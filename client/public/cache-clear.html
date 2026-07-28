@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Limpando Cache...</title>
+    <script>
+        // Limpar todos os Service Workers
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then((registrations) => {
+                for (let registration of registrations) {
+                    registration.unregister();
+                }
+            });
+        }
+
+        // Limpar IndexedDB
+        if (window.indexedDB) {
+            const dbs = ['walk-contas', 'walkajuda'];
+            dbs.forEach((dbName) => {
+                indexedDB.deleteDatabase(dbName);
+            });
+        }
+
+        // Redirecionar para home
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 500);
+    </script>
+</head>
+<body>
+    <p>Limpando cache...</p>
+</body>
+</html>

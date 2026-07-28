@@ -1,0 +1,1 @@
+ALTER TABLE `orderStatusHistory` ADD `commissionPaid` int DEFAULT 0 NOT NULL;

@@ -1,0 +1,1 @@
+ALTER TABLE `adCampaigns` ADD `enableAudio` int DEFAULT 0 NOT NULL;

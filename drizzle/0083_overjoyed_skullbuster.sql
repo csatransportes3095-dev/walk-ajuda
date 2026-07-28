@@ -1,0 +1,1 @@
+ALTER TABLE `scheduleConfig` ADD `scheduledWhatsappMessage` text DEFAULT ('Olá {nome}! Seu atendimento está confirmado para o dia {data} às {hora}. Fique disponível no WhatsApp nesse horário. Qualquer dúvida, estamos à disposição!') NOT NULL;

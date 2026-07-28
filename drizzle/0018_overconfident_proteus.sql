@@ -1,0 +1,1 @@
+ALTER TABLE `customers` ADD `uf` varchar(2);

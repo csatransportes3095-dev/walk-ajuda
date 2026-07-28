@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+    <title>WALK AJUDA</title>
+    <meta name="description" content="WALK AJUDA" />
+
+    <!-- Cache Control - Básico -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <!-- Ocultar dos mecanismos de busca -->
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
+    <meta name="googlebot" content="noindex, nofollow" />
+    <meta name="theme-color" content="#1a1a2e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Walk Ajuda" />
+    <!-- Ícone para iOS (Add to Home Screen) -->
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
+
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="manifest" href="/manifest.json" />
+    <!-- Montserrat e Poppins Bold para opções de fonte dos botões -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&family=Poppins:wght@400;700;900&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+
+    <script>
+      // Limpar IndexedDB de versões antigas (não cancela mais o SW)
+      if (window.indexedDB) {
+        ['walk-contas', 'walkajuda'].forEach((dbName) => {
+          try { indexedDB.deleteDatabase(dbName); } catch (e) {}
+        });
+      }
+      // IMPORTANTE: NAO limpar localStorage/sessionStorage aqui.
+      // Isso apagava o token de login do Gestor de Gastos a cada F5/reload.
+    </script>
+  </body>
+</html>

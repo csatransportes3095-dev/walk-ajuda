@@ -1,0 +1,279 @@
+// Force UTC timezone before any imports to ensure consistent date handling
+// This prevents Drizzle ORM from misinterpreting MySQL timestamps based on server locale
+process.env.TZ = "UTC";
+
+import "dotenv/config";
+import express from "express";
+import { createServer } from "http";
+import net from "net";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { registerOAuthRoutes } from "./oauth";
+import { registerStorageProxy } from "./storageProxy";
+import { registerUploadRoute } from "../uploadRoute";
+import { appRouter } from "../routers";
+import { createContext } from "./context";
+import { serveStatic, setupVite } from "./vite";
+import { isIpBlocked, getSetting } from "../db";
+import { broadcastEmailHandler } from "../broadcastEmailHandler";
+import path from "path";
+import fs from "fs";
+
+/** Extrai o IP real do cliente, respeitando proxies (Cloudflare, Cloud Run) */
+export function getClientIp(req: express.Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    const ips = (typeof forwarded === "string" ? forwarded : forwarded[0]).split(",");
+    return ips[0].trim();
+  }
+  return req.socket?.remoteAddress || "unknown";
+}
+
+function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise(resolve => {
+    const server = net.createServer();
+    server.listen(port, () => {
+      server.close(() => resolve(true));
+    });
+    server.on("error", () => resolve(false));
+  });
+}
+
+async function findAvailablePort(startPort: number = 3000): Promise<number> {
+  for (let port = startPort; port < startPort + 20; port++) {
+    if (await isPortAvailable(port)) {
+      return port;
+    }
+  }
+  throw new Error(`No available port found starting from ${startPort}`);
+}
+
+async function startServer() {
+  const app = express();
+  const server = createServer(app);
+  // Register upload route BEFORE body parsers so multer can handle multipart streams correctly
+  registerUploadRoute(app);
+  // Configure body parser with larger size limit for file uploads
+  app.use(express.json({ limit: "200mb" }));
+  app.use(express.urlencoded({ limit: "200mb", extended: true }));
+  registerStorageProxy(app);
+  registerOAuthRoutes(app);
+
+  // Middleware de bloqueio de IP — bloqueia antes de qualquer rota de negócio
+  app.use(async (req, res, next) => {
+    // Não bloquear rotas admin (frontend) nem qualquer chamada tRPC de admin autenticado
+    if (req.path.startsWith("/admin") || req.path.startsWith("/api/trpc/admin")) {
+      return next();
+    }
+    // Não bloquear chamadas tRPC se o cookie admin_token estiver presente e válido
+    const cookieHeader = req.headers.cookie || '';
+    if (cookieHeader.includes('admin_token=')) {
+      return next();
+    }
+    const ip = getClientIp(req);
+    if (ip && ip !== "unknown") {
+      try {
+        const blocked = await isIpBlocked(ip);
+        if (blocked) {
+          res.status(403).json({ error: "Acesso bloqueado. Entre em contato pelo WhatsApp." });
+          return;
+        }
+      } catch (e) { /* silenciar erros de verificação */ }
+    }
+    next();
+  });
+
+  // Rota dinâmica de vídeos — busca fileKey no banco pelo slug
+  // Rota pública para imagens com slug amigável: /foto/:slug
+  app.get("/foto/:slug", async (req, res) => {
+    const { slug } = req.params;
+    try {
+      const { getDb } = await import('../db');
+      const { adminMediaFiles } = await import('../../drizzle/schema');
+      const { eq: eqOp } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) { res.status(503).send("Banco indisponível"); return; }
+      const rows = await db.select().from(adminMediaFiles).where(eqOp(adminMediaFiles.videoSlug, slug)).limit(1);
+      if (!rows.length) { res.status(404).send("<h2>Imagem não encontrada</h2>"); return; }
+      const media = rows[0];
+      const imageUrl = (media as any).url || '';
+      if (!imageUrl) { res.status(502).send("URL da imagem não encontrada"); return; }
+      const title = media.name.replace(/\.(jpg|jpeg|png|gif|webp|mp4|webm|mov|avi)$/i, "");
+      // Se for vídeo, redirecionar para /video/:slug
+      if (media.mimeType.startsWith('video/')) { res.redirect(301, `/video/${slug}`); return; }
+      const canonicalUrl = `https://walkajuda.com/foto/${slug}`;
+      res.set('Content-Type', 'text/html; charset=utf-8');
+      res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} - Walk Ajuda</title><meta property="og:title" content="${title}"><meta property="og:description" content="Walk Ajuda - Atendimento rápido para motoristas de app"><meta property="og:image" content="${imageUrl}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:type" content="website"><meta property="og:url" content="${canonicalUrl}"><meta property="og:site_name" content="Walk Ajuda"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:image" content="${imageUrl}"><meta name="twitter:description" content="Walk Ajuda - Atendimento rápido para motoristas de app"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}img{width:100%;max-width:900px;max-height:100vh;object-fit:contain}</style></head><body><img src="${imageUrl}" alt="${title}"></body></html>`);
+    } catch (err) {
+      console.error('[FotoRoute] dynamic error:', err);
+      res.status(500).send("Erro interno");
+    }
+  });
+
+  app.get("/video/:slug", async (req, res) => {
+    const { slug } = req.params;
+    // Rota especial /video/tutorial usa fileKey fixo (tratada separadamente abaixo via redirect)
+    if (slug === "tutorial") { res.redirect(307, "/video/tutorial"); return; }
+    try {
+      const { getDb } = await import('../db');
+      const { adminMediaFiles } = await import('../../drizzle/schema');
+      const { eq: eqOp } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) { res.status(503).send("Banco indisponível"); return; }
+      const rows = await db.select().from(adminMediaFiles).where(eqOp(adminMediaFiles.videoSlug, slug)).limit(1);
+      if (!rows.length) { res.status(404).send("<h2>Vídeo não encontrado</h2>"); return; }
+      const media = rows[0];
+      // Usar a URL direta do CloudFront salva no banco (sem assinatura, acesso público)
+      const videoUrl = (media as any).url || '';
+      if (!videoUrl) { res.status(502).send("URL do vídeo não encontrada"); return; }
+      const title = media.name.replace(/\.(mp4|webm|mov|avi)$/i, "");
+      const canonicalUrl = `https://walkajuda.com/video/${slug}`;
+      res.set('Content-Type', 'text/html; charset=utf-8');
+      res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} - Walk Ajuda</title><meta property="og:title" content="${title}"><meta property="og:description" content="Walk Ajuda - Atendimento rápido para motoristas de app"><meta property="og:type" content="video.other"><meta property="og:url" content="${canonicalUrl}"><meta property="og:site_name" content="Walk Ajuda"><meta property="og:video" content="${videoUrl}"><meta property="og:video:secure_url" content="${videoUrl}"><meta property="og:video:type" content="${media.mimeType || 'video/mp4'}"><meta property="og:video:width" content="1280"><meta property="og:video:height" content="720"><meta property="og:image" content="${videoUrl}"><meta name="twitter:card" content="player"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="Walk Ajuda - Atendimento rápido para motoristas de app"><meta name="twitter:player" content="${canonicalUrl}"><meta name="twitter:player:width" content="1280"><meta name="twitter:player:height" content="720"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}video{width:100%;max-width:900px;max-height:100vh}</style></head><body><video controls autoplay playsinline preload="auto"><source src="${videoUrl}" type="${media.mimeType || 'video/mp4'}">Seu browser não suporta vídeo HTML5.</video></body></html>`);
+    } catch (err) {
+      console.error('[VideoRoute] dynamic error:', err);
+      res.status(500).send("Erro interno");
+    }
+  });
+
+  // Rota de vídeos públicos — página HTML com player nativo
+  app.get("/video/tutorial", async (_req, res) => {
+    try {
+      const { ENV } = await import('./env');
+      const forgeUrl = new URL("v1/storage/presign/get", ENV.forgeApiUrl!.replace(/\/+$/, "") + "/");
+      forgeUrl.searchParams.set("path", "tutorial_fe1af5d4.mp4");
+      const forgeResp = await fetch(forgeUrl, { headers: { Authorization: `Bearer ${ENV.forgeApiKey}` } });
+      if (!forgeResp.ok) { res.status(502).send("Erro ao obter vídeo"); return; }
+      const { url } = await forgeResp.json() as { url: string };
+      if (!url) { res.status(502).send("URL inválida"); return; }
+      res.set('Content-Type', 'text/html; charset=utf-8');
+      res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tutorial Walk Ajuda</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}video{width:100%;max-width:900px;max-height:100vh}</style></head><body><video controls autoplay playsinline preload="auto"><source src="${url}" type="video/mp4">Seu browser não suporta vídeo HTML5.</video></body></html>`);
+    } catch (err) {
+      console.error('[VideoRoute] error:', err);
+      res.status(500).send("Erro interno");
+    }
+  });
+
+  // Pixel de rastreamento de abertura de e-mail
+  app.get("/api/email-open/:trackingId", async (req, res) => {
+    const { trackingId } = req.params;
+    try {
+      const { getDb } = await import('../db');
+      const db = await getDb();
+      if (db && trackingId) {
+        const { sql } = await import('drizzle-orm');
+        const now = Date.now();
+        const safeId = trackingId.replace(/[^a-zA-Z0-9_-]/g, '');
+        await db.execute(sql.raw(`UPDATE emailTracking SET openedAt = COALESCE(openedAt, ${now}), openCount = openCount + 1 WHERE trackingId = '${safeId}'`));
+      }
+    } catch (_) { /* silenciar erros */ }
+    // Retornar pixel 1x1 transparente
+    const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+    res.set({ 'Content-Type': 'image/gif', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' });
+    res.send(pixel);
+  });
+
+  // ===== MANIFESTO PWA DINÂMICO =====
+  // Retorna manifest.json com o ícone atual configurado pelo ADM
+  app.get("/manifest.json", async (_req, res) => {
+    try {
+      const loginImageUrl = await getSetting("login_image_url");
+      // Usa a imagem do ADM se disponível, senão usa os ícones estáticos
+      const iconUrl = loginImageUrl || "/icon-192.png";
+      const iconUrl512 = loginImageUrl || "/icon-512.png";
+      const appName = (await getSetting("login_title")) || "WALK AJUDA";
+      const manifest = {
+        id: "/",
+        name: appName,
+        short_name: appName,
+        description: "Atendimento rápido para motoristas de app - Uber, 99 e InDrive",
+        start_url: "/",
+        scope: "/",
+        display: "standalone",
+        orientation: "portrait",
+        background_color: "#0a0a1a",
+        theme_color: "#0ea5e9",
+        icons: [
+          { src: iconUrl,    sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: iconUrl,    sizes: "192x192", type: "image/png", purpose: "maskable" },
+          { src: iconUrl512, sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: iconUrl512, sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+        shortcuts: [
+          {
+            name: "Fazer Pedido",
+            short_name: "Pedido",
+            description: "Acessar o site para fazer um novo pedido",
+            url: "/",
+            icons: [{ src: iconUrl, sizes: "192x192", type: "image/png" }],
+          },
+          {
+            name: "Acompanhar Pedido",
+            short_name: "Acompanhar",
+            description: "Consultar o status do seu pedido pelo telefone",
+            url: "/acompanhar",
+            icons: [{ src: iconUrl, sizes: "192x192", type: "image/png" }],
+          },
+          {
+            name: "Planilha de Gastos",
+            short_name: "Gastos",
+            description: "Controle seus ganhos e gastos como motorista",
+            url: "/gastos",
+            icons: [{ src: iconUrl, sizes: "192x192", type: "image/png" }],
+          },
+        ],
+      };
+      res.set("Content-Type", "application/manifest+json");
+      res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.json(manifest);
+    } catch (err) {
+      // Fallback: serve o manifest estático
+      const staticPath = path.join(process.cwd(), "client", "public", "manifest.json");
+      if (fs.existsSync(staticPath)) {
+        res.set("Content-Type", "application/manifest+json");
+        res.sendFile(staticPath);
+      } else {
+        res.status(500).json({ error: "manifest not found" });
+      }
+    }
+  });
+
+  // Heartbeat: processar fila de e-mail em massa
+  app.post("/api/scheduled/broadcastEmail", broadcastEmailHandler);
+
+  // tRPC API
+  app.use(
+    "/api/trpc",
+    createExpressMiddleware({
+      router: appRouter,
+      createContext,
+    })
+  );
+  // development mode uses Vite, production mode uses static files
+  if (process.env.NODE_ENV === "development") {
+    await setupVite(app, server);
+  } else {
+    await serveStatic(app);
+  }
+
+  const preferredPort = parseInt(process.env.PORT || "3000");
+  const port = await findAvailablePort(preferredPort);
+
+  if (port !== preferredPort) {
+    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  }
+
+  server.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}/`);
+    // Inicializar formulários fixos automaticamente
+    setTimeout(async () => {
+      try {
+        const { autoInitBuiltinForms } = await import('../routers/consultas');
+        await autoInitBuiltinForms();
+      } catch (e) {
+        // silencioso — não crítico
+      }
+    }, 3000);
+  });
+}
+
+startServer().catch(console.error);

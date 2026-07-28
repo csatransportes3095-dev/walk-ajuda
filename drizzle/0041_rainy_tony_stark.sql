@@ -1,0 +1,1 @@
+ALTER TABLE `orderStatusHistory` MODIFY COLUMN `status` varchar(64) NOT NULL;

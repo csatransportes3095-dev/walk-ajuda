@@ -1,0 +1,1 @@
+ALTER TABLE `productOptions` ADD `description` text DEFAULT ('');

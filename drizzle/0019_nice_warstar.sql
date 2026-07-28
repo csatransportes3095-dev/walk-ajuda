@@ -1,0 +1,1 @@
+ALTER TABLE `optionDocuments` ADD `exampleImageUrl` varchar(512);

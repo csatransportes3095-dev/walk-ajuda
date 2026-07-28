@@ -1,0 +1,1 @@
+ALTER TABLE `productOptions` ADD `originalPrice` varchar(64) DEFAULT '';

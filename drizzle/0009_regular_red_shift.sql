@@ -1,0 +1,1 @@
+ALTER TABLE `accessCodePhones` DROP COLUMN `consumed`;

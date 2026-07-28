@@ -1,0 +1,1 @@
+ALTER TABLE `docRequests` ADD `docLabel` varchar(128);

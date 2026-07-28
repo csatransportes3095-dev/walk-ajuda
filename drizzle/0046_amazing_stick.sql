@@ -1,0 +1,1 @@
+ALTER TABLE `orderFiles` ADD `fromAdmin` int DEFAULT 0 NOT NULL;

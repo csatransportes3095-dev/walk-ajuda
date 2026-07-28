@@ -1,0 +1,1 @@
+ALTER TABLE `spreadsheetEarnings` ADD `particular` decimal(10,2) DEFAULT '0';

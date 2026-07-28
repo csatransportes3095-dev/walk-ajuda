@@ -1,0 +1,1 @@
+ALTER TABLE `accessCodePhones` ADD `consumed` int DEFAULT 0 NOT NULL;

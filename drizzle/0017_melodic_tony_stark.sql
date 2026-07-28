@@ -1,0 +1,1 @@
+ALTER TABLE `customers` ADD `referredByPhone` varchar(32);

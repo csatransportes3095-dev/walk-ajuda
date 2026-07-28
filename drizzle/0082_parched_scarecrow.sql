@@ -1,0 +1,1 @@
+ALTER TABLE `orderLoginData` ADD `loginPhone` varchar(64);

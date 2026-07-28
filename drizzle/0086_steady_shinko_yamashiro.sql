@@ -1,0 +1,1 @@
+ALTER TABLE `orderNotes` ADD `blockName` varchar(100) DEFAULT 'Bloco 1' NOT NULL;

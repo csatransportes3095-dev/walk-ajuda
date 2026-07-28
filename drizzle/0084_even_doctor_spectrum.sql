@@ -1,0 +1,1 @@
+ALTER TABLE `scheduleTemplates` ADD `scheduledWhatsappMessage` text;

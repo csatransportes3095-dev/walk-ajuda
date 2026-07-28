@@ -1,0 +1,1 @@
+ALTER TABLE `customerDocuments` ADD `fileName` varchar(256);

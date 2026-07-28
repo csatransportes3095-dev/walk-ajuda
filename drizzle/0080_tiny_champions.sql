@@ -1,0 +1,1 @@
+ALTER TABLE `productOptions` ADD `warranty` varchar(255) DEFAULT '';

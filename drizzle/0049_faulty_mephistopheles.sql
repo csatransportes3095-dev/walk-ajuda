@@ -1,0 +1,1 @@
+ALTER TABLE `accessCodePhones` ADD `archived` int DEFAULT 0 NOT NULL;

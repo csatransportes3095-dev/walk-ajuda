@@ -1,0 +1,1 @@
+ALTER TABLE `optionDocuments` ADD `inputSource` enum('camera','gallery','both') DEFAULT 'both' NOT NULL;

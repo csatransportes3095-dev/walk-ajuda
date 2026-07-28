@@ -1,0 +1,1 @@
+ALTER TABLE `raffleEntries` ADD `paymentStatus` enum('pending','paid') DEFAULT 'pending' NOT NULL;

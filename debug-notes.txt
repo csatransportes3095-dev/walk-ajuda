@@ -1,0 +1,3 @@
+AdminSettings reescrito com inputs nativos + style inline (bg: #1a1a3e, color: #ffffff).
+Compilação OK, sem erros TS. Screenshot confirma PasswordGate funcionando.
+Próximo: tabela accessCodePhones para histórico de telefones por senha VIP.

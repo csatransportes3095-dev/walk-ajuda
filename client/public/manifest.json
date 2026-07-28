@@ -1,0 +1,79 @@
+{
+  "id": "/",
+  "name": "WALK AJUDA",
+  "short_name": "Walk Ajuda",
+  "description": "Atendimento rápido para motoristas de app - Uber, 99 e InDrive",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a1a",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Fazer Pedido",
+      "short_name": "Pedido",
+      "description": "Acessar o site para fazer um novo pedido",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Acompanhar Pedido",
+      "short_name": "Acompanhar",
+      "description": "Consultar o status do seu pedido pelo telefone",
+      "url": "/acompanhar",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Planilha de Gastos",
+      "short_name": "Gastos",
+      "description": "Controle seus ganhos e gastos como motorista",
+      "url": "/gastos",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}

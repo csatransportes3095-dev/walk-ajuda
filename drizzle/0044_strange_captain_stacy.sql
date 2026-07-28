@@ -1,0 +1,1 @@
+ALTER TABLE `orderStatusHistory` ADD `deliveryEstimate` int;

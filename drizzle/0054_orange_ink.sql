@@ -1,0 +1,1 @@
+ALTER TABLE `orderLoginData` ADD `emailLink` varchar(512);

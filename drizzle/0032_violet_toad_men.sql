@@ -1,0 +1,1 @@
+ALTER TABLE `orderStatusHistory` MODIFY COLUMN `status` enum('recebido','pagamento_recebido','em_andamento','em_montagem','documentos_aprovados','conta_ativa','pedido_entregue','cancelado') NOT NULL;
