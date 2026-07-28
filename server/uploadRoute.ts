@@ -18,9 +18,9 @@ import multer from "multer";
 import jwt from "jsonwebtoken";
 import { parse as parseCookieHeader } from "cookie";
 import { r2PutObject, r2GetObjectBuffer, r2DeleteObjects } from "./r2Storage";
-import { addOrderFile, getDb } from "./db";
+import { addOrderFile, createCustomer, getCustomerByPhone, getDb, updateCustomer, addOrderStatus, generateOrderNumber } from "./db";
 import { uploadSessions } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { ENV } from "./_core/env";
 
 const jsonParser = express.json({ limit: "2mb" });
