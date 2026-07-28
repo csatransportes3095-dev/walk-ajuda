@@ -611,7 +611,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
                 background: `linear-gradient(135deg, ${btn.color} 0%, ${btn.color}cc 100%)`,
                 border: `2px solid ${btn.color}`,
                 boxShadow: `0 6px 24px ${btn.color}66, 0 2px 8px ${btn.color}44`,
-                ...getFontStyle(btn.font || ''),
+                ...getFontStyle(btn.font || HOME_FONT),
                 ...getHoverStyle(btn.hover, btn.color, `extra-${btn.id}`)
               }}
             >
