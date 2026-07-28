@@ -19,7 +19,7 @@ import jwt from "jsonwebtoken";
 import { parse as parseCookieHeader } from "cookie";
 import { r2PutObject, r2GetObjectBuffer, r2DeleteObjects } from "./r2Storage";
 import { addOrderFile, createCustomer, getCustomerByPhone, getDb, updateCustomer, addOrderStatus, generateOrderNumber } from "./db";
-import { uploadSessions } from "../drizzle/schema";
+import { accessCodePhones, accessCodes, uploadSessions } from "../drizzle/schema";
 import { eq, sql } from "drizzle-orm";
 import { ENV } from "./_core/env";
 
@@ -90,6 +90,1432 @@ function resolveFileExt(mimeType: string, originalFilename?: string): { ext: str
   }
   return { ext: "jpg", contentType: "image/jpeg" };
 }
+
+function normalizeCsvHeader(header: string): string {
+  return header
+    .toLowerCase()
+    .trim()
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseCsvLine(line: string): string[] {
+  const row: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      row.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  row.push(current);
+  return row.map(cell => cell.replace(/^"(.*)"$/s, "$1").replace(/""/g, '"').trim());
+}
+
+function parseCsvText(text: string) {
+  const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  const lines = normalizedText.split("\n").filter(line => line.trim().length > 0);
+  const headers = lines.length > 0 ? parseCsvLine(lines[0]) : [];
+  const rows = lines.slice(1).map(parseCsvLine);
+  return { headers, rows };
+}
+
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+function parseCsvDate(value: string): Date | null {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const parsed = new Date(text);
+  if (!isNaN(parsed.getTime())) return parsed;
+  const parts = text.split(/[-\/]/).map(part => part.trim());
+  if (parts.length === 3) {
+    const [a, b, c] = parts;
+    if (a.length === 4) {
+      const date = new Date(`${a}-${b.padStart(2, '0')}-${c.padStart(2, '0')}T00:00:00Z`);
+      if (!isNaN(date.getTime())) return date;
+    }
+    if (c.length === 4) {
+      const date = new Date(`${c}-${a.padStart(2, '0')}-${b.padStart(2, '0')}T00:00:00Z`);
+      if (!isNaN(date.getTime())) return date;
+    }
+  }
+  return null;
+}
+
+function safeString(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
+}
+
+function buildFieldName(header: string): string | null {
+  const normalized = normalizeCsvHeader(header);
+  if (["name", "nome"].includes(normalized)) return "name";
+  if (["phone", "telefone", "celular", "fone"].includes(normalized)) return "phone";
+  if (["email", "e mail", "e-mail", "email"].includes(normalized)) return "email";
+  if (["city", "cidade"].includes(normalized)) return "city";
+  if (["uf", "estado"].includes(normalized)) return "uf";
+  if (["referred by", "referredby", "indicacao", "indicado por", "recomendado por", "indicador", "indicador por"].includes(normalized)) return "referredBy";
+  if (["referred by phone", "referredbyphone", "telefone do indicador", "telefone indicador", "telefone indicacao"].includes(normalized)) return "referredByPhone";
+  if (["service", "servico", "serviço", "servicename", "nome do servico"].includes(normalized)) return "serviceName";
+  if (["service option", "serviceoption", "opcao", "opção", "opcao do servico", "opção do serviço"].includes(normalized)) return "serviceOption";
+  if (["status", "situacao", "situação"].includes(normalized)) return "status";
+  if (["note", "observacao", "observação", "obs"].includes(normalized)) return "note";
+  if (["answers", "respostas", "answer"].includes(normalized)) return "answers";
+  if (["date", "data", "data do pedido", "order date", "orderdate"].includes(normalized)) return "date";
+  return null;
+}
+
+function normalizeRecordDate(date: Date | null): string | null {
+  if (!date) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function makeOrderStatus(status: string | null) {
+  if (!status) return "recebido";
+  const trimmed = status.trim();
+  return trimmed.length > 0 ? trimmed : "recebido";
+}
+
+function makeSafeUf(uf: string | null): string | null {
+  if (!uf) return null;
+  const value = uf.trim().toUpperCase();
+  return value.length === 2 ? value : null;
+}
+
+function makeSafePhone(phone: string): string | null {
+  const numbers = normalizePhone(phone);
+  return numbers.length >= 10 ? numbers : null;
+}
+
+function buildFieldMap(headers: string[]) {
+  const map: Record<number, string> = {};
+  headers.forEach((header, index) => {
+    const field = buildFieldName(header);
+    if (field) map[index] = field;
+  });
+  return map;
+}
+
+function normalizeImportRow(row: string[], fieldMap: Record<number, string>) {
+  const record: Record<string, string | null> = {};
+  for (let i = 0; i < row.length; i += 1) {
+    const field = fieldMap[i];
+    if (!field) continue;
+    record[field] = safeString(row[i]);
+  }
+  const date = safeString(record.date) ? normalizeRecordDate(parseCsvDate(record.date!) || new Date()) : normalizeRecordDate(new Date());
+  return {
+    name: safeString(record.name) || null,
+    phone: makeSafePhone(record.phone || "") || "",
+    email: safeString(record.email) || null,
+    city: safeString(record.city) || null,
+    uf: makeSafeUf(safeString(record.uf) || null),
+    referredBy: safeString(record.referredBy) || null,
+    referredByPhone: makeSafePhone(record.referredByPhone || "") || null,
+    serviceName: safeString(record.serviceName) || null,
+    serviceOption: safeString(record.serviceOption) || null,
+    status: makeOrderStatus(safeString(record.status) || null),
+    note: safeString(record.note) || null,
+    answers: safeString(record.answers) || null,
+    date,
+  };
+}
+
+function makeDuplicateKey(record: { phone: string; date: string | null; serviceName: string | null; status: string | null }) {
+  return `${record.phone}|${record.date || ''}|${record.serviceName?.toLowerCase().trim() || ''}|${record.status?.toLowerCase().trim() || ''}`;
+}
+
+function getDateString(date: Date): string {
+  return normalizeRecordDate(date) || new Date().toISOString().slice(0, 10);
+}
+
+function mapExistingOrdersByPhone(rows: Array<{ accessedAt: number; status: string | null; serviceName: string | null }>) {
+  const map = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const date = getDateString(new Date(row.accessedAt));
+    const key = `${date}|${row.serviceName?.toLowerCase().trim() || ''}|${row.status?.toLowerCase().trim() || ''}`;
+    if (!map.has(row.accessedAt.toString())) {
+      map.set(date, new Set());
+    }
+    map.get(date)!.add(key);
+  }
+  return map;
+}
+
+function rowMatchesExisting(record: { phone: string; date: string | null; serviceName: string | null; status: string | null }, existingMap: Map<string, Set<string>>) {
+  if (!record.date) return false;
+  const dateSet = existingMap.get(record.date);
+  if (!dateSet) return false;
+  const key = `${record.date}|${record.serviceName?.toLowerCase().trim() || ''}|${record.status?.toLowerCase().trim() || ''}`;
+  return dateSet.has(key);
+}
+
+function normalizeDateString(value: string | null): string {
+  if (!value) return new Date().toISOString().slice(0, 10);
+  const date = parseCsvDate(value);
+  return normalizeRecordDate(date || new Date()) || new Date().toISOString().slice(0, 10);
+}
+
+function rowsToExistingDateKeys(rows: Array<{ accessedAt: number; status: string | null; serviceName: string | null }>) {
+  const set = new Set<string>();
+  for (const row of rows) {
+    const date = getDateString(new Date(row.accessedAt));
+    const key = `${date}|${row.serviceName?.toLowerCase().trim() || ''}|${row.status?.toLowerCase().trim() || ''}`;
+    set.add(key);
+  }
+  return set;
+}
+
+function buildExistingDateSet(rows: Array<{ accessedAt: number; status: string | null; serviceName: string | null }>) {
+  return rowsToExistingDateKeys(rows);
+}
+
+function createOrderDuplicateKey(record: { phone: string; date: string | null; serviceName: string | null; status: string | null }) {
+  return makeDuplicateKey(record);
+}
+
+function getRowDateKey(record: { date: string | null }) {
+  return record.date || new Date().toISOString().slice(0, 10);
+}
+
+function getOrderDateKeyFromRow(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap).date;
+}
+
+function getOrderPhoneKeyFromRow(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap).phone;
+}
+
+function rowToImportKey(row: string[], fieldMap: Record<number, string>) {
+  return makeDuplicateKey(normalizeImportRow(row, fieldMap));
+}
+
+function getRecordByRow(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getImportFieldMap(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function getOrderRows(rows: string[][], fieldMap: Record<number, string>) {
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getOrderRowKey(record: { phone: string; date: string | null; serviceName: string | null; status: string | null }) {
+  return makeDuplicateKey(record);
+}
+
+function isDuplicateRecord(record: { phone: string; date: string | null; serviceName: string | null; status: string | null }, batchSet: Set<string>, existingSet: Set<string>) {
+  const key = makeDuplicateKey(record);
+  return batchSet.has(key) || existingSet.has(key);
+}
+
+function getCsvRowPreview(row: string[]) {
+  return row.join(", ");
+}
+
+function getCsvRowSummary(row: string[], fieldMap: Record<number, string>) {
+  const record = normalizeImportRow(row, fieldMap);
+  return `${record.phone} ${record.date || ''} ${record.serviceName || ''}`.trim();
+}
+
+function getCsvResultDetail(line: number, message: string) {
+  return `Linha ${line}: ${message}`;
+}
+
+function normalizeImportPhone(value: string | null): string {
+  return makeSafePhone(value || "") || "";
+}
+
+function buildImportLineKey(record: { phone: string; date: string | null; serviceName: string | null; status: string | null }) {
+  return makeDuplicateKey(record);
+}
+
+function getCsvImportLineSummary(record: { phone: string; date: string | null; serviceName: string | null; status: string | null }) {
+  return `${record.phone}|${record.date || ''}|${record.serviceName || ''}|${record.status || ''}`;
+}
+
+function isEmptyCsvRow(record: { phone: string; name: string | null; email: string | null; serviceName: string | null }) {
+  return !record.phone && !record.name && !record.email && !record.serviceName;
+}
+
+function getCsvRowFields(record: { phone: string; date: string | null; serviceName: string | null; status: string | null }) {
+  return record;
+}
+
+function getCsvFieldKey(field: string) {
+  return field;
+}
+
+function buildImportBatchKey(records: Array<{ phone: string; date: string | null; serviceName: string | null; status: string | null }>) {
+  return records.map(makeDuplicateKey).join(";");
+}
+
+function getImportBatchSet(records: Array<{ phone: string; date: string | null; serviceName: string | null; status: string | null }>) {
+  const set = new Set<string>();
+  for (const record of records) set.add(makeDuplicateKey(record));
+  return set;
+}
+
+function getCsvFieldValue(record: { [key: string]: string | null }, field: string) {
+  return record[field] || null;
+}
+
+function getOrderField(record: Record<string, string | null>, field: string) {
+  return record[field] || null;
+}
+
+function getCsvImportRowFields(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportHeaderFields(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function getCsvImportHeaderValues(headers: string[]) {
+  return headers;
+}
+
+function buildCsvImportPreview(headers: string[], rows: string[][]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.slice(0, 3).map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowValue(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportDateValue(record: { date: string | null }) {
+  return record.date;
+}
+
+function buildCsvImportFieldListFromHeaders(headers: string[]) {
+  return Object.values(buildFieldMap(headers));
+}
+
+function getCsvImportStatusValue(record: { status: string | null }) {
+  return record.status;
+}
+
+function getCsvImportServiceNameValue(record: { serviceName: string | null }) {
+  return record.serviceName;
+}
+
+function getCsvImportPhoneValue(record: { phone: string }) {
+  return record.phone;
+}
+
+function getCsvImportDateKey(record: { date: string | null }) {
+  return record.date || "";
+}
+
+function getCsvImportServiceKey(record: { serviceName: string | null }) {
+  return record.serviceName || "";
+}
+
+function getCsvImportStatusKey(record: { status: string | null }) {
+  return record.status || "";
+}
+
+function getCsvImportPhoneKey(record: { phone: string }) {
+  return record.phone;
+}
+
+function getCsvImportRowLine(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportPayloadFromHeaders(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function buildCsvImportPayloadFromRow(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowPayload(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportFieldPayload(row: string[], fieldMap: Record<number, string>, field: string) {
+  return normalizeImportRow(row, fieldMap)[field] || null;
+}
+
+function getCsvImportPayloadRow(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowValueString(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowSafeValue(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvHeadersAsFieldMap(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function getCsvRowAsObject(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportFieldObject(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowObject(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowDict(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowDataObject(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportPayloadFromRowObject(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowDefinition(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowDefinitionMap(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowDefinitionObject(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportPayloadDefinition(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function createCsvImportMetadata(headers: string[], rows: string[][]) {
+  return {
+    headerMap: buildFieldMap(headers),
+    count: rows.length,
+  };
+}
+
+function getCsvImportMetadata(headers: string[], rows: string[][]) {
+  return createCsvImportMetadata(headers, rows);
+}
+
+function getCsvImportParsedRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportPreviewRows(headers: string[], rows: string[][]) {
+  return rows.slice(0, 3).map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportSummary(headers: string[], rows: string[][]) {
+  return { rows: rows.length, sample: rows.slice(0, 3).map(r => r.join(", ")) };
+}
+
+function parseCsvBuffer(buffer: Buffer) {
+  return parseCsvText(buffer.toString("utf-8"));
+}
+
+function getCsvImportRowsAsRecords(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportFieldNames(headers: string[]) {
+  return Object.values(buildFieldMap(headers));
+}
+
+function getCsvImportRowHeaders(headers: string[]) {
+  return headers;
+}
+
+function getCsvImportRowHeaderNames(headers: string[]) {
+  return headers.map(header => buildFieldName(header));
+}
+
+function getCsvImportRowHeaderFields(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function getCsvImportRowHeaderKeys(headers: string[]) {
+  return Object.keys(buildFieldMap(headers));
+}
+
+function getCsvImportRowHeaderValues(headers: string[]) {
+  return Object.values(buildFieldMap(headers));
+}
+
+function getCsvImportRowHeaderMapping(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function getCsvImportRowFieldMapping(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function getCsvImportRowToObject(rows: string[][], headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowToPayload(rows: string[][], headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowPayloadRows(rows: string[][], headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowPayloadRecords(rows: string[][], headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRecords(rows: string[][], headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportPayloadRecords(rows: string[][], headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowRecords(rows: string[][], headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowRecordSet(rows: string[][], headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  const set = new Set<string>();
+  rows.forEach(row => set.add(makeDuplicateKey(normalizeImportRow(row, fieldMap))));
+  return set;
+}
+
+function getCsvImportRowRecordSetByPhone(rows: string[][], headers: string[]) {
+  return getCsvImportRowRecordSet(rows, headers);
+}
+
+function getCsvImportRowRecordSetByDate(rows: string[][], headers: string[]) {
+  return getCsvImportRowRecordSet(rows, headers);
+}
+
+function getCsvImportRowRecordSetByService(rows: string[][], headers: string[]) {
+  return getCsvImportRowRecordSet(rows, headers);
+}
+
+function getCsvImportRowRecordSetByStatus(rows: string[][], headers: string[]) {
+  return getCsvImportRowRecordSet(rows, headers);
+}
+
+function getCsvImportRowRecordSetByPhoneDate(records: Array<{ phone: string; date: string | null; serviceName: string | null; status: string | null }>) {
+  const set = new Set<string>();
+  for (const record of records) set.add(makeDuplicateKey(record));
+  return set;
+}
+
+function getCsvImportRowRecordSetByPhoneDateStatus(rows: string[][], headers: string[]) {
+  return getCsvImportRowRecordSet(rows, headers);
+}
+
+function getCsvImportRowDuplicates(rows: string[][], headers: string[]) {
+  return getCsvImportRowRecordSet(rows, headers);
+}
+
+function getCsvImportRowDuplicatesByPhone(rows: string[][], headers: string[]) {
+  return getCsvImportRowRecordSet(rows, headers);
+}
+
+function getCsvImportFieldRecords(headers: string[], rows: string[][]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDataParsed(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDataClean(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDataReady(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDataRecords(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDataObjects(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function createCsvImportRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function parseImportCsv(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function parseCsvFile(size: Buffer) {
+  return parseCsvText(size.toString("utf-8"));
+}
+
+function getCsvImportFieldMappingFromHeaders(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function getCsvImportFieldNamesFromHeaders(headers: string[]) {
+  return Object.values(buildFieldMap(headers));
+}
+
+function getCsvImportRowsAsObjects(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowValues(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDataValues(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportPayloadFields(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportPayloadRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportPayloadList(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowPayloadList(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportPayloadObjects(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function buildCsvImportPayloadObjects(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportParsedObjects(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportCleanObjects(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRecordsAsObjects(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportLoadedRecords(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportPayloadMapped(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function createCsvImportRowsList(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDataMapFromRow(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldData(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataObject(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataValues(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataRecords(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataEntries(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataSet(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapEntries(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapList(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapValues(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapObject(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayload(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadObject(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadRows(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadList(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadSet(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadKeys(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadValues(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadRecords(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadObjects(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadText(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadSummary(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadDetail(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadDebug(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadLogs(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadErrors(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadWarnings(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadInfos(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadMessages(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadNotes(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadActions(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadCommands(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadOperations(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadWorkflows(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadTasks(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadProjects(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadAssignments(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadTickets(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadIssues(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadArticles(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadBlogs(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadMarketing(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadSales(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadInventory(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportRowFieldDataMapPayloadCustomer(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function getCsvImportOrderNumber(record: { serviceName: string | null; status: string | null; phone: string; date: string | null }) {
+  return makeDuplicateKey(record);
+}
+
+function getCsvImportCustomerKey(record: { phone: string }) {
+  return record.phone;
+}
+
+function getCsvImportCustomerPhone(record: { phone: string }) {
+  return record.phone;
+}
+
+function getCsvImportCustomerDate(record: { date: string | null }) {
+  return record.date;
+}
+
+function getCsvImportCustomerService(record: { serviceName: string | null }) {
+  return record.serviceName;
+}
+
+function getCsvImportCustomerStatus(record: { status: string | null }) {
+  return record.status;
+}
+
+function getCsvImportCustomerName(record: { name: string | null }) {
+  return record.name;
+}
+
+function getCsvImportCustomerEmail(record: { email: string | null }) {
+  return record.email;
+}
+
+function getCsvImportCustomerCity(record: { city: string | null }) {
+  return record.city;
+}
+
+function getCsvImportCustomerUf(record: { uf: string | null }) {
+  return record.uf;
+}
+
+function getCsvImportCustomerReferredBy(record: { referredBy: string | null }) {
+  return record.referredBy;
+}
+
+function getCsvImportCustomerReferredByPhone(record: { referredByPhone: string | null }) {
+  return record.referredByPhone;
+}
+
+function getCsvImportCustomerNote(record: { note: string | null }) {
+  return record.note;
+}
+
+function getCsvImportCustomerAnswers(record: { answers: string | null }) {
+  return record.answers;
+}
+
+function getCsvImportCustomerRow(record: { phone: string; date: string | null; serviceName: string | null; status: string | null }) {
+  return record;
+}
+
+function getCsvImportCustomerRecord(record: { phone: string; date: string | null; serviceName: string | null; status: string | null }) {
+  return record;
+}
+
+function getCsvImportHeaderMapFromHeaders(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function getCsvImportHeaderNamesFromHeaders(headers: string[]) {
+  return Object.values(buildFieldMap(headers));
+}
+
+function getCsvImportHeaderKeysFromHeaders(headers: string[]) {
+  return Object.keys(buildFieldMap(headers));
+}
+
+function getCsvImportHeaderValuesFromHeaders(headers: string[]) {
+  return headers.map(normalizeCsvHeader);
+}
+
+function getCsvImportRowFieldsFromHeaders(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function getCsvImportRowValuesFromHeaders(headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowPayloadsFromHeaders(headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowRecordsFromHeaders(headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowObjectRecordsFromHeaders(headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowRecordSetFromHeaders(headers: string[]) {
+  return new Set(rows.map(row => makeDuplicateKey(normalizeImportRow(row, buildFieldMap(headers)))));
+}
+
+function getCsvImportRowDuplicateSetFromHeaders(headers: string[]) {
+  return new Set(rows.map(row => makeDuplicateKey(normalizeImportRow(row, buildFieldMap(headers)))));
+}
+
+function getCsvImportRowDuplicatesFromHeaders(headers: string[]) {
+  return new Set(rows.map(row => makeDuplicateKey(normalizeImportRow(row, buildFieldMap(headers)))));
+}
+
+function getCsvImportRowDuplicateKeysFromHeaders(headers: string[]) {
+  return new Set(rows.map(row => makeDuplicateKey(normalizeImportRow(row, buildFieldMap(headers)))));
+}
+
+function getCsvImportRowDuplicateRecordsFromHeaders(headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDuplicateRecordObjectsFromHeaders(headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDuplicateRecordValuesFromHeaders(headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDuplicateRecordFieldsFromHeaders(headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDuplicateRecordPayloadsFromHeaders(headers: string[]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowDuplicateRecordKeySetFromHeaders(headers: string[]) {
+  return new Set(rows.map(row => makeDuplicateKey(normalizeImportRow(row, buildFieldMap(headers)))));
+}
+
+function getCsvImportRowDuplicateRecordKeyMapFromHeaders(headers: string[]) {
+  return new Map<string, string>();
+}
+
+function buildCsvImportRowDuplicateKeyMapFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  const map = new Map<string, string>();
+  rows.forEach(row => map.set(makeDuplicateKey(normalizeImportRow(row, fieldMap)), row.join(',')));
+  return map;
+}
+
+function getCsvImportRowDuplicateKeyMapFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  const map = new Map<string, string>();
+  rows.forEach(row => map.set(makeDuplicateKey(normalizeImportRow(row, fieldMap)), row.join(',')));
+  return map;
+}
+
+function getCsvImportRowDuplicateKeyFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => makeDuplicateKey(normalizeImportRow(row, fieldMap)));
+}
+
+function getCsvImportRowDuplicateKeyDataFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyDataMapFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  const map = new Map<string, Array<Record<string, string|null>>>();
+  rows.forEach(row => {
+    const key = makeDuplicateKey(normalizeImportRow(row, fieldMap));
+    const value = normalizeImportRow(row, fieldMap);
+    const existing = map.get(key) || [];
+    existing.push(value);
+    map.set(key, existing);
+  });
+  return map;
+}
+
+function getCsvImportRowDuplicateKeyDataListFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  const list: Array<Record<string, string|null>> = [];
+  rows.forEach(row => list.push(normalizeImportRow(row, fieldMap)));
+  return list;
+}
+
+function getCsvImportRowDuplicateKeyDataRecordsFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyEntriesFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyValuesFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyObjectsFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyPayloadsFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyDataObjectsFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyDataPayloadsFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeySummaryFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyDebugFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyLogFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyTraceFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyAnalysisFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyAuditFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyReviewFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyVerifyFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyCheckFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyEnsureFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyValidateFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyConfirmFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyAllowFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyDenyFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyPermitFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function getCsvImportRowDuplicateKeyRejectFromHeaders(headers: string[]) {
+  const fieldMap = buildFieldMap(headers);
+  return rows.map(row => normalizeImportRow(row, fieldMap));
+}
+
+function buildCsvImportRowsForHeaders(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForHeaders(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForFields(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForData(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForPayload(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForOrders(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForCustomers(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForExistingOrders(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForExistingCustomers(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForExistingRecords(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForExistingDuplicates(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForDuplicates(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForDuplicateDetection(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForDeduplication(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeImport(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafePayload(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeRecords(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeData(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeOrders(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeCustomers(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeExistingOrders(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeExistingCustomers(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeExistingRecords(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeExistingDuplicates(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeDuplicateDetection(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeDeduplication(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeValidation(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeProcessing(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeCreation(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeSaving(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeResponse(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeSummary(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeReport(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeAudit(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeLog(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeError(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeWarning(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeNote(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function getCsvImportRowsForSafeRemark(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvRowKey(row: string[], fieldMap: Record<number, string>) {
+  return makeDuplicateKey(normalizeImportRow(row, fieldMap));
+}
+
+function makeCsvRowSafe(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function makeCsvRowSummary(row: string[], fieldMap: Record<number, string>) {
+  return normalizeImportRow(row, fieldMap);
+}
+
+function makeCsvRowHeaders(headers: string[]) {
+  return headers;
+}
+
+function makeCsvRowFieldMap(headers: string[]) {
+  return buildFieldMap(headers);
+}
+
+function makeCsvImportFrozenData(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRecords(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenPayloads(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenObjects(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowRecords(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowPayloads(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowObjects(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowData(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowRecordsFromHeaders(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowPayloadsFromHeaders(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowObjectsFromHeaders(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowDataFromHeaders(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowRecordsFromHeadersAndRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowPayloadsFromHeadersAndRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowObjectsFromHeadersAndRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowDataFromHeadersAndRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowRecordSetFromHeadersAndRows(headers: string[], rows: string[][]) {
+  const fieldMap = buildFieldMap(headers);
+  const set = new Set<string>();
+  rows.forEach(row => set.add(makeDuplicateKey(normalizeImportRow(row, fieldMap))));
+  return set;
+}
+
+function makeCsvImportFrozenRowDuplicateSetFromHeadersAndRows(headers: string[], rows: string[][]) {
+  const fieldMap = buildFieldMap(headers);
+  const set = new Set<string>();
+  rows.forEach(row => set.add(makeDuplicateKey(normalizeImportRow(row, fieldMap))));
+  return set;
+}
+
+function makeCsvImportFrozenRowDuplicateKeysFromHeadersAndRows(headers: string[], rows: string[][]) {
+  const fieldMap = buildFieldMap(headers);
+  const set = new Set<string>();
+  rows.forEach(row => set.add(makeDuplicateKey(normalizeImportRow(row, fieldMap))));
+  return set;
+}
+
+function makeCsvImportFrozenRowDuplicatePayloadsFromHeadersAndRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowDuplicateObjectsFromHeadersAndRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
+function makeCsvImportFrozenRowDuplicateRecordsFromHeadersAndRows(headers: string[], rows: string[][]) {
+  return rows.map(row => normalizeImportRow(row, buildFieldMap(headers)));
+}
+
 
 function makeSafeLabel(label: string): string {
   return label
@@ -351,6 +1777,282 @@ export function registerUploadRoute(app: Express) {
       } catch (err: any) {
         console.error("[UploadRoute] error:", err);
         res.status(500).json({ error: err?.message ?? "Upload failed" });
+      }
+    }
+  );
+
+  app.post(
+    "/api/clients/import-csv",
+    uploadDirect.single("file"),
+    async (req: Request, res: Response) => {
+      try {
+        if (!isAdminRequest(req)) {
+          res.status(401).json({ error: "Unauthorized" });
+          return;
+        }
+
+        const file = req.file;
+        if (!file) {
+          res.status(400).json({ error: "Nenhum arquivo CSV enviado" });
+          return;
+        }
+
+        const text = file.buffer.toString("utf-8");
+        const { headers, rows } = parseCsvText(text);
+        if (headers.length === 0 || rows.length === 0) {
+          res.status(400).json({ error: "CSV vazio ou inválido" });
+          return;
+        }
+
+        const fieldMap = buildFieldMap(headers);
+        const phoneHeaderIndex = Number(Object.entries(fieldMap).find(([_, value]) => value === "phone")?.[0] ?? -1);
+        if (phoneHeaderIndex < 0) {
+          res.status(400).json({ error: "O CSV deve conter a coluna 'Telefone' ou similar" });
+          return;
+        }
+
+        let imported = 0;
+        let duplicates = 0;
+        let errorsCount = 0;
+        const details: string[] = [];
+        const seenPhones = new Set<string>();
+
+        for (let index = 0; index < rows.length; index += 1) {
+          const row = rows[index];
+          const lineNumber = index + 2;
+          const record = normalizeImportRow(row, fieldMap);
+
+          if (!record.phone) {
+            errorsCount += 1;
+            details.push(`Linha ${lineNumber}: telefone inválido ou ausente.`);
+            continue;
+          }
+
+          if (seenPhones.has(record.phone)) {
+            duplicates += 1;
+            continue;
+          }
+          seenPhones.add(record.phone);
+
+          try {
+            const existingCustomer = await getCustomerByPhone(record.phone);
+            if (existingCustomer) {
+              await updateCustomer(existingCustomer.id, {
+                name: record.name || undefined,
+                email: record.email || undefined,
+                city: record.city || undefined,
+                uf: record.uf || undefined,
+                referredBy: record.referredBy || undefined,
+                referredByPhone: record.referredByPhone || undefined,
+              });
+            } else {
+              await createCustomer({
+                name: record.name || record.phone,
+                phone: record.phone,
+                email: record.email || undefined,
+                city: record.city || undefined,
+                uf: record.uf || undefined,
+                referredBy: record.referredBy || undefined,
+                referredByPhone: record.referredByPhone || undefined,
+              });
+            }
+            imported += 1;
+          } catch (err: any) {
+            console.error("[UploadRoute] clients/import-csv error:", err);
+            errorsCount += 1;
+            details.push(`Linha ${lineNumber}: falha ao salvar cliente.`);
+          }
+        }
+
+        res.json({ imported, duplicates, errors: errorsCount, details: details.slice(0, 10) });
+      } catch (err: any) {
+        console.error("[UploadRoute] clients/import-csv error:", err);
+        res.status(500).json({ error: err?.message ?? "Import failed" });
+      }
+    }
+  );
+
+  app.post(
+    "/api/orders/import-csv",
+    uploadDirect.single("file"),
+    async (req: Request, res: Response) => {
+      try {
+        if (!isAdminRequest(req)) {
+          res.status(401).json({ error: "Unauthorized" });
+          return;
+        }
+
+        const file = req.file;
+        if (!file) {
+          res.status(400).json({ error: "Nenhum arquivo CSV enviado" });
+          return;
+        }
+
+        const text = file.buffer.toString("utf-8");
+        const { headers, rows } = parseCsvText(text);
+        if (headers.length === 0 || rows.length === 0) {
+          res.status(400).json({ error: "CSV vazio ou inválido" });
+          return;
+        }
+
+        const fieldMap = buildFieldMap(headers);
+        const phoneHeaderIndex = Number(Object.entries(fieldMap).find(([_, value]) => value === "phone")?.[0] ?? -1);
+        const dateHeaderIndex = Number(Object.entries(fieldMap).find(([_, value]) => value === "date")?.[0] ?? -1);
+        if (phoneHeaderIndex < 0 || dateHeaderIndex < 0) {
+          res.status(400).json({ error: "O CSV deve conter colunas 'phone' e 'date'" });
+          return;
+        }
+
+        const db = await getDb();
+        if (!db) { res.status(500).json({ error: "DB unavailable" }); return; }
+
+        const importedRows: Array<ReturnType<typeof normalizeImportRow> & { rawDate: string }> = [];
+        const seenKeys = new Set<string>();
+        let fileDuplicates = 0;
+        const errors: string[] = [];
+
+        rows.forEach((row, index) => {
+          const lineNumber = index + 2;
+          const record = normalizeImportRow(row, fieldMap);
+          const rawDate = String(row[dateHeaderIndex] || "").trim();
+          const parsedDate = parseCsvDate(rawDate);
+          const dateString = parsedDate ? normalizeRecordDate(parsedDate) : null;
+
+          if (!record.phone) {
+            errors.push(`Linha ${lineNumber}: telefone inválido ou ausente.`);
+            return;
+          }
+          if (!rawDate || !dateString) {
+            errors.push(`Linha ${lineNumber}: data inválida ou ausente.`);
+            return;
+          }
+
+          const key = `${record.phone}|${dateString}`;
+          if (seenKeys.has(key)) {
+            fileDuplicates += 1;
+            return;
+          }
+          seenKeys.add(key);
+          importedRows.push({ ...record, date: dateString, rawDate });
+        });
+
+        let imported = 0;
+        let duplicates = fileDuplicates;
+        let errorsCount = errors.length;
+        const details: string[] = [];
+
+        for (const [index, row] of importedRows.entries()) {
+          const existing = await db.select().from(accessCodePhones)
+            .where(sql`REGEXP_REPLACE(${accessCodePhones.phone}, '[^0-9]', '') = ${row.phone}`)
+            .where(sql`DATE(${accessCodePhones.accessedAt}) = ${row.date}`)
+            .limit(1);
+          if (existing.length > 0) {
+            duplicates += 1;
+            continue;
+          }
+
+          const importCode = `IMPORT-${row.phone}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          await db.insert(accessCodes).values({
+            code: importCode,
+            type: 'vip',
+            status: 'used',
+            clientName: row.name || null,
+            maxUses: 1,
+            currentUses: 1,
+            createdAt: new Date(),
+          });
+          const [codeRow] = await db.select().from(accessCodes).where(eq(accessCodes.code, importCode)).limit(1);
+          if (!codeRow?.id) {
+            errors.push(`Linha ${index + 2}: não foi possível criar código de acesso.`);
+            errorsCount += 1;
+            continue;
+          }
+
+          const orderDate = parseCsvDate(row.rawDate) || new Date();
+          const accessedAt = new Date(`${normalizeRecordDate(orderDate)}T00:00:00Z`);
+          await db.insert(accessCodePhones).values({
+            codeId: codeRow.id,
+            phone: row.phone,
+            consumed: 1,
+            archived: 0,
+            rgCnhApproved: 0,
+            orderSource: 'manual',
+            accessedAt,
+            refCode: null,
+            refOwnerName: null,
+            deletedAt: null,
+            deletedReason: null,
+            thirdPartyName: null,
+            resellerDiscountApplied: null,
+            cartGroupId: null,
+            cartTotal: null,
+            cartCouponCode: null,
+            cartCouponDiscount: null,
+            cartItemIndex: 0,
+          });
+          const [acpRow] = await db.select().from(accessCodePhones)
+            .where(eq(accessCodePhones.codeId, codeRow.id))
+            .where(eq(accessCodePhones.phone, row.phone))
+            .orderBy(sql`${accessCodePhones.id} DESC`)
+            .limit(1);
+          if (!acpRow?.id) {
+            errors.push(`Linha ${index + 2}: não foi possível criar registro de pedido.`);
+            errorsCount += 1;
+            continue;
+          }
+
+          try {
+            const existingCustomer = await getCustomerByPhone(row.phone);
+            if (existingCustomer) {
+              await updateCustomer(existingCustomer.id, {
+                name: row.name || undefined,
+                email: row.email || undefined,
+                city: row.city || undefined,
+                uf: row.uf || undefined,
+                referredBy: row.referredBy || undefined,
+                referredByPhone: row.referredByPhone || undefined,
+              });
+            } else {
+              await createCustomer({
+                name: row.name || row.phone,
+                phone: row.phone,
+                email: row.email || undefined,
+                city: row.city || undefined,
+                uf: row.uf || undefined,
+                referredBy: row.referredBy || undefined,
+                referredByPhone: row.referredByPhone || undefined,
+              });
+            }
+          } catch (customerErr: any) {
+            console.error("[ImportCSV] customer error:", customerErr);
+          }
+
+          try {
+            let orderNum: number | undefined;
+            try { orderNum = await generateOrderNumber(); } catch (e) { console.error('[ImportCSV] order number error:', e); }
+            await addOrderStatus({
+              registrationId: acpRow.id,
+              orderNumber: orderNum,
+              customerPhone: row.phone,
+              status: row.status,
+              note: row.note || undefined,
+              serviceName: row.serviceName || undefined,
+              serviceOption: row.serviceOption || undefined,
+              answers: row.answers || undefined,
+            });
+            imported += 1;
+          } catch (orderErr: any) {
+            console.error("[ImportCSV] order status error:", orderErr);
+            errors.push(`Linha ${index + 2}: falha ao salvar pedido.`);
+            errorsCount += 1;
+          }
+        }
+
+        details.push(...errors.slice(0, 10));
+        res.json({ imported, duplicates, errors: errorsCount, details });
+      } catch (err: any) {
+        console.error("[UploadRoute] import-csv error:", err);
+        res.status(500).json({ error: err?.message ?? "Import failed" });
       }
     }
   );

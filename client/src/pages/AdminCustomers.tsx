@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Pencil, Trash2, Download, Search, X, Users, Gift, Camera, KeyRound, RefreshCw, Eye, EyeOff, ShieldCheck, ShieldOff, Lock, Unlock, Clock, FileText, FolderOpen, CheckSquare, Square, ListChecks, ExternalLink, Link2, Copy, Plus, DollarSign, BadgePercent, FileCheck, File, FileArchive, FileCode, FileJson, Music, Video, Image as ImageIcon } from "lucide-react";
+import { Pencil, Trash2, Download, Search, X, Users, Gift, Camera, KeyRound, RefreshCw, Eye, EyeOff, ShieldCheck, ShieldOff, Lock, Unlock, Clock, FileText, FolderOpen, CheckSquare, Square, ListChecks, ExternalLink, Link2, Copy, Plus, DollarSign, BadgePercent, FileCheck, File, FileArchive, FileCode, FileJson, Music, Video, Upload, Image as ImageIcon } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import { useTimezone } from "@/hooks/useTimezone";
 import { useLocation } from "wouter";
@@ -293,6 +293,14 @@ export default function AdminCustomers() {
   const [createCity, setCreateCity] = useState('');
   const [createUf, setCreateUf] = useState('');
   const [createError, setCreateError] = useState('');
+
+  const [showCsvImportModal, setShowCsvImportModal] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvPreview, setCsvPreview] = useState<{ rows: number; headers: string[]; sample: string[] } | null>(null);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvImportResult, setCsvImportResult] = useState<{ imported: number; duplicates: number; errors: number; details: string[] } | null>(null);
+  const [csvErrors, setCsvErrors] = useState<string[]>([]);
+
   const adminCreateMut = trpc.customers.adminCreate.useMutation({
     onSuccess: (data) => {
       if (data.success) {
@@ -394,6 +402,106 @@ export default function AdminCustomers() {
     let pwd = '';
     for (let i = 0; i < 8; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
     setFixedPwdInput(pwd);
+  };
+
+  const parseCsvLine = (line: string) => {
+    const cells: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        cells.push(current);
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    cells.push(current);
+    return cells.map(cell => cell.replace(/^"(.*)"$/s, '$1').replace(/""/g, '"').trim());
+  };
+
+  const parseCsvText = (text: string) => {
+    const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+    const lines = normalizedText.split("\n").filter(line => line.trim().length > 0);
+    if (lines.length === 0) return { headers: [] as string[], rows: [] as string[][] };
+    const headers = parseCsvLine(lines[0]);
+    const rows = lines.slice(1).map(parseCsvLine);
+    return { headers, rows };
+  };
+
+  const buildCsvPreview = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      const { headers, rows } = parseCsvText(text);
+      setCsvPreview({ rows: rows.length, headers, sample: rows.slice(0, 3).map(row => row.join(", ")) });
+      setCsvErrors([]);
+      setCsvImportResult(null);
+    };
+    reader.onerror = () => {
+      setCsvPreview(null);
+      setCsvErrors(["Não foi possível ler o arquivo CSV."]);
+      setCsvImportResult(null);
+    };
+    reader.readAsText(file, "UTF-8");
+  };
+
+  const handleCsvFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    setCsvFile(file);
+    setCsvImportResult(null);
+    setCsvErrors([]);
+    if (file) {
+      buildCsvPreview(file);
+    } else {
+      setCsvPreview(null);
+    }
+  };
+
+  const handleImportCsv = async () => {
+    if (!csvFile) {
+      toast.error("Selecione um arquivo CSV antes de importar.");
+      return;
+    }
+    setCsvImporting(true);
+    setCsvErrors([]);
+    setCsvImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", csvFile);
+      const response = await fetch("/api/clients/import-csv", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        const message = data?.error || "Falha ao importar o CSV.";
+        setCsvErrors([message]);
+        toast.error(message);
+      } else {
+        setCsvImportResult({
+          imported: Number(data.imported ?? 0),
+          duplicates: Number(data.duplicates ?? 0),
+          errors: Number(data.errors ?? 0),
+          details: Array.isArray(data.details) ? data.details.slice(0, 10) : [],
+        });
+        toast.success(`Importação concluída: ${data.imported ?? 0} clientes importados.`);
+        await customersQuery.refetch();
+      }
+    } catch (error) {
+      setCsvErrors(["Erro de rede ao enviar o CSV."]);
+      toast.error("Erro de rede ao enviar o CSV.");
+    } finally {
+      setCsvImporting(false);
+    }
   };
 
   const uploadPhotoMut = trpc.customers.uploadProfilePhoto.useMutation({
@@ -591,12 +699,104 @@ export default function AdminCustomers() {
             <span className="hidden sm:inline">Sorteios</span>
           </a>
 
+          <button onClick={() => setShowCsvImportModal(true)} className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors">
+            <Upload className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Importar CSV</span>
+          </button>
           <button onClick={exportCSV} className="flex items-center gap-1 px-2.5 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition-colors">
             <Download className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">CSV</span>
           </button>
         </div>
       } />
+
+      {showCsvImportModal && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-border bg-background shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold">Importar clientes CSV</h2>
+                <p className="text-sm text-muted-foreground">Envie um arquivo CSV com clientes. Telefones duplicados no arquivo serão ignorados.</p>
+              </div>
+              <button onClick={() => setShowCsvImportModal(false)} className="rounded-full p-2 text-muted-foreground hover:bg-card transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-4 px-6 py-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-foreground">Arquivo CSV</label>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleCsvFileChange}
+                  className="block w-full rounded-2xl border border-border bg-transparent px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary"
+                />
+              </div>
+              {csvFile && (
+                <div className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-foreground">{csvFile.name}</span>
+                    <span>({Math.round(csvFile.size / 1024)} KB)</span>
+                  </div>
+                  {csvPreview && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      <div>Linhas: {csvPreview.rows}</div>
+                      <div>Colunas: {csvPreview.headers.length}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {csvImportResult && (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm text-foreground">
+                  <div className="font-semibold">Resultado da importação</div>
+                  <div className="mt-2 grid gap-1 text-sm text-muted-foreground">
+                    <div>Importados: {csvImportResult.imported}</div>
+                    <div>Duplicatas ignoradas: {csvImportResult.duplicates}</div>
+                    <div>Erros: {csvImportResult.errors}</div>
+                  </div>
+                  {csvImportResult.details.length > 0 && (
+                    <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                      {csvImportResult.details.map((detail, index) => (
+                        <div key={index}>• {detail}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {csvErrors.length > 0 && (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-500">
+                  {csvErrors.map((error, index) => (
+                    <div key={index}>{error}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col gap-3 border-t border-border px-6 py-4 sm:flex-row sm:justify-end sm:items-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCsvImportModal(false);
+                  setCsvFile(null);
+                  setCsvPreview(null);
+                  setCsvImportResult(null);
+                  setCsvErrors([]);
+                }}
+                className="rounded-2xl border border-border px-4 py-2 text-sm text-foreground hover:bg-card transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleImportCsv}
+                disabled={!csvFile || csvImporting}
+                className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors disabled:opacity-50"
+              >
+                {csvImporting ? "Importando..." : "Importar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="container py-4 space-y-4">
         {/* Busca + Ordenação */}
