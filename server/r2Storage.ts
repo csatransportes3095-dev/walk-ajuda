@@ -10,9 +10,10 @@ function validateR2Config() {
 
 function getR2Client() {
   validateR2Config();
+  const endpoint = ENV.r2Endpoint.replace(/\/+$/, "");
   return new S3Client({
     region: "auto",
-    endpoint: ENV.r2Endpoint,
+    endpoint,
     credentials: {
       accessKeyId: ENV.r2AccessKeyId,
       secretAccessKey: ENV.r2SecretAccessKey,
