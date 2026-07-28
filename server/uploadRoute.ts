@@ -1,10 +1,10 @@
 /**
- * uploadRoute.ts — Upload de vídeo em chunks via presigned PUT para S3
+ * uploadRoute.ts — Upload de vídeo em chunks para Cloudflare R2 via backend
  *
  * Fluxo:
- *   1. POST /api/upload/init-chunked  → cria sessão no banco, retorna uploadId + array de presigned PUT URLs
- *   2. PUT  /api/upload/chunk-proxy   → recebe chunk do browser, faz PUT streaming para S3 (sem buffer em memória)
- *   3. POST /api/upload/finalize-chunked → baixa chunks do S3 em paralelo, monta arquivo final, salva no banco
+ *   1. POST /api/upload/init-chunked  → cria sessão no banco, retorna uploadId e fileKey
+ *   2. POST /api/upload/chunk-media  → recebe chunk do browser e envia direto para R2 via backend
+ *   3. POST /api/upload/finalize-media → baixa chunks do R2 em paralelo, monta arquivo final, salva no banco
  *
  * Por que funciona em produção:
  *   - Cada chunk é 20MB → abaixo do limite do Cloudflare (~100MB)
@@ -17,7 +17,7 @@ import express from "express";
 import multer from "multer";
 import jwt from "jsonwebtoken";
 import { parse as parseCookieHeader } from "cookie";
-import { storagePut, storageGet } from "./storage";
+import { r2PutObject, r2GetObjectBuffer, r2DeleteObjects } from "./r2Storage";
 import { addOrderFile, getDb } from "./db";
 import { uploadSessions } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -100,39 +100,6 @@ function makeSafeLabel(label: string): string {
     .replace(/[^a-z0-9-]/gi, "");
 }
 
-/** Obtém presigned PUT URL do Forge API para um path no S3 */
-async function getPresignedPutUrl(relKey: string): Promise<string> {
-  const baseUrl = (ENV.forgeApiUrl || "").replace(/\/+$/, "");
-  const apiKey = ENV.forgeApiKey;
-  const url = new URL(`${baseUrl}/v1/storage/presign/put`);
-  url.searchParams.set("path", relKey.replace(/^\/+/, ""));
-  const resp = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
-  if (!resp.ok) {
-    const msg = await resp.text().catch(() => resp.statusText);
-    throw new Error(`Failed to get presigned PUT URL: ${resp.status} ${msg}`);
-  }
-  const data = await resp.json() as { url: string };
-  return data.url;
-}
-
-/** Obtém presigned GET URL do Forge API para um path no S3 (mesmo bucket do presign/put) */
-async function getPresignedGetUrl(relKey: string): Promise<string> {
-  const baseUrl = (ENV.forgeApiUrl || "").replace(/\/+$/, "");
-  const apiKey = ENV.forgeApiKey;
-  const url = new URL(`${baseUrl}/v1/storage/presign/get`);
-  url.searchParams.set("path", relKey.replace(/^\/+/, ""));
-  const resp = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
-  if (!resp.ok) {
-    const msg = await resp.text().catch(() => resp.statusText);
-    throw new Error(`Failed to get presigned GET URL: ${resp.status} ${msg}`);
-  }
-  const data = await resp.json() as { url: string };
-  return data.url;
-}
 
 export function registerUploadRoute(app: Express) {
 
@@ -210,19 +177,9 @@ export function registerUploadRoute(app: Express) {
           return;
         }
 
-        // Obter presigned PUT URL e fazer upload do chunk diretamente para S3
+        // Enviar diretamente para Cloudflare R2 via backend
         const chunkKey = `chunks/${uploadId}/${idx}`;
-        const presignedUrl = await getPresignedPutUrl(chunkKey);
-
-        const putResp = await fetch(presignedUrl, {
-          method: "PUT",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: new Uint8Array(chunk.buffer),
-        });
-        if (!putResp.ok) {
-          const msg = await putResp.text().catch(() => putResp.statusText);
-          throw new Error(`S3 PUT failed for chunk ${idx}: ${putResp.status} ${msg}`);
-        }
+        await r2PutObject(chunkKey, chunk.buffer, "application/octet-stream");
 
         // Atualizar contador no banco
         const newCount = session.receivedChunks + 1;
@@ -264,22 +221,22 @@ export function registerUploadRoute(app: Express) {
         return;
       }
 
-      // Baixar todos os chunks do S3 em PARALELO
-      // IMPORTANTE: usar presign/get (mesmo bucket do presign/put), não storageGet
+      // Baixar todos os chunks do Cloudflare R2 em paralelo
       const chunkKeys = Array.from({ length: session.totalChunks }, (_, i) => `chunks/${uploadId}/${i}`);
       const chunkBuffers = await Promise.all(
-        chunkKeys.map(async (chunkKey, i) => {
-          const presignedGetUrl = await getPresignedGetUrl(chunkKey);
-          const resp = await fetch(presignedGetUrl);
-          if (!resp.ok) throw new Error(`Failed to download chunk ${i}: ${resp.status}`);
-          return Buffer.from(await resp.arrayBuffer());
+        chunkKeys.map(async (chunkKey) => {
+          return await r2GetObjectBuffer(chunkKey);
         })
       );
 
       const fullBuffer = Buffer.concat(chunkBuffers);
 
-      // Salvar arquivo final no S3
-      const { url } = await storagePut(session.fileKey, fullBuffer, session.contentType);
+      // Salvar arquivo final no Cloudflare R2
+      const { url } = await r2PutObject(session.fileKey, fullBuffer, session.contentType);
+
+      // Limpar chunks temporários após persistir o arquivo final
+      const cleanupKeys = Array.from({ length: session.totalChunks }, (_, i) => `chunks/${uploadId}/${i}`);
+      await r2DeleteObjects(cleanupKeys);
 
       // Salvar no banco de dados
       await addOrderFile({
@@ -337,7 +294,7 @@ export function registerUploadRoute(app: Express) {
         const safePhone = (phone || "desconhecido").replace(/\D/g, "").slice(-11);
         const randomSuffix = Math.random().toString(36).substring(2, 10);
         const fileKey = `order-docs/${safePhone}-${safeLabel}-${randomSuffix}.${r.ext}`;
-        const { url } = await storagePut(fileKey, file.buffer, r.contentType);
+        const { url } = await r2PutObject(fileKey, file.buffer, r.contentType);
         res.json({ success: true, fileUrl: url, fileKey, mimeType: r.contentType });
       } catch (err: any) {
         console.error("[UploadRoute] client-file error:", err);
@@ -380,7 +337,7 @@ export function registerUploadRoute(app: Express) {
         const randomSuffix = Math.random().toString(36).substring(2, 10);
         const prefix = fromAdmin === "1" || fromAdmin === 1 ? "admin-docs" : "order-docs";
         const fileKey = `${prefix}/${customerPhone}-${safeLabel}-${randomSuffix}.${r.ext}`;
-        const { url } = await storagePut(fileKey, file.buffer, r.contentType);
+        const { url } = await r2PutObject(fileKey, file.buffer, r.contentType);
         await addOrderFile({
           registrationId: Number(registrationId),
           customerPhone,
@@ -398,12 +355,12 @@ export function registerUploadRoute(app: Express) {
     }
   );
 
-  // ─── ADMIN MEDIA UPLOAD V2: Frontend envia chunks DIRETO para S3 ──────────
+  // ─── ADMIN MEDIA UPLOAD V2: Frontend envia chunks para o backend e R2 ────
   // Fluxo:
-  //   1. POST /api/upload/init-media → cria sessão, retorna uploadId + presigned PUT URLs para cada chunk
-  //   2. Frontend envia cada chunk DIRETO para S3 (sem passar pelo backend)
-  //   3. POST /api/upload/confirm-chunk → frontend confirma que chunk foi enviado
-  //   4. POST /api/upload/finalize-media → backend monta o arquivo final em background
+  //   1. POST /api/upload/init-media → cria sessão, retorna uploadId + fileKey
+  //   2. POST /api/upload/chunk-media → envia cada chunk para o backend, que grava em R2
+  //   3. POST /api/upload/confirm-chunk → frontend confirma que chunk foi recebido
+  //   4. POST /api/upload/finalize-media → backend monta o arquivo final em R2
   //   5. GET /api/upload/media-job-status?jobId=X → polling do status
 
   app.post("/api/upload/init-media", jsonParser, async (req: Request, res: Response) => {
@@ -414,18 +371,10 @@ export function registerUploadRoute(app: Express) {
       const r = resolveFileExt(mimeType, filename);
       const safeName = makeSafeLabel(filename || "media");
       const randomSuffix = Math.random().toString(36).substring(2, 10);
-      const fileKey = `admin-media/${safeName}-${randomSuffix}.${r.ext}`;
+      const fileKey = `videos/${safeName}-${randomSuffix}.${r.ext}`;
       const uploadId = `media-${Date.now()}-${randomSuffix}`;
       const db = await getDb();
       if (!db) { res.status(500).json({ error: "DB unavailable" }); return; }
-
-      // Gerar presigned PUT URLs para todos os chunks
-      const presignedUrls: string[] = [];
-      for (let i = 0; i < Number(totalChunks); i++) {
-        const chunkKey = `chunks/${uploadId}/${i}`;
-        const url = await getPresignedPutUrl(chunkKey);
-        presignedUrls.push(url);
-      }
 
       await db.insert(uploadSessions).values({
         uploadId,
@@ -441,7 +390,7 @@ export function registerUploadRoute(app: Express) {
         receivedChunks: 0,
         jobStatus: "uploading",
       });
-      res.json({ uploadId, fileKey, presignedUrls });
+      res.json({ uploadId, fileKey });
     } catch (err: any) {
       console.error("[UploadRoute] init-media error:", err);
       res.status(500).json({ error: err?.message ?? "Init failed" });
@@ -485,13 +434,7 @@ export function registerUploadRoute(app: Express) {
         const session = sessions[0];
         if (!session) { res.status(404).json({ error: "Session not found" }); return; }
         const chunkKey = `chunks/${uploadId}/${idx}`;
-        const presignedUrl = await getPresignedPutUrl(chunkKey);
-        const putResp = await fetch(presignedUrl, {
-          method: "PUT",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: new Uint8Array(chunk.buffer),
-        });
-        if (!putResp.ok) throw new Error(`S3 PUT failed: ${putResp.status}`);
+        await r2PutObject(chunkKey, chunk.buffer, "application/octet-stream");
         const newCount = session.receivedChunks + 1;
         await db.update(uploadSessions).set({ receivedChunks: newCount }).where(eq(uploadSessions.uploadId, uploadId));
         res.json({ received: newCount, total: session.totalChunks });
@@ -535,15 +478,12 @@ export function registerUploadRoute(app: Express) {
       const buffers: Buffer[] = [];
       for (let i = 0; i < session.totalChunks; i++) {
         const chunkKey = `chunks/${uploadId}/${i}`;
-        const presignedGetUrl = await getPresignedGetUrl(chunkKey);
-        const resp = await fetch(presignedGetUrl);
-        if (!resp.ok) throw new Error(`Falha ao baixar chunk ${i}: ${resp.status}`);
-        buffers.push(Buffer.from(await resp.arrayBuffer()));
+        buffers.push(await r2GetObjectBuffer(chunkKey));
       }
       const fullBuffer = Buffer.concat(buffers);
-      console.log(`[finalize-media] Buffer: ${fullBuffer.length} bytes. Enviando S3...`);
-      const { url } = await storagePut(session.fileKey, fullBuffer, session.contentType);
-      console.log(`[finalize-media] S3 OK: ${url}`);
+      console.log(`[finalize-media] Buffer: ${fullBuffer.length} bytes. Enviando R2...`);
+      const { url } = await r2PutObject(session.fileKey, fullBuffer, session.contentType);
+      console.log(`[finalize-media] R2 OK: ${url}`);
 
       // Salvar no banco
       const { adminMediaFiles } = await import("../drizzle/schema");
@@ -652,8 +592,8 @@ export function registerUploadRoute(app: Express) {
       const r = resolveFileExt(file.mimetype, file.originalname);
       const safeName = makeSafeLabel(file.originalname || "imagem");
       const randomSuffix = Math.random().toString(36).substring(2, 10);
-      const fileKey = `admin-media/${safeName}-${randomSuffix}.${r.ext}`;
-      const { url } = await storagePut(fileKey, file.buffer, r.contentType);
+      const fileKey = `fotos/${safeName}-${randomSuffix}.${r.ext}`;
+      const { url } = await r2PutObject(fileKey, file.buffer, r.contentType);
       // Salvar no banco
       const db = await getDb();
       if (!db) { res.status(500).json({ error: "DB unavailable" }); return; }
@@ -683,7 +623,7 @@ export function registerUploadRoute(app: Express) {
 
   // ─── CLIENT UPLOAD via JSON base64 (robusto em produção/celular) ──────────────
   // O browser comprime a imagem para JPEG e envia como base64 dentro de JSON.
-  // O servidor decodifica e usa storagePut direto — SEM multer, SEM multipart.
+  // O servidor decodifica e usa r2PutObject direto — SEM multer, SEM multipart.
   // Isso elimina a causa real das falhas de upload no celular:
   //   - parsing de multipart no proxy (Cloudflare/Cloud Run)
   //   - multer com memoryStorage e limites de body
@@ -703,7 +643,7 @@ export function registerUploadRoute(app: Express) {
       const safePhone = (phone || "desconhecido").replace(/\D/g, "").slice(-11);
       const randomSuffix = Math.random().toString(36).substring(2, 10);
       const fileKey = `order-docs/${safePhone}-${safeLabel}-${randomSuffix}.${r.ext}`;
-      const { url } = await storagePut(fileKey, buffer, r.contentType);
+      const { url } = await r2PutObject(fileKey, buffer, r.contentType);
       res.json({ success: true, fileUrl: url, fileKey, mimeType: r.contentType });
     } catch (err: any) {
       console.error("[UploadRoute] client-file-base64 error:", err);
