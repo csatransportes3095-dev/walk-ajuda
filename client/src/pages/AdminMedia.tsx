@@ -152,9 +152,9 @@ export default function AdminMedia() {
           pollingRef.current = null;
           const videoUrl = data.videoUrl || "";
           const finalSlug = data.videoSlug || null;
-          const friendlyUrl = finalSlug ? `https://walkajuda.com/video/${finalSlug}` : (videoUrl.startsWith("/") ? `${window.location.origin}${videoUrl}` : videoUrl);
+          const friendlyUrl = finalSlug ? `https://h2colombiano.com/video/${finalSlug}` : (videoUrl.startsWith("/") ? `${window.location.origin}${videoUrl}` : videoUrl);
           setStatus({ phase: "completed", url: friendlyUrl, videoUrl: friendlyUrl, name: fileName, slug: finalSlug });
-          toast.success(finalSlug ? `Pronto! URL: https://walkajuda.com/video/${finalSlug}` : "Upload concluído!");
+          toast.success(finalSlug ? `Pronto! URL: https://h2colombiano.com/video/${finalSlug}` : "Upload concluído!");
           navigator.clipboard.writeText(friendlyUrl).catch(() => {});
           loadList();
         } else if (data.status === "failed") {
@@ -224,7 +224,7 @@ export default function AdminMedia() {
       if (result.status === "completed") {
         const friendlyUrl = result.videoUrl || "";
         setStatus({ phase: "completed", url: friendlyUrl, videoUrl: friendlyUrl, name: file.name, slug: result.videoSlug || null });
-        toast.success(result.videoSlug ? `Pronto! URL: https://walkajuda.com/video/${result.videoSlug}` : "Upload concluído!");
+        toast.success(result.videoSlug ? `Pronto! URL: https://h2colombiano.com/video/${result.videoSlug}` : "Upload concluído!");
         navigator.clipboard.writeText(friendlyUrl).catch(() => {});
         loadList();
       } else {
