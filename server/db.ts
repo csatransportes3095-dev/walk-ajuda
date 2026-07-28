@@ -60,6 +60,7 @@ import {
   spreadsheetOperational, SpreadsheetOperational, InsertSpreadsheetOperational,
   spreadsheetGoals, SpreadsheetGoal, InsertSpreadsheetGoal,
   broadcastQueue, BroadcastQueue,
+  emailAccounts, EmailAccount, InsertEmailAccount,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -3680,3 +3681,37 @@ export async function getBroadcastByTaskUid(taskUid: string): Promise<Broadcast 
   const rows = await db.select().from(broadcasts).where(eq(broadcasts.scheduleCronTaskUid, taskUid)).limit(1);
   return rows[0] || null;
 }
+
+// ========== EMAIL ACCOUNTS (ZOHO) ==========
+
+export async function upsertEmailAccount(emailAddress: string, type: 'principal' | 'membro' = 'membro') {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const existing = await db.select().from(emailAccounts).where(eq(emailAccounts.emailAddress, emailAddress)).limit(1);
+  const now = Date.now();
+  if (existing.length > 0) {
+    return await db.update(emailAccounts).set({ type, updatedAt: now }).where(eq(emailAccounts.emailAddress, emailAddress));
+  }
+  return await db.insert(emailAccounts).values({ emailAddress, type, createdAt: now, updatedAt: now });
+}
+
+export async function getEmailAccountType(emailAddress: string): Promise<'principal' | 'membro' | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(emailAccounts).where(eq(emailAccounts.emailAddress, emailAddress)).limit(1);
+  return rows[0]?.type || null;
+}
+
+export async function deleteEmailAccount(emailAddress: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(emailAccounts).where(eq(emailAccounts.emailAddress, emailAddress));
+}
+
+export async function listEmailAccounts(): Promise<Array<{ emailAddress: string; type: 'principal' | 'membro' }>> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(emailAccounts);
+  return rows.map(r => ({ emailAddress: r.emailAddress, type: r.type }));
+}
+

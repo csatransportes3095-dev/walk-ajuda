@@ -7510,7 +7510,14 @@ export const appRouter = router({
   // === ZOHO MAIL - GERENCIAMENTO DE EMAILS ===
   email: router({
     list: adminProcedure.query(async () => {
-      return await listZohoUsers(200);
+      const users = await listZohoUsers(200);
+      const { listEmailAccounts } = await import('../server/db');
+      const accountTypes = await listEmailAccounts();
+      const typeMap = Object.fromEntries(accountTypes.map(a => [a.emailAddress, a.type]));
+      return users.map(user => ({
+        ...user,
+        type: typeMap[user.primaryEmailAddress] || 'membro',
+      }));
     }),
 
     create: adminProcedure
@@ -7520,6 +7527,7 @@ export const appRouter = router({
         password: z.string().min(8),
         firstName: z.string().optional(),
         lastName: z.string().optional(),
+        type: z.enum(['principal', 'membro']).default('membro'),
       }))
       .mutation(async ({ input }) => {
         const primaryEmailAddress = `${input.username.toLowerCase()}@walkajuda.com`;
@@ -7530,6 +7538,9 @@ export const appRouter = router({
           firstName: input.firstName,
           lastName: input.lastName,
         });
+        // Store email account type in database
+        const { upsertEmailAccount } = await import('../server/db');
+        await upsertEmailAccount(primaryEmailAddress, input.type);
         return { success: true, user };
       }),
 
@@ -7537,6 +7548,9 @@ export const appRouter = router({
       .input(z.object({ email: z.string().email() }))
       .mutation(async ({ input }) => {
         await deleteZohoUser(input.email);
+        // Remove email account from database
+        const { deleteEmailAccount } = await import('../server/db');
+        await deleteEmailAccount(input.email);
         return { success: true };
       }),
 

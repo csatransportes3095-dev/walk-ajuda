@@ -1501,6 +1501,18 @@ export const spreadsheetOnlineStatus = mysqlTable("spreadsheetOnlineStatus", {
 export type SpreadsheetOnlineStatus = typeof spreadsheetOnlineStatus.$inferSelect;
 export type InsertSpreadsheetOnlineStatus = typeof spreadsheetOnlineStatus.$inferInsert;
 
+// Tabela de contas de email (metadados do Zoho)
+export const emailAccounts = mysqlTable("emailAccounts", {
+  id: int("id").autoincrement().primaryKey(),
+  emailAddress: varchar("emailAddress", { length: 320 }).notNull().unique(),
+  type: mysqlEnum("type", ["principal", "membro"]).notNull().default("membro"),
+  createdAt: bigint("createdAt", { mode: "number" }).notNull().default(Date.now()),
+  updatedAt: bigint("updatedAt", { mode: "number" }).notNull().default(Date.now()),
+});
+
+export type EmailAccount = typeof emailAccounts.$inferSelect;
+export type InsertEmailAccount = typeof emailAccounts.$inferInsert;
+
 // Tabela de notificações de chat não lidas
 export const chatNotifications = mysqlTable("chatNotifications", {
   id: int("id").autoincrement().primaryKey(),
