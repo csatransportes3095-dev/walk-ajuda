@@ -2200,7 +2200,7 @@ export function registerUploadRoute(app: Express) {
       console.log(`[finalize-media] COMPLETED: ${url}`);
 
       // Responder com resultado final — sem polling necessário
-      const friendlyUrl = finalSlug ? `https://walkajuda.com/video/${finalSlug}` : url;
+      const friendlyUrl = finalSlug ? `https://h2colombiano.com/video/${finalSlug}` : url;
       res.json({ success: true, status: "completed", videoUrl: friendlyUrl, videoSlug: finalSlug });
     } catch (err: any) {
       console.error("[UploadRoute] finalize-media error:", err);
