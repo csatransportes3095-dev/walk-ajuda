@@ -7,7 +7,6 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { registerUploadRoute } from "../uploadRoute";
 import { appRouter } from "../routers";
@@ -56,7 +55,6 @@ async function startServer() {
   app.use(express.json({ limit: "200mb" }));
   app.use(express.urlencoded({ limit: "200mb", extended: true }));
   registerStorageProxy(app);
-  registerOAuthRoutes(app);
 
   // Middleware de bloqueio de IP — bloqueia antes de qualquer rota de negócio
   app.use(async (req, res, next) => {

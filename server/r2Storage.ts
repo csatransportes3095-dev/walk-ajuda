@@ -10,16 +10,16 @@ function validateR2Config() {
 
 function getR2Client() {
   validateR2Config();
-  const endpoint = ENV.r2Endpoint.trim().replace(/\/+$/, "");
-  const accessKeyIdRaw = ENV.r2AccessKeyId || "";
-  const secretAccessKeyRaw = ENV.r2SecretAccessKey || "";
+  const endpoint = ENV.r2Endpoint.replace(/[\r\n\s]+/g, "").replace(/\/+$/, "");
+  const accessKeyId = ENV.r2AccessKeyId.replace(/[\r\n\s]+/g, "");
+  const secretAccessKey = ENV.r2SecretAccessKey.replace(/[\r\n\s]+/g, "");
 
   // --- R2 Diagnostic safe logs (DO NOT LOG SECRET CONTENT) ---
   try {
     const endpointRaw = ENV.r2Endpoint || "";
     const bucketRaw = ENV.r2BucketName || "";
-    const accessRaw = accessKeyIdRaw;
-    const secretRaw = secretAccessKeyRaw;
+    const accessRaw = ENV.r2AccessKeyId || "";
+    const secretRaw = ENV.r2SecretAccessKey || "";
     const accessTrimmed = accessRaw.trim();
     const secretTrimmed = secretRaw.trim();
 
@@ -45,8 +45,8 @@ function getR2Client() {
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
     credentials: {
-      accessKeyId: accessKeyIdRaw.trim(),
-      secretAccessKey: secretAccessKeyRaw.trim(),
+      accessKeyId,
+      secretAccessKey,
     },
   });
 }

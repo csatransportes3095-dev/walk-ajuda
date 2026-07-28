@@ -48,11 +48,9 @@ export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
 
-    // Aceita tanto Manus OAuth admin quanto o novo cookie JWT admin independente
-    const isOAuthAdmin = ctx.user && ctx.user.role === 'admin';
     const isJwtAdmin = isAdminJwtValid(ctx.req);
 
-    if (!isOAuthAdmin && !isJwtAdmin) {
+    if (!isJwtAdmin) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 
