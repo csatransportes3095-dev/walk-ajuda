@@ -11,8 +11,32 @@ function validateR2Config() {
 function getR2Client() {
   validateR2Config();
   const endpoint = ENV.r2Endpoint.trim().replace(/\/+$/, "");
-  const accessKeyId = ENV.r2AccessKeyId.trim();
-  const secretAccessKey = ENV.r2SecretAccessKey.trim();
+  const accessKeyIdRaw = ENV.r2AccessKeyId || "";
+  const secretAccessKeyRaw = ENV.r2SecretAccessKey || "";
+
+  // --- R2 Diagnostic safe logs (DO NOT LOG SECRET CONTENT) ---
+  try {
+    const endpointRaw = ENV.r2Endpoint || "";
+    const bucketRaw = ENV.r2BucketName || "";
+    const accessRaw = accessKeyIdRaw;
+    const secretRaw = secretAccessKeyRaw;
+    const accessTrimmed = accessRaw.trim();
+    const secretTrimmed = secretRaw.trim();
+
+    // Log only non-sensitive diagnostics
+    console.log('[R2 DIAG] endpoint:', endpointRaw);
+    console.log('[R2 DIAG] bucket:', bucketRaw);
+    console.log('[R2 DIAG] accessKeyLength:', accessTrimmed.length);
+    console.log('[R2 DIAG] secretKeyLength:', secretTrimmed.length);
+    console.log('[R2 DIAG] accessKeyStartsWith_cfat:', accessTrimmed.startsWith('cfat_'));
+    console.log('[R2 DIAG] accessKeyContainsQuotes:', /["\']/.test(accessRaw));
+    console.log('[R2 DIAG] secretKeyContainsQuotes:', /["\']/.test(secretRaw));
+    console.log('[R2 DIAG] accessKeyHasSpacesOrNewline:', /[ \t\n\r]/.test(accessRaw));
+    console.log('[R2 DIAG] secretKeyHasSpacesOrNewline:', /[ \t\n\r]/.test(secretRaw));
+  } catch (diagErr) {
+    // Never throw from diagnostics
+    try { console.error('[R2 DIAG] error while diagnosing R2 env:', String(diagErr)); } catch {}
+  }
 
   return new S3Client({
     region: "auto",
@@ -21,8 +45,8 @@ function getR2Client() {
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
     credentials: {
-      accessKeyId,
-      secretAccessKey,
+      accessKeyId: accessKeyIdRaw.trim(),
+      secretAccessKey: secretAccessKeyRaw.trim(),
     },
   });
 }
@@ -33,7 +57,7 @@ function normalizeKey(key: string) {
 
 export function buildR2PublicUrl(key: string) {
   const path = normalizeKey(key);
-  return `${ENV.r2PublicUrl.replace(/\/+$/, "")}/${path}`;
+  return `${ENV.r2PublicUrl.trim().replace(/\/+$/, "")}/${path}`;
 }
 
 async function streamToBuffer(stream: unknown): Promise<Buffer> {
@@ -66,7 +90,7 @@ export async function r2PutObject(key: string, body: Buffer | Uint8Array | strin
   const client = getR2Client();
   const normalizedKey = normalizeKey(key);
   const command = new PutObjectCommand({
-    Bucket: ENV.r2BucketName,
+    Bucket: ENV.r2BucketName.trim(),
     Key: normalizedKey,
     Body: body,
     ContentType: contentType,
@@ -79,7 +103,7 @@ export async function r2PutObject(key: string, body: Buffer | Uint8Array | strin
 export async function r2GetObjectBuffer(key: string) {
   const client = getR2Client();
   const normalizedKey = normalizeKey(key);
-  const command = new GetObjectCommand({ Bucket: ENV.r2BucketName, Key: normalizedKey });
+  const command = new GetObjectCommand({ Bucket: ENV.r2BucketName.trim(), Key: normalizedKey });
   const response = await client.send(command);
   if (!response.Body) {
     throw new Error(`R2 object ${normalizedKey} has no body`);
@@ -95,7 +119,7 @@ export async function r2DeleteObjects(keys: string[]) {
     .map((key) => ({ Key: normalizeKey(key) }));
   if (normalizedObjects.length === 0) return;
   const command = new DeleteObjectsCommand({
-    Bucket: ENV.r2BucketName,
+    Bucket: ENV.r2BucketName.trim(),
     Delete: { Objects: normalizedObjects, Quiet: true },
   });
   await client.send(command);
@@ -105,7 +129,7 @@ export async function r2ListObjects(prefix: string) {
   const client = getR2Client();
   const normalizedPrefix = normalizeKey(prefix);
   const command = new ListObjectsV2Command({
-    Bucket: ENV.r2BucketName,
+    Bucket: ENV.r2BucketName.trim(),
     Prefix: normalizedPrefix,
   });
   const response = await client.send(command);
