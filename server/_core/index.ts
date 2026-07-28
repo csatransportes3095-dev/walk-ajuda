@@ -14,6 +14,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { isIpBlocked, getSetting } from "../db";
 import { broadcastEmailHandler } from "../broadcastEmailHandler";
+import { sendMail } from "./mailer";
 import path from "path";
 import fs from "fs";
 
@@ -168,6 +169,20 @@ async function startServer() {
     const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
     res.set({ 'Content-Type': 'image/gif', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' });
     res.send(pixel);
+  });
+
+  app.post("/api/email/test", async (_req, res) => {
+    try {
+      await sendMail({
+        to: "walkajuda@walkajuda.com",
+        subject: "Teste de SMTP Walk Ajuda",
+        html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f8fafc;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,0.12)"><h1 style="margin:0 0 16px;color:#0f172a">Teste de SMTP Walk Ajuda</h1><p style="margin:0 0 12px;color:#334155">Este é um e-mail de teste enviado pelo endpoint <strong>/api/email/test</strong>.</p><p style="margin:0;color:#475569">Se você receber este e-mail, a configuração SMTP está funcionando.</p></div>`,
+      });
+      res.json({ ok: true, message: "Email de teste enviado para walkajuda@walkajuda.com" });
+    } catch (error) {
+      console.error('[EmailTest] erro ao enviar e-mail de teste:', error);
+      res.status(500).json({ ok: false, error: String(error) });
+    }
   });
 
   // ===== MANIFESTO PWA DINÂMICO =====

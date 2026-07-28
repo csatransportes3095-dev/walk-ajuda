@@ -17,5 +17,10 @@ export const ENV = {
   zohoClientId: process.env.ZOHO_CLIENT_ID ?? "",
   zohoClientSecret: process.env.ZOHO_CLIENT_SECRET ?? "",
   zohoRefreshToken: process.env.ZOHO_REFRESH_TOKEN ?? "",
+  smtpHost: process.env.SMTP_HOST ?? "smtp.zoho.com",
+  smtpPort: Number(process.env.SMTP_PORT ?? "465"),
+  smtpUser: process.env.SMTP_USER ?? "walkajuda@walkajuda.com",
+  smtpPass: process.env.SMTP_PASS ?? process.env.ZOHO_EMAIL_PASSWORD ?? "",
+  smtpFrom: process.env.SMTP_FROM ?? process.env.SMTP_USER ?? "walkajuda@walkajuda.com",
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? "",
 };

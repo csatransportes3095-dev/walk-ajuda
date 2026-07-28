@@ -1,19 +1,12 @@
 import { z } from "zod";
 import { adminProcedure, publicProcedure, router } from "./trpc";
-import nodemailer from "nodemailer";
+import { sendMail } from "./mailer";
 
 const ADMIN_EMAIL = 'walkajuda@walkajuda.com';
 
 async function sendOwnerEmail(subject: string, html: string) {
   try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.zoho.com',
-      port: 465,
-      secure: true,
-      auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
-    });
-    await transporter.sendMail({
-      from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+    await sendMail({
       to: ADMIN_EMAIL,
       subject,
       html,

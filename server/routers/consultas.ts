@@ -14,20 +14,13 @@ import {
   getSetting,
   upsertSetting,
 } from "../db";
-import nodemailer from "nodemailer";
 import { storagePut } from "../storage";
+import { sendMail } from "../_core/mailer";
+
 // ─── Helpers de e-mail ──────────────────────────────────────────────────────────────────────────────
 async function sendEmail(to: string, subject: string, html: string) {
-  const emailPass = process.env.ZOHO_EMAIL_PASSWORD;
-  if (!emailPass) return false;
   try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.zoho.com',
-      port: 465,
-      secure: true,
-      auth: { user: 'walkajuda@walkajuda.com', pass: emailPass },
-    });
-    await transporter.sendMail({ from: '"Walk Ajuda" <walkajuda@walkajuda.com>', to, subject, html });
+    await sendMail({ to, subject, html });
     return true;
   } catch (e) {
     console.error("[consultas] email error:", e);

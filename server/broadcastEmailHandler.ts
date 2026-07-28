@@ -3,7 +3,7 @@
  * Montado em /api/scheduled/broadcastEmail no index.ts.
  */
 import type { Request, Response } from "express";
-import nodemailer from "nodemailer";
+import { sendMail } from "./_core/mailer";
 import { sdk } from "./_core/sdk";
 import {
   getBroadcastByTaskUid,
@@ -55,19 +55,6 @@ export async function broadcastEmailHandler(req: Request, res: Response) {
     }
 
     // Enviar e-mail para este item
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 20000,
-      auth: {
-        user: "walkajuda@gmail.com",
-        pass: process.env.GMAIL_APP_PASSWORD || "",
-      },
-    });
-
     const typeLabel: Record<string, string> = {
       text: "Mensagem",
       promo: "🎉 Promoção",
@@ -111,8 +98,8 @@ export async function broadcastEmailHandler(req: Request, res: Response) {
     const subject = broadcast.title || "Mensagem da Walk Ajuda";
 
     try {
-      await transporter.sendMail({
-        from: '"Walk Ajuda" <walkajuda@gmail.com>',
+      await sendMail({
+        from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
         to: item.recipientEmail,
         subject,
         html,
