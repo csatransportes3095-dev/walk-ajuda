@@ -62,7 +62,7 @@ function fileNameToSlug(filename: string): string {
 function getPublicUrl(media: Pick<MediaFile, "url" | "videoSlug" | "mimeType">): string {
   if (media.videoSlug) {
     const prefix = media.mimeType.startsWith('video/') ? 'video' : 'foto';
-    return `https://walkajuda.com/${prefix}/${media.videoSlug}`;
+    return `https://h2colombiano.com/${prefix}/${media.videoSlug}`;
   }
   return media.url;
 }
