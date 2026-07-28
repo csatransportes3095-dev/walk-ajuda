@@ -1837,25 +1837,20 @@ export function registerUploadRoute(app: Express) {
           try {
             const existingCustomer = await getCustomerByPhone(record.phone);
             if (existingCustomer) {
-              await updateCustomer(existingCustomer.id, {
-                name: record.name || undefined,
-                email: record.email || undefined,
-                city: record.city || undefined,
-                uf: record.uf || undefined,
-                referredBy: record.referredBy || undefined,
-                referredByPhone: record.referredByPhone || undefined,
-              });
-            } else {
-              await createCustomer({
-                name: record.name || record.phone,
-                phone: record.phone,
-                email: record.email || undefined,
-                city: record.city || undefined,
-                uf: record.uf || undefined,
-                referredBy: record.referredBy || undefined,
-                referredByPhone: record.referredByPhone || undefined,
-              });
+              duplicates += 1;
+              details.push(`Linha ${lineNumber}: cliente já existe no banco e foi descartado.`);
+              continue;
             }
+
+            await createCustomer({
+              name: record.name || record.phone,
+              phone: record.phone,
+              email: record.email || undefined,
+              city: record.city || undefined,
+              uf: record.uf || undefined,
+              referredBy: record.referredBy || undefined,
+              referredByPhone: record.referredByPhone || undefined,
+            });
             imported += 1;
           } catch (err: any) {
             console.error("[UploadRoute] clients/import-csv error:", err);
