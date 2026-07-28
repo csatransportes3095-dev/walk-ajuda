@@ -3,22 +3,27 @@ import { Readable } from "stream";
 import { ENV } from "./_core/env";
 
 function validateR2Config() {
-  if (!ENV.r2AccessKeyId || !ENV.r2SecretAccessKey || !ENV.r2Endpoint || !ENV.r2BucketName || !ENV.r2PublicUrl) {
+  if (!ENV.r2AccessKeyId?.trim() || !ENV.r2SecretAccessKey?.trim() || !ENV.r2Endpoint?.trim() || !ENV.r2BucketName?.trim() || !ENV.r2PublicUrl?.trim()) {
     throw new Error("Cloudflare R2 storage is not configured. Set R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT, R2_BUCKET_NAME, and R2_PUBLIC_URL.");
   }
 }
 
 function getR2Client() {
   validateR2Config();
-  const endpoint = ENV.r2Endpoint.replace(/\/+$/, "");
+  const endpoint = ENV.r2Endpoint.trim().replace(/\/+$/, "");
+  const accessKeyId = ENV.r2AccessKeyId.trim();
+  const secretAccessKey = ENV.r2SecretAccessKey.trim();
+
   return new S3Client({
     region: "auto",
     endpoint,
+    forcePathStyle: true,
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
     credentials: {
-      accessKeyId: ENV.r2AccessKeyId,
-      secretAccessKey: ENV.r2SecretAccessKey,
+      accessKeyId,
+      secretAccessKey,
     },
-    forcePathStyle: false,
   });
 }
 
