@@ -4,8 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 // ============================================================
 // 🔧 MODO MANUTENÇÃO — mude para false para reabrir o site
 // ============================================================
-const MAINTENANCE_MODE = true;
-
+const MAINTENANCE_MODE = false;
 function MaintenancePage() {
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center px-4 text-center">
