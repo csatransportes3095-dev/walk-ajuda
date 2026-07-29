@@ -4,75 +4,42 @@ const ZOHO_TOKEN_URL = "https://accounts.zoho.com/oauth/v2/token";
 const ZOHO_API_BASE = "https://mail.zoho.com/api";
 const ZOHO_USER_API_BASE = "https://mail.zoho.com/api";
 
-let cachedAccessToken: string | null = null;
-let tokenExpiresAt = 0;
-let cachedOrgId: string | null = null;
-let cachedClientId: string | null = null;
-let cachedClientSecret: string | null = null;
-let cachedRefreshToken: string | null = null;
+// Cache por servidor (configId -> token)
+const tokenCache = new Map<number, { token: string; expiresAt: number }>();
 
-// Obter credenciais: primeiro do banco de dados, depois do .env
-async function getZohoCredentials() {
-  // Cache com validade de 60s para não consultar DB toda hora
-  if (cachedOrgId && cachedClientId && cachedClientSecret && cachedRefreshToken) {
-    return { cachedOrgId, cachedClientId, cachedClientSecret, cachedRefreshToken };
+// Cache de credenciais de todos os servidores ativos (expira em 30s)
+let cachedActiveConfigs: any[] | null = null;
+let configCacheExpiresAt = 0;
+
+async function getAllActiveConfigs(): Promise<any[]> {
+  const now = Date.now();
+  if (cachedActiveConfigs && now < configCacheExpiresAt) {
+    return cachedActiveConfigs;
   }
-
   try {
-    const { getActiveZohoOAuthConfig } = await import('./db');
-    const config = await getActiveZohoOAuthConfig();
-    
-    if (config) {
-      cachedOrgId = config.zohoOrgId;
-      cachedClientId = config.zohoClientId;
-      cachedClientSecret = config.zohoClientSecret;
-      cachedRefreshToken = config.zohoRefreshToken;
-      
-      // Limpar cache após 60 segundos
-      setTimeout(() => {
-        cachedOrgId = null;
-        cachedClientId = null;
-        cachedClientSecret = null;
-        cachedRefreshToken = null;
-      }, 60_000);
-      
-      return {
-        orgId: config.zohoOrgId,
-        clientId: config.zohoClientId,
-        clientSecret: config.zohoClientSecret,
-        refreshToken: config.zohoRefreshToken,
-      };
-    }
+    const { listZohoOAuthConfigs } = await import('./db');
+    const all = await listZohoOAuthConfigs();
+    cachedActiveConfigs = all.filter((c: any) => c.isActive === 1);
+    configCacheExpiresAt = now + 30_000;
+    return cachedActiveConfigs;
   } catch (err) {
-    console.warn("Erro ao buscar credenciais do banco:", err);
+    console.warn("Erro ao buscar configs Zoho:", err);
+    return [];
   }
-
-  // Fallback para variáveis de ambiente
-  if (!ENV.zohoOrgId || !ENV.zohoClientId || !ENV.zohoClientSecret || !ENV.zohoRefreshToken) {
-    throw new Error("Credenciais Zoho não configuradas. Configure via painel Admin ou arquivo .env");
-  }
-
-  return {
-    orgId: ENV.zohoOrgId,
-    clientId: ENV.zohoClientId,
-    clientSecret: ENV.zohoClientSecret,
-    refreshToken: ENV.zohoRefreshToken,
-  };
 }
 
-async function getAccessToken(): Promise<string> {
+async function getAccessTokenForConfig(config: any): Promise<string> {
   const now = Date.now();
-  if (cachedAccessToken && now < tokenExpiresAt - 60_000) {
-    return cachedAccessToken;
+  const cached = tokenCache.get(config.id);
+  if (cached && now < cached.expiresAt - 60_000) {
+    return cached.token;
   }
 
-  const creds = await getZohoCredentials();
-
   const params = new URLSearchParams({
-    refresh_token: creds.refreshToken,
+    refresh_token: config.zohoRefreshToken,
     grant_type: "refresh_token",
-    client_id: creds.clientId,
-    client_secret: creds.clientSecret,
+    client_id: config.zohoClientId,
+    client_secret: config.zohoClientSecret,
   });
 
   const res = await fetch(ZOHO_TOKEN_URL, {
@@ -81,29 +48,43 @@ async function getAccessToken(): Promise<string> {
     body: params.toString(),
   });
 
-  const data = (await res.json()) as {
-    access_token?: string;
-    expires_in?: number;
-    error?: string;
-  };
-
+  const data = (await res.json()) as { access_token?: string; expires_in?: number; error?: string };
   if (!data.access_token) {
-    throw new Error(`Zoho token error: ${data.error ?? "unknown"}`);
+    throw new Error(`Zoho token error (${config.name}): ${data.error ?? "unknown"}`);
   }
 
-  cachedAccessToken = data.access_token;
-  tokenExpiresAt = now + (data.expires_in ?? 3600) * 1000;
-  return cachedAccessToken;
+  tokenCache.set(config.id, { token: data.access_token, expiresAt: now + (data.expires_in ?? 3600) * 1000 });
+  return data.access_token;
 }
 
-async function zohoRequest<T>(
+// Obter o primeiro servidor ativo (para operações que precisam de um servidor específico)
+async function getPrimaryConfig(): Promise<any> {
+  const configs = await getAllActiveConfigs();
+  if (configs.length > 0) return configs[0];
+
+  // Fallback para variáveis de ambiente
+  if (!ENV.zohoOrgId || !ENV.zohoClientId || !ENV.zohoClientSecret || !ENV.zohoRefreshToken) {
+    throw new Error("Credenciais Zoho não configuradas. Configure via painel Admin.");
+  }
+  return {
+    id: 0,
+    name: "ENV",
+    zohoOrgId: ENV.zohoOrgId,
+    zohoClientId: ENV.zohoClientId,
+    zohoClientSecret: ENV.zohoClientSecret,
+    zohoRefreshToken: ENV.zohoRefreshToken,
+  };
+}
+
+// Fazer request para um servidor específico
+async function zohoRequestForConfig<T>(
+  config: any,
   method: string,
   path: string,
   body?: unknown
 ): Promise<T> {
-  const token = await getAccessToken();
-  const creds = await getZohoCredentials();
-  const url = `${ZOHO_API_BASE}/organization/${creds.orgId}${path}`;
+  const token = await getAccessTokenForConfig(config);
+  const url = `${ZOHO_API_BASE}/organization/${config.zohoOrgId}${path}`;
 
   const res = await fetch(url, {
     method,
@@ -125,12 +106,18 @@ async function zohoRequest<T>(
     let message = json.status?.description ?? json.error ?? "unknown";
     if (errorCode === "EMAILADDRESS_ALREADY_EXISTS") message = "Este email já existe no Zoho Mail";
     else if (errorCode === "INVALID_PASSWORD") message = "Senha inválida — use pelo menos 8 caracteres com letras e números";
-    else if (errorCode === "ACCOUNT_LIMIT_EXCEEDED") message = "Limite de contas atingido no plano atual";
+    else if (errorCode === "ACCOUNT_LIMIT_EXCEEDED") message = "Limite de contas atingido neste servidor (máx. 5 no plano FREE)";
     else if (errorCode === "INVALID_EMAILADDRESS") message = "Endereço de email inválido";
     throw new Error(message);
   }
 
   return (json.data ?? json) as T;
+}
+
+// Request para o servidor primário (compatibilidade com código existente)
+async function zohoRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const config = await getPrimaryConfig();
+  return zohoRequestForConfig<T>(config, method, path, body);
 }
 
 export interface ZohoUser {
@@ -151,6 +138,11 @@ export interface ZohoUser {
   country: string;
 }
 
+export interface ZohoUserWithServer extends ZohoUser {
+  serverId: number;
+  serverName: string;
+}
+
 export interface CreateUserInput {
   primaryEmailAddress: string;
   displayName: string;
@@ -159,16 +151,41 @@ export interface CreateUserInput {
   lastName?: string;
 }
 
-export async function listZohoUsers(limit = 50): Promise<ZohoUser[]> {
-  const data = await zohoRequest<ZohoUser[]>(
-    "GET",
-    `/accounts?limit=${limit}`
-  );
-  return Array.isArray(data) ? data : [];
+// Listar utilizadores de um servidor específico
+export async function listZohoUsersForConfig(config: any, limit = 50): Promise<ZohoUser[]> {
+  try {
+    const data = await zohoRequestForConfig<ZohoUser[]>(config, "GET", `/accounts?limit=${limit}`);
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.warn(`Erro ao listar utilizadores do servidor ${config.name}:`, err);
+    return [];
+  }
 }
 
-export async function createZohoUser(input: CreateUserInput): Promise<ZohoUser> {
-  return zohoRequest<ZohoUser>("POST", "/accounts", {
+// Listar utilizadores de TODOS os servidores ativos, agrupados por servidor
+export async function listAllZohoUsersGrouped(limit = 50): Promise<{ serverId: number; serverName: string; domain: string; users: ZohoUser[] }[]> {
+  const configs = await getAllActiveConfigs();
+  if (configs.length === 0) return [];
+  const results = await Promise.all(
+    configs.map(async (config: any) => ({
+      serverId: config.id,
+      serverName: config.name,
+      domain: config.domain || 'walkajuda.com',
+      users: await listZohoUsersForConfig(config, limit),
+    }))
+  );
+  return results;
+}
+
+// Listar todos os utilizadores de todos os servidores (lista plana com info do servidor)
+export async function listZohoUsers(limit = 50): Promise<ZohoUserWithServer[]> {
+  const grouped = await listAllZohoUsersGrouped(limit);
+  return grouped.flatMap(g => g.users.map(u => ({ ...u, serverId: g.serverId, serverName: g.serverName })));
+}
+
+// Criar utilizador num servidor específico
+export async function createZohoUserInConfig(config: any, input: CreateUserInput): Promise<ZohoUser> {
+  return zohoRequestForConfig<ZohoUser>(config, "POST", "/accounts", {
     primaryEmailAddress: input.primaryEmailAddress,
     displayName: input.displayName,
     password: input.password,
@@ -177,40 +194,75 @@ export async function createZohoUser(input: CreateUserInput): Promise<ZohoUser> 
   });
 }
 
+// Criar utilizador no servidor com menos contas (distribuição automática)
+export async function createZohoUser(input: CreateUserInput): Promise<ZohoUser> {
+  const configs = await getAllActiveConfigs();
+  if (configs.length === 0) throw new Error("Nenhum servidor Zoho ativo. Configure via painel Admin.");
+
+  // Tentar criar no primeiro servidor disponível (que não lotou)
+  let lastError: Error | null = null;
+  for (const config of configs) {
+    try {
+      const result = await zohoRequestForConfig<ZohoUser>(config, "POST", "/accounts", {
+        primaryEmailAddress: input.primaryEmailAddress,
+        displayName: input.displayName,
+        password: input.password,
+        firstName: input.firstName ?? "",
+        lastName: input.lastName ?? "",
+      });
+      return result;
+    } catch (err: any) {
+      if (err.message.includes("Limite de contas atingido")) {
+        lastError = err;
+        continue; // Tentar próximo servidor
+      }
+      throw err; // Outro erro — propagar
+    }
+  }
+  throw lastError ?? new Error("Não foi possível criar a conta em nenhum servidor");
+}
+
 export async function deleteZohoUser(emailAddress: string): Promise<void> {
-  await zohoRequest<unknown>("DELETE", "/accounts", {
-    emailList: [emailAddress],
-  });
+  // Tentar deletar em todos os servidores (o email existe em apenas um)
+  const configs = await getAllActiveConfigs();
+  for (const config of configs) {
+    try {
+      await zohoRequestForConfig<unknown>(config, "DELETE", "/accounts", { emailList: [emailAddress] });
+      return;
+    } catch {
+      continue;
+    }
+  }
+  // Fallback para servidor primário
+  await zohoRequest<unknown>("DELETE", "/accounts", { emailList: [emailAddress] });
 }
 
-export async function resetZohoPassword(
-  emailAddress: string,
-  newPassword: string
-): Promise<void> {
-  // Find the user's accountId first
-  const users = await listZohoUsers(200);
-  const user = users.find((u) => u.primaryEmailAddress === emailAddress);
+export async function resetZohoPassword(emailAddress: string, newPassword: string): Promise<void> {
+  const allUsers = await listZohoUsers(200);
+  const user = allUsers.find((u) => u.primaryEmailAddress === emailAddress);
   if (!user) throw new Error("Usuário não encontrado");
 
-  await zohoRequest<unknown>("PUT", `/accounts/${user.accountId}/password`, {
-    password: newPassword,
-  });
+  const configs = await getAllActiveConfigs();
+  const config = configs.find((c: any) => c.id === user.serverId) ?? await getPrimaryConfig();
+  await zohoRequestForConfig<unknown>(config, "PUT", `/accounts/${user.accountId}/password`, { password: newPassword });
 }
 
-export async function toggleZohoUser(
-  emailAddress: string,
-  enabled: boolean
-): Promise<void> {
-  const users = await listZohoUsers(200);
-  const user = users.find((u) => u.primaryEmailAddress === emailAddress);
+export async function toggleZohoUser(emailAddress: string, enabled: boolean): Promise<void> {
+  const allUsers = await listZohoUsers(200);
+  const user = allUsers.find((u) => u.primaryEmailAddress === emailAddress);
   if (!user) throw new Error("Usuário não encontrado");
 
-  await zohoRequest<unknown>("PUT", `/accounts/${user.accountId}`, {
-    enabled,
-  });
+  const configs = await getAllActiveConfigs();
+  const config = configs.find((c: any) => c.id === user.serverId) ?? await getPrimaryConfig();
+  await zohoRequestForConfig<unknown>(config, "PUT", `/accounts/${user.accountId}`, { enabled });
 }
 
 // ─── Funções de leitura de e-mails (inbox) ────────────────────────────────────
+
+async function getAccessToken(): Promise<string> {
+  const config = await getPrimaryConfig();
+  return getAccessTokenForConfig(config);
+}
 
 async function zohoUserRequest<T>(
   method: string,
@@ -255,7 +307,7 @@ export interface ZohoMessage {
   toAddress: string;
   receivedTime: string;
   size: number;
-  status: string; // "0" = unread, "1" = read
+  status: string;
   summary: string;
   folderId: string;
   hasAttachment: boolean;
@@ -271,66 +323,41 @@ export interface ZohoMessageContent {
   htmlContent?: string;
 }
 
-// Listar contas de e-mail do usuário autenticado
 export async function listMailAccounts(): Promise<ZohoMailAccount[]> {
   const data = await zohoUserRequest<{ data: ZohoMailAccount[] }>("GET", "/accounts");
   return Array.isArray((data as any).data) ? (data as any).data : Array.isArray(data) ? (data as any) : [];
 }
 
-// Resolver o folderId real da inbox (a API Zoho não aceita a string "inbox")
 async function resolveInboxFolderId(accountId: string): Promise<string> {
   const folders = await listFolders(accountId);
   const inbox = folders.find(f => f.folderName?.toLowerCase() === 'inbox');
   return inbox?.folderId ?? '';
 }
 
-// Listar mensagens da inbox de uma conta
 export async function listInboxMessages(
   accountId: string,
   folderId = "inbox",
   limit = 20,
   start = 0
 ): Promise<ZohoMessage[]> {
-  // Se folderId for "inbox" (string literal), resolver para o ID numérico real
   const resolvedFolderId = folderId === 'inbox' ? await resolveInboxFolderId(accountId) : folderId;
   if (!resolvedFolderId) return [];
   const data = await zohoUserRequest<any>(
     "GET",
     `/accounts/${accountId}/messages/view?folderId=${resolvedFolderId}&limit=${limit}&start=${start}&sortorder=false`
   );
-  const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
-  return arr;
+  return Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
 }
 
-// Ler conteúdo de uma mensagem
-export async function getMessageContent(
-  accountId: string,
-  messageId: string
-): Promise<ZohoMessageContent> {
-  return zohoUserRequest<ZohoMessageContent>(
-    "GET",
-    `/accounts/${accountId}/messages/${messageId}/content`
-  );
+export async function getMessageContent(accountId: string, messageId: string): Promise<ZohoMessageContent> {
+  return zohoUserRequest<ZohoMessageContent>("GET", `/accounts/${accountId}/messages/${messageId}/content`);
 }
 
-// Marcar mensagem como lida
-export async function markMessageRead(
-  accountId: string,
-  messageId: string
-): Promise<void> {
-  await zohoUserRequest<unknown>(
-    "PUT",
-    `/accounts/${accountId}/updatemessage`,
-    { mode: "markAsRead", messageId: [messageId] }
-  );
+export async function markMessageRead(accountId: string, messageId: string): Promise<void> {
+  await zohoUserRequest<unknown>("PUT", `/accounts/${accountId}/updatemessage`, { mode: "markAsRead", messageId: [messageId] });
 }
 
-// Listar pastas de uma conta
 export async function listFolders(accountId: string): Promise<{ folderId: string; folderName: string; unreadCount: number }[]> {
-  const data = await zohoUserRequest<any>(
-    "GET",
-    `/accounts/${accountId}/folders`
-  );
-  const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
-  return arr;
+  const data = await zohoUserRequest<any>("GET", `/accounts/${accountId}/folders`);
+  return Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
 }

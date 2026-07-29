@@ -1,7 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
   listZohoUsers,
+  listAllZohoUsersGrouped,
   createZohoUser,
+  createZohoUserInConfig,
+  listZohoUsersForConfig,
   deleteZohoUser,
   resetZohoPassword,
   toggleZohoUser,
@@ -856,7 +859,7 @@ export const appRouter = router({
             }
           }
 
-          const emailTo = await getSetting('contact_email') || 'walkajuda@walkajuda.com';
+          const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
           const whatsappNumberRaw = await getSetting('whatsapp_number') || '5511978307371';
           const whatsappNumber = whatsappNumberRaw.replace(/[^\d+]/g, '');
 
@@ -882,7 +885,7 @@ export const appRouter = router({
             connectionTimeout: 15000,
             greetingTimeout: 15000,
             socketTimeout: 20000,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
 
           const sendEmailWithTimeout = async (mailOptions: Parameters<typeof transporter.sendMail>[0], label: string): Promise<boolean> => {
@@ -1049,7 +1052,7 @@ export const appRouter = router({
 
           // Enviar email admin com timeout (não-bloqueante)
           const emailSent = await sendEmailWithTimeout({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
             to: emailTo,
             subject: `Novo Pedido - ${input.service} - ${input.clientName}`,
             html: emailContent,
@@ -1435,7 +1438,7 @@ export const appRouter = router({
                 } catch { /* ignore */ }
               }
               await sendEmailWithTimeout({
-                from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+                from: '"Walk Ajuda" <h2@h2colombiano.com>',
                 to: input.email,
                 subject: `✅ Pedido Recebido — ${siteTitle}`,
                 html: emailPedidoRecebidoCliente({
@@ -1468,12 +1471,12 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         try {
-          const emailTo = await getSetting('contact_email') || 'walkajuda@walkajuda.com';
+          const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
           const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           const spMime = input.paymentProofMime || 'image/jpeg';
           const spExt = spMime === 'application/pdf' ? 'pdf' : spMime === 'image/png' ? 'png' : 'jpg';
@@ -1485,7 +1488,7 @@ export const appRouter = router({
             paymentProofUrl = url;
           } catch (uploadError) { console.error('[S3] Erro:', uploadError); }
           await transporter.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
             to: emailTo,
             subject: `COMPROVANTE PIX - ${input.service} - ${input.clientName}`,
             html: emailComprovantePix({
@@ -1716,11 +1719,11 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
               const waLink = `https://wa.me/55${referrerCleanPhone}`;
               await transporter.sendMail({
-                from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+                from: '"Walk Ajuda" <h2@h2colombiano.com>',
                 to: referrer.email,
                 subject: `🎉 Sua indicação deu certo! ${safeInput.name} fez um pedido`,
                 html: emailIndicacaoSucesso({
@@ -1736,32 +1739,30 @@ export const appRouter = router({
           } catch (e) { console.error('Erro ao notificar indicador:', e); }
         }
         
-        // Notificação: finalização do cadastro (todos os dados)
-        try {
-          const emailTo = await getSetting('contact_email') || 'walkajuda@walkajuda.com';
-          const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
-          const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
-          const photoHtml = customer.profilePhotoUrl
-            ? `<div style="margin-top:16px;text-align:center"><img src="${customer.profilePhotoUrl}" alt="Foto" style="width:120px;height:120px;object-fit:cover;border-radius:50%;border:3px solid #10b981" /></div>`
-            : '';
-          await transporter.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
-            to: emailTo,
-            subject: `✅ Cadastro finalizado — ${safeInput.name} (${safeInput.phone})`,
-            html: emailCadastroFinalizadoAdmin({
-              name: safeInput.name,
-              phone: safeInput.phone,
-              service: undefined,
-              email: safeInput.email || undefined,
-              cpf: safeInput.cpf || undefined,
-            }),
-          });
-        } catch (e) { console.error('Email finalização cadastro:', e); }
+        // Notificação: finalização do cadastro — enviado em segundo plano para não bloquear
+        void (async () => {
+          try {
+            const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
+            const transporter = nodemailer.createTransport({
+              host: 'smtp.zoho.com',
+              port: 465,
+              secure: true,
+              auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            });
+            await transporter.sendMail({
+              from: '"Walk Ajuda" <h2@h2colombiano.com>',
+              to: emailTo,
+              subject: `✅ Cadastro finalizado — ${safeInput.name} (${safeInput.phone})`,
+              html: emailCadastroFinalizadoAdmin({
+                name: safeInput.name,
+                phone: safeInput.phone,
+                service: undefined,
+                email: safeInput.email || undefined,
+                cpf: safeInput.cpf || undefined,
+              }),
+            });
+          } catch (e) { console.error('Email finalização cadastro:', e); }
+        })();
         return { success: true, customer, alreadyExists: false };
       }),
 
@@ -2058,16 +2059,16 @@ export const appRouter = router({
         // nem falhar o upload da foto caso o Zoho esteja lento/indisponivel.
         void (async () => {
          try {
-          const emailTo = await getSetting('contact_email') || 'walkajuda@walkajuda.com';
+          const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
           const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
           const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporter.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
             to: emailTo,
             subject: `📸 Novo cliente iniciou cadastro — ${input.phone}`,
             html: emailInicioCadastroAdmin({
@@ -2452,11 +2453,11 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporterRaffle.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
-            to: await getSetting('contact_email') || 'walkajuda@walkajuda.com',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
+            to: await getSetting('contact_email') || 'h2@h2colombiano.com',
             subject: raffleNotifTitle,
             html: `<h2>${raffleNotifTitle}</h2><p>Nome: <strong>${input.customerName}</strong></p><p>Número: <strong>${input.number}</strong></p><p>Telefone: ${phoneFormatted}</p><p>Sorteio: ${raffle.title}</p>`,
           });
@@ -2562,11 +2563,11 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporter.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
-            to: await getSetting('contact_email') || 'walkajuda@walkajuda.com',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
+            to: await getSetting('contact_email') || 'h2@h2colombiano.com',
             subject: title,
             html: `<h2>${title}</h2><pre style="font-family:monospace;white-space:pre-wrap">${content}</pre>`,
           });
@@ -3174,14 +3175,14 @@ export const appRouter = router({
         const statusLabel = statusInfo.label;
 
         // Enviar email ao admin quando status muda
-        const emailTo = await getSetting('contact_email') || 'walkajuda@walkajuda.com';
+        const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
         if (emailTo && emailTo.trim() !== '') {
           try {
             const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const adminEmailContent = emailStatusAdmin({
@@ -3193,7 +3194,7 @@ export const appRouter = router({
               note: input.note || undefined,
             });
             await transporter.sendMail({
-              from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+              from: '"Walk Ajuda" <h2@h2colombiano.com>',
               to: emailTo,
               subject: `[ADMIN] Status Atualizado - ${statusLabel}`,
               html: adminEmailContent,
@@ -3213,7 +3214,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
@@ -3232,7 +3233,7 @@ export const appRouter = router({
               }
             } catch { /* usa fallback */ }
             await transporter.sendMail({
-              from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+              from: '"Walk Ajuda" <h2@h2colombiano.com>',
               to: input.customerEmail,
               subject: `${statusLabel} — ${siteTitle}`,
               html: emailStatusCliente({
@@ -3322,14 +3323,14 @@ export const appRouter = router({
         const statusLabel = statusInfo.label;
 
         // Enviar email ao admin quando status muda
-        const emailTo = await getSetting('contact_email') || 'walkajuda@walkajuda.com';
+        const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
         if (emailTo && emailTo.trim() !== '') {
           try {
             const transporterAdmin2 = nodemailer.createTransport({
               host: 'smtp.zoho.com',
               port: 465,
               secure: true,
-              auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+              auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
             });
             const adminEmailContent = emailStatusAdmin({
               statusLabel,
@@ -3340,7 +3341,7 @@ export const appRouter = router({
               note: input.note || undefined,
             });
             await transporterAdmin2.sendMail({
-              from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+              from: '"Walk Ajuda" <h2@h2colombiano.com>',
               to: emailTo,
               subject: `[ADMIN] Status Atualizado - ${statusLabel} - ${input.customerName || 'Pedido #' + input.orderNumber}`,
               html: adminEmailContent,
@@ -3360,7 +3361,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
@@ -3433,7 +3434,7 @@ export const appRouter = router({
               } catch (_) {}
             }
             await transporter.sendMail({
-              from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+              from: '"Walk Ajuda" <h2@h2colombiano.com>',
               to: input.customerEmail,
               subject: `${statusLabel} — ${siteTitle}`,
               html: emailStatusCliente({
@@ -3668,7 +3669,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
           const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
@@ -3705,7 +3706,7 @@ export const appRouter = router({
           const trackingIdR = cryptoR.randomBytes(24).toString('hex');
           const trackingPixelUrlR = `https://walkajuda.com/api/email-open/${trackingIdR}`;
           await transporter.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
             to: input.customerEmail,
             subject: `[Reenvio] ${statusLabel} — ${siteTitle}`,
               html: emailStatusCliente({
@@ -4140,10 +4141,10 @@ export const appRouter = router({
                   host: 'smtp.zoho.com',
                   port: 465,
                   secure: true,
-                  auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+                  auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
                 });
                 await transporter.sendMail({
-                  from: `"${siteTitle}" <walkajuda@walkajuda.com>`,
+                  from: `"${siteTitle}" <h2@h2colombiano.com>`,
                   to: referrer.email,
                   subject: `✅ Sua comissão${commText} foi paga! - ${siteTitle}`,
                   html: `
@@ -4355,14 +4356,14 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           const waLink = `https://wa.me/55${referrerCleanPhone}`;
           const commissionHtml = input.commissionValue && input.commissionValue > 0
             ? `<p style="margin:12px 0 8px;font-size:13px;color:#fcd34d;font-weight:bold;">💰 Comissão: R$ ${(input.commissionValue / 100).toFixed(2).replace('.', ',')}</p>`
             : '';
           await transporter.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
             to: referrer.email,
             subject: `[Reenvio] 🎉 Sua indicação deu certo! ${input.referredName} fez um pedido`,
             html: emailIndicacaoSucesso({
@@ -4469,7 +4470,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
@@ -4489,7 +4490,7 @@ export const appRouter = router({
             } catch { /* usa fallback */ }
             const pinHtml3 = ''; // Senha de acompanhamento removida
             await transporter.sendMail({
-              from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+              from: '"Walk Ajuda" <h2@h2colombiano.com>',
               to: input.email,
               subject: `${statusLabel} — ${siteTitle}`,
               html: emailStatusCliente({
@@ -4627,7 +4628,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const itemsHtml = input.items.map((item, i) =>
@@ -4649,7 +4650,7 @@ export const appRouter = router({
             } catch { /* usa fallback */ }
             const pinHtmlM = ''; // Senha de acompanhamento removida
             await transporter.sendMail({
-              from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+              from: '"Walk Ajuda" <h2@h2colombiano.com>',
               to: input.email,
               subject: `${statusLabel} — ${siteTitle}`,
               html: emailStatusCliente({
@@ -5423,11 +5424,11 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporterDoc.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
-            to: await getSetting('contact_email') || 'walkajuda@walkajuda.com',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
+            to: await getSetting('contact_email') || 'h2@h2colombiano.com',
             subject: docNotifTitle,
             html: `<h2>${docNotifTitle}</h2><p>Cliente: <strong>${input.customerPhone}</strong></p><p>Documento: <strong>${input.label}</strong></p><p><a href="${url}">Ver arquivo enviado</a></p>`,
           });
@@ -7511,13 +7512,18 @@ export const appRouter = router({
   // === ZOHO MAIL - GERENCIAMENTO DE EMAILS ===
   email: router({
     list: adminProcedure.query(async () => {
-      const users = await listZohoUsers(200);
+      const grouped = await listAllZohoUsersGrouped(200);
       const { listEmailAccounts } = await import('../server/db');
       const accountTypes = await listEmailAccounts();
-      const typeMap = Object.fromEntries(accountTypes.map(a => [a.emailAddress, a.type]));
-      return users.map(user => ({
-        ...user,
-        type: typeMap[user.primaryEmailAddress] || 'membro',
+      const typeMap = Object.fromEntries(accountTypes.map((a: any) => [a.emailAddress, a.type]));
+      return grouped.map(group => ({
+        serverId: group.serverId,
+        serverName: group.serverName,
+        domain: (group as any).domain || 'walkajuda.com',
+        users: group.users.map(user => ({
+          ...user,
+          type: typeMap[user.primaryEmailAddress] || 'membro',
+        })),
       }));
     }),
 
@@ -7529,20 +7535,50 @@ export const appRouter = router({
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         type: z.enum(['principal', 'membro']).default('membro'),
+        serverId: z.number().optional(), // ID do servidor específico onde criar
       }))
       .mutation(async ({ input }) => {
-        const primaryEmailAddress = `${input.username.toLowerCase()}@walkajuda.com`;
-        const user = await createZohoUser({
-          primaryEmailAddress,
-          displayName: input.displayName,
-          password: input.password,
-          firstName: input.firstName,
-          lastName: input.lastName,
-        });
-        // Store email account type in database
+        // Determinar o domínio correto baseado no servidor selecionado
+        let emailDomain = 'walkajuda.com';
+        if (input.serverId) {
+          const { listZohoOAuthConfigs: getConfigs } = await import('../server/db');
+          const allCfgs = await getConfigs();
+          const cfg = allCfgs.find((c: any) => c.id === input.serverId);
+          if (cfg?.domain) emailDomain = cfg.domain;
+        }
+        const primaryEmailAddress = `${input.username.toLowerCase()}@${emailDomain}`;
+        
+        // Se serverId especificado, usar esse servidor; senão distribuição automática
+        let user;
+        if (input.serverId) {
+          const { listZohoOAuthConfigs } = await import('../server/db');
+          const allConfigs = await listZohoOAuthConfigs();
+          const config = allConfigs.find((c: any) => c.id === input.serverId);
+          if (!config) throw new Error('Servidor não encontrado');
+          if (config.isActive !== 1) throw new Error('Servidor não está ativo');
+          const existingUsers = await listZohoUsersForConfig(config, 10);
+          if (existingUsers.length >= 5) throw new Error(`Servidor ${config.name} está lotado (5/5 contas). Escolha outro servidor.`);
+          user = await createZohoUserInConfig(config, {
+            primaryEmailAddress,
+            displayName: input.displayName,
+            password: input.password,
+            firstName: input.firstName,
+            lastName: input.lastName,
+          });
+        } else {
+          user = await createZohoUser({
+            primaryEmailAddress,
+            displayName: input.displayName,
+            password: input.password,
+            firstName: input.firstName,
+            lastName: input.lastName,
+          });
+        }
+        
+        // Guardar tipo na base de dados
         const { upsertEmailAccount } = await import('../server/db');
         await upsertEmailAccount(primaryEmailAddress, input.type);
-        return { success: true, user };
+        return { success: true, user, serverName: input.serverId ? undefined : 'auto' };
       }),
 
     delete: adminProcedure
@@ -7655,7 +7691,7 @@ export const appRouter = router({
         const authUrl = `https://accounts.zoho.com/oauth/v2/auth?` + new URLSearchParams({
           client_id: input.zohoClientId,
           response_type: 'code',
-          scope: 'ZohoMail.organization.accounts.ALL',
+          scope: 'ZohoMail.organization.accounts.ALL,ZohoMail.accounts.ALL,ZohoMail.messages.ALL,ZohoMail.folders.ALL',
           redirect_uri: redirectUri,
           state: sessionId,
           prompt: 'consent',

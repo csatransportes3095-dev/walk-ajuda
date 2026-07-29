@@ -3722,17 +3722,33 @@ export async function createZohoOAuthConfig(data: { name: string; zohoOrgId: str
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = Date.now();
-  await db.execute(sql.raw(
-    `INSERT INTO zohoOAuthConfigs (name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, lastError, lastTestAt, createdAt, updatedAt)
-     VALUES ('${data.name.replace(/'/g,"''")}', '${data.zohoOrgId.replace(/'/g,"''")}', '${data.zohoClientId.replace(/'/g,"''")}', '${data.zohoClientSecret.replace(/'/g,"''")}', '${data.zohoRefreshToken.replace(/'/g,"''")}', 0, 'inactive', '', 0, ${now}, ${now})`
-  ));
+  const n = data.name.replace(/'/g, "''");
+  const org = data.zohoOrgId.replace(/'/g, "''");
+  const cid = data.zohoClientId.replace(/'/g, "''");
+  const csec = data.zohoClientSecret.replace(/'/g, "''");
+  const tok = data.zohoRefreshToken.replace(/'/g, "''");
+  // Verificar se já existe um registo com este nome
+  const existing = await db.execute(sql.raw(`SELECT id, isActive FROM zohoOAuthConfigs WHERE name = '${n}' LIMIT 1`));
+  const rows = (existing as any)[0] as any[];
+  if (rows && rows.length > 0) {
+    // UPDATE: atualizar token e credenciais mantendo isActive e domain
+    await db.execute(sql.raw(
+      `UPDATE zohoOAuthConfigs SET zohoOrgId='${org}', zohoClientId='${cid}', zohoClientSecret='${csec}', zohoRefreshToken='${tok}', status='active', isActive=1, updatedAt=${now} WHERE name='${n}'`
+    ));
+  } else {
+    // INSERT: criar novo registo
+    await db.execute(sql.raw(
+      `INSERT INTO zohoOAuthConfigs (name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, createdAt, updatedAt)
+       VALUES ('${n}', '${org}', '${cid}', '${csec}', '${tok}', 1, 'active', ${now}, ${now})`
+    ));
+  }
 }
 
 export async function listZohoOAuthConfigs(): Promise<any[]> {
   const db = await getDb();
   if (!db) return [];
   const result = await db.execute(sql.raw(
-    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, lastError, lastTestAt, createdAt, updatedAt FROM zohoOAuthConfigs ORDER BY createdAt ASC`
+    `SELECT id, name, \`domain\`, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, createdAt, updatedAt FROM zohoOAuthConfigs ORDER BY createdAt ASC`
   ));
   return (result as any)[0] as any[];
 }
@@ -3741,7 +3757,7 @@ export async function getActiveZohoOAuthConfig(): Promise<any | null> {
   const db = await getDb();
   if (!db) return null;
   const result = await db.execute(sql.raw(
-    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status FROM zohoOAuthConfigs WHERE isActive = 1 LIMIT 1`
+    `SELECT id, name, \`domain\`, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status FROM zohoOAuthConfigs WHERE isActive = 1 LIMIT 1`
   ));
   const rows = (result as any)[0] as any[];
   return rows?.[0] || null;
@@ -3751,7 +3767,7 @@ export async function getZohoOAuthConfig(id: number): Promise<any | null> {
   const db = await getDb();
   if (!db) return null;
   const result = await db.execute(sql.raw(
-    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status FROM zohoOAuthConfigs WHERE id = ${id} LIMIT 1`
+    `SELECT id, name, \`domain\`, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status FROM zohoOAuthConfigs WHERE id = ${id} LIMIT 1`
   ));
   const rows = (result as any)[0] as any[];
   return rows?.[0] || null;
@@ -3776,8 +3792,13 @@ export async function deleteZohoOAuthConfig(id: number) {
 export async function setActiveZohoOAuthConfig(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET isActive = 0, updatedAt = ${Date.now()}`));
-  await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET isActive = 1, status = 'active', updatedAt = ${Date.now()} WHERE id = ${id}`));
+  // Toggle: se já está ativo, desativa; se está inativo, ativa (sem afetar os outros)
+  const result = await db.execute(sql.raw(`SELECT isActive FROM zohoOAuthConfigs WHERE id = ${id} LIMIT 1`));
+  const rows = (result as any)[0] as any[];
+  const currentlyActive = rows?.[0]?.isActive === 1;
+  const newActive = currentlyActive ? 0 : 1;
+  const newStatus = newActive === 1 ? 'active' : 'inactive';
+  await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET isActive = ${newActive}, status = '${newStatus}', updatedAt = ${Date.now()} WHERE id = ${id}`));
 }
 
 // Salvar config pendente para OAuth callback (troca de código por token)

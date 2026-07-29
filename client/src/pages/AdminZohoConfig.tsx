@@ -1,7 +1,6 @@
 ﻿import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -66,7 +65,7 @@ export default function AdminZohoConfig() {
     }
     try {
       await createMut.mutateAsync(form);
-      toast.success("ConfiguraÃ§Ã£o adicionada!");
+      toast.success("Configuração adicionada!");
       setForm(EMPTY_FORM); setShowAdd(false); setShowManual(false);
       refetch();
     } catch (e: any) {
@@ -86,10 +85,10 @@ export default function AdminZohoConfig() {
     } finally { setTestingId(null); }
   }
 
-  async function handleActivate(id: number) {
+  async function handleActivate(id: number, currentlyActive: boolean) {
     try {
       await setActiveMut.mutateAsync({ id });
-      toast.success("Servidor ativado!");
+      toast.success(currentlyActive ? "Servidor desativado!" : "Servidor ativado!");
       refetch();
     } catch (e: any) {
       toast.error(e.message);
@@ -108,10 +107,10 @@ export default function AdminZohoConfig() {
   }
 
   function statusBadge(status: string, isActive: number) {
-    if (isActive === 1) return <Badge className="bg-green-500/20 text-green-400 border-green-500/40">âœ… Ativo</Badge>;
-    if (status === "active") return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/40">ðŸ”µ Testado</Badge>;
-    if (status === "error") return <Badge className="bg-red-500/20 text-red-400 border-red-500/40">âŒ Erro</Badge>;
-    return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40">â³ Inativo</Badge>;
+    if (isActive === 1) return <Badge className="bg-green-500/20 text-green-400 border-green-500/40">✅ Ativo</Badge>;
+    if (status === "active") return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/40">🔵 Testado</Badge>;
+    if (status === "error") return <Badge className="bg-red-500/20 text-red-400 border-red-500/40">❌ Erro</Badge>;
+    return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40">⏳ Inativo</Badge>;
   }
 
   return (
@@ -123,8 +122,8 @@ export default function AdminZohoConfig() {
           <div className="flex items-center gap-3">
             <Shield className="w-7 h-7 text-purple-400" />
             <div>
-              <h1 className="text-xl font-bold">ConfiguraÃ§Ã£o Zoho Mail</h1>
-              <p className="text-sm text-gray-400">Gerencie mÃºltiplos servidores OAuth</p>
+              <h1 className="text-xl font-bold">Configuração Zoho Mail</h1>
+              <p className="text-sm text-gray-400">Gerencie múltiplos servidores OAuth</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -147,14 +146,14 @@ export default function AdminZohoConfig() {
         )}
         {!activeConfig && configs.length > 0 && (
           <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-3 mb-4">
-            <p className="text-sm text-yellow-300">âš ï¸ Nenhum servidor ativo. Clique em <strong>âœ“</strong> para ativar um.</p>
+            <p className="text-sm text-yellow-300">⚠️ Nenhum servidor ativo. Clique em <strong>✓</strong> para ativar um.</p>
           </div>
         )}
 
-        {/* FormulÃ¡rio de adiÃ§Ã£o */}
+        {/* Formulário de adição */}
         {showAdd && (
           <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 mb-5 space-y-4">
-            <h2 className="font-semibold text-white">Nova ConfiguraÃ§Ã£o</h2>
+            <h2 className="font-semibold text-white">Nova Configuração</h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -165,7 +164,7 @@ export default function AdminZohoConfig() {
               </div>
               <div>
                 <Label className="text-gray-300 text-xs mb-1 block">Organization ID *</Label>
-                <input placeholder="Ex: 931276368" value={form.zohoOrgId}
+                <input placeholder="Ex: 920722948" value={form.zohoOrgId}
                   onChange={e => setForm(f => ({ ...f, zohoOrgId: e.target.value }))}
                   className="w-full bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
               </div>
@@ -178,7 +177,7 @@ export default function AdminZohoConfig() {
               <div className="sm:col-span-2">
                 <Label className="text-gray-300 text-xs mb-1 block">Client Secret *</Label>
                 <div className="relative">
-                  <input type={showSecret ? "text" : "password"} placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value={form.zohoClientSecret}
+                  <input type={showSecret ? "text" : "password"} placeholder="••••••••" value={form.zohoClientSecret}
                     onChange={e => setForm(f => ({ ...f, zohoClientSecret: e.target.value }))}
                     className="w-full bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 pr-10 text-sm outline-none focus:border-purple-500" />
                   <button onClick={() => setShowSecret(!showSecret)}
@@ -189,21 +188,21 @@ export default function AdminZohoConfig() {
               </div>
             </div>
 
-            {/* AUTOMÃTICO */}
+            {/* AUTOMÁTICO */}
             <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Zap className="w-4 h-4 text-purple-400" />
                 <span className="text-sm font-semibold text-purple-300">Gerar Token Automaticamente</span>
                 <Badge className="bg-green-500/20 text-green-400 border-green-500/40 text-xs">Recomendado</Badge>
               </div>
-              <p className="text-xs text-gray-400 mb-1">Preencha os 4 campos acima â†’ clique â†’ autorize no Zoho â†’ token salvo sozinho.</p>
+              <p className="text-xs text-gray-400 mb-1">Preencha os 4 campos acima → clique → autorize no Zoho → token salvo sozinho.</p>
               <p className="text-xs text-yellow-400 mb-3">
-                âš ï¸ Registre <code className="bg-gray-800 px-1 rounded">https://h2colombiano.com/api/zoho-oauth-callback</code> como Redirect URI no Zoho API Console.
+                ⚠️ Registre <code className="bg-gray-800 px-1 rounded">https://h2colombiano.com/api/zoho-oauth-callback</code> como Redirect URI no Zoho API Console (tipo: Server-based Applications).
               </p>
               <Button onClick={handleAutoToken} disabled={getAuthUrlMut.isPending}
                 className="bg-purple-600 hover:bg-purple-700 w-full">
                 <Zap className="w-4 h-4 mr-2" />
-                {getAuthUrlMut.isPending ? "Gerando URL..." : "Abrir AutorizaÃ§Ã£o Zoho"}
+                {getAuthUrlMut.isPending ? "Gerando URL..." : "Abrir Autorização Zoho"}
               </Button>
             </div>
 
@@ -212,13 +211,13 @@ export default function AdminZohoConfig() {
               <button onClick={() => setShowManual(!showManual)}
                 className="w-full flex items-center justify-between p-3 text-sm text-gray-400 hover:bg-gray-800 transition">
                 <span className="flex items-center gap-2">
-                  <KeyRound className="w-4 h-4" /> JÃ¡ tenho o Refresh Token (manual)
+                  <KeyRound className="w-4 h-4" /> Já tenho o Refresh Token (manual)
                 </span>
                 {showManual ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
               {showManual && (
                 <div className="p-3 border-t border-gray-700 bg-gray-900/50 space-y-3">
-                  <p className="text-xs text-gray-500">Cole o Refresh Token obtido manualmente no Zoho API Console.</p>
+                  <p className="text-xs text-gray-500">Cole o Refresh Token obtido manualmente no Zoho API Console (Self Client).</p>
                   <div className="relative">
                     <input type={showToken ? "text" : "password"} placeholder="1000.xxxx..." value={form.zohoRefreshToken}
                       onChange={e => setForm(f => ({ ...f, zohoRefreshToken: e.target.value }))}
@@ -252,18 +251,19 @@ export default function AdminZohoConfig() {
           </button>
           {showGuide && (
             <div className="mt-2 bg-gray-900 border border-gray-700 rounded-lg p-4 text-xs text-gray-300 space-y-2">
-              <p><strong className="text-white">1. Organization ID:</strong> Zoho Admin â†’ Settings â†’ Organization Profile</p>
+              <p><strong className="text-white">1. Organization ID:</strong> Zoho Mail Admin → Organization → Profile → "Organization ID"</p>
               <p><strong className="text-white">2. Client ID + Secret:</strong>{" "}
                 <a href="https://api-console.zoho.com/" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">
                   api-console.zoho.com
-                </a>{" "}â†’ "Server-based Applications"
+                </a>{" "}→ ADD CLIENT → "Server-based Applications"
               </p>
               <p><strong className="text-white">3. Redirect URI a registrar:</strong>{" "}
                 <code className="bg-gray-800 px-1 rounded">https://h2colombiano.com/api/zoho-oauth-callback</code>
               </p>
-              <p><strong className="text-white">4. Scope:</strong>{" "}
-                <code className="bg-gray-800 px-1 rounded">ZohoMail.organization.accounts.ALL</code>
+              <p><strong className="text-white">4. Scope usado:</strong>{" "}
+                <code className="bg-gray-800 px-1 rounded">ZohoMail.organization.accounts.ALL + ZohoMail.accounts.ALL + ZohoMail.messages.ALL</code>
               </p>
+              <p className="text-yellow-400">💡 Cada conta Zoho gratuita suporta 5 emails. Crie múltiplos servidores para ter mais emails!</p>
             </div>
           )}
         </div>
@@ -274,8 +274,8 @@ export default function AdminZohoConfig() {
         ) : configs.length === 0 ? (
           <div className="text-center py-10 text-gray-500">
             <Shield className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p>Nenhuma configuraÃ§Ã£o ainda.</p>
-            <p className="text-sm mt-1">Clique em "+ Adicionar" para comeÃ§ar.</p>
+            <p>Nenhuma configuração ainda.</p>
+            <p className="text-sm mt-1">Clique em "+ Adicionar" para começar.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -289,21 +289,20 @@ export default function AdminZohoConfig() {
                       {statusBadge(c.status, c.isActive)}
                     </div>
                     <p className="text-xs text-gray-500 mt-1 truncate">
-                      Org: {c.zohoOrgId} Â· Client: {c.zohoClientId.slice(0, 24)}...
+                      Org: {c.zohoOrgId} · Client: {c.zohoClientId.slice(0, 24)}...
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => handleTest(c.id)} disabled={testingId === c.id}
-                      title="Testar conexÃ£o"
+                      title="Testar conexão"
                       className="p-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 transition disabled:opacity-40">
                       <TestTube2 className={`w-4 h-4 ${testingId === c.id ? "animate-spin" : ""}`} />
                     </button>
-                    {c.isActive !== 1 && (
-                      <button onClick={() => handleActivate(c.id)} title="Ativar este servidor"
-                        className="p-2 rounded-lg bg-green-600/20 hover:bg-green-600/40 text-green-400 transition">
-                        <CheckCircle className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button onClick={() => handleActivate(c.id, c.isActive === 1)}
+                      title={c.isActive === 1 ? "Desativar servidor" : "Ativar servidor"}
+                      className={`p-2 rounded-lg transition ${c.isActive === 1 ? "bg-green-600/30 hover:bg-red-600/30 text-green-400 hover:text-red-400" : "bg-gray-600/20 hover:bg-green-600/30 text-gray-400 hover:text-green-400"}`}>
+                      <CheckCircle className="w-4 h-4" />
+                    </button>
                     <button onClick={() => handleDelete(c.id, c.name)} title="Deletar"
                       className="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 transition">
                       <Trash2 className="w-4 h-4" />
@@ -315,11 +314,12 @@ export default function AdminZohoConfig() {
           </div>
         )}
 
-        {/* Rodape informativo */}
+        {/* Rodapé informativo */}
         <div className="mt-8 bg-gray-900/50 border border-gray-800 rounded-xl p-4 text-xs text-gray-500 space-y-1">
-          <p><strong className="text-gray-400">Fluxo:</strong> Adicionar, Testar, Ativar, Criar emails normalmente</p>
-          <p>Quando lotar (5 contas FREE), adicione novo servidor e ative</p>
-          <p>Painel atualiza a cada 5 segundos apos autorizar no Zoho</p>
+          <p><strong className="text-gray-400">Fluxo:</strong> Adicionar → Testar → Ativar → Criar emails normalmente</p>
+          <p>Múltiplos servidores podem estar ativos ao mesmo tempo — emails distribuídos automaticamente</p>
+          <p>Quando lotar (5 contas FREE), adicione novo servidor, ative e continue criando</p>
+          <p>Painel atualiza a cada 5 segundos após autorizar no Zoho</p>
         </div>
       </div>
     </div>

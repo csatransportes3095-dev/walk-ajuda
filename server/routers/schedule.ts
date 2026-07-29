@@ -24,12 +24,12 @@ async function sendScheduleEmail(to: string, subject: string, html: string): Pro
       host: 'smtp.zoho.com',
       port: 465,
       secure: true,
-      auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+      auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
     });
     const siteTitle = (await getSetting("site_title")) || "WALK AJUDA";
     await Promise.race([
       transporter.sendMail({
-        from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+        from: '"Walk Ajuda" <h2@h2colombiano.com>',
         to,
         subject,
         html,
@@ -282,11 +282,11 @@ export const scheduleRouter = router({
           host: 'smtp.zoho.com',
           port: 465,
           secure: true,
-          auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
         await transporter.sendMail({
-          from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
-          to: 'walkajuda@walkajuda.com',
+          from: '"Walk Ajuda" <h2@h2colombiano.com>',
+          to: 'h2@h2colombiano.com',
           subject: 'Agendamento manual confirmado',
           html: `<h2>Agendamento manual confirmado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>Cliente: <strong>${appt.customerName || appt.customerPhone}</strong></p><p>Data: <strong>${input.slotDate}</strong></p><p>Hora: <strong>${input.slotTime}</strong></p>`,
         });
@@ -330,17 +330,17 @@ export const scheduleRouter = router({
           host: 'smtp.zoho.com',
           port: 465,
           secure: true,
-          auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
-            to: 'walkajuda@walkajuda.com',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
+            to: 'h2@h2colombiano.com',
             subject: 'Link de agendamento enviado',
             html: `<h2>Link de agendamento enviado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>E-mail: <strong>${appt.customerEmail}</strong></p>`,
           });
         } catch (e) { console.warn('[ScheduleEmail] Erro ao enviar e-mail:', e); }
         // Cópia para o e-mail de destino dos pedidos (mesma regra dos pedidos do site)
-        const orderEmail = 'walkajuda@walkajuda.com';
+        const orderEmail = 'h2@h2colombiano.com';
         if (orderEmail && orderEmail !== appt.customerEmail) {
           const adminHtml = `
             <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#fff;border-radius:12px">
@@ -422,11 +422,11 @@ export const scheduleRouter = router({
           host: 'smtp.zoho.com',
           port: 465,
           secure: true,
-          auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
-            to: 'walkajuda@walkajuda.com',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
+            to: 'h2@h2colombiano.com',
             subject: 'Novo agendamento confirmado',
             html: `<h2>Novo agendamento confirmado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>Cliente: <strong>${appt.customerName || appt.customerPhone}</strong></p><p>Data/Hora: <strong>${appt.slotDate} às ${appt.slotTime}</strong></p>`,
           });
@@ -434,7 +434,7 @@ export const scheduleRouter = router({
       })();
       // Avisa o e-mail de destino dos pedidos que o cliente escolheu o horário
       (async () => {
-        const orderEmail = 'walkajuda@walkajuda.com';
+        const orderEmail = 'h2@h2colombiano.com';
         if (orderEmail) {
           const html = `
             <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#fff;border-radius:12px">
@@ -471,18 +471,18 @@ export const scheduleRouter = router({
           host: 'smtp.zoho.com',
           port: 465,
           secure: true,
-          auth: { user: 'walkajuda@walkajuda.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
-            from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
-            to: 'walkajuda@walkajuda.com',
+            from: '"Walk Ajuda" <h2@h2colombiano.com>',
+            to: 'h2@h2colombiano.com',
             subject: 'Cliente solicitou reagendamento',
             html: `<h2>Cliente solicitou reagendamento</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>Cliente: <strong>${appt.customerName || appt.customerPhone}</strong></p><p>Horario liberado: <strong>${prevDate ?? ""} ${prevTime ?? ""}</strong></p>`,
           });
         } catch (e) { console.warn('[ScheduleEmail] Erro ao enviar e-mail:', e); }
       })();
       (async () => {
-        const orderEmail = 'walkajuda@walkajuda.com';
+        const orderEmail = 'h2@h2colombiano.com';
         if (orderEmail) {
           const html = `
             <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#fff;border-radius:12px">
