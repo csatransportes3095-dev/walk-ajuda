@@ -46,6 +46,108 @@ function parseArray(value: string) {
     .filter(Boolean);
 }
 
+// Helper para construir o payload baseado no tipo de ação
+function buildPayload(actionType: string, payloadValue: string): Record<string, unknown> {
+  if (actionType === "send_text") return { text: payloadValue };
+  if (actionType === "open_internal") return { path: payloadValue.startsWith("/") ? payloadValue : "/" + payloadValue };
+  if (actionType === "open_external") return { url: payloadValue };
+  if (actionType === "handoff_human") return {};
+  try { return JSON.parse(payloadValue || "{}"); } catch { return {}; }
+}
+
+// Componente visual para editar/criar um item de menu — sem JSON exposto
+function MenuItemEditor({
+  title, setTitle,
+  description, setDescription,
+  actionType, setActionType,
+  actionPayload, setActionPayload,
+  onSave, onCancel, saveLabel = "Salvar",
+}: {
+  title: string; setTitle: (v: string) => void;
+  description: string; setDescription: (v: string) => void;
+  actionType: string; setActionType: (v: string) => void;
+  actionPayload: string; setActionPayload: (v: string) => void;
+  onSave: () => void; onCancel?: () => void; saveLabel?: string;
+}) {
+  const actionOptions = [
+    { value: "open_internal", label: "📄 Abrir página do site", placeholder: "/pre-cadastro", hint: "Ex: /pre-cadastro, /acompanhar, /video/tutorial" },
+    { value: "open_external", label: "🔗 Abrir link externo", placeholder: "https://...", hint: "Ex: https://wa.me/55119..." },
+    { value: "send_text", label: "💬 Enviar mensagem automática", placeholder: "Escreva a mensagem que será enviada...", hint: "O chat enviará esta mensagem automaticamente" },
+    { value: "handoff_human", label: "👤 Falar com atendente humano", placeholder: "", hint: "Encaminha o cliente para um atendente real" },
+  ];
+  const selected = actionOptions.find(o => o.value === actionType) || actionOptions[0];
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs font-semibold text-white/70 block mb-1">Nome do botão *</label>
+        <input
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Ex: Fazer pedido, Consultar status..."
+          className="w-full h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400"
+        />
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-white/70 block mb-1">Descrição (opcional)</label>
+        <input
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Ex: Abrir formulário de cadastro"
+          className="w-full h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400"
+        />
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-white/70 block mb-1">O que este botão faz?</label>
+        <select
+          value={actionType}
+          onChange={e => { setActionType(e.target.value); setActionPayload(""); }}
+          className="w-full h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-400"
+        >
+          {actionOptions.map(o => (
+            <option key={o.value} value={o.value} className="bg-gray-900">{o.label}</option>
+          ))}
+        </select>
+        <p className="text-[11px] text-white/40 mt-1">{selected.hint}</p>
+      </div>
+      {actionType !== "handoff_human" && (
+        <div>
+          <label className="text-xs font-semibold text-white/70 block mb-1">
+            {actionType === "open_internal" ? "Caminho da página" : actionType === "open_external" ? "URL do link" : "Mensagem automática"}
+          </label>
+          {actionType === "send_text" ? (
+            <textarea
+              value={actionPayload}
+              onChange={e => setActionPayload(e.target.value)}
+              placeholder={selected.placeholder}
+              rows={3}
+              className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 resize-none"
+            />
+          ) : (
+            <input
+              value={actionPayload}
+              onChange={e => setActionPayload(e.target.value)}
+              placeholder={selected.placeholder}
+              className="w-full h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400"
+            />
+          )}
+        </div>
+      )}
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={onSave}
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+        >{saveLabel}</button>
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition-colors"
+          >Cancelar</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminOnlineSupport() {
   const [tab, setTab] = useState<TabLabel>("Visao geral");
 
@@ -74,7 +176,7 @@ export default function AdminOnlineSupport() {
   const [newMenuTitle, setNewMenuTitle] = useState("");
   const [newMenuDescription, setNewMenuDescription] = useState("");
   const [newMenuActionType, setNewMenuActionType] = useState("send_text");
-  const [newMenuActionPayload, setNewMenuActionPayload] = useState('{"text":""}');
+  const [newMenuActionPayload, setNewMenuActionPayload] = useState('');
   const [editingMenuId, setEditingMenuId] = useState<number | null>(null);
   const [editMenuTitle, setEditMenuTitle] = useState("");
   const [editMenuDescription, setEditMenuDescription] = useState("");
@@ -315,7 +417,10 @@ export default function AdminOnlineSupport() {
     setEditMenuTitle(item.title || "");
     setEditMenuDescription(item.description || "");
     setEditMenuActionType(item.actionType || "send_text");
-    setEditMenuActionPayload(JSON.stringify(item.actionPayload || {}, null, 2));
+    // Extrair valor legível do payload para o editor visual
+    const rawPayload = item.actionPayload || {};
+    const payloadStr = String(rawPayload.path || rawPayload.url || rawPayload.text || "");
+    setEditMenuActionPayload(payloadStr);
   };
 
   const startEditingReply = (item: any) => {
@@ -540,118 +645,85 @@ export default function AdminOnlineSupport() {
         )}
 
         {tab === "Menu inicial" && (
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Card className="p-4 bg-white/5 border-white/10 space-y-3">
-              <h3 className="font-bold">Novo botao de menu</h3>
-              <p className="text-xs text-white/60">Use acao <strong>open_internal</strong> com payload <strong>{`{"path":"/pre-cadastro"}`}</strong> para levar direto ao pedido.</p>
-              <Input placeholder="Titulo" value={newMenuTitle} onChange={e => setNewMenuTitle(e.target.value)} />
-              <Input placeholder="Descricao" value={newMenuDescription} onChange={e => setNewMenuDescription(e.target.value)} />
-              <select
-                value={newMenuActionType}
-                onChange={e => setNewMenuActionType(e.target.value)}
-                className="w-full h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm"
-              >
-                <option value="send_text">Enviar texto automatico</option>
-                <option value="open_internal">Abrir pagina interna</option>
-                <option value="open_external">Abrir link externo</option>
-                <option value="handoff_human">Falar com atendente</option>
-              </select>
-              <Textarea placeholder="Payload JSON" value={newMenuActionPayload} onChange={e => setNewMenuActionPayload(e.target.value)} />
-              <p className="text-[11px] text-white/50">Exemplos: send_text =&gt; {`{"text":"Quero fazer pedido"}`} | open_internal =&gt; {`{"path":"/pre-cadastro"}`} | open_external =&gt; {`{"url":"https://..."}`}</p>
-              <Button onClick={() => {
-                try {
-                  const payload = JSON.parse(newMenuActionPayload || "{}");
-                  saveMenuMut.mutate({ title: newMenuTitle, description: newMenuDescription, actionType: newMenuActionType, actionPayload: payload });
-                } catch {
-                  toast.error("JSON invalido no payload");
-                }
-              }}>Salvar</Button>
-            </Card>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-lg">Botões do Menu de Atendimento</h3>
+                <p className="text-xs text-white/60 mt-1">Cada botão aparece no chat quando o cliente abre o atendimento. Configure o que cada botão faz.</p>
+              </div>
+            </div>
 
-            <Card className="p-4 bg-white/5 border-white/10 space-y-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  const target = (menuQ.data || []).find((item: any) => (item.title || "").toLowerCase().includes("fazer pedido"));
-                  if (!target) {
-                    toast.error("Item 'Fazer pedido' nao encontrado no menu");
-                    return;
-                  }
-                  saveMenuMut.mutate({
-                    id: target.id,
-                    title: target.title,
-                    description: target.description || "",
-                    actionType: "open_internal",
-                    actionPayload: { path: "/pre-cadastro" },
-                    isActive: true,
-                  });
+            {/* Lista de botões existentes */}
+            <div className="space-y-3">
+              {(menuQ.data || []).map((item: any) => {
+                const actionLabels: Record<string, { label: string; color: string; desc: string }> = {
+                  open_internal: { label: "Abre página do site", color: "bg-blue-500/20 text-blue-300 border-blue-500/30", desc: item.actionPayloadJson ? (() => { try { return JSON.parse(item.actionPayloadJson).path || ""; } catch { return ""; } })() : "" },
+                  open_external: { label: "Abre link externo", color: "bg-green-500/20 text-green-300 border-green-500/30", desc: item.actionPayloadJson ? (() => { try { return JSON.parse(item.actionPayloadJson).url || ""; } catch { return ""; } })() : "" },
+                  send_text: { label: "Envia mensagem automática", color: "bg-purple-500/20 text-purple-300 border-purple-500/30", desc: item.actionPayloadJson ? (() => { try { return JSON.parse(item.actionPayloadJson).text || ""; } catch { return ""; } })() : "" },
+                  handoff_human: { label: "Falar com atendente", color: "bg-orange-500/20 text-orange-300 border-orange-500/30", desc: "Encaminha para atendimento humano" },
+                  send_buttons: { label: "Mostra sub-botões", color: "bg-pink-500/20 text-pink-300 border-pink-500/30", desc: "Exibe opções adicionais" },
+                };
+                const info = actionLabels[item.actionType] || { label: item.actionType, color: "bg-white/10 text-white/60 border-white/20", desc: "" };
+                return (
+                  <Card key={item.id} className={`p-4 border transition-all ${item.isActive ? "bg-white/5 border-white/10" : "bg-black/20 border-white/5 opacity-60"}`}>
+                    {editingMenuId === item.id ? (
+                      <MenuItemEditor
+                        title={editMenuTitle} setTitle={setEditMenuTitle}
+                        description={editMenuDescription} setDescription={setEditMenuDescription}
+                        actionType={editMenuActionType} setActionType={setEditMenuActionType}
+                        actionPayload={editMenuActionPayload} setActionPayload={setEditMenuActionPayload}
+                        onSave={() => {
+                          try {
+                            const payload = buildPayload(editMenuActionType, editMenuActionPayload);
+                            saveMenuMut.mutate({ id: item.id, title: editMenuTitle, description: editMenuDescription, actionType: editMenuActionType, actionPayload: payload, isActive: true });
+                            setEditingMenuId(null);
+                          } catch { toast.error("Erro ao salvar"); }
+                        }}
+                        onCancel={() => setEditingMenuId(null)}
+                      />
+                    ) : (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-white">{item.title}</p>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${info.color}`}>{info.label}</span>
+                            {!item.isActive && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 font-semibold">DESATIVADO</span>}
+                          </div>
+                          {item.description && <p className="text-xs text-white/60 mt-1">{item.description}</p>}
+                          {info.desc && <p className="text-xs text-white/40 mt-0.5 font-mono truncate">{info.desc}</p>}
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <Button size="sm" variant="secondary" onClick={() => startEditingMenu(item)}>Editar</Button>
+                          <Button size="sm" variant="destructive" onClick={() => deleteMenuMut.mutate({ id: item.id })}>Excluir</Button>
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* Formulário para novo botão */}
+            <Card className="p-4 bg-white/5 border-white/10 border-dashed space-y-1">
+              <h4 className="font-bold text-white mb-3">+ Adicionar novo botão</h4>
+              <MenuItemEditor
+                title={newMenuTitle} setTitle={setNewMenuTitle}
+                description={newMenuDescription} setDescription={setNewMenuDescription}
+                actionType={newMenuActionType} setActionType={setNewMenuActionType}
+                actionPayload={newMenuActionPayload} setActionPayload={setNewMenuActionPayload}
+                onSave={() => {
+                  if (!newMenuTitle.trim()) { toast.error("Título obrigatório"); return; }
+                  try {
+                    const payload = buildPayload(newMenuActionType, newMenuActionPayload);
+                    saveMenuMut.mutate({ title: newMenuTitle, description: newMenuDescription, actionType: newMenuActionType, actionPayload: payload });
+                  } catch { toast.error("Erro ao salvar"); }
                 }}
-              >
-                Corrigir "Fazer pedido" para abrir /pre-cadastro
-              </Button>
-              {(menuQ.data || []).map((item: any) => (
-                <div key={item.id} className="rounded-lg border border-white/10 p-3 bg-black/20 flex items-start justify-between gap-2">
-                  {editingMenuId === item.id ? (
-                    <div className="w-full space-y-2">
-                      <Input value={editMenuTitle} onChange={e => setEditMenuTitle(e.target.value)} placeholder="Titulo" />
-                      <Input value={editMenuDescription} onChange={e => setEditMenuDescription(e.target.value)} placeholder="Descricao" />
-                      <select
-                        value={editMenuActionType}
-                        onChange={e => setEditMenuActionType(e.target.value)}
-                        className="w-full h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm"
-                      >
-                        <option value="send_text">Enviar texto automatico</option>
-                        <option value="open_internal">Abrir pagina interna</option>
-                        <option value="open_external">Abrir link externo</option>
-                        <option value="handoff_human">Falar com atendente</option>
-                      </select>
-                      <Textarea value={editMenuActionPayload} onChange={e => setEditMenuActionPayload(e.target.value)} placeholder="Payload JSON" />
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            try {
-                              const payload = JSON.parse(editMenuActionPayload || "{}");
-                              saveMenuMut.mutate({
-                                id: item.id,
-                                title: editMenuTitle,
-                                description: editMenuDescription,
-                                actionType: editMenuActionType,
-                                actionPayload: payload,
-                                isActive: true,
-                              });
-                              setEditingMenuId(null);
-                            } catch {
-                              toast.error("JSON invalido no payload");
-                            }
-                          }}
-                        >
-                          Salvar
-                        </Button>
-                        <Button size="sm" variant="secondary" onClick={() => setEditingMenuId(null)}>Cancelar</Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div>
-                        <p className="font-semibold">{item.title}</p>
-                        <p className="text-xs text-white/60">{item.actionType}</p>
-                        <p className="text-xs text-white/50">{item.description}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="secondary" onClick={() => startEditingMenu(item)}>Editar</Button>
-                        <Button size="sm" variant="destructive" onClick={() => deleteMenuMut.mutate({ id: item.id })}>Excluir</Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
+                saveLabel="Adicionar botão"
+              />
             </Card>
           </div>
         )}
-
-        {tab === "Base de conhecimento" && (
+                {tab === "Base de conhecimento" && (
           <div className="grid lg:grid-cols-2 gap-4">
             <Card className="p-4 bg-white/5 border-white/10 space-y-2">
               <h3 className="font-bold">Novo item</h3>
