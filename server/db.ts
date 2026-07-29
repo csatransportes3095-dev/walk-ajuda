@@ -3732,7 +3732,7 @@ export async function listZohoOAuthConfigs(): Promise<any[]> {
   const db = await getDb();
   if (!db) return [];
   const result = await db.execute(sql.raw(
-    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, createdAt, updatedAt FROM zohoOAuthConfigs ORDER BY createdAt ASC`
+    `SELECT id, name, \`domain\`, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, createdAt, updatedAt FROM zohoOAuthConfigs ORDER BY createdAt ASC`
   ));
   return (result as any)[0] as any[];
 }
@@ -3741,7 +3741,7 @@ export async function getActiveZohoOAuthConfig(): Promise<any | null> {
   const db = await getDb();
   if (!db) return null;
   const result = await db.execute(sql.raw(
-    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status FROM zohoOAuthConfigs WHERE isActive = 1 LIMIT 1`
+    `SELECT id, name, \`domain\`, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status FROM zohoOAuthConfigs WHERE isActive = 1 LIMIT 1`
   ));
   const rows = (result as any)[0] as any[];
   return rows?.[0] || null;
@@ -3751,7 +3751,7 @@ export async function getZohoOAuthConfig(id: number): Promise<any | null> {
   const db = await getDb();
   if (!db) return null;
   const result = await db.execute(sql.raw(
-    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status FROM zohoOAuthConfigs WHERE id = ${id} LIMIT 1`
+    `SELECT id, name, \`domain\`, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status FROM zohoOAuthConfigs WHERE id = ${id} LIMIT 1`
   ));
   const rows = (result as any)[0] as any[];
   return rows?.[0] || null;
