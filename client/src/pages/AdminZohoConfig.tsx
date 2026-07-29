@@ -85,10 +85,10 @@ export default function AdminZohoConfig() {
     } finally { setTestingId(null); }
   }
 
-  async function handleActivate(id: number) {
+  async function handleActivate(id: number, currentlyActive: boolean) {
     try {
       await setActiveMut.mutateAsync({ id });
-      toast.success("Servidor ativado!");
+      toast.success(currentlyActive ? "Servidor desativado!" : "Servidor ativado!");
       refetch();
     } catch (e: any) {
       toast.error(e.message);
@@ -298,12 +298,11 @@ export default function AdminZohoConfig() {
                       className="p-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 transition disabled:opacity-40">
                       <TestTube2 className={`w-4 h-4 ${testingId === c.id ? "animate-spin" : ""}`} />
                     </button>
-                    {c.isActive !== 1 && (
-                      <button onClick={() => handleActivate(c.id)} title="Ativar este servidor"
-                        className="p-2 rounded-lg bg-green-600/20 hover:bg-green-600/40 text-green-400 transition">
-                        <CheckCircle className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button onClick={() => handleActivate(c.id, c.isActive === 1)}
+                      title={c.isActive === 1 ? "Desativar servidor" : "Ativar servidor"}
+                      className={`p-2 rounded-lg transition ${c.isActive === 1 ? "bg-green-600/30 hover:bg-red-600/30 text-green-400 hover:text-red-400" : "bg-gray-600/20 hover:bg-green-600/30 text-gray-400 hover:text-green-400"}`}>
+                      <CheckCircle className="w-4 h-4" />
+                    </button>
                     <button onClick={() => handleDelete(c.id, c.name)} title="Deletar"
                       className="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 transition">
                       <Trash2 className="w-4 h-4" />
@@ -318,7 +317,8 @@ export default function AdminZohoConfig() {
         {/* Rodapé informativo */}
         <div className="mt-8 bg-gray-900/50 border border-gray-800 rounded-xl p-4 text-xs text-gray-500 space-y-1">
           <p><strong className="text-gray-400">Fluxo:</strong> Adicionar → Testar → Ativar → Criar emails normalmente</p>
-          <p>Quando lotar (5 contas FREE), adicione novo servidor e ative</p>
+          <p>Múltiplos servidores podem estar ativos ao mesmo tempo — emails distribuídos automaticamente</p>
+          <p>Quando lotar (5 contas FREE), adicione novo servidor, ative e continue criando</p>
           <p>Painel atualiza a cada 5 segundos após autorizar no Zoho</p>
         </div>
       </div>

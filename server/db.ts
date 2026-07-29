@@ -3776,8 +3776,13 @@ export async function deleteZohoOAuthConfig(id: number) {
 export async function setActiveZohoOAuthConfig(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET isActive = 0, updatedAt = ${Date.now()}`));
-  await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET isActive = 1, status = 'active', updatedAt = ${Date.now()} WHERE id = ${id}`));
+  // Toggle: se já está ativo, desativa; se está inativo, ativa (sem afetar os outros)
+  const result = await db.execute(sql.raw(`SELECT isActive FROM zohoOAuthConfigs WHERE id = ${id} LIMIT 1`));
+  const rows = (result as any)[0] as any[];
+  const currentlyActive = rows?.[0]?.isActive === 1;
+  const newActive = currentlyActive ? 0 : 1;
+  const newStatus = newActive === 1 ? 'active' : 'inactive';
+  await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET isActive = ${newActive}, status = '${newStatus}', updatedAt = ${Date.now()} WHERE id = ${id}`));
 }
 
 // Salvar config pendente para OAuth callback (troca de código por token)
