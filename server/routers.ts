@@ -7598,6 +7598,114 @@ export const appRouter = router({
   chatUsers: router(chatUsersRouter),
   consultas: router(consultasRouter),
   whatsappTemplates: router(whatsappTemplatesRouter),
+
+  // === ZOHO OAUTH CONFIG ===
+  zohoConfig: router({
+    list: adminProcedure.query(async () => {
+      const { listZohoOAuthConfigs } = await import('../server/db');
+      const configs = await listZohoOAuthConfigs();
+      return (configs || []).map((c: any) => ({
+        id: Number(c.id),
+        name: String(c.name || ''),
+        zohoOrgId: String(c.zohoOrgId || ''),
+        zohoClientId: String(c.zohoClientId || ''),
+        zohoClientSecret: '••••••••',
+        zohoRefreshToken: '••••••••',
+        isActive: Number(c.isActive),
+        status: String(c.status || 'inactive'),
+        createdAt: Number(c.createdAt || 0),
+      }));
+    }),
+
+    // Gera URL de autorização Zoho e salva dados pendentes para callback automático
+    getAuthUrl: adminProcedure
+      .input(z.object({
+        name: z.string().min(2).max(128),
+        zohoOrgId: z.string().min(1),
+        zohoClientId: z.string().min(1),
+        zohoClientSecret: z.string().min(1),
+      }))
+      .mutation(async ({ input }) => {
+        const { savePendingZohoOAuth } = await import('../server/db');
+        const crypto = await import('crypto');
+        const sessionId = (crypto as any).randomBytes(16).toString('hex');
+        const baseUrl = process.env.APP_URL || 'https://h2colombiano.com';
+        const redirectUri = `${baseUrl}/api/zoho-oauth-callback`;
+        await savePendingZohoOAuth(sessionId, {
+          name: input.name,
+          zohoOrgId: input.zohoOrgId,
+          zohoClientId: input.zohoClientId,
+          zohoClientSecret: input.zohoClientSecret,
+          redirectUri,
+        });
+        const authUrl = `https://accounts.zoho.com/oauth/v2/auth?` + new URLSearchParams({
+          client_id: input.zohoClientId,
+          response_type: 'code',
+          scope: 'ZohoMail.organization.accounts.ALL',
+          redirect_uri: redirectUri,
+          state: sessionId,
+          prompt: 'consent',
+        }).toString();
+        return { authUrl, sessionId };
+      }),
+
+    // Adicionar manualmente com refresh token já obtido
+    create: adminProcedure
+      .input(z.object({
+        name: z.string().min(2).max(128),
+        zohoOrgId: z.string().min(1),
+        zohoClientId: z.string().min(1),
+        zohoClientSecret: z.string().min(1),
+        zohoRefreshToken: z.string().min(1),
+      }))
+      .mutation(async ({ input }) => {
+        const { createZohoOAuthConfig } = await import('../server/db');
+        await createZohoOAuthConfig(input);
+        return { success: true };
+      }),
+
+    setActive: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { setActiveZohoOAuthConfig } = await import('../server/db');
+        await setActiveZohoOAuthConfig(input.id);
+        return { success: true };
+      }),
+
+    test: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { getZohoOAuthConfig, updateZohoOAuthConfig } = await import('../server/db');
+        const config = await getZohoOAuthConfig(input.id);
+        if (!config) throw new Error('Configuração não encontrada');
+        const params = new URLSearchParams({
+          refresh_token: config.zohoRefreshToken,
+          grant_type: 'refresh_token',
+          client_id: config.zohoClientId,
+          client_secret: config.zohoClientSecret,
+        });
+        const res = await fetch('https://accounts.zoho.com/oauth/v2/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString(),
+        });
+        const data = await res.json() as { access_token?: string; error?: string };
+        if (!data.access_token) {
+          await updateZohoOAuthConfig(input.id, { status: 'error' });
+          throw new Error(`Token inválido: ${data.error ?? 'credenciais incorretas'}`);
+        }
+        await updateZohoOAuthConfig(input.id, { status: 'active' });
+        return { success: true, message: 'Conexão OK! Token válido.' };
+      }),
+
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { deleteZohoOAuthConfig } = await import('../server/db');
+        await deleteZohoOAuthConfig(input.id);
+        return { success: true };
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;
 

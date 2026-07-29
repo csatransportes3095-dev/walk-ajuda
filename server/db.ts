@@ -3716,53 +3716,97 @@ export async function listEmailAccounts(): Promise<Array<{ emailAddress: string;
   return rows.map(r => ({ emailAddress: r.emailAddress, type: r.type }));
 }
 
-// ========== ZOHO OAUTH CONFIGURATIONS ==========
+// ========== ZOHO OAUTH CONFIGURATIONS (100% SQL puro - sem ORM) ==========
 
-export async function createZohoOAuthConfig(data: any) {
+export async function createZohoOAuthConfig(data: { name: string; zohoOrgId: string; zohoClientId: string; zohoClientSecret: string; zohoRefreshToken: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return await db.insert(zohoOAuthConfigs).values(data);
+  const now = Date.now();
+  await db.execute(sql.raw(
+    `INSERT INTO zohoOAuthConfigs (name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, lastError, lastTestAt, createdAt, updatedAt)
+     VALUES ('${data.name.replace(/'/g,"''")}', '${data.zohoOrgId.replace(/'/g,"''")}', '${data.zohoClientId.replace(/'/g,"''")}', '${data.zohoClientSecret.replace(/'/g,"''")}', '${data.zohoRefreshToken.replace(/'/g,"''")}', 0, 'inactive', '', 0, ${now}, ${now})`
+  ));
 }
 
-export async function listZohoOAuthConfigs(): Promise<ZohoOAuthConfig[]> {
+export async function listZohoOAuthConfigs(): Promise<any[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.select().from(zohoOAuthConfigs).orderBy(zohoOAuthConfigs.createdAt);
-  return rows;
+  const result = await db.execute(sql.raw(
+    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, lastError, lastTestAt, createdAt, updatedAt FROM zohoOAuthConfigs ORDER BY createdAt ASC`
+  ));
+  return (result as any)[0] as any[];
 }
 
-export async function getActiveZohoOAuthConfig(): Promise<ZohoOAuthConfig | null> {
+export async function getActiveZohoOAuthConfig(): Promise<any | null> {
   const db = await getDb();
   if (!db) return null;
-  const rows = await db.select().from(zohoOAuthConfigs).where(eq(zohoOAuthConfigs.isActive, 1)).limit(1);
-  return rows[0] || null;
+  const result = await db.execute(sql.raw(
+    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status FROM zohoOAuthConfigs WHERE isActive = 1 LIMIT 1`
+  ));
+  const rows = (result as any)[0] as any[];
+  return rows?.[0] || null;
 }
 
-export async function getZohoOAuthConfig(id: number): Promise<ZohoOAuthConfig | null> {
+export async function getZohoOAuthConfig(id: number): Promise<any | null> {
   const db = await getDb();
   if (!db) return null;
-  const rows = await db.select().from(zohoOAuthConfigs).where(eq(zohoOAuthConfigs.id, id)).limit(1);
-  return rows[0] || null;
+  const result = await db.execute(sql.raw(
+    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status FROM zohoOAuthConfigs WHERE id = ${id} LIMIT 1`
+  ));
+  const rows = (result as any)[0] as any[];
+  return rows?.[0] || null;
 }
 
-export async function updateZohoOAuthConfig(id: number, data: Partial<InsertZohoOAuthConfig>) {
+export async function updateZohoOAuthConfig(id: number, data: { status?: string; updatedAt?: number; zohoRefreshToken?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return await db.update(zohoOAuthConfigs).set({ ...data, updatedAt: Date.now() }).where(eq(zohoOAuthConfigs.id, id));
+  const now = Date.now();
+  const sets: string[] = [`updatedAt = ${now}`];
+  if (data.status !== undefined) sets.push(`status = '${data.status}'`);
+  if (data.zohoRefreshToken !== undefined) sets.push(`zohoRefreshToken = '${data.zohoRefreshToken.replace(/'/g, "''")}'`);
+  await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET ${sets.join(', ')} WHERE id = ${id}`));
 }
 
 export async function deleteZohoOAuthConfig(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return await db.delete(zohoOAuthConfigs).where(eq(zohoOAuthConfigs.id, id));
+  await db.execute(sql.raw(`DELETE FROM zohoOAuthConfigs WHERE id = ${id}`));
 }
 
 export async function setActiveZohoOAuthConfig(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  // Desativar todos
-  await db.update(zohoOAuthConfigs).set({ isActive: 0 }).where(gt(zohoOAuthConfigs.id, 0));
-  // Ativar o selecionado
-  return await db.update(zohoOAuthConfigs).set({ isActive: 1, updatedAt: Date.now() }).where(eq(zohoOAuthConfigs.id, id));
+  await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET isActive = 0, updatedAt = ${Date.now()}`));
+  await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET isActive = 1, status = 'active', updatedAt = ${Date.now()} WHERE id = ${id}`));
+}
+
+// Salvar config pendente para OAuth callback (troca de código por token)
+export async function savePendingZohoOAuth(sessionId: string, data: { name: string; zohoOrgId: string; zohoClientId: string; zohoClientSecret: string; redirectUri: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const now = Date.now();
+  const expires = now + 10 * 60 * 1000; // 10 minutos
+  const json = JSON.stringify(data).replace(/'/g, "''");
+  // Usar tabela de settings como storage temporário
+  await db.execute(sql.raw(
+    `INSERT INTO settings (\`key\`, value) VALUES ('__zoho_oauth_${sessionId}', '${json}') ON DUPLICATE KEY UPDATE value = '${json}'`
+  ));
+}
+
+export async function getPendingZohoOAuth(sessionId: string): Promise<any | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.execute(sql.raw(
+    `SELECT value FROM settings WHERE \`key\` = '__zoho_oauth_${sessionId}' LIMIT 1`
+  ));
+  const rows = (result as any)[0] as any[];
+  if (!rows?.[0]?.value) return null;
+  try { return JSON.parse(rows[0].value); } catch { return null; }
+}
+
+export async function deletePendingZohoOAuth(sessionId: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.execute(sql.raw(`DELETE FROM settings WHERE \`key\` = '__zoho_oauth_${sessionId}'`));
 }
 

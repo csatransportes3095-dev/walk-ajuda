@@ -152,6 +152,53 @@ async function startServer() {
     }
   });
 
+  // === ZOHO OAUTH CALLBACK - troca código por refresh token automaticamente ===
+  app.get("/api/zoho-oauth-callback", async (req, res) => {
+    const { code, state, error } = req.query as Record<string, string>;
+
+    const errorHtml = (msg: string) => `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Erro</title></head><body style="font-family:sans-serif;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0"><div style="text-align:center;padding:40px;background:#1e293b;border-radius:12px;max-width:500px"><h2 style="color:#ef4444">❌ Erro na autorização</h2><p style="color:#94a3b8;margin:16px 0">${msg}</p><p style="color:#64748b;font-size:13px">Feche esta aba e tente novamente.</p></div></body></html>`;
+    const successHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sucesso</title></head><body style="font-family:sans-serif;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0"><div style="text-align:center;padding:40px;background:#1e293b;border-radius:12px;max-width:500px"><h2 style="color:#22c55e">✅ Token gerado com sucesso!</h2><p style="color:#94a3b8;margin:16px 0">Configuração Zoho salva. Volte para o painel e clique em <strong>Atualizar</strong>.</p><p style="color:#64748b;font-size:13px">Pode fechar esta aba.</p><script>setTimeout(()=>window.close(),3000)</script></div></body></html>`;
+
+    if (error) { res.send(errorHtml(`Zoho retornou: ${error}`)); return; }
+    if (!code || !state) { res.send(errorHtml('Parâmetros inválidos na resposta do Zoho.')); return; }
+
+    try {
+      const { getPendingZohoOAuth, deletePendingZohoOAuth, createZohoOAuthConfig } = await import('../db');
+      const pending = await getPendingZohoOAuth(state);
+      if (!pending) { res.send(errorHtml('Sessão expirada (mais de 10 min). Tente novamente.')); return; }
+
+      // Trocar código por refresh token
+      const params = new URLSearchParams({
+        code,
+        client_id: pending.zohoClientId,
+        client_secret: pending.zohoClientSecret,
+        redirect_uri: pending.redirectUri,
+        grant_type: 'authorization_code',
+      });
+      const tokenRes = await fetch('https://accounts.zoho.com/oauth/v2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      });
+      const tokenData = await tokenRes.json() as { refresh_token?: string; error?: string };
+      if (!tokenData.refresh_token) { res.send(errorHtml(`Zoho não retornou refresh_token: ${tokenData.error || 'erro desconhecido'}`)); return; }
+
+      // Salvar configuração completa no banco
+      await createZohoOAuthConfig({
+        name: pending.name,
+        zohoOrgId: pending.zohoOrgId,
+        zohoClientId: pending.zohoClientId,
+        zohoClientSecret: pending.zohoClientSecret,
+        zohoRefreshToken: tokenData.refresh_token,
+      });
+      await deletePendingZohoOAuth(state);
+      res.send(successHtml);
+    } catch (err) {
+      console.error('[ZohoOAuth] Callback error:', err);
+      res.send(errorHtml('Erro interno ao processar autorização.'));
+    }
+  });
+
   // Pixel de rastreamento de abertura de e-mail
   app.get("/api/email-open/:trackingId", async (req, res) => {
     const { trackingId } = req.params;

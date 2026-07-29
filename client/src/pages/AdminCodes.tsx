@@ -251,6 +251,10 @@ export default function AdminCodes() {
             <Mail className="w-5 h-5 text-blue-400 mx-auto mb-1" />
             <span className="text-xs font-bold text-white">Emails</span>
           </a>
+          <a href="/admin/zoho-config" className="bg-purple-600/20 border border-purple-500/30 rounded-xl p-3 text-center hover:bg-purple-600/30 transition-all">
+            <ShieldCheck className="w-5 h-5 text-purple-400 mx-auto mb-1" />
+            <span className="text-xs font-bold text-white">Zoho Config</span>
+          </a>
           <a href="/admin/loans" className="bg-violet-600/20 border border-violet-500/30 rounded-xl p-3 text-center hover:bg-violet-600/30 transition-all">
             <span className="text-xl block mb-1">💳</span>
             <span className="text-xs font-bold text-white">Empréstimos</span>
