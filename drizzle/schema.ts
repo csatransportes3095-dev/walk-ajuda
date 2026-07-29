@@ -1525,8 +1525,8 @@ export const zohoOAuthConfigs = mysqlTable("zohoOAuthConfigs", {
   status: mysqlEnum("status", ["active", "inactive", "error"]).notNull().default("inactive"),
   lastError: text("lastError"), // Última mensagem de erro
   lastTestAt: bigint("lastTestAt", { mode: "number" }), // Último teste de conexão
-  createdAt: bigint("createdAt", { mode: "number" }).notNull().default(Date.now()),
-  updatedAt: bigint("updatedAt", { mode: "number" }).notNull().default(Date.now()),
+  createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+  updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
 });
 
 export type ZohoOAuthConfig = typeof zohoOAuthConfigs.$inferSelect;

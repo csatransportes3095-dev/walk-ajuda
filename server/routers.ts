@@ -7626,6 +7626,8 @@ export const appRouter = router({
           zohoRefreshToken: input.zohoRefreshToken,
           isActive: 1,
           status: 'inactive',
+          lastError: null,
+          lastTestAt: null,
           createdAt: now,
           updatedAt: now,
         });
