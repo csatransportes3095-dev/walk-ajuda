@@ -232,6 +232,78 @@ async function startServer() {
     }
   });
 
+  // Endpoint de teste para debugar sessão OAuth
+  app.get("/api/zoho-test-session", async (req, res) => {
+    try {
+      const { savePendingZohoOAuth, getPendingZohoOAuth } = await import('../db');
+      const crypto = await import('crypto');
+      
+      const testSessionId = (crypto as any).randomBytes(8).toString('hex');
+      const testData = {
+        name: 'TEST_walk1',
+        zohoOrgId: '931276368',
+        zohoClientId: '1000.G5IJGPRDWJB7OI7OCMBW23R5B4LU1X',
+        zohoClientSecret: '3d7bc5d567aa563b34476c838dcfabd97d117f5b0a',
+        redirectUri: 'https://h2colombiano.com/api/zoho-oauth-callback',
+      };
+
+      console.log('[ZohoTestSession] 1. Salvando sessão:', { sessionId: testSessionId, data: testData });
+      await savePendingZohoOAuth(testSessionId, testData);
+      console.log('[ZohoTestSession] 2. Sessão salva');
+
+      console.log('[ZohoTestSession] 3. Recuperando sessão...');
+      const retrieved = await getPendingZohoOAuth(testSessionId);
+      console.log('[ZohoTestSession] 4. Sessão recuperada:', retrieved ? 'SIM' : 'NÃO');
+
+      if (!retrieved) {
+        res.json({
+          ok: false,
+          step: 'retrieve',
+          message: 'Falha ao recuperar sessão após salvar',
+          sessionId: testSessionId,
+          dataSaved: testData,
+          dataRetrieved: null,
+        });
+        return;
+      }
+
+      const clientSecretMatch = retrieved.zohoClientSecret === testData.zohoClientSecret;
+      console.log('[ZohoTestSession] 5. ClientSecret match:', clientSecretMatch);
+      console.log('[ZohoTestSession]    Esperado:', testData.zohoClientSecret);
+      console.log('[ZohoTestSession]    Recuperado:', retrieved.zohoClientSecret);
+
+      if (!clientSecretMatch) {
+        res.json({
+          ok: false,
+          step: 'data_integrity',
+          message: 'ClientSecret foi corrompido ao salvar/recuperar',
+          sessionId: testSessionId,
+          dataSaved: testData,
+          dataRetrieved: retrieved,
+          comparison: {
+            secretLength: { saved: testData.zohoClientSecret.length, retrieved: retrieved.zohoClientSecret.length },
+            secretMatch: clientSecretMatch,
+          },
+        });
+        return;
+      }
+
+      res.json({
+        ok: true,
+        message: 'Sessão salva e recuperada com sucesso',
+        sessionId: testSessionId,
+        dataSaved: testData,
+        dataRetrieved: retrieved,
+      });
+    } catch (err) {
+      console.error('[ZohoTestSession] Erro:', err);
+      res.status(500).json({
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
   // Pixel de rastreamento de abertura de e-mail
   app.get("/api/email-open/:trackingId", async (req, res) => {
     const { trackingId } = req.params;
