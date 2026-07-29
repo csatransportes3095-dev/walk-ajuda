@@ -48,6 +48,7 @@ function parseArray(value: string) {
 
 export default function AdminOnlineSupport() {
   const [tab, setTab] = useState<TabLabel>("Visao geral");
+  const [simpleMode, setSimpleMode] = useState(true);
 
   const configQ = trpc.onlineSupport.adminConfigGet.useQuery();
   const conversationsQ = trpc.onlineSupport.adminConversationsList.useQuery(undefined, { refetchInterval: 5000 });
@@ -75,12 +76,23 @@ export default function AdminOnlineSupport() {
   const [newMenuDescription, setNewMenuDescription] = useState("");
   const [newMenuActionType, setNewMenuActionType] = useState("send_text");
   const [newMenuActionPayload, setNewMenuActionPayload] = useState('{"text":""}');
+  const [editingMenuId, setEditingMenuId] = useState<number | null>(null);
+  const [editMenuTitle, setEditMenuTitle] = useState("");
+  const [editMenuDescription, setEditMenuDescription] = useState("");
+  const [editMenuActionType, setEditMenuActionType] = useState("send_text");
+  const [editMenuActionPayload, setEditMenuActionPayload] = useState('{"text":""}');
 
   const [newReplyName, setNewReplyName] = useState("");
   const [newReplyTitle, setNewReplyTitle] = useState("");
   const [newReplyKeywords, setNewReplyKeywords] = useState("");
   const [newReplyQuestions, setNewReplyQuestions] = useState("");
   const [newReplyText, setNewReplyText] = useState("");
+  const [editingReplyId, setEditingReplyId] = useState<number | null>(null);
+  const [editReplyName, setEditReplyName] = useState("");
+  const [editReplyTitle, setEditReplyTitle] = useState("");
+  const [editReplyKeywords, setEditReplyKeywords] = useState("");
+  const [editReplyQuestions, setEditReplyQuestions] = useState("");
+  const [editReplyText, setEditReplyText] = useState("");
 
   const [newKbTitle, setNewKbTitle] = useState("");
   const [newKbQuestion, setNewKbQuestion] = useState("");
@@ -89,6 +101,11 @@ export default function AdminOnlineSupport() {
   const [newFileTitle, setNewFileTitle] = useState("");
   const [newFileType, setNewFileType] = useState("document");
   const [newFileUrl, setNewFileUrl] = useState("");
+  const [quickAutoQuestion, setQuickAutoQuestion] = useState("Como fazer pedido?");
+  const [quickAutoReply, setQuickAutoReply] = useState("Para fazer seu pedido, clique no botao abaixo e siga o passo a passo.");
+  const [quickVideoUrl, setQuickVideoUrl] = useState("");
+  const [quickLinkLabel, setQuickLinkLabel] = useState("Abrir video explicativo");
+  const [quickSaving, setQuickSaving] = useState(false);
 
   const [newAgentUser, setNewAgentUser] = useState("");
   const [newAgentName, setNewAgentName] = useState("");
@@ -248,13 +265,87 @@ export default function AdminOnlineSupport() {
 
   const selectedConversation = (conversationsQ.data || []).find((c: any) => c.id === selectedConversationId);
 
+  const visibleTabs = simpleMode
+    ? (["Visao geral", "Conversas", "Respostas automaticas", "Menu inicial", "Configuracoes"] as TabLabel[])
+    : [...tabs];
+
+  const applyQuickAutoSetup = async () => {
+    if (!quickAutoQuestion.trim() || !quickAutoReply.trim()) {
+      toast.error("Preencha a pergunta e a resposta automatica.");
+      return;
+    }
+
+    setQuickSaving(true);
+    try {
+      await saveReplyMut.mutateAsync({
+        internalName: "resposta_rapida_painel",
+        title: "Resposta rapida do painel",
+        relatedQuestions: [quickAutoQuestion],
+        keywords: parseArray(quickAutoQuestion),
+        responseText: quickAutoReply,
+        buttons: quickVideoUrl.trim()
+          ? [{ label: quickLinkLabel || "Abrir link", actionType: "open_external", actionPayload: { url: quickVideoUrl.trim() } }]
+          : [],
+        media: {},
+        updatedBy: "admin",
+      });
+
+      await saveMenuMut.mutateAsync({
+        title: "Atendimento automatico",
+        description: "Resposta imediata com orientacoes",
+        actionType: "send_text",
+        actionPayload: { text: quickAutoQuestion.trim() },
+        isActive: true,
+      });
+
+      if (quickVideoUrl.trim()) {
+        await saveFileMut.mutateAsync({
+          title: "Video/Link do atendimento automatico",
+          fileType: "link",
+          url: quickVideoUrl.trim(),
+        });
+      }
+
+      await Promise.all([autoRepliesQ.refetch(), menuQ.refetch(), filesQ.refetch()]);
+      toast.success("Atendimento automatico configurado com sucesso.");
+    } catch {
+      toast.error("Falha ao aplicar configuracao automatica.");
+    } finally {
+      setQuickSaving(false);
+    }
+  };
+
+  const startEditingMenu = (item: any) => {
+    setEditingMenuId(item.id);
+    setEditMenuTitle(item.title || "");
+    setEditMenuDescription(item.description || "");
+    setEditMenuActionType(item.actionType || "send_text");
+    setEditMenuActionPayload(JSON.stringify(item.actionPayload || {}, null, 2));
+  };
+
+  const startEditingReply = (item: any) => {
+    setEditingReplyId(item.id);
+    setEditReplyName(item.internalName || "");
+    setEditReplyTitle(item.title || "");
+    setEditReplyText(item.responseText || "");
+    setEditReplyKeywords((item.keywords || []).join("\n"));
+    setEditReplyQuestions((item.relatedQuestions || []).join("\n"));
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0a1a] text-white">
       <AdminHeader title="Atendimento Online" icon={<MessageCircle className="w-5 h-5" />} backTo="/admin/codes" />
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-white/60">Modo {simpleMode ? "simples" : "avancado"}</p>
+          <Button size="sm" variant="secondary" onClick={() => setSimpleMode(v => !v)}>
+            {simpleMode ? "Mostrar opcoes avancadas" : "Voltar para modo simples"}
+          </Button>
+        </div>
+
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {tabs.map(item => (
+          {visibleTabs.map(item => (
             <button
               key={item}
               onClick={() => setTab(item)}
@@ -266,12 +357,64 @@ export default function AdminOnlineSupport() {
         </div>
 
         {tab === "Visao geral" && (
-          <div className="grid md:grid-cols-5 gap-3">
-            <Card className="p-4 bg-white/5 border-white/10"><p className="text-xs text-white/60">Total</p><p className="text-2xl font-black">{overview.total}</p></Card>
-            <Card className="p-4 bg-white/5 border-white/10"><p className="text-xs text-white/60">Novas</p><p className="text-2xl font-black text-blue-300">{overview.newCount}</p></Card>
-            <Card className="p-4 bg-white/5 border-white/10"><p className="text-xs text-white/60">Aguardando</p><p className="text-2xl font-black text-amber-300">{overview.waitingAgent}</p></Card>
-            <Card className="p-4 bg-white/5 border-white/10"><p className="text-xs text-white/60">Em atendimento</p><p className="text-2xl font-black text-emerald-300">{overview.inService}</p></Card>
-            <Card className="p-4 bg-white/5 border-white/10"><p className="text-xs text-white/60">Finalizadas</p><p className="text-2xl font-black text-violet-300">{overview.finalized}</p></Card>
+          <div className="space-y-4">
+            <div className="grid md:grid-cols-5 gap-3">
+              <Card className="p-4 bg-white/5 border-white/10"><p className="text-xs text-white/60">Total</p><p className="text-2xl font-black">{overview.total}</p></Card>
+              <Card className="p-4 bg-white/5 border-white/10"><p className="text-xs text-white/60">Novas</p><p className="text-2xl font-black text-blue-300">{overview.newCount}</p></Card>
+              <Card className="p-4 bg-white/5 border-white/10"><p className="text-xs text-white/60">Aguardando</p><p className="text-2xl font-black text-amber-300">{overview.waitingAgent}</p></Card>
+              <Card className="p-4 bg-white/5 border-white/10"><p className="text-xs text-white/60">Em atendimento</p><p className="text-2xl font-black text-emerald-300">{overview.inService}</p></Card>
+              <Card className="p-4 bg-white/5 border-white/10"><p className="text-xs text-white/60">Finalizadas</p><p className="text-2xl font-black text-violet-300">{overview.finalized}</p></Card>
+            </div>
+
+            <Card className="p-4 bg-white/5 border-white/10 space-y-3">
+              <h3 className="font-bold">Atendimento automatico rapido</h3>
+              <p className="text-xs text-white/60">Configure aqui o essencial: resposta automatica e link/video para o cliente.</p>
+
+              <div className="grid lg:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-white/70">1) Resposta automatica padrao</p>
+                  <Input value={quickAutoQuestion} onChange={e => setQuickAutoQuestion(e.target.value)} placeholder="Pergunta do cliente" />
+                  <Textarea value={quickAutoReply} onChange={e => setQuickAutoReply(e.target.value)} placeholder="Resposta automatica" />
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-white/70">2) Link ou video do atendimento</p>
+                  <Input value={quickVideoUrl} onChange={e => setQuickVideoUrl(e.target.value)} placeholder="https://..." />
+                  <Input value={quickLinkLabel} onChange={e => setQuickLinkLabel(e.target.value)} placeholder="Texto do botao (ex: Ver video)" />
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="secondary"
+                      onClick={() => saveFileMut.mutate({
+                        title: "Video de atendimento",
+                        fileType: "video",
+                        url: quickVideoUrl,
+                      })}
+                      disabled={!quickVideoUrl.trim()}
+                    >
+                      Salvar como video
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => saveFileMut.mutate({
+                        title: "Link de atendimento",
+                        fileType: "link",
+                        url: quickVideoUrl,
+                      })}
+                      disabled={!quickVideoUrl.trim()}
+                    >
+                      Salvar como link
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-white/50">Os itens salvos aparecem na aba "Biblioteca de arquivos".</p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/10">
+                <Button onClick={applyQuickAutoSetup} disabled={quickSaving}>
+                  {quickSaving ? "Aplicando..." : "Aplicar configuracao automatica completa"}
+                </Button>
+              </div>
+            </Card>
           </div>
         )}
 
@@ -360,10 +503,29 @@ export default function AdminOnlineSupport() {
               <div className="h-[40vh] overflow-auto space-y-2 pt-2">
                 {(autoRepliesQ.data || []).map((item: any) => (
                   <div key={item.id} className="rounded-lg border border-white/10 p-3 bg-white/5">
-                    <p className="font-semibold">{item.title}</p>
-                    <p className="text-xs text-white/60">{item.internalName} • prioridade {item.priority}</p>
-                    <p className="text-sm mt-1 whitespace-pre-wrap">{item.responseText}</p>
-                    <Button size="sm" variant="destructive" className="mt-2" onClick={() => deleteReplyMut.mutate({ id: item.id })}>Excluir</Button>
+                    {editingReplyId === item.id ? (
+                      <div className="space-y-2">
+                        <Input value={editReplyName} onChange={e => setEditReplyName(e.target.value)} placeholder="Nome interno" />
+                        <Input value={editReplyTitle} onChange={e => setEditReplyTitle(e.target.value)} placeholder="Titulo" />
+                        <Textarea value={editReplyQuestions} onChange={e => setEditReplyQuestions(e.target.value)} placeholder="Perguntas relacionadas (1 por linha)" />
+                        <Textarea value={editReplyKeywords} onChange={e => setEditReplyKeywords(e.target.value)} placeholder="Palavras-chave (1 por linha)" />
+                        <Textarea value={editReplyText} onChange={e => setEditReplyText(e.target.value)} placeholder="Texto da resposta" />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => saveReplyMut.mutate({ id: item.id, internalName: editReplyName, title: editReplyTitle, relatedQuestions: parseArray(editReplyQuestions), keywords: parseArray(editReplyKeywords), responseText: editReplyText, buttons: item.buttons || [], media: item.media || {}, updatedBy: "admin" })}>Salvar</Button>
+                          <Button size="sm" variant="secondary" onClick={() => setEditingReplyId(null)}>Cancelar</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="font-semibold">{item.title}</p>
+                        <p className="text-xs text-white/60">{item.internalName} • prioridade {item.priority}</p>
+                        <p className="text-sm mt-1 whitespace-pre-wrap">{item.responseText}</p>
+                        <div className="mt-2 flex gap-2">
+                          <Button size="sm" variant="secondary" onClick={() => startEditingReply(item)}>Editar</Button>
+                          <Button size="sm" variant="destructive" onClick={() => deleteReplyMut.mutate({ id: item.id })}>Excluir</Button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -375,10 +537,21 @@ export default function AdminOnlineSupport() {
           <div className="grid lg:grid-cols-2 gap-4">
             <Card className="p-4 bg-white/5 border-white/10 space-y-3">
               <h3 className="font-bold">Novo botao de menu</h3>
+              <p className="text-xs text-white/60">Use acao <strong>open_internal</strong> com payload <strong>{`{"path":"/pre-cadastro"}`}</strong> para levar direto ao pedido.</p>
               <Input placeholder="Titulo" value={newMenuTitle} onChange={e => setNewMenuTitle(e.target.value)} />
               <Input placeholder="Descricao" value={newMenuDescription} onChange={e => setNewMenuDescription(e.target.value)} />
-              <Input placeholder="Acao (send_text/open_internal/handoff_human)" value={newMenuActionType} onChange={e => setNewMenuActionType(e.target.value)} />
+              <select
+                value={newMenuActionType}
+                onChange={e => setNewMenuActionType(e.target.value)}
+                className="w-full h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm"
+              >
+                <option value="send_text">Enviar texto automatico</option>
+                <option value="open_internal">Abrir pagina interna</option>
+                <option value="open_external">Abrir link externo</option>
+                <option value="handoff_human">Falar com atendente</option>
+              </select>
               <Textarea placeholder="Payload JSON" value={newMenuActionPayload} onChange={e => setNewMenuActionPayload(e.target.value)} />
+              <p className="text-[11px] text-white/50">Exemplos: send_text =&gt; {`{"text":"Quero fazer pedido"}`} | open_internal =&gt; {`{"path":"/pre-cadastro"}`} | open_external =&gt; {`{"url":"https://..."}`}</p>
               <Button onClick={() => {
                 try {
                   const payload = JSON.parse(newMenuActionPayload || "{}");
@@ -390,14 +563,82 @@ export default function AdminOnlineSupport() {
             </Card>
 
             <Card className="p-4 bg-white/5 border-white/10 space-y-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  const target = (menuQ.data || []).find((item: any) => (item.title || "").toLowerCase().includes("fazer pedido"));
+                  if (!target) {
+                    toast.error("Item 'Fazer pedido' nao encontrado no menu");
+                    return;
+                  }
+                  saveMenuMut.mutate({
+                    id: target.id,
+                    title: target.title,
+                    description: target.description || "",
+                    actionType: "open_internal",
+                    actionPayload: { path: "/pre-cadastro" },
+                    isActive: true,
+                  });
+                }}
+              >
+                Corrigir "Fazer pedido" para abrir /pre-cadastro
+              </Button>
               {(menuQ.data || []).map((item: any) => (
                 <div key={item.id} className="rounded-lg border border-white/10 p-3 bg-black/20 flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold">{item.title}</p>
-                    <p className="text-xs text-white/60">{item.actionType}</p>
-                    <p className="text-xs text-white/50">{item.description}</p>
-                  </div>
-                  <Button size="sm" variant="destructive" onClick={() => deleteMenuMut.mutate({ id: item.id })}>Excluir</Button>
+                  {editingMenuId === item.id ? (
+                    <div className="w-full space-y-2">
+                      <Input value={editMenuTitle} onChange={e => setEditMenuTitle(e.target.value)} placeholder="Titulo" />
+                      <Input value={editMenuDescription} onChange={e => setEditMenuDescription(e.target.value)} placeholder="Descricao" />
+                      <select
+                        value={editMenuActionType}
+                        onChange={e => setEditMenuActionType(e.target.value)}
+                        className="w-full h-10 rounded-lg bg-white/5 border border-white/10 px-3 text-sm"
+                      >
+                        <option value="send_text">Enviar texto automatico</option>
+                        <option value="open_internal">Abrir pagina interna</option>
+                        <option value="open_external">Abrir link externo</option>
+                        <option value="handoff_human">Falar com atendente</option>
+                      </select>
+                      <Textarea value={editMenuActionPayload} onChange={e => setEditMenuActionPayload(e.target.value)} placeholder="Payload JSON" />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            try {
+                              const payload = JSON.parse(editMenuActionPayload || "{}");
+                              saveMenuMut.mutate({
+                                id: item.id,
+                                title: editMenuTitle,
+                                description: editMenuDescription,
+                                actionType: editMenuActionType,
+                                actionPayload: payload,
+                                isActive: true,
+                              });
+                              setEditingMenuId(null);
+                            } catch {
+                              toast.error("JSON invalido no payload");
+                            }
+                          }}
+                        >
+                          Salvar
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setEditingMenuId(null)}>Cancelar</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="font-semibold">{item.title}</p>
+                        <p className="text-xs text-white/60">{item.actionType}</p>
+                        <p className="text-xs text-white/50">{item.description}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => startEditingMenu(item)}>Editar</Button>
+                        <Button size="sm" variant="destructive" onClick={() => deleteMenuMut.mutate({ id: item.id })}>Excluir</Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </Card>
