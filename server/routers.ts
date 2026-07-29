@@ -7626,18 +7626,30 @@ export const appRouter = router({
         zohoClientSecret: z.string().min(1),
       }))
       .mutation(async ({ input }) => {
-        const { savePendingZohoOAuth } = await import('../server/db');
+        const { savePendingZohoOAuth, getPendingZohoOAuth } = await import('../server/db');
         const crypto = await import('crypto');
         const sessionId = (crypto as any).randomBytes(16).toString('hex');
         const baseUrl = process.env.APP_URL || 'https://h2colombiano.com';
         const redirectUri = `${baseUrl}/api/zoho-oauth-callback`;
-        await savePendingZohoOAuth(sessionId, {
+        
+        const dataToSave = {
           name: input.name,
           zohoOrgId: input.zohoOrgId,
           zohoClientId: input.zohoClientId,
           zohoClientSecret: input.zohoClientSecret,
           redirectUri,
-        });
+        };
+        
+        console.log('[getAuthUrl] Salvando sessão:', { sessionId: sessionId.substring(0, 8), data: dataToSave });
+        await savePendingZohoOAuth(sessionId, dataToSave);
+        
+        // Verificar imediatamente se foi salvo
+        const retrieved = await getPendingZohoOAuth(sessionId);
+        console.log('[getAuthUrl] Sessão recuperada imediatamente:', retrieved ? 'SIM' : 'NÃO');
+        if (retrieved) {
+          console.log('[getAuthUrl] ClientSecret recuperado:', retrieved.zohoClientSecret.substring(0, 10) + '...');
+        }
+        
         const authUrl = `https://accounts.zoho.com/oauth/v2/auth?` + new URLSearchParams({
           client_id: input.zohoClientId,
           response_type: 'code',
