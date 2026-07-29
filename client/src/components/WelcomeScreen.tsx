@@ -434,7 +434,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   };
 
   // Rota /login é atalho direto — pula a tela de boas-vindas
-  if (choiceMade || location === "/login") {
+  if (choiceMade || location === "/login" || location === "/pre-cadastro" || location === "/consultar-cadastro" || location.startsWith("/agendar")) {
     return <>{children}</>;
   }
 
