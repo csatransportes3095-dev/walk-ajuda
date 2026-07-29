@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportConfig` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportVisitors` (
   `id` int NOT NULL AUTO_INCREMENT,
   `visitorId` varchar(128) NOT NULL,
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportVisitors` (
   KEY `idx_onlineSupportVisitors_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportConversations` (
   `id` int NOT NULL AUTO_INCREMENT,
   `visitorId` varchar(128) NOT NULL,
@@ -77,6 +79,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportConversations` (
   KEY `idx_onlineSupportConversations_lastMessageAt` (`lastMessageAt`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportMessages` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `conversationId` int NOT NULL,
@@ -98,6 +101,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportMessages` (
   CONSTRAINT `fk_onlineSupportMessages_conversation` FOREIGN KEY (`conversationId`) REFERENCES `onlineSupportConversations` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportMenuItems` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(128) NOT NULL,
@@ -115,6 +119,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportMenuItems` (
   KEY `idx_onlineSupportMenuItems_isActive` (`isActive`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportAutoReplies` (
   `id` int NOT NULL AUTO_INCREMENT,
   `internalName` varchar(128) NOT NULL,
@@ -137,6 +142,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportAutoReplies` (
   KEY `idx_onlineSupportAutoReplies_isActive` (`isActive`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportKnowledgeBase` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(255) NOT NULL,
@@ -157,6 +163,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportKnowledgeBase` (
   KEY `idx_onlineSupportKnowledgeBase_category` (`category`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportFileLibrary` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(255) NOT NULL,
@@ -177,6 +184,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportFileLibrary` (
   KEY `idx_onlineSupportFileLibrary_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportBusinessHours` (
   `id` int NOT NULL AUTO_INCREMENT,
   `weekDay` int NOT NULL,
@@ -191,6 +199,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportBusinessHours` (
   UNIQUE KEY `uk_onlineSupportBusinessHours_weekDay` (`weekDay`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportAgents` (
   `id` int NOT NULL AUTO_INCREMENT,
   `username` varchar(128) NOT NULL,
@@ -205,6 +214,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportAgents` (
   KEY `idx_onlineSupportAgents_role` (`role`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportNotifications` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `conversationId` int,
@@ -222,6 +232,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportNotifications` (
   CONSTRAINT `fk_onlineSupportNotifications_conversation` FOREIGN KEY (`conversationId`) REFERENCES `onlineSupportConversations` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `onlineSupportLogs` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `level` varchar(16) NOT NULL DEFAULT 'info',
@@ -237,6 +248,7 @@ CREATE TABLE IF NOT EXISTS `onlineSupportLogs` (
   KEY `idx_onlineSupportLogs_createdAt` (`createdAt`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+--> statement-breakpoint
 INSERT INTO `onlineSupportConfig` (
   `chatEnabled`, `welcomeButtonEnabled`, `floatingBubbleEnabled`, `autoReplyEnabled`, `aiEnabled`,
   `humanSupportEnabled`, `fileUploadEnabled`, `notificationsEnabled`, `maintenanceMode`,
@@ -254,46 +266,60 @@ SELECT
   'no_safe_answer', 'Ao iniciar o chat, voce concorda com nossa politica de privacidade.', 'system'
 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportConfig` LIMIT 1);
 
+--> statement-breakpoint
 INSERT INTO `onlineSupportBusinessHours` (`weekDay`, `openTime`, `closeTime`, `breakStart`, `breakEnd`, `isOpen`)
 SELECT 1, '08:00', '18:00', NULL, NULL, 1 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportBusinessHours` WHERE `weekDay` = 1);
+--> statement-breakpoint
 INSERT INTO `onlineSupportBusinessHours` (`weekDay`, `openTime`, `closeTime`, `breakStart`, `breakEnd`, `isOpen`)
 SELECT 2, '08:00', '18:00', NULL, NULL, 1 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportBusinessHours` WHERE `weekDay` = 2);
+--> statement-breakpoint
 INSERT INTO `onlineSupportBusinessHours` (`weekDay`, `openTime`, `closeTime`, `breakStart`, `breakEnd`, `isOpen`)
 SELECT 3, '08:00', '18:00', NULL, NULL, 1 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportBusinessHours` WHERE `weekDay` = 3);
+--> statement-breakpoint
 INSERT INTO `onlineSupportBusinessHours` (`weekDay`, `openTime`, `closeTime`, `breakStart`, `breakEnd`, `isOpen`)
 SELECT 4, '08:00', '18:00', NULL, NULL, 1 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportBusinessHours` WHERE `weekDay` = 4);
+--> statement-breakpoint
 INSERT INTO `onlineSupportBusinessHours` (`weekDay`, `openTime`, `closeTime`, `breakStart`, `breakEnd`, `isOpen`)
 SELECT 5, '08:00', '18:00', NULL, NULL, 1 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportBusinessHours` WHERE `weekDay` = 5);
+--> statement-breakpoint
 INSERT INTO `onlineSupportBusinessHours` (`weekDay`, `openTime`, `closeTime`, `breakStart`, `breakEnd`, `isOpen`)
 SELECT 6, '08:00', '12:00', NULL, NULL, 1 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportBusinessHours` WHERE `weekDay` = 6);
+--> statement-breakpoint
 INSERT INTO `onlineSupportBusinessHours` (`weekDay`, `openTime`, `closeTime`, `breakStart`, `breakEnd`, `isOpen`)
 SELECT 0, NULL, NULL, NULL, NULL, 0 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportBusinessHours` WHERE `weekDay` = 0);
 
+--> statement-breakpoint
 INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
 SELECT 'Fazer pedido', 'Abrir fluxo para criacao de pedido', 'shopping-cart', '#2563eb', 'send_buttons',
        '[{"label":"FAZER PEDIDO","actionType":"open_internal","actionPayload":{"path":"/"}},{"label":"VER VIDEO EXPLICATIVO","actionType":"open_internal","actionPayload":{"path":"/video/tutorial"}},{"label":"FALAR COM ATENDENTE","actionType":"handoff_human","actionPayload":{}}]', 1, 1
 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Fazer pedido');
 
+--> statement-breakpoint
 INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
 SELECT 'Consultar pedido', 'Acompanhar status do pedido', 'search', '#059669', 'open_internal', '{"path":"/acompanhar"}', 2, 1
 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Consultar pedido');
 
+--> statement-breakpoint
 INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
 SELECT 'Agendar atendimento', 'Escolher horario disponivel', 'calendar', '#7c3aed', 'send_text', '{"text":"Para agendar atendimento, envie seu nome completo e telefone."}', 3, 1
 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Agendar atendimento');
 
+--> statement-breakpoint
 INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
 SELECT 'Ver videos explicativos', 'Tutoriais de uso', 'play-circle', '#0ea5e9', 'open_internal', '{"path":"/video/tutorial"}', 4, 1
 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Ver videos explicativos');
 
+--> statement-breakpoint
 INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
 SELECT 'Duvidas frequentes', 'Acessar base de conhecimento', 'help-circle', '#f59e0b', 'send_text', '{"text":"Posso ajudar com pedidos, prazos, pagamento e documentacao. O que voce precisa?"}', 5, 1
 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Duvidas frequentes');
 
+--> statement-breakpoint
 INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
 SELECT 'Falar com atendente', 'Encaminhar para equipe humana', 'user-round', '#ef4444', 'handoff_human', '{}', 6, 1
 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Falar com atendente');
 
+--> statement-breakpoint
 INSERT INTO `onlineSupportAutoReplies` (`internalName`, `title`, `category`, `relatedQuestionsJson`, `keywordsJson`, `priority`, `responseText`, `mediaJson`, `buttonsJson`, `nextStep`, `waitTimeMs`, `isActive`, `updatedBy`)
 SELECT 'como_fazer_pedido', 'Como fazer pedido', 'pedidos',
        '["Como faco pedido?","Quero fazer pedido","Onde faco meu pedido?","Como comprar?","Quero contratar","Manda o link","Como funciona o pedido?"]',
