@@ -7617,6 +7617,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const { createZohoOAuthConfig } = await import('../server/db');
+        const now = Date.now();
         await createZohoOAuthConfig({
           name: input.name,
           zohoOrgId: input.zohoOrgId,
@@ -7625,6 +7626,8 @@ export const appRouter = router({
           zohoRefreshToken: input.zohoRefreshToken,
           isActive: 1,
           status: 'inactive',
+          createdAt: now,
+          updatedAt: now,
         });
         return { success: true };
       }),
