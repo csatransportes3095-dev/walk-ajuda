@@ -163,10 +163,26 @@ async function startServer() {
     if (!code || !state) { res.send(errorHtml('Parâmetros inválidos na resposta do Zoho.')); return; }
 
     try {
+      console.log('[ZohoOAuth] Iniciando callback com state:', state.substring(0, 8));
+      
       const { getPendingZohoOAuth, deletePendingZohoOAuth, createZohoOAuthConfig } = await import('../db');
-      const pending = await getPendingZohoOAuth(state);
-      if (!pending) { res.send(errorHtml('Sessão expirada (mais de 10 min). Tente novamente.')); return; }
+      
+      let pending;
+      try {
+        pending = await getPendingZohoOAuth(state);
+        console.log('[ZohoOAuth] getPendingZohoOAuth resultado:', pending ? 'encontrado' : 'não encontrado');
+      } catch (e) {
+        console.error('[ZohoOAuth] Erro ao recuperar sessão:', e);
+        res.send(errorHtml(`Erro ao recuperar sessão: ${String(e)}`));
+        return;
+      }
+      
+      if (!pending) { 
+        res.send(errorHtml('Sessão expirada (mais de 10 min). Tente novamente.')); 
+        return; 
+      }
 
+      console.log('[ZohoOAuth] Trocando código por refresh token');
       // Trocar código por refresh token
       const params = new URLSearchParams({
         code,
@@ -182,21 +198,37 @@ async function startServer() {
         body: params.toString(),
       });
       const tokenData = await tokenRes.json() as { refresh_token?: string; error?: string };
-      if (!tokenData.refresh_token) { res.send(errorHtml(`Zoho não retornou refresh_token: ${tokenData.error || 'erro desconhecido'}`)); return; }
+      console.log('[ZohoOAuth] Resposta Zoho token:', tokenData.refresh_token ? 'OK' : `ERRO: ${tokenData.error}`);
+      
+      if (!tokenData.refresh_token) { 
+        res.send(errorHtml(`Zoho não retornou refresh_token: ${tokenData.error || 'erro desconhecido'}`)); 
+        return; 
+      }
 
+      console.log('[ZohoOAuth] Salvando configuração no banco');
       // Salvar configuração completa no banco
-      await createZohoOAuthConfig({
-        name: pending.name,
-        zohoOrgId: pending.zohoOrgId,
-        zohoClientId: pending.zohoClientId,
-        zohoClientSecret: pending.zohoClientSecret,
-        zohoRefreshToken: tokenData.refresh_token,
-      });
+      try {
+        await createZohoOAuthConfig({
+          name: pending.name,
+          zohoOrgId: pending.zohoOrgId,
+          zohoClientId: pending.zohoClientId,
+          zohoClientSecret: pending.zohoClientSecret,
+          zohoRefreshToken: tokenData.refresh_token,
+        });
+        console.log('[ZohoOAuth] Configuração salva com sucesso');
+      } catch (e) {
+        console.error('[ZohoOAuth] Erro ao salvar configuração:', e);
+        res.send(errorHtml(`Erro ao salvar configuração: ${String(e)}`));
+        return;
+      }
+
+      console.log('[ZohoOAuth] Deletando sessão temporária');
       await deletePendingZohoOAuth(state);
+      console.log('[ZohoOAuth] Sucesso!');
       res.send(successHtml);
     } catch (err) {
       console.error('[ZohoOAuth] Callback error:', err);
-      res.send(errorHtml('Erro interno ao processar autorização.'));
+      res.send(errorHtml(`Erro interno: ${err instanceof Error ? err.message : String(err)}`));
     }
   });
 
