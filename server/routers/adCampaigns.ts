@@ -1,25 +1,25 @@
 import { z } from "zod";
 import { eq, and, desc, lte, gte, or, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
+import { router, publicProcedure, adminProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 import { adCampaigns, adImpressions, spreadsheetSessions } from "../../drizzle/schema";
 
 // Procedure que verifica se o usuário é admin da planilha (via token de sessão admin)
-// Para simplificar, usamos protectedProcedure (Manus OAuth) para o painel ADM
+// Para simplificar, usamos adminProcedure (Manus OAuth) para o painel ADM
 
 export const adCampaignsRouter = router({
   // ===== ADMIN: CRUD DE CAMPANHAS =====
 
   // Listar todas as campanhas
-  list: protectedProcedure.query(async () => {
+  list: adminProcedure.query(async () => {
     const db = await getDb() as any;
     const campaigns = await db.select().from(adCampaigns).orderBy(desc(adCampaigns.createdAt));
     return campaigns;
   }),
 
   // Criar nova campanha
-  create: protectedProcedure
+  create: adminProcedure
     .input(z.object({
       name: z.string().min(1).max(256),
       isActive: z.number().int().min(0).max(1).default(1),
@@ -64,7 +64,7 @@ export const adCampaignsRouter = router({
     }),
 
   // Atualizar campanha
-  update: protectedProcedure
+  update: adminProcedure
     .input(z.object({
       id: z.number().int(),
       name: z.string().min(1).max(256).optional(),
@@ -96,7 +96,7 @@ export const adCampaignsRouter = router({
     }),
 
   // Deletar campanha
-  delete: protectedProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ input }) => {
       const db = await getDb() as any;
@@ -105,7 +105,7 @@ export const adCampaignsRouter = router({
     }),
 
   // Toggle ativo/inativo
-  toggle: protectedProcedure
+  toggle: adminProcedure
     .input(z.object({ id: z.number().int(), isActive: z.number().int().min(0).max(1) }))
     .mutation(async ({ input }) => {
       const db = await getDb() as any;
