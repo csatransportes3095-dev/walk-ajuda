@@ -1513,6 +1513,25 @@ export const emailAccounts = mysqlTable("emailAccounts", {
 export type EmailAccount = typeof emailAccounts.$inferSelect;
 export type InsertEmailAccount = typeof emailAccounts.$inferInsert;
 
+// Tabela de configurações Zoho OAuth (múltiplos servidores)
+export const zohoOAuthConfigs = mysqlTable("zohoOAuthConfigs", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(), // ex: "Servidor 1", "Servidor 2"
+  zohoOrgId: varchar("zohoOrgId", { length: 64 }).notNull(),
+  zohoClientId: varchar("zohoClientId", { length: 256 }).notNull(),
+  zohoClientSecret: varchar("zohoClientSecret", { length: 256 }).notNull(),
+  zohoRefreshToken: varchar("zohoRefreshToken", { length: 512 }).notNull(),
+  isActive: int("isActive").notNull().default(1), // 1 = ativo (usa este servidor)
+  status: mysqlEnum("status", ["active", "inactive", "error"]).notNull().default("inactive"),
+  lastError: text("lastError"), // Última mensagem de erro
+  lastTestAt: bigint("lastTestAt", { mode: "number" }), // Último teste de conexão
+  createdAt: bigint("createdAt", { mode: "number" }).notNull().default(Date.now()),
+  updatedAt: bigint("updatedAt", { mode: "number" }).notNull().default(Date.now()),
+});
+
+export type ZohoOAuthConfig = typeof zohoOAuthConfigs.$inferSelect;
+export type InsertZohoOAuthConfig = typeof zohoOAuthConfigs.$inferInsert;
+
 // Tabela de notificações de chat não lidas
 export const chatNotifications = mysqlTable("chatNotifications", {
   id: int("id").autoincrement().primaryKey(),

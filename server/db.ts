@@ -1,4 +1,4 @@
-import { eq, asc, desc, sql, and, gte, inArray } from "drizzle-orm";
+import { eq, asc, desc, sql, and, gte, inArray, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 
 import {
@@ -61,6 +61,7 @@ import {
   spreadsheetGoals, SpreadsheetGoal, InsertSpreadsheetGoal,
   broadcastQueue, BroadcastQueue,
   emailAccounts, EmailAccount, InsertEmailAccount,
+  zohoOAuthConfigs, ZohoOAuthConfig, InsertZohoOAuthConfig,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -3713,5 +3714,55 @@ export async function listEmailAccounts(): Promise<Array<{ emailAddress: string;
   if (!db) return [];
   const rows = await db.select().from(emailAccounts);
   return rows.map(r => ({ emailAddress: r.emailAddress, type: r.type }));
+}
+
+// ========== ZOHO OAUTH CONFIGURATIONS ==========
+
+export async function createZohoOAuthConfig(data: InsertZohoOAuthConfig) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  return await db.insert(zohoOAuthConfigs).values(data);
+}
+
+export async function listZohoOAuthConfigs(): Promise<ZohoOAuthConfig[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(zohoOAuthConfigs).orderBy(zohoOAuthConfigs.createdAt);
+  return rows;
+}
+
+export async function getActiveZohoOAuthConfig(): Promise<ZohoOAuthConfig | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(zohoOAuthConfigs).where(eq(zohoOAuthConfigs.isActive, 1)).limit(1);
+  return rows[0] || null;
+}
+
+export async function getZohoOAuthConfig(id: number): Promise<ZohoOAuthConfig | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(zohoOAuthConfigs).where(eq(zohoOAuthConfigs.id, id)).limit(1);
+  return rows[0] || null;
+}
+
+export async function updateZohoOAuthConfig(id: number, data: Partial<InsertZohoOAuthConfig>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  return await db.update(zohoOAuthConfigs).set({ ...data, updatedAt: Date.now() }).where(eq(zohoOAuthConfigs.id, id));
+}
+
+export async function deleteZohoOAuthConfig(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  return await db.delete(zohoOAuthConfigs).where(eq(zohoOAuthConfigs.id, id));
+}
+
+export async function setActiveZohoOAuthConfig(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  // Desativar todos
+  await db.update(zohoOAuthConfigs).set({ isActive: 0 }).where(gt(zohoOAuthConfigs.id, 0));
+  // Ativar o selecionado
+  return await db.update(zohoOAuthConfigs).set({ isActive: 1, updatedAt: Date.now() }).where(eq(zohoOAuthConfigs.id, id));
 }
 

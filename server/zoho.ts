@@ -6,6 +6,59 @@ const ZOHO_USER_API_BASE = "https://mail.zoho.com/api";
 
 let cachedAccessToken: string | null = null;
 let tokenExpiresAt = 0;
+let cachedOrgId: string | null = null;
+let cachedClientId: string | null = null;
+let cachedClientSecret: string | null = null;
+let cachedRefreshToken: string | null = null;
+
+// Obter credenciais: primeiro do banco de dados, depois do .env
+async function getZohoCredentials() {
+  // Cache com validade de 60s para não consultar DB toda hora
+  if (cachedOrgId && cachedClientId && cachedClientSecret && cachedRefreshToken) {
+    return { cachedOrgId, cachedClientId, cachedClientSecret, cachedRefreshToken };
+  }
+
+  try {
+    const { getActiveZohoOAuthConfig } = await import('./db');
+    const config = await getActiveZohoOAuthConfig();
+    
+    if (config) {
+      cachedOrgId = config.zohoOrgId;
+      cachedClientId = config.zohoClientId;
+      cachedClientSecret = config.zohoClientSecret;
+      cachedRefreshToken = config.zohoRefreshToken;
+      
+      // Limpar cache após 60 segundos
+      setTimeout(() => {
+        cachedOrgId = null;
+        cachedClientId = null;
+        cachedClientSecret = null;
+        cachedRefreshToken = null;
+      }, 60_000);
+      
+      return {
+        orgId: config.zohoOrgId,
+        clientId: config.zohoClientId,
+        clientSecret: config.zohoClientSecret,
+        refreshToken: config.zohoRefreshToken,
+      };
+    }
+  } catch (err) {
+    console.warn("Erro ao buscar credenciais do banco:", err);
+  }
+
+  // Fallback para variáveis de ambiente
+  if (!ENV.zohoOrgId || !ENV.zohoClientId || !ENV.zohoClientSecret || !ENV.zohoRefreshToken) {
+    throw new Error("Credenciais Zoho não configuradas. Configure via painel Admin ou arquivo .env");
+  }
+
+  return {
+    orgId: ENV.zohoOrgId,
+    clientId: ENV.zohoClientId,
+    clientSecret: ENV.zohoClientSecret,
+    refreshToken: ENV.zohoRefreshToken,
+  };
+}
 
 async function getAccessToken(): Promise<string> {
   const now = Date.now();
@@ -13,11 +66,13 @@ async function getAccessToken(): Promise<string> {
     return cachedAccessToken;
   }
 
+  const creds = await getZohoCredentials();
+
   const params = new URLSearchParams({
-    refresh_token: ENV.zohoRefreshToken,
+    refresh_token: creds.refreshToken,
     grant_type: "refresh_token",
-    client_id: ENV.zohoClientId,
-    client_secret: ENV.zohoClientSecret,
+    client_id: creds.clientId,
+    client_secret: creds.clientSecret,
   });
 
   const res = await fetch(ZOHO_TOKEN_URL, {
@@ -47,7 +102,8 @@ async function zohoRequest<T>(
   body?: unknown
 ): Promise<T> {
   const token = await getAccessToken();
-  const url = `${ZOHO_API_BASE}/organization/${ENV.zohoOrgId}${path}`;
+  const creds = await getZohoCredentials();
+  const url = `${ZOHO_API_BASE}/organization/${creds.orgId}${path}`;
 
   const res = await fetch(url, {
     method,
