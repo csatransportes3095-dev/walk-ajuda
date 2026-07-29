@@ -1523,8 +1523,8 @@ export const zohoOAuthConfigs = mysqlTable("zohoOAuthConfigs", {
   zohoRefreshToken: varchar("zohoRefreshToken", { length: 512 }).notNull(),
   isActive: int("isActive").notNull().default(1), // 1 = ativo (usa este servidor)
   status: mysqlEnum("status", ["active", "inactive", "error"]).notNull().default("inactive"),
-  lastError: text("lastError"), // Última mensagem de erro
-  lastTestAt: bigint("lastTestAt", { mode: "number" }), // Último teste de conexão
+  lastError: text("lastError").default(""), // Última mensagem de erro
+  lastTestAt: bigint("lastTestAt", { mode: "number" }).default(0), // Último teste de conexão
   createdAt: bigint("createdAt", { mode: "number" }).notNull(),
   updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
 });

@@ -3718,7 +3718,7 @@ export async function listEmailAccounts(): Promise<Array<{ emailAddress: string;
 
 // ========== ZOHO OAUTH CONFIGURATIONS ==========
 
-export async function createZohoOAuthConfig(data: InsertZohoOAuthConfig) {
+export async function createZohoOAuthConfig(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   return await db.insert(zohoOAuthConfigs).values(data);
