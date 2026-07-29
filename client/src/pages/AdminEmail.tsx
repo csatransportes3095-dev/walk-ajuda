@@ -54,6 +54,7 @@ interface ZohoUser {
 interface ServerGroup {
   serverId: number;
   serverName: string;
+  domain: string;
   users: ZohoUser[];
 }
 
@@ -103,6 +104,8 @@ export default function AdminEmail() {
 
   const allEmails = (groups as ServerGroup[]).flatMap(g => g.users.map(u => u.primaryEmailAddress));
   const totalCount = allEmails.length;
+  // Domínio do servidor selecionado
+  const selectedDomain = selectedServer?.domain || 'walkajuda.com';
 
   const handleGenerateUsername = useCallback(() => {
     setIsGeneratingUsername(true);
@@ -414,7 +417,7 @@ export default function AdminEmail() {
                     title="Gerar usuário aleatório único" className="shrink-0">
                     <Shuffle className={`w-4 h-4 ${isGeneratingUsername ? "animate-spin" : ""}`} />
                   </Button>
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">@walkajuda.com</span>
+                  <span className="text-sm font-semibold text-blue-400 whitespace-nowrap">@{selectedDomain}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">Clique em 🔀 para gerar um usuário aleatório único</p>
               </div>
@@ -455,10 +458,14 @@ export default function AdminEmail() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setModalStep(null)}>Cancelar</Button>
               <Button
-                onClick={() => createMutation.mutate({
-                  ...form,
-                  serverId: selectedServer?.serverId,
-                } as any)}
+                onClick={() => {
+                  if (window.confirm(`A conta será criada no servidor ${selectedServer?.serverName?.toUpperCase()}:\n\n${form.username}@${selectedDomain}\n\nConfirmar?`)) {
+                    createMutation.mutate({
+                      ...form,
+                      serverId: selectedServer?.serverId,
+                    } as any);
+                  }
+                }}
                 disabled={createMutation.isPending || !form.username || !form.displayName || form.password.length < 8}>
                 {createMutation.isPending ? "Criando..." : `Criar Conta`}
               </Button>

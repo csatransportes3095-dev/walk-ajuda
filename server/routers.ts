@@ -7520,6 +7520,7 @@ export const appRouter = router({
       return grouped.map(group => ({
         serverId: group.serverId,
         serverName: group.serverName,
+        domain: (group as any).domain || 'walkajuda.com',
         users: group.users.map(user => ({
           ...user,
           type: typeMap[user.primaryEmailAddress] || 'membro',
@@ -7538,7 +7539,15 @@ export const appRouter = router({
         serverId: z.number().optional(), // ID do servidor específico onde criar
       }))
       .mutation(async ({ input }) => {
-        const primaryEmailAddress = `${input.username.toLowerCase()}@walkajuda.com`;
+        // Determinar o domínio correto baseado no servidor selecionado
+        let emailDomain = 'walkajuda.com';
+        if (input.serverId) {
+          const { listZohoOAuthConfigs: getConfigs } = await import('../server/db');
+          const allCfgs = await getConfigs();
+          const cfg = allCfgs.find((c: any) => c.id === input.serverId);
+          if (cfg?.domain) emailDomain = cfg.domain;
+        }
+        const primaryEmailAddress = `${input.username.toLowerCase()}@${emailDomain}`;
         
         // Se serverId especificado, usar esse servidor; senão distribuição automática
         let user;

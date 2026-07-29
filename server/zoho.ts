@@ -163,14 +163,14 @@ export async function listZohoUsersForConfig(config: any, limit = 50): Promise<Z
 }
 
 // Listar utilizadores de TODOS os servidores ativos, agrupados por servidor
-export async function listAllZohoUsersGrouped(limit = 50): Promise<{ serverId: number; serverName: string; users: ZohoUser[] }[]> {
+export async function listAllZohoUsersGrouped(limit = 50): Promise<{ serverId: number; serverName: string; domain: string; users: ZohoUser[] }[]> {
   const configs = await getAllActiveConfigs();
   if (configs.length === 0) return [];
-
   const results = await Promise.all(
     configs.map(async (config: any) => ({
       serverId: config.id,
       serverName: config.name,
+      domain: config.domain || 'walkajuda.com',
       users: await listZohoUsersForConfig(config, limit),
     }))
   );
