@@ -15,7 +15,7 @@ let cachedRefreshToken: string | null = null;
 async function getZohoCredentials() {
   // Cache com validade de 60s para não consultar DB toda hora
   if (cachedOrgId && cachedClientId && cachedClientSecret && cachedRefreshToken) {
-    return { cachedOrgId, cachedClientId, cachedClientSecret, cachedRefreshToken };
+    return { orgId: cachedOrgId, clientId: cachedClientId, clientSecret: cachedClientSecret, refreshToken: cachedRefreshToken };
   }
 
   try {
