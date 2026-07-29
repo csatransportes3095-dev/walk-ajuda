@@ -2,7 +2,7 @@ import { z } from "zod";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { sendMail } from "./mailer";
 
-const ADMIN_EMAIL = 'walkajuda@walkajuda.com';
+const ADMIN_EMAIL = 'h2@h2colombiano.com';
 
 async function sendOwnerEmail(subject: string, html: string) {
   try {

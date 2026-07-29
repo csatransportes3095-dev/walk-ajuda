@@ -3,7 +3,7 @@ import type Mail from "nodemailer/lib/mailer";
 
 const SMTP_HOST = process.env.SMTP_HOST || "smtp.zoho.com";
 const SMTP_PORT = Number(process.env.SMTP_PORT || "465");
-const SMTP_USER = process.env.SMTP_USER || "walkajuda@walkajuda.com";
+const SMTP_USER = process.env.SMTP_USER || "h2@h2colombiano.com";
 const SMTP_PASS = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || "";
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
 

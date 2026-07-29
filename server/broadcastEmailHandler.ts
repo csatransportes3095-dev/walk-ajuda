@@ -99,7 +99,7 @@ export async function broadcastEmailHandler(req: Request, res: Response) {
 
     try {
       await sendMail({
-        from: '"Walk Ajuda" <walkajuda@walkajuda.com>',
+        from: '"Walk Ajuda" <h2@h2colombiano.com>',
         to: item.recipientEmail,
         subject,
         html,
