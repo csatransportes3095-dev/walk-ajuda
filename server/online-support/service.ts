@@ -152,7 +152,7 @@ export async function getPublicState(pathname: string) {
     outOfHoursMessage: config.outOfHoursMessage,
     notificationsEnabled: notifications,
     allowedPages,
-    showOnPage: allowedPages.includes(pathname),
+    showOnPage: allowedPages.length === 0 || allowedPages.includes(pathname),
     menuItems,
     onlineNow: await isInWorkingHours(),
   };
