@@ -101,11 +101,33 @@ export default function AdminEmail() {
     firstName: "", lastName: "", type: 'membro' as 'principal' | 'membro',
   });
   const [isGeneratingUsername, setIsGeneratingUsername] = useState(false);
+  // Domínio manual: pode ser sobreposto pelo utilizador
+  const [manualDomain, setManualDomain] = useState<string | null>(null);
 
   const allEmails = (groups as ServerGroup[]).flatMap(g => g.users.map(u => u.primaryEmailAddress));
   const totalCount = allEmails.length;
-  // Domínio do servidor selecionado
-  const selectedDomain = selectedServer?.domain || 'walkajuda.com';
+
+  // Domínios disponíveis: extrair dos grupos ou usar defaults
+  const availableDomains = (() => {
+    const fromGroups = (groups as ServerGroup[])
+      .filter(g => g.domain)
+      .map(g => g.domain)
+      .filter((d, i, arr) => arr.indexOf(d) === i);
+    // Sempre garantir os dois domínios conhecidos
+    const known = ['walkajuda.com', 'h2colombiano.com'];
+    const all = [...new Set([...fromGroups, ...known])];
+    return all;
+  })();
+
+  // Domínio do servidor selecionado (com fallback inteligente por nome)
+  const serverDomain = (() => {
+    if (selectedServer?.domain) return selectedServer.domain;
+    // Fallback por nome do servidor
+    const name = (selectedServer?.serverName || '').toLowerCase();
+    if (name.includes('walk2') || name === 'walk2') return 'h2colombiano.com';
+    return 'walkajuda.com';
+  })();
+  const selectedDomain = manualDomain || serverDomain;
 
   const handleGenerateUsername = useCallback(() => {
     setIsGeneratingUsername(true);
@@ -130,6 +152,7 @@ export default function AdminEmail() {
   function handleSelectServer(group: ServerGroup) {
     if (group.users.length >= 5) return; // Lotado, não permite
     setSelectedServer(group);
+    setManualDomain(null); // Resetar domínio manual ao trocar servidor
     setModalStep('fill-form');
   }
 
@@ -417,7 +440,19 @@ export default function AdminEmail() {
                     title="Gerar usuário aleatório único" className="shrink-0">
                     <Shuffle className={`w-4 h-4 ${isGeneratingUsername ? "animate-spin" : ""}`} />
                   </Button>
-                  <span className="text-sm font-semibold text-blue-400 whitespace-nowrap">@{selectedDomain}</span>
+                    {availableDomains.length > 1 ? (
+                    <select
+                      value={selectedDomain}
+                      onChange={(e) => setManualDomain(e.target.value)}
+                      className="text-sm font-semibold text-blue-400 bg-transparent border border-blue-500/40 rounded px-2 py-1 cursor-pointer hover:border-blue-400 transition"
+                    >
+                      {availableDomains.map(d => (
+                        <option key={d} value={d} className="bg-gray-900 text-white">@{d}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-sm font-semibold text-blue-400 whitespace-nowrap">@{selectedDomain}</span>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">Clique em 🔀 para gerar um usuário aleatório único</p>
               </div>
