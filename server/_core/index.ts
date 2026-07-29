@@ -174,6 +174,7 @@ async function startServer() {
         client_secret: pending.zohoClientSecret,
         redirect_uri: pending.redirectUri,
         grant_type: 'authorization_code',
+        access_type: 'offline',
       });
       const tokenRes = await fetch('https://accounts.zoho.com/oauth/v2/token', {
         method: 'POST',

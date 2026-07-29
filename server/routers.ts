@@ -7645,6 +7645,7 @@ export const appRouter = router({
           redirect_uri: redirectUri,
           state: sessionId,
           prompt: 'consent',
+          access_type: 'offline',
         }).toString();
         return { authUrl, sessionId };
       }),
