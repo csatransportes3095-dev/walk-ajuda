@@ -1516,15 +1516,13 @@ export type InsertEmailAccount = typeof emailAccounts.$inferInsert;
 // Tabela de configurações Zoho OAuth (múltiplos servidores)
 export const zohoOAuthConfigs = mysqlTable("zohoOAuthConfigs", {
   id: int("id").autoincrement().primaryKey(),
-  name: varchar("name", { length: 128 }).notNull(), // ex: "Servidor 1", "Servidor 2"
+  name: varchar("name", { length: 128 }).notNull(),
   zohoOrgId: varchar("zohoOrgId", { length: 64 }).notNull(),
   zohoClientId: varchar("zohoClientId", { length: 256 }).notNull(),
   zohoClientSecret: varchar("zohoClientSecret", { length: 256 }).notNull(),
   zohoRefreshToken: varchar("zohoRefreshToken", { length: 512 }).notNull(),
-  isActive: int("isActive").notNull().default(1), // 1 = ativo (usa este servidor)
-  status: mysqlEnum("status", ["active", "inactive", "error"]).notNull().default("inactive"),
-  lastError: text("lastError").default(""), // Última mensagem de erro
-  lastTestAt: bigint("lastTestAt", { mode: "number" }).default(0), // Último teste de conexão
+  isActive: int("isActive").notNull().default(1),
+  status: varchar("status", { length: 20 }).notNull().default("inactive"),
   createdAt: bigint("createdAt", { mode: "number" }).notNull(),
   updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
 });
