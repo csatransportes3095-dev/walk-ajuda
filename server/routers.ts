@@ -1738,32 +1738,30 @@ export const appRouter = router({
           } catch (e) { console.error('Erro ao notificar indicador:', e); }
         }
         
-        // Notificação: finalização do cadastro (todos os dados)
-        try {
-          const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
-          const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
-          const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
-          const photoHtml = customer.profilePhotoUrl
-            ? `<div style="margin-top:16px;text-align:center"><img src="${customer.profilePhotoUrl}" alt="Foto" style="width:120px;height:120px;object-fit:cover;border-radius:50%;border:3px solid #10b981" /></div>`
-            : '';
-          await transporter.sendMail({
-            from: '"Walk Ajuda" <h2@h2colombiano.com>',
-            to: emailTo,
-            subject: `✅ Cadastro finalizado — ${safeInput.name} (${safeInput.phone})`,
-            html: emailCadastroFinalizadoAdmin({
-              name: safeInput.name,
-              phone: safeInput.phone,
-              service: undefined,
-              email: safeInput.email || undefined,
-              cpf: safeInput.cpf || undefined,
-            }),
-          });
-        } catch (e) { console.error('Email finalização cadastro:', e); }
+        // Notificação: finalização do cadastro — enviado em segundo plano para não bloquear
+        void (async () => {
+          try {
+            const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
+            const transporter = nodemailer.createTransport({
+              host: 'smtp.zoho.com',
+              port: 465,
+              secure: true,
+              auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            });
+            await transporter.sendMail({
+              from: '"Walk Ajuda" <h2@h2colombiano.com>',
+              to: emailTo,
+              subject: `✅ Cadastro finalizado — ${safeInput.name} (${safeInput.phone})`,
+              html: emailCadastroFinalizadoAdmin({
+                name: safeInput.name,
+                phone: safeInput.phone,
+                service: undefined,
+                email: safeInput.email || undefined,
+                cpf: safeInput.cpf || undefined,
+              }),
+            });
+          } catch (e) { console.error('Email finalização cadastro:', e); }
+        })();
         return { success: true, customer, alreadyExists: false };
       }),
 
