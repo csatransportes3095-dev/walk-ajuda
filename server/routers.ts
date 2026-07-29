@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   listZohoUsers,
+  listAllZohoUsersGrouped,
   createZohoUser,
   deleteZohoUser,
   resetZohoPassword,
@@ -7510,13 +7511,17 @@ export const appRouter = router({
   // === ZOHO MAIL - GERENCIAMENTO DE EMAILS ===
   email: router({
     list: adminProcedure.query(async () => {
-      const users = await listZohoUsers(200);
+      const grouped = await listAllZohoUsersGrouped(200);
       const { listEmailAccounts } = await import('../server/db');
       const accountTypes = await listEmailAccounts();
-      const typeMap = Object.fromEntries(accountTypes.map(a => [a.emailAddress, a.type]));
-      return users.map(user => ({
-        ...user,
-        type: typeMap[user.primaryEmailAddress] || 'membro',
+      const typeMap = Object.fromEntries(accountTypes.map((a: any) => [a.emailAddress, a.type]));
+      return grouped.map(group => ({
+        serverId: group.serverId,
+        serverName: group.serverName,
+        users: group.users.map(user => ({
+          ...user,
+          type: typeMap[user.primaryEmailAddress] || 'membro',
+        })),
       }));
     }),
 

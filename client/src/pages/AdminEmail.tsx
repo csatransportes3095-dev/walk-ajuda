@@ -39,6 +39,7 @@ import {
   Copy,
   Search,
   Shuffle,
+  Server,
 } from "lucide-react";
 
 interface ZohoUser {
@@ -52,10 +53,17 @@ interface ZohoUser {
   mailboxStatus: string;
   accountCreationTime: number;
   lastLogin: number;
-  type?: 'principal' | 'membro';
+  type?: string;
+  serverId?: number;
+  serverName?: string;
 }
 
-// Dados para geração aleatória completa
+interface ServerGroup {
+  serverId: number;
+  serverName: string;
+  users: ZohoUser[];
+}
+
 const FIRST_NAMES = [
   "Ana", "Bruno", "Carlos", "Daniel", "Eduardo", "Fernanda", "Gabriel",
   "Helena", "Igor", "Julia", "Kevin", "Lucas", "Marcos", "Natalia",
@@ -75,98 +83,65 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-interface GeneratedAccount {
-  username: string;
-  firstName: string;
-  lastName: string;
-  displayName: string;
-  password: string;
-}
-
-function generateFullAccount(existingEmails: string[]): GeneratedAccount {
-  const existingUsernames = new Set(
-    existingEmails.map((e) => e.split("@")[0].toLowerCase())
-  );
-
-  let username = "";
-  let firstName = "";
-  let lastName = "";
-
-  // Tentar gerar username único baseado em nome real
+function generateFullAccount(existingEmails: string[]) {
+  const existingUsernames = new Set(existingEmails.map((e) => e.split("@")[0].toLowerCase()));
+  let username = "", firstName = "", lastName = "";
   for (let attempt = 0; attempt < 50; attempt++) {
     firstName = pick(FIRST_NAMES);
     lastName = pick(LAST_NAMES);
-    const num = Math.floor(Math.random() * 900) + 100; // 100-999
+    const num = Math.floor(Math.random() * 900) + 100;
     const candidate = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${num}`;
-    if (!existingUsernames.has(candidate)) {
-      username = candidate;
-      break;
-    }
+    if (!existingUsernames.has(candidate)) { username = candidate; break; }
   }
-
-  // Fallback se não encontrou
   if (!username) {
     username = `user_${Date.now().toString(36).slice(-5)}`;
     firstName = pick(FIRST_NAMES);
     lastName = pick(LAST_NAMES);
   }
-
-  const displayName = `${firstName} ${lastName}`;
-  const password = generatePassword();
-
-  return { username, firstName, lastName, displayName, password };
+  return { username, firstName, lastName, displayName: `${firstName} ${lastName}`, password: "Walk@@3095" };
 }
 
-function generatePassword() {
-  return "Walk@@3095";
-}
+// Cores por servidor
+const SERVER_COLORS = [
+  { border: "border-blue-500/40", bg: "bg-blue-500/10", text: "text-blue-400", badge: "bg-blue-500/20 text-blue-300" },
+  { border: "border-purple-500/40", bg: "bg-purple-500/10", text: "text-purple-400", badge: "bg-purple-500/20 text-purple-300" },
+  { border: "border-green-500/40", bg: "bg-green-500/10", text: "text-green-400", badge: "bg-green-500/20 text-green-300" },
+  { border: "border-orange-500/40", bg: "bg-orange-500/10", text: "text-orange-400", badge: "bg-orange-500/20 text-orange-300" },
+];
 
 export default function AdminEmail() {
   const utils = trpc.useUtils();
 
-  const { data: users = [], isLoading, refetch } = trpc.email.list.useQuery();
+  const { data: groups = [], isLoading, refetch } = trpc.email.list.useQuery();
 
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showDelete, setShowDelete] = useState<ZohoUser | null>(null);
-  const [showCreated, setShowCreated] = useState<{
-    email: string;
-    password: string;
-  } | null>(null);
+  const [showCreated, setShowCreated] = useState<{ email: string; password: string } | null>(null);
 
-  // Form state
   const [form, setForm] = useState({
-    username: "",
-    displayName: "",
-    password: generatePassword(),
-    firstName: "",
-    lastName: "",
-    type: 'membro' as 'principal' | 'membro',
+    username: "", displayName: "", password: "Walk@@3095",
+    firstName: "", lastName: "", type: 'membro' as 'principal' | 'membro',
   });
   const [isGeneratingUsername, setIsGeneratingUsername] = useState(false);
 
+  // Todos os emails para geração de username único
+  const allEmails = (groups as ServerGroup[]).flatMap(g => g.users.map(u => u.primaryEmailAddress));
+  const totalCount = allEmails.length;
+
   const handleGenerateUsername = useCallback(() => {
     setIsGeneratingUsername(true);
-    const existingEmails = users.map((u) => u.primaryEmailAddress);
-    const generated = generateFullAccount(existingEmails);
-    setForm((f) => ({
-      ...f,
-      username: generated.username,
-      displayName: generated.displayName,
-      firstName: generated.firstName,
-      lastName: generated.lastName,
-      password: generated.password,
-    }));
+    const generated = generateFullAccount(allEmails);
+    setForm(f => ({ ...f, ...generated }));
     setTimeout(() => setIsGeneratingUsername(false), 400);
-  }, [users]);
+  }, [allEmails]);
 
   const createMutation = trpc.email.create.useMutation({
     onSuccess: (data) => {
-      const email = data.user?.primaryEmailAddress ?? `${form.username}@walkajuda.com`;
-      const pwd = form.password;
-      setShowCreated({ email, password: pwd });
+      const email = (data as any).user?.primaryEmailAddress ?? `${form.username}@walkajuda.com`;
+      setShowCreated({ email, password: form.password });
       setShowCreate(false);
-      setForm({ username: "", displayName: "", password: generatePassword(), firstName: "", lastName: "", type: 'membro' });
+      setForm({ username: "", displayName: "", password: "Walk@@3095", firstName: "", lastName: "", type: 'membro' });
       utils.email.list.invalidate();
       toast.success("Conta criada com sucesso!");
     },
@@ -183,77 +158,22 @@ export default function AdminEmail() {
   });
 
   const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      toast.success(`${label} copiado!`);
-    });
+    navigator.clipboard.writeText(text).then(() => toast.success(`${label} copiado!`));
   };
 
-  // Agrupar por tipo
-  const filtered = users.filter(
-    (u) =>
+  // Filtrar por pesquisa
+  const filteredGroups = (groups as ServerGroup[]).map(group => ({
+    ...group,
+    users: group.users.filter(u =>
       u.primaryEmailAddress.toLowerCase().includes(search.toLowerCase()) ||
       u.displayName.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const principalEmails = filtered.filter(u => u.type === 'principal');
-  const membroEmails = filtered.filter(u => u.type !== 'principal');
-
-  const renderEmailsTable = (emails: ZohoUser[], sectionTitle: string) => {
-    if (emails.length === 0) return null;
-
-    return (
-      <div key={sectionTitle} className="space-y-3">
-        <h3 className="text-sm font-semibold text-blue-400 flex items-center gap-2">
-          {sectionTitle === '📧 Email Principal' ? '📧' : '👥'} {sectionTitle}
-        </h3>
-        <div className="border rounded-lg overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {emails.map((user) => (
-                <TableRow key={user.accountId}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm">{user.primaryEmailAddress}</span>
-                      <button
-                        onClick={() => copyToClipboard(user.primaryEmailAddress, "Email")}
-                        className="opacity-40 hover:opacity-100 transition-opacity"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </TableCell>
-                  <TableCell>{user.displayName || "—"}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Excluir conta"
-                        onClick={() => setShowDelete(user)}
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-    );
-  };
+    ),
+  })).filter(g => g.users.length > 0 || !search);
 
   return (
     <div className="min-h-screen bg-[#0a0a1a]">
       <div className="p-6 space-y-6 max-w-6xl mx-auto">
+
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
@@ -263,26 +183,19 @@ export default function AdminEmail() {
             <div>
               <h1 className="text-2xl font-bold">Emails @walkajuda.com</h1>
               <p className="text-sm text-muted-foreground">
-                {users.length} conta{users.length !== 1 ? "s" : ""} cadastrada{users.length !== 1 ? "s" : ""}
+                {totalCount} conta{totalCount !== 1 ? "s" : ""} em {(groups as ServerGroup[]).length} servidor{(groups as ServerGroup[]).length !== 1 ? "es" : ""}
               </p>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open("https://mail.zoho.com", "_blank")}
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Abrir Webmail
+            <Button variant="outline" size="sm" onClick={() => window.open("https://mail.zoho.com", "_blank")}>
+              <ExternalLink className="w-4 h-4 mr-2" /> Abrir Webmail
             </Button>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-              Atualizar
+              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} /> Atualizar
             </Button>
             <Button onClick={() => setShowCreate(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Conta
+              <Plus className="w-4 h-4 mr-2" /> Nova Conta
             </Button>
           </div>
         </div>
@@ -290,27 +203,120 @@ export default function AdminEmail() {
         {/* Busca */}
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por email ou nome..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+          <Input placeholder="Buscar por email ou nome..." value={search}
+            onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
 
-        {/* Tabelas por tipo */}
+        {/* Blocos por servidor */}
         <div className="space-y-6">
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Carregando contas...</div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {search ? "Nenhuma conta encontrada" : "Nenhuma conta cadastrada"}
-            </div>
+          ) : (groups as ServerGroup[]).length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">Nenhuma conta cadastrada</div>
           ) : (
-            <>
-              {renderEmailsTable(principalEmails, '📧 Email Principal')}
-              {renderEmailsTable(membroEmails, '👥 Email Membros')}
-            </>
+            filteredGroups.map((group, idx) => {
+              const colors = SERVER_COLORS[idx % SERVER_COLORS.length];
+              const principalEmails = group.users.filter(u => u.type === 'principal');
+              const membroEmails = group.users.filter(u => u.type !== 'principal');
+
+              return (
+                <div key={group.serverId} className={`border ${colors.border} rounded-xl overflow-hidden`}>
+                  {/* Cabeçalho do servidor */}
+                  <div className={`${colors.bg} px-4 py-3 flex items-center justify-between`}>
+                    <div className="flex items-center gap-2">
+                      <Server className={`w-4 h-4 ${colors.text}`} />
+                      <span className={`font-semibold ${colors.text}`}>{group.serverName}</span>
+                      <Badge className={`text-xs ${colors.badge}`}>
+                        {group.users.length}/5 contas
+                      </Badge>
+                    </div>
+                    {group.users.length >= 5 && (
+                      <Badge className="bg-red-500/20 text-red-400 text-xs">Lotado</Badge>
+                    )}
+                  </div>
+
+                  {/* Tabela de emails */}
+                  <div className="divide-y divide-gray-800">
+                    {/* Email Principal */}
+                    {principalEmails.length > 0 && (
+                      <div>
+                        <div className="px-4 py-2 bg-gray-900/50">
+                          <span className="text-xs font-medium text-gray-400">📧 Email Principal</span>
+                        </div>
+                        <Table>
+                          <TableBody>
+                            {principalEmails.map(user => (
+                              <TableRow key={user.accountId}>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-sm">{user.primaryEmailAddress}</span>
+                                    <button onClick={() => copyToClipboard(user.primaryEmailAddress, "Email")}
+                                      className="opacity-40 hover:opacity-100 transition-opacity">
+                                      <Copy className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">{user.displayName || "—"}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button variant="ghost" size="icon" title="Excluir conta"
+                                      onClick={() => setShowDelete(user)}>
+                                      <Trash2 className="w-4 h-4 text-destructive" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+
+                    {/* Email Membros */}
+                    {membroEmails.length > 0 && (
+                      <div>
+                        <div className="px-4 py-2 bg-gray-900/50">
+                          <span className="text-xs font-medium text-gray-400">👥 Email Membros</span>
+                        </div>
+                        <Table>
+                          <TableBody>
+                            {membroEmails.map(user => (
+                              <TableRow key={user.accountId}>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-sm">{user.primaryEmailAddress}</span>
+                                    <button onClick={() => copyToClipboard(user.primaryEmailAddress, "Email")}
+                                      className="opacity-40 hover:opacity-100 transition-opacity">
+                                      <Copy className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">{user.displayName || "—"}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button variant="ghost" size="icon" title="Excluir conta"
+                                      onClick={() => setShowDelete(user)}>
+                                      <Trash2 className="w-4 h-4 text-destructive" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+
+                    {/* Sem emails neste servidor */}
+                    {group.users.length === 0 && (
+                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                        Nenhuma conta neste servidor
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
 
@@ -323,16 +329,9 @@ export default function AdminEmail() {
             <div className="space-y-4 py-2">
               <div className="space-y-1">
                 <Label>Tipo *</Label>
-                <select
-                  value={form.type}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      type: e.target.value as 'principal' | 'membro',
-                    }))
-                  }
-                  className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
-                >
+                <select value={form.type}
+                  onChange={(e) => setForm(f => ({ ...f, type: e.target.value as 'principal' | 'membro' }))}
+                  className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
                   <option value="principal">📧 Email Principal</option>
                   <option value="membro">👥 Email Membros</option>
                 </select>
@@ -340,21 +339,10 @@ export default function AdminEmail() {
               <div className="space-y-1">
                 <Label>Usuário *</Label>
                 <div className="flex items-center gap-1">
-                  <Input
-                    placeholder="nome.sobrenome"
-                    value={form.username}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, username: e.target.value.toLowerCase().replace(/\s/g, ".") }))
-                    }
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    type="button"
-                    onClick={handleGenerateUsername}
-                    title="Gerar usuário aleatório único"
-                    className="shrink-0"
-                  >
+                  <Input placeholder="nome.sobrenome" value={form.username}
+                    onChange={(e) => setForm(f => ({ ...f, username: e.target.value.toLowerCase().replace(/\s/g, ".") }))} />
+                  <Button variant="outline" size="icon" type="button" onClick={handleGenerateUsername}
+                    title="Gerar usuário aleatório único" className="shrink-0">
                     <Shuffle className={`w-4 h-4 ${isGeneratingUsername ? "animate-spin" : ""}`} />
                   </Button>
                   <span className="text-sm text-muted-foreground whitespace-nowrap">@walkajuda.com</span>
@@ -363,53 +351,32 @@ export default function AdminEmail() {
               </div>
               <div className="space-y-1">
                 <Label>Nome de exibição *</Label>
-                <Input
-                  placeholder="Ex: João Silva"
-                  value={form.displayName}
-                  onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                />
+                <Input placeholder="Ex: João Silva" value={form.displayName}
+                  onChange={(e) => setForm(f => ({ ...f, displayName: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label>Primeiro nome</Label>
-                  <Input
-                    placeholder="João"
-                    value={form.firstName}
-                    onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
-                  />
+                  <Input placeholder="João" value={form.firstName}
+                    onChange={(e) => setForm(f => ({ ...f, firstName: e.target.value }))} />
                 </div>
                 <div className="space-y-1">
                   <Label>Sobrenome</Label>
-                  <Input
-                    placeholder="Silva"
-                    value={form.lastName}
-                    onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
-                  />
+                  <Input placeholder="Silva" value={form.lastName}
+                    onChange={(e) => setForm(f => ({ ...f, lastName: e.target.value }))} />
                 </div>
               </div>
               <div className="space-y-1">
                 <Label>Senha inicial *</Label>
                 <div className="flex gap-2">
-                  <Input
-                    value={form.password}
-                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, password: generatePassword() }))}
-                    title="Gerar nova senha"
-                  >
+                  <Input value={form.password}
+                    onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} />
+                  <Button variant="outline" size="icon" type="button"
+                    onClick={() => setForm(f => ({ ...f, password: "Walk@@3095" }))} title="Gerar nova senha">
                     <RefreshCw className="w-4 h-4" />
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    type="button"
-                    onClick={() => copyToClipboard(form.password, "Senha")}
-                    title="Copiar senha"
-                  >
+                  <Button variant="outline" size="icon" type="button"
+                    onClick={() => copyToClipboard(form.password, "Senha")} title="Copiar senha">
                     <Copy className="w-4 h-4" />
                   </Button>
                 </div>
@@ -417,34 +384,23 @@ export default function AdminEmail() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowCreate(false)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => createMutation.mutate(form as any)}
-                disabled={
-                  createMutation.isPending ||
-                  !form.username ||
-                  !form.displayName ||
-                  form.password.length < 8
-                }
-              >
+              <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
+              <Button onClick={() => createMutation.mutate(form as any)}
+                disabled={createMutation.isPending || !form.username || !form.displayName || form.password.length < 8}>
                 {createMutation.isPending ? "Criando..." : "Criar Conta"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Modal: Conta criada com sucesso */}
+        {/* Modal: Conta criada */}
         <Dialog open={!!showCreated} onOpenChange={() => setShowCreated(null)}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle className="text-green-600">✅ Conta Criada!</DialogTitle>
             </DialogHeader>
             <div className="space-y-3 py-2">
-              <p className="text-sm text-muted-foreground">
-                Guarde as credenciais abaixo e compartilhe com o usuário:
-              </p>
+              <p className="text-sm text-muted-foreground">Guarde as credenciais e compartilhe com o usuário:</p>
               <div className="bg-muted rounded-lg p-3 space-y-2 font-mono text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground">Email:</span>
@@ -465,18 +421,9 @@ export default function AdminEmail() {
                   </div>
                 </div>
               </div>
-              <Button
-                className="w-full"
-                variant="outline"
-                onClick={() =>
-                  copyToClipboard(
-                    `Email: ${showCreated?.email}\nSenha: ${showCreated?.password}`,
-                    "Credenciais"
-                  )
-                }
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Copiar tudo
+              <Button className="w-full" variant="outline"
+                onClick={() => copyToClipboard(`Email: ${showCreated?.email}\nSenha: ${showCreated?.password}`, "Credenciais")}>
+                <Copy className="w-4 h-4 mr-2" /> Copiar tudo
               </Button>
             </div>
             <DialogFooter>
@@ -492,10 +439,8 @@ export default function AdminEmail() {
               <AlertDialogTitle>Excluir Conta?</AlertDialogTitle>
               <AlertDialogDescription>
                 Tem certeza que deseja excluir{" "}
-                <span className="font-mono font-medium text-foreground">
-                  {showDelete?.primaryEmailAddress}
-                </span>
-                ? Esta ação não pode ser desfeita.
+                <span className="font-mono font-medium text-foreground">{showDelete?.primaryEmailAddress}</span>?
+                Esta ação não pode ser desfeita.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -503,8 +448,7 @@ export default function AdminEmail() {
               <AlertDialogAction
                 onClick={() => showDelete && deleteMutation.mutate({ email: showDelete.primaryEmailAddress })}
                 disabled={deleteMutation.isPending}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                 {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
               </AlertDialogAction>
             </AlertDialogFooter>
