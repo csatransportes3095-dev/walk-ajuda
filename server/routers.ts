@@ -7653,7 +7653,7 @@ export const appRouter = router({
         const authUrl = `https://accounts.zoho.com/oauth/v2/auth?` + new URLSearchParams({
           client_id: input.zohoClientId,
           response_type: 'code',
-          scope: 'ZohoMail.organization.accounts.ALL',
+          scope: 'ZohoMail.organization.accounts.ALL,ZohoMail.accounts.ALL,ZohoMail.messages.ALL,ZohoMail.folders.ALL',
           redirect_uri: redirectUri,
           state: sessionId,
           prompt: 'consent',

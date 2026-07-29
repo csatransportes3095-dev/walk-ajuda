@@ -3723,8 +3723,8 @@ export async function createZohoOAuthConfig(data: { name: string; zohoOrgId: str
   if (!db) throw new Error("Database connection failed");
   const now = Date.now();
   await db.execute(sql.raw(
-    `INSERT INTO zohoOAuthConfigs (name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, lastError, lastTestAt, createdAt, updatedAt)
-     VALUES ('${data.name.replace(/'/g,"''")}', '${data.zohoOrgId.replace(/'/g,"''")}', '${data.zohoClientId.replace(/'/g,"''")}', '${data.zohoClientSecret.replace(/'/g,"''")}', '${data.zohoRefreshToken.replace(/'/g,"''")}', 0, 'inactive', '', 0, ${now}, ${now})`
+    `INSERT INTO zohoOAuthConfigs (name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, createdAt, updatedAt)
+     VALUES ('${data.name.replace(/'/g,"''")}', '${data.zohoOrgId.replace(/'/g,"''")}', '${data.zohoClientId.replace(/'/g,"''")}', '${data.zohoClientSecret.replace(/'/g,"''")}', '${data.zohoRefreshToken.replace(/'/g,"''")}', 0, 'inactive', ${now}, ${now})`
   ));
 }
 
@@ -3732,7 +3732,7 @@ export async function listZohoOAuthConfigs(): Promise<any[]> {
   const db = await getDb();
   if (!db) return [];
   const result = await db.execute(sql.raw(
-    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, lastError, lastTestAt, createdAt, updatedAt FROM zohoOAuthConfigs ORDER BY createdAt ASC`
+    `SELECT id, name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, createdAt, updatedAt FROM zohoOAuthConfigs ORDER BY createdAt ASC`
   ));
   return (result as any)[0] as any[];
 }
