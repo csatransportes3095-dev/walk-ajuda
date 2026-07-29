@@ -3784,12 +3784,10 @@ export async function setActiveZohoOAuthConfig(id: number) {
 export async function savePendingZohoOAuth(sessionId: string, data: { name: string; zohoOrgId: string; zohoClientId: string; zohoClientSecret: string; redirectUri: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const now = Date.now();
-  const expires = now + 10 * 60 * 1000; // 10 minutos
   const json = JSON.stringify(data).replace(/'/g, "''");
-  // Usar tabela de settings como storage temporário
+  // Usar REPLACE INTO para storage temporário (mais seguro que ON DUPLICATE KEY UPDATE)
   await db.execute(sql.raw(
-    `INSERT INTO settings (\`key\`, value) VALUES ('__zoho_oauth_${sessionId}', '${json}') ON DUPLICATE KEY UPDATE value = '${json}'`
+    `REPLACE INTO settings (\`key\`, value) VALUES ('__zoho_oauth_${sessionId}', '${json}')`
   ));
 }
 
