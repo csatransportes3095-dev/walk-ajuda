@@ -48,7 +48,6 @@ function parseArray(value: string) {
 
 export default function AdminOnlineSupport() {
   const [tab, setTab] = useState<TabLabel>("Visao geral");
-  const [simpleMode, setSimpleMode] = useState(true);
 
   const configQ = trpc.onlineSupport.adminConfigGet.useQuery();
   const conversationsQ = trpc.onlineSupport.adminConversationsList.useQuery(undefined, { refetchInterval: 5000 });
@@ -265,10 +264,6 @@ export default function AdminOnlineSupport() {
 
   const selectedConversation = (conversationsQ.data || []).find((c: any) => c.id === selectedConversationId);
 
-  const visibleTabs = simpleMode
-    ? (["Visao geral", "Conversas", "Respostas automaticas", "Menu inicial", "Configuracoes"] as TabLabel[])
-    : [...tabs];
-
   const applyQuickAutoSetup = async () => {
     if (!quickAutoQuestion.trim() || !quickAutoReply.trim()) {
       toast.error("Preencha a pergunta e a resposta automatica.");
@@ -337,15 +332,8 @@ export default function AdminOnlineSupport() {
       <AdminHeader title="Atendimento Online" icon={<MessageCircle className="w-5 h-5" />} backTo="/admin/codes" />
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-white/60">Modo {simpleMode ? "simples" : "avancado"}</p>
-          <Button size="sm" variant="secondary" onClick={() => setSimpleMode(v => !v)}>
-            {simpleMode ? "Mostrar opcoes avancadas" : "Voltar para modo simples"}
-          </Button>
-        </div>
-
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {visibleTabs.map(item => (
+          {tabs.map(item => (
             <button
               key={item}
               onClick={() => setTab(item)}
@@ -412,6 +400,24 @@ export default function AdminOnlineSupport() {
               <div className="pt-2 border-t border-white/10">
                 <Button onClick={applyQuickAutoSetup} disabled={quickSaving}>
                   {quickSaving ? "Aplicando..." : "Aplicar configuracao automatica completa"}
+                </Button>
+                <Button
+                  className="ml-2"
+                  variant="secondary"
+                  onClick={() => saveReplyMut.mutate({
+                    internalName: "resposta_rapida_painel",
+                    title: "Resposta rapida do painel",
+                    relatedQuestions: [quickAutoQuestion],
+                    keywords: parseArray(quickAutoQuestion),
+                    responseText: quickAutoReply,
+                    buttons: quickVideoUrl.trim()
+                      ? [{ label: quickLinkLabel || "Abrir link", actionType: "open_external", actionPayload: { url: quickVideoUrl.trim() } }]
+                      : [],
+                    media: {},
+                    updatedBy: "admin",
+                  })}
+                >
+                  Salvar resposta automatica
                 </Button>
               </div>
             </Card>
