@@ -3784,27 +3784,33 @@ export async function setActiveZohoOAuthConfig(id: number) {
 export async function savePendingZohoOAuth(sessionId: string, data: { name: string; zohoOrgId: string; zohoClientId: string; zohoClientSecret: string; redirectUri: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const json = JSON.stringify(data).replace(/'/g, "''");
-  // Usar REPLACE INTO na tabela correta com colunas corretas
-  await db.execute(sql.raw(
-    `REPLACE INTO siteSettings (\`settingKey\`, \`settingValue\`) VALUES ('__zoho_oauth_${sessionId}', '${json}')`
-  ));
+  const key = `__zoho_oauth_${sessionId}`;
+  const json = JSON.stringify(data);
+  
+  // Usar DELETE + INSERT ao invés de REPLACE para evitar problemas
+  await db.execute(sql.raw(`DELETE FROM siteSettings WHERE \`settingKey\` = '${key.replace(/'/g, "''")}'`)).catch(() => {});
+  await db.insert(siteSettings).values({ settingKey: key, settingValue: json });
 }
 
 export async function getPendingZohoOAuth(sessionId: string): Promise<any | null> {
   const db = await getDb();
   if (!db) return null;
-  const result = await db.execute(sql.raw(
-    `SELECT settingValue FROM siteSettings WHERE \`settingKey\` = '__zoho_oauth_${sessionId}' LIMIT 1`
-  ));
-  const rows = (result as any)[0] as any[];
-  if (!rows?.[0]?.value) return null;
-  try { return JSON.parse(rows[0].value); } catch { return null; }
+  const key = `__zoho_oauth_${sessionId}`;
+  
+  try {
+    const rows = await db.select().from(siteSettings).where(eq(siteSettings.settingKey, key)).limit(1);
+    if (!rows?.[0]?.settingValue) return null;
+    return JSON.parse(rows[0].settingValue);
+  } catch (e) {
+    console.error('[getPendingZohoOAuth] Erro:', e);
+    return null;
+  }
 }
 
 export async function deletePendingZohoOAuth(sessionId: string) {
   const db = await getDb();
   if (!db) return;
-  await db.execute(sql.raw(`DELETE FROM siteSettings WHERE \`settingKey\` = '__zoho_oauth_${sessionId}'`));
+  const key = `__zoho_oauth_${sessionId}`;
+  await db.delete(siteSettings).where(eq(siteSettings.settingKey, key)).catch(() => {});
 }
 
