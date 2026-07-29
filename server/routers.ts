@@ -3,6 +3,8 @@ import {
   listZohoUsers,
   listAllZohoUsersGrouped,
   createZohoUser,
+  createZohoUserInConfig,
+  listZohoUsersForConfig,
   deleteZohoUser,
   resetZohoPassword,
   toggleZohoUser,
@@ -7533,20 +7535,42 @@ export const appRouter = router({
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         type: z.enum(['principal', 'membro']).default('membro'),
+        serverId: z.number().optional(), // ID do servidor específico onde criar
       }))
       .mutation(async ({ input }) => {
         const primaryEmailAddress = `${input.username.toLowerCase()}@walkajuda.com`;
-        const user = await createZohoUser({
-          primaryEmailAddress,
-          displayName: input.displayName,
-          password: input.password,
-          firstName: input.firstName,
-          lastName: input.lastName,
-        });
-        // Store email account type in database
+        
+        // Se serverId especificado, usar esse servidor; senão distribuição automática
+        let user;
+        if (input.serverId) {
+          const { listZohoOAuthConfigs } = await import('../server/db');
+          const allConfigs = await listZohoOAuthConfigs();
+          const config = allConfigs.find((c: any) => c.id === input.serverId);
+          if (!config) throw new Error('Servidor não encontrado');
+          if (config.isActive !== 1) throw new Error('Servidor não está ativo');
+          const existingUsers = await listZohoUsersForConfig(config, 10);
+          if (existingUsers.length >= 5) throw new Error(`Servidor ${config.name} está lotado (5/5 contas). Escolha outro servidor.`);
+          user = await createZohoUserInConfig(config, {
+            primaryEmailAddress,
+            displayName: input.displayName,
+            password: input.password,
+            firstName: input.firstName,
+            lastName: input.lastName,
+          });
+        } else {
+          user = await createZohoUser({
+            primaryEmailAddress,
+            displayName: input.displayName,
+            password: input.password,
+            firstName: input.firstName,
+            lastName: input.lastName,
+          });
+        }
+        
+        // Guardar tipo na base de dados
         const { upsertEmailAccount } = await import('../server/db');
         await upsertEmailAccount(primaryEmailAddress, input.type);
-        return { success: true, user };
+        return { success: true, user, serverName: input.serverId ? undefined : 'auto' };
       }),
 
     delete: adminProcedure

@@ -31,15 +31,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
-  Mail,
-  Plus,
-  Trash2,
-  ExternalLink,
-  RefreshCw,
-  Copy,
-  Search,
-  Shuffle,
-  Server,
+  Mail, Plus, Trash2, ExternalLink, RefreshCw,
+  Copy, Search, Shuffle, Server, CheckCircle2, XCircle,
 } from "lucide-react";
 
 interface ZohoUser {
@@ -64,60 +57,43 @@ interface ServerGroup {
   users: ZohoUser[];
 }
 
-const FIRST_NAMES = [
-  "Ana", "Bruno", "Carlos", "Daniel", "Eduardo", "Fernanda", "Gabriel",
-  "Helena", "Igor", "Julia", "Kevin", "Lucas", "Marcos", "Natalia",
-  "Olivia", "Paulo", "Rafael", "Sandra", "Thiago", "Vanessa",
-  "William", "Xavier", "Yasmin", "Zeca", "Adriana", "Beatriz",
-  "Camila", "Diego", "Elisa", "Felipe",
-];
+const FIRST_NAMES = ["Ana","Bruno","Carlos","Daniel","Eduardo","Fernanda","Gabriel","Helena","Igor","Julia","Kevin","Lucas","Marcos","Natalia","Olivia","Paulo","Rafael","Sandra","Thiago","Vanessa","William","Xavier","Yasmin","Zeca","Adriana","Beatriz","Camila","Diego","Elisa","Felipe"];
+const LAST_NAMES = ["Silva","Santos","Oliveira","Souza","Lima","Pereira","Costa","Ferreira","Rodrigues","Almeida","Nascimento","Carvalho","Gomes","Martins","Araujo","Melo","Barbosa","Ribeiro","Rocha","Cardoso","Mendes","Castro","Moreira","Nunes"];
 
-const LAST_NAMES = [
-  "Silva", "Santos", "Oliveira", "Souza", "Lima", "Pereira", "Costa",
-  "Ferreira", "Rodrigues", "Almeida", "Nascimento", "Carvalho",
-  "Gomes", "Martins", "Araujo", "Melo", "Barbosa", "Ribeiro",
-  "Rocha", "Cardoso", "Mendes", "Castro", "Moreira", "Nunes",
-];
-
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
+function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function generateFullAccount(existingEmails: string[]) {
-  const existingUsernames = new Set(existingEmails.map((e) => e.split("@")[0].toLowerCase()));
+  const existingUsernames = new Set(existingEmails.map(e => e.split("@")[0].toLowerCase()));
   let username = "", firstName = "", lastName = "";
-  for (let attempt = 0; attempt < 50; attempt++) {
-    firstName = pick(FIRST_NAMES);
-    lastName = pick(LAST_NAMES);
+  for (let i = 0; i < 50; i++) {
+    firstName = pick(FIRST_NAMES); lastName = pick(LAST_NAMES);
     const num = Math.floor(Math.random() * 900) + 100;
     const candidate = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${num}`;
     if (!existingUsernames.has(candidate)) { username = candidate; break; }
   }
-  if (!username) {
-    username = `user_${Date.now().toString(36).slice(-5)}`;
-    firstName = pick(FIRST_NAMES);
-    lastName = pick(LAST_NAMES);
-  }
+  if (!username) { username = `user_${Date.now().toString(36).slice(-5)}`; firstName = pick(FIRST_NAMES); lastName = pick(LAST_NAMES); }
   return { username, firstName, lastName, displayName: `${firstName} ${lastName}`, password: "Walk@@3095" };
 }
 
-// Cores por servidor
 const SERVER_COLORS = [
-  { border: "border-blue-500/40", bg: "bg-blue-500/10", text: "text-blue-400", badge: "bg-blue-500/20 text-blue-300" },
-  { border: "border-purple-500/40", bg: "bg-purple-500/10", text: "text-purple-400", badge: "bg-purple-500/20 text-purple-300" },
-  { border: "border-green-500/40", bg: "bg-green-500/10", text: "text-green-400", badge: "bg-green-500/20 text-green-300" },
-  { border: "border-orange-500/40", bg: "bg-orange-500/10", text: "text-orange-400", badge: "bg-orange-500/20 text-orange-300" },
+  { border: "border-blue-500/40", bg: "bg-blue-500/10", text: "text-blue-400", badge: "bg-blue-500/20 text-blue-300", headerBg: "bg-blue-950/30" },
+  { border: "border-purple-500/40", bg: "bg-purple-500/10", text: "text-purple-400", badge: "bg-purple-500/20 text-purple-300", headerBg: "bg-purple-950/30" },
+  { border: "border-green-500/40", bg: "bg-green-500/10", text: "text-green-400", badge: "bg-green-500/20 text-green-300", headerBg: "bg-green-950/30" },
+  { border: "border-orange-500/40", bg: "bg-orange-500/10", text: "text-orange-400", badge: "bg-orange-500/20 text-orange-300", headerBg: "bg-orange-950/30" },
 ];
+
+// Etapas do modal
+type ModalStep = 'select-server' | 'fill-form';
 
 export default function AdminEmail() {
   const utils = trpc.useUtils();
-
   const { data: groups = [], isLoading, refetch } = trpc.email.list.useQuery();
 
   const [search, setSearch] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
+  const [modalStep, setModalStep] = useState<ModalStep | null>(null);
+  const [selectedServer, setSelectedServer] = useState<ServerGroup | null>(null);
   const [showDelete, setShowDelete] = useState<ZohoUser | null>(null);
-  const [showCreated, setShowCreated] = useState<{ email: string; password: string } | null>(null);
+  const [showCreated, setShowCreated] = useState<{ email: string; password: string; serverName: string } | null>(null);
 
   const [form, setForm] = useState({
     username: "", displayName: "", password: "Walk@@3095",
@@ -125,7 +101,6 @@ export default function AdminEmail() {
   });
   const [isGeneratingUsername, setIsGeneratingUsername] = useState(false);
 
-  // Todos os emails para geração de username único
   const allEmails = (groups as ServerGroup[]).flatMap(g => g.users.map(u => u.primaryEmailAddress));
   const totalCount = allEmails.length;
 
@@ -136,24 +111,44 @@ export default function AdminEmail() {
     setTimeout(() => setIsGeneratingUsername(false), 400);
   }, [allEmails]);
 
+  // Abrir modal: selecionar servidor primeiro
+  function handleOpenCreate() {
+    const serverList = groups as ServerGroup[];
+    // Se só há um servidor disponível (não lotado), pular seleção
+    const available = serverList.filter(g => g.users.length < 5);
+    if (available.length === 1) {
+      setSelectedServer(available[0]);
+      setModalStep('fill-form');
+    } else {
+      setModalStep('select-server');
+    }
+  }
+
+  function handleSelectServer(group: ServerGroup) {
+    if (group.users.length >= 5) return; // Lotado, não permite
+    setSelectedServer(group);
+    setModalStep('fill-form');
+  }
+
+  function handleBackToSelect() {
+    setModalStep('select-server');
+    setSelectedServer(null);
+  }
+
   const createMutation = trpc.email.create.useMutation({
     onSuccess: (data) => {
       const email = (data as any).user?.primaryEmailAddress ?? `${form.username}@walkajuda.com`;
-      setShowCreated({ email, password: form.password });
-      setShowCreate(false);
+      setShowCreated({ email, password: form.password, serverName: selectedServer?.serverName ?? 'auto' });
+      setModalStep(null);
+      setSelectedServer(null);
       setForm({ username: "", displayName: "", password: "Walk@@3095", firstName: "", lastName: "", type: 'membro' });
       utils.email.list.invalidate();
-      toast.success("Conta criada com sucesso!");
     },
     onError: (e) => toast.error("Erro ao criar conta: " + e.message),
   });
 
   const deleteMutation = trpc.email.delete.useMutation({
-    onSuccess: () => {
-      setShowDelete(null);
-      utils.email.list.invalidate();
-      toast.success("Conta excluída com sucesso");
-    },
+    onSuccess: () => { setShowDelete(null); utils.email.list.invalidate(); toast.success("Conta excluída com sucesso"); },
     onError: (e) => toast.error("Erro ao excluir conta: " + e.message),
   });
 
@@ -161,14 +156,17 @@ export default function AdminEmail() {
     navigator.clipboard.writeText(text).then(() => toast.success(`${label} copiado!`));
   };
 
-  // Filtrar por pesquisa
   const filteredGroups = (groups as ServerGroup[]).map(group => ({
     ...group,
     users: group.users.filter(u =>
       u.primaryEmailAddress.toLowerCase().includes(search.toLowerCase()) ||
       u.displayName.toLowerCase().includes(search.toLowerCase())
     ),
-  })).filter(g => g.users.length > 0 || !search);
+  }));
+
+  // Servidor selecionado no header (seletor rápido)
+  const availableServers = (groups as ServerGroup[]).filter(g => g.users.length < 5);
+  const defaultServer = availableServers[0] ?? null;
 
   return (
     <div className="min-h-screen bg-[#0a0a1a]">
@@ -187,14 +185,14 @@ export default function AdminEmail() {
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={() => window.open("https://mail.zoho.com", "_blank")}>
               <ExternalLink className="w-4 h-4 mr-2" /> Abrir Webmail
             </Button>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} /> Atualizar
             </Button>
-            <Button onClick={() => setShowCreate(true)}>
+            <Button onClick={handleOpenCreate} className="bg-blue-600 hover:bg-blue-700">
               <Plus className="w-4 h-4 mr-2" /> Nova Conta
             </Button>
           </div>
@@ -218,26 +216,24 @@ export default function AdminEmail() {
               const colors = SERVER_COLORS[idx % SERVER_COLORS.length];
               const principalEmails = group.users.filter(u => u.type === 'principal');
               const membroEmails = group.users.filter(u => u.type !== 'principal');
+              const isLotado = group.users.length >= 5;
 
               return (
                 <div key={group.serverId} className={`border ${colors.border} rounded-xl overflow-hidden`}>
-                  {/* Cabeçalho do servidor */}
-                  <div className={`${colors.bg} px-4 py-3 flex items-center justify-between`}>
+                  <div className={`${colors.headerBg} px-4 py-3 flex items-center justify-between`}>
                     <div className="flex items-center gap-2">
                       <Server className={`w-4 h-4 ${colors.text}`} />
                       <span className={`font-semibold ${colors.text}`}>{group.serverName}</span>
-                      <Badge className={`text-xs ${colors.badge}`}>
-                        {group.users.length}/5 contas
-                      </Badge>
+                      <Badge className={`text-xs ${colors.badge}`}>{group.users.length}/5 contas</Badge>
                     </div>
-                    {group.users.length >= 5 && (
-                      <Badge className="bg-red-500/20 text-red-400 text-xs">Lotado</Badge>
+                    {isLotado ? (
+                      <Badge className="bg-red-500/20 text-red-400 text-xs">🔴 Lotado</Badge>
+                    ) : (
+                      <Badge className="bg-green-500/20 text-green-400 text-xs">🟢 Disponível</Badge>
                     )}
                   </div>
 
-                  {/* Tabela de emails */}
                   <div className="divide-y divide-gray-800">
-                    {/* Email Principal */}
                     {principalEmails.length > 0 && (
                       <div>
                         <div className="px-4 py-2 bg-gray-900/50">
@@ -250,17 +246,15 @@ export default function AdminEmail() {
                                 <TableCell>
                                   <div className="flex items-center gap-2">
                                     <span className="font-mono text-sm">{user.primaryEmailAddress}</span>
-                                    <button onClick={() => copyToClipboard(user.primaryEmailAddress, "Email")}
-                                      className="opacity-40 hover:opacity-100 transition-opacity">
+                                    <button onClick={() => copyToClipboard(user.primaryEmailAddress, "Email")} className="opacity-40 hover:opacity-100 transition-opacity">
                                       <Copy className="w-3 h-3" />
                                     </button>
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">{user.displayName || "—"}</TableCell>
                                 <TableCell>
-                                  <div className="flex items-center justify-end gap-1">
-                                    <Button variant="ghost" size="icon" title="Excluir conta"
-                                      onClick={() => setShowDelete(user)}>
+                                  <div className="flex items-center justify-end">
+                                    <Button variant="ghost" size="icon" onClick={() => setShowDelete(user)}>
                                       <Trash2 className="w-4 h-4 text-destructive" />
                                     </Button>
                                   </div>
@@ -271,8 +265,6 @@ export default function AdminEmail() {
                         </Table>
                       </div>
                     )}
-
-                    {/* Email Membros */}
                     {membroEmails.length > 0 && (
                       <div>
                         <div className="px-4 py-2 bg-gray-900/50">
@@ -285,17 +277,15 @@ export default function AdminEmail() {
                                 <TableCell>
                                   <div className="flex items-center gap-2">
                                     <span className="font-mono text-sm">{user.primaryEmailAddress}</span>
-                                    <button onClick={() => copyToClipboard(user.primaryEmailAddress, "Email")}
-                                      className="opacity-40 hover:opacity-100 transition-opacity">
+                                    <button onClick={() => copyToClipboard(user.primaryEmailAddress, "Email")} className="opacity-40 hover:opacity-100 transition-opacity">
                                       <Copy className="w-3 h-3" />
                                     </button>
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">{user.displayName || "—"}</TableCell>
                                 <TableCell>
-                                  <div className="flex items-center justify-end gap-1">
-                                    <Button variant="ghost" size="icon" title="Excluir conta"
-                                      onClick={() => setShowDelete(user)}>
+                                  <div className="flex items-center justify-end">
+                                    <Button variant="ghost" size="icon" onClick={() => setShowDelete(user)}>
                                       <Trash2 className="w-4 h-4 text-destructive" />
                                     </Button>
                                   </div>
@@ -306,12 +296,8 @@ export default function AdminEmail() {
                         </Table>
                       </div>
                     )}
-
-                    {/* Sem emails neste servidor */}
                     {group.users.length === 0 && (
-                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                        Nenhuma conta neste servidor
-                      </div>
+                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">Nenhuma conta neste servidor</div>
                     )}
                   </div>
                 </div>
@@ -320,13 +306,96 @@ export default function AdminEmail() {
           )}
         </div>
 
-        {/* Modal: Criar conta */}
-        <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        {/* MODAL PASSO 1: Escolher servidor */}
+        <Dialog open={modalStep === 'select-server'} onOpenChange={(o) => !o && setModalStep(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Server className="w-5 h-5 text-blue-400" />
+                Escolha o Servidor
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <p className="text-sm text-muted-foreground">Selecione em qual servidor o novo email será criado:</p>
+              {(groups as ServerGroup[]).map((group, idx) => {
+                const colors = SERVER_COLORS[idx % SERVER_COLORS.length];
+                const isLotado = group.users.length >= 5;
+                return (
+                  <button
+                    key={group.serverId}
+                    onClick={() => handleSelectServer(group)}
+                    disabled={isLotado}
+                    className={`w-full text-left border rounded-xl p-4 transition ${
+                      isLotado
+                        ? "border-gray-700 bg-gray-900/30 opacity-60 cursor-not-allowed"
+                        : `${colors.border} ${colors.bg} hover:opacity-90 cursor-pointer`
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Server className={`w-5 h-5 ${isLotado ? "text-gray-500" : colors.text}`} />
+                        <div>
+                          <p className={`font-bold text-base ${isLotado ? "text-gray-400" : "text-white"}`}>
+                            {group.serverName.toUpperCase()}
+                          </p>
+                          <p className="text-xs text-gray-400">Contas utilizadas: {group.users.length}/5</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {isLotado ? (
+                          <div>
+                            <Badge className="bg-red-500/20 text-red-400 text-xs mb-1 block">LOTADO</Badge>
+                            <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">SEM VAGAS</span>
+                          </div>
+                        ) : (
+                          <div>
+                            <Badge className="bg-green-500/20 text-green-400 text-xs mb-1 block">DISPONÍVEL</Badge>
+                            <span className={`text-xs font-semibold ${colors.text} bg-gray-800 px-2 py-1 rounded`}>
+                              CRIAR NO {group.serverName.toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setModalStep(null)}>Cancelar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* MODAL PASSO 2: Preencher formulário */}
+        <Dialog open={modalStep === 'fill-form'} onOpenChange={(o) => !o && setModalStep(null)}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Nova Conta de Email</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
+              {/* Servidor selecionado */}
+              {selectedServer && (() => {
+                const idx = (groups as ServerGroup[]).findIndex(g => g.serverId === selectedServer.serverId);
+                const colors = SERVER_COLORS[idx % SERVER_COLORS.length];
+                return (
+                  <div className={`flex items-center justify-between ${colors.bg} border ${colors.border} rounded-lg px-3 py-2`}>
+                    <div className="flex items-center gap-2">
+                      <Server className={`w-4 h-4 ${colors.text}`} />
+                      <span className={`text-sm font-semibold ${colors.text}`}>
+                        Servidor: {selectedServer.serverName.toUpperCase()}
+                      </span>
+                      <Badge className={`text-xs ${colors.badge}`}>{selectedServer.users.length}/5</Badge>
+                    </div>
+                    {(groups as ServerGroup[]).length > 1 && (
+                      <button onClick={handleBackToSelect} className="text-xs text-gray-400 hover:text-white underline">
+                        Trocar
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="space-y-1">
                 <Label>Tipo *</Label>
                 <select value={form.type}
@@ -372,7 +441,7 @@ export default function AdminEmail() {
                   <Input value={form.password}
                     onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} />
                   <Button variant="outline" size="icon" type="button"
-                    onClick={() => setForm(f => ({ ...f, password: "Walk@@3095" }))} title="Gerar nova senha">
+                    onClick={() => setForm(f => ({ ...f, password: "Walk@@3095" }))} title="Resetar senha">
                     <RefreshCw className="w-4 h-4" />
                   </Button>
                   <Button variant="outline" size="icon" type="button"
@@ -384,22 +453,36 @@ export default function AdminEmail() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-              <Button onClick={() => createMutation.mutate(form as any)}
+              <Button variant="outline" onClick={() => setModalStep(null)}>Cancelar</Button>
+              <Button
+                onClick={() => createMutation.mutate({
+                  ...form,
+                  serverId: selectedServer?.serverId,
+                } as any)}
                 disabled={createMutation.isPending || !form.username || !form.displayName || form.password.length < 8}>
-                {createMutation.isPending ? "Criando..." : "Criar Conta"}
+                {createMutation.isPending ? "Criando..." : `Criar Conta`}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Modal: Conta criada */}
+        {/* Modal: Conta criada com sucesso */}
         <Dialog open={!!showCreated} onOpenChange={() => setShowCreated(null)}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
-              <DialogTitle className="text-green-600">✅ Conta Criada!</DialogTitle>
+              <DialogTitle className="text-green-500 flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5" />
+                Conta Criada com Sucesso!
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-3 py-2">
+              {showCreated?.serverName && (
+                <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2 text-center">
+                  <p className="text-sm text-green-400 font-semibold">
+                    ✅ CONTA CRIADA NO SERVIDOR {showCreated.serverName.toUpperCase()}
+                  </p>
+                </div>
+              )}
               <p className="text-sm text-muted-foreground">Guarde as credenciais e compartilhe com o usuário:</p>
               <div className="bg-muted rounded-lg p-3 space-y-2 font-mono text-sm">
                 <div className="flex items-center justify-between gap-2">
