@@ -271,7 +271,7 @@ class SDKServer {
       projectId: ENV.appId,
     };
 
-    const { data } = await this.getOAuthService().post<GetUserInfoWithJwtResponse>(
+    const { data } = await this.client.post<GetUserInfoWithJwtResponse>(
       GET_USER_INFO_WITH_JWT_PATH,
       payload
     );

@@ -298,6 +298,10 @@ export default function AdminCodes() {
             <LayoutGrid className="w-5 h-5 text-sky-400 mx-auto mb-1" />
             <span className="text-xs font-bold text-white">Hub Central</span>
           </a>
+          <a href="/admin/online-support" className="bg-blue-600/20 border border-blue-500/30 rounded-xl p-3 text-center hover:bg-blue-600/30 transition-all">
+            <MessageCircle className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+            <span className="text-xs font-bold text-white">Atendimento</span>
+          </a>
           {/* P */}
           <a href="/admin/orders" className="bg-pink-600/20 border border-pink-500/30 rounded-xl p-3 text-center hover:bg-pink-600/30 transition-all">
             <Package className="w-5 h-5 text-pink-400 mx-auto mb-1" />

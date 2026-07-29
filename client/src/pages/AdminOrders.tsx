@@ -1790,7 +1790,7 @@ export default function AdminOrders() {
       }
     }
     cells.push(current);
-    return cells.map(cell => cell.replace(/^"(.*)"$/s, "$1").replace(/""/g, '"').trim());
+    return cells.map(cell => cell.replace(/^"([\s\S]*)"$/, "$1").replace(/""/g, '"').trim());
   };
 
   const parseCsvText = (text: string) => {

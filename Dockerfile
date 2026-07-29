@@ -20,7 +20,8 @@ RUN pip3 install weasyprint --break-system-packages
 
 WORKDIR /app
 COPY . .
+RUN sed -i 's/\r$//' /app/scripts/render-start.sh && chmod +x /app/scripts/render-start.sh
 RUN npm install -g corepack@latest && corepack pnpm install && corepack pnpm run build
 
 ENV NODE_ENV=production
-CMD ["node", "dist/index.js"]
+CMD ["/app/scripts/render-start.sh"]

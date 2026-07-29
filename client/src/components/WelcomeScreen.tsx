@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { Zap, ClipboardList, Search, ShieldX, WifiOff, RefreshCw, Trophy, Star, Gift, Ticket, Bell, Sparkles } from "lucide-react";
+import { Zap, ClipboardList, Search, ShieldX, WifiOff, RefreshCw, Trophy, Star, Gift, Ticket, Bell, Sparkles, MessageCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { OnlineSupportWidget } from "@/components/OnlineSupportWidget";
 
 const EXTRA_BTN_ICONS: Record<string, React.ReactNode> = {
   // legados
@@ -35,6 +36,15 @@ const EXTRA_BTN_ICONS: Record<string, React.ReactNode> = {
 const WELCOME_CHOICE_KEY = "walk_welcome_choice";
 const VPN_CHECK_KEY = "walk_vpn_checked";
 const PWA_DISMISSED_KEY = "walk_home_pwa_dismissed_v2";
+const ONLINE_SUPPORT_VISITOR_KEY = "walk_online_support_visitor_id";
+
+function getOrCreateOnlineSupportVisitorId() {
+  const stored = localStorage.getItem(ONLINE_SUPPORT_VISITOR_KEY);
+  if (stored) return stored;
+  const created = `v_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  localStorage.setItem(ONLINE_SUPPORT_VISITOR_KEY, created);
+  return created;
+}
 
 // Card de instalação estilo Play Store
 function PWAInstallCard({ onInstall, logoUrl }: { onInstall: () => Promise<void>; logoUrl?: string }) {
@@ -164,6 +174,7 @@ function useHomePWA() {
 export default function WelcomeScreen({ children }: { children: React.ReactNode }) {
   const [, navigate] = useLocation();
   const [location] = useLocation();
+  const [onlineSupportOpen, setOnlineSupportOpen] = useState(false);
   const [choiceMade, setChoiceMade] = useState(false);
   // Marca que o usuário acabou de clicar no card "Cadastro" (fluxo na própria rota "/").
   // Persiste no contexto de memória da aba via window, sobrevive a navegações internas mas
@@ -171,8 +182,14 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const justClickedCard = useRef(false);
   const [vpnBlocked, setVpnBlocked] = useState(false);
   const [vpnChecking, setVpnChecking] = useState(true);
+  const [onlineSupportVisitorId] = useState(() => getOrCreateOnlineSupportVisitorId());
   const { data: settings } = trpc.settings.getAll.useQuery();
   const { data: extraButtons = [] } = trpc.homeButtons.listPublic.useQuery();
+  const { data: onlineSupportState } = trpc.onlineSupport.publicState.useQuery({ pathname: location }, { refetchInterval: 20000 });
+  const { data: onlineSupportUnread } = trpc.onlineSupport.unreadSummary.useQuery(
+    { visitorId: onlineSupportVisitorId },
+    { refetchInterval: 5000 },
+  );
   const vpnCheckMutation = trpc.vpn.check.useMutation();
   const { isInstallable: pwaInstallable, isInstalled: pwaInstalled, install: pwaInstall } = useHomePWA();
 
@@ -433,6 +450,49 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     }
   };
 
+  const supportUnreadCount = onlineSupportUnread?.unreadMessages || 0;
+  const supportLabelBase = onlineSupportState?.buttonLabel || "ATENDIMENTO ONLINE";
+  const supportLabel = supportUnreadCount > 0
+    ? `${supportLabelBase} — ${supportUnreadCount} NOVA${supportUnreadCount > 1 ? "S" : ""} MENSAGEM${supportUnreadCount > 1 ? "S" : ""}`
+    : supportLabelBase;
+  const supportDescription = onlineSupportState?.buttonDescription || "Tire suas dúvidas, receba instruções e fale com nossa equipe.";
+  const supportColor = onlineSupportState?.buttonColor || "#2563eb";
+  const supportVisible = !!onlineSupportState?.welcomeButtonEnabled && !!onlineSupportState?.showOnPage;
+  const supportSortOrder = Number(onlineSupportState?.buttonSortOrder || 3);
+  const supportStatusText = onlineSupportState?.onlineNow ? "online" : "fora do horário";
+
+  const renderSupportButton = () => {
+    if (!supportVisible) return null;
+
+    return (
+      <button
+        onClick={() => setOnlineSupportOpen(true)}
+        onMouseEnter={() => setHovered(h => ({ ...h, support: true }))}
+        onMouseLeave={() => setHovered(h => ({ ...h, support: false }))}
+        className={`w-full group relative overflow-hidden text-white font-bold rounded-2xl py-4 px-4 transition-all duration-300 flex items-center gap-3 ${getHoverClass("lift")}`}
+        style={{
+          background: `linear-gradient(135deg, ${supportColor} 0%, ${supportColor}cc 100%)`,
+          border: `2px solid ${supportColor}`,
+          boxShadow: `0 6px 24px ${supportColor}66, 0 2px 8px ${supportColor}44`,
+          ...getHoverStyle("lift", supportColor, "support"),
+        }}
+      >
+        <div className="w-12 h-12 min-w-[3rem] rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(0,0,0,0.25)" }}>
+          <MessageCircle className="w-7 h-7 text-white" />
+        </div>
+        <div className="text-left flex-1 min-w-0 pr-2">
+          <p className="text-base font-black leading-snug break-words text-white">{supportLabel}</p>
+          <p className="text-xs font-normal mt-1 leading-relaxed break-words whitespace-pre-wrap text-white/80">{supportDescription}</p>
+          <p className="text-[11px] mt-1 font-semibold text-white/90">Status: {supportStatusText}</p>
+        </div>
+        <div className="flex-shrink-0 opacity-90 bg-black/25 rounded-full min-w-7 h-7 px-2 flex items-center justify-center text-xs font-black">
+          {supportUnreadCount}
+        </div>
+        <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      </button>
+    );
+  };
+
   // Rota /login é atalho direto — pula a tela de boas-vindas
   if (choiceMade || location === "/login") {
     return <>{children}</>;
@@ -539,6 +599,8 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
 
         {/* Botões de escolha */}
         <div className="w-full space-y-3">
+          {supportSortOrder <= 1 && renderSupportButton()}
+
           {/* Botão 1 (FAZER PEDIDO) */}
           <button
             onClick={handleFazerPedido}
@@ -569,6 +631,8 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
             <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
           </button>
 
+          {supportSortOrder > 1 && supportSortOrder <= 2 && renderSupportButton()}
+
           {/* Botão 2 (ACOMPANHAR) */}
           <button
             onClick={handleAcompanhar}
@@ -598,6 +662,8 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
             {/* Shimmer effect */}
             <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
           </button>
+
+          {supportSortOrder > 2 && renderSupportButton()}
 
           {/* Botões Extras Dinâmicos */}
           {extraButtons.filter(btn => (btn as any).vipOnly !== 1).map((btn, idx) => (
@@ -648,6 +714,14 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
           {HOME_FOOTER_TEXT}
         </p>
       </div>
+
+      <OnlineSupportWidget
+        isOpen={onlineSupportOpen}
+        onClose={() => setOnlineSupportOpen(false)}
+        onMinimize={() => setOnlineSupportOpen(false)}
+        onBack={() => setOnlineSupportOpen(false)}
+        openMode={(onlineSupportState?.openMode as "modal" | "sidebar" | "fullscreen") || "modal"}
+      />
     </div>
   );
 }

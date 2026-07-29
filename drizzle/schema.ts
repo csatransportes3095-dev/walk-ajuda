@@ -1670,3 +1670,224 @@ export const whatsappTemplates = mysqlTable("whatsappTemplates", {
 });
 export type WhatsappTemplate = typeof whatsappTemplates.$inferSelect;
 export type InsertWhatsappTemplate = typeof whatsappTemplates.$inferInsert;
+
+// ===== ATENDIMENTO ONLINE =====
+
+export const onlineSupportConfig = mysqlTable("onlineSupportConfig", {
+  id: int("id").autoincrement().primaryKey(),
+  chatEnabled: int("chatEnabled").notNull().default(0),
+  welcomeButtonEnabled: int("welcomeButtonEnabled").notNull().default(1),
+  floatingBubbleEnabled: int("floatingBubbleEnabled").notNull().default(1),
+  autoReplyEnabled: int("autoReplyEnabled").notNull().default(1),
+  aiEnabled: int("aiEnabled").notNull().default(0),
+  humanSupportEnabled: int("humanSupportEnabled").notNull().default(1),
+  fileUploadEnabled: int("fileUploadEnabled").notNull().default(1),
+  notificationsEnabled: int("notificationsEnabled").notNull().default(1),
+  maintenanceMode: int("maintenanceMode").notNull().default(0),
+  allowedPages: text("allowedPages"),
+  buttonSortOrder: int("buttonSortOrder").notNull().default(3),
+  buttonLabel: varchar("buttonLabel", { length: 128 }).notNull().default("ATENDIMENTO ONLINE"),
+  buttonDescription: varchar("buttonDescription", { length: 255 }).notNull().default("Tire suas duvidas, receba instrucoes e fale com nossa equipe."),
+  buttonIcon: varchar("buttonIcon", { length: 64 }).notNull().default("message-circle"),
+  buttonColor: varchar("buttonColor", { length: 32 }).notNull().default("#2563eb"),
+  openMode: varchar("openMode", { length: 32 }).notNull().default("modal"),
+  disabledMessage: text("disabledMessage"),
+  welcomeMessage: text("welcomeMessage"),
+  outOfHoursMessage: text("outOfHoursMessage"),
+  defaultFallbackMessage: text("defaultFallbackMessage"),
+  aiProvider: varchar("aiProvider", { length: 64 }).notNull().default("openai"),
+  aiModel: varchar("aiModel", { length: 128 }).notNull().default("gpt-4o-mini"),
+  aiTone: varchar("aiTone", { length: 64 }).notNull().default("profissional"),
+  aiMaxTokens: int("aiMaxTokens").notNull().default(400),
+  aiErrorMessage: text("aiErrorMessage"),
+  blockedTopics: text("blockedTopics"),
+  handoffRule: varchar("handoffRule", { length: 64 }).notNull().default("no_safe_answer"),
+  privacyConsentText: text("privacyConsentText"),
+  updatedBy: varchar("updatedBy", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OnlineSupportConfig = typeof onlineSupportConfig.$inferSelect;
+export type InsertOnlineSupportConfig = typeof onlineSupportConfig.$inferInsert;
+
+export const onlineSupportVisitors = mysqlTable("onlineSupportVisitors", {
+  id: int("id").autoincrement().primaryKey(),
+  visitorId: varchar("visitorId", { length: 128 }).notNull().unique(),
+  name: varchar("name", { length: 128 }),
+  phone: varchar("phone", { length: 32 }),
+  email: varchar("email", { length: 320 }),
+  originPage: varchar("originPage", { length: 512 }),
+  firstSeenAt: timestamp("firstSeenAt").defaultNow().notNull(),
+  lastSeenAt: timestamp("lastSeenAt").defaultNow().onUpdateNow().notNull(),
+  privacyConsent: int("privacyConsent").notNull().default(0),
+});
+export type OnlineSupportVisitor = typeof onlineSupportVisitors.$inferSelect;
+export type InsertOnlineSupportVisitor = typeof onlineSupportVisitors.$inferInsert;
+
+export const onlineSupportConversations = mysqlTable("onlineSupportConversations", {
+  id: int("id").autoincrement().primaryKey(),
+  visitorId: varchar("visitorId", { length: 128 }).notNull(),
+  visitorName: varchar("visitorName", { length: 128 }),
+  visitorPhone: varchar("visitorPhone", { length: 32 }),
+  visitorEmail: varchar("visitorEmail", { length: 320 }),
+  originPage: varchar("originPage", { length: 512 }),
+  status: varchar("status", { length: 32 }).notNull().default("new"),
+  assignedAgent: varchar("assignedAgent", { length: 128 }),
+  botPaused: int("botPaused").notNull().default(0),
+  urgent: int("urgent").notNull().default(0),
+  labels: text("labels"),
+  internalNotes: text("internalNotes"),
+  lastMessageAt: timestamp("lastMessageAt"),
+  lastMessagePreview: text("lastMessagePreview"),
+  unreadForAdmin: int("unreadForAdmin").notNull().default(0),
+  unreadForVisitor: int("unreadForVisitor").notNull().default(0),
+  closedAt: timestamp("closedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OnlineSupportConversation = typeof onlineSupportConversations.$inferSelect;
+export type InsertOnlineSupportConversation = typeof onlineSupportConversations.$inferInsert;
+
+export const onlineSupportMessages = mysqlTable("onlineSupportMessages", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull(),
+  senderType: varchar("senderType", { length: 32 }).notNull(),
+  senderId: varchar("senderId", { length: 128 }),
+  senderName: varchar("senderName", { length: 128 }),
+  messageType: varchar("messageType", { length: 32 }).notNull().default("text"),
+  text: text("text"),
+  payloadJson: text("payloadJson"),
+  isRead: int("isRead").notNull().default(0),
+  isDelivered: int("isDelivered").notNull().default(1),
+  dedupeKey: varchar("dedupeKey", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type OnlineSupportMessage = typeof onlineSupportMessages.$inferSelect;
+export type InsertOnlineSupportMessage = typeof onlineSupportMessages.$inferInsert;
+
+export const onlineSupportMenuItems = mysqlTable("onlineSupportMenuItems", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 128 }).notNull(),
+  description: varchar("description", { length: 255 }),
+  icon: varchar("icon", { length: 64 }),
+  color: varchar("color", { length: 32 }),
+  actionType: varchar("actionType", { length: 64 }).notNull().default("send_text"),
+  actionPayloadJson: text("actionPayloadJson"),
+  sortOrder: int("sortOrder").notNull().default(0),
+  isActive: int("isActive").notNull().default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OnlineSupportMenuItem = typeof onlineSupportMenuItems.$inferSelect;
+export type InsertOnlineSupportMenuItem = typeof onlineSupportMenuItems.$inferInsert;
+
+export const onlineSupportAutoReplies = mysqlTable("onlineSupportAutoReplies", {
+  id: int("id").autoincrement().primaryKey(),
+  internalName: varchar("internalName", { length: 128 }).notNull(),
+  title: varchar("title", { length: 128 }).notNull(),
+  category: varchar("category", { length: 128 }),
+  relatedQuestionsJson: text("relatedQuestionsJson"),
+  keywordsJson: text("keywordsJson"),
+  priority: int("priority").notNull().default(10),
+  responseText: text("responseText"),
+  mediaJson: text("mediaJson"),
+  buttonsJson: text("buttonsJson"),
+  nextStep: varchar("nextStep", { length: 128 }),
+  waitTimeMs: int("waitTimeMs").notNull().default(0),
+  isActive: int("isActive").notNull().default(1),
+  updatedBy: varchar("updatedBy", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OnlineSupportAutoReply = typeof onlineSupportAutoReplies.$inferSelect;
+export type InsertOnlineSupportAutoReply = typeof onlineSupportAutoReplies.$inferInsert;
+
+export const onlineSupportKnowledgeBase = mysqlTable("onlineSupportKnowledgeBase", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  category: varchar("category", { length: 128 }),
+  question: text("question"),
+  answer: text("answer"),
+  keywordsJson: text("keywordsJson"),
+  linksJson: text("linksJson"),
+  mediaJson: text("mediaJson"),
+  priority: int("priority").notNull().default(10),
+  status: varchar("status", { length: 32 }).notNull().default("draft"),
+  publishedAt: timestamp("publishedAt"),
+  author: varchar("author", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OnlineSupportKnowledgeBase = typeof onlineSupportKnowledgeBase.$inferSelect;
+export type InsertOnlineSupportKnowledgeBase = typeof onlineSupportKnowledgeBase.$inferInsert;
+
+export const onlineSupportFileLibrary = mysqlTable("onlineSupportFileLibrary", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 128 }),
+  fileType: varchar("fileType", { length: 64 }).notNull(),
+  mimeType: varchar("mimeType", { length: 128 }),
+  fileSize: bigint("fileSize", { mode: "number" }),
+  url: text("url").notNull(),
+  thumbnailUrl: text("thumbnailUrl"),
+  status: varchar("status", { length: 32 }).notNull().default("active"),
+  uploadedBy: varchar("uploadedBy", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OnlineSupportFileLibrary = typeof onlineSupportFileLibrary.$inferSelect;
+export type InsertOnlineSupportFileLibrary = typeof onlineSupportFileLibrary.$inferInsert;
+
+export const onlineSupportBusinessHours = mysqlTable("onlineSupportBusinessHours", {
+  id: int("id").autoincrement().primaryKey(),
+  weekDay: int("weekDay").notNull(),
+  openTime: varchar("openTime", { length: 5 }),
+  closeTime: varchar("closeTime", { length: 5 }),
+  breakStart: varchar("breakStart", { length: 5 }),
+  breakEnd: varchar("breakEnd", { length: 5 }),
+  isOpen: int("isOpen").notNull().default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OnlineSupportBusinessHours = typeof onlineSupportBusinessHours.$inferSelect;
+export type InsertOnlineSupportBusinessHours = typeof onlineSupportBusinessHours.$inferInsert;
+
+export const onlineSupportAgents = mysqlTable("onlineSupportAgents", {
+  id: int("id").autoincrement().primaryKey(),
+  username: varchar("username", { length: 128 }).notNull().unique(),
+  displayName: varchar("displayName", { length: 128 }),
+  role: varchar("role", { length: 64 }).notNull().default("attendant"),
+  permissionsJson: text("permissionsJson"),
+  isActive: int("isActive").notNull().default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OnlineSupportAgent = typeof onlineSupportAgents.$inferSelect;
+export type InsertOnlineSupportAgent = typeof onlineSupportAgents.$inferInsert;
+
+export const onlineSupportNotifications = mysqlTable("onlineSupportNotifications", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  conversationId: int("conversationId"),
+  type: varchar("type", { length: 64 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message"),
+  targetRole: varchar("targetRole", { length: 64 }).notNull().default("admin"),
+  targetUser: varchar("targetUser", { length: 128 }),
+  isRead: int("isRead").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type OnlineSupportNotification = typeof onlineSupportNotifications.$inferSelect;
+export type InsertOnlineSupportNotification = typeof onlineSupportNotifications.$inferInsert;
+
+export const onlineSupportLogs = mysqlTable("onlineSupportLogs", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  level: varchar("level", { length: 16 }).notNull().default("info"),
+  source: varchar("source", { length: 128 }).notNull(),
+  event: varchar("event", { length: 128 }).notNull(),
+  message: text("message"),
+  metaJson: text("metaJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type OnlineSupportLog = typeof onlineSupportLogs.$inferSelect;
+export type InsertOnlineSupportLog = typeof onlineSupportLogs.$inferInsert;

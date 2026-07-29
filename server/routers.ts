@@ -27,6 +27,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { chatRouter } from "./routers/chat";
 import { chatUsersRouter } from "./routers/chat-users";
+import { onlineSupportRouter } from "./routers/online-support";
 import { consultasRouter } from "./routers/consultas";
 import { whatsappTemplatesRouter } from "./routers/whatsappTemplates";
 import { preRegistrationsRouter } from "./routers/preRegistrations";
@@ -7596,6 +7597,7 @@ export const appRouter = router({
 
   chat: router(chatRouter),
   chatUsers: router(chatUsersRouter),
+  onlineSupport: onlineSupportRouter,
   consultas: router(consultasRouter),
   whatsappTemplates: router(whatsappTemplatesRouter),
 

@@ -20,7 +20,7 @@ import { parse as parseCookieHeader } from "cookie";
 import { r2PutObject, r2GetObjectBuffer, r2DeleteObjects } from "./r2Storage";
 import { addOrderFile, createCustomer, getCustomerByPhone, getDb, updateCustomer, addOrderStatus, generateOrderNumber } from "./db";
 import { accessCodePhones, accessCodes, uploadSessions } from "../drizzle/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { ENV } from "./_core/env";
 
 const jsonParser = express.json({ limit: "2mb" });
@@ -38,6 +38,8 @@ const uploadDirect = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
 });
+
+const rows: string[][] = [];
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 function isAdminRequest(req: Request): boolean {
@@ -122,7 +124,7 @@ function parseCsvLine(line: string): string[] {
     }
   }
   row.push(current);
-  return row.map(cell => cell.replace(/^"(.*)"$/s, "$1").replace(/""/g, '"').trim());
+  return row.map(cell => cell.replace(/^"([\s\S]*)"$/, "$1").replace(/""/g, '"').trim());
 }
 
 function parseCsvText(text: string) {
@@ -456,7 +458,8 @@ function getCsvImportRowPayload(row: string[], fieldMap: Record<number, string>)
 }
 
 function getCsvImportFieldPayload(row: string[], fieldMap: Record<number, string>, field: string) {
-  return normalizeImportRow(row, fieldMap)[field] || null;
+  const normalized = normalizeImportRow(row, fieldMap) as Record<string, string | null>;
+  return normalized[field] || null;
 }
 
 function getCsvImportPayloadRow(row: string[], fieldMap: Record<number, string>) {
@@ -1936,10 +1939,13 @@ export function registerUploadRoute(app: Express) {
         let errorsCount = errors.length;
         const details: string[] = [];
 
-        for (const [index, row] of importedRows.entries()) {
+        for (let index = 0; index < importedRows.length; index += 1) {
+          const row = importedRows[index];
           const existing = await db.select().from(accessCodePhones)
-            .where(sql`REGEXP_REPLACE(${accessCodePhones.phone}, '[^0-9]', '') = ${row.phone}`)
-            .where(sql`DATE(${accessCodePhones.accessedAt}) = ${row.date}`)
+            .where(and(
+              sql`REGEXP_REPLACE(${accessCodePhones.phone}, '[^0-9]', '') = ${row.phone}`,
+              sql`DATE(${accessCodePhones.accessedAt}) = ${row.date}`,
+            ))
             .limit(1);
           if (existing.length > 0) {
             duplicates += 1;
@@ -1986,8 +1992,10 @@ export function registerUploadRoute(app: Express) {
             cartItemIndex: 0,
           });
           const [acpRow] = await db.select().from(accessCodePhones)
-            .where(eq(accessCodePhones.codeId, codeRow.id))
-            .where(eq(accessCodePhones.phone, row.phone))
+            .where(and(
+              eq(accessCodePhones.codeId, codeRow.id),
+              eq(accessCodePhones.phone, row.phone),
+            ))
             .orderBy(sql`${accessCodePhones.id} DESC`)
             .limit(1);
           if (!acpRow?.id) {

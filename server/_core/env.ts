@@ -23,4 +23,7 @@ export const ENV = {
   smtpPass: process.env.SMTP_PASS ?? process.env.ZOHO_EMAIL_PASSWORD ?? "",
   smtpFrom: process.env.SMTP_FROM ?? process.env.SMTP_USER ?? "walkajuda@walkajuda.com",
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? "",
+  openAiApiKey: process.env.OPENAI_API_KEY ?? "",
+  openAiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  chatAiEnabled: process.env.CHAT_AI_ENABLED ?? "false",
 };
