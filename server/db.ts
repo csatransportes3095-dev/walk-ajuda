@@ -3722,10 +3722,26 @@ export async function createZohoOAuthConfig(data: { name: string; zohoOrgId: str
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = Date.now();
-  await db.execute(sql.raw(
-    `INSERT INTO zohoOAuthConfigs (name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, createdAt, updatedAt)
-     VALUES ('${data.name.replace(/'/g,"''")}', '${data.zohoOrgId.replace(/'/g,"''")}', '${data.zohoClientId.replace(/'/g,"''")}', '${data.zohoClientSecret.replace(/'/g,"''")}', '${data.zohoRefreshToken.replace(/'/g,"''")}', 0, 'inactive', ${now}, ${now})`
-  ));
+  const n = data.name.replace(/'/g, "''");
+  const org = data.zohoOrgId.replace(/'/g, "''");
+  const cid = data.zohoClientId.replace(/'/g, "''");
+  const csec = data.zohoClientSecret.replace(/'/g, "''");
+  const tok = data.zohoRefreshToken.replace(/'/g, "''");
+  // Verificar se já existe um registo com este nome
+  const existing = await db.execute(sql.raw(`SELECT id, isActive FROM zohoOAuthConfigs WHERE name = '${n}' LIMIT 1`));
+  const rows = (existing as any)[0] as any[];
+  if (rows && rows.length > 0) {
+    // UPDATE: atualizar token e credenciais mantendo isActive e domain
+    await db.execute(sql.raw(
+      `UPDATE zohoOAuthConfigs SET zohoOrgId='${org}', zohoClientId='${cid}', zohoClientSecret='${csec}', zohoRefreshToken='${tok}', status='active', isActive=1, updatedAt=${now} WHERE name='${n}'`
+    ));
+  } else {
+    // INSERT: criar novo registo
+    await db.execute(sql.raw(
+      `INSERT INTO zohoOAuthConfigs (name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, createdAt, updatedAt)
+       VALUES ('${n}', '${org}', '${cid}', '${csec}', '${tok}', 1, 'active', ${now}, ${now})`
+    ));
+  }
 }
 
 export async function listZohoOAuthConfigs(): Promise<any[]> {
