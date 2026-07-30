@@ -861,7 +861,7 @@ export const appRouter = router({
             }
           }
 
-          const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
+          const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
           const whatsappNumberRaw = await getSetting('whatsapp_number') || '5511978307371';
           const whatsappNumber = whatsappNumberRaw.replace(/[^\d+]/g, '');
 
@@ -1464,7 +1464,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         try {
-          const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
+          const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
           const spMime = input.paymentProofMime || 'image/jpeg';
           const spExt = spMime === 'application/pdf' ? 'pdf' : spMime === 'image/png' ? 'png' : 'jpg';
           let paymentProofUrl = '';
@@ -1723,7 +1723,7 @@ export const appRouter = router({
         // Notificação: finalização do cadastro — enviado em segundo plano para não bloquear
         void (async () => {
           try {
-            const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
+            const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
             await sendMailDirect({
               from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
               to: emailTo,
@@ -2034,7 +2034,7 @@ export const appRouter = router({
         // nem falhar o upload da foto caso o Zoho esteja lento/indisponivel.
         void (async () => {
          try {
-          const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
+          const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
           const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
           await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
@@ -2420,7 +2420,7 @@ export const appRouter = router({
         try {
           await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
-            to: await getSetting('contact_email') || 'h2@h2colombiano.com',
+            to: await getSetting('email_to') || 'h2@h2colombiano.com',
             subject: raffleNotifTitle,
             html: `<h2>${raffleNotifTitle}</h2><p>Nome: <strong>${input.customerName}</strong></p><p>Número: <strong>${input.number}</strong></p><p>Telefone: ${phoneFormatted}</p><p>Sorteio: ${raffle.title}</p>`,
           });
@@ -2524,7 +2524,7 @@ export const appRouter = router({
         try {
           await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
-            to: await getSetting('contact_email') || 'h2@h2colombiano.com',
+            to: await getSetting('email_to') || 'h2@h2colombiano.com',
             subject: title,
             html: `<h2>${title}</h2><pre style="font-family:monospace;white-space:pre-wrap">${content}</pre>`,
           });
@@ -3132,7 +3132,7 @@ export const appRouter = router({
         const statusLabel = statusInfo.label;
 
         // Enviar email ao admin quando status muda
-        const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
+        const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
         if (emailTo && emailTo.trim() !== '') {
           try {
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
@@ -3269,7 +3269,7 @@ export const appRouter = router({
         const statusLabel = statusInfo.label;
 
         // Enviar email ao admin quando status muda
-        const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
+        const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
         if (emailTo && emailTo.trim() !== '') {
           try {
             const adminEmailContent = emailStatusAdmin({
@@ -5327,7 +5327,7 @@ export const appRouter = router({
         try {
           await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
-            to: await getSetting('contact_email') || 'h2@h2colombiano.com',
+            to: await getSetting('email_to') || 'h2@h2colombiano.com',
             subject: docNotifTitle,
             html: `<h2>${docNotifTitle}</h2><p>Cliente: <strong>${input.customerPhone}</strong></p><p>Documento: <strong>${input.label}</strong></p><p><a href="${url}">Ver arquivo enviado</a></p>`,
           });
