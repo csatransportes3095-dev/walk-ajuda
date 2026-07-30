@@ -38,6 +38,7 @@ import { preRegistrationsRouter } from "./routers/preRegistrations";
 import { preCadastroQuestionsRouter } from "./routers/preCadastroQuestions";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
+import { sendMailDirect } from "./_core/sendMailDirect";
 import { emailStatusCliente, emailStatusAdmin, emailNovoPedidoAdmin, emailPedidoRecebidoCliente, emailCadastroFinalizadoAdmin, emailInicioCadastroAdmin, emailIndicacaoSucesso, emailComprovantePix, nl2br } from "./emailTemplates";
 import { parse as parseCookieHeader } from "cookie";
 import jwt from "jsonwebtoken";
@@ -99,7 +100,7 @@ import {
 import { storagePut } from "./storage";
 
 /**
- * Verifica se um telefone estÃ¡ na blocklist.
+ * Verifica se um telefone estÃƒÂ¡ na blocklist.
  * Se estiver e o IP for fornecido, bloqueia o IP automaticamente.
  * Retorna { blocked: true, reason } se bloqueado, ou { blocked: false } se livre.
  */
@@ -113,9 +114,9 @@ async function checkPhoneBlockedAndBlockIp(
   if (result.blocked) {
     // Registrar tentativa de acesso bloqueado
     logBlockedAttempt(normalizedPhone, action || 'acesso', clientIp, result.reason).catch(() => {});
-    // Bloquear IP automaticamente se disponÃ­vel
+    // Bloquear IP automaticamente se disponÃƒÂ­vel
     if (clientIp && clientIp !== 'unknown') {
-      blockIp(clientIp, `Bloqueio automÃ¡tico: telefone ${normalizedPhone} na lista negra`).catch(() => {});
+      blockIp(clientIp, `Bloqueio automÃƒÂ¡tico: telefone ${normalizedPhone} na lista negra`).catch(() => {});
     }
     return { blocked: true, reason: result.reason || 'Acesso bloqueado' };
   }
@@ -130,7 +131,7 @@ function resolveFileExt(mime: string | undefined | null): { ext: string; content
   if (m === 'image/png') return { ext: 'png', contentType: 'image/png' };
   if (m === 'image/webp') return { ext: 'webp', contentType: 'image/webp' };
   if (m.startsWith('image/')) return { ext: 'jpg', contentType: m };
-  // VÃ­deos
+  // VÃƒÂ­deos
   if (m === 'video/mp4') return { ext: 'mp4', contentType: 'video/mp4' };
   if (m === 'video/webm') return { ext: 'webm', contentType: 'video/webm' };
   if (m === 'video/quicktime') return { ext: 'mov', contentType: 'video/quicktime' };
@@ -202,7 +203,7 @@ export const appRouter = router({
   preRegistrations: preRegistrationsRouter,
   preCadastroQuestions: preCadastroQuestionsRouter,
   attention: router({
-    // Listar todos os pedidos em atendimento (ativos, nÃ£o expirados)
+    // Listar todos os pedidos em atendimento (ativos, nÃƒÂ£o expirados)
     list: adminProcedure.query(async () => {
       const { listAttentions } = await import('./db');
       return await listAttentions();
@@ -215,7 +216,7 @@ export const appRouter = router({
         await markAttention(input.registrationId, input.adminName);
         return { success: true };
       }),
-    // Remover marcaÃ§Ã£o
+    // Remover marcaÃƒÂ§ÃƒÂ£o
     clear: adminProcedure
       .input(z.object({ registrationId: z.number() }))
       .mutation(async ({ input }) => {
@@ -238,7 +239,7 @@ export const appRouter = router({
     validate: publicProcedure
       .input(z.object({ code: z.string().min(1), phone: z.string().optional() }))
       .mutation(async ({ input }) => {
-        // Verificar se Ã© senha do sorteio
+        // Verificar se ÃƒÂ© senha do sorteio
         const raffleEnabled = await getSetting('raffle_password_enabled');
         const rafflePassword = await getSetting('raffle_password');
         if (raffleEnabled === '1' && rafflePassword && rafflePassword.trim() !== '' && input.code.trim() === rafflePassword.trim()) {
@@ -259,7 +260,7 @@ export const appRouter = router({
           const accessCode = await createAccessCode(input.code, input.clientName, input.maxUses || 1, input.timeOnly || false, input.allowedProductIds);
           return { success: true, accessCode };
         } catch (error) {
-          return { success: false, message: 'Erro ao criar senha. CÃ³digo jÃ¡ existe?' };
+          return { success: false, message: 'Erro ao criar senha. CÃƒÂ³digo jÃƒÂ¡ existe?' };
         }
       }),
 
@@ -283,7 +284,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number(), minutes: z.number().min(1).optional() }))
       .mutation(async ({ input }) => {
         const updated = await renewAccessCode(input.id, input.minutes);
-        if (!updated) return { success: false, message: 'Senha nÃ£o encontrada' };
+        if (!updated) return { success: false, message: 'Senha nÃƒÂ£o encontrada' };
         return { success: true, accessCode: updated };
       }),
 
@@ -318,7 +319,7 @@ export const appRouter = router({
           });
           return { success: true, coupon };
         } catch (error) {
-          return { success: false, message: 'Erro ao criar cupom. CÃ³digo jÃ¡ existe?' };
+          return { success: false, message: 'Erro ao criar cupom. CÃƒÂ³digo jÃƒÂ¡ existe?' };
         }
       }),
 
@@ -337,9 +338,9 @@ export const appRouter = router({
       .mutation(async ({ input }) => await validateCoupon(input.code)),
   }),
 
-  // === PRODUTOS / CARDS DE SERVIÃ‡O ===
+  // === PRODUTOS / CARDS DE SERVIÃƒâ€¡O ===
   products: router({
-    // PÃºblico: listar produtos ativos com opÃ§Ãµes, perguntas, documentos e tiers de garantia por opÃ§Ã£o
+    // PÃƒÂºblico: listar produtos ativos com opÃƒÂ§ÃƒÂµes, perguntas, documentos e tiers de garantia por opÃƒÂ§ÃƒÂ£o
     listActive: publicProcedure.query(async () => {
       const prods = await listActiveProducts();
       const now = Date.now();
@@ -349,7 +350,7 @@ export const appRouter = router({
         const activeOptions = options.filter(o => o.isActive === 1);
         const optionsWithRelations = [];
         for (const opt of activeOptions) {
-          // Auto-expirar promoÃ§Ã£o: se promoEndsAt jÃ¡ passou, reverter preÃ§o
+          // Auto-expirar promoÃƒÂ§ÃƒÂ£o: se promoEndsAt jÃƒÂ¡ passou, reverter preÃƒÂ§o
           if (opt.promoEndsAt && Number(opt.promoEndsAt) > 0 && Number(opt.promoEndsAt) <= now && opt.originalPrice) {
             await updateProductOption(opt.id, { price: opt.originalPrice, originalPrice: '', promoEndsAt: null });
             opt.price = opt.originalPrice;
@@ -366,7 +367,7 @@ export const appRouter = router({
       return result;
     }),
 
-    // Admin: listar todos os produtos com opÃ§Ãµes, perguntas, documentos e tiers de garantia por opÃ§Ã£o
+    // Admin: listar todos os produtos com opÃƒÂ§ÃƒÂµes, perguntas, documentos e tiers de garantia por opÃƒÂ§ÃƒÂ£o
     list: adminProcedure.query(async () => {
       const prods = await listProducts();
       const now = Date.now();
@@ -375,7 +376,7 @@ export const appRouter = router({
         const options = await listProductOptions(p.id);
         const optionsWithRelations = [];
         for (const opt of options) {
-          // Auto-expirar promoÃ§Ã£o: se promoEndsAt jÃ¡ passou, reverter preÃ§o
+          // Auto-expirar promoÃƒÂ§ÃƒÂ£o: se promoEndsAt jÃƒÂ¡ passou, reverter preÃƒÂ§o
           if (opt.promoEndsAt && Number(opt.promoEndsAt) > 0 && Number(opt.promoEndsAt) <= now && opt.originalPrice) {
             await updateProductOption(opt.id, { price: opt.originalPrice, originalPrice: '', promoEndsAt: null });
             opt.price = opt.originalPrice;
@@ -478,7 +479,7 @@ export const appRouter = router({
       }),
   }),
 
-  // === OPÃ‡Ã•ES DE PRODUTO ===
+  // === OPÃƒâ€¡Ãƒâ€¢ES DE PRODUTO ===
   productOptions: router({
     list: adminProcedure
       .input(z.object({ productId: z.number() }))
@@ -504,7 +505,7 @@ export const appRouter = router({
           const option = await createProductOption(input);
           return { success: true, option };
         } catch (error) {
-          return { success: false, message: 'Erro ao criar opÃ§Ã£o' };
+          return { success: false, message: 'Erro ao criar opÃƒÂ§ÃƒÂ£o' };
         }
       }),
 
@@ -537,7 +538,7 @@ export const appRouter = router({
         delete: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
-        // Deletar documentos associados Ã  opÃ§Ã£o
+        // Deletar documentos associados ÃƒÂ  opÃƒÂ§ÃƒÂ£o
         await deleteOptionDocumentsByOptionId(input.id);
         // Deletar tiers de garantia associados
         await deleteWarrantyTiersByOptionId(input.id);
@@ -553,7 +554,7 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
-  // === TIERS DE GARANTIA POR OPÃ‡ÃƒO ===
+  // === TIERS DE GARANTIA POR OPÃƒâ€¡ÃƒÆ’O ===
   warrantyTiers: router({
     list: adminProcedure
       .input(z.object({ optionId: z.number() }))
@@ -599,7 +600,7 @@ export const appRouter = router({
       }),
   }),
 
-  // === DOCUMENTOS DINÃ‚MICOS POR OPÃ‡ÃƒO ===
+  // === DOCUMENTOS DINÃƒâ€šMICOS POR OPÃƒâ€¡ÃƒÆ’O ===
   optionDocuments: router({
     list: adminProcedure
       .input(z.object({ optionId: z.number() }))
@@ -678,13 +679,13 @@ export const appRouter = router({
       }),
   }),
 
-  // === PERGUNTAS POR OPÃ‡ÃƒO DE COMPRA ===
+  // === PERGUNTAS POR OPÃƒâ€¡ÃƒÆ’O DE COMPRA ===
   productQuestions: router({
     listByOption: adminProcedure
       .input(z.object({ optionId: z.number() }))
       .query(async ({ input }) => await listOptionQuestions(input.optionId)),
 
-    // MantÃ©m compatibilidade
+    // MantÃƒÂ©m compatibilidade
     list: adminProcedure
       .input(z.object({ productId: z.number() }))
       .query(async ({ input }) => await listProductQuestions(input.productId)),
@@ -733,14 +734,14 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Copia todas as perguntas de uma opÃ§Ã£o de origem para uma opÃ§Ã£o de destino (substituindo as existentes)
+    // Copia todas as perguntas de uma opÃƒÂ§ÃƒÂ£o de origem para uma opÃƒÂ§ÃƒÂ£o de destino (substituindo as existentes)
     copyFromOption: adminProcedure
       .input(z.object({ fromOptionId: z.number(), toOptionId: z.number(), toProductId: z.number() }))
       .mutation(async ({ input }) => {
         const { fromOptionId, toOptionId, toProductId } = input;
-        // Busca todas as perguntas da opÃ§Ã£o de origem
+        // Busca todas as perguntas da opÃƒÂ§ÃƒÂ£o de origem
         const sourceQuestions = await listOptionQuestions(fromOptionId);
-        // Deleta todas as perguntas existentes na opÃ§Ã£o de destino
+        // Deleta todas as perguntas existentes na opÃƒÂ§ÃƒÂ£o de destino
         const existingQuestions = await listOptionQuestions(toOptionId);
         await Promise.all(existingQuestions.map(q => deleteProductQuestion(q.id)));
         // Mapa de IDs antigos para novos (para reconstruir parentQuestionId)
@@ -782,7 +783,7 @@ export const appRouter = router({
       }),
   }),
 
-  // === CONFIGURAÃ‡Ã•ES DO SITE ===
+  // === CONFIGURAÃƒâ€¡Ãƒâ€¢ES DO SITE ===
   settings: router({
     getAll: publicProcedure.query(async () => await getAllSettings()),
 
@@ -800,7 +801,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Template editÃ¡vel da mensagem WhatsApp de atualizaÃ§Ã£o de pedido
+    // Template editÃƒÂ¡vel da mensagem WhatsApp de atualizaÃƒÂ§ÃƒÂ£o de pedido
     getWhatsappOrderTemplate: adminProcedure.query(async () => {
       const value = await getSetting('whatsapp_order_template');
       return { template: value };
@@ -812,7 +813,7 @@ export const appRouter = router({
         await upsertSetting('whatsapp_order_template', input.template);
         return { success: true };
       }),
-    // Template editÃ¡vel da mensagem WhatsApp de dados de login
+    // Template editÃƒÂ¡vel da mensagem WhatsApp de dados de login
     getWhatsappLoginTemplate: adminProcedure.query(async () => {
       const value = await getSetting('whatsapp_login_template');
       return { template: value };
@@ -831,11 +832,11 @@ export const appRouter = router({
         clientName: z.string(), service: z.string(), nameOption: z.string(),
         referrerName: z.string().optional(), referrerPhone: z.string().optional(),
         bypassCode: z.string().optional(),
-        // Documentos dinÃ¢micos: array de { label, data (base64), mime } OU { label, url, mime } (jÃ¡ enviados)
+        // Documentos dinÃƒÂ¢micos: array de { label, data (base64), mime } OU { label, url, mime } (jÃƒÂ¡ enviados)
         documents: z.array(z.object({
           label: z.string(),
           data: z.string().optional(),   // base64 (legado)
-          url: z.string().optional(),    // URL jÃ¡ enviada via /api/upload/client-file
+          url: z.string().optional(),    // URL jÃƒÂ¡ enviada via /api/upload/client-file
           fileKey: z.string().optional(),
           mime: z.string().optional(),
         })).optional(),
@@ -845,12 +846,12 @@ export const appRouter = router({
         alvara: z.string().optional(), alvaraMime: z.string().optional(),
         condutaxi: z.string().optional(), condutaxiMime: z.string().optional(),
         phone: z.string().optional(), city: z.string().optional(),
-        email: z.string().email('Email invÃ¡lido').optional(),
+        email: z.string().email('Email invÃƒÂ¡lido').optional(),
         accessCode: z.string().optional(),
         cpToken: z.string().optional(), // Novo sistema de senha de cliente
         couponCode: z.string().optional(),
         paymentProof: z.string().optional(),       // base64 (legado)
-        paymentProofUrl: z.string().optional(),    // URL jÃ¡ enviada via /api/upload/client-file
+        paymentProofUrl: z.string().optional(),    // URL jÃƒÂ¡ enviada via /api/upload/client-file
         paymentProofMime: z.string().optional(),
         answers: z.string().optional(),
         docNameMode: z.string().optional(),
@@ -860,13 +861,13 @@ export const appRouter = router({
         thirdPartyPhone: z.string().optional(), // telefone do cliente final (revendedor)
         resellerDiscountApplied: z.number().optional(), // valor do desconto aplicado em R$
         // Agrupamento de carrinho
-        cartGroupId: z.string().optional(), // ID Ãºnico do grupo de carrinho
+        cartGroupId: z.string().optional(), // ID ÃƒÂºnico do grupo de carrinho
         cartTotal: z.number().optional(), // total bruto do carrinho em R$
         cartCouponCode: z.string().optional(), // cupom aplicado no carrinho
         cartCouponDiscount: z.number().optional(), // valor do desconto do cupom em R$
-        cartItemIndex: z.number().optional(), // Ã­ndice do item no carrinho (0 = primeiro)
+        cartItemIndex: z.number().optional(), // ÃƒÂ­ndice do item no carrinho (0 = primeiro)
         cartItemCount: z.number().optional(), // total de itens no carrinho
-        cartItems: z.string().optional(), // JSON com todos os itens do carrinho (para email/notificaÃ§Ã£o)
+        cartItems: z.string().optional(), // JSON com todos os itens do carrinho (para email/notificaÃƒÂ§ÃƒÂ£o)
       }))
       .mutation(async ({ input, ctx }) => {
         // Capturar IP do cliente
@@ -885,7 +886,7 @@ export const appRouter = router({
           // Validar acesso: aceitar accessCode (sistema antigo) OU cpToken (novo sistema)
           let cpTokenValid = false;
           if (input.cpToken) {
-            // Verificar se o cpToken Ã© vÃ¡lido via banco
+            // Verificar se o cpToken ÃƒÂ© vÃƒÂ¡lido via banco
             try {
               const dbInst = await (await import('./db')).getDb();
               const { eq: eqDrizzle } = await import('drizzle-orm');
@@ -893,30 +894,30 @@ export const appRouter = router({
               const sessRows = await (dbInst as any).select().from(cpSessions).where(eqDrizzle(cpSessions.token, input.cpToken.trim())).limit(1);
               const sess = sessRows?.[0];
               if (!sess || new Date(sess.expiresAt) < new Date()) {
-                return { success: false, message: 'SessÃ£o expirada. FaÃ§a login novamente.' };
+                return { success: false, message: 'SessÃƒÂ£o expirada. FaÃƒÂ§a login novamente.' };
               }
-              cpTokenValid = true; // SessÃ£o vÃ¡lida â€” pular checkAccessCodeCanSubmit
+              cpTokenValid = true; // SessÃƒÂ£o vÃƒÂ¡lida Ã¢â‚¬â€ pular checkAccessCodeCanSubmit
             } catch {
-              return { success: false, message: 'Erro ao verificar sessÃ£o. Tente novamente.' };
+              return { success: false, message: 'Erro ao verificar sessÃƒÂ£o. Tente novamente.' };
             }
           }
           if (!cpTokenValid) {
             // Sistema antigo: validar via accessCode
             const accessCodeToUse = input.accessCode || '';
             if (!accessCodeToUse) {
-              return { success: false, message: 'SessÃ£o expirada. FaÃ§a login novamente.' };
+              return { success: false, message: 'SessÃƒÂ£o expirada. FaÃƒÂ§a login novamente.' };
             }
             const canSubmit = await checkAccessCodeCanSubmit(accessCodeToUse, input.phone);
             if (!canSubmit.canSubmit) {
-              return { success: false, message: canSubmit.reason || 'Esta senha jÃ¡ foi utilizada.' };
+              return { success: false, message: canSubmit.reason || 'Esta senha jÃƒÂ¡ foi utilizada.' };
             }
           }
 
-          const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
+          const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
           const whatsappNumberRaw = await getSetting('whatsapp_number') || '5511978307371';
           const whatsappNumber = whatsappNumberRaw.replace(/[^\d+]/g, '');
 
-          // Helper para enviar email com timeout de 20s (evita travar a requisiÃ§Ã£o)
+          // Helper para enviar email com timeout de 20s (evita travar a requisiÃƒÂ§ÃƒÂ£o)
 
 
 
@@ -931,20 +932,11 @@ export const appRouter = router({
 
 
 
-          const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            connectionTimeout: 15000,
-            greetingTimeout: 15000,
-            socketTimeout: 20000,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
 
-          const sendEmailWithTimeout = async (mailOptions: Parameters<typeof transporter.sendMail>[0], label: string): Promise<boolean> => {
+          const sendEmailWithTimeout = async (mailOptions: { from?: string; to: string; subject: string; html: string; text?: string; attachments?: any[] }, label: string): Promise<boolean> => {
             try {
               await Promise.race([
-                transporter.sendMail(mailOptions),
+                sendMailDirect(mailOptions),
                 new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timeout: ${label}`)), 20000)),
               ]);
               return true;
@@ -960,7 +952,7 @@ export const appRouter = router({
 
 
 
-          // Comprovante PIX: aceitar URL jÃ¡ enviada (novo fluxo) ou base64 (legado)
+          // Comprovante PIX: aceitar URL jÃƒÂ¡ enviada (novo fluxo) ou base64 (legado)
           let paymentProofUrl = input.paymentProofUrl || '';
           if (!paymentProofUrl && input.paymentProof) {
             try {
@@ -997,7 +989,7 @@ export const appRouter = router({
 
           // Salvar todos os documentos no S3 e registrar no banco (orderFiles)
           const docListHtml: string[] = [];
-          // FunÃ§Ã£o auxiliar para salvar arquivo no S3 e no banco
+          // FunÃƒÂ§ÃƒÂ£o auxiliar para salvar arquivo no S3 e no banco
           const saveDocToStorage = async (label: string, data: string, mime: string, regId: number, phone: string) => {
             try {
               const r = resolveFileExt(mime);
@@ -1024,12 +1016,12 @@ export const appRouter = router({
             }
           } catch (e) { console.error('[OrderFiles] Erro ao obter regId:', e); }
 
-          // Documentos dinÃ¢micos (novo sistema)
-          // Suporta tanto base64 (legado) quanto URL jÃ¡ enviada via /api/upload/client-file
+          // Documentos dinÃƒÂ¢micos (novo sistema)
+          // Suporta tanto base64 (legado) quanto URL jÃƒÂ¡ enviada via /api/upload/client-file
           if (input.documents && input.documents.length > 0) {
             for (const doc of input.documents) {
               if (doc.url) {
-                // Arquivo jÃ¡ enviado: apenas registrar no banco
+                // Arquivo jÃƒÂ¡ enviado: apenas registrar no banco
                 try {
                   const proofKey = doc.fileKey || doc.url.replace('/manus-storage/', '');
                   await addOrderFile({ registrationId: docRegId, customerPhone: input.phone || 'desconhecido', label: doc.label, fileUrl: doc.url, fileKey: proofKey, mimeType: doc.mime || 'image/jpeg' });
@@ -1050,13 +1042,13 @@ export const appRouter = router({
             await saveDocToStorage('Documento do Carro', input.carDocument, input.carDocumentMime || 'image/jpeg', docRegId, input.phone || 'desconhecido');
           }
           if (input.alvara) {
-            await saveDocToStorage('AlvarÃ¡', input.alvara, input.alvaraMime || 'image/jpeg', docRegId, input.phone || 'desconhecido');
+            await saveDocToStorage('AlvarÃƒÂ¡', input.alvara, input.alvaraMime || 'image/jpeg', docRegId, input.phone || 'desconhecido');
           }
           if (input.condutaxi) {
             await saveDocToStorage('Condutaxi', input.condutaxi, input.condutaxiMime || 'image/jpeg', docRegId, input.phone || 'desconhecido');
           }
 
-          // Comprovante PIX: registrar no banco (URL jÃ¡ obtida acima)
+          // Comprovante PIX: registrar no banco (URL jÃƒÂ¡ obtida acima)
           if (paymentProofUrl) {
             try {
               const proofMime2 = input.paymentProofMime || 'image/jpeg';
@@ -1066,19 +1058,19 @@ export const appRouter = router({
             } catch (e) { console.error('[OrderFiles] Erro ao registrar comprovante:', e); }
           }
 
-          // Montar seÃ§Ã£o de serviÃ§os (carrinho ou item Ãºnico)
+          // Montar seÃƒÂ§ÃƒÂ£o de serviÃƒÂ§os (carrinho ou item ÃƒÂºnico)
           const isCartOrder = !!(input.cartGroupId && (input.cartItemCount ?? 1) > 1);
           let servicoHtml = '';
           if (isCartOrder && input.cartItems) {
             try {
               const cartItemsList = JSON.parse(input.cartItems) as Array<{ service: string; nameOption: string; price: string }>;
               servicoHtml = `<h3>CARRINHO (${cartItemsList.length} itens)</h3>` +
-                cartItemsList.map((ci, idx) => `<p><strong>${idx + 1}. ${ci.service}</strong> â€” ${ci.nameOption} â€” ${ci.price}</p>`).join('') +
+                cartItemsList.map((ci, idx) => `<p><strong>${idx + 1}. ${ci.service}</strong> Ã¢â‚¬â€ ${ci.nameOption} Ã¢â‚¬â€ ${ci.price}</p>`).join('') +
                 (input.cartCouponCode ? `<p><strong>Cupom:</strong> ${input.cartCouponCode} (desconto: R$ ${(input.cartCouponDiscount ?? 0).toFixed(2).replace('.', ',')})</p>` : '') +
                 (input.cartTotal ? `<p><strong>Total Pago:</strong> R$ ${(input.cartTotal - (input.cartCouponDiscount ?? 0)).toFixed(2).replace('.', ',')}</p>` : '');
-            } catch { servicoHtml = `<p><strong>ServiÃ§o:</strong> ${input.service}</p><p><strong>OpÃ§Ã£o:</strong> ${input.nameOption}</p>`; }
+            } catch { servicoHtml = `<p><strong>ServiÃƒÂ§o:</strong> ${input.service}</p><p><strong>OpÃƒÂ§ÃƒÂ£o:</strong> ${input.nameOption}</p>`; }
           } else {
-            servicoHtml = `<p><strong>ServiÃ§o:</strong> ${input.service}</p><p><strong>OpÃ§Ã£o:</strong> ${input.nameOption}</p>`;
+            servicoHtml = `<p><strong>ServiÃƒÂ§o:</strong> ${input.service}</p><p><strong>OpÃƒÂ§ÃƒÂ£o:</strong> ${input.nameOption}</p>`;
           }
 
           // Extrair URLs dos documentos para o template
@@ -1094,7 +1086,7 @@ export const appRouter = router({
           const emailContent = emailNovoPedidoAdmin({
             ...emailBranding,
             clientName: input.clientName,
-            phone: input.phone || 'NÃ£o informado',
+            phone: input.phone || 'NÃƒÂ£o informado',
             service: input.service,
             option: input.nameOption,
             email: input.email,
@@ -1106,7 +1098,7 @@ export const appRouter = router({
             documents: docLinks.length > 0 ? docLinks : undefined,
           });
 
-          // Enviar email admin com timeout (nÃ£o-bloqueante)
+          // Enviar email admin com timeout (nÃƒÂ£o-bloqueante)
           const emailSent = await sendEmailWithTimeout({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: emailTo,
@@ -1133,7 +1125,7 @@ export const appRouter = router({
             if (input.phone) whatsappMsg += `\nTelefone: ${input.phone}`;
             if (input.city) whatsappMsg += `\nCidade: ${input.city}`;
 
-            // ServiÃ§os (carrinho ou item Ãºnico)
+            // ServiÃƒÂ§os (carrinho ou item ÃƒÂºnico)
             if (isCartOrder && input.cartItems) {
               try {
                 const cartItemsList2 = JSON.parse(input.cartItems) as Array<{ service: string; nameOption: string; price: string }>;
@@ -1160,7 +1152,7 @@ export const appRouter = router({
             // Comprovante PIX
             whatsappMsg += `\nComprovante PIX: ${paymentProofUrl ? 'Enviado' : 'Nao enviado'}`;
 
-            // Respostas do formulÃ¡rio
+            // Respostas do formulÃƒÂ¡rio
             if (input.answers) {
               try {
                 const answersArr = JSON.parse(input.answers) as { question: string; answer: string; depth?: number }[];
@@ -1220,15 +1212,15 @@ export const appRouter = router({
           try {
             const db2 = await (await import('./db')).getDb();
             if (db2 && input.phone) {
-              // Normalizar telefone para apenas dÃ­gitos (ex: "(11) 99342-5253" -> "11993425253")
+              // Normalizar telefone para apenas dÃƒÂ­gitos (ex: "(11) 99342-5253" -> "11993425253")
               const phoneDigits = input.phone.replace(/\D/g, '');
               let regId: number | undefined;
 
-              // Se senha geral, criar registro em accessCodePhones (nÃ£o existe cÃ³digo VIP associado)
+              // Se senha geral, criar registro em accessCodePhones (nÃƒÂ£o existe cÃƒÂ³digo VIP associado)
               const generalPwd = process.env.SITE_GENERAL_PASSWORD || '';
               const isGeneralCode = generalPwd && input.accessCode === generalPwd;
               if (cpTokenValid) {
-                // Novo sistema de senha (cpToken): criar registro usando cÃ³digo __cptoken__
+                // Novo sistema de senha (cpToken): criar registro usando cÃƒÂ³digo __cptoken__
                 try {
                   let cpCodeId: number | undefined;
                   const cpRows = await db2.execute(`SELECT id FROM accessCodes WHERE code = '__cptoken__' LIMIT 1`);
@@ -1249,7 +1241,7 @@ export const appRouter = router({
                 } catch (e) { console.error('[OrderStatus] Erro ao criar registro cpToken:', e); }
               } else if (isGeneralCode) {
                 try {
-                  // Criar um cÃ³digo de acesso geral no banco se nÃ£o existir
+                  // Criar um cÃƒÂ³digo de acesso geral no banco se nÃƒÂ£o existir
                   let generalCodeId: number | undefined;
                   const gcRows = await db2.execute(`SELECT id FROM accessCodes WHERE code = '__general__' LIMIT 1`);
                   const gcArr = (gcRows[0] as unknown as Array<{ id: number }>);
@@ -1268,13 +1260,13 @@ export const appRouter = router({
                   }
                 } catch (e) { console.error('[OrderStatus] Erro ao criar registro geral:', e); }
               } else {
-                // Buscar regId pelo phone + cÃ³digo VIP
+                // Buscar regId pelo phone + cÃƒÂ³digo VIP
                 try {
                   const phoneRow = await db2.execute(`SELECT acp.id FROM accessCodePhones acp INNER JOIN accessCodes ac ON ac.id = acp.codeId WHERE REGEXP_REPLACE(acp.phone, '[^0-9]', '') = '${phoneDigits}' AND ac.code = '${input.accessCode}' ORDER BY acp.accessedAt DESC LIMIT 1`);
                   regId = (phoneRow[0] as unknown as Array<{ id: number }>)[0]?.id;
                   console.log('[OrderStatus] Buscando regId por phone+code:', phoneDigits, input.accessCode, '-> regId:', regId);
                 } catch (e) { console.error('[OrderStatus] Erro ao buscar regId:', e); }
-                // Se nÃ£o encontrou, criar o registro em accessCodePhones para o cÃ³digo VIP
+                // Se nÃƒÂ£o encontrou, criar o registro em accessCodePhones para o cÃƒÂ³digo VIP
                 if (!regId) {
                   try {
                     const acRows = await db2.execute(`SELECT id FROM accessCodes WHERE code = '${input.accessCode}' LIMIT 1`);
@@ -1287,7 +1279,7 @@ export const appRouter = router({
                     }
                   } catch (e) { console.error('[OrderStatus] Erro ao criar registro VIP:', e); }
                 }
-                // Fallback final: buscar pelo phone sem filtro de cÃ³digo
+                // Fallback final: buscar pelo phone sem filtro de cÃƒÂ³digo
                 if (!regId) {
                   try {
                     const phoneRow2 = await db2.execute(`SELECT id FROM accessCodePhones WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = '${phoneDigits}' ORDER BY accessedAt DESC LIMIT 1`);
@@ -1297,14 +1289,14 @@ export const appRouter = router({
                 }
               }
               if (regId) {
-                // Buscar status inicial dinÃ¢mico do banco
+                // Buscar status inicial dinÃƒÂ¢mico do banco
                 let initialStatus = 'pedido_recebido';
                 try {
                   const stRows = await db2.execute(`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
                   const stArr = (stRows[0] as unknown as Array<{ key: string }>);
                   if (stArr && stArr.length > 0 && stArr[0].key) initialStatus = stArr[0].key;
                 } catch (e) { /* usa pedido_recebido como fallback */ }
-                // Gerar nÃºmero de pedido Ãºnico
+                // Gerar nÃƒÂºmero de pedido ÃƒÂºnico
                 let orderNum: number | undefined;
                 try { orderNum = await generateOrderNumber(); } catch (e) { console.error('[OrderNumber] Erro:', e); }
                 console.log('[OrderStatus] Salvando status inicial:', initialStatus, 'regId:', regId, 'orderNum:', orderNum);
@@ -1320,8 +1312,8 @@ export const appRouter = router({
                   answers: input.answers,
                 });
                 outerRegId = regId;
-                // Corrigir registrationId dos documentos salvos antes da criaÃ§Ã£o do pedido
-                // Os docs foram salvos com docRegId (Ãºltimo acesso do telefone), mas devem usar o regId do novo pedido
+                // Corrigir registrationId dos documentos salvos antes da criaÃƒÂ§ÃƒÂ£o do pedido
+                // Os docs foram salvos com docRegId (ÃƒÂºltimo acesso do telefone), mas devem usar o regId do novo pedido
                 if (docRegId && docRegId !== regId) {
                   try {
                     await db2.execute(`UPDATE orderFiles SET registrationId = ${regId} WHERE registrationId = ${docRegId} AND customerPhone = '${phoneDigits}' AND createdAt >= NOW() - INTERVAL 5 MINUTE`);
@@ -1342,7 +1334,7 @@ export const appRouter = router({
                   } catch (e) { console.error('[Cart] Erro ao salvar dados de carrinho/revendedor:', e); }
                 }
               } else {
-                console.error('[OrderStatus] regId nÃ£o encontrado para phone:', phoneDigits, 'code:', input.accessCode);
+                console.error('[OrderStatus] regId nÃƒÂ£o encontrado para phone:', phoneDigits, 'code:', input.accessCode);
               }
             }
           } catch (e) { console.error('[OrderStatus] Erro ao salvar status inicial:', e); }
@@ -1361,7 +1353,7 @@ export const appRouter = router({
                 // Criar novo cadastro de cliente
                 const newCustomer = await createCustomer({ name: input.clientName, phone: input.phone, email: input.email, city: input.city });
                 
-                // Registrar indicaÃ§Ã£o se houver indicador
+                // Registrar indicaÃƒÂ§ÃƒÂ£o se houver indicador
                 if (input.referrerPhone && input.referrerName && newCustomer?.id) {
                   try {
                     const { recordReferral } = await import('./db');
@@ -1373,8 +1365,8 @@ export const appRouter = router({
                       referredName: input.clientName,
                       orderId: outerRegId,
                     });
-                    console.log('[Referral] IndicaÃ§Ã£o registrada:', input.referrerName, '->', input.clientName);
-                  } catch (e) { console.error('[Referral] Erro ao registrar indicaÃ§Ã£o:', e); }
+                    console.log('[Referral] IndicaÃƒÂ§ÃƒÂ£o registrada:', input.referrerName, '->', input.clientName);
+                  } catch (e) { console.error('[Referral] Erro ao registrar indicaÃƒÂ§ÃƒÂ£o:', e); }
                 }
               }
             } catch (e) { console.error('[Customer] Erro ao salvar dados do cliente:', e); }
@@ -1383,12 +1375,12 @@ export const appRouter = router({
             try { await consumeCoupon(input.couponCode, input.clientName); } catch (e) { console.error('[Coupon] Erro:', e); }
           }
 
-          // Gerar senha de 4 dÃ­gitos para acompanhamento do pedido
+          // Gerar senha de 4 dÃƒÂ­gitos para acompanhamento do pedido
           let generatedPin: string | null = null;
           if (input.phone) {
             try {
               const phone4 = input.phone.replace(/\D/g, '');
-              // Gerar PIN aleatÃ³rio de 4 dÃ­gitos
+              // Gerar PIN aleatÃƒÂ³rio de 4 dÃƒÂ­gitos
               generatedPin = String(Math.floor(1000 + Math.random() * 9000));
               const { getDb: getDbPin } = await import('./db');
               const { customerPins: customerPinsTable } = await import('../drizzle/schema');
@@ -1408,20 +1400,20 @@ export const appRouter = router({
             } catch (e) { console.error('[PIN] Erro ao gerar senha:', e); }
           }
 
-          // LanÃ§ar automaticamente no Controle Financeiro como Pendente
+          // LanÃƒÂ§ar automaticamente no Controle Financeiro como Pendente
           if (outerRegId) {
             try {
-              // Extrair preÃ§o do nameOption (que pode conter tier de garantia)
-              // Formato: "Nome OpÃ§Ã£o - Garantia: X corridas" ou apenas "Nome OpÃ§Ã£o"
+              // Extrair preÃƒÂ§o do nameOption (que pode conter tier de garantia)
+              // Formato: "Nome OpÃƒÂ§ÃƒÂ£o - Garantia: X corridas" ou apenas "Nome OpÃƒÂ§ÃƒÂ£o"
               let saleValueCents = 0;
-              // Usar input.price (enviado pelo frontend no momento da compra) como fonte primÃ¡ria
+              // Usar input.price (enviado pelo frontend no momento da compra) como fonte primÃƒÂ¡ria
               if (input.price) {
                 const priceFromInput = parseFloat(input.price.replace(/[^0-9,\.]/g, '').replace(',', '.'));
                 if (priceFromInput > 0) saleValueCents = Math.round(priceFromInput * 100);
               }
               const dbFin = await (await import('./db')).getDb();
               if (dbFin && saleValueCents === 0) {
-                // Extrair nome base da opÃ§Ã£o (antes do " - Garantia:")
+                // Extrair nome base da opÃƒÂ§ÃƒÂ£o (antes do " - Garantia:")
                 const baseOptionName = input.nameOption.split(' - Garantia:')[0].trim();
                 const optRows = await dbFin.execute(sql.raw(
                   `SELECT price FROM productOptions WHERE label = '${baseOptionName.replace(/'/g, "''")}' LIMIT 1`
@@ -1432,7 +1424,7 @@ export const appRouter = router({
                   const numericPrice = parseFloat(priceStr.replace(/[^0-9,\.]/g, '').replace(',', '.'));
                   saleValueCents = Math.round(numericPrice * 100);
                 }
-                // Se hÃ¡ tier de garantia, buscar preÃ§o do tier
+                // Se hÃƒÂ¡ tier de garantia, buscar preÃƒÂ§o do tier
                 if (input.nameOption.includes(' - Garantia:')) {
                   const tierPart = input.nameOption.split(' - Garantia:')[1]?.trim();
                   if (tierPart && baseOptionName) {
@@ -1471,7 +1463,7 @@ export const appRouter = router({
             } catch (e) { console.error('[Financeiro] Erro ao registrar venda:', e); }
           }
 
-          // Enviar email de confirmaÃ§Ã£o ao cliente
+          // Enviar email de confirmaÃƒÂ§ÃƒÂ£o ao cliente
           if (input.email) {
             try {
               const emailBranding = await getEmailBranding();
@@ -1482,11 +1474,11 @@ export const appRouter = router({
                   if (ans.length > 0) {
                     answersClientHtml = `
                       <div style="margin:16px 0;">
-                        <p style="color:#a855f7;font-weight:bold;font-size:14px;margin-bottom:8px;">ðŸ“‹ RESPOSTAS DO FORMULÃRIO</p>
+                        <p style="color:#a855f7;font-weight:bold;font-size:14px;margin-bottom:8px;">Ã°Å¸â€œâ€¹ RESPOSTAS DO FORMULÃƒÂRIO</p>
                         ${ans.map(a => {
                           const d = a.depth || 0;
                           const ml = d * 16;
-                          const prefix = d > 0 ? 'â†³ ' : '';
+                          const prefix = d > 0 ? 'Ã¢â€ Â³ ' : '';
                           return `<p style="color:#ccc;font-size:13px;margin:4px 0;margin-left:${ml}px;"><strong style="color:#ddd;">${prefix}${a.question}:</strong> ${a.answer}</p>`;
                         }).join('')}
                       </div>`;
@@ -1496,7 +1488,7 @@ export const appRouter = router({
               await sendEmailWithTimeout({
                 from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
                 to: input.email,
-                subject: `âœ… Pedido Recebido â€” ${emailBranding.siteTitle}`,
+                subject: `Ã¢Å“â€¦ Pedido Recebido Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
                 html: emailPedidoRecebidoCliente({
                   ...emailBranding,
                   customerName: input.clientName,
@@ -1505,13 +1497,13 @@ export const appRouter = router({
                   pin: generatedPin || undefined,
                 }),
               }, 'email cliente');
-              console.log('[Email] ConfirmaÃ§Ã£o enviada ao cliente:', input.email);
+              console.log('[Email] ConfirmaÃƒÂ§ÃƒÂ£o enviada ao cliente:', input.email);
             } catch (clientEmailError) {
-              console.error('[Email] Erro ao enviar confirmaÃ§Ã£o ao cliente:', clientEmailError);
+              console.error('[Email] Erro ao enviar confirmaÃƒÂ§ÃƒÂ£o ao cliente:', clientEmailError);
             }
           }
 
-          return { success: true, message: emailSent ? 'Pedido enviado com sucesso!' : 'Pedido registrado! (email serÃ¡ reenviado em breve)', registrationId: outerRegId ?? null, trackingPin: generatedPin };
+          return { success: true, message: emailSent ? 'Pedido enviado com sucesso!' : 'Pedido registrado! (email serÃƒÂ¡ reenviado em breve)', registrationId: outerRegId ?? null, trackingPin: generatedPin };
         } catch (error) {
           console.error('Erro geral ao processar pedido:', error);
           return { success: false, message: 'Erro ao processar pedido' };
@@ -1522,18 +1514,12 @@ export const appRouter = router({
       .input(z.object({
         clientName: z.string(), service: z.string(),
         phone: z.string().optional(), city: z.string().optional(),
-        paymentProof: z.string().min(1, 'Comprovante obrigatÃ³rio'),
+        paymentProof: z.string().min(1, 'Comprovante obrigatÃƒÂ³rio'),
         paymentProofMime: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         try {
-          const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
-          const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
+          const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
           const spMime = input.paymentProofMime || 'image/jpeg';
           const spExt = spMime === 'application/pdf' ? 'pdf' : spMime === 'image/png' ? 'png' : 'jpg';
           let paymentProofUrl = '';
@@ -1551,7 +1537,7 @@ export const appRouter = router({
             html: emailComprovantePix({
               ...emailBranding,
               clientName: input.clientName,
-              phone: input.phone || 'NÃ£o informado',
+              phone: input.phone || 'NÃƒÂ£o informado',
               service: input.service,
               extra: [
                 input.city ? `Cidade: ${input.city}` : '',
@@ -1628,7 +1614,7 @@ export const appRouter = router({
         return { exists: !!customer, customer, hasOrders };
       }),
 
-    // Verificar cadastro por telefone (mutation â€” aceita telefone canÃ´nico dinÃ¢mico)
+    // Verificar cadastro por telefone (mutation Ã¢â‚¬â€ aceita telefone canÃƒÂ´nico dinÃƒÂ¢mico)
     checkByPhoneMutation: publicProcedure
       .input(z.object({ phone: z.string().min(1) }))
       .mutation(async ({ input, ctx }) => {
@@ -1643,7 +1629,7 @@ export const appRouter = router({
         return { exists: !!customer, customer, customerBlocked: false };
       }),
 
-    // Verificar se CPF jÃ¡ estÃ¡ cadastrado
+    // Verificar se CPF jÃƒÂ¡ estÃƒÂ¡ cadastrado
     checkCpf: publicProcedure
       .input(z.object({ cpf: z.string().min(1) }))
       .query(async ({ input }) => {
@@ -1655,7 +1641,7 @@ export const appRouter = router({
         return { exists: !!customer, customerBlocked: false };
       }),
 
-    // Atualizar email do cliente pelo telefone (chamado quando cliente preenche email no formulÃ¡rio)
+    // Atualizar email do cliente pelo telefone (chamado quando cliente preenche email no formulÃƒÂ¡rio)
     updateEmailByPhone: publicProcedure
       .input(z.object({ phone: z.string().min(1), email: z.string().email() }))
       .mutation(async ({ input, ctx }) => {
@@ -1663,19 +1649,19 @@ export const appRouter = router({
         const blockResult = await checkPhoneBlockedAndBlockIp(input.phone, clientIp, 'atualizar_email');
         if (blockResult.blocked) return { success: false, message: 'Acesso bloqueado' };
         const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
-        if (!customer) return { success: false, message: 'Cliente nÃ£o encontrado' };
+        if (!customer) return { success: false, message: 'Cliente nÃƒÂ£o encontrado' };
         await updateCustomer(customer.id, { email: input.email });
         return { success: true };
       }),
 
     updateCpfByPhone: publicProcedure
-      .input(z.object({ phone: z.string().min(1), cpf: z.string().regex(/^\d{11}$/, 'CPF invÃ¡lido') }))
+      .input(z.object({ phone: z.string().min(1), cpf: z.string().regex(/^\d{11}$/, 'CPF invÃƒÂ¡lido') }))
       .mutation(async ({ input }) => {
         const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
-        if (!customer) return { success: false, message: 'Cliente nÃ£o encontrado' };
+        if (!customer) return { success: false, message: 'Cliente nÃƒÂ£o encontrado' };
         // Verificar duplicidade
         const existing = await getCustomerByCpf(input.cpf);
-        if (existing && existing.id !== customer.id) return { success: false, message: 'CPF jÃ¡ cadastrado' };
+        if (existing && existing.id !== customer.id) return { success: false, message: 'CPF jÃƒÂ¡ cadastrado' };
         await updateCustomer(customer.id, { cpf: input.cpf });
         return { success: true };
       }),
@@ -1684,23 +1670,23 @@ export const appRouter = router({
       .input(z.object({
         name: z.string().min(1),
         phone: z.string().min(1),
-        email: z.string().email("Email invÃ¡lido").optional(),
-        cpf: z.string().min(14, "CPF invÃ¡lido").max(14),
-        city: z.string().min(1, "Cidade Ã© obrigatÃ³ria"),
+        email: z.string().email("Email invÃƒÂ¡lido").optional(),
+        cpf: z.string().min(14, "CPF invÃƒÂ¡lido").max(14),
+        city: z.string().min(1, "Cidade ÃƒÂ© obrigatÃƒÂ³ria"),
         uf: z.string().length(2, "UF deve ter 2 caracteres"),
         referredBy: z.string().optional(),
         referredByPhone: z.string().regex(/^\d{10,11}$/).optional(),
         bypassCode: z.string().optional(),
-        profilePhotoUrl: z.string().min(1, "Foto de perfil Ã© obrigatÃ³ria"),
+        profilePhotoUrl: z.string().min(1, "Foto de perfil ÃƒÂ© obrigatÃƒÂ³ria"),
       }))
       .mutation(async ({ input, ctx }) => {
-        // SEGURANÃ‡A: foto Ã© obrigatÃ³ria no servidor
+        // SEGURANÃƒâ€¡A: foto ÃƒÂ© obrigatÃƒÂ³ria no servidor
         if (!input.profilePhotoUrl || input.profilePhotoUrl.trim() === '') {
-          return { success: false, blocked: false, message: 'Foto de perfil Ã© obrigatÃ³ria para finalizar o cadastro.' };
+          return { success: false, blocked: false, message: 'Foto de perfil ÃƒÂ© obrigatÃƒÂ³ria para finalizar o cadastro.' };
         }
         // Capturar IP do cliente
         const clientIp = (ctx.req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || ctx.req.socket?.remoteAddress || 'unknown';
-        // Verificar se IP estÃ¡ bloqueado
+        // Verificar se IP estÃƒÂ¡ bloqueado
         if (clientIp && clientIp !== 'unknown') {
           const ipBlocked = await isIpBlocked(clientIp);
           if (ipBlocked) return { success: false, blocked: true, message: 'Acesso bloqueado. Entre em contato pelo WhatsApp.' };
@@ -1710,23 +1696,23 @@ export const appRouter = router({
         // Verificar blocklist antes de qualquer coisa
         const blockCheck = await checkBlocklist(input.name, input.phone);
         if (blockCheck.blocked) {
-          return { success: false, blocked: true, message: blockCheck.reason || 'Cadastro nÃ£o permitido. Entre em contato pelo WhatsApp.' };
+          return { success: false, blocked: true, message: blockCheck.reason || 'Cadastro nÃƒÂ£o permitido. Entre em contato pelo WhatsApp.' };
         }
-        // Verificar se jÃ¡ existe
+        // Verificar se jÃƒÂ¡ existe
         const existing = await getCustomerByPhone(input.phone);
         if (existing) return { success: true, customer: existing, alreadyExists: true };
-        // Verificar se CPF jÃ¡ estÃ¡ registrado
+        // Verificar se CPF jÃƒÂ¡ estÃƒÂ¡ registrado
         const existingByCpf = await getCustomerByCpf(input.cpf);
         if (existingByCpf) {
           return {
             success: false,
             blocked: false,
-            message: `CPF jÃ¡ registrado no sistema. Telefone associado: ${existingByCpf.phone}`,
+            message: `CPF jÃƒÂ¡ registrado no sistema. Telefone associado: ${existingByCpf.phone}`,
             duplicateCpf: true,
             existingPhone: existingByCpf.phone,
           };
         }
-        // Validar indicador obrigatÃ³rio ou cÃ³digo de bypass
+        // Validar indicador obrigatÃƒÂ³rio ou cÃƒÂ³digo de bypass
         const { validateReferrer, validateBypassCode, useBypassCode } = await import('./db');
         const cleanPhone = input.phone.replace(/\D/g, '');
         const cleanRefPhone = (input.referredByPhone ?? '').replace(/\D/g, '');
@@ -1735,7 +1721,7 @@ export const appRouter = router({
         if (cleanRefPhone) {
           const referrerValidation = await validateReferrer(cleanRefPhone);
           if (!referrerValidation.valid) {
-            return { success: false, blocked: false, message: 'Indicador nÃ£o encontrado no sistema. Verifique o telefone do indicador.' };
+            return { success: false, blocked: false, message: 'Indicador nÃƒÂ£o encontrado no sistema. Verifique o telefone do indicador.' };
           }
         } else if (input.bypassCode) {
           // Se o cliente informou um codigo de liberacao, validamos e consumimos.
@@ -1753,7 +1739,7 @@ export const appRouter = router({
         };
         const customer = await createCustomer(safeInput);
         
-        // Registrar indicaÃ§Ã£o se houver indicador
+        // Registrar indicaÃƒÂ§ÃƒÂ£o se houver indicador
         if (safeInput.referredByPhone && safeInput.referredBy) {
           try {
             const { recordReferral } = await import('./db');
@@ -1764,7 +1750,7 @@ export const appRouter = router({
               referredPhone: cleanPhone,
               referredName: safeInput.name,
             });
-          } catch (e) { console.error('Erro ao registrar indicaÃ§Ã£o:', e); }
+          } catch (e) { console.error('Erro ao registrar indicaÃƒÂ§ÃƒÂ£o:', e); }
 
           // Notificar o indicador por e-mail (se tiver e-mail cadastrado)
           try {
@@ -1773,17 +1759,11 @@ export const appRouter = router({
             const referrer = await getCustomerByPhone(referrerCleanPhone);
             const emailBranding = await getEmailBranding();
             if (referrer?.email) {
-              const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
               const waLink = `https://wa.me/55${referrerCleanPhone}`;
               await transporter.sendMail({
                 from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
                 to: referrer.email,
-                subject: `ðŸŽ‰ Sua indicaÃ§Ã£o deu certo! ${safeInput.name} fez um pedido`,
+                subject: `Ã°Å¸Å½â€° Sua indicaÃƒÂ§ÃƒÂ£o deu certo! ${safeInput.name} fez um pedido`,
                 html: emailIndicacaoSucesso({
                   ...emailBranding,
                   referrerName: referrer.name || safeInput.referredBy || undefined,
@@ -1791,14 +1771,14 @@ export const appRouter = router({
                   service: undefined,
                 }),
               });
-              console.log(`[IndicaÃ§Ã£o] E-mail enviado ao indicador ${referrer.email}`);
+              console.log(`[IndicaÃƒÂ§ÃƒÂ£o] E-mail enviado ao indicador ${referrer.email}`);
             } else {
-              console.log(`[IndicaÃ§Ã£o] Indicador ${referrerCleanPhone} sem e-mail cadastrado â€” notificaÃ§Ã£o nÃ£o enviada`);
+              console.log(`[IndicaÃƒÂ§ÃƒÂ£o] Indicador ${referrerCleanPhone} sem e-mail cadastrado Ã¢â‚¬â€ notificaÃƒÂ§ÃƒÂ£o nÃƒÂ£o enviada`);
             }
           } catch (e) { console.error('Erro ao notificar indicador:', e); }
         }
         
-        // NotificaÃ§Ã£o: finalizaÃ§Ã£o do cadastro â€” enviado em segundo plano para nÃ£o bloquear
+        // NotificaÃƒÂ§ÃƒÂ£o: finalizaÃƒÂ§ÃƒÂ£o do cadastro Ã¢â‚¬â€ enviado em segundo plano para nÃƒÂ£o bloquear
         void (async () => {
           try {
             const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
@@ -1811,7 +1791,7 @@ export const appRouter = router({
             await transporter.sendMail({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: emailTo,
-              subject: `âœ… Cadastro finalizado â€” ${safeInput.name} (${safeInput.phone})`,
+              subject: `Ã¢Å“â€¦ Cadastro finalizado Ã¢â‚¬â€ ${safeInput.name} (${safeInput.phone})`,
               html: emailCadastroFinalizadoAdmin({
                 ...(await getEmailBranding()),
                 name: safeInput.name,
@@ -1821,7 +1801,7 @@ export const appRouter = router({
                 cpf: safeInput.cpf || undefined,
               }),
             });
-          } catch (e) { console.error('Email finalizaÃ§Ã£o cadastro:', e); }
+          } catch (e) { console.error('Email finalizaÃƒÂ§ÃƒÂ£o cadastro:', e); }
         })();
         return { success: true, customer, alreadyExists: false };
       }),
@@ -1829,7 +1809,7 @@ export const appRouter = router({
     list: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) return [];
-      // Buscar clientes com flag indicando se tÃªm pedido finalizado
+      // Buscar clientes com flag indicando se tÃƒÂªm pedido finalizado
       const rows = await db.execute(`
         SELECT c.*,
           UNIX_TIMESTAMP(CONVERT_TZ(c.lastAccessAt, @@session.time_zone, '+00:00')) * 1000 AS lastAccessAtMs,
@@ -1925,7 +1905,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        // Se o telefone foi alterado, atualizar tambÃ©m em accessCodePhones para manter consistÃªncia
+        // Se o telefone foi alterado, atualizar tambÃƒÂ©m em accessCodePhones para manter consistÃƒÂªncia
         if (data.phone) {
           const db = await (await import('./db')).getDb();
           if (db) {
@@ -1935,21 +1915,21 @@ export const appRouter = router({
             if (oldPhone && oldPhone !== data.phone) {
               // Atualizar acp.phone para o novo telefone
               await db.execute(sql`UPDATE accessCodePhones SET phone = ${data.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
-              // Atualizar orderStatusHistory.customerPhone tambÃ©m
+              // Atualizar orderStatusHistory.customerPhone tambÃƒÂ©m
               await db.execute(sql`UPDATE orderStatusHistory SET customerPhone = ${data.phone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
-              // Atualizar orderLoginData.customerPhone tambÃ©m
+              // Atualizar orderLoginData.customerPhone tambÃƒÂ©m
               await db.execute(sql`UPDATE orderLoginData SET customerPhone = ${data.phone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
-              // Atualizar orderFiles.customerPhone tambÃ©m
+              // Atualizar orderFiles.customerPhone tambÃƒÂ©m
               await db.execute(sql`UPDATE orderFiles SET customerPhone = ${data.phone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
               // Atualizar customerPasswordSessions.phone para que o cliente continue logado com o novo telefone
               try {
                 await db.execute(sql`UPDATE customerPasswordSessions SET phone = ${data.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
               } catch {}
-              // Atualizar customerPasswords.phone tambÃ©m
+              // Atualizar customerPasswords.phone tambÃƒÂ©m
               try {
                 await db.execute(sql`UPDATE customerPasswords SET phone = ${data.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
               } catch {}
-              // Atualizar customerLoginHistory.phone tambÃ©m
+              // Atualizar customerLoginHistory.phone tambÃƒÂ©m
               try {
                 await db.execute(sql`UPDATE customerLoginHistory SET phone = ${data.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
               } catch {}
@@ -2013,7 +1993,7 @@ export const appRouter = router({
         // Buscar o cliente
         const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, input.id)).limit(1);
         if (!customer) return { success: false };
-        const reason = input.reason || 'ExcluÃ­do junto com o cliente';
+        const reason = input.reason || 'ExcluÃƒÂ­do junto com o cliente';
         // Ocultar todos os pedidos ativos deste cliente (inserir na hiddenSubOrders)
         await db.execute(drizzleSql`
           INSERT IGNORE INTO hiddenSubOrders (registrationId, subOrderIndex, deletedReason, customerPhone)
@@ -2028,18 +2008,18 @@ export const appRouter = router({
         // Agora excluir o cliente (soft delete)
         await db.update(customersTable).set({
           deletedAt: new Date(),
-          deletedReason: input.reason || 'ExcluÃ­do pelo administrador',
+          deletedReason: input.reason || 'ExcluÃƒÂ­do pelo administrador',
         }).where(eq(customersTable.id, input.id));
         return { success: true };
       }),
 
-    // Lixeira: listar clientes excluÃ­dos
+    // Lixeira: listar clientes excluÃƒÂ­dos
     listDeleted: adminProcedure
       .query(async () => {
         return await listDeletedCustomers();
       }),
 
-    // Lixeira: restaurar cliente excluÃ­do
+    // Lixeira: restaurar cliente excluÃƒÂ­do
     restore: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
@@ -2072,7 +2052,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Endpoint pÃºblico: retorna desconto do revendedor para o cliente logado (por telefone)
+    // Endpoint pÃƒÂºblico: retorna desconto do revendedor para o cliente logado (por telefone)
     getResellerDiscount: publicProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
@@ -2109,12 +2089,12 @@ export const appRouter = router({
         const ext = 'jpg';
         const fileKey = `profile-photos/${input.phone}-${Date.now()}.${ext}`;
         const { url } = await storagePut(fileKey, Buffer.from(input.imageBase64, 'base64'), mime);
-        // Salvar a URL direta do CloudFront (pÃºblica, nÃ£o expira)
+        // Salvar a URL direta do CloudFront (pÃƒÂºblica, nÃƒÂ£o expira)
         const customer = await getCustomerByPhone(input.phone);
         if (customer) {
           await updateCustomer(customer.id, { profilePhotoUrl: url });
         }
-        // NotificaÃ§Ã£o: inÃ­cio do cadastro (telefone + foto)
+        // NotificaÃƒÂ§ÃƒÂ£o: inÃƒÂ­cio do cadastro (telefone + foto)
         // IMPORTANTE: enviar o e-mail em segundo plano (sem await) para NAO bloquear
         // nem falhar o upload da foto caso o Zoho esteja lento/indisponivel.
         void (async () => {
@@ -2130,7 +2110,7 @@ export const appRouter = router({
           await transporter.sendMail({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: emailTo,
-            subject: `ðŸ“¸ Novo cliente iniciou cadastro â€” ${input.phone}`,
+            subject: `Ã°Å¸â€œÂ¸ Novo cliente iniciou cadastro Ã¢â‚¬â€ ${input.phone}`,
             html: emailInicioCadastroAdmin({
               ...emailBranding,
               phone: input.phone,
@@ -2178,7 +2158,7 @@ export const appRouter = router({
         const db = await (await import('./db')).getDb();
         if (!db) return { success: false };
         const phone = input.phone.replace(/\D/g, '');
-        // Remover permissÃµes antigas e inserir as novas
+        // Remover permissÃƒÂµes antigas e inserir as novas
         await db.execute(sql`DELETE FROM customerProductAccess WHERE phone = ${phone}`);
         for (const productId of input.productIds) {
           await db.execute(sql`INSERT INTO customerProductAccess (phone, productId) VALUES (${phone}, ${productId})`);
@@ -2198,7 +2178,7 @@ export const appRouter = router({
         return { productIds: ids };
       }),
 
-    // PÃºblico: cliente obtÃ©m quais produtos pode acessar ([] = sem restriÃ§Ã£o = vÃª tudo)
+    // PÃƒÂºblico: cliente obtÃƒÂ©m quais produtos pode acessar ([] = sem restriÃƒÂ§ÃƒÂ£o = vÃƒÂª tudo)
     getAllowedProducts: publicProcedure
       .input(z.object({ phone: z.string().min(1) }))
       .query(async ({ input }) => {
@@ -2210,7 +2190,7 @@ export const appRouter = router({
         return { productIds: ids, restricted: ids.length > 0 };
       }),
 
-    // PÃºblico: cliente atualiza indicaÃ§Ã£o apÃ³s o cadastro (step separado)
+    // PÃƒÂºblico: cliente atualiza indicaÃƒÂ§ÃƒÂ£o apÃƒÂ³s o cadastro (step separado)
     updateReferral: publicProcedure
       .input(z.object({
         phone: z.string().min(1),
@@ -2222,18 +2202,18 @@ export const appRouter = router({
         const blockResult = await checkPhoneBlockedAndBlockIp(input.phone, clientIp, 'atualizar_indicacao');
         if (blockResult.blocked) return { success: false, message: 'Acesso bloqueado' };
         const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
-        if (!customer) return { success: false, message: 'Cliente nÃ£o encontrado' };
-        // Validar: nÃ£o pode indicar a si mesmo
+        if (!customer) return { success: false, message: 'Cliente nÃƒÂ£o encontrado' };
+        // Validar: nÃƒÂ£o pode indicar a si mesmo
         if (input.referredByPhone) {
           const cleanSelf = input.phone.replace(/\D/g, '');
           const cleanRef = input.referredByPhone.replace(/\D/g, '');
           if (cleanSelf === cleanRef) {
-            return { success: false, message: 'VocÃª nÃ£o pode indicar a si mesmo' };
+            return { success: false, message: 'VocÃƒÂª nÃƒÂ£o pode indicar a si mesmo' };
           }
           // Validar: o telefone do indicador deve estar cadastrado no banco
           const referrer = await getCustomerByPhone(cleanRef);
           if (!referrer) {
-            return { success: false, message: 'Telefone do indicador nÃ£o encontrado no cadastro. Verifique o nÃºmero informado.' };
+            return { success: false, message: 'Telefone do indicador nÃƒÂ£o encontrado no cadastro. Verifique o nÃƒÂºmero informado.' };
           }
         }
         // Buscar o nome real do indicador pelo telefone (evita salvar texto digitado pelo cliente)
@@ -2251,7 +2231,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // PÃºblico: cliente visualiza seus prÃ³prios dados (somente leitura)
+    // PÃƒÂºblico: cliente visualiza seus prÃƒÂ³prios dados (somente leitura)
     getMyProfile: publicProcedure
       .input(z.object({ phone: z.string().min(1) }))
       .query(async ({ input, ctx }) => {
@@ -2272,7 +2252,7 @@ export const appRouter = router({
         };
       }),
 
-    // Registrar aviso de opÃ§Ã£o bloqueante selecionada pelo cliente
+    // Registrar aviso de opÃƒÂ§ÃƒÂ£o bloqueante selecionada pelo cliente
     addBlockingNote: publicProcedure
       .input(z.object({
         phone: z.string(),
@@ -2284,7 +2264,7 @@ export const appRouter = router({
         const customer = await getCustomerByPhone(phone);
         if (!customer) return { success: false };
         const timestamp = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-        const newNote = `[${timestamp}] âš ï¸ Recusou: "${input.question}" â†’ selecionou "${input.answer}"\n`;
+        const newNote = `[${timestamp}] Ã¢Å¡Â Ã¯Â¸Â Recusou: "${input.question}" Ã¢â€ â€™ selecionou "${input.answer}"\n`;
         const existingNotes = (customer as unknown as { adminNotes?: string | null }).adminNotes || '';
         await updateCustomer(customer.id, { adminNotes: existingNotes + newNote });
         return { success: true };
@@ -2307,11 +2287,11 @@ export const appRouter = router({
         fileName: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        // Detectar extensÃ£o e MIME type do arquivo
+        // Detectar extensÃƒÂ£o e MIME type do arquivo
         let mime = input.mimeType || 'application/octet-stream';
         let ext = 'bin';
         
-        // Tentar extrair extensÃ£o do fileName
+        // Tentar extrair extensÃƒÂ£o do fileName
         if (input.fileName) {
           const parts = input.fileName.split('.');
           if (parts.length > 1) {
@@ -2319,7 +2299,7 @@ export const appRouter = router({
           }
         }
         
-        // Se nÃ£o conseguiu extensÃ£o, tentar do MIME type
+        // Se nÃƒÂ£o conseguiu extensÃƒÂ£o, tentar do MIME type
         if (ext === 'bin' && mime) {
           const mimeMap: Record<string, string> = {
             'image/jpeg': 'jpg',
@@ -2363,23 +2343,23 @@ export const appRouter = router({
     // Admin: criar cadastro manual de cliente
     adminCreate: adminProcedure
       .input(z.object({
-        name: z.string().min(2, 'Nome obrigatÃ³rio'),
-        phone: z.string().regex(/^\d{10,11}$/, 'Telefone invÃ¡lido (somente dÃ­gitos, 10 ou 11)'),
-        email: z.string().email('Email invÃ¡lido').optional().or(z.literal('')),
+        name: z.string().min(2, 'Nome obrigatÃƒÂ³rio'),
+        phone: z.string().regex(/^\d{10,11}$/, 'Telefone invÃƒÂ¡lido (somente dÃƒÂ­gitos, 10 ou 11)'),
+        email: z.string().email('Email invÃƒÂ¡lido').optional().or(z.literal('')),
         cpf: z.string().optional(),
         city: z.string().optional(),
         uf: z.string().length(2).optional().or(z.literal('')),
       }))
       .mutation(async ({ input }) => {
-        // Verificar se telefone jÃ¡ existe
+        // Verificar se telefone jÃƒÂ¡ existe
         const existing = await getCustomerByPhone(input.phone);
-        if (existing) return { success: false, message: 'Telefone jÃ¡ cadastrado no sistema.' };
+        if (existing) return { success: false, message: 'Telefone jÃƒÂ¡ cadastrado no sistema.' };
         // Verificar CPF duplicado se informado
         if (input.cpf && input.cpf.trim()) {
           const cleanCpf = input.cpf.replace(/\D/g, '');
           if (cleanCpf.length === 11) {
             const existingByCpf = await getCustomerByCpf(cleanCpf);
-            if (existingByCpf) return { success: false, message: `CPF jÃ¡ cadastrado. Telefone associado: ${existingByCpf.phone}` };
+            if (existingByCpf) return { success: false, message: `CPF jÃƒÂ¡ cadastrado. Telefone associado: ${existingByCpf.phone}` };
           }
         }
         const customer = await createCustomer({
@@ -2418,7 +2398,7 @@ export const appRouter = router({
         return raffle;
       }),
 
-    // Admin: atualizar sorteio (tÃ­tulo, descriÃ§Ã£o, status)
+    // Admin: atualizar sorteio (tÃƒÂ­tulo, descriÃƒÂ§ÃƒÂ£o, status)
     update: adminProcedure
       .input(z.object({ id: z.number(), title: z.string().optional(), description: z.string().optional(), status: z.enum(["open", "closed", "drawn"]).optional(), maxNumbersPerPerson: z.number().min(1).max(10).optional() }))
       .mutation(async ({ input }) => {
@@ -2443,7 +2423,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: liberar nÃºmero nÃ£o pago (remover entrada)
+    // Admin: liberar nÃƒÂºmero nÃƒÂ£o pago (remover entrada)
     removeEntry: adminProcedure
       .input(z.object({ entryId: z.number(), raffleId: z.number() }))
       .mutation(async ({ input }) => {
@@ -2451,7 +2431,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: realizar sorteio (sortear um nÃºmero entre os participantes)
+    // Admin: realizar sorteio (sortear um nÃƒÂºmero entre os participantes)
     draw: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
@@ -2471,7 +2451,7 @@ export const appRouter = router({
         return { success: true, winner: { number: winner.number, name: winner.customerName, phone: winner.customerPhone } };
       }),
 
-    // PÃºblico: obter sorteio ativo (para cliente escolher nÃºmero)
+    // PÃƒÂºblico: obter sorteio ativo (para cliente escolher nÃƒÂºmero)
     active: publicProcedure.query(async () => {
       const raffle = await getActiveRaffle();
       if (!raffle) return null;
@@ -2480,35 +2460,35 @@ export const appRouter = router({
       return { id: raffle.id, title: raffle.title, description: raffle.description, takenNumbers, maxNumbersPerPerson: raffle.maxNumbersPerPerson ?? 1 };
     }),
 
-    // PÃºblico: obter resultado do Ãºltimo sorteio realizado
+    // PÃƒÂºblico: obter resultado do ÃƒÂºltimo sorteio realizado
     result: publicProcedure.query(async () => {
       const raffle = await getLatestDrawnRaffle();
       if (!raffle) return null;
       return { id: raffle.id, title: raffle.title, winnerNumber: raffle.winnerNumber, winnerName: raffle.winnerName, winnerPhone: raffle.winnerPhone, winnerProfilePhotoUrl: raffle.winnerProfilePhotoUrl, drawnAt: raffle.drawnAt };
     }),
 
-    // PÃºblico: escolher um nÃºmero no sorteio ativo
+    // PÃƒÂºblico: escolher um nÃƒÂºmero no sorteio ativo
     chooseNumber: publicProcedure
       .input(z.object({ raffleId: z.number(), number: z.number().min(1).max(100), customerName: z.string().min(1), customerPhone: z.string().min(10) }))
       .mutation(async ({ input }) => {
         const raffle = await getRaffleById(input.raffleId);
-        if (!raffle || raffle.status !== "open") return { success: false, error: "Sorteio nÃ£o estÃ¡ aberto" };
-        // Verificar limite de nÃºmeros por pessoa
+        if (!raffle || raffle.status !== "open") return { success: false, error: "Sorteio nÃƒÂ£o estÃƒÂ¡ aberto" };
+        // Verificar limite de nÃƒÂºmeros por pessoa
         const entries = await getRaffleEntries(input.raffleId);
         const myEntries = entries.filter((e: any) => e.customerPhone === input.customerPhone);
         const maxAllowed = raffle.maxNumbersPerPerson ?? 1;
         if (myEntries.length >= maxAllowed) {
           if (maxAllowed === 1) {
-            return { success: false, error: "VocÃª jÃ¡ escolheu o nÃºmero " + myEntries[0].number + ". NÃ£o Ã© possÃ­vel alterar." };
+            return { success: false, error: "VocÃƒÂª jÃƒÂ¡ escolheu o nÃƒÂºmero " + myEntries[0].number + ". NÃƒÂ£o ÃƒÂ© possÃƒÂ­vel alterar." };
           }
-          return { success: false, error: `VocÃª jÃ¡ escolheu ${myEntries.length} nÃºmero(s). Limite mÃ¡ximo: ${maxAllowed}.` };
+          return { success: false, error: `VocÃƒÂª jÃƒÂ¡ escolheu ${myEntries.length} nÃƒÂºmero(s). Limite mÃƒÂ¡ximo: ${maxAllowed}.` };
         }
         const taken = await checkNumberTaken(input.raffleId, input.number);
-        if (taken) return { success: false, error: "NÃºmero jÃ¡ escolhido por outro participante" };
+        if (taken) return { success: false, error: "NÃƒÂºmero jÃƒÂ¡ escolhido por outro participante" };
         await createRaffleEntry({ raffleId: input.raffleId, number: input.number, customerName: input.customerName, customerPhone: input.customerPhone });
         // Notificar admin por e-mail
         const phoneFormatted = input.customerPhone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-        const raffleNotifTitle = `ðŸŽ« Novo participante no sorteio!`;
+        const raffleNotifTitle = `Ã°Å¸Å½Â« Novo participante no sorteio!`;
         try {
           const transporterRaffle = nodemailer.createTransport({
             host: 'smtp.zoho.com',
@@ -2520,13 +2500,13 @@ export const appRouter = router({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: await getSetting('contact_email') || 'h2@h2colombiano.com',
             subject: raffleNotifTitle,
-            html: `<h2>${raffleNotifTitle}</h2><p>Nome: <strong>${input.customerName}</strong></p><p>NÃºmero: <strong>${input.number}</strong></p><p>Telefone: ${phoneFormatted}</p><p>Sorteio: ${raffle.title}</p>`,
+            html: `<h2>${raffleNotifTitle}</h2><p>Nome: <strong>${input.customerName}</strong></p><p>NÃƒÂºmero: <strong>${input.number}</strong></p><p>Telefone: ${phoneFormatted}</p><p>Sorteio: ${raffle.title}</p>`,
           });
         } catch (e) { console.warn('[RaffleEmail] Erro ao enviar e-mail:', e); }
         return { success: true };
       }),
 
-    // PÃºblico: verificar se telefone jÃ¡ escolheu nÃºmero
+    // PÃƒÂºblico: verificar se telefone jÃƒÂ¡ escolheu nÃƒÂºmero
     myEntry: publicProcedure
       .input(z.object({ raffleId: z.number(), phone: z.string().min(10) }))
       .query(async ({ input }) => {
@@ -2536,7 +2516,7 @@ export const appRouter = router({
         return { hasEntry: true, number: myEntries[0].number, numbers: myEntries.map((e: any) => e.number), count: myEntries.length };
       }),
 
-    // PÃºblico: listar nÃºmeros jÃ¡ escolhidos (para exibir no grid)
+    // PÃƒÂºblico: listar nÃƒÂºmeros jÃƒÂ¡ escolhidos (para exibir no grid)
     entries: publicProcedure
       .input(z.object({ raffleId: z.number() }))
       .query(async ({ input }) => {
@@ -2546,29 +2526,29 @@ export const appRouter = router({
 
   // === AUTENTICACAO ADMIN INDEPENDENTE ===
   adminAuth: router({
-    // Setup inicial: cria admin se nÃ£o existir nenhum (apenas se tabela estiver vazia)
+    // Setup inicial: cria admin se nÃƒÂ£o existir nenhum (apenas se tabela estiver vazia)
     setup: publicProcedure
       .input(z.object({ username: z.string().min(1), password: z.string().min(6) }))
       .mutation(async ({ input }) => {
         const { adminCredentials: adminCredsTable } = await import('../drizzle/schema');
         const db = await (await import('./db')).getDb();
-        if (!db) return { success: false, error: 'DB indisponÃ­vel' };
+        if (!db) return { success: false, error: 'DB indisponÃƒÂ­vel' };
         const existing = await getAdminCredential(input.username);
-        if (existing) return { success: false, error: 'Admin jÃ¡ existe' };
+        if (existing) return { success: false, error: 'Admin jÃƒÂ¡ existe' };
         const hash = await bcrypt.hash(input.password, 12);
         await db.insert(adminCredsTable).values({ username: input.username, passwordHash: hash });
         return { success: true };
       }),
-    // Login: valida username+password e seta cookie de sessÃ£o admin
+    // Login: valida username+password e seta cookie de sessÃƒÂ£o admin
     login: publicProcedure
       .input(z.object({ username: z.string().min(1), password: z.string().min(1) }))
       .mutation(async ({ input, ctx }) => {
         // Obter IP real do cliente
         const ip = (ctx.req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || ctx.req.socket.remoteAddress || 'unknown';
-        // Verificar se IP estÃ¡ bloqueado
+        // Verificar se IP estÃƒÂ¡ bloqueado
         const blocked = await isAdminLoginBlocked(ip);
         if (blocked) {
-          return { success: false, error: 'IP_BLOCKED', message: 'Acesso bloqueado apÃ³s 3 tentativas. Use a contra-senha para desbloquear.' };
+          return { success: false, error: 'IP_BLOCKED', message: 'Acesso bloqueado apÃƒÂ³s 3 tentativas. Use a contra-senha para desbloquear.' };
         }
         const cred = await getAdminCredential(input.username);
         const valid = cred ? await bcrypt.compare(input.password, cred.passwordHash) : false;
@@ -2576,9 +2556,9 @@ export const appRouter = router({
           const result = await recordAdminLoginAttempt(ip);
           const remaining = Math.max(0, 3 - result.attempts);
           if (result.blocked) {
-            return { success: false, error: 'IP_BLOCKED', message: 'Acesso bloqueado apÃ³s 3 tentativas. Use a contra-senha para desbloquear.' };
+            return { success: false, error: 'IP_BLOCKED', message: 'Acesso bloqueado apÃƒÂ³s 3 tentativas. Use a contra-senha para desbloquear.' };
           }
-          return { success: false, error: 'INVALID_CREDENTIALS', message: `UsuÃ¡rio ou senha incorretos. ${remaining} tentativa(s) restante(s).` };
+          return { success: false, error: 'INVALID_CREDENTIALS', message: `UsuÃƒÂ¡rio ou senha incorretos. ${remaining} tentativa(s) restante(s).` };
         }
         // Login bem-sucedido: zerar tentativas
         await resetAdminLoginAttempts(ip);
@@ -2602,9 +2582,9 @@ export const appRouter = router({
       .input(z.object({ counterPassword: z.string().min(1) }))
       .mutation(async ({ input, ctx }) => {
         const ip = (ctx.req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || ctx.req.socket.remoteAddress || 'unknown';
-        // Contra-senha armazenada como variÃ¡vel de ambiente ADMIN_COUNTER_PASSWORD
+        // Contra-senha armazenada como variÃƒÂ¡vel de ambiente ADMIN_COUNTER_PASSWORD
         const counterPwd = process.env.ADMIN_COUNTER_PASSWORD || '';
-        if (!counterPwd) return { success: false, error: 'Contra-senha nÃ£o configurada. Configure ADMIN_COUNTER_PASSWORD.' };
+        if (!counterPwd) return { success: false, error: 'Contra-senha nÃƒÂ£o configurada. Configure ADMIN_COUNTER_PASSWORD.' };
         if (input.counterPassword !== counterPwd) {
           return { success: false, error: 'Contra-senha incorreta.' };
         }
@@ -2612,13 +2592,13 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Solicitar desbloqueio via Manus (envia notificaÃ§Ã£o ao dono)
+    // Solicitar desbloqueio via Manus (envia notificaÃƒÂ§ÃƒÂ£o ao dono)
     requestUnlock: publicProcedure
       .input(z.object({ message: z.string().optional() }))
       .mutation(async ({ input, ctx }) => {
         const ip = (ctx.req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || ctx.req.socket.remoteAddress || 'unknown';
-        const title = 'ðŸ” SolicitaÃ§Ã£o de Desbloqueio Admin';
-        const content = `IP ${ip} estÃ¡ bloqueado e solicita desbloqueio.\n\nMensagem: ${input.message || 'Sem mensagem'}\n\nPara desbloquear, acesse o painel e use a opÃ§Ã£o de desbloqueio.`;
+        const title = 'Ã°Å¸â€Â SolicitaÃƒÂ§ÃƒÂ£o de Desbloqueio Admin';
+        const content = `IP ${ip} estÃƒÂ¡ bloqueado e solicita desbloqueio.\n\nMensagem: ${input.message || 'Sem mensagem'}\n\nPara desbloquear, acesse o painel e use a opÃƒÂ§ÃƒÂ£o de desbloqueio.`;
         try {
           const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
@@ -2636,7 +2616,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Desbloquear IP especÃ­fico (apenas admin autenticado)
+    // Desbloquear IP especÃƒÂ­fico (apenas admin autenticado)
     unblockIpAdmin: adminProcedure
       .input(z.object({ ip: z.string() }))
       .mutation(async ({ input }) => {
@@ -2657,7 +2637,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Check: verifica se cookie admin Ã© vÃ¡lido
+    // Check: verifica se cookie admin ÃƒÂ© vÃƒÂ¡lido
     check: publicProcedure
       .query(({ ctx }) => {
         const cookieHeader = ctx.req.headers.cookie || '';
@@ -2680,27 +2660,27 @@ export const appRouter = router({
         const cookieHeader = ctx.req.headers.cookie || '';
         const cookies = parseCookieHeader(cookieHeader);
         const token = cookies.admin_token;
-        if (!token) return { success: false, error: 'NÃ£o autenticado' };
+        if (!token) return { success: false, error: 'NÃƒÂ£o autenticado' };
         try {
           const secret = process.env.JWT_SECRET || 'admin-secret-fallback';
           const payload = jwt.verify(token, secret) as { sub: string; role: string };
-          if (payload.role !== 'admin') return { success: false, error: 'Sem permissÃ£o' };
+          if (payload.role !== 'admin') return { success: false, error: 'Sem permissÃƒÂ£o' };
           const cred = await getAdminCredential(payload.sub);
-          if (!cred) return { success: false, error: 'UsuÃ¡rio nÃ£o encontrado' };
+          if (!cred) return { success: false, error: 'UsuÃƒÂ¡rio nÃƒÂ£o encontrado' };
           const valid = await bcrypt.compare(input.currentPassword, cred.passwordHash);
           if (!valid) return { success: false, error: 'Senha atual incorreta' };
           const newHash = await bcrypt.hash(input.newPassword, 12);
           await updateAdminPassword(payload.sub, newHash);
           return { success: true };
         } catch {
-          return { success: false, error: 'Token invÃ¡lido' };
+          return { success: false, error: 'Token invÃƒÂ¡lido' };
         }
       }),
   }),
 
   // ========== STATUS DO PEDIDO ==========
   orderStatus: router({
-    // Buscar nome do cliente pelo telefone (para exibir na pÃ¡gina de acompanhamento)
+    // Buscar nome do cliente pelo telefone (para exibir na pÃƒÂ¡gina de acompanhamento)
     getClientName: publicProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input, ctx }) => {
@@ -2710,7 +2690,7 @@ export const appRouter = router({
         const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
         return { name: customer?.name || null };
       }),
-    // Admin: buscar nome do indicador pelo telefone (autocomplete no formulÃ¡rio)
+    // Admin: buscar nome do indicador pelo telefone (autocomplete no formulÃƒÂ¡rio)
     lookupReferrerByPhone: adminProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
@@ -2721,12 +2701,12 @@ export const appRouter = router({
         return { name: customer.name || null, found: true };
       }),
     // Admin: listar todos os pedidos com status mais recente
-    // Suporta mÃºltiplos pedidos no mesmo registrationId (separados por cada 'recebido')
+    // Suporta mÃƒÂºltiplos pedidos no mesmo registrationId (separados por cada 'recebido')
     listOrders: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) return [];
 
-      // Buscar todos os registrationIds com histÃ³rico
+      // Buscar todos os registrationIds com histÃƒÂ³rico
       const acpResult = await db.execute(sql`
         SELECT 
           acp.id,
@@ -2772,12 +2752,12 @@ export const appRouter = router({
       `);
       const acpRows = (acpResult as any)[0] as any[];
 
-      // ---- Pedidos Ã“RFÃƒOS ----
-      // Alguns pedidos tÃªm histÃ³rico (orderStatusHistory) cujo registrationId NÃƒO existe em
-      // accessCodePhones (dados importados/migrados de versÃµes anteriores). Sem isto eles
-      // ficam invisÃ­veis no admin, apesar de o cliente enxergÃ¡-los em "Acompanhar Pedido"
-      // (que busca por telefone). Aqui reconstruÃ­mos uma linha virtual de acp para cada
-      // registrationId Ã³rfÃ£o, ligando ao cliente pelo telefone quando possÃ­vel.
+      // ---- Pedidos Ãƒâ€œRFÃƒÆ’OS ----
+      // Alguns pedidos tÃƒÂªm histÃƒÂ³rico (orderStatusHistory) cujo registrationId NÃƒÆ’O existe em
+      // accessCodePhones (dados importados/migrados de versÃƒÂµes anteriores). Sem isto eles
+      // ficam invisÃƒÂ­veis no admin, apesar de o cliente enxergÃƒÂ¡-los em "Acompanhar Pedido"
+      // (que busca por telefone). Aqui reconstruÃƒÂ­mos uma linha virtual de acp para cada
+      // registrationId ÃƒÂ³rfÃƒÂ£o, ligando ao cliente pelo telefone quando possÃƒÂ­vel.
       const knownAcpIds = new Set<number>((acpRows || []).map((r: any) => Number(r.id)));
       let orphanRows: any[] = [];
       try {
@@ -2820,18 +2800,18 @@ export const appRouter = router({
           GROUP BY osh.registrationId, osh.customerPhone, c.id, c.email, c.name, c.city, c.uf, c.referredBy, c.referredByPhone, c.profilePhotoUrl, c.customerNumber
         `);
         orphanRows = ((orphanResult as any)[0] as any[]) || [];
-        // SeguranÃ§a extra: nunca duplicar um id jÃ¡ presente em acpRows
+        // SeguranÃƒÂ§a extra: nunca duplicar um id jÃƒÂ¡ presente em acpRows
         orphanRows = orphanRows.filter((r: any) => !knownAcpIds.has(Number(r.id)));
-      } catch (e) { console.error('[listOrders] Erro ao buscar pedidos Ã³rfÃ£os:', e); }
+      } catch (e) { console.error('[listOrders] Erro ao buscar pedidos ÃƒÂ³rfÃƒÂ£os:', e); }
 
       const allAcpRows = [...(acpRows || []), ...orphanRows];
       if (!allAcpRows || allAcpRows.length === 0) return [];
 
-      // Para cada acp, buscar TODO o histÃ³rico de status para dividir sub-pedidos por 'recebido'
+      // Para cada acp, buscar TODO o histÃƒÂ³rico de status para dividir sub-pedidos por 'recebido'
       const ids = allAcpRows.map((r: any) => r.id);
       const idsList = ids.join(',');
 
-      // Buscar histÃ³rico completo de todos os registrationIds
+      // Buscar histÃƒÂ³rico completo de todos os registrationIds
       const histResult = await db.execute(
         sql.raw(`SELECT id, registrationId, status, serviceName, serviceOption, pricePaid, answers, orderNumber, deliveryEstimate, isUrgent, commissionPaid, UNIX_TIMESTAMP(createdAt) * 1000 AS createdAtMs, note, UNIX_TIMESTAMP(deliveredNotifiedAt) * 1000 AS deliveredNotifiedAtMs
           FROM orderStatusHistory
@@ -2847,7 +2827,7 @@ export const appRouter = router({
       const hiddenRows = (hiddenResult as any)[0] as Array<{ registrationId: number; subOrderIndex: number }>;
       const hiddenSet = new Set(hiddenRows.map((h: any) => `${h.registrationId}_${h.subOrderIndex}`));
 
-      // Agrupar histÃ³rico por registrationId
+      // Agrupar histÃƒÂ³rico por registrationId
       const histByRegId = new Map<number, any[]>();
       for (const r of histRows) {
         const regId = Number(r.registrationId);
@@ -2855,7 +2835,7 @@ export const appRouter = router({
         histByRegId.get(regId)!.push(r);
       }
 
-      // Buscar o status inicial dinÃ¢mico do banco (sortOrder mais baixo)
+      // Buscar o status inicial dinÃƒÂ¢mico do banco (sortOrder mais baixo)
       let initialStatus = 'recebido';
       try {
         const statusTypesResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
@@ -2866,10 +2846,10 @@ export const appRouter = router({
       } catch (e) { /* usa 'recebido' como fallback */ }
 
       // Para cada registrationId, dividir em sub-pedidos pelo marcador do status inicial
-      // (mesma lÃ³gica do OrderTracking.tsx)
+      // (mesma lÃƒÂ³gica do OrderTracking.tsx)
       function splitIntoSubOrders(history: any[]): any[][] {
         if (history.length === 0) return [];
-        // history jÃ¡ estÃ¡ em ASC
+        // history jÃƒÂ¡ estÃƒÂ¡ em ASC
         const result: any[][] = [];
         let current: any[] = [];
         for (const entry of history) {
@@ -2881,7 +2861,7 @@ export const appRouter = router({
           }
         }
         if (current.length > 0) result.push(current);
-        // Reverter para que o sub-pedido mais recente seja o primeiro (Ã­ndice 0)
+        // Reverter para que o sub-pedido mais recente seja o primeiro (ÃƒÂ­ndice 0)
         return result.reverse();
       }
 
@@ -2894,7 +2874,7 @@ export const appRouter = router({
         const history = histByRegId.get(Number(row.id)) || [];
         const subOrders = splitIntoSubOrders(history);
         if (subOrders.length === 0) {
-          // Sem histÃ³rico, criar entrada vazia
+          // Sem histÃƒÂ³rico, criar entrada vazia
           finalOrders.push({
             id: row.id,
             codeId: row.codeId,
@@ -2938,28 +2918,28 @@ export const appRouter = router({
           });
           continue;
         }
-        // PrÃ©-calcular serviceName herdado: se um sub-pedido nÃ£o tem serviceName,
+        // PrÃƒÂ©-calcular serviceName herdado: se um sub-pedido nÃƒÂ£o tem serviceName,
         // herda do sub-pedido anterior do mesmo registrationId
-        // subOrders estÃ¡ em ordem reversa (mais recente primeiro), entÃ£o iterar de trÃ¡s para frente
+        // subOrders estÃƒÂ¡ em ordem reversa (mais recente primeiro), entÃƒÂ£o iterar de trÃƒÂ¡s para frente
         const subOrdersAsc = [...subOrders].reverse(); // mais antigo primeiro
         let lastKnownServiceName: string | null = null;
         let lastKnownServiceOption: string | null = null;
         const resolvedServiceNames: Array<{ serviceName: string | null; serviceOption: string | null }> = [];
         for (const subHistory of subOrdersAsc) {
-          // Procurar serviceName em qualquer entrada do sub-pedido (nÃ£o sÃ³ a primeira)
+          // Procurar serviceName em qualquer entrada do sub-pedido (nÃƒÂ£o sÃƒÂ³ a primeira)
           const anyWithService = subHistory.find((h: any) => normalizeNull(h.serviceName) !== null);
           const sn: string | null = anyWithService ? normalizeNull(anyWithService.serviceName) : lastKnownServiceName;
           const so: string | null = anyWithService ? normalizeNull(anyWithService.serviceOption) : lastKnownServiceOption;
           resolvedServiceNames.push({ serviceName: sn, serviceOption: so });
           if (sn) { lastKnownServiceName = sn; lastKnownServiceOption = so; }
         }
-        // Reverter para ordem DESC (mais recente primeiro = Ã­ndice 0)
+        // Reverter para ordem DESC (mais recente primeiro = ÃƒÂ­ndice 0)
         resolvedServiceNames.reverse();
 
         subOrders.forEach((subHistory, subIdx) => {
           // Pular sub-pedidos ocultos (soft delete)
           if (hiddenSet.has(`${row.id}_${subIdx}`)) return;
-          // subHistory estÃ¡ em ASC (mais antigo primeiro)
+          // subHistory estÃƒÂ¡ em ASC (mais antigo primeiro)
           const first = subHistory[0];
           const last = subHistory[subHistory.length - 1];
           const isUrgent = subHistory.some((h: any) => h.isUrgent) ? 1 : 0;
@@ -3117,7 +3097,7 @@ export const appRouter = router({
         return { success: true, fileUrl: url };
       }),
 
-    // PÃºblico: buscar arquivos enviados pelo CLIENTE (nÃ£o-admin) para prÃ©-preencher ao retomar cadastro
+    // PÃƒÂºblico: buscar arquivos enviados pelo CLIENTE (nÃƒÂ£o-admin) para prÃƒÂ©-preencher ao retomar cadastro
     getClientFiles: publicProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
@@ -3136,7 +3116,7 @@ export const appRouter = router({
           }));
       }),
 
-    // PÃºblico: buscar documentos enviados pelo admin para o cliente
+    // PÃƒÂºblico: buscar documentos enviados pelo admin para o cliente
     getAdminFilesForClient: publicProcedure
       .input(z.object({ phone: z.string(), registrationId: z.number().int().optional() }))
       .query(async ({ input }) => {
@@ -3144,7 +3124,7 @@ export const appRouter = router({
         if (!db) return [];
         const files = await getOrderFilesByPhone(input.phone);
         const adminFiles = files.filter(f => Number(f.fromAdmin) === 1);
-        // Se registrationId fornecido, filtrar apenas arquivos deste pedido especÃ­fico
+        // Se registrationId fornecido, filtrar apenas arquivos deste pedido especÃƒÂ­fico
         if (input.registrationId && input.registrationId > 0) {
           return adminFiles.filter(f => f.registrationId === input.registrationId);
         }
@@ -3174,7 +3154,7 @@ export const appRouter = router({
         const { orderFiles: orderFilesTable } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
         const [source] = await db.select().from(orderFilesTable).where(eq(orderFilesTable.id, input.sourceFileId)).limit(1);
-        if (!source) throw new Error('Arquivo de origem nÃ£o encontrado');
+        if (!source) throw new Error('Arquivo de origem nÃƒÂ£o encontrado');
         await addOrderFile({
           registrationId: input.targetRegistrationId,
           customerPhone: input.targetCustomerPhone,
@@ -3187,7 +3167,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: salvar URL de vÃ­deo externo (YouTube, Google Drive, Vimeo, etc.) sem upload
+    // Admin: salvar URL de vÃƒÂ­deo externo (YouTube, Google Drive, Vimeo, etc.) sem upload
     addVideoUrl: adminProcedure
       .input(z.object({
         registrationId: z.number(),
@@ -3219,12 +3199,12 @@ export const appRouter = router({
         note: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        // NUNCA inserir 'recebido' via update do admin â€” esse status Ã© exclusivo do sistema
+        // NUNCA inserir 'recebido' via update do admin Ã¢â‚¬â€ esse status ÃƒÂ© exclusivo do sistema
         // (inserir 'recebido' cria um novo sub-pedido duplicado)
         if (input.status === 'recebido') {
-          return { success: false, error: 'Status recebido nÃ£o pode ser definido manualmente' };
+          return { success: false, error: 'Status recebido nÃƒÂ£o pode ser definido manualmente' };
         }
-        // Salvar no histÃ³rico
+        // Salvar no histÃƒÂ³rico
         await addOrderStatus({
           registrationId: input.registrationId,
           customerPhone: input.customerPhone,
@@ -3236,7 +3216,7 @@ export const appRouter = router({
         const statusLabel = statusInfo.label;
 
         // Enviar email ao admin quando status muda
-        const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
+        const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
         if (emailTo && emailTo.trim() !== '') {
           try {
             const transporter = nodemailer.createTransport({
@@ -3261,13 +3241,13 @@ export const appRouter = router({
               subject: `[ADMIN] Status Atualizado - ${statusLabel}`,
               html: adminEmailContent,
             });
-            console.log('[Email] NotificaÃ§Ã£o de status enviada ao admin:', emailTo);
+            console.log('[Email] NotificaÃƒÂ§ÃƒÂ£o de status enviada ao admin:', emailTo);
           } catch (adminEmailError) {
-            console.error('[Email] Erro ao enviar notificaÃ§Ã£o ao admin:', adminEmailError);
+            console.error('[Email] Erro ao enviar notificaÃƒÂ§ÃƒÂ£o ao admin:', adminEmailError);
           }
         }
 
-        // Enviar email ao cliente se tiver email e nÃ£o estiver bloqueado
+        // Enviar email ao cliente se tiver email e nÃƒÂ£o estiver bloqueado
         const customerForBlock = await getCustomerByPhone(input.customerPhone);
         const isCustomerBlocked = customerForBlock && (customerForBlock as any).blocked === 1;
         if (input.customerEmail && !isCustomerBlocked) {
@@ -3279,7 +3259,7 @@ export const appRouter = router({
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const emailBranding = await getEmailBranding();
-            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">ðŸ“‹ ObservaÃ§Ã£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
+            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Ã°Å¸â€œâ€¹ ObservaÃƒÂ§ÃƒÂ£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml = statusInfo.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo.description}</p></div>` : '';
             // Buscar PIN gerado para o cliente (tabela customerPins)
             let phonePin: string = input.customerPhone ? input.customerPhone.replace(/\D/g, '').slice(-4) : '????';
@@ -3297,7 +3277,7 @@ export const appRouter = router({
             await transporter.sendMail({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.customerEmail,
-              subject: `${statusLabel} â€” ${emailBranding.siteTitle}`,
+              subject: `${statusLabel} Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
               html: emailStatusCliente({
                 ...emailBranding,
                 customerName: input.customerName || undefined,
@@ -3316,7 +3296,7 @@ export const appRouter = router({
           return { success: true };
       }),
 
-    // Admin: atualizar a observaÃ§Ã£o (note) do status mais recente
+    // Admin: atualizar a observaÃƒÂ§ÃƒÂ£o (note) do status mais recente
     updateNote: adminProcedure
       .input(z.object({
         registrationId: z.number(),
@@ -3337,7 +3317,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: SUBSTITUIR o Ãºltimo status de um sub-pedido (sem criar novo registro)
+    // Admin: SUBSTITUIR o ÃƒÂºltimo status de um sub-pedido (sem criar novo registro)
     updateStatus: adminProcedure
       .input(z.object({
         registrationId: z.number(),
@@ -3357,9 +3337,9 @@ export const appRouter = router({
         skipEmail: z.boolean().optional().default(false),
       }))
       .mutation(async ({ input }) => {
-        const smtpPass = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
+        const smtpPass = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || process.env.RESEND_API_KEY || '';
         if (input.status === 'recebido') {
-          return { success: false, error: 'Status recebido nÃ£o pode ser definido manualmente' };
+          return { success: false, error: 'Status recebido nÃƒÂ£o pode ser definido manualmente' };
         }
         const result = await updateLastOrderStatus({
           registrationId: input.registrationId,
@@ -3369,7 +3349,7 @@ export const appRouter = router({
         });
         if (!result.success) return result;
 
-        // Ao marcar como entregue, remover urgÃªncia obrigatoriamente
+        // Ao marcar como entregue, remover urgÃƒÂªncia obrigatoriamente
         const FINAL_STATUSES = ['entregue', 'pedido_entregue', 'cancelado'];
         if (FINAL_STATUSES.includes(input.status)) {
           try {
@@ -3386,8 +3366,8 @@ export const appRouter = router({
         const statusLabel = statusInfo.label;
 
         // Enviar email ao admin quando status muda
-        const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
-        if (emailTo && emailTo.trim() !== '' && smtpPass) {
+        const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
+        if (emailTo && emailTo.trim() !== '') {
           try {
             const transporterAdmin2 = nodemailer.createTransport({
               host: 'smtp.zoho.com',
@@ -3414,18 +3394,18 @@ export const appRouter = router({
               subject: `[ADMIN] Status Atualizado - ${statusLabel} - ${input.customerName || 'Pedido #' + input.orderNumber}`,
               html: adminEmailContent,
             });
-            console.log('[Email] NotificaÃ§Ã£o de status enviada ao admin:', emailTo);
+            console.log('[Email] NotificaÃƒÂ§ÃƒÂ£o de status enviada ao admin:', emailTo);
           } catch (adminEmailError) {
-            console.error('[Email] Erro ao enviar notificaÃ§Ã£o ao admin:', adminEmailError);
+            console.error('[Email] Erro ao enviar notificaÃƒÂ§ÃƒÂ£o ao admin:', adminEmailError);
           }
         } else if (!smtpPass) {
-          console.warn('[Email] SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente: notificaÃ§Ã£o por e-mail ignorada em updateStatus.');
+          console.warn('[Email] SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente: notificaÃƒÂ§ÃƒÂ£o por e-mail ignorada em updateStatus.');
         }
 
-        // Enviar email ao cliente se tiver email, nÃ£o for silencioso e nÃ£o estiver bloqueado
+        // Enviar email ao cliente se tiver email, nÃƒÂ£o for silencioso e nÃƒÂ£o estiver bloqueado
         const customerForBlock2 = await getCustomerByPhone(input.customerPhone);
         const isCustomerBlocked2 = customerForBlock2 && (customerForBlock2 as any).blocked === 1;
-        if (input.customerEmail && !input.skipEmail && !isCustomerBlocked2 && smtpPass) {
+        if (input.customerEmail && !input.skipEmail && !isCustomerBlocked2) {
           try {
             const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
@@ -3437,7 +3417,7 @@ export const appRouter = router({
             auth: { user: 'h2@h2colombiano.com', pass: smtpPass },
           });
             const emailBranding = await getEmailBranding();
-            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">ðŸ“‹ ObservaÃ§Ã£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
+            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Ã°Å¸â€œâ€¹ ObservaÃƒÂ§ÃƒÂ£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml = statusInfo.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo.description}</p></div>` : '';
             // Buscar PIN gerado para o cliente (tabela customerPins)
             let phonePin: string = input.customerPhone ? input.customerPhone.replace(/\D/g, '').slice(-4) : '????';
@@ -3467,14 +3447,14 @@ export const appRouter = router({
             // Bloco de dados do pedido
             const pedidoRows: string[] = [];
             if (input.customerNumber) pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Cadastro</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">*${input.customerNumber}</td></tr>`);
-            if (input.orderNumber) pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">NÂº Pedido</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">#${input.orderNumber}</td></tr>`);
-            const svcLabelU = [input.serviceName, input.serviceOption].filter(Boolean).join(' â€” ');
-            if (svcLabelU) pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">ServiÃ§o</td><td style="color:#fff;font-size:13px;padding:4px 0;">${svcLabelU}</td></tr>`);
-            const localidadeU = [input.customerCity, input.customerUf].filter(Boolean).join(' â€” ');
+            if (input.orderNumber) pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">NÃ‚Âº Pedido</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">#${input.orderNumber}</td></tr>`);
+            const svcLabelU = [input.serviceName, input.serviceOption].filter(Boolean).join(' Ã¢â‚¬â€ ');
+            if (svcLabelU) pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">ServiÃƒÂ§o</td><td style="color:#fff;font-size:13px;padding:4px 0;">${svcLabelU}</td></tr>`);
+            const localidadeU = [input.customerCity, input.customerUf].filter(Boolean).join(' Ã¢â‚¬â€ ');
             if (localidadeU) pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Cidade</td><td style="color:#fff;font-size:13px;padding:4px 0;">${localidadeU}</td></tr>`);
             if (input.deliveryEstimate) {
               const previsaoU = new Date(input.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-              pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">PrevisÃ£o</td><td style="color:#22c55e;font-size:13px;font-weight:bold;padding:4px 0;">ðŸ“… ${previsaoU}</td></tr>`);
+              pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">PrevisÃƒÂ£o</td><td style="color:#22c55e;font-size:13px;font-weight:bold;padding:4px 0;">Ã°Å¸â€œâ€¦ ${previsaoU}</td></tr>`);
             }
             const pedidoHtmlU = pedidoRows.length > 0 ? `<div style="background:#111827;border:1px solid #374151;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#a855f7;font-size:11px;font-weight:bold;margin:0 0 10px;text-transform:uppercase;letter-spacing:1px;">Dados do Pedido</p><table style="width:100%;border-collapse:collapse;">${pedidoRows.join('')}</table></div>` : '';
             // Buscar dados de login para incluir no email se status for entregue
@@ -3496,10 +3476,10 @@ export const appRouter = router({
                     if (ld.emailLink) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Link E-mail</td><td style="color:#a78bfa;font-size:12px;word-break:break-all;padding:4px 0;"><a href="${ld.emailLink}" style="color:#a78bfa;">${ld.emailLink}</a></td></tr>`);
                     if (ld.loginGroupLink) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Link do Grupo</td><td style="color:#4ade80;font-size:12px;word-break:break-all;padding:4px 0;"><a href="${ld.loginGroupLink}" style="color:#4ade80;">${ld.loginGroupLink}</a></td></tr>`);
                     if (loginRows2.length > 0) {
-                      loginDataHtml += `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:11px;font-weight:bold;margin:0 0 10px;text-transform:uppercase;letter-spacing:1px;">ðŸ” Seus Dados de Acesso</p><table style="width:100%;border-collapse:collapse;">${loginRows2.join('')}</table></div>`;
+                      loginDataHtml += `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:11px;font-weight:bold;margin:0 0 10px;text-transform:uppercase;letter-spacing:1px;">Ã°Å¸â€Â Seus Dados de Acesso</p><table style="width:100%;border-collapse:collapse;">${loginRows2.join('')}</table></div>`;
                     }
                     if (ld.loginNotes) {
-                      loginDataHtml += `<div style="background:#0d1a2b;border:1px solid #3b82f640;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#60a5fa;font-size:11px;font-weight:bold;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;">ðŸ“ InstruÃ§Ãµes</p><p style="color:#ccc;font-size:13px;margin:0;white-space:pre-line;line-height:1.7;">${ld.loginNotes}</p></div>`;
+                      loginDataHtml += `<div style="background:#0d1a2b;border:1px solid #3b82f640;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#60a5fa;font-size:11px;font-weight:bold;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;">Ã°Å¸â€œÂ InstruÃƒÂ§ÃƒÂµes</p><p style="color:#ccc;font-size:13px;margin:0;white-space:pre-line;line-height:1.7;">${ld.loginNotes}</p></div>`;
                     }
                   }
                 }
@@ -3508,7 +3488,7 @@ export const appRouter = router({
             await transporter.sendMail({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.customerEmail,
-              subject: `${statusLabel} â€” ${emailBranding.siteTitle}`,
+              subject: `${statusLabel} Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
               html: emailStatusCliente({
                 ...emailBranding,
                 customerName: input.customerName || undefined,
@@ -3521,7 +3501,7 @@ export const appRouter = router({
                 pedidoHtml: pedidoHtmlU || undefined,
               }),
             });
-            // Se status Ã© de entrega, registrar data/hora da notificaÃ§Ã£o
+            // Se status ÃƒÂ© de entrega, registrar data/hora da notificaÃƒÂ§ÃƒÂ£o
             if (FINAL_STATUSES_EMAIL.includes(input.status)) {
               try {
                 const dbN = await (await import('./db')).getDb();
@@ -3557,7 +3537,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: atualizar nÃºmero do pedido manualmente
+    // Admin: atualizar nÃƒÂºmero do pedido manualmente
     updateOrderNumber: adminProcedure
       .input(z.object({
         registrationId: z.number(),
@@ -3567,19 +3547,19 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const db = await (await import('./db')).getDb();
         if (!db) return { success: false };
-        // Buscar histÃ³rico completo em ordem ASC
+        // Buscar histÃƒÂ³rico completo em ordem ASC
         const stRows = await db.execute(sql.raw(
           `SELECT id, status FROM orderStatusHistory WHERE registrationId = ${input.registrationId} ORDER BY createdAt ASC, id ASC`
         ));
         const rows = (stRows[0] as unknown as Array<{ id: number; status: string }>);
-        if (!rows || rows.length === 0) return { success: false, error: 'Nenhum histÃ³rico encontrado' };
-        // Buscar status inicial dinÃ¢mico
+        if (!rows || rows.length === 0) return { success: false, error: 'Nenhum histÃƒÂ³rico encontrado' };
+        // Buscar status inicial dinÃƒÂ¢mico
         const stTypeRows = await db.execute(sql.raw(
           `SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`
         ));
         const stTypeArr = (stTypeRows[0] as unknown as Array<{ key: string }>);
         const initialStatus = stTypeArr?.[0]?.key || 'recebido';
-        // Dividir em sub-pedidos (mesma lÃ³gica do listOrders)
+        // Dividir em sub-pedidos (mesma lÃƒÂ³gica do listOrders)
         const subGroups: Array<{ startId: number; endId: number | null }> = [];
         let currentStart: number | null = null;
         for (let i = 0; i < rows.length; i++) {
@@ -3587,17 +3567,17 @@ export const appRouter = router({
           if (i === 0) {
             currentStart = r.id;
           } else if (r.status === initialStatus || r.status === 'recebido') {
-            // Novo sub-pedido comeÃ§a aqui
+            // Novo sub-pedido comeÃƒÂ§a aqui
             subGroups.push({ startId: currentStart!, endId: r.id });
             currentStart = r.id;
           }
         }
         if (currentStart !== null) subGroups.push({ startId: currentStart, endId: null });
-        // subGroups estÃ¡ em ordem ASC (mais antigo primeiro)
-        // O frontend usa ordem reversa (mais recente = Ã­ndice 0), entÃ£o inverter
+        // subGroups estÃƒÂ¡ em ordem ASC (mais antigo primeiro)
+        // O frontend usa ordem reversa (mais recente = ÃƒÂ­ndice 0), entÃƒÂ£o inverter
         subGroups.reverse();
         const targetGroup = subGroups[input.subOrderIndex];
-        if (!targetGroup) return { success: false, error: 'Sub-pedido nÃ£o encontrado' };
+        if (!targetGroup) return { success: false, error: 'Sub-pedido nÃƒÂ£o encontrado' };
         // Atualizar todos os registros do sub-pedido com o novo orderNumber
         const whereClause = targetGroup.endId
           ? `registrationId = ${input.registrationId} AND id >= ${targetGroup.startId} AND id < ${targetGroup.endId}`
@@ -3608,14 +3588,14 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: listar histÃ³rico de um pedido
+    // Admin: listar histÃƒÂ³rico de um pedido
     getHistory: adminProcedure
       .input(z.object({ registrationId: z.number() }))
       .query(async ({ input }) => {
         return await getOrderStatusHistory(input.registrationId);
       }),
 
-    // Cliente: ver histÃ³rico do prÃ³prio pedido pelo telefone
+    // Cliente: ver histÃƒÂ³rico do prÃƒÂ³prio pedido pelo telefone
     getMyStatus: publicProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input, ctx }) => {
@@ -3625,7 +3605,7 @@ export const appRouter = router({
         const db = await (await import('./db')).getDb();
         if (!db) return [];
 
-        // Buscar todo o histÃ³rico do cliente
+        // Buscar todo o histÃƒÂ³rico do cliente
         const allHistory = await getOrderStatusHistoryByPhone(input.phone);
         if (allHistory.length === 0) return [];
 
@@ -3644,7 +3624,7 @@ export const appRouter = router({
         // Construir set de sub-pedidos ocultos
         const hiddenSet = new Set(hiddenRows.map((h: any) => `${h.registrationId}_${h.subOrderIndex}`));
 
-        // Buscar status inicial dinÃ¢mico (mesma lÃ³gica do admin)
+        // Buscar status inicial dinÃƒÂ¢mico (mesma lÃƒÂ³gica do admin)
         let initialStatusForHidden = 'recebido';
         try {
           const stResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
@@ -3652,7 +3632,7 @@ export const appRouter = router({
           if (stRows && stRows.length > 0 && stRows[0].key) initialStatusForHidden = stRows[0].key;
         } catch (e) { /* fallback */ }
 
-        // FunÃ§Ã£o de divisÃ£o em sub-pedidos â€” IDÃŠNTICA Ã  do admin (history em ASC)
+        // FunÃƒÂ§ÃƒÂ£o de divisÃƒÂ£o em sub-pedidos Ã¢â‚¬â€ IDÃƒÅ NTICA ÃƒÂ  do admin (history em ASC)
         function splitIntoSubOrdersForHidden(historyAsc: typeof allHistory): typeof allHistory[] {
           if (historyAsc.length === 0) return [];
           const result: typeof allHistory[] = [];
@@ -3666,13 +3646,13 @@ export const appRouter = router({
             }
           }
           if (current.length > 0) result.push(current);
-          // Reverter para que Ã­ndice 0 = mais recente (igual ao admin)
+          // Reverter para que ÃƒÂ­ndice 0 = mais recente (igual ao admin)
           return result.reverse();
         }
 
-        // Agrupar por registrationId em ordem ASC (mais antigo primeiro â€” igual ao admin)
+        // Agrupar por registrationId em ordem ASC (mais antigo primeiro Ã¢â‚¬â€ igual ao admin)
         const byRegId = new Map<number, typeof allHistory>();
-        for (const entry of [...allHistory].reverse()) { // allHistory Ã© DESC, reverter para ASC
+        for (const entry of [...allHistory].reverse()) { // allHistory ÃƒÂ© DESC, reverter para ASC
           const regId = entry.registrationId;
           if (!byRegId.has(regId)) byRegId.set(regId, []);
           byRegId.get(regId)!.push(entry);
@@ -3682,7 +3662,7 @@ export const appRouter = router({
         const hiddenHistoryIds = new Set<number>();
         for (const [regId, historyAsc] of Array.from(byRegId.entries())) {
           const subOrders = splitIntoSubOrdersForHidden(historyAsc);
-          // Marcar IDs dos sub-pedidos ocultos (Ã­ndice igual ao do admin)
+          // Marcar IDs dos sub-pedidos ocultos (ÃƒÂ­ndice igual ao do admin)
           subOrders.forEach((subHistory, subIdx) => {
             if (hiddenSet.has(`${regId}_${subIdx}`)) {
               for (const entry of subHistory) hiddenHistoryIds.add(entry.id);
@@ -3699,7 +3679,7 @@ export const appRouter = router({
           if (allSubsHidden) fullyHiddenRegIds.add(regId);
         }
 
-        // Retornar apenas entradas que nÃ£o pertencem a sub-pedidos ocultos nem a registrationIds completamente ocultos
+        // Retornar apenas entradas que nÃƒÂ£o pertencem a sub-pedidos ocultos nem a registrationIds completamente ocultos
         return allHistory.filter(h => !hiddenHistoryIds.has(h.id) && !fullyHiddenRegIds.has(h.registrationId));
       }),
 
@@ -3730,13 +3710,13 @@ export const appRouter = router({
         try {
           const smtpPass = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
           if (!smtpPass) {
-            return { success: false, message: 'ConfiguraÃ§Ã£o de e-mail indisponÃ­vel (SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente).' };
+            return { success: false, message: 'ConfiguraÃƒÂ§ÃƒÂ£o de e-mail indisponÃƒÂ­vel (SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente).' };
           }
-          // Verificar se cliente estÃ¡ bloqueado
+          // Verificar se cliente estÃƒÂ¡ bloqueado
           if (input.customerPhone) {
             const customerForBlockR = await getCustomerByPhone(input.customerPhone);
             if (customerForBlockR && (customerForBlockR as any).blocked === 1) {
-              return { success: false, message: 'Cliente bloqueado. E-mail nÃ£o enviado.' };
+              return { success: false, message: 'Cliente bloqueado. E-mail nÃƒÂ£o enviado.' };
             }
           }
           const statusInfo2 = await getStatusInfoFromDb(input.status);
@@ -3751,7 +3731,7 @@ export const appRouter = router({
             auth: { user: 'h2@h2colombiano.com', pass: smtpPass },
           });
           const emailBranding = await getEmailBranding();
-          const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">ðŸ“‹ ObservaÃ§Ã£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
+          const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Ã°Å¸â€œâ€¹ ObservaÃƒÂ§ÃƒÂ£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
           const descriptionHtml2 = statusInfo2.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo2.description}</p></div>` : '';
           // Buscar PIN gerado para o cliente (tabela customerPins)
           let phonePin: string | null = input.customerPhone ? input.customerPhone.replace(/\D/g, '').slice(-4) : null;
@@ -3769,14 +3749,14 @@ export const appRouter = router({
           // Bloco de dados do pedido
           const reRows: string[] = [];
           if (input.customerNumber) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Cadastro</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">*${input.customerNumber}</td></tr>`);
-          if (input.orderNumber) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">NÂº Pedido</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">#${input.orderNumber}</td></tr>`);
-          const svcLabelR = [input.serviceName, input.serviceOption].filter(Boolean).join(' â€” ');
-          if (svcLabelR) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">ServiÃ§o</td><td style="color:#fff;font-size:13px;padding:4px 0;">${svcLabelR}</td></tr>`);
-          const localidadeR = [input.customerCity, input.customerUf].filter(Boolean).join(' â€” ');
+          if (input.orderNumber) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">NÃ‚Âº Pedido</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">#${input.orderNumber}</td></tr>`);
+          const svcLabelR = [input.serviceName, input.serviceOption].filter(Boolean).join(' Ã¢â‚¬â€ ');
+          if (svcLabelR) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">ServiÃƒÂ§o</td><td style="color:#fff;font-size:13px;padding:4px 0;">${svcLabelR}</td></tr>`);
+          const localidadeR = [input.customerCity, input.customerUf].filter(Boolean).join(' Ã¢â‚¬â€ ');
           if (localidadeR) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Cidade</td><td style="color:#fff;font-size:13px;padding:4px 0;">${localidadeR}</td></tr>`);
           if (input.deliveryEstimate) {
             const previsaoR = new Date(input.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">PrevisÃ£o</td><td style="color:#22c55e;font-size:13px;font-weight:bold;padding:4px 0;">ðŸ“… ${previsaoR}</td></tr>`);
+            reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">PrevisÃƒÂ£o</td><td style="color:#22c55e;font-size:13px;font-weight:bold;padding:4px 0;">Ã°Å¸â€œâ€¦ ${previsaoR}</td></tr>`);
           }
           const pedidoHtmlR = reRows.length > 0 ? `<div style="background:#111827;border:1px solid #374151;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#a855f7;font-size:11px;font-weight:bold;margin:0 0 10px;text-transform:uppercase;letter-spacing:1px;">Dados do Pedido</p><table style="width:100%;border-collapse:collapse;">${reRows.join('')}</table></div>` : '';
           const pinHtml = ''; // Senha de acompanhamento removida
@@ -3787,7 +3767,7 @@ export const appRouter = router({
           await transporter.sendMail({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: input.customerEmail,
-            subject: `[Reenvio] ${statusLabel} â€” ${emailBranding.siteTitle}`,
+            subject: `[Reenvio] ${statusLabel} Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
               html: emailStatusCliente({
                 ...emailBranding,
                 customerName: input.customerName || undefined,
@@ -3832,9 +3812,9 @@ export const appRouter = router({
         const db = await (await import('./db')).getDb();
         if (!db) return { success: false };
         const targetIdx = input.subOrderIndex ?? 0;
-        const reason = input.reason || 'ExcluÃ­do pelo administrador';
+        const reason = input.reason || 'ExcluÃƒÂ­do pelo administrador';
         // Soft delete: inserir na tabela hiddenSubOrders para ocultar o card sem apagar dados
-        // Verificar se jÃ¡ existe para evitar duplicata
+        // Verificar se jÃƒÂ¡ existe para evitar duplicata
         await db.execute(sql`
           INSERT INTO hiddenSubOrders (registrationId, subOrderIndex, deletedReason, customerPhone, customerName, serviceName)
           SELECT ${input.registrationId}, ${targetIdx}, ${reason}, ${input.customerPhone}, ${input.customerName || null}, ${input.serviceName || null}
@@ -3846,7 +3826,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Lixeira: listar pedidos excluÃ­dos (hiddenSubOrders)
+    // Lixeira: listar pedidos excluÃƒÂ­dos (hiddenSubOrders)
     listDeletedOrders: adminProcedure
       .query(async () => {
         const db = await (await import('./db')).getDb();
@@ -3862,7 +3842,7 @@ export const appRouter = router({
         return (rows[0] as unknown as Array<{ id: number; registrationId: number; subOrderIndex: number; hiddenAt: string; deletedReason: string | null; customerPhone: string | null; customerName: string | null; serviceName: string | null }>);
       }),
 
-    // Lixeira: restaurar pedido excluÃ­do
+    // Lixeira: restaurar pedido excluÃƒÂ­do
     restoreDeletedOrder: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
@@ -3893,11 +3873,11 @@ export const appRouter = router({
           if (stRows?.[0]?.key) initialStatus = stRows[0].key;
         } catch (e) { /* fallback */ }
 
-        // Buscar histÃ³rico do registrationId em ASC para dividir em sub-pedidos
+        // Buscar histÃƒÂ³rico do registrationId em ASC para dividir em sub-pedidos
         const histResult = await db.execute(sql`SELECT id, status FROM orderStatusHistory WHERE registrationId = ${input.registrationId} ORDER BY createdAt ASC, id ASC`);
         const histRows = ((histResult as any)[0] as any[]) || [];
 
-        // Dividir em sub-pedidos (mesma lÃ³gica do admin)
+        // Dividir em sub-pedidos (mesma lÃƒÂ³gica do admin)
         const subOrders: number[][] = [];
         let current: number[] = [];
         for (const entry of histRows) {
@@ -3909,17 +3889,17 @@ export const appRouter = router({
           }
         }
         if (current.length > 0) subOrders.push(current);
-        // Reverter para que Ã­ndice 0 = mais recente
+        // Reverter para que ÃƒÂ­ndice 0 = mais recente
         subOrders.reverse();
 
-        // Apagar entradas do orderStatusHistory do sub-pedido especÃ­fico
+        // Apagar entradas do orderStatusHistory do sub-pedido especÃƒÂ­fico
         const idsToDelete = subOrders[subOrderIndex] || [];
         if (idsToDelete.length > 0) {
           const idsList = idsToDelete.join(',');
           await db.execute(sql.raw(`DELETE FROM orderStatusHistory WHERE id IN (${idsList})`) );
         }
 
-        // Se nÃ£o hÃ¡ mais sub-pedidos, apagar o accessCodePhones tambÃ©m
+        // Se nÃƒÂ£o hÃƒÂ¡ mais sub-pedidos, apagar o accessCodePhones tambÃƒÂ©m
         const remainingSubOrders = subOrders.filter((_, idx) => idx !== subOrderIndex);
         if (remainingSubOrders.length === 0) {
           await db.execute(sql`DELETE FROM accessCodePhones WHERE id = ${input.registrationId}`);
@@ -3930,7 +3910,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: arquivar pedido (tira dos cards ativos, fica sÃ³ para consulta)
+    // Admin: arquivar pedido (tira dos cards ativos, fica sÃƒÂ³ para consulta)
     archiveOrder: adminProcedure
       .input(z.object({ registrationId: z.number() }))
       .mutation(async ({ input }) => {
@@ -4108,7 +4088,7 @@ export const appRouter = router({
       }));
     }),
 
-    // Admin: atualizar dados do pedido (serviÃ§o, opÃ§Ã£o, respostas)
+    // Admin: atualizar dados do pedido (serviÃƒÂ§o, opÃƒÂ§ÃƒÂ£o, respostas)
     updateOrderData: adminProcedure
       .input(z.object({
         registrationId: z.number(),
@@ -4120,7 +4100,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const db = await (await import('./db')).getDb();
         if (!db) return { success: false };
-        // Atualizar o primeiro registro de histÃ³rico (onde ficam os dados do pedido)
+        // Atualizar o primeiro registro de histÃƒÂ³rico (onde ficam os dados do pedido)
         await db.execute(sql`
           UPDATE orderStatusHistory
           SET
@@ -4149,11 +4129,11 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: marcar automaticamente como urgente pedidos com +48h sem atualizaÃ§Ã£o
+    // Admin: marcar automaticamente como urgente pedidos com +48h sem atualizaÃƒÂ§ÃƒÂ£o
     autoMarkUrgent: adminProcedure.mutation(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) return { updated: 0 };
-      // Busca registrationIds de pedidos com latestStatusAt > 48h e status nÃ£o finalizado
+      // Busca registrationIds de pedidos com latestStatusAt > 48h e status nÃƒÂ£o finalizado
       const result = await db.execute(`
         UPDATE orderStatusHistory osh
         INNER JOIN (
@@ -4171,7 +4151,7 @@ export const appRouter = router({
       return { updated: affected };
     }),
 
-    // Admin: marcar/desmarcar comissÃ£o como paga
+    // Admin: marcar/desmarcar comissÃƒÂ£o como paga
     toggleCommissionPaid: adminProcedure
       .input(z.object({ registrationId: z.number(), paid: z.boolean() }))
       .mutation(async ({ input }) => {
@@ -4183,7 +4163,7 @@ export const appRouter = router({
           WHERE registrationId = ${input.registrationId}
         `);
 
-        // Se estÃ¡ marcando como PAGO, buscar dados do indicador e enviar e-mail
+        // Se estÃƒÂ¡ marcando como PAGO, buscar dados do indicador e enviar e-mail
         if (input.paid) {
           try {
             // Buscar dados do cliente indicado e do indicador
@@ -4225,22 +4205,22 @@ export const appRouter = router({
                 await transporter.sendMail({
                   from: `"${siteTitle}" <h2@h2colombiano.com>`,
                   to: referrer.email,
-                  subject: `âœ… Sua comissÃ£o${commText} foi paga! - ${siteTitle}`,
+                  subject: `Ã¢Å“â€¦ Sua comissÃƒÂ£o${commText} foi paga! - ${siteTitle}`,
                   html: `
                     <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#e2e8f0;border-radius:12px;overflow:hidden">
                       <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:28px 24px;text-align:center">
-                        <h1 style="margin:0;font-size:22px;color:#fff">âœ… ComissÃ£o Paga!</h1>
+                        <h1 style="margin:0;font-size:22px;color:#fff">Ã¢Å“â€¦ ComissÃƒÂ£o Paga!</h1>
                         <p style="margin:8px 0 0;color:#c4b5fd;font-size:14px">${siteTitle}</p>
                       </div>
                       <div style="padding:24px">
-                        <p style="font-size:15px;margin:0 0 16px">OlÃ¡ <strong>${row.referrerName || referrer.name || 'indicador'}</strong>! ðŸŽ‰</p>
-                        <p style="font-size:14px;color:#94a3b8;margin:0 0 16px">Sua comissÃ£o pela indicaÃ§Ã£o de <strong style="color:#e2e8f0">${row.customerName || row.phone}</strong> foi <strong style="color:#4ade80">paga com sucesso</strong>!</p>
-                        ${commVal > 0 ? `<div style="background:#1e293b;border-radius:8px;padding:16px;text-align:center;margin:16px 0"><span style="font-size:24px;font-weight:bold;color:#4ade80">R$ ${(commVal / 100).toFixed(2).replace('.', ',')}</span><br><span style="font-size:12px;color:#64748b">Valor da comissÃ£o</span></div>` : ''}
-                        <p style="font-size:13px;color:#64748b;margin:16px 0 0">Obrigado por indicar! Continue indicando e ganhe mais. ðŸ’ª</p>
+                        <p style="font-size:15px;margin:0 0 16px">OlÃƒÂ¡ <strong>${row.referrerName || referrer.name || 'indicador'}</strong>! Ã°Å¸Å½â€°</p>
+                        <p style="font-size:14px;color:#94a3b8;margin:0 0 16px">Sua comissÃƒÂ£o pela indicaÃƒÂ§ÃƒÂ£o de <strong style="color:#e2e8f0">${row.customerName || row.phone}</strong> foi <strong style="color:#4ade80">paga com sucesso</strong>!</p>
+                        ${commVal > 0 ? `<div style="background:#1e293b;border-radius:8px;padding:16px;text-align:center;margin:16px 0"><span style="font-size:24px;font-weight:bold;color:#4ade80">R$ ${(commVal / 100).toFixed(2).replace('.', ',')}</span><br><span style="font-size:12px;color:#64748b">Valor da comissÃƒÂ£o</span></div>` : ''}
+                        <p style="font-size:13px;color:#64748b;margin:16px 0 0">Obrigado por indicar! Continue indicando e ganhe mais. Ã°Å¸â€™Âª</p>
                       </div>
                     </div>
                   `,
-                }).catch((e: any) => console.error('Erro e-mail comissÃ£o paga:', e));
+                }).catch((e: any) => console.error('Erro e-mail comissÃƒÂ£o paga:', e));
               }
               // Retornar dados para o frontend abrir WhatsApp
               return {
@@ -4254,14 +4234,14 @@ export const appRouter = router({
               };
             }
           } catch (e) {
-            console.error('Erro ao notificar comissÃ£o paga:', e);
+            console.error('Erro ao notificar comissÃƒÂ£o paga:', e);
           }
         }
 
         return { success: true };
       }),
 
-    // Admin: definir previsÃ£o de entrega do pedido
+    // Admin: definir previsÃƒÂ£o de entrega do pedido
     updateDeliveryEstimate: adminProcedure
       .input(z.object({ registrationId: z.number(), deliveryEstimate: z.number().nullable() }))
       .mutation(async ({ input }) => {
@@ -4276,7 +4256,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: buscar configuraÃ§Ã£o de progresso por pedido
+    // Admin: buscar configuraÃƒÂ§ÃƒÂ£o de progresso por pedido
     getProgressConfig: adminProcedure
       .input(z.object({ registrationId: z.number(), subOrderIndex: z.number().default(0) }))
       .query(async ({ input }) => {
@@ -4284,7 +4264,7 @@ export const appRouter = router({
         return rows.map((r: { statusKey: string }) => r.statusKey);
       }),
 
-    // Admin: salvar configuraÃ§Ã£o de progresso por pedido
+    // Admin: salvar configuraÃƒÂ§ÃƒÂ£o de progresso por pedido
     setProgressConfig: adminProcedure
       .input(z.object({
         registrationId: z.number(),
@@ -4296,7 +4276,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Public: buscar configuraÃ§Ã£o de progresso por pedido (para a tela do cliente)
+    // Public: buscar configuraÃƒÂ§ÃƒÂ£o de progresso por pedido (para a tela do cliente)
     getProgressConfigPublic: publicProcedure
       .input(z.object({ registrationId: z.number(), subOrderIndex: z.number().default(0) }))
       .query(async ({ input }) => {
@@ -4304,7 +4284,7 @@ export const appRouter = router({
         return rows.map((r: { statusKey: string }) => r.statusKey);
       }),
 
-    // Admin: relatÃ³rio de comissÃµes (pedidos com indicador)
+    // Admin: relatÃƒÂ³rio de comissÃƒÂµes (pedidos com indicador)
     listCommissions: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) return [];
@@ -4397,7 +4377,7 @@ export const appRouter = router({
       }));
     }),
 
-    // Admin: deletar indicaÃ§Ã£o (remove referredBy do cliente e o histÃ³rico de pedido)
+    // Admin: deletar indicaÃƒÂ§ÃƒÂ£o (remove referredBy do cliente e o histÃƒÂ³rico de pedido)
     deleteCommission: adminProcedure
       .input(z.object({ registrationId: z.number() }))
       .mutation(async ({ input }) => {
@@ -4407,7 +4387,7 @@ export const appRouter = router({
         const rows = await db.execute(`SELECT phone FROM accessCodePhones WHERE id = ${input.registrationId} LIMIT 1`);
         const rec = (rows[0] as unknown as any[])[0];
         if (rec?.phone) {
-          // Limpar referredBy do cliente para nÃ£o aparecer mais como indicaÃ§Ã£o
+          // Limpar referredBy do cliente para nÃƒÂ£o aparecer mais como indicaÃƒÂ§ÃƒÂ£o
           await db.execute(`
             UPDATE customers
             SET referredBy = NULL, referredByPhone = NULL
@@ -4439,12 +4419,12 @@ export const appRouter = router({
           });
           const waLink = `https://wa.me/55${referrerCleanPhone}`;
           const commissionHtml = input.commissionValue && input.commissionValue > 0
-            ? `<p style="margin:12px 0 8px;font-size:13px;color:#fcd34d;font-weight:bold;">ðŸ’° ComissÃ£o: R$ ${(input.commissionValue / 100).toFixed(2).replace('.', ',')}</p>`
+            ? `<p style="margin:12px 0 8px;font-size:13px;color:#fcd34d;font-weight:bold;">Ã°Å¸â€™Â° ComissÃƒÂ£o: R$ ${(input.commissionValue / 100).toFixed(2).replace('.', ',')}</p>`
             : '';
           await transporter.sendMail({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: referrer.email,
-            subject: `[Reenvio] ðŸŽ‰ Sua indicaÃ§Ã£o deu certo! ${input.referredName} fez um pedido`,
+            subject: `[Reenvio] Ã°Å¸Å½â€° Sua indicaÃƒÂ§ÃƒÂ£o deu certo! ${input.referredName} fez um pedido`,
             html: emailIndicacaoSucesso({
               ...emailBranding,
               referrerName: referrer.name || undefined,
@@ -4464,7 +4444,7 @@ export const appRouter = router({
       .input(z.object({
         name: z.string().min(2),
         phone: z.string().min(10),
-        email: z.string().email('Email invÃ¡lido').min(1, 'Email obrigatÃ³rio'),
+        email: z.string().email('Email invÃƒÂ¡lido').min(1, 'Email obrigatÃƒÂ³rio'),
         city: z.string().optional(),
         uf: z.string().length(2).optional(),
         referredBy: z.string().optional(),
@@ -4492,21 +4472,21 @@ export const appRouter = router({
             referredByPhone: input.referredByPhone,
           });
          } else {
-          // Atualizar dados existentes â€” NÃƒO sobrescrever referredBy se cliente jÃ¡ existe
-          // IndicaÃ§Ã£o sÃ³ conta para clientes novos (primeiro cadastro)
+          // Atualizar dados existentes Ã¢â‚¬â€ NÃƒÆ’O sobrescrever referredBy se cliente jÃƒÂ¡ existe
+          // IndicaÃƒÂ§ÃƒÂ£o sÃƒÂ³ conta para clientes novos (primeiro cadastro)
           await updateCustomer(customer.id, {
             name: input.name,
             email: input.email,
             city: input.city,
             uf: input.uf,
-            // SÃ³ salva referredBy se o cliente ainda nÃ£o tem um (cliente novo)
+            // SÃƒÂ³ salva referredBy se o cliente ainda nÃƒÂ£o tem um (cliente novo)
             ...(customer.referredBy ? {} : {
               referredBy: input.referredBy,
               referredByPhone: input.referredByPhone,
             }),
           });
         }
-        // 2. Criar cÃ³digo de acesso manual (tipo 'vip', jÃ¡ consumido)
+        // 2. Criar cÃƒÂ³digo de acesso manual (tipo 'vip', jÃƒÂ¡ consumido)
         const manualCode = `MANUAL-${input.phone.replace(/\D/g, '')}-${Date.now()}`;
         await db.execute(sql`
           INSERT INTO accessCodes (code, type, status, clientName, maxUses, currentUses, createdAt)
@@ -4514,7 +4494,7 @@ export const appRouter = router({
         `);
         const codeRows = await db.execute(sql`SELECT id FROM accessCodes WHERE code = ${manualCode} LIMIT 1`);
         const codeId = (codeRows[0] as unknown as Array<{ id: number }>)[0]?.id;
-        if (!codeId) throw new Error('Erro ao criar cÃ³digo de acesso');
+        if (!codeId) throw new Error('Erro ao criar cÃƒÂ³digo de acesso');
 
         // 3. Registrar telefone como consumed=1
         await db.execute(sql`
@@ -4525,7 +4505,7 @@ export const appRouter = router({
         const registrationId = (phoneRows[0] as unknown as Array<{ id: number }>)[0]?.id;
         if (!registrationId) throw new Error('Erro ao registrar telefone');
 
-        // 4. Salvar status inicial com nÃºmero de pedido Ãºnico
+        // 4. Salvar status inicial com nÃƒÂºmero de pedido ÃƒÂºnico
         let adminOrderNum: number | undefined;
         try { adminOrderNum = await generateOrderNumber(); } catch (e) { console.error('[OrderNumber] Erro:', e); }
         await addOrderStatus({
@@ -4539,7 +4519,7 @@ export const appRouter = router({
           answers: input.answers,
         });
 
-        // 5. Enviar email de notificaÃ§Ã£o se tiver email e nÃ£o estiver bloqueado
+        // 5. Enviar email de notificaÃƒÂ§ÃƒÂ£o se tiver email e nÃƒÂ£o estiver bloqueado
         const customerForBlock4 = input.phone ? await getCustomerByPhone(input.phone) : null;
         const isCustomerBlocked4 = customerForBlock4 && (customerForBlock4 as any).blocked === 1;
         if (input.email && !isCustomerBlocked4) {
@@ -4553,7 +4533,7 @@ export const appRouter = router({
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const emailBranding = await getEmailBranding();
-            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">ðŸ“‹ ObservaÃ§Ã£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
+            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Ã°Å¸â€œâ€¹ ObservaÃƒÂ§ÃƒÂ£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml3 = statusInfo3.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo3.description}</p></div>` : '';
             // Buscar PIN do cliente
             let phonePin3: string | null = input.phone ? input.phone.replace(/\D/g, '').slice(-4) : null;
@@ -4572,7 +4552,7 @@ export const appRouter = router({
             await transporter.sendMail({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.email,
-              subject: `${statusLabel} â€” ${emailBranding.siteTitle}`,
+              subject: `${statusLabel} Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
               html: emailStatusCliente({
                 ...emailBranding,
                 customerName: input.name || undefined,
@@ -4597,12 +4577,12 @@ export const appRouter = router({
         };
       }),
 
-    // Admin: criar pedido manual com mÃºltiplos produtos
+    // Admin: criar pedido manual com mÃƒÂºltiplos produtos
     createManualOrderMultiple: adminProcedure
       .input(z.object({
         name: z.string().min(2),
         phone: z.string().min(10),
-        email: z.string().email('Email invÃ¡lido').min(1, 'Email obrigatÃ³rio'),
+        email: z.string().email('Email invÃƒÂ¡lido').min(1, 'Email obrigatÃƒÂ³rio'),
         city: z.string().optional(),
         uf: z.string().length(2).optional(),
         referredBy: z.string().optional(),
@@ -4632,8 +4612,8 @@ export const appRouter = router({
             referredByPhone: input.referredByPhone,
           });
         } else {
-          // NÃƒO sobrescrever referredBy se cliente jÃ¡ existe
-          // IndicaÃ§Ã£o sÃ³ conta para clientes novos (primeiro cadastro)
+          // NÃƒÆ’O sobrescrever referredBy se cliente jÃƒÂ¡ existe
+          // IndicaÃƒÂ§ÃƒÂ£o sÃƒÂ³ conta para clientes novos (primeiro cadastro)
           await updateCustomer(customer.id, {
             name: input.name,
             email: input.email,
@@ -4645,7 +4625,7 @@ export const appRouter = router({
             }),
           });
         }
-        // 2. Criar cÃ³digo de acesso manual compartilhado
+        // 2. Criar cÃƒÂ³digo de acesso manual compartilhado
         const manualCode = `MANUAL-${input.phone.replace(/\D/g, '')}-${Date.now()}`;
         await db.execute(sql`
           INSERT INTO accessCodes (code, type, status, clientName, maxUses, currentUses, createdAt)
@@ -4653,7 +4633,7 @@ export const appRouter = router({
         `);
         const codeRows = await db.execute(sql`SELECT id FROM accessCodes WHERE code = ${manualCode} LIMIT 1`);
         const codeId = (codeRows[0] as unknown as Array<{ id: number }>)[0]?.id;
-        if (!codeId) throw new Error('Erro ao criar cÃ³digo de acesso');
+        if (!codeId) throw new Error('Erro ao criar cÃƒÂ³digo de acesso');
 
         // 3. Registrar telefone como consumed=1
         await db.execute(sql`
@@ -4664,7 +4644,7 @@ export const appRouter = router({
         const registrationId = (phoneRows[0] as unknown as Array<{ id: number }>)[0]?.id;
         if (!registrationId) throw new Error('Erro ao registrar telefone');
 
-        // 4. Criar UMA ÃšNICA entrada no histÃ³rico com todos os produtos concatenados e 1 nÃºmero de pedido
+        // 4. Criar UMA ÃƒÅ¡NICA entrada no histÃƒÂ³rico com todos os produtos concatenados e 1 nÃƒÂºmero de pedido
         let orderNum: number | undefined;
         try { orderNum = await generateOrderNumber(); } catch (e) { console.error('[OrderNumber] Erro:', e); }
 
@@ -4697,7 +4677,7 @@ export const appRouter = router({
           orderNumber: orderNum,
         }));
 
-        // 5. Enviar email de notificaÃ§Ã£o (exceto clientes bloqueados)
+        // 5. Enviar email de notificaÃƒÂ§ÃƒÂ£o (exceto clientes bloqueados)
         const customerForBlock5 = input.phone ? await getCustomerByPhone(input.phone) : null;
         const isCustomerBlocked5 = customerForBlock5 && (customerForBlock5 as any).blocked === 1;
         if (input.email && !isCustomerBlocked5) {
@@ -4712,9 +4692,9 @@ export const appRouter = router({
           });
             const emailBranding = await getEmailBranding();
             const itemsHtml = input.items.map((item, i) =>
-              `<tr><td style="padding:6px 8px;color:#ccc;font-size:13px;border-bottom:1px solid #ffffff10;">${i + 1}. ${item.serviceName}${item.serviceOption ? ` â€” ${item.serviceOption}` : ''}</td></tr>`
+              `<tr><td style="padding:6px 8px;color:#ccc;font-size:13px;border-bottom:1px solid #ffffff10;">${i + 1}. ${item.serviceName}${item.serviceOption ? ` Ã¢â‚¬â€ ${item.serviceOption}` : ''}</td></tr>`
             ).join('');
-            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">ðŸ“‹ ObservaÃ§Ã£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
+            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Ã°Å¸â€œâ€¹ ObservaÃƒÂ§ÃƒÂ£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             // Buscar PIN do cliente
             let phonePinM: string | null = input.phone ? input.phone.replace(/\D/g, '').slice(-4) : null;
             try {
@@ -4732,7 +4712,7 @@ export const appRouter = router({
             await transporter.sendMail({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.email,
-              subject: `${statusLabel} â€” ${emailBranding.siteTitle}`,
+              subject: `${statusLabel} Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
               html: emailStatusCliente({
                 ...emailBranding,
                 customerName: input.name || undefined,
@@ -4744,13 +4724,13 @@ export const appRouter = router({
               }),
             });
           } catch (err) {
-            console.error('Erro ao enviar email de observaÃ§Ã£o:', err);
+            console.error('Erro ao enviar email de observaÃƒÂ§ÃƒÂ£o:', err);
           }
         }
         return { success: true };
       }),
 
-    // Admin: remover mÃºltiplos pedidos em massa (soft delete)
+    // Admin: remover mÃƒÂºltiplos pedidos em massa (soft delete)
     deleteOrdersBulk: adminProcedure
       .input(z.object({
         orders: z.array(z.object({ registrationId: z.number(), customerPhone: z.string(), subOrderIndex: z.number().optional() }))
@@ -4775,7 +4755,7 @@ export const appRouter = router({
         return { success: true, deleted };
       }),
 
-    // PÃºblico: registrar tentativa de PIN e verificar bloqueio
+    // PÃƒÂºblico: registrar tentativa de PIN e verificar bloqueio
     checkPinAttempt: publicProcedure
       .input(z.object({ phone: z.string(), correct: z.boolean() }))
       .mutation(async ({ input }) => {
@@ -4813,7 +4793,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: verificar se um telefone estÃ¡ bloqueado
+    // Admin: verificar se um telefone estÃƒÂ¡ bloqueado
     getPinBlockStatus: adminProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
@@ -4825,24 +4805,24 @@ export const appRouter = router({
         return { blocked: (row?.blocked ?? 0) === 1, attempts: row?.attempts ?? 0 };
       }),
 
-    // Admin: busca de emergÃªncia â€” busca em TODAS as pastas (ativas, arquivo, rgcnh, pastas personalizadas)
+    // Admin: busca de emergÃƒÂªncia Ã¢â‚¬â€ busca em TODAS as pastas (ativas, arquivo, rgcnh, pastas personalizadas)
     emergencySearch: adminProcedure
       .input(z.object({ term: z.string().min(1) }))
       .query(async ({ input }) => {
         const db = await (await import('./db')).getDb();
         if (!db) return [];
         const term = input.term.trim();
-        // Normaliza o termo: remove tudo que nÃ£o Ã© dÃ­gito para busca por telefone
+        // Normaliza o termo: remove tudo que nÃƒÂ£o ÃƒÂ© dÃƒÂ­gito para busca por telefone
         const termDigits = term.replace(/\D/g, '');
         // Escapa aspas simples para SQL seguro
         const esc = (s: string) => s.replace(/'/g, "''");
         // Para busca por nome: usa o termo original com LIKE
         const likeTermSql = `'%${esc(term)}%'`;
-        // Para busca por dÃ­gitos: usa apenas os dÃ­gitos (aceita qualquer formato de telefone)
+        // Para busca por dÃƒÂ­gitos: usa apenas os dÃƒÂ­gitos (aceita qualquer formato de telefone)
         const likeDigitsSql = termDigits.length >= 4 ? `'%${esc(termDigits)}%'` : null;
-        // Sufixo de 8 dÃ­gitos (sem DDD) para busca parcial
+        // Sufixo de 8 dÃƒÂ­gitos (sem DDD) para busca parcial
         const suffix8Sql = termDigits.length >= 8 ? `'%${esc(termDigits.slice(-8))}%'` : null;
-        // Termo limpo para comparaÃ§Ã£o de nÃºmero de pedido/cadastro
+        // Termo limpo para comparaÃƒÂ§ÃƒÂ£o de nÃƒÂºmero de pedido/cadastro
         const termCleanSql = `'%${esc(termDigits || term)}%'`;
 
         // Buscar em TODOS os pedidos (archived=0 e archived=1, rgCnhApproved=0 e =1)
@@ -4900,7 +4880,7 @@ export const appRouter = router({
           WHERE (ac.type IS NULL OR ac.type != 'raffle')
             AND (${allWhereClauses})
             -- Ocultar cadastros vazios (sem status e sem pasta) quando o mesmo telefone
-            -- jÃ¡ possui outro cadastro com dados/histÃ³rico. Evita cards duplicados "Sem status".
+            -- jÃƒÂ¡ possui outro cadastro com dados/histÃƒÂ³rico. Evita cards duplicados "Sem status".
             AND NOT (
               latest.maxId IS NULL
               AND cfo.id IS NULL
@@ -4928,13 +4908,13 @@ export const appRouter = router({
             folderLabel = r.folderIcon ? `${r.folderIcon} ${r.folderName}` : r.folderName;
             folderType = 'custom';
           } else if (Number(r.archived) === 1) {
-            folderLabel = 'ðŸ“ Arquivo';
+            folderLabel = 'Ã°Å¸â€œÂ Arquivo';
             folderType = 'archived';
           } else if (Number(r.rgCnhApproved) === 1) {
-            folderLabel = 'ðŸª· RG/CNH Aprovado';
+            folderLabel = 'Ã°Å¸ÂªÂ· RG/CNH Aprovado';
             folderType = 'rgcnh';
           } else {
-            folderLabel = 'ðŸ“‹ Pedidos Ativos';
+            folderLabel = 'Ã°Å¸â€œâ€¹ Pedidos Ativos';
             folderType = 'active';
           }
           return {
@@ -4963,9 +4943,9 @@ export const appRouter = router({
       }),
   }),
 
-  // ConfiguraÃ§Ãµes globais do app
+  // ConfiguraÃƒÂ§ÃƒÂµes globais do app
   appSettings: router({
-    // PÃºblico: ler modo de captura de foto
+    // PÃƒÂºblico: ler modo de captura de foto
     getPhotoMode: publicProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) return { mode: 'both' as const };
@@ -4975,7 +4955,7 @@ export const appRouter = router({
       return { mode: mode as 'camera' | 'gallery' | 'both' | 'disabled' };
     }),
 
-    // PÃºblico: verificar se o modo manual de senha estÃ¡ ativo
+    // PÃƒÂºblico: verificar se o modo manual de senha estÃƒÂ¡ ativo
     getManualMode: publicProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) return { isManual: true }; // default seguro: modo manual
@@ -4998,9 +4978,9 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
-  // Status de pedido editÃ¡veis pelo admin
+  // Status de pedido editÃƒÂ¡veis pelo admin
   statusTypes: router({
-    // PÃºblico: listar todos os status (ativos e inativos para o admin)
+    // PÃƒÂºblico: listar todos os status (ativos e inativos para o admin)
     list: publicProcedure.query(async () => {
       const { listOrderStatusTypes } = await import('./db');
       return await listOrderStatusTypes();
@@ -5008,7 +4988,7 @@ export const appRouter = router({
     // Admin: criar novo status
     create: adminProcedure
       .input(z.object({
-        key: z.string().min(1).max(64).regex(/^[a-z0-9_]+$/, "Apenas letras minÃºsculas, nÃºmeros e _"),
+        key: z.string().min(1).max(64).regex(/^[a-z0-9_]+$/, "Apenas letras minÃƒÂºsculas, nÃƒÂºmeros e _"),
         label: z.string().min(1).max(128),
         color: z.string().default("text-gray-400"),
         bgColor: z.string().default("bg-gray-500/20 border-gray-500/40"),
@@ -5043,7 +5023,7 @@ export const appRouter = router({
         await updateOrderStatusType(id, data);
         return { success: true };
       }),
-    // Admin: excluir status (apenas nÃ£o-sistema)
+    // Admin: excluir status (apenas nÃƒÂ£o-sistema)
     delete: adminProcedure
       .input(z.object({ id: z.number().int() }))
       .mutation(async ({ input }) => {
@@ -5110,9 +5090,9 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€ AnotaÃ§Ãµes Internas do Admin por Pedido â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ AnotaÃƒÂ§ÃƒÂµes Internas do Admin por Pedido Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   orderNotes: router({
-    // Buscar anotaÃ§Ã£o do pedido (legado â€” retorna primeiro bloco)
+    // Buscar anotaÃƒÂ§ÃƒÂ£o do pedido (legado Ã¢â‚¬â€ retorna primeiro bloco)
     get: adminProcedure
       .input(z.object({ registrationId: z.number().int() }))
       .query(async ({ input }) => {
@@ -5121,7 +5101,7 @@ export const appRouter = router({
         return notes[0] ?? null;
       }),
 
-    // Buscar TODOS os blocos de anotaÃ§Ã£o do pedido
+    // Buscar TODOS os blocos de anotaÃƒÂ§ÃƒÂ£o do pedido
     getAll: adminProcedure
       .input(z.object({ registrationId: z.number().int() }))
       .query(async ({ input }) => {
@@ -5129,7 +5109,7 @@ export const appRouter = router({
         return await getOrderNotes(input.registrationId);
       }),
 
-    // Criar novo bloco de anotaÃ§Ã£o
+    // Criar novo bloco de anotaÃƒÂ§ÃƒÂ£o
     createBlock: adminProcedure
       .input(z.object({
         registrationId: z.number().int(),
@@ -5141,7 +5121,7 @@ export const appRouter = router({
         return await createOrderNoteBlock(input.registrationId, input.blockName, input.content);
       }),
 
-    // Salvar conteÃºdo de um bloco especÃ­fico
+    // Salvar conteÃƒÂºdo de um bloco especÃƒÂ­fico
     saveBlock: adminProcedure
       .input(z.object({ id: z.number().int(), content: z.string() }))
       .mutation(async ({ input }) => {
@@ -5159,7 +5139,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Deletar bloco especÃ­fico
+    // Deletar bloco especÃƒÂ­fico
     deleteBlock: adminProcedure
       .input(z.object({ id: z.number().int() }))
       .mutation(async ({ input }) => {
@@ -5168,7 +5148,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Salvar (criar ou atualizar) anotaÃ§Ã£o do pedido (legado)
+    // Salvar (criar ou atualizar) anotaÃƒÂ§ÃƒÂ£o do pedido (legado)
     save: adminProcedure
       .input(z.object({ registrationId: z.number().int(), content: z.string() }))
       .mutation(async ({ input }) => {
@@ -5176,7 +5156,7 @@ export const appRouter = router({
         return await saveOrderNote(input.registrationId, input.content);
       }),
 
-    // Excluir anotaÃ§Ã£o do pedido (legado)
+    // Excluir anotaÃƒÂ§ÃƒÂ£o do pedido (legado)
     delete: adminProcedure
       .input(z.object({ registrationId: z.number().int() }))
       .mutation(async ({ input }) => {
@@ -5186,7 +5166,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€ Dados de Login Liberado por Pedido â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Dados de Login Liberado por Pedido Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   loginData: router({
     // Admin busca dados de login de um pedido
     get: adminProcedure
@@ -5219,9 +5199,9 @@ export const appRouter = router({
         const { eq } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('Database unavailable');
-        // Remover traÃ§os e espaÃ§os do cÃ³digo autenticador automaticamente
+        // Remover traÃƒÂ§os e espaÃƒÂ§os do cÃƒÂ³digo autenticador automaticamente
         const cleanAuthCode = input.authCode ? input.authCode.replace(/[-\s]/g, '') : null;
-        // Buscar o customerPhone diretamente do histÃ³rico do pedido (evita bug de telefone alterado)
+        // Buscar o customerPhone diretamente do histÃƒÂ³rico do pedido (evita bug de telefone alterado)
         const historyRow = await db.select({ customerPhone: orderStatusHistory.customerPhone })
           .from(orderStatusHistory)
           .where(eq(orderStatusHistory.registrationId, input.registrationId))
@@ -5254,7 +5234,7 @@ export const appRouter = router({
         }
         return { success: true };
       }),
-    // Cliente busca dados de login do seu pedido (sem autenticaÃ§Ã£o admin)
+    // Cliente busca dados de login do seu pedido (sem autenticaÃƒÂ§ÃƒÂ£o admin)
     getForClient: publicProcedure
       .input(z.object({ registrationId: z.number().int(), customerPhone: z.string() }))
       .query(async ({ input }) => {
@@ -5284,7 +5264,7 @@ export const appRouter = router({
 
   // === SENHA PERSONALIZADA DO CLIENTE (acompanhar pedido) ===
   customerPin: router({
-    // Verifica a senha do cliente e retorna se Ã© primeiro acesso
+    // Verifica a senha do cliente e retorna se ÃƒÂ© primeiro acesso
      check: publicProcedure
       .input(z.object({ phone: z.string(), pin: z.string().length(4) }))
       .mutation(async ({ input, ctx }) => {
@@ -5337,7 +5317,7 @@ export const appRouter = router({
         }
       }),
 
-    // Cliente cria sua senha pessoal (apÃ³s primeiro acesso)
+    // Cliente cria sua senha pessoal (apÃƒÂ³s primeiro acesso)
     setPin: publicProcedure
       .input(z.object({ phone: z.string(), newPin: z.string().length(4) }))
       .mutation(async ({ input, ctx }) => {
@@ -5418,16 +5398,16 @@ export const appRouter = router({
       }),
   }),
 
-  // === SOLICITAÃ‡Ã•ES DE DOCUMENTOS PENDENTES ===
+  // === SOLICITAÃƒâ€¡Ãƒâ€¢ES DE DOCUMENTOS PENDENTES ===
   docRequests: router({
-    // Admin: listar solicitaÃ§Ãµes de um pedido
+    // Admin: listar solicitaÃƒÂ§ÃƒÂµes de um pedido
     listByRegistration: adminProcedure
       .input(z.object({ registrationId: z.number() }))
       .query(async ({ input }) => {
         return await getDocRequestsByRegistration(input.registrationId);
       }),
 
-    // Admin: criar solicitaÃ§Ã£o de documento
+    // Admin: criar solicitaÃƒÂ§ÃƒÂ£o de documento
     create: adminProcedure
       .input(z.object({
         registrationId: z.number(),
@@ -5446,7 +5426,7 @@ export const appRouter = router({
         return { success: true, docRequest: req };
       }),
 
-    // Admin: fechar/cancelar solicitaÃ§Ã£o
+    // Admin: fechar/cancelar solicitaÃƒÂ§ÃƒÂ£o
     close: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
@@ -5454,7 +5434,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: excluir solicitaÃ§Ã£o
+    // Admin: excluir solicitaÃƒÂ§ÃƒÂ£o
     delete: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
@@ -5462,7 +5442,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // PÃºblico: cliente busca solicitaÃ§Ãµes pendentes pelo telefone
+    // PÃƒÂºblico: cliente busca solicitaÃƒÂ§ÃƒÂµes pendentes pelo telefone
     getPendingForClient: publicProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
@@ -5470,7 +5450,7 @@ export const appRouter = router({
         return all.filter(r => r.status === 'pending');
       }),
 
-    // PÃºblico: cliente responde solicitaÃ§Ã£o enviando arquivo (base64)
+    // PÃƒÂºblico: cliente responde solicitaÃƒÂ§ÃƒÂ£o enviando arquivo (base64)
     answer: publicProcedure
       .input(z.object({
         docRequestId: z.number(),
@@ -5495,10 +5475,10 @@ export const appRouter = router({
           mimeType: r.contentType,
           fromAdmin: 0,
         });
-        // Marcar solicitaÃ§Ã£o como respondida
+        // Marcar solicitaÃƒÂ§ÃƒÂ£o como respondida
         await updateDocRequestStatus(input.docRequestId, 'answered', undefined);
         // Notificar admin por e-mail
-        const docNotifTitle = 'ðŸ“„ Documento respondido pelo cliente';
+        const docNotifTitle = 'Ã°Å¸â€œâ€ž Documento respondido pelo cliente';
         try {
           const transporterDoc = nodemailer.createTransport({
             host: 'smtp.zoho.com',
@@ -5543,9 +5523,9 @@ export const appRouter = router({
         reason: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        if (input.type === 'name' && !input.name) throw new Error('Nome obrigatÃ³rio');
-        if (input.type === 'phone' && !input.phone) throw new Error('Telefone obrigatÃ³rio');
-        if (input.type === 'both' && (!input.name || !input.phone)) throw new Error('Nome e telefone obrigatÃ³rios');
+        if (input.type === 'name' && !input.name) throw new Error('Nome obrigatÃƒÂ³rio');
+        if (input.type === 'phone' && !input.phone) throw new Error('Telefone obrigatÃƒÂ³rio');
+        if (input.type === 'both' && (!input.name || !input.phone)) throw new Error('Nome e telefone obrigatÃƒÂ³rios');
         return addToBlocklist({
           type: input.type,
           name: input.name || null,
@@ -5603,7 +5583,7 @@ export const appRouter = router({
         const fileName = `og-image/og-image-${Date.now()}.${ext}`;
         const buffer = Buffer.from(input.imageBase64, 'base64');
         const { url } = await storagePut(fileName, buffer, mime);
-        // Save storage URL â€” the /og-image proxy route serves it without redirect for WhatsApp
+        // Save storage URL Ã¢â‚¬â€ the /og-image proxy route serves it without redirect for WhatsApp
         await upsertSettings({ og_image_url: url });
         // Bust the in-memory image cache so the new image is served immediately
         const { bustOgImageCache } = await import('./_core/vite');
@@ -5665,7 +5645,7 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return await getVpnAttempts(input.limit || 200);
       }),
-    // PÃºblico: verificar se o IP atual Ã© VPN e registrar tentativa
+    // PÃƒÂºblico: verificar se o IP atual ÃƒÂ© VPN e registrar tentativa
     check: publicProcedure
       .input(z.object({
         ip: z.string().optional(),
@@ -5694,7 +5674,7 @@ export const appRouter = router({
   }),
   // === SORTEIO - SENHA EXCLUSIVA ===
   raffleAccess: router({
-    // PÃºblico: verificar senha de acesso ao sorteio
+    // PÃƒÂºblico: verificar senha de acesso ao sorteio
     verify: publicProcedure
       .input(z.object({ password: z.string() }))
       .mutation(async ({ input }) => {
@@ -5704,21 +5684,21 @@ export const appRouter = router({
         }
         const rafflePassword = await getSetting('raffle_password');
         if (!rafflePassword || rafflePassword.trim() === '') {
-          return { success: true }; // Senha nÃ£o configurada, acesso livre
+          return { success: true }; // Senha nÃƒÂ£o configurada, acesso livre
         }
         if (input.password === rafflePassword.trim()) {
           return { success: true };
         }
         return { success: false, error: 'Senha incorreta' };
       }),
-    // PÃºblico: verificar se sorteio tem senha ativa (para mostrar tela de senha)
+    // PÃƒÂºblico: verificar se sorteio tem senha ativa (para mostrar tela de senha)
     config: publicProcedure.query(async () => {
       const enabled = await getSetting('raffle_password_enabled');
       const title = await getSetting('raffle_page_title') || 'SORTEIO';
       const subtitle = await getSetting('raffle_page_subtitle') || 'Participe do nosso sorteio exclusivo!';
       return { passwordRequired: enabled === '1', title, subtitle };
     }),
-    // Admin: obter configuraÃ§Ãµes do sorteio
+    // Admin: obter configuraÃƒÂ§ÃƒÂµes do sorteio
     getConfig: adminProcedure.query(async () => {
       const password = await getSetting('raffle_password') || '';
       const enabled = await getSetting('raffle_password_enabled') || '0';
@@ -5726,7 +5706,7 @@ export const appRouter = router({
       const subtitle = await getSetting('raffle_page_subtitle') || 'Participe do nosso sorteio exclusivo!';
       return { password, enabled, title, subtitle };
     }),
-    // Admin: salvar configuraÃ§Ãµes do sorteio
+    // Admin: salvar configuraÃƒÂ§ÃƒÂµes do sorteio
     saveConfig: adminProcedure
       .input(z.object({
         password: z.string(),
@@ -5795,14 +5775,14 @@ export const appRouter = router({
         const allCustomers = await listCustomers();
         const broadcasts_list = await listBroadcasts();
         const broadcast = broadcasts_list.find(b => b.id === input.id);
-        if (!broadcast) return { success: false, message: 'Broadcast nÃ£o encontrado' };
+        if (!broadcast) return { success: false, message: 'Broadcast nÃƒÂ£o encontrado' };
 
                 let recipients = allCustomers;
         if (broadcast.targetType === 'selected' && broadcast.targetPhones) {
           const phones: string[] = JSON.parse(broadcast.targetPhones);
           recipients = allCustomers.filter(c => phones.includes(c.phone));
         }
-        // Filtrar clientes bloqueados â€” nÃ£o recebem nenhuma comunicaÃ§Ã£o
+        // Filtrar clientes bloqueados Ã¢â‚¬â€ nÃƒÂ£o recebem nenhuma comunicaÃƒÂ§ÃƒÂ£o
         recipients = recipients.filter(c => !(c as any).blocked || (c as any).blocked === 0);
         // Filtrar apenas clientes com e-mail
         const emailRecipients = recipients.filter(c => c.email && c.email.trim() !== '');
@@ -5825,7 +5805,7 @@ export const appRouter = router({
           const { parse: parseCk } = await import('cookie');
           const { COOKIE_NAME: CNAME } = await import('@shared/const');
           const sessionToken = parseCk(ctx.req.headers.cookie ?? '')[CNAME] ?? '';
-          // Converter segundos para expressÃ£o cron (mÃ­nimo 60s = 1 minuto)
+          // Converter segundos para expressÃƒÂ£o cron (mÃƒÂ­nimo 60s = 1 minuto)
           const safeInterval = Math.max(60, intervalSeconds);
           const minutes = Math.ceil(safeInterval / 60);
           const cronExpr = `0 */${minutes} * * * *`;
@@ -5855,7 +5835,7 @@ export const appRouter = router({
             auth: { user: 'h2@h2colombiano.com', pass: process.env.GMAIL_APP_PASSWORD || '' },
           });
           const typeLabel: Record<string, string> = {
-            text: 'Mensagem', promo: '\uD83C\uDF89 PromoÃ§Ã£o', link: '\uD83D\uDD17 Link', banner: '\uD83D\uDDBC\uFE0F Banner', group_invite: '\uD83D\uDC65 Convite para Grupo'
+            text: 'Mensagem', promo: '\uD83C\uDF89 PromoÃƒÂ§ÃƒÂ£o', link: '\uD83D\uDD17 Link', banner: '\uD83D\uDDBC\uFE0F Banner', group_invite: '\uD83D\uDC65 Convite para Grupo'
           };
           const label = typeLabel[broadcast.messageType] || 'Mensagem';
           let extra = '';
@@ -5869,7 +5849,7 @@ export const appRouter = router({
           // Imagem no e-mail: mostrar inline no corpo HTML
           let imageHtml = '';
           if (broadcast.imageUrl) {
-            // Verificar se Ã© URL do storage interno (/manus-storage/) ou URL externa
+            // Verificar se ÃƒÂ© URL do storage interno (/manus-storage/) ou URL externa
             const imgSrc = broadcast.imageUrl.startsWith('/manus-storage/')
               ? `https://h2colombiano.com${broadcast.imageUrl}`
               : broadcast.imageUrl;
@@ -5887,14 +5867,14 @@ export const appRouter = router({
                 ${imageHtml}
               </div>
               <div style="background:#1a1a2e;padding:16px;text-align:center">
-                <p style="color:#6b7280;font-size:12px;margin:0">H2 COLOMBIANO â€” h2colombiano.com</p>
+                <p style="color:#6b7280;font-size:12px;margin:0">H2 COLOMBIANO Ã¢â‚¬â€ h2colombiano.com</p>
               </div>
             </div>`;
 
           const subject = broadcast.title || 'Mensagem da H2 COLOMBIANO';
 
           // Preparar anexo se imagem for do storage interno (pode ser baixada pelo servidor)
-          // Para URLs externas, a imagem jÃ¡ estÃ¡ inline no HTML
+          // Para URLs externas, a imagem jÃƒÂ¡ estÃƒÂ¡ inline no HTML
           const attachments: { filename: string; path?: string; href?: string; contentType?: string }[] = [];
           if (broadcast.imageUrl) {
             const imgUrl = broadcast.imageUrl.startsWith('/manus-storage/')
@@ -5914,7 +5894,7 @@ export const appRouter = router({
                   contentType,
                 });
               }
-            } catch { /* Se nÃ£o conseguir baixar, a imagem ainda aparece inline no HTML */ }
+            } catch { /* Se nÃƒÂ£o conseguir baixar, a imagem ainda aparece inline no HTML */ }
           }
 
           // Enviar em lotes de 10
@@ -5954,13 +5934,13 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Listar clientes para seleÃ§Ã£o (excluir bloqueados)
+    // Listar clientes para seleÃƒÂ§ÃƒÂ£o (excluir bloqueados)
     getCustomers: adminProcedure.query(async () => {
       const { getDb: getDbConn } = await import('./db');
       const dbConn = await getDbConn();
       const allCustomers = await listCustomers();
       const filtered = allCustomers.filter(c => !(c as any).blocked || (c as any).blocked === 0);
-      // Buscar quais telefones tÃªm pedido e qual Ã© o Ãºltimo status
+      // Buscar quais telefones tÃƒÂªm pedido e qual ÃƒÂ© o ÃƒÂºltimo status
       const phonesWithOrders = new Set<string>();
       const phoneLastStatus = new Map<string, string>(); // phone digits -> last status key
       if (dbConn) {
@@ -5970,7 +5950,7 @@ export const appRouter = router({
           const rows1 = await dbConn.selectDistinct({ phone: acp.phone }).from(acp)
             .where(sql`${acp.consumed} = 1 AND ${acp.deletedAt} IS NULL`);
           rows1.forEach((r: { phone: string }) => phonesWithOrders.add(r.phone.replace(/\D/g, '')));
-          // 2. Via orderStatusHistory (cobre pedidos manuais e outros fluxos) + Ãºltimo status
+          // 2. Via orderStatusHistory (cobre pedidos manuais e outros fluxos) + ÃƒÂºltimo status
           const rows2 = await dbConn.select({ phone: osh.customerPhone, status: osh.status })
             .from(osh)
             .where(sql`${osh.customerPhone} IS NOT NULL AND ${osh.customerPhone} != ''`)
@@ -6002,7 +5982,7 @@ export const appRouter = router({
     }),
   }),
 
-  // SeguranÃ§a: reportar tentativa de print/screenshot
+  // SeguranÃƒÂ§a: reportar tentativa de print/screenshot
   security: router({
     reportPrintAttempt: publicProcedure
       .input(z.object({
@@ -6017,21 +5997,21 @@ export const appRouter = router({
         if (phone) {
           await logBlockedAttempt(phone, `Tentativa de print/screenshot (#${attempts})`, clientIp, 'Captura de tela detectada').catch(() => {});
         }
-        // Na 3Âª tentativa: bloquear IP e nÃºmero
+        // Na 3Ã‚Âª tentativa: bloquear IP e nÃƒÂºmero
         if (attempts >= 3) {
           if (clientIp && clientIp !== 'unknown') {
-            await blockIp(clientIp, `Bloqueio automÃ¡tico: ${attempts} tentativas de print/screenshot`).catch(() => {});
+            await blockIp(clientIp, `Bloqueio automÃƒÂ¡tico: ${attempts} tentativas de print/screenshot`).catch(() => {});
           }
           if (phone) {
-            await addToBlocklist({ type: 'phone', phone, reason: `Bloqueio automÃ¡tico: ${attempts} tentativas de print/screenshot` }).catch(() => {});
+            await addToBlocklist({ type: 'phone', phone, reason: `Bloqueio automÃƒÂ¡tico: ${attempts} tentativas de print/screenshot` }).catch(() => {});
           }
           return { blocked: true };
         }
         return { blocked: false, attempts };
       }),
 
-    // Registrar tentativa de inspeÃ§Ã£o (DevTools) detectada no frontend.
-    // NÃ£o bloqueia IP/telefone (pode ser falso-positivo), apenas registra para auditoria.
+    // Registrar tentativa de inspeÃƒÂ§ÃƒÂ£o (DevTools) detectada no frontend.
+    // NÃƒÂ£o bloqueia IP/telefone (pode ser falso-positivo), apenas registra para auditoria.
     reportDevtools: publicProcedure
       .input(z.object({
         method: z.string().optional(),
@@ -6044,7 +6024,7 @@ export const appRouter = router({
         const method = (input.method || 'desconhecido').slice(0, 60);
         await logBlockedAttempt(
           phone || 'sem-telefone',
-          `Tentativa de inspeÃ§Ã£o (DevTools: ${method})`,
+          `Tentativa de inspeÃƒÂ§ÃƒÂ£o (DevTools: ${method})`,
           clientIp,
           'Ferramentas de desenvolvedor detectadas'
         ).catch(() => {});
@@ -6175,9 +6155,9 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ Controle Financeiro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Controle Financeiro Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   financial: router({
-    // Resumo financeiro (mÃ©tricas)
+    // Resumo financeiro (mÃƒÂ©tricas)
     summary: adminProcedure
       .input(z.object({ startDate: z.number().optional(), endDate: z.number().optional() }))
       .query(async ({ input }) => {
@@ -6253,7 +6233,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        // Se marcando como pago e nÃ£o tem receivedDate, definir agora
+        // Se marcando como pago e nÃƒÂ£o tem receivedDate, definir agora
         if (data.status === 'pago' && !data.receivedDate) {
           data.receivedDate = Date.now();
         }
@@ -6279,9 +6259,9 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ Links de IndicaÃ§Ã£o por Cliente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Links de IndicaÃƒÂ§ÃƒÂ£o por Cliente Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   referral: router({
-    // Gerar novo link de indicaÃ§Ã£o para um cliente (admin)
+    // Gerar novo link de indicaÃƒÂ§ÃƒÂ£o para um cliente (admin)
     generateLink: adminProcedure
       .input(z.object({
         customerId: z.number(),
@@ -6335,7 +6315,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Marcar comissÃ£o como paga (admin)
+    // Marcar comissÃƒÂ£o como paga (admin)
     markCommissionPaid: adminProcedure
       .input(z.object({ usageId: z.number() }))
       .mutation(async ({ input }) => {
@@ -6343,7 +6323,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Registrar uso de link de indicaÃ§Ã£o (pÃºblico) â€” chamado apÃ³s cadastro bem-sucedido
+    // Registrar uso de link de indicaÃƒÂ§ÃƒÂ£o (pÃƒÂºblico) Ã¢â‚¬â€ chamado apÃƒÂ³s cadastro bem-sucedido
     recordUsage: publicProcedure
       .input(z.object({
         code: z.string(),
@@ -6353,10 +6333,10 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
-        if (!link || !link.active) return { success: false, reason: 'CÃ³digo invÃ¡lido ou inativo' };
-        // Verificar se o telefone Ã© novo (nÃ£o pode ser cliente jÃ¡ cadastrado)
+        if (!link || !link.active) return { success: false, reason: 'CÃƒÂ³digo invÃƒÂ¡lido ou inativo' };
+        // Verificar se o telefone ÃƒÂ© novo (nÃƒÂ£o pode ser cliente jÃƒÂ¡ cadastrado)
         const isNew = await isPhoneNewCustomer(input.clientPhone);
-        // Permitir mesmo que nÃ£o seja novo (pode ter acabado de se cadastrar)
+        // Permitir mesmo que nÃƒÂ£o seja novo (pode ter acabado de se cadastrar)
         await recordReferralUsage({
           referralLinkId: link.id,
           registrationId: input.registrationId,
@@ -6366,9 +6346,9 @@ export const appRouter = router({
         return { success: true, isNew };
       }),
 
-    // Iniciar sessÃ£o de acesso por link de indicaÃ§Ã£o (pÃºblico)
+    // Iniciar sessÃƒÂ£o de acesso por link de indicaÃƒÂ§ÃƒÂ£o (pÃƒÂºblico)
     // Cria um registro em accessCodePhones com refCode e refExpiresAt = agora + 30min
-    // Retorna um token de sessÃ£o para o frontend usar como "senha temporÃ¡ria"
+    // Retorna um token de sessÃƒÂ£o para o frontend usar como "senha temporÃƒÂ¡ria"
     startRefSession: publicProcedure
       .input(z.object({
         code: z.string(),
@@ -6376,13 +6356,13 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const db = await (await import('./db')).getDb();
-        if (!db) return { success: false, reason: 'DB indisponÃ­vel' };
+        if (!db) return { success: false, reason: 'DB indisponÃƒÂ­vel' };
         const link = await getReferralLinkByCode(input.code);
-        if (!link || !link.active) return { success: false, reason: 'CÃ³digo invÃ¡lido ou inativo' };
+        if (!link || !link.active) return { success: false, reason: 'CÃƒÂ³digo invÃƒÂ¡lido ou inativo' };
         const phone = input.phone.replace(/\D/g, '');
         const now = Date.now();
         const expiresAt = now + 30 * 60 * 1000; // 30 minutos
-        // Verificar se jÃ¡ existe uma sessÃ£o ativa para esse telefone com esse link
+        // Verificar se jÃƒÂ¡ existe uma sessÃƒÂ£o ativa para esse telefone com esse link
         const existing = await db.execute(
           sql.raw(`SELECT id, refExpiresAt FROM accessCodePhones WHERE REGEXP_REPLACE(phone,'[^0-9]','') = '${phone}' AND refCode = '${link.code}' ORDER BY accessedAt DESC LIMIT 1`)
         );
@@ -6391,14 +6371,14 @@ export const appRouter = router({
           const row = existingRows[0];
           const exp = Number(row.refExpiresAt);
           if (exp > now) {
-            // SessÃ£o ainda vÃ¡lida
+            // SessÃƒÂ£o ainda vÃƒÂ¡lida
             return { success: true, expiresAt: exp, ownerName: link.customerName, sessionId: row.id };
           }
-          // SessÃ£o expirada â€” nÃ£o criar nova, exigir senha
-          return { success: false, reason: 'SessÃ£o expirada', expired: true };
+          // SessÃƒÂ£o expirada Ã¢â‚¬â€ nÃƒÂ£o criar nova, exigir senha
+          return { success: false, reason: 'SessÃƒÂ£o expirada', expired: true };
         }
         // Criar nova entrada em accessCodePhones com codeId = 0 (sem senha VIP)
-        // Buscar ou criar um accessCode genÃ©rico para links de indicaÃ§Ã£o
+        // Buscar ou criar um accessCode genÃƒÂ©rico para links de indicaÃƒÂ§ÃƒÂ£o
         let refCodeId = 0;
         try {
           const gcResult = await db.execute(sql.raw(`SELECT id FROM accessCodes WHERE type = 'referral_link' LIMIT 1`));
@@ -6406,8 +6386,8 @@ export const appRouter = router({
           if (gcRows && gcRows.length > 0) {
             refCodeId = Number(gcRows[0].id);
           } else {
-            // Criar um accessCode genÃ©rico para links de indicaÃ§Ã£o
-            await db.execute(sql.raw(`INSERT INTO accessCodes (clientName, type, status, maxUses, currentUses, timeOnly, createdAt) VALUES ('Link de IndicaÃ§Ã£o', 'referral_link', 'active', 9999, 0, 1, NOW())`));
+            // Criar um accessCode genÃƒÂ©rico para links de indicaÃƒÂ§ÃƒÂ£o
+            await db.execute(sql.raw(`INSERT INTO accessCodes (clientName, type, status, maxUses, currentUses, timeOnly, createdAt) VALUES ('Link de IndicaÃƒÂ§ÃƒÂ£o', 'referral_link', 'active', 9999, 0, 1, NOW())`));
             const newGc = await db.execute(sql.raw(`SELECT id FROM accessCodes WHERE type = 'referral_link' LIMIT 1`));
             refCodeId = Number(((newGc as any)[0] as any[])[0]?.id || 0);
           }
@@ -6421,7 +6401,7 @@ export const appRouter = router({
         return { success: true, expiresAt, ownerName: link.customerName, sessionId };
       }),
 
-    // Verificar se sessÃ£o de link ainda Ã© vÃ¡lida (pÃºblico)
+    // Verificar se sessÃƒÂ£o de link ainda ÃƒÂ© vÃƒÂ¡lida (pÃƒÂºblico)
     checkRefSession: publicProcedure
       .input(z.object({ phone: z.string(), code: z.string() }))
       .query(async ({ input }) => {
@@ -6439,15 +6419,15 @@ export const appRouter = router({
         return { valid: false, expired: true };
       }),
 
-    // Validar cÃ³digo de indicaÃ§Ã£o (pÃºblico) â€” verifica se cÃ³digo existe e se telefone Ã© novo
+    // Validar cÃƒÂ³digo de indicaÃƒÂ§ÃƒÂ£o (pÃƒÂºblico) Ã¢â‚¬â€ verifica se cÃƒÂ³digo existe e se telefone ÃƒÂ© novo
     validateCode: publicProcedure
       .input(z.object({ code: z.string(), phone: z.string().optional() }))
       .query(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
-        if (!link || !link.active) return { valid: false, reason: 'CÃ³digo invÃ¡lido ou inativo' };
+        if (!link || !link.active) return { valid: false, reason: 'CÃƒÂ³digo invÃƒÂ¡lido ou inativo' };
         if (input.phone) {
           const isNew = await isPhoneNewCustomer(input.phone);
-          if (!isNew) return { valid: false, reason: 'Este nÃºmero jÃ¡ possui cadastro' };
+          if (!isNew) return { valid: false, reason: 'Este nÃƒÂºmero jÃƒÂ¡ possui cadastro' };
         }
         return {
           valid: true,
@@ -6460,7 +6440,7 @@ export const appRouter = router({
           },
         };
       }),
-    // Adicionar indicaÃ§Ã£o manual a um link (admin)
+    // Adicionar indicaÃƒÂ§ÃƒÂ£o manual a um link (admin)
     addManualUsage: adminProcedure
       .input(z.object({
         linkId: z.number(),
@@ -6497,14 +6477,14 @@ export const appRouter = router({
       }),
   }),
 
-  // === FORMULÃRIO DINÃ‚MICO - TELA DE ACOMPANHAMENTO ===
+  // === FORMULÃƒÂRIO DINÃƒâ€šMICO - TELA DE ACOMPANHAMENTO ===
   trackingQuestions: router({
     // Admin: listar todas as perguntas
     list: adminProcedure.query(async () => {
       return await listTrackingQuestions();
     }),
 
-    // PÃºblico: listar perguntas ativas (para o cliente responder)
+    // PÃƒÂºblico: listar perguntas ativas (para o cliente responder)
     listActive: publicProcedure.query(async () => {
       return await listActiveTrackingQuestions();
     }),
@@ -6570,7 +6550,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // PÃºblico: salvar resposta do cliente
+    // PÃƒÂºblico: salvar resposta do cliente
     saveAnswer: publicProcedure
       .input(z.object({
         orderId: z.number(),
@@ -6584,14 +6564,14 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // PÃºblico/Admin: buscar respostas de um pedido
+    // PÃƒÂºblico/Admin: buscar respostas de um pedido
     getAnswersByOrder: publicProcedure
       .input(z.object({ orderId: z.number() }))
       .query(async ({ input }) => {
         return await getTrackingAnswersByOrder(input.orderId);
       }),
 
-    // Admin: enviar pergunta para um pedido especÃ­fico
+    // Admin: enviar pergunta para um pedido especÃƒÂ­fico
     assignToOrder: adminProcedure
       .input(z.object({
         orderId: z.number(),
@@ -6609,14 +6589,14 @@ export const appRouter = router({
         return { success: true, assignment };
       }),
 
-    // PÃºblico/Admin: buscar perguntas enviadas para um pedido
+    // PÃƒÂºblico/Admin: buscar perguntas enviadas para um pedido
     getAssignments: publicProcedure
       .input(z.object({ orderId: z.number() }))
       .query(async ({ input }) => {
         return await getAssignmentsByOrder(input.orderId);
       }),
 
-    // PÃºblico: salvar resposta de uma pergunta enviada individualmente
+    // PÃƒÂºblico: salvar resposta de uma pergunta enviada individualmente
     saveAssignmentAnswer: publicProcedure
       .input(z.object({
         orderId: z.number(),
@@ -6639,13 +6619,13 @@ export const appRouter = router({
 
   // === FOTO PROTEGIDA ===
   protectedPhotos: router({
-    // PÃºblico: buscar todas as fotos ativas (em ordem)
+    // PÃƒÂºblico: buscar todas as fotos ativas (em ordem)
     getActive: publicProcedure.query(async () => {
       const all = await listProtectedPhotos();
       return all.filter(p => p.isActive === 1);
     }),
 
-    // PÃºblico: verificar se telefone tem acesso (nÃºmero cadastrado) e registrar o acesso
+    // PÃƒÂºblico: verificar se telefone tem acesso (nÃƒÂºmero cadastrado) e registrar o acesso
     checkAccess: publicProcedure
       .input(z.object({ phone: z.string().min(1), photoId: z.number().optional() }))
       .query(async ({ input, ctx }) => {
@@ -6657,7 +6637,7 @@ export const appRouter = router({
         return { hasAccess };
       }),
 
-    // PÃºblico: registrar acesso (chamado apÃ³s autenticaÃ§Ã£o bem-sucedida)
+    // PÃƒÂºblico: registrar acesso (chamado apÃƒÂ³s autenticaÃƒÂ§ÃƒÂ£o bem-sucedida)
     logAccess: publicProcedure
       .input(z.object({ phone: z.string().min(1), photoId: z.number() }))
       .mutation(async ({ input, ctx }) => {
@@ -6732,7 +6712,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Admin: atualizar tÃ­tulo e mensagem
+    // Admin: atualizar tÃƒÂ­tulo e mensagem
     update: adminProcedure
       .input(z.object({
         id: z.number(),
@@ -6757,14 +6737,14 @@ export const appRouter = router({
 
   // === FAQ / CAIXA DE AJUDA ===
   faq: router({
-    // PÃºblico: obter configuraÃ§Ã£o e perguntas ativas
+    // PÃƒÂºblico: obter configuraÃƒÂ§ÃƒÂ£o e perguntas ativas
     getPublic: publicProcedure.query(async () => {
       const config = await getFaqConfig();
       const items = await listFaqItems();
       return {
         config: config ?? {
-          id: 0, title: 'Tire suas dÃºvidas antes de finalizar seu pedido',
-          subtitle: null, buttonLabel: 'Tire suas dÃºvidas',
+          id: 0, title: 'Tire suas dÃƒÂºvidas antes de finalizar seu pedido',
+          subtitle: null, buttonLabel: 'Tire suas dÃƒÂºvidas',
           buttonColor: '#8b5cf6', buttonTextColor: '#ffffff',
           headerColor: '#1e1b4b', headerTextColor: '#ffffff',
           accentColor: '#8b5cf6', enabled: 1, updatedAt: new Date(),
@@ -6780,7 +6760,7 @@ export const appRouter = router({
       return { config, items };
     }),
 
-    // Admin: atualizar configuraÃ§Ã£o
+    // Admin: atualizar configuraÃƒÂ§ÃƒÂ£o
     updateConfig: adminProcedure
       .input(z.object({
         title: z.string().min(1).max(256).optional(),
@@ -6872,11 +6852,11 @@ export const appRouter = router({
         if (!dbInst) throw new Error('DB not available');
         const [result] = await dbInst.insert(customFoldersTable).values({
           name: input.name,
-          icon: input.icon ?? 'ðŸ“',
+          icon: input.icon ?? 'Ã°Å¸â€œÂ',
           color: input.color ?? '#8b5cf6',
           sortOrder: 0,
         });
-        return { id: (result as any).insertId, name: input.name, icon: input.icon ?? 'ðŸ“', color: input.color ?? '#8b5cf6' };
+        return { id: (result as any).insertId, name: input.name, icon: input.icon ?? 'Ã°Å¸â€œÂ', color: input.color ?? '#8b5cf6' };
       }),
 
     // Renomear/editar pasta
@@ -6968,7 +6948,7 @@ export const appRouter = router({
         const idsList = folderOrders.map((fo: any) => fo.registrationId).join(',');
         const subOrderMap = new Map(folderOrders.map((fo: any) => [fo.registrationId, fo.subOrderIndex]));
 
-        // Buscar dados completos do cliente (mesma lÃ³gica do listOrders principal)
+        // Buscar dados completos do cliente (mesma lÃƒÂ³gica do listOrders principal)
         const acpResult = await dbInst.execute(sql.raw(`
           SELECT
             acp.id,
@@ -6991,7 +6971,7 @@ export const appRouter = router({
         const acpRows = (acpResult as any)[0] as any[];
         if (!acpRows || acpRows.length === 0) return [];
 
-        // Buscar Ãºltimo status e dados do serviÃ§o para cada registrationId
+        // Buscar ÃƒÂºltimo status e dados do serviÃƒÂ§o para cada registrationId
         const histResult = await dbInst.execute(sql.raw(`
           SELECT h.registrationId, h.status, h.serviceName, h.serviceOption, h.orderNumber, h.answers,
                  UNIX_TIMESTAMP(h.createdAt) * 1000 AS latestStatusAt
@@ -7035,9 +7015,9 @@ export const appRouter = router({
       }),
   }),
 
-  // ===================== CONFIGURAÃ‡ÃƒO DAS PASTAS FIXAS =====================
+  // ===================== CONFIGURAÃƒâ€¡ÃƒÆ’O DAS PASTAS FIXAS =====================
   folderConfig: router({
-    // Buscar configuraÃ§Ãµes de todas as pastas fixas
+    // Buscar configuraÃƒÂ§ÃƒÂµes de todas as pastas fixas
     getAll: adminProcedure.query(async () => {
       const { getDb } = await import('./db');
       const { folderConfig: folderConfigTable } = await import('../drizzle/schema');
@@ -7047,12 +7027,12 @@ export const appRouter = router({
       const rows = await dbInst.select().from(folderConfigTable).orderBy(asc(folderConfigTable.tabOrder));
       const result: Record<string, { id: number; name: string; icon: string; color: string; tabOrder: number; hidden: number }> = {};
       for (const row of rows) {
-        result[row.folderKey] = { id: row.id, name: row.name, icon: row.icon ?? 'ðŸ“', color: row.color ?? '#8b5cf6', tabOrder: row.tabOrder, hidden: row.hidden ?? 0 };
+        result[row.folderKey] = { id: row.id, name: row.name, icon: row.icon ?? 'Ã°Å¸â€œÂ', color: row.color ?? '#8b5cf6', tabOrder: row.tabOrder, hidden: row.hidden ?? 0 };
       }
       return result;
     }),
 
-    // Salvar configuraÃ§Ã£o de uma pasta fixa
+    // Salvar configuraÃƒÂ§ÃƒÂ£o de uma pasta fixa
     save: adminProcedure
       .input(z.object({ folderKey: z.enum(['entregues', 'arquivo', 'rgcnh']), name: z.string().min(1).max(128), icon: z.string().optional(), color: z.string().optional() }))
       .mutation(async ({ input }) => {
@@ -7062,7 +7042,7 @@ export const appRouter = router({
         const dbInst = await getDb();
         if (!dbInst) throw new Error('DB not available');
         await dbInst.update(folderConfigTable)
-          .set({ name: input.name, icon: input.icon ?? 'ðŸ“', color: input.color ?? '#8b5cf6' })
+          .set({ name: input.name, icon: input.icon ?? 'Ã°Å¸â€œÂ', color: input.color ?? '#8b5cf6' })
           .where(eq(folderConfigTable.folderKey, input.folderKey));
         return { success: true };
       }),
@@ -7123,7 +7103,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ ETAPAS INTERNAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ETAPAS INTERNAS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   stages: router({
     list: adminProcedure.query(async () => {
       return await listInternalStages();
@@ -7168,7 +7148,7 @@ export const appRouter = router({
       .input(z.object({ registrationIds: z.array(z.number()) }))
       .query(async ({ input }) => {
         const map = await getOrderCurrentStagesBatch(input.registrationIds);
-        // Converter Map para array de objetos para serializaÃ§Ã£o
+        // Converter Map para array de objetos para serializaÃƒÂ§ÃƒÂ£o
         return Array.from(map.entries()).map(([registrationId, data]) => ({ registrationId, ...data }));
       }),
   }),
@@ -7185,9 +7165,9 @@ export const appRouter = router({
       }),
   }),
 
-  // BotÃµes extras da tela inicial do cliente (antes do login) â€” gerenciÃ¡veis pelo admin
+  // BotÃƒÂµes extras da tela inicial do cliente (antes do login) Ã¢â‚¬â€ gerenciÃƒÂ¡veis pelo admin
   homeButtons: router({
-    // PÃºblico: lista apenas os botÃµes ativos, em ordem (usado no WelcomeScreen)
+    // PÃƒÂºblico: lista apenas os botÃƒÂµes ativos, em ordem (usado no WelcomeScreen)
     listPublic: publicProcedure.query(async () => await listActiveHomeButtons()),
     // Admin: lista todos (ativos e inativos)
     list: adminProcedure.query(async () => await listHomeButtons()),
@@ -7288,7 +7268,7 @@ export const appRouter = router({
       }),
   }),
 
-  // Retorna URL assinada do vÃ­deo tutorial (para streaming direto sem proxy)
+  // Retorna URL assinada do vÃƒÂ­deo tutorial (para streaming direto sem proxy)
   video: router({
     getTutorialUrl: publicProcedure.query(async () => {
       const { ENV } = await import('./_core/env');
@@ -7397,13 +7377,13 @@ export const appRouter = router({
       .input(z.object({
         name: z.string().min(1).max(100),
         color: z.string().default('red'),
-        icon: z.string().default('ðŸ”–'),
+        icon: z.string().default('Ã°Å¸â€â€“'),
       }))
       .mutation(async ({ input }) => {
         const { getDb } = await import('./db');
         const { orderCustomGroups } = await import('../drizzle/schema');
         const db = await getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃ­vel' });
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃƒÂ­vel' });
         const existing = await db.select().from(orderCustomGroups);
         const position = existing.length;
         await db.insert(orderCustomGroups).values({ name: input.name, color: input.color, icon: input.icon, position });
@@ -7423,7 +7403,7 @@ export const appRouter = router({
         const { orderCustomGroups } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
         const db = await getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃ­vel' });
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃƒÂ­vel' });
         const updates: any = {};
         if (input.name !== undefined) updates.name = input.name;
         if (input.color !== undefined) updates.color = input.color;
@@ -7439,7 +7419,7 @@ export const appRouter = router({
         const { orderCustomGroups } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
         const db = await getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃ­vel' });
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃƒÂ­vel' });
         await db.delete(orderCustomGroups).where(eq(orderCustomGroups.id, input.id));
         return { success: true };
       }),
@@ -7451,7 +7431,7 @@ export const appRouter = router({
         const { orderCustomGroupMembers } = await import('../drizzle/schema');
         const { and, eq } = await import('drizzle-orm');
         const db = await getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃ­vel' });
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃƒÂ­vel' });
         const existing = await db.select().from(orderCustomGroupMembers)
           .where(and(eq(orderCustomGroupMembers.groupId, input.groupId), eq(orderCustomGroupMembers.registrationId, input.registrationId)));
         if (existing.length > 0) return { success: true };
@@ -7466,7 +7446,7 @@ export const appRouter = router({
         const { orderCustomGroupMembers } = await import('../drizzle/schema');
         const { and, eq } = await import('drizzle-orm');
         const db = await getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃ­vel' });
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃƒÂ­vel' });
         await db.delete(orderCustomGroupMembers)
           .where(and(eq(orderCustomGroupMembers.groupId, input.groupId), eq(orderCustomGroupMembers.registrationId, input.registrationId)));
         return { success: true };
@@ -7480,7 +7460,7 @@ export const appRouter = router({
         const { orderCustomGroups } = await import('../drizzle/schema');
         const { eq } = await import('drizzle-orm');
         const db = await getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃ­vel' });
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃƒÂ­vel' });
         // Atualiza o campo position de cada grupo conforme a nova ordem
         for (let i = 0; i < input.orderedIds.length; i++) {
           await db.update(orderCustomGroups)
@@ -7492,7 +7472,7 @@ export const appRouter = router({
   }),
 
   featureCards: router({
-    // Listar todos os cards (pÃºblico - para a pÃ¡gina inicial)
+    // Listar todos os cards (pÃƒÂºblico - para a pÃƒÂ¡gina inicial)
     list: publicProcedure.query(async () => {
       const { featureCards } = await import('../drizzle/schema');
       const { asc } = await import('drizzle-orm');
@@ -7522,8 +7502,8 @@ export const appRouter = router({
         const { getDb } = await import('./db');
         const { sql } = await import('drizzle-orm');
         const db = await getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃ­vel' });
-        // Atribui sortOrder automaticamente como prÃ³ximo nÃºmero na sequÃªncia
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃƒÂ­vel' });
+        // Atribui sortOrder automaticamente como prÃƒÂ³ximo nÃƒÂºmero na sequÃƒÂªncia
         const maxResult = await db.execute(sql`SELECT COALESCE(MAX(sortOrder), -1) + 1 AS nextOrder FROM featureCards`);
         const nextOrder = maxResult?.[0]?.[0]?.nextOrder ?? 0;
         const result = await db.insert(featureCards).values({ ...input, sortOrder: nextOrder });
@@ -7551,7 +7531,7 @@ export const appRouter = router({
         const { eq } = await import('drizzle-orm');
         const { getDb } = await import('./db');
         const db = await getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃ­vel' });
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃƒÂ­vel' });
         const { id, ...data } = input;
         await db.update(featureCards).set(data).where(eq(featureCards.id, id));
         return { success: true };
@@ -7564,13 +7544,13 @@ export const appRouter = router({
         const { eq } = await import('drizzle-orm');
         const { getDb } = await import('./db');
         const db = await getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃ­vel' });
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB indisponÃƒÂ­vel' });
         await db.delete(featureCards).where(eq(featureCards.id, input.id));
         return { success: true };
       }),
   }),
   media: router({
-    // Upload de foto ou vÃ­deo pelo admin â€” retorna URL pÃºblica hospedada no Manus
+    // Upload de foto ou vÃƒÂ­deo pelo admin Ã¢â‚¬â€ retorna URL pÃƒÂºblica hospedada no Manus
     upload: adminProcedure
       .input(z.object({
         fileBase64: z.string(),
@@ -7583,8 +7563,8 @@ export const appRouter = router({
         const baseName = (input.fileName || 'media').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').replace(/[^a-z0-9-]/gi, '') || 'media';
         const fileKey = `admin-media/${baseName}-${randomSuffix}.${r.ext}`;
         const { url } = await storagePut(fileKey, Buffer.from(input.fileBase64, 'base64'), r.contentType);
-        // url jÃ¡ Ã© a URL completa (CloudFront ou /manus-storage/)
-        // Para uso no site (campo de vÃ­deo/imagem), usar a url diretamente
+        // url jÃƒÂ¡ ÃƒÂ© a URL completa (CloudFront ou /manus-storage/)
+        // Para uso no site (campo de vÃƒÂ­deo/imagem), usar a url diretamente
         return { success: true, url, absoluteUrl: url, fileKey };
       }),
   }),
@@ -7609,16 +7589,16 @@ export const appRouter = router({
 
     create: adminProcedure
       .input(z.object({
-        username: z.string().min(2).max(50).regex(/^[a-z0-9._-]+$/i, 'Apenas letras, nÃºmeros, ponto, traÃ§o e sublinhado'),
+        username: z.string().min(2).max(50).regex(/^[a-z0-9._-]+$/i, 'Apenas letras, nÃƒÂºmeros, ponto, traÃƒÂ§o e sublinhado'),
         displayName: z.string().min(2).max(100),
         password: z.string().min(8),
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         type: z.enum(['principal', 'membro']).default('membro'),
-        serverId: z.number().optional(), // ID do servidor especÃ­fico onde criar
+        serverId: z.number().optional(), // ID do servidor especÃƒÂ­fico onde criar
       }))
       .mutation(async ({ input }) => {
-        // Determinar o domÃ­nio correto baseado no servidor selecionado
+        // Determinar o domÃƒÂ­nio correto baseado no servidor selecionado
         let emailDomain = 'h2colombiano.com';
         if (input.serverId) {
           const { listZohoOAuthConfigs: getConfigs } = await import('../server/db');
@@ -7628,16 +7608,16 @@ export const appRouter = router({
         }
         const primaryEmailAddress = `${input.username.toLowerCase()}@${emailDomain}`;
         
-        // Se serverId especificado, usar esse servidor; senÃ£o distribuiÃ§Ã£o automÃ¡tica
+        // Se serverId especificado, usar esse servidor; senÃƒÂ£o distribuiÃƒÂ§ÃƒÂ£o automÃƒÂ¡tica
         let user;
         if (input.serverId) {
           const { listZohoOAuthConfigs } = await import('../server/db');
           const allConfigs = await listZohoOAuthConfigs();
           const config = allConfigs.find((c: any) => c.id === input.serverId);
-          if (!config) throw new Error('Servidor nÃ£o encontrado');
-          if (config.isActive !== 1) throw new Error('Servidor nÃ£o estÃ¡ ativo');
+          if (!config) throw new Error('Servidor nÃƒÂ£o encontrado');
+          if (config.isActive !== 1) throw new Error('Servidor nÃƒÂ£o estÃƒÂ¡ ativo');
           const existingUsers = await listZohoUsersForConfig(config, 10);
-          if (existingUsers.length >= 5) throw new Error(`Servidor ${config.name} estÃ¡ lotado (5/5 contas). Escolha outro servidor.`);
+          if (existingUsers.length >= 5) throw new Error(`Servidor ${config.name} estÃƒÂ¡ lotado (5/5 contas). Escolha outro servidor.`);
           user = await createZohoUserInConfig(config, {
             primaryEmailAddress,
             displayName: input.displayName,
@@ -7728,15 +7708,15 @@ export const appRouter = router({
         name: String(c.name || ''),
         zohoOrgId: String(c.zohoOrgId || ''),
         zohoClientId: String(c.zohoClientId || ''),
-        zohoClientSecret: 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢',
-        zohoRefreshToken: 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢',
+        zohoClientSecret: 'Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢',
+        zohoRefreshToken: 'Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢',
         isActive: Number(c.isActive),
         status: String(c.status || 'inactive'),
         createdAt: Number(c.createdAt || 0),
       }));
     }),
 
-    // Gera URL de autorizaÃ§Ã£o Zoho e salva dados pendentes para callback automÃ¡tico
+    // Gera URL de autorizaÃƒÂ§ÃƒÂ£o Zoho e salva dados pendentes para callback automÃƒÂ¡tico
     getAuthUrl: adminProcedure
       .input(z.object({
         name: z.string().min(2).max(128),
@@ -7759,12 +7739,12 @@ export const appRouter = router({
           redirectUri,
         };
         
-        console.log('[getAuthUrl] Salvando sessÃ£o:', { sessionId: sessionId.substring(0, 8), data: dataToSave });
+        console.log('[getAuthUrl] Salvando sessÃƒÂ£o:', { sessionId: sessionId.substring(0, 8), data: dataToSave });
         await savePendingZohoOAuth(sessionId, dataToSave);
         
         // Verificar imediatamente se foi salvo
         const retrieved = await getPendingZohoOAuth(sessionId);
-        console.log('[getAuthUrl] SessÃ£o recuperada imediatamente:', retrieved ? 'SIM' : 'NÃƒO');
+        console.log('[getAuthUrl] SessÃƒÂ£o recuperada imediatamente:', retrieved ? 'SIM' : 'NÃƒÆ’O');
         if (retrieved) {
           console.log('[getAuthUrl] ClientSecret recuperado:', retrieved.zohoClientSecret.substring(0, 10) + '...');
         }
@@ -7781,7 +7761,7 @@ export const appRouter = router({
         return { authUrl, sessionId };
       }),
 
-    // Adicionar manualmente com refresh token jÃ¡ obtido
+    // Adicionar manualmente com refresh token jÃƒÂ¡ obtido
     create: adminProcedure
       .input(z.object({
         name: z.string().min(2).max(128),
@@ -7809,7 +7789,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const { getZohoOAuthConfig, updateZohoOAuthConfig } = await import('../server/db');
         const config = await getZohoOAuthConfig(input.id);
-        if (!config) throw new Error('ConfiguraÃ§Ã£o nÃ£o encontrada');
+        if (!config) throw new Error('ConfiguraÃƒÂ§ÃƒÂ£o nÃƒÂ£o encontrada');
         const params = new URLSearchParams({
           refresh_token: config.zohoRefreshToken,
           grant_type: 'refresh_token',
@@ -7824,10 +7804,10 @@ export const appRouter = router({
         const data = await res.json() as { access_token?: string; error?: string };
         if (!data.access_token) {
           await updateZohoOAuthConfig(input.id, { status: 'error' });
-          throw new Error(`Token invÃ¡lido: ${data.error ?? 'credenciais incorretas'}`);
+          throw new Error(`Token invÃƒÂ¡lido: ${data.error ?? 'credenciais incorretas'}`);
         }
         await updateZohoOAuthConfig(input.id, { status: 'active' });
-        return { success: true, message: 'ConexÃ£o OK! Token vÃ¡lido.' };
+        return { success: true, message: 'ConexÃƒÂ£o OK! Token vÃƒÂ¡lido.' };
       }),
 
     delete: adminProcedure

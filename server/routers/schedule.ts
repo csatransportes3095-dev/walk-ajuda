@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+import { sendMailDirect } from "../_core/sendMailDirect";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -44,7 +45,7 @@ async function sendScheduleEmail(to: string, subject: string, html: string): Pro
 }
 
 export const scheduleRouter = router({
-  // â”€â”€â”€ CONFIG GLOBAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CONFIG GLOBAL Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   getConfig: publicProcedure.query(async () => {
     const cfg = await getScheduleConfig();
     return cfg;
@@ -66,7 +67,7 @@ export const scheduleRouter = router({
       return { success: true };
     }),
 
-  // â”€â”€â”€ MODELOS PRÃ‰-FEITOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ MODELOS PRÃƒâ€°-FEITOS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   listTemplates: adminProcedure.query(async () => await listScheduleTemplates(false)),
   createTemplate: adminProcedure
     .input(z.object({
@@ -117,12 +118,12 @@ export const scheduleRouter = router({
       return { success: true };
     }),
 
-  // â”€â”€â”€ SLOTS DE DATA/HORA (ADMIN) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SLOTS DE DATA/HORA (ADMIN) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   listSlots: adminProcedure.query(async () => {
     await cleanupOldScheduleSlots();
     return await listScheduleSlots();
   }),
-  // cria slots em lote: combinaÃ§Ã£o de datas x horÃ¡rios, vinculados a um modelo (templateId).
+  // cria slots em lote: combinaÃƒÂ§ÃƒÂ£o de datas x horÃƒÂ¡rios, vinculados a um modelo (templateId).
   createSlots: adminProcedure
     .input(z.object({
       dates: z.array(z.string()).min(1),       // ["2026-06-20", ...]
@@ -146,12 +147,12 @@ export const scheduleRouter = router({
   toggleSlot: adminProcedure
     .input(z.object({ id: z.number(), status: z.enum(["available", "disabled"]) }))
     .mutation(async ({ input }) => { await toggleScheduleSlot(input.id, input.status); return { success: true }; }),
-  // altera o modelo de um horÃ¡rio existente
+  // altera o modelo de um horÃƒÂ¡rio existente
   setSlotTemplate: adminProcedure
     .input(z.object({ id: z.number(), templateId: z.number().nullable() }))
     .mutation(async ({ input }) => { await setScheduleSlotTemplate(input.id, input.templateId); return { success: true }; }),
 
-  // â”€â”€â”€ AGENDAMENTOS (ADMIN) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AGENDAMENTOS (ADMIN) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   listAppointments: adminProcedure.query(async () => await listAppointments()),
 
   getForOrder: adminProcedure
@@ -159,8 +160,8 @@ export const scheduleRouter = router({
     .query(async ({ input }) => {
       let appt = await getAppointmentByOrder(input.registrationId, input.subOrderIndex);
       // Fallback por TELEFONE: agendamentos podem ter sido vinculados a um
-      // registrationId antigo/diferente do mesmo cliente (re-cadastro). Se nÃ£o
-      // encontrar pela chave do pedido, casa pelo telefone (chave confiÃ¡vel),
+      // registrationId antigo/diferente do mesmo cliente (re-cadastro). Se nÃƒÂ£o
+      // encontrar pela chave do pedido, casa pelo telefone (chave confiÃƒÂ¡vel),
       // priorizando o agendamento confirmado mais recente.
       if (!appt && input.customerPhone) {
         const byPhone = await listAppointmentsByPhone(input.customerPhone);
@@ -238,21 +239,21 @@ export const scheduleRouter = router({
       const siteTitle = (await getSetting("site_title")) || "H2 COLOMBIANO";
       const customerName = appt.customerName ? `, ${appt.customerName.split(' ')[0]}` : '';
       // Mensagem WhatsApp
-      const waMsg = `OlÃ¡${customerName}! Seu agendamento do pedido #${appt.registrationId} foi liberado para reagendamento. Por favor, escolha um novo horÃ¡rio pelo link abaixo:\n${link}`;
+      const waMsg = `OlÃƒÂ¡${customerName}! Seu agendamento do pedido #${appt.registrationId} foi liberado para reagendamento. Por favor, escolha um novo horÃƒÂ¡rio pelo link abaixo:\n${link}`;
       const digits = appt.customerPhone.replace(/\D/g, '');
       const waFull = digits.startsWith('55') ? digits : `55${digits}`;
       const waUrl = `https://wa.me/${waFull}?text=${encodeURIComponent(waMsg)}`;
       // Email
       let emailSent = false;
       if (appt.customerEmail) {
-        const subject = `Reagendamento necessÃ¡rio â€” ${siteTitle}`;
+        const subject = `Reagendamento necessÃƒÂ¡rio Ã¢â‚¬â€ ${siteTitle}`;
         const html = `
           <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#ffffff;border-radius:12px">
-            <h2 style="color:${accent};margin:0 0 16px">Reagendamento necessÃ¡rio</h2>
-            <p style="margin:0 0 12px;font-size:15px;color:#333">OlÃ¡${customerName}! Seu agendamento do pedido <strong>#${appt.registrationId}</strong> foi liberado para reagendamento.</p>
-            <p style="margin:0 0 12px;font-size:15px;color:#333">Por favor, clique no botÃ£o abaixo para escolher um novo horÃ¡rio:</p>
+            <h2 style="color:${accent};margin:0 0 16px">Reagendamento necessÃƒÂ¡rio</h2>
+            <p style="margin:0 0 12px;font-size:15px;color:#333">OlÃƒÂ¡${customerName}! Seu agendamento do pedido <strong>#${appt.registrationId}</strong> foi liberado para reagendamento.</p>
+            <p style="margin:0 0 12px;font-size:15px;color:#333">Por favor, clique no botÃƒÂ£o abaixo para escolher um novo horÃƒÂ¡rio:</p>
             <p style="text-align:center;margin:24px 0">
-              <a href="${link}" style="background:${accent};color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">Escolher novo horÃ¡rio</a>
+              <a href="${link}" style="background:${accent};color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">Escolher novo horÃƒÂ¡rio</a>
             </p>
             <p style="margin:0 0 12px;font-size:13px;color:#888">Ou copie e cole este link no navegador:<br>${link}</p>
           </div>`;
@@ -275,7 +276,7 @@ export const scheduleRouter = router({
     .input(z.object({ id: z.number(), slotDate: z.string(), slotTime: z.string() }))
     .mutation(async ({ input }) => {
       const appt = await manualConfirmAppointment(input.id, input.slotDate, input.slotTime);
-      if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento nÃ£o encontrado" });
+      if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento nÃƒÂ£o encontrado" });
       // Notificar admin por e-mail
       try {
         const transporter = nodemailer.createTransport({
@@ -299,14 +300,14 @@ export const scheduleRouter = router({
     .input(z.object({ token: z.string(), origin: z.string() }))
     .mutation(async ({ input }) => {
       const appt = await getAppointmentByToken(input.token);
-      if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento nÃ£o encontrado" });
-      if (!appt.customerEmail) throw new TRPCError({ code: "BAD_REQUEST", message: "Este cliente nÃ£o possui e-mail cadastrado" });
+      if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento nÃƒÂ£o encontrado" });
+      if (!appt.customerEmail) throw new TRPCError({ code: "BAD_REQUEST", message: "Este cliente nÃƒÂ£o possui e-mail cadastrado" });
       const cfg = await getScheduleConfig();
       const link = `${input.origin}/agendar/${appt.token}`;
       const subject = cfg?.emailSubject || "Agende seu atendimento";
-      const intro = cfg?.emailMessage || "Seu pedido precisa ser agendado. Clique no link abaixo para escolher a data e o horÃ¡rio.";
+      const intro = cfg?.emailMessage || "Seu pedido precisa ser agendado. Clique no link abaixo para escolher a data e o horÃƒÂ¡rio.";
       const accent = cfg?.accentColor || "#8b5cf6";
-      const serviceLine = appt.serviceName ? `<p style="margin:0 0 12px;font-size:15px;color:#333"><strong>ServiÃ§o:</strong> ${appt.serviceName}</p>` : "";
+      const serviceLine = appt.serviceName ? `<p style="margin:0 0 12px;font-size:15px;color:#333"><strong>ServiÃƒÂ§o:</strong> ${appt.serviceName}</p>` : "";
       const instrLine = appt.instructions ? `<p style="margin:0 0 12px;font-size:14px;color:#555">${appt.instructions}</p>` : "";
       const warn = cfg?.noShowWarning || "";
       const html = `
@@ -316,7 +317,7 @@ export const scheduleRouter = router({
           ${serviceLine}
           ${instrLine}
           <p style="text-align:center;margin:24px 0">
-            <a href="${link}" style="background:${accent};color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">Escolher data e horÃ¡rio</a>
+            <a href="${link}" style="background:${accent};color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">Escolher data e horÃƒÂ¡rio</a>
           </p>
           <p style="margin:0 0 12px;font-size:13px;color:#888">Ou copie e cole este link no navegador:<br>${link}</p>
           ${warn ? `<p style="margin:16px 0 0;font-size:13px;color:#b45309;background:#fef3c7;padding:12px;border-radius:8px">${warn}</p>` : ""}
@@ -339,7 +340,7 @@ export const scheduleRouter = router({
             html: `<h2>Link de agendamento enviado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>E-mail: <strong>${appt.customerEmail}</strong></p>`,
           });
         } catch (e) { console.warn('[ScheduleEmail] Erro ao enviar e-mail:', e); }
-        // CÃ³pia para o e-mail de destino dos pedidos (mesma regra dos pedidos do site)
+        // CÃƒÂ³pia para o e-mail de destino dos pedidos (mesma regra dos pedidos do site)
         const orderEmail = 'h2@h2colombiano.com';
         if (orderEmail && orderEmail !== appt.customerEmail) {
           const adminHtml = `
@@ -347,18 +348,18 @@ export const scheduleRouter = router({
               <h2 style="color:${accent};margin:0 0 12px">Link de agendamento enviado ao cliente</h2>
               <p style="margin:0 0 8px;font-size:14px;color:#333"><strong>Pedido:</strong> #${appt.registrationId}</p>
               <p style="margin:0 0 8px;font-size:14px;color:#333"><strong>Cliente:</strong> ${appt.customerName || ""} (${appt.customerPhone})</p>
-              ${appt.serviceName ? `<p style=\"margin:0 0 8px;font-size:14px;color:#333\"><strong>ServiÃ§o:</strong> ${appt.serviceName}</p>` : ""}
+              ${appt.serviceName ? `<p style=\"margin:0 0 8px;font-size:14px;color:#333\"><strong>ServiÃƒÂ§o:</strong> ${appt.serviceName}</p>` : ""}
               <p style="margin:0 0 8px;font-size:14px;color:#333"><strong>E-mail do cliente:</strong> ${appt.customerEmail}</p>
               <p style="margin:12px 0 0;font-size:13px;color:#888">Link: ${link}</p>
             </div>`;
-          sendScheduleEmail(orderEmail, `Agendamento enviado â€” Pedido #${appt.registrationId}`, adminHtml).catch(() => {});
+          sendScheduleEmail(orderEmail, `Agendamento enviado Ã¢â‚¬â€ Pedido #${appt.registrationId}`, adminHtml).catch(() => {});
         }
       }
       return { success: ok };
     }),
 
-  // Lista agendamentos de um pedido para a PÃGINA DE ACOMPANHAMENTO (pÃºblico)
-  // Retorna apenas o necessÃ¡rio para exibir status/data/hora e montar o link.
+  // Lista agendamentos de um pedido para a PÃƒÂGINA DE ACOMPANHAMENTO (pÃƒÂºblico)
+  // Retorna apenas o necessÃƒÂ¡rio para exibir status/data/hora e montar o link.
   listForTracking: publicProcedure
     .input(z.object({ registrationId: z.number() }))
     .query(async ({ input }) => {
@@ -376,8 +377,8 @@ export const scheduleRouter = router({
         }));
     }),
 
-  // Lista agendamentos pelo TELEFONE para a PÃGINA DE ACOMPANHAMENTO (pÃºblico).
-  // Mais confiÃ¡vel que registrationId, pois o telefone Ã© a chave usada no acompanhamento.
+  // Lista agendamentos pelo TELEFONE para a PÃƒÂGINA DE ACOMPANHAMENTO (pÃƒÂºblico).
+  // Mais confiÃƒÂ¡vel que registrationId, pois o telefone ÃƒÂ© a chave usada no acompanhamento.
   listForTrackingByPhone: publicProcedure
     .input(z.object({ phone: z.string() }))
     .query(async ({ input }) => {
@@ -395,25 +396,25 @@ export const scheduleRouter = router({
         }));
     }),
 
-  // â”€â”€â”€ PÃšBLICO (PÃGINA DO CLIENTE) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // Dados do agendamento pelo token + slots disponÃ­veis + config
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PÃƒÅ¡BLICO (PÃƒÂGINA DO CLIENTE) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // Dados do agendamento pelo token + slots disponÃƒÂ­veis + config
   getByToken: publicProcedure
     .input(z.object({ token: z.string() }))
     .query(async ({ input }) => {
       const appt = await getAppointmentByToken(input.token);
       if (!appt) return { found: false as const };
       const cfg = await getScheduleConfig();
-      // envia slots disponÃ­veis sempre, para permitir reagendamento
+      // envia slots disponÃƒÂ­veis sempre, para permitir reagendamento
       const slots = await listAvailableScheduleSlots(appt.templateId ?? null);
       return { found: true as const, appointment: appt, config: cfg, slots };
     }),
 
-  // Cliente confirma o horÃ¡rio escolhido (reserva exclusiva)
+  // Cliente confirma o horÃƒÂ¡rio escolhido (reserva exclusiva)
   confirm: publicProcedure
     .input(z.object({ token: z.string(), slotId: z.number() }))
     .mutation(async ({ input }) => {
       const result = await confirmAppointment(input.token, input.slotId);
-      if (!result.ok) throw new TRPCError({ code: "CONFLICT", message: result.reason || "NÃ£o foi possÃ­vel agendar" });
+      if (!result.ok) throw new TRPCError({ code: "CONFLICT", message: result.reason || "NÃƒÂ£o foi possÃƒÂ­vel agendar" });
       const appt = result.appointment!;
       // Notificar admin por e-mail
       (async () => {
@@ -428,37 +429,37 @@ export const scheduleRouter = router({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: 'h2@h2colombiano.com',
             subject: 'Novo agendamento confirmado',
-            html: `<h2>Novo agendamento confirmado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>Cliente: <strong>${appt.customerName || appt.customerPhone}</strong></p><p>Data/Hora: <strong>${appt.slotDate} Ã s ${appt.slotTime}</strong></p>`,
+            html: `<h2>Novo agendamento confirmado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>Cliente: <strong>${appt.customerName || appt.customerPhone}</strong></p><p>Data/Hora: <strong>${appt.slotDate} ÃƒÂ s ${appt.slotTime}</strong></p>`,
           });
         } catch (e) { console.warn('[ScheduleEmail] Erro ao enviar e-mail:', e); }
       })();
-      // Avisa o e-mail de destino dos pedidos que o cliente escolheu o horÃ¡rio
+      // Avisa o e-mail de destino dos pedidos que o cliente escolheu o horÃƒÂ¡rio
       (async () => {
         const orderEmail = 'h2@h2colombiano.com';
         if (orderEmail) {
           const html = `
             <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#fff;border-radius:12px">
-              <h2 style="color:#16a34a;margin:0 0 12px">âœ… Cliente agendou o atendimento</h2>
+              <h2 style="color:#16a34a;margin:0 0 12px">Ã¢Å“â€¦ Cliente agendou o atendimento</h2>
               <p style="margin:0 0 8px;font-size:14px;color:#333"><strong>Pedido:</strong> #${appt.registrationId}</p>
               <p style="margin:0 0 8px;font-size:14px;color:#333"><strong>Cliente:</strong> ${appt.customerName || ""} (${appt.customerPhone})</p>
-              ${appt.serviceName ? `<p style=\"margin:0 0 8px;font-size:14px;color:#333\"><strong>ServiÃ§o:</strong> ${appt.serviceName}</p>` : ""}
-              <p style="margin:8px 0 0;font-size:16px;color:#111"><strong>Data/Hora:</strong> ${appt.slotDate} Ã s ${appt.slotTime}</p>
+              ${appt.serviceName ? `<p style=\"margin:0 0 8px;font-size:14px;color:#333\"><strong>ServiÃƒÂ§o:</strong> ${appt.serviceName}</p>` : ""}
+              <p style="margin:8px 0 0;font-size:16px;color:#111"><strong>Data/Hora:</strong> ${appt.slotDate} ÃƒÂ s ${appt.slotTime}</p>
             </div>`;
-          sendScheduleEmail(orderEmail, `Agendamento confirmado â€” Pedido #${appt.registrationId}`, html).catch(() => {});
+          sendScheduleEmail(orderEmail, `Agendamento confirmado Ã¢â‚¬â€ Pedido #${appt.registrationId}`, html).catch(() => {});
         }
       })().catch(() => {});
       return { success: true, appointment: appt };
     }),
 
   // Cliente solicita reagendamento pelo token: libera o slot atual e volta para pending
-  // para que ele possa escolher um novo horÃ¡rio disponÃ­vel.
+  // para que ele possa escolher um novo horÃƒÂ¡rio disponÃƒÂ­vel.
   requestReschedule: publicProcedure
     .input(z.object({ token: z.string() }))
     .mutation(async ({ input }) => {
       const appt = await getAppointmentByToken(input.token);
-      if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento nÃ£o encontrado" });
+      if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento nÃƒÂ£o encontrado" });
       if (appt.status !== "confirmed") {
-        // jÃ¡ estÃ¡ pendente/sem horÃ¡rio â€” nada a fazer
+        // jÃƒÂ¡ estÃƒÂ¡ pendente/sem horÃƒÂ¡rio Ã¢â‚¬â€ nada a fazer
         return { success: true };
       }
       const prevDate = appt.slotDate;
@@ -486,12 +487,12 @@ export const scheduleRouter = router({
         if (orderEmail) {
           const html = `
             <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#fff;border-radius:12px">
-              <h2 style="color:#d97706;margin:0 0 12px">âš ï¸ Cliente solicitou reagendamento</h2>
+              <h2 style="color:#d97706;margin:0 0 12px">Ã¢Å¡Â Ã¯Â¸Â Cliente solicitou reagendamento</h2>
               <p style="margin:0 0 8px;font-size:14px;color:#333"><strong>Pedido:</strong> #${appt.registrationId}</p>
               <p style="margin:0 0 8px;font-size:14px;color:#333"><strong>Cliente:</strong> ${appt.customerName || ""} (${appt.customerPhone})</p>
-              <p style="margin:8px 0 0;font-size:14px;color:#333">HorÃ¡rio liberado: ${prevDate ?? ""} ${prevTime ?? ""}. O cliente vai escolher um novo horÃ¡rio.</p>
+              <p style="margin:8px 0 0;font-size:14px;color:#333">HorÃƒÂ¡rio liberado: ${prevDate ?? ""} ${prevTime ?? ""}. O cliente vai escolher um novo horÃƒÂ¡rio.</p>
             </div>`;
-          sendScheduleEmail(orderEmail, `Reagendamento solicitado â€” Pedido #${appt.registrationId}`, html).catch(() => {});
+          sendScheduleEmail(orderEmail, `Reagendamento solicitado Ã¢â‚¬â€ Pedido #${appt.registrationId}`, html).catch(() => {});
         }
       })().catch(() => {});
       return { success: true };
@@ -506,7 +507,7 @@ export const scheduleRouter = router({
     }),
 
   // Busca o status mais recente do pedido pelo telefone do cliente
-  // Usado para substituir a variÃ¡vel {status} nas mensagens de WhatsApp
+  // Usado para substituir a variÃƒÂ¡vel {status} nas mensagens de WhatsApp
   getLatestOrderStatusByPhone: adminProcedure
     .input(z.object({ phone: z.string() }))
     .query(async ({ input }) => {

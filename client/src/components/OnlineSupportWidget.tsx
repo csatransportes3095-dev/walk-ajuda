@@ -39,9 +39,14 @@ function saveVisitorData(name: string, phone: string) {
   localStorage.setItem(VISITOR_PHONE_KEY, phone);
 }
 
-function getMessagePayload(payload: unknown): Record<string, any> | null {
-  if (!payload || typeof payload !== "object") return null;
-  return payload as Record<string, any>;
+function getMessagePayload(msg: any): Record<string, any> | null {
+  // Tentar payload já deserializado primeiro
+  if (msg.payload && typeof msg.payload === "object") return msg.payload as Record<string, any>;
+  // Fallback: tentar deserializar payloadJson (string raw do banco)
+  if (msg.payloadJson && typeof msg.payloadJson === "string") {
+    try { return JSON.parse(msg.payloadJson); } catch { return null; }
+  }
+  return null;
 }
 
 function toRenderableUrl(value: unknown): string | null {
@@ -110,7 +115,7 @@ function MediaImage({ src }: { src: string }) {
 }
 
 function renderMessageContent(message: any, handleAction: (actionType?: string, payload?: Record<string, any>) => void) {
-  const payload = getMessagePayload(message.payload);
+  const payload = getMessagePayload(message);
   const imageUrl = getMediaField(payload, "imageUrl");
   const videoUrl = getMediaField(payload, "videoUrl");
   const audioUrl = getMediaField(payload, "audioUrl");
