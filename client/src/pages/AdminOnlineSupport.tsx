@@ -40,6 +40,7 @@ function BotaoEditor({
   value, setValue,
   responseText, setResponseText,
   responseImageUrl, setResponseImageUrl,
+  keywords, setKeywords,
   subButtons, setSubButtons,
   onSave, onCancel,
   saveLabel = "Salvar",
@@ -49,6 +50,7 @@ function BotaoEditor({
   value: string; setValue: (v: string) => void;
   responseText?: string; setResponseText?: (v: string) => void;
   responseImageUrl?: string; setResponseImageUrl?: (v: string) => void;
+  keywords?: string[]; setKeywords?: (v: string[]) => void;
   subButtons?: Array<{label: string; actionType: string; value: string}>;
   setSubButtons?: (v: Array<{label: string; actionType: string; value: string}>) => void;
   onSave: () => void; onCancel?: () => void;
@@ -136,6 +138,33 @@ function BotaoEditor({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Palavras-chave do botão */}
+      {setKeywords && (
+        <div className="border-t border-white/10 pt-3">
+          <label className="text-xs font-bold text-white/60 block mb-1">PALAVRAS-CHAVE (opcional)</label>
+          <p className="text-[11px] text-white/35 mb-2">Quando o cliente digitar uma dessas palavras, este botão é acionado com prioridade sobre as respostas automáticas</p>
+          <div className="space-y-1.5">
+            {(keywords || []).map((kw, i) => (
+              <div key={i} className="flex gap-2">
+                <input
+                  value={kw}
+                  onChange={e => { const n = [...(keywords || [])]; n[i] = e.target.value; setKeywords(n); }}
+                  placeholder="Ex: fazer pedido, quero abrir conta..."
+                  className="flex-1 h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400"
+                />
+                <button onClick={() => setKeywords((keywords || []).filter((_, j) => j !== i))} className="p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => setKeywords([...(keywords || []), ""])}
+              className="text-xs px-3 py-1.5 rounded-lg bg-green-600/20 hover:bg-green-600/35 text-green-300 font-bold transition-colors"
+            >+ Adicionar palavra-chave</button>
+          </div>
         </div>
       )}
 
@@ -239,10 +268,12 @@ export default function AdminOnlineSupport() {
   const [editValue, setEditValue] = useState("");
   const [editResponseText, setEditResponseText] = useState("");
   const [editResponseImageUrl, setEditResponseImageUrl] = useState("");
+  const [editKeywords, setEditKeywords] = useState<string[]>([]);
   const [editSubButtons, setEditSubButtons] = useState<Array<{label: string; actionType: string; value: string}>>([]);
 
   const [newResponseText, setNewResponseText] = useState("");
   const [newResponseImageUrl, setNewResponseImageUrl] = useState("");
+  const [newKeywords, setNewKeywords] = useState<string[]>([]);
   const [newSubButtons, setNewSubButtons] = useState<Array<{label: string; actionType: string; value: string}>>([]);
 
   const handleSaveNew = () => {
@@ -254,6 +285,7 @@ export default function AdminOnlineSupport() {
       actionPayload: buildPayload(newActionType, newValue),
       responseText: newResponseText.trim() || undefined,
       responseImageUrl: newResponseImageUrl.trim() || undefined,
+      keywords: newKeywords.filter(k => k.trim()),
       subButtons: newSubButtons.filter(b => b.label.trim()).map(b => ({
         label: b.label.trim(),
         actionType: b.actionType,
@@ -262,7 +294,7 @@ export default function AdminOnlineSupport() {
       isActive: true,
       sortOrder: 99,
     });
-    setNewTitle(""); setNewActionType("open_internal"); setNewValue(""); setNewResponseText(""); setNewResponseImageUrl(""); setNewSubButtons([]); setShowNewForm(false);
+    setNewTitle(""); setNewActionType("open_internal"); setNewValue(""); setNewResponseText(""); setNewResponseImageUrl(""); setNewKeywords([]); setNewSubButtons([]); setShowNewForm(false);
   };
 
   const handleSaveEdit = () => {
@@ -275,6 +307,7 @@ export default function AdminOnlineSupport() {
       actionPayload: buildPayload(editActionType, editValue),
       responseText: editResponseText.trim() || undefined,
       responseImageUrl: editResponseImageUrl.trim() || undefined,
+      keywords: editKeywords.filter(k => k.trim()),
       subButtons: editSubButtons.filter(b => b.label.trim()).map(b => ({
         label: b.label.trim(),
         actionType: b.actionType,
@@ -293,6 +326,7 @@ export default function AdminOnlineSupport() {
     setEditValue(extractValue(item.actionType, item.actionPayload));
     setEditResponseText(item.responseText || "");
     setEditResponseImageUrl(item.responseImageUrl || "");
+    setEditKeywords(item.keywords || []);
     setEditSubButtons((item.subButtons || []).map((b: any) => ({
       label: b.label || "",
       actionType: b.actionType || "open_internal",
@@ -431,9 +465,10 @@ export default function AdminOnlineSupport() {
                 value={newValue} setValue={setNewValue}
                 responseText={newResponseText} setResponseText={setNewResponseText}
                 responseImageUrl={newResponseImageUrl} setResponseImageUrl={setNewResponseImageUrl}
+                keywords={newKeywords} setKeywords={setNewKeywords}
                 subButtons={newSubButtons} setSubButtons={setNewSubButtons}
                 onSave={handleSaveNew}
-                onCancel={() => { setShowNewForm(false); setNewTitle(""); setNewValue(""); setNewResponseText(""); setNewResponseImageUrl(""); setNewSubButtons([]); }}
+                onCancel={() => { setShowNewForm(false); setNewTitle(""); setNewValue(""); setNewResponseText(""); setNewResponseImageUrl(""); setNewKeywords([]); setNewSubButtons([]); }}
                 saveLabel="Criar Botão"
               />
             )}
@@ -461,6 +496,7 @@ export default function AdminOnlineSupport() {
                         value={editValue} setValue={setEditValue}
                         responseText={editResponseText} setResponseText={setEditResponseText}
                         responseImageUrl={editResponseImageUrl} setResponseImageUrl={setEditResponseImageUrl}
+                        keywords={editKeywords} setKeywords={setEditKeywords}
                         subButtons={editSubButtons} setSubButtons={setEditSubButtons}
                         onSave={handleSaveEdit}
                         onCancel={() => setEditId(null)}

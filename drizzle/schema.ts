@@ -1777,6 +1777,7 @@ export const onlineSupportMenuItems = mysqlTable("onlineSupportMenuItems", {
   responseText: text("responseText"),
   responseImageUrl: text("responseImageUrl"),
   subButtonsJson: text("subButtonsJson"),
+  keywordsJson: text("keywordsJson"),
   sortOrder: int("sortOrder").notNull().default(0),
   isActive: int("isActive").notNull().default(1),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

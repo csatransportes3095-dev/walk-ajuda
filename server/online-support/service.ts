@@ -701,11 +701,21 @@ export async function sendVisitorMessage(input: {
     return { conversationId: conversation.id, visitorMessage, responses };
   }
 
-  // Verificar se o texto corresponde a um botão do menu (árvore de botões)
+  // Verificar se o texto corresponde a um botão do menu (por keywords ou título) — PRIORIDADE sobre respostas automáticas
+  const inputNorm = normalizeText(input.text || "");
   const menuItemMatch = menuItems.find((m: any) => {
-    const t = normalizeText(input.text || "");
+    // 1. Verificar por keywords configuradas no botão
+    const keywords: string[] = m.keywords || [];
+    if (keywords.length > 0) {
+      const kwMatch = keywords.some(kw => {
+        const kwNorm = normalizeText(kw);
+        return inputNorm === kwNorm || inputNorm.includes(kwNorm) || fuzzyIncludes(inputNorm, kwNorm);
+      });
+      if (kwMatch) return true;
+    }
+    // 2. Verificar pelo título do botão
     const title = normalizeText(m.title || "");
-    return t === title || t.includes(title) || title.includes(t);
+    return inputNorm === title || inputNorm.includes(title) || title.includes(inputNorm);
   });
   if (menuItemMatch && (menuItemMatch.responseText || (menuItemMatch.subButtons && menuItemMatch.subButtons.length > 0))) {
     const botText = menuItemMatch.responseText || "Selecione uma opção:";
@@ -994,6 +1004,7 @@ export async function listMenuItems(activeOnly = false) {
     ...row,
     actionPayload: parseJson<Record<string, unknown> | null>(row.actionPayloadJson, null),
     subButtons: parseJson<Array<Record<string, unknown>>>(row.subButtonsJson || null, []),
+    keywords: parseJson<string[]>(row.keywordsJson || null, []),
   }));
 }
 
@@ -1025,6 +1036,7 @@ export async function saveMenuItem(input: {
         actionPayloadJson: stringifyJson(input.actionPayload || {}),
         responseText: input.responseText || null,
         responseImageUrl: (input as any).responseImageUrl || null,
+        keywordsJson: (input as any).keywords && (input as any).keywords.length > 0 ? stringifyJson((input as any).keywords) : null,
         subButtonsJson: input.subButtons && input.subButtons.length > 0 ? stringifyJson(input.subButtons) : null,
         sortOrder: input.sortOrder ?? 0,
         isActive: input.isActive ? 1 : 0,
