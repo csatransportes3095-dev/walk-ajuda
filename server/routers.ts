@@ -3296,7 +3296,7 @@ export const appRouter = router({
         skipEmail: z.boolean().optional().default(false),
       }))
       .mutation(async ({ input }) => {
-        const smtpPass = process.env.ZOHO_EMAIL_PASSWORD || '';
+        const smtpPass = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
         if (input.status === 'recebido') {
           return { success: false, error: 'Status recebido não pode ser definido manualmente' };
         }
@@ -3356,7 +3356,7 @@ export const appRouter = router({
             console.error('[Email] Erro ao enviar notificação ao admin:', adminEmailError);
           }
         } else if (!smtpPass) {
-          console.warn('[Email] ZOHO_EMAIL_PASSWORD ausente: notificação por e-mail ignorada em updateStatus.');
+          console.warn('[Email] SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente: notificação por e-mail ignorada em updateStatus.');
         }
 
         // Enviar email ao cliente se tiver email, não for silencioso e não estiver bloqueado
@@ -3666,9 +3666,9 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         try {
-          const smtpPass = process.env.ZOHO_EMAIL_PASSWORD || '';
+          const smtpPass = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
           if (!smtpPass) {
-            return { success: false, message: 'Configuração de e-mail indisponível (ZOHO_EMAIL_PASSWORD ausente).' };
+            return { success: false, message: 'Configuração de e-mail indisponível (SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente).' };
           }
           // Verificar se cliente está bloqueado
           if (input.customerPhone) {
