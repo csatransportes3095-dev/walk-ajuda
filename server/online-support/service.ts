@@ -620,7 +620,7 @@ export async function sendVisitorMessage(input: {
         const kwMatch = keywords.some(kw => {
           const kwNorm = normalizeText(kw);
           if (!kwNorm || kwNorm.length < 3) return false;
-          return inputNormOOH === kwNorm || inputNormOOH.includes(kwNorm) || (kwNorm.length >= 4 && fuzzyIncludes(inputNormOOH, kwNorm));
+          return inputNormOOH === kwNorm || inputNormOOH.includes(kwNorm);
         });
         if (kwMatch) return true;
       }
@@ -793,8 +793,8 @@ export async function sendVisitorMessage(input: {
       const kwMatch = keywords.some(kw => {
         const kwNorm = normalizeText(kw);
         if (!kwNorm || kwNorm.length < 3) return false;
-        // Match exato, input contém keyword, ou fuzzy — mas keyword deve ter pelo menos 4 chars para fuzzy
-        return inputNorm === kwNorm || inputNorm.includes(kwNorm) || (kwNorm.length >= 4 && fuzzyIncludes(inputNorm, kwNorm));
+        // Match exato ou input contém keyword (sem fuzzy para evitar falsos positivos)
+        return inputNorm === kwNorm || inputNorm.includes(kwNorm);
       });
       if (kwMatch) return true;
     }
