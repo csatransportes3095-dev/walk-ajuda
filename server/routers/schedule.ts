@@ -22,8 +22,8 @@ async function sendScheduleEmail(to: string, subject: string, html: string): Pro
   try {
     const transporter = nodemailer.createTransport({
       host: 'smtp.zoho.com',
-      port: 465,
-      secure: true,
+      port: 587,
+      secure: false,
       auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
     });
     const siteTitle = (await getSetting("site_title")) || "WALK AJUDA";
@@ -280,8 +280,8 @@ export const scheduleRouter = router({
       try {
         const transporter = nodemailer.createTransport({
           host: 'smtp.zoho.com',
-          port: 465,
-          secure: true,
+          port: 587,
+          secure: false,
           auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
         await transporter.sendMail({
@@ -328,8 +328,8 @@ export const scheduleRouter = router({
         try {
           const transporter = nodemailer.createTransport({
           host: 'smtp.zoho.com',
-          port: 465,
-          secure: true,
+          port: 587,
+          secure: false,
           auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
@@ -420,8 +420,8 @@ export const scheduleRouter = router({
         try {
           const transporter = nodemailer.createTransport({
           host: 'smtp.zoho.com',
-          port: 465,
-          secure: true,
+          port: 587,
+          secure: false,
           auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
@@ -469,8 +469,8 @@ export const scheduleRouter = router({
         try {
           const transporter = nodemailer.createTransport({
           host: 'smtp.zoho.com',
-          port: 465,
-          secure: true,
+          port: 587,
+          secure: false,
           auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({

@@ -146,7 +146,7 @@ async function generateReceiptJpg(pdfBuffer: Buffer): Promise<Buffer> {
 
 async function sendReceiptEmail(to: string, clientName: string, receiptNumber: string, installmentNumber: number, pdfBuffer: Buffer): Promise<void> {
   const transporter = nodemailer.createTransport({
-    host: 'smtp.zoho.com', port: 465, secure: true,
+    host: 'smtp.zoho.com', port: 587, secure: false,
     auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
   });
   await transporter.sendMail({
@@ -687,7 +687,7 @@ export const loanRouter = router({
     if (clientEmail) {
       try {
         const transporter = nodemailer.createTransport({
-          host: 'smtp.zoho.com', port: 465, secure: true,
+          host: 'smtp.zoho.com', port: 587, secure: false,
           auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
         const amountFmt = parseFloat(loan.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -2308,7 +2308,7 @@ export const loanRouter = router({
     if (!toEmail) throw new TRPCError({ code: 'BAD_REQUEST', message: 'E-mail do cliente não encontrado. Informe o e-mail manualmente.' });
     const pdfBuffer = Buffer.from(input.pdfBase64, 'base64');
     const transporter = nodemailer.createTransport({
-      host: 'smtp.zoho.com', port: 465, secure: true,
+      host: 'smtp.zoho.com', port: 587, secure: false,
       auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
     });
     await transporter.sendMail({
