@@ -145,26 +145,21 @@ function BotaoEditor({
       {setKeywords && (
         <div className="border-t border-white/10 pt-3">
           <label className="text-xs font-bold text-white/60 block mb-1">PALAVRAS-CHAVE (opcional)</label>
-          <p className="text-[11px] text-white/35 mb-2">Quando o cliente digitar uma dessas palavras, este botão é acionado com prioridade sobre as respostas automáticas</p>
-          <div className="space-y-1.5">
-            {(keywords || []).map((kw, i) => (
-              <div key={i} className="flex gap-2">
-                <input
-                  value={kw}
-                  onChange={e => { const n = [...(keywords || [])]; n[i] = e.target.value; setKeywords(n); }}
-                  placeholder="Ex: fazer pedido, quero abrir conta..."
-                  className="flex-1 h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400"
-                />
-                <button onClick={() => setKeywords((keywords || []).filter((_, j) => j !== i))} className="p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={() => setKeywords([...(keywords || []), ""])}
-              className="text-xs px-3 py-1.5 rounded-lg bg-green-600/20 hover:bg-green-600/35 text-green-300 font-bold transition-colors"
-            >+ Adicionar palavra-chave</button>
-          </div>
+          <p className="text-[11px] text-white/35 mb-2">Separe por vírgula ou uma por linha. Ex: fazer pedido, quero abrir conta, pedido</p>
+          <textarea
+            value={(keywords || []).join("\n")}
+            onChange={e => {
+              const raw = e.target.value;
+              const parsed = raw.split(/[,\n]/).map(k => k.trim()).filter(Boolean);
+              setKeywords(parsed.length > 0 || raw.trim() === "" ? (raw.endsWith(",") || raw.endsWith("\n") ? parsed : raw.split(/[,\n]/).map(k => k.trim())) : []);
+            }}
+            placeholder={"fazer pedido\nquero abrir conta\npedido, cadastro"}
+            rows={4}
+            className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400 resize-none"
+          />
+          {(keywords || []).filter(k => k.trim()).length > 0 && (
+            <p className="text-[11px] text-green-400/70 mt-1">{(keywords || []).filter(k => k.trim()).length} palavra(s)-chave configurada(s)</p>
+          )}
         </div>
       )}
 
