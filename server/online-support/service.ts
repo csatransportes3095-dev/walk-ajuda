@@ -619,12 +619,15 @@ export async function sendVisitorMessage(input: {
       if (keywords.length > 0) {
         const kwMatch = keywords.some(kw => {
           const kwNorm = normalizeText(kw);
-          return inputNormOOH === kwNorm || inputNormOOH.includes(kwNorm) || fuzzyIncludes(inputNormOOH, kwNorm);
+          if (!kwNorm || kwNorm.length < 3) return false;
+          return inputNormOOH === kwNorm || inputNormOOH.includes(kwNorm) || (kwNorm.length >= 4 && fuzzyIncludes(inputNormOOH, kwNorm));
         });
         if (kwMatch) return true;
       }
-      const title = normalizeText(m.title || "");
-      return inputNormOOH === title || inputNormOOH.includes(title) || title.includes(inputNormOOH);
+      const titleRaw = (m.title || "").replace(/^[\p{Emoji}\s]+/u, "").trim();
+      const title = normalizeText(titleRaw);
+      if (title.length < 3) return false;
+      return inputNormOOH === title || inputNormOOH.includes(title);
     });
     if (menuItemOOH) {
       const actionType = (menuItemOOH as any).actionType || "send_message";
@@ -639,8 +642,9 @@ export async function sendVisitorMessage(input: {
       } else if (hasDirectAction) {
         botPayload.buttons = [{ label: menuItemOOH.title, actionType, actionPayload }];
       }
-      if ((menuItemOOH as any).responseImageUrl) {
-        botPayload.media = { imageUrl: (menuItemOOH as any).responseImageUrl };
+      const imgUrlOOH = menuItemOOH.responseImageUrl;
+      if (imgUrlOOH) {
+        botPayload.media = { imageUrl: imgUrlOOH };
       }
       const menuBotMsgOOH = await createMessage({
         conversationId: conversation.id, senderType: "bot", senderName: "Assistente",
@@ -783,18 +787,22 @@ export async function sendVisitorMessage(input: {
   // Verificar se o texto corresponde a um botão do menu (por keywords ou título) — PRIORIDADE sobre respostas automáticas
   const inputNorm = normalizeText(input.text || "");
   const menuItemMatch = menuItems.find((m: any) => {
-    // 1. Verificar por keywords configuradas no botão
+    // 1. Verificar por keywords configuradas no botão (prioridade)
     const keywords: string[] = m.keywords || [];
     if (keywords.length > 0) {
       const kwMatch = keywords.some(kw => {
         const kwNorm = normalizeText(kw);
-        return inputNorm === kwNorm || inputNorm.includes(kwNorm) || fuzzyIncludes(inputNorm, kwNorm);
+        if (!kwNorm || kwNorm.length < 3) return false;
+        // Match exato, input contém keyword, ou fuzzy — mas keyword deve ter pelo menos 4 chars para fuzzy
+        return inputNorm === kwNorm || inputNorm.includes(kwNorm) || (kwNorm.length >= 4 && fuzzyIncludes(inputNorm, kwNorm));
       });
       if (kwMatch) return true;
     }
-    // 2. Verificar pelo título do botão
-    const title = normalizeText(m.title || "");
-    return inputNorm === title || inputNorm.includes(title) || title.includes(inputNorm);
+    // 2. Verificar pelo título do botão — apenas match exato ou input contém título completo
+    const titleRaw = (m.title || "").replace(/^[\p{Emoji}\s]+/u, "").trim();
+    const title = normalizeText(titleRaw);
+    if (title.length < 3) return false;
+    return inputNorm === title || inputNorm.includes(title);
   });
   if (menuItemMatch) {
     const actionType = (menuItemMatch as any).actionType || "send_message";
@@ -820,8 +828,9 @@ export async function sendVisitorMessage(input: {
       }];
     }
 
-    if ((menuItemMatch as any).responseImageUrl) {
-      botPayload.media = { imageUrl: (menuItemMatch as any).responseImageUrl };
+    const imgUrl = menuItemMatch.responseImageUrl;
+    if (imgUrl) {
+      botPayload.media = { imageUrl: imgUrl };
     }
 
     const menuBotMsg = await createMessage({
