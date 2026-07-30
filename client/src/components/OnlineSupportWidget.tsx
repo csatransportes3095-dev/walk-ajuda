@@ -130,6 +130,30 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
     sendVisitorMessageMut.mutate({ conversationId, visitorId, text: message.trim() });
   };
 
+  // Clique num botão do menu principal (com responseText e subButtons da árvore)
+  const handleMenuItemClick = (item: any) => {
+    if (!conversationId) return;
+    const label = item.title || item.label || "";
+    // Enviar o texto do botão como mensagem do visitante
+    sendVisitorMessageMut.mutate({ conversationId, visitorId, text: label });
+    // Se o item tem responseText ou subButtons, enviar como resposta do bot
+    if (item.responseText || (item.subButtons && item.subButtons.length > 0)) {
+      setTimeout(() => {
+        // Criar mensagem bot com responseText + subButtons
+        const payload: Record<string, any> = {};
+        if (item.subButtons && item.subButtons.length > 0) {
+          payload.buttons = item.subButtons.map((b: any) => ({
+            label: b.label,
+            actionType: b.actionType,
+            actionPayload: b.actionPayload || {},
+          }));
+        }
+        // Enviar via sendVisitorMessage com texto especial que o bot vai interceptar
+        // Na verdade, vamos usar handleMenuAction para ações diretas
+      }, 300);
+    }
+  };
+
   const handleMenuAction = (actionType?: string, actionPayload?: Record<string, any>) => {
     if (!actionType) return;
     if (actionType === "open_internal" && actionPayload?.path) { window.location.href = String(actionPayload.path); return; }

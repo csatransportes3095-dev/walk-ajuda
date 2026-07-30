@@ -325,6 +325,12 @@ export const onlineSupportRouter = router({
         color: z.string().optional(),
         actionType: z.string().min(1),
         actionPayload: z.record(z.string(), z.unknown()).optional(),
+        responseText: z.string().optional(),
+        subButtons: z.array(z.object({
+          label: z.string(),
+          actionType: z.string(),
+          actionPayload: z.record(z.string(), z.unknown()).optional(),
+        })).optional(),
         sortOrder: z.number().optional(),
         isActive: z.boolean().optional(),
       }),

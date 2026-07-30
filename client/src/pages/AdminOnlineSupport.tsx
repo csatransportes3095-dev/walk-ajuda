@@ -38,16 +38,23 @@ function BotaoEditor({
   title, setTitle,
   actionType, setActionType,
   value, setValue,
+  responseText, setResponseText,
+  subButtons, setSubButtons,
   onSave, onCancel,
   saveLabel = "Salvar",
 }: {
   title: string; setTitle: (v: string) => void;
   actionType: string; setActionType: (v: string) => void;
   value: string; setValue: (v: string) => void;
+  responseText?: string; setResponseText?: (v: string) => void;
+  subButtons?: Array<{label: string; actionType: string; value: string}>;
+  setSubButtons?: (v: Array<{label: string; actionType: string; value: string}>) => void;
   onSave: () => void; onCancel?: () => void;
   saveLabel?: string;
 }) {
   const info = getActionInfo(actionType);
+  const subs = subButtons || [];
+  const setSubs = setSubButtons || (() => {});
   return (
     <div className="space-y-3 p-4 bg-white/5 rounded-xl border border-white/10">
       <div>
@@ -98,7 +105,71 @@ function BotaoEditor({
           )}
         </div>
       )}
-      <div className="flex gap-2">
+
+      {/* Resposta do bot quando o cliente clica neste botão */}
+      {setResponseText && (
+        <div className="border-t border-white/10 pt-3">
+          <label className="text-xs font-bold text-white/60 block mb-1">RESPOSTA DO BOT (opcional)</label>
+          <p className="text-[11px] text-white/35 mb-2">Texto que o bot envia quando o cliente clica neste botão</p>
+          <textarea
+            value={responseText || ""}
+            onChange={e => setResponseText(e.target.value)}
+            placeholder="Ex: Olá! Para fazer seu pedido, siga os passos abaixo..."
+            rows={3}
+            className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400 resize-none"
+          />
+        </div>
+      )}
+
+      {/* Sub-botões (árvore) */}
+      {setSubButtons && (
+        <div className="border-t border-white/10 pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <label className="text-xs font-bold text-white/60 block">SUB-BOTÕES (opcional)</label>
+              <p className="text-[11px] text-white/35">Botões que aparecem junto com a resposta acima</p>
+            </div>
+            <button
+              onClick={() => setSubs([...subs, { label: "", actionType: "open_internal", value: "" }])}
+              className="text-xs px-3 py-1.5 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 font-bold transition-colors"
+            >+ Adicionar</button>
+          </div>
+          {subs.map((sub, i) => (
+            <div key={i} className="flex gap-2 mb-2 items-start">
+              <div className="flex-1 space-y-1.5">
+                <input
+                  value={sub.label}
+                  onChange={e => { const n = [...subs]; n[i] = {...n[i], label: e.target.value}; setSubs(n); }}
+                  placeholder="Nome do sub-botão"
+                  className="w-full h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400"
+                />
+                <div className="flex gap-1.5">
+                  <select
+                    value={sub.actionType}
+                    onChange={e => { const n = [...subs]; n[i] = {...n[i], actionType: e.target.value, value: ""}; setSubs(n); }}
+                    className="flex-1 h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white focus:outline-none focus:border-blue-400"
+                  >
+                    {ACTION_TYPES.map(a => <option key={a.value} value={a.value} className="bg-gray-900">{a.label}</option>)}
+                  </select>
+                  {getActionInfo(sub.actionType).field && (
+                    <input
+                      value={sub.value}
+                      onChange={e => { const n = [...subs]; n[i] = {...n[i], value: e.target.value}; setSubs(n); }}
+                      placeholder={getActionInfo(sub.actionType).placeholder}
+                      className="flex-1 h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400"
+                    />
+                  )}
+                </div>
+              </div>
+              <button onClick={() => setSubs(subs.filter((_, j) => j !== i))} className="p-1.5 mt-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-2 pt-1">
         <button onClick={onSave} className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold transition-colors">
           {saveLabel}
         </button>
@@ -148,6 +219,11 @@ export default function AdminOnlineSupport() {
   const [editTitle, setEditTitle] = useState("");
   const [editActionType, setEditActionType] = useState("open_internal");
   const [editValue, setEditValue] = useState("");
+  const [editResponseText, setEditResponseText] = useState("");
+  const [editSubButtons, setEditSubButtons] = useState<Array<{label: string; actionType: string; value: string}>>([]);
+
+  const [newResponseText, setNewResponseText] = useState("");
+  const [newSubButtons, setNewSubButtons] = useState<Array<{label: string; actionType: string; value: string}>>([]);
 
   const handleSaveNew = () => {
     if (!newTitle.trim()) { toast.error("Nome do botão é obrigatório"); return; }
@@ -156,10 +232,16 @@ export default function AdminOnlineSupport() {
       description: "",
       actionType: newActionType,
       actionPayload: buildPayload(newActionType, newValue),
+      responseText: newResponseText.trim() || undefined,
+      subButtons: newSubButtons.filter(b => b.label.trim()).map(b => ({
+        label: b.label.trim(),
+        actionType: b.actionType,
+        actionPayload: buildPayload(b.actionType, b.value),
+      })),
       isActive: true,
       sortOrder: 99,
     });
-    setNewTitle(""); setNewActionType("open_internal"); setNewValue(""); setShowNewForm(false);
+    setNewTitle(""); setNewActionType("open_internal"); setNewValue(""); setNewResponseText(""); setNewSubButtons([]); setShowNewForm(false);
   };
 
   const handleSaveEdit = () => {
@@ -170,6 +252,12 @@ export default function AdminOnlineSupport() {
       description: "",
       actionType: editActionType,
       actionPayload: buildPayload(editActionType, editValue),
+      responseText: editResponseText.trim() || undefined,
+      subButtons: editSubButtons.filter(b => b.label.trim()).map(b => ({
+        label: b.label.trim(),
+        actionType: b.actionType,
+        actionPayload: buildPayload(b.actionType, b.value),
+      })),
       isActive: true,
       sortOrder: 0,
     });
@@ -181,6 +269,12 @@ export default function AdminOnlineSupport() {
     setEditTitle(item.title || "");
     setEditActionType(item.actionType || "open_internal");
     setEditValue(extractValue(item.actionType, item.actionPayload));
+    setEditResponseText(item.responseText || "");
+    setEditSubButtons((item.subButtons || []).map((b: any) => ({
+      label: b.label || "",
+      actionType: b.actionType || "open_internal",
+      value: extractValue(b.actionType, b.actionPayload || {}),
+    })));
   };
 
   // ── Respostas Automáticas ──
@@ -310,8 +404,10 @@ export default function AdminOnlineSupport() {
                 title={newTitle} setTitle={setNewTitle}
                 actionType={newActionType} setActionType={setNewActionType}
                 value={newValue} setValue={setNewValue}
+                responseText={newResponseText} setResponseText={setNewResponseText}
+                subButtons={newSubButtons} setSubButtons={setNewSubButtons}
                 onSave={handleSaveNew}
-                onCancel={() => { setShowNewForm(false); setNewTitle(""); setNewValue(""); }}
+                onCancel={() => { setShowNewForm(false); setNewTitle(""); setNewValue(""); setNewResponseText(""); setNewSubButtons([]); }}
                 saveLabel="Criar Botão"
               />
             )}
@@ -337,6 +433,8 @@ export default function AdminOnlineSupport() {
                         title={editTitle} setTitle={setEditTitle}
                         actionType={editActionType} setActionType={setEditActionType}
                         value={editValue} setValue={setEditValue}
+                        responseText={editResponseText} setResponseText={setEditResponseText}
+                        subButtons={editSubButtons} setSubButtons={setEditSubButtons}
                         onSave={handleSaveEdit}
                         onCancel={() => setEditId(null)}
                         saveLabel="Salvar Alterações"

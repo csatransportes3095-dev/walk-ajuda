@@ -659,6 +659,39 @@ export async function sendVisitorMessage(input: {
     return { conversationId: conversation.id, visitorMessage, responses };
   }
 
+  // Verificar se o texto corresponde a um botão do menu (árvore de botões)
+  const menuItemMatch = menuItems.find((m: any) => {
+    const t = normalizeText(input.text || "");
+    const title = normalizeText(m.title || "");
+    return t === title || t.includes(title) || title.includes(t);
+  });
+  if (menuItemMatch && (menuItemMatch.responseText || (menuItemMatch.subButtons && menuItemMatch.subButtons.length > 0))) {
+    const botText = menuItemMatch.responseText || "Selecione uma opção:";
+    const botPayload: Record<string, unknown> = {};
+    if (menuItemMatch.subButtons && menuItemMatch.subButtons.length > 0) {
+      botPayload.buttons = menuItemMatch.subButtons.map((b: any) => ({
+        label: b.label,
+        actionType: b.actionType,
+        actionPayload: b.actionPayload || {},
+      }));
+    }
+    const menuBotMsg = await createMessage({
+      conversationId: conversation.id,
+      senderType: "bot",
+      senderName: "Assistente",
+      text: botText,
+      messageType: "rich",
+      payload: botPayload,
+    });
+    await touchConversationForMessage(conversation.id, {
+      previewText: menuBotMsg.text || "",
+      incrementVisitorUnread: 1,
+      status: "waiting_customer",
+    });
+    responses.push({ type: "menu_item", message: menuBotMsg });
+    return { conversationId: conversation.id, visitorMessage, responses };
+  }
+
   if (config.autoReplyEnabled === 1) {
     const match = await testAutoReply(input.text);
     if (match.matched && match.reply) {
@@ -915,6 +948,7 @@ export async function listMenuItems(activeOnly = false) {
   return rows.map(row => ({
     ...row,
     actionPayload: parseJson<Record<string, unknown> | null>(row.actionPayloadJson, null),
+    subButtons: parseJson<Array<Record<string, unknown>>>(row.subButtonsJson || null, []),
   }));
 }
 
@@ -926,6 +960,8 @@ export async function saveMenuItem(input: {
   color?: string;
   actionType: string;
   actionPayload?: Record<string, unknown>;
+  responseText?: string;
+  subButtons?: Array<Record<string, unknown>>;
   sortOrder?: number;
   isActive?: boolean;
 }) {
@@ -942,6 +978,8 @@ export async function saveMenuItem(input: {
         color: input.color || null,
         actionType: input.actionType,
         actionPayloadJson: stringifyJson(input.actionPayload || {}),
+        responseText: input.responseText || null,
+        subButtonsJson: input.subButtons && input.subButtons.length > 0 ? stringifyJson(input.subButtons) : null,
         sortOrder: input.sortOrder ?? 0,
         isActive: input.isActive ? 1 : 0,
         updatedAt: new Date(),
@@ -959,6 +997,8 @@ export async function saveMenuItem(input: {
     color: input.color || null,
     actionType: input.actionType,
     actionPayloadJson: stringifyJson(input.actionPayload || {}),
+    responseText: input.responseText || null,
+    subButtonsJson: input.subButtons && input.subButtons.length > 0 ? stringifyJson(input.subButtons) : null,
     sortOrder: input.sortOrder ?? 0,
     isActive: input.isActive === false ? 0 : 1,
   });

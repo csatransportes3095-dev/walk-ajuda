@@ -1773,6 +1773,8 @@ export const onlineSupportMenuItems = mysqlTable("onlineSupportMenuItems", {
   color: varchar("color", { length: 32 }),
   actionType: varchar("actionType", { length: 64 }).notNull().default("send_text"),
   actionPayloadJson: text("actionPayloadJson"),
+  responseText: text("responseText"),
+  subButtonsJson: text("subButtonsJson"),
   sortOrder: int("sortOrder").notNull().default(0),
   isActive: int("isActive").notNull().default(1),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
