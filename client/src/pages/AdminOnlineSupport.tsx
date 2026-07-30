@@ -196,6 +196,10 @@ export default function AdminOnlineSupport() {
   const [editReplyText, setEditReplyText] = useState("");
 
   const [newKbTitle, setNewKbTitle] = useState("");
+  const [editingKbId, setEditingKbId] = useState<number | null>(null);
+  const [editKbTitle, setEditKbTitle] = useState("");
+  const [editKbQuestion, setEditKbQuestion] = useState("");
+  const [editKbAnswer, setEditKbAnswer] = useState("");
   const [newKbQuestion, setNewKbQuestion] = useState("");
   const [newKbAnswer, setNewKbAnswer] = useState("");
 
@@ -738,10 +742,27 @@ export default function AdminOnlineSupport() {
             <Card className="p-4 bg-white/5 border-white/10 space-y-2">
               {(kbQ.data || []).map((item: any) => (
                 <div key={item.id} className="rounded-lg border border-white/10 p-3 bg-black/20">
-                  <p className="font-semibold">{item.title}</p>
-                  <p className="text-xs text-white/60">{item.status}</p>
-                  <p className="text-sm mt-1 whitespace-pre-wrap">{item.answer}</p>
-                  <Button size="sm" variant="destructive" className="mt-2" onClick={() => deleteKbMut.mutate({ id: item.id })}>Excluir</Button>
+                  {editingKbId === item.id ? (
+                    <div className="space-y-2">
+                      <input value={editKbTitle} onChange={e => setEditKbTitle(e.target.value)} placeholder="Título" className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-400" />
+                      <textarea value={editKbQuestion} onChange={e => setEditKbQuestion(e.target.value)} placeholder="Pergunta" rows={2} className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-400 resize-none" />
+                      <textarea value={editKbAnswer} onChange={e => setEditKbAnswer(e.target.value)} placeholder="Resposta" rows={4} className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-400 resize-none" />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => { saveKbMut.mutate({ id: item.id, title: editKbTitle, question: editKbQuestion, answer: editKbAnswer, status: "published", publishNow: true, author: "admin" }); setEditingKbId(null); }}>Salvar</Button>
+                        <Button size="sm" variant="secondary" onClick={() => setEditingKbId(null)}>Cancelar</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="font-semibold">{item.title}</p>
+                      <p className="text-xs text-white/60">{item.status}</p>
+                      <p className="text-sm mt-1 whitespace-pre-wrap">{item.answer}</p>
+                      <div className="flex gap-2 mt-2">
+                        <Button size="sm" variant="secondary" onClick={() => { setEditingKbId(item.id); setEditKbTitle(item.title || ""); setEditKbQuestion(item.question || ""); setEditKbAnswer(item.answer || ""); }}>Editar</Button>
+                        <Button size="sm" variant="destructive" onClick={() => deleteKbMut.mutate({ id: item.id })}>Excluir</Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </Card>
