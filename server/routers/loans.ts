@@ -1582,7 +1582,7 @@ export const loanRouter = router({
     if (!instRows.length) throw new TRPCError({ code: "NOT_FOUND", message: "Parcela não encontrada" });
     const inst = instRows[0];
     if (inst.status !== 'pendente') throw new TRPCError({ code: "BAD_REQUEST", message: "Parcela não está pendente" });
-    if (inst.dueDate >= today) throw new TRPCError({ code: "BAD_REQUEST", message: "Parcela ainda não venceu" });
+    if (inst.dueDate > today) throw new TRPCError({ code: "BAD_REQUEST", message: "Parcela ainda não venceu" });
 
     const loanPrincipal = parseFloat(loan.amount);
     const totalInstallments = parseInt(loan.installments);
