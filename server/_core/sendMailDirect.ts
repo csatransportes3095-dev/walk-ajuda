@@ -54,10 +54,16 @@ export async function sendMailDirect(options: MailOptions): Promise<void> {
 
   // Fallback SMTP (pode falhar no Render Free)
   const nodemailer = await import("nodemailer");
+  const smtpHost = process.env.SMTP_HOST || "smtp.zoho.com";
+  const smtpPort = Number(process.env.SMTP_PORT || "465");
+  const smtpSecure = process.env.SMTP_SECURE
+    ? ["1", "true", "yes", "on"].includes(process.env.SMTP_SECURE.toLowerCase())
+    : smtpPort === 465;
+
   const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.zoho.com",
-    port: Number(process.env.SMTP_PORT || "587"),
-    secure: false,
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure,
     auth: {
       user: process.env.SMTP_USER || "h2@h2colombiano.com",
       pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || "",

@@ -939,8 +939,24 @@ export default function AdminOrders() {
       setLocalStatusOverrides(prev => ({ ...prev, [orderKey]: vars.status }));
       return { orderKey };
     },
-    onSuccess: (_data, vars) => {
-      toast.success("Status atualizado!");
+    onSuccess: (data: any, vars) => {
+      const notifications = data?.notifications;
+      if (!notifications) {
+        toast.success("Status atualizado!");
+      } else {
+        const adminOk = !!notifications.adminEmailSent;
+        const customerShouldSend = !vars.skipEmail && !!vars.customerEmail;
+        const customerOk = !!notifications.customerEmailSent;
+
+        if (adminOk && (!customerShouldSend || customerOk)) {
+          toast.success("Status atualizado e notificaÃ§Ã£o enviada!");
+        } else {
+          const details: string[] = [];
+          if (!adminOk) details.push(`Admin: ${notifications.adminEmailError || 'nÃ£o enviado'}`);
+          if (customerShouldSend && !customerOk) details.push(`Cliente: ${notifications.customerEmailError || 'nÃ£o enviado'}`);
+          toast.warning(`Status salvo, mas e-mail falhou. ${details.join(' | ')}`);
+        }
+      }
       // Aguardar servidor persistir, depois refetch e limpar override
       setTimeout(() => {
         ordersQuery.refetch().then(() => {

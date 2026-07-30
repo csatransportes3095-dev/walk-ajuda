@@ -3346,6 +3346,10 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const mailEnabled = hasMailChannel();
+        let adminEmailSent = false;
+        let customerEmailSent = false;
+        let adminEmailError: string | null = null;
+        let customerEmailError: string | null = null;
         if (input.status === 'recebido') {
           return { success: false, error: 'Status recebido nÃƒÂ£o pode ser definido manualmente' };
         }
@@ -3397,12 +3401,15 @@ export const appRouter = router({
               subject: `[ADMIN] Status Atualizado - ${statusLabel} - ${input.customerName || 'Pedido #' + input.orderNumber}`,
               html: adminEmailContent,
             });
+            adminEmailSent = true;
             console.log('[Email] NotificaÃƒÂ§ÃƒÂ£o de status enviada ao admin:', emailTo);
-          } catch (adminEmailError) {
-            console.error('[Email] Erro ao enviar notificaÃƒÂ§ÃƒÂ£o ao admin:', adminEmailError);
+          } catch (adminErr) {
+            console.error('[Email] Erro ao enviar notificaÃƒÂ§ÃƒÂ£o ao admin:', adminErr);
+            adminEmailError = adminErr instanceof Error ? adminErr.message : String(adminErr);
           }
         } else if (!mailEnabled) {
           console.warn('[Email] SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente: notificaÃƒÂ§ÃƒÂ£o por e-mail ignorada em updateStatus.');
+          adminEmailError = 'Canal de envio nÃ£o configurado';
         }
 
         // Enviar email ao cliente se tiver email, nÃƒÂ£o for silencioso e nÃƒÂ£o estiver bloqueado
@@ -3499,6 +3506,7 @@ export const appRouter = router({
                 pedidoHtml: pedidoHtmlU || undefined,
               }),
             });
+            customerEmailSent = true;
             // Se status ÃƒÂ© de entrega, registrar data/hora da notificaÃƒÂ§ÃƒÂ£o
             if (FINAL_STATUSES_EMAIL.includes(input.status)) {
               try {
@@ -3516,9 +3524,28 @@ export const appRouter = router({
             }
           } catch (err) {
             console.error('Erro ao enviar email de status:', err);
+            customerEmailError = err instanceof Error ? err.message : String(err);
           }
         }
-        return { success: true };
+        if (!input.customerEmail && !input.skipEmail) {
+          customerEmailError = customerEmailError || 'Cliente sem e-mail cadastrado';
+        } else if (input.skipEmail) {
+          customerEmailError = customerEmailError || 'Envio ao cliente desativado (skipEmail=true)';
+        } else if (isCustomerBlocked2) {
+          customerEmailError = customerEmailError || 'Cliente bloqueado';
+        } else if (!mailEnabled) {
+          customerEmailError = customerEmailError || 'Canal de envio nÃ£o configurado';
+        }
+
+        return {
+          success: true,
+          notifications: {
+            adminEmailSent,
+            customerEmailSent,
+            adminEmailError,
+            customerEmailError,
+          },
+        };
       }),
     // Admin: atualizar orderSource (auto/manual) de um pedido
     updateOrderSource: adminProcedure
