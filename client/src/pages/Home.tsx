@@ -41,7 +41,7 @@ type Product = {
   options: ProductOption[];
 };
 
-// ── Componente PromoCard com cronômetro decrescente ────────────────────────
+// â”€â”€ Componente PromoCard com cronÃ´metro decrescente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function useCountdown(endsAt: number | null | undefined) {
   const [remaining, setRemaining] = useState<number>(() =>
     endsAt ? Math.max(0, endsAt - Date.now()) : -1
@@ -106,12 +106,12 @@ function PromoCard({
         ) : null;
       })()}
 
-      {/* Cabeçalho do card */}
+      {/* CabeÃ§alho do card */}
       <div className="flex items-center gap-3 px-4 pt-4 pb-3">
         {product.iconUrl
           ? <img src={product.iconUrl} alt={product.name} className="w-10 h-10 rounded-xl flex-shrink-0 object-cover" />
           : <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-orange-400 text-lg">🔥</span>
+              <span className="text-orange-400 text-lg">ðŸ”¥</span>
             </div>
         }
         <div className="flex-1 min-w-0">
@@ -120,7 +120,7 @@ function PromoCard({
         </div>
       </div>
 
-      {/* Preços */}
+      {/* PreÃ§os */}
       <div className="px-4 pb-3 flex items-baseline gap-2">
         <span
           className="text-white/50 text-sm font-medium"
@@ -131,7 +131,7 @@ function PromoCard({
         <span className="text-green-400 font-black text-xl">{option.price}</span>
       </div>
 
-      {/* Cronômetro */}
+      {/* CronÃ´metro */}
       {hasTimer && (
         <div
           className="mx-4 mb-4 rounded-xl px-3 py-2.5 flex items-center gap-2"
@@ -142,10 +142,10 @@ function PromoCard({
             border: `1px solid ${urgent ? 'rgba(239,68,68,0.4)' : 'rgba(249,115,22,0.3)'}`,
           }}
         >
-          <span className={`text-lg ${urgent ? 'animate-pulse' : ''}`}>⏰</span>
+          <span className={`text-lg ${urgent ? 'animate-pulse' : ''}`}>â°</span>
           <div className="flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: urgent ? '#fca5a5' : '#fdba74' }}>
-              {urgent ? '⚠️ Últimas horas!' : 'Promoção encerra em'}
+              {urgent ? 'âš ï¸ Ãšltimas horas!' : 'PromoÃ§Ã£o encerra em'}
             </p>
             <div className="flex items-center gap-1 mt-0.5">
               {[{ v: hh, l: 'h' }, { v: mm, l: 'm' }, { v: ss, l: 's' }].map(({ v, l }, i) => (
@@ -165,7 +165,7 @@ function PromoCard({
         </div>
       )}
 
-      {/* Botão CTA */}
+      {/* BotÃ£o CTA */}
       <div className="px-4 pb-4">
         <div
           className="w-full py-2.5 rounded-xl text-center text-sm font-black tracking-wide transition-all duration-200 group-hover:brightness-110"
@@ -177,7 +177,7 @@ function PromoCard({
             boxShadow: urgent ? '0 4px 14px rgba(239,68,68,0.4)' : '0 4px 14px rgba(249,115,22,0.4)',
           }}
         >
-          APROVEITAR OFERTA →
+          APROVEITAR OFERTA â†’
         </div>
       </div>
     </button>
@@ -201,7 +201,7 @@ export default function Home() {
   const activeResellerSlug = resellerSlug ||
     (typeof window !== 'undefined' ? localStorage.getItem('walk_reseller_slug') || null : null);
 
-  // Buscar dados do revendedor e seus preços
+  // Buscar dados do revendedor e seus preÃ§os
   const { data: resellerData } = trpc.resellers.getBySlug.useQuery(
     { slug: activeResellerSlug! },
     { enabled: !!activeResellerSlug }
@@ -220,7 +220,7 @@ export default function Home() {
     return map;
   }, [resellerPrices]);
 
-  // Buscar dados dinâmicos
+  // Buscar dados dinÃ¢micos
   const { data: products } = trpc.products.listActive.useQuery();
   const { data: settings } = trpc.settings.getAll.useQuery();
   const { data: activePix } = trpc.pix.getActive.useQuery();
@@ -242,9 +242,9 @@ export default function Home() {
   const [carDocumentYear, setCarDocumentYear] = useState("");
   const [alvaraFile, setAlvaraFile] = useState<File | null>(null);
   const [condutaxiFile, setCondutaxiFile] = useState<File | null>(null);
-  // Documentos dinâmicos: mapa de docId -> File
+  // Documentos dinÃ¢micos: mapa de docId -> File
   const [docFiles, setDocFiles] = useState<Record<number, File>>({});
-  // Previews de documentos dinâmicos (objectURL para imagens)
+  // Previews de documentos dinÃ¢micos (objectURL para imagens)
   const [docFilePreviews, setDocFilePreviews] = useState<Record<number, string>>({});
   const [showDocPhotoPreview, setShowDocPhotoPreview] = useState<number | null>(null);
   const [clientName, setClientName] = useState("");
@@ -274,8 +274,8 @@ export default function Home() {
   const [trackingPinFromServer, setTrackingPinFromServer] = useState<string | null>(null);
   const questionRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
-  // URLs de arquivos já salvos no servidor (restaurados ao retomar progresso)
-  // Permite pular re-upload e validação quando o arquivo já existe no banco
+  // URLs de arquivos jÃ¡ salvos no servidor (restaurados ao retomar progresso)
+  // Permite pular re-upload e validaÃ§Ã£o quando o arquivo jÃ¡ existe no banco
   const [restoredFileUrls, setRestoredFileUrls] = useState<{
     profilePhoto?: string;
     carDocument?: string;
@@ -298,7 +298,7 @@ export default function Home() {
     clientCity: string;
   } | null>(null);
 
-  // ===== PROPAGANDA OBRIGATÓRIA =====
+  // ===== PROPAGANDA OBRIGATÃ“RIA =====
   const [adVisible, setAdVisible] = useState(false);
   const [adProgress, setAdProgress] = useState(0);
   const [adCanClose, setAdCanClose] = useState(false);
@@ -334,8 +334,8 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [adVisible, adCampaign?.id]);
 
-  // ===== INDICAÇÃO PÓS-PEDIDO =====
-  // Só mostra o formulário de indicação se o cliente era NOVO no momento do pedido
+  // ===== INDICAÃ‡ÃƒO PÃ“S-PEDIDO =====
+  // SÃ³ mostra o formulÃ¡rio de indicaÃ§Ã£o se o cliente era NOVO no momento do pedido
   const [isNewCustomerOrder, setIsNewCustomerOrder] = useState(false);
   const [postOrderReferralStep, setPostOrderReferralStep] = useState<'question' | 'form' | 'done'>('question');
   const [postOrderReferralPhone, setPostOrderReferralPhone] = useState('');
@@ -376,7 +376,7 @@ export default function Home() {
     } catch { return {}; }
   };
 
-  // Quando o step vai para 'success' e o cliente NÃO é novo, pular o formulário de indicação
+  // Quando o step vai para 'success' e o cliente NÃƒO Ã© novo, pular o formulÃ¡rio de indicaÃ§Ã£o
   useEffect(() => {
     if (step === 'success' && !isNewCustomerOrder) {
       setPostOrderReferralStep('done');
@@ -408,7 +408,7 @@ export default function Home() {
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch {}
   }, [step, selectedProduct, selectedOption, questionAnswers, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep]);
 
-  // Verificar se há progresso salvo ao montar o componente (quando produtos estão carregados)
+  // Verificar se hÃ¡ progresso salvo ao montar o componente (quando produtos estÃ£o carregados)
   useEffect(() => {
     if (!products || products.length === 0) return;
     try {
@@ -420,16 +420,16 @@ export default function Home() {
         localStorage.removeItem(PROGRESS_KEY);
         return;
       }
-      // Só mostrar se estiver na tela home e tiver produto salvo
+      // SÃ³ mostrar se estiver na tela home e tiver produto salvo
       if (step !== 'home') return;
       const prod = products.find((p: Product) => p.id === saved.productId);
       if (!prod) { localStorage.removeItem(PROGRESS_KEY); return; }
-      setSavedProgressLabel(prod.name + (saved.optionId ? ` — ${prod.options.find((o: ProductOption) => o.id === saved.optionId)?.label || ''}` : ''));
+      setSavedProgressLabel(prod.name + (saved.optionId ? ` â€” ${prod.options.find((o: ProductOption) => o.id === saved.optionId)?.label || ''}` : ''));
       setShowResumeModal(true);
     } catch {}
   }, [products]);
 
-  // Scroll automático para a próxima pergunta após selecionar uma opção
+  // Scroll automÃ¡tico para a prÃ³xima pergunta apÃ³s selecionar uma opÃ§Ã£o
   const scrollToNextQuestion = (currentQuestionId: number, questions: ProductQuestion[], selectedLabel: string) => {
     // Efeito de destaque visual por 400ms antes de rolar
     setHighlightedAnswer({ qId: currentQuestionId, label: selectedLabel });
@@ -468,7 +468,7 @@ export default function Home() {
       if (saved.cadastroSubStep) setCadastroSubStep(saved.cadastroSubStep);
       setStep(saved.step || 'home');
 
-      // Restaurar URLs de arquivos já uploaded ao S3 (fonte primária: localStorage)
+      // Restaurar URLs de arquivos jÃ¡ uploaded ao S3 (fonte primÃ¡ria: localStorage)
       const uploadedFiles = getUploadedFiles();
       const newRestoredUrls: typeof restoredFileUrls = { dynamicDocs: {} };
       let hasAnyFile = false;
@@ -499,7 +499,7 @@ export default function Home() {
         hasAnyFile = true;
       }
 
-      // Documentos dinâmicos do localStorage
+      // Documentos dinÃ¢micos do localStorage
       if (saved.optionId) {
         const opt = prod.options.find((o: ProductOption) => o.id === saved.optionId);
         if (opt?.documents) {
@@ -518,7 +518,7 @@ export default function Home() {
         }
       }
 
-      // Fallback: buscar no banco (para pedidos que já foram finalizados anteriormente)
+      // Fallback: buscar no banco (para pedidos que jÃ¡ foram finalizados anteriormente)
       const phone = saved.clientPhone || '';
       if (!hasAnyFile && phone.replace(/\D/g, '').length >= 8) {
         try {
@@ -550,7 +550,7 @@ export default function Home() {
               newRestoredUrls.carDocument = carFile.fileUrl;
             }
 
-            // Alvará
+            // AlvarÃ¡
             const alvaraFileFound = clientFiles.find(f => f.label.toLowerCase().includes('alvar'));
             if (alvaraFileFound && !newRestoredUrls.alvara) {
               newRestoredUrls.alvara = alvaraFileFound.fileUrl;
@@ -562,13 +562,13 @@ export default function Home() {
               newRestoredUrls.condutaxi = condutaxiFileFound.fileUrl;
             }
 
-            // Documentos dinâmicos (fallback por label flexível)
+            // Documentos dinÃ¢micos (fallback por label flexÃ­vel)
             if (saved.optionId) {
               const opt = prod.options.find((o: ProductOption) => o.id === saved.optionId);
               if (opt?.documents) {
                 const newPreviews: Record<number, string> = {};
                 for (const doc of opt.documents as Array<{ id: number; label: string }>) {
-                  if (newRestoredUrls.dynamicDocs[doc.id]) continue; // já restaurado do localStorage
+                  if (newRestoredUrls.dynamicDocs[doc.id]) continue; // jÃ¡ restaurado do localStorage
                   const docLabelNorm = doc.label.trim().toLowerCase();
                   const found = clientFiles.find(f => {
                     const fLabelNorm = f.label.trim().toLowerCase();
@@ -586,7 +586,7 @@ export default function Home() {
             }
           }
         } catch {
-          // Silencioso — não bloquear o fluxo se a busca falhar
+          // Silencioso â€” nÃ£o bloquear o fluxo se a busca falhar
         }
       }
 
@@ -619,7 +619,7 @@ export default function Home() {
 
   const handleAddToCartClick = (product: Product) => {
     if (product.options.filter(o => o.isActive === 1).length > 0) {
-      // Precisa escolher opção — abre o seletor de opção mas no modo carrinho
+      // Precisa escolher opÃ§Ã£o â€” abre o seletor de opÃ§Ã£o mas no modo carrinho
       setCartPendingProduct(product);
     } else {
       addToCart(product, null);
@@ -687,7 +687,7 @@ export default function Home() {
     if (!activeRaffle || !raffleSelectedNumber) return;
     if (!raffleName.trim()) { toast.error("Informe seu nome"); return; }
     const phoneDigits = rafflePhone.replace(/\D/g, '');
-    if (phoneDigits.length !== 11) { toast.error("Telefone deve ter 11 dígitos"); return; }
+    if (phoneDigits.length !== 11) { toast.error("Telefone deve ter 11 dÃ­gitos"); return; }
     setRaffleSubmitting(true);
     try {
       const res = await chooseNumberMutation.mutateAsync({
@@ -698,18 +698,18 @@ export default function Home() {
       });
       if (res.success) {
         setRaffleSubmitted(true);
-        toast.success("Número confirmado com sucesso!");
+        toast.success("NÃºmero confirmado com sucesso!");
       } else {
-        toast.error(res.error || "Erro ao confirmar número");
+        toast.error(res.error || "Erro ao confirmar nÃºmero");
       }
     } catch (e: any) {
-      toast.error("Erro ao confirmar número");
+      toast.error("Erro ao confirmar nÃºmero");
     } finally {
       setRaffleSubmitting(false);
     }
   };
 
-  // Carregar dados do cliente a partir da sessão (já cadastrado no PasswordGate)
+  // Carregar dados do cliente a partir da sessÃ£o (jÃ¡ cadastrado no PasswordGate)
   const clientPhoneFromSession = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';
   const [showMyData, setShowMyData] = useState(false);
   // Controle de acesso por produto
@@ -740,13 +740,13 @@ export default function Home() {
   const [protectedPhotoAccess, setProtectedPhotoAccess] = useState<boolean | null>(null);
   const [checkingPhotoAccess, setCheckingPhotoAccess] = useState(false);
   const [protectedPhotoExpanded, setProtectedPhotoExpanded] = useState(false);
-  // Se já tem sessão, verificar acesso automaticamente
+  // Se jÃ¡ tem sessÃ£o, verificar acesso automaticamente
   const photoAccessQuery = trpc.protectedPhotos.checkAccess.useQuery(
     { phone: clientPhoneFromSession },
     { enabled: !!clientPhoneFromSession && !!activeProtectedPhoto }
   );
 
-  // Busca automática por telefone digitado manualmente no formulário
+  // Busca automÃ¡tica por telefone digitado manualmente no formulÃ¡rio
   const [manualPhoneSearch, setManualPhoneSearch] = useState("");
   const [customerAutoFilled, setCustomerAutoFilled] = useState(false);
   const manualCustomerCheck = trpc.customers.checkByPhone.useQuery(
@@ -776,7 +776,7 @@ export default function Home() {
     }
   }, [customerCheck.data, clientPhoneFromSession]);
 
-  // Preencher campos quando cliente é encontrado pelo telefone digitado manualmente
+  // Preencher campos quando cliente Ã© encontrado pelo telefone digitado manualmente
   useEffect(() => {
     if (!manualCustomerCheck.data) return;
     if (manualCustomerCheck.data.exists && manualCustomerCheck.data.customer) {
@@ -789,7 +789,7 @@ export default function Home() {
     }
   }, [manualCustomerCheck.data]);
 
-  // Configurações dinâmicas do PIX
+  // ConfiguraÃ§Ãµes dinÃ¢micas do PIX
   const PIX_KEY = activePix?.pixKey || settings?.pix_key || "11915193551";
   const PIX_NAME = activePix?.pixName || settings?.pix_name || "Adiel Cardeal dos Santos";
   const PIX_BANK = activePix?.pixBank || settings?.pix_bank || "99Pay";
@@ -798,14 +798,14 @@ export default function Home() {
   const WHATSAPP_NUMBER = WHATSAPP_NUMBER_RAW.replace(/[^\d+]/g, '');
   const WHATSAPP_DISPLAY = settings?.whatsapp_display || "(11) 97830-7371";
 
-  // Textos dinâmicos
+  // Textos dinÃ¢micos
   const HERO_TITLE = settings?.hero_title || '';
   const HERO_SUBTITLE = settings?.hero_subtitle || "";
   const HERO_BUTTON = settings?.hero_button_text || "";
   const SERVICES_TITLE = settings?.services_title || "";
   const SERVICES_SUBTITLE = settings?.services_subtitle || "";
   const FOOTER_TEXT = settings?.footer_text || "";
-  const SITE_NAME = settings?.site_name || "WALK AJUDA";
+  const SITE_NAME = settings?.site_name || "H2 COLOMBIANO";
   const VIDEO_URL = settings?.video_url || "";
   const [videoError, setVideoError] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
@@ -824,26 +824,26 @@ export default function Home() {
   const addBlockingNoteMutation = trpc.customers.addBlockingNote.useMutation();
 
 
-  // Determinar se é fluxo PDF-only - agora vem da opção selecionada
+  // Determinar se Ã© fluxo PDF-only - agora vem da opÃ§Ã£o selecionada
   const isPDFOnly = selectedOption?.isPdfOnly === 1 || selectedProduct?.isPdfOnly === 1;
   const showVehicleWarning = selectedOption?.requireVehicle2016 === 1 || selectedProduct?.requireVehicle2016 === 1;
 
-  // Documentos dinâmicos da opção selecionada
+  // Documentos dinÃ¢micos da opÃ§Ã£o selecionada
   const dynamicDocs = selectedOption?.documents || [];
   const hasDynamicDocs = dynamicDocs.length > 0;
 
-  // Obter valor atual (usa tier se selecionado, caso contrário usa preço da opção)
+  // Obter valor atual (usa tier se selecionado, caso contrÃ¡rio usa preÃ§o da opÃ§Ã£o)
   const getCurrentServiceValue = (): string => {
     if (selectedTier) return selectedTier.price;
     if (selectedOption) return selectedOption.price;
     return "Consulte";
   };
 
-  // Calcula se o item atual tem promoção ativa (preço riscado)
+  // Calcula se o item atual tem promoÃ§Ã£o ativa (preÃ§o riscado)
   const hasActivePromotion = (): boolean => {
-    // Se tem tier selecionado, verifica se o tier tem promoção
+    // Se tem tier selecionado, verifica se o tier tem promoÃ§Ã£o
     if (selectedTier) return !!(selectedTier as any).originalPrice;
-    // Se tem opção selecionada, verifica se a opção tem promoção
+    // Se tem opÃ§Ã£o selecionada, verifica se a opÃ§Ã£o tem promoÃ§Ã£o
     if (selectedOption) return !!(selectedOption as any).originalPrice;
     return false;
   };
@@ -867,7 +867,7 @@ export default function Home() {
 
   const getResellerDiscountAmount = (): number => {
     if (!resellerInfo?.isReseller) return 0;
-    if (hasActivePromotion()) return 0; // promoção tem prioridade
+    if (hasActivePromotion()) return 0; // promoÃ§Ã£o tem prioridade
     const rawValue = getCurrentServiceValue();
     const numericValue = parseFloat(rawValue.replace('R$ ', '').replace('.', '').replace(',', '.'));
     if (isNaN(numericValue)) return 0;
@@ -895,7 +895,7 @@ export default function Home() {
         discounted = discounted - couponDiscount.value;
       }
     }
-    // Aplicar desconto de revendedor (se não tiver promoção)
+    // Aplicar desconto de revendedor (se nÃ£o tiver promoÃ§Ã£o)
     const resellerDiscount = getResellerDiscountAmount();
     if (resellerDiscount > 0) {
       discounted = discounted - resellerDiscount;
@@ -931,14 +931,14 @@ export default function Home() {
     // Aceitar qualquer imagem (incluindo HEIC/HEIF do iPhone) e PDF
     const isImage = file.type.startsWith('image/') || file.type === '' || file.type === 'application/octet-stream';
     const isPdf = file.type === 'application/pdf';
-    // Verificar pela extensão se o MIME não foi reconhecido
+    // Verificar pela extensÃ£o se o MIME nÃ£o foi reconhecido
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif', 'bmp', 'tiff'];
     const isImageByExt = imageExts.includes(ext);
-    if (!isImage && !isPdf && !isImageByExt) { toast.error('Formato não suportado. Use JPG, PNG, PDF ou captura de tela.'); return; }
-    if (file.size > 25 * 1024 * 1024) { toast.error('Arquivo muito grande. Máximo 25MB.'); return; }
+    if (!isImage && !isPdf && !isImageByExt) { toast.error('Formato nÃ£o suportado. Use JPG, PNG, PDF ou captura de tela.'); return; }
+    if (file.size > 25 * 1024 * 1024) { toast.error('Arquivo muito grande. MÃ¡ximo 25MB.'); return; }
     if (isPdf) {
-      // PDF: usa direto, sem compressão
+      // PDF: usa direto, sem compressÃ£o
       setPaymentProof(file);
       setPaymentProofPreview('pdf');
       // Upload imediato ao S3
@@ -952,7 +952,7 @@ export default function Home() {
       })();
       return;
     }
-    // Imagem: comprimir para reduzir tamanho e converter HEIC/HEIF → JPEG (resolve falha de upload em celular)
+    // Imagem: comprimir para reduzir tamanho e converter HEIC/HEIF â†’ JPEG (resolve falha de upload em celular)
     void (async () => {
       try {
         const compressed = await compressImageFile(file);
@@ -966,7 +966,7 @@ export default function Home() {
           setRestoredFileUrls(prev => ({ ...prev, paymentProof: result.url }));
         }
       } catch {
-        // Se a compressão falhar, usa o arquivo original como fallback
+        // Se a compressÃ£o falhar, usa o arquivo original como fallback
         setPaymentProof(file);
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -986,7 +986,7 @@ export default function Home() {
     })();
   };
 
-  // Comprime uma imagem no navegador via canvas: redimensiona p/ máx 1600px, exporta JPEG ~0.8.
+  // Comprime uma imagem no navegador via canvas: redimensiona p/ mÃ¡x 1600px, exporta JPEG ~0.8.
   // Converte HEIC/HEIF/PNG/etc para JPEG, eliminando problemas de upload em celulares.
   const compressImageFile = (file: File): Promise<{ file: File; previewUrl: string }> => {
     return new Promise((resolve, reject) => {
@@ -1028,13 +1028,13 @@ export default function Home() {
   };
 
   // Prepara um arquivo para upload: comprime imagens grandes (reduz falhas de upload em
-  // celular/4G) e mantém PDFs intactos. Se a compressão falhar, retorna o arquivo original.
+  // celular/4G) e mantÃ©m PDFs intactos. Se a compressÃ£o falhar, retorna o arquivo original.
   const prepareForUpload = async (file: File): Promise<File> => {
     const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
     if (isPdf) return file;
     const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff)$/i.test(file.name);
     if (!isImage) return file;
-    // Só comprime se valer a pena (> 1.2MB) para não degradar imagens já pequenas.
+    // SÃ³ comprime se valer a pena (> 1.2MB) para nÃ£o degradar imagens jÃ¡ pequenas.
     if (file.size <= 1.2 * 1024 * 1024) return file;
     try {
       const { file: compressed } = await compressImageFile(file);
@@ -1056,24 +1056,24 @@ export default function Home() {
         const discountText = result.discountType === 'percentage'
           ? `${result.discountValue}% de desconto`
           : `R$ ${result.discountValue!.toFixed(2).replace('.', ',')} de desconto`;
-        setCouponMessage(`Cupom válido! ${discountText}`);
+        setCouponMessage(`Cupom vÃ¡lido! ${discountText}`);
         toast.success(`Cupom aplicado: ${discountText}`);
       } else {
         setCouponValid(false); setCouponDiscount(null);
-        setCouponMessage(result.reason || 'Cupom inválido');
-        toast.error(result.reason || 'Cupom inválido');
+        setCouponMessage(result.reason || 'Cupom invÃ¡lido');
+        toast.error(result.reason || 'Cupom invÃ¡lido');
       }
     } catch { setCouponValid(false); setCouponDiscount(null); setCouponMessage('Erro ao validar cupom'); toast.error('Erro ao validar cupom'); }
     setIsValidatingCoupon(false);
   };
 
-  // Upload de arquivo via JSON base64 (robusto em produção/celular).
-  // O arquivo (já comprimido para JPEG no caso de imagens) é lido como base64
-  // e enviado dentro de um JSON. SEM multipart/form-data — isso elimina as
+  // Upload de arquivo via JSON base64 (robusto em produÃ§Ã£o/celular).
+  // O arquivo (jÃ¡ comprimido para JPEG no caso de imagens) Ã© lido como base64
+  // e enviado dentro de um JSON. SEM multipart/form-data â€” isso elimina as
   // falhas de upload no celular causadas pelo parsing de multipart no proxy.
   const uploadFileToServer = async (file: File, label: string, phone: string): Promise<{ url: string; fileKey: string; mimeType: string } | null> => {
     const MAX_RETRIES = 3;
-    // Lê o arquivo como base64 puro (sem o prefixo data URI)
+    // LÃª o arquivo como base64 puro (sem o prefixo data URI)
     let base64: string;
     try {
       base64 = await fileToBase64(file);
@@ -1095,7 +1095,7 @@ export default function Home() {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s (conexões móveis lentas)
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s (conexÃµes mÃ³veis lentas)
         const res = await fetch('/api/upload/client-file-base64', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1111,7 +1111,7 @@ export default function Home() {
         return { url: data.fileUrl, fileKey: data.fileKey, mimeType: data.mimeType };
       } catch (e: any) {
         if (attempt === MAX_RETRIES) {
-          console.error(`[Upload] Falha após ${MAX_RETRIES} tentativas para "${label}":`, e);
+          console.error(`[Upload] Falha apÃ³s ${MAX_RETRIES} tentativas para "${label}":`, e);
           return null;
         }
         await new Promise(r => setTimeout(r, 1000 * attempt)); // espera antes de retry
@@ -1138,7 +1138,7 @@ export default function Home() {
       try { reader.readAsDataURL(file); } catch (e) { clearTimeout(timeout); reject(e); }
     });
     return tryRead(1).catch(() => {
-      // Retry automático após 500ms
+      // Retry automÃ¡tico apÃ³s 500ms
       return new Promise(res => setTimeout(res, 500)).then(() => tryRead(2));
     });
   };
@@ -1150,16 +1150,16 @@ export default function Home() {
     if (!clientName.trim()) { toast.error('Preencha seu nome completo'); submitLockRef.current = false; return; }
     if (!clientPhone.trim()) { toast.error('Preencha seu telefone'); submitLockRef.current = false; return; }
     if (!clientCity.trim()) { toast.error('Preencha sua cidade'); submitLockRef.current = false; return; }
-    if (!clientEmail.trim()) { toast.error('Preencha seu email para receber atualizações do pedido'); submitLockRef.current = false; return; }
+    if (!clientEmail.trim()) { toast.error('Preencha seu email para receber atualizaÃ§Ãµes do pedido'); submitLockRef.current = false; return; }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(clientEmail.trim())) { toast.error('Digite um email válido'); submitLockRef.current = false; return; }
+    if (!emailRegex.test(clientEmail.trim())) { toast.error('Digite um email vÃ¡lido'); submitLockRef.current = false; return; }
     if (!paymentProof && !restoredFileUrls.paymentProof) { toast.error('Envie o comprovante de pagamento PIX'); submitLockRef.current = false; return; }
 
-    // Validar perguntas obrigatórias (perguntas individuais por opção)
+    // Validar perguntas obrigatÃ³rias (perguntas individuais por opÃ§Ã£o)
     const optQuestions = selectedOption?.questions || [];
     if (optQuestions.length > 0) {
       for (const q of optQuestions) {
-        // Pular perguntas condicionais que não estão visíveis
+        // Pular perguntas condicionais que nÃ£o estÃ£o visÃ­veis
         if (q.parentQuestionId) {
           const parentAnswer = questionAnswers[q.parentQuestionId]?.trim() || "";
           const isVisible = !q.triggerOption || parentAnswer === q.triggerOption;
@@ -1173,10 +1173,10 @@ export default function Home() {
       }
     }
 
-    // Validar uploads: documentos dinâmicos ou legados
+    // Validar uploads: documentos dinÃ¢micos ou legados
     if (hasDynamicDocs) {
       for (const doc of dynamicDocs) {
-        // Aceitar File local OU URL já salva no servidor
+        // Aceitar File local OU URL jÃ¡ salva no servidor
         if (!docFiles[doc.id] && !restoredFileUrls.dynamicDocs[doc.id]) {
           toast.error(`Envie o documento: ${doc.label}`);
           submitLockRef.current = false;
@@ -1188,15 +1188,15 @@ export default function Home() {
       if (!isPDFOnly) {
         if (reqSource?.requireProfilePhoto === 1 && !profilePhoto && !restoredFileUrls.profilePhoto) { toast.error('Selecione a foto de perfil'); submitLockRef.current = false; return; }
         if (reqSource?.requireCarDocument === 1 && !carDocument && !restoredFileUrls.carDocument) { toast.error('Selecione o documento do carro'); submitLockRef.current = false; return; }
-        if (reqSource?.requireAlvara === 1 && !alvaraFile && !restoredFileUrls.alvara) { toast.error('Selecione o Alvará'); submitLockRef.current = false; return; }
+        if (reqSource?.requireAlvara === 1 && !alvaraFile && !restoredFileUrls.alvara) { toast.error('Selecione o AlvarÃ¡'); submitLockRef.current = false; return; }
         if (reqSource?.requireCondutaxi === 1 && !condutaxiFile && !restoredFileUrls.condutaxi) { toast.error('Selecione o Condutaxi'); submitLockRef.current = false; return; }
       } else {
         if (!carDocument && !restoredFileUrls.carDocument) { toast.error('Selecione o documento PDF'); submitLockRef.current = false; return; }
       }
     }
 
-    // Capturar se o cliente é NOVO antes de enviar o pedido
-    // hasOrders = true significa que já fez pedido antes (não é primeiro pedido)
+    // Capturar se o cliente Ã© NOVO antes de enviar o pedido
+    // hasOrders = true significa que jÃ¡ fez pedido antes (nÃ£o Ã© primeiro pedido)
     const wasExistingCustomer = customerCheck.data?.hasOrders === true;
     setIsNewCustomerOrder(!wasExistingCustomer);
 
@@ -1205,9 +1205,9 @@ export default function Home() {
     try {
       const accessCode = localStorage.getItem('walk_access_code') || '';
       const cpTokenForSubmit = localStorage.getItem('cp_token') || '';
-      // Verificar se tem alguma forma de autenticação válida
+      // Verificar se tem alguma forma de autenticaÃ§Ã£o vÃ¡lida
       if (!accessCode && !cpTokenForSubmit) {
-        toast.error('Sessão expirada. Faça login novamente.');
+        toast.error('SessÃ£o expirada. FaÃ§a login novamente.');
         localStorage.removeItem('walk_access_granted');
         localStorage.removeItem('walk_access_code');
         localStorage.removeItem('walk_access_type');
@@ -1217,12 +1217,12 @@ export default function Home() {
 
       const phone = clientPhone.trim();
 
-      // ── NOVO FLUXO: Upload multipart direto (sem base64) ──────────────────────
-      // Cada arquivo é enviado individualmente antes de finalizar o pedido.
-      // Isso evita payloads gigantes que travam em celulares com 4G instável.
-      // ─────────────────────────────────────────────────────────────────────────
+      // â”€â”€ NOVO FLUXO: Upload multipart direto (sem base64) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // Cada arquivo Ã© enviado individualmente antes de finalizar o pedido.
+      // Isso evita payloads gigantes que travam em celulares com 4G instÃ¡vel.
+      // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-      // Documentos dinâmicos
+      // Documentos dinÃ¢micos
       const dynamicDocsArray: { label: string; url?: string; fileKey?: string; data?: string; mime?: string }[] = [];
       if (hasDynamicDocs) {
         const docsNeedingUpload = dynamicDocs.filter(d => docFiles[d.id] && !restoredFileUrls.dynamicDocs[d.id]);
@@ -1230,10 +1230,10 @@ export default function Home() {
         let uploadedCount = 0;
         for (const doc of dynamicDocs) {
           if (restoredFileUrls.dynamicDocs[doc.id]) {
-            // Já foi enviado ao S3 (upload imediato ou restaurado) — reutilizar URL
+            // JÃ¡ foi enviado ao S3 (upload imediato ou restaurado) â€” reutilizar URL
             dynamicDocsArray.push({ label: doc.label, url: restoredFileUrls.dynamicDocs[doc.id] });
           } else if (docFiles[doc.id]) {
-            // Tem File local sem URL salva — fazer upload
+            // Tem File local sem URL salva â€” fazer upload
             uploadedCount++;
             setSubmitProgress(`Enviando ${doc.label} (${uploadedCount}/${totalDocs})...`);
             const fileToSend = await prepareForUpload(docFiles[doc.id]);
@@ -1247,7 +1247,7 @@ export default function Home() {
         }
       }
 
-      // Documentos legados (foto, CRLV, alvará, condutaxi) — sempre URL, nunca base64
+      // Documentos legados (foto, CRLV, alvarÃ¡, condutaxi) â€” sempre URL, nunca base64
       setSubmitProgress('Enviando documentos...');
       if (!hasDynamicDocs) {
         if (restoredFileUrls.profilePhoto) {
@@ -1265,10 +1265,10 @@ export default function Home() {
           else throw new Error('UPLOAD_FAILED');
         }
         if (restoredFileUrls.alvara) {
-          dynamicDocsArray.push({ label: 'Alvará', url: restoredFileUrls.alvara });
+          dynamicDocsArray.push({ label: 'AlvarÃ¡', url: restoredFileUrls.alvara });
         } else if (alvaraFile) {
           const up = await uploadFileToServer(await prepareForUpload(alvaraFile), 'alvara', phone);
-          if (up) dynamicDocsArray.push({ label: 'Alvará', url: up.url, fileKey: up.fileKey, mime: up.mimeType });
+          if (up) dynamicDocsArray.push({ label: 'AlvarÃ¡', url: up.url, fileKey: up.fileKey, mime: up.mimeType });
           else throw new Error('UPLOAD_FAILED');
         }
         if (restoredFileUrls.condutaxi) {
@@ -1280,10 +1280,10 @@ export default function Home() {
         }
       }
 
-      // Comprovante PIX — sempre envia como URL (nunca base64), evita problemas no Android
+      // Comprovante PIX â€” sempre envia como URL (nunca base64), evita problemas no Android
       let paymentProofUploadedUrl: string | undefined;
       if (restoredFileUrls.paymentProof) {
-        // Comprovante já salvo no servidor (upload imediato ou restaurado) — reutilizar URL
+        // Comprovante jÃ¡ salvo no servidor (upload imediato ou restaurado) â€” reutilizar URL
         paymentProofUploadedUrl = restoredFileUrls.paymentProof;
       } else if (paymentProof) {
         setSubmitProgress('Enviando comprovante PIX...');
@@ -1295,7 +1295,7 @@ export default function Home() {
         }
       }
 
-      // Normalizar MIME type do comprovante (HEIC/HEIF → image/jpeg para compatibilidade)
+      // Normalizar MIME type do comprovante (HEIC/HEIF â†’ image/jpeg para compatibilidade)
       const getProofMime = (f: File | null) => {
         if (!f) return undefined;
         if (f.type && f.type !== 'application/octet-stream' && f.type !== '') return f.type;
@@ -1307,14 +1307,14 @@ export default function Home() {
       };
 
       // Montar respostas das perguntas (incluindo optionsMeta para preservar cores)
-      // Filtrar perguntas condicionais que não estavam visíveis
+      // Filtrar perguntas condicionais que nÃ£o estavam visÃ­veis
       const isQVisibleFinal = (q: ProductQuestion): boolean => {
         if (!q.parentQuestionId) return true;
         const parentAnswer = questionAnswers[q.parentQuestionId]?.trim() || "";
         if (!q.triggerOption) return !!parentAnswer;
         return parentAnswer === q.triggerOption;
       };
-      // Construir answersArray com ordenação hierárquica (pai → sub → sub-sub) e depth
+      // Construir answersArray com ordenaÃ§Ã£o hierÃ¡rquica (pai â†’ sub â†’ sub-sub) e depth
       const allQs = selectedOption?.questions || [];
       const orderedAnswers: { question: string; answer: string; depth: number; optionsMeta?: string }[] = [];
       const addWithDepth = (q: ProductQuestion, depth: number) => {
@@ -1324,7 +1324,7 @@ export default function Home() {
           try { const parsed = JSON.parse(q.options); if (Array.isArray(parsed) && parsed[0]?.label !== undefined) base.optionsMeta = q.options; } catch {}
         }
         orderedAnswers.push(base);
-        // Inserir filhos logo após o pai
+        // Inserir filhos logo apÃ³s o pai
         allQs.filter(c => c.parentQuestionId === q.id).sort((a, b) => a.sortOrder - b.sortOrder)
           .forEach(child => addWithDepth(child, depth + 1));
       };
@@ -1332,11 +1332,11 @@ export default function Home() {
         .forEach(root => addWithDepth(root, 0));
       const answersArray = orderedAnswers;
 
-      // Se carrinho tem múltiplos itens, criar um pedido para cada item
+      // Se carrinho tem mÃºltiplos itens, criar um pedido para cada item
       const cartItems = cart.length > 1 ? cart : null;
 
       if (cartItems) {
-        // Gerar cartGroupId único para agrupar todos os itens deste carrinho
+        // Gerar cartGroupId Ãºnico para agrupar todos os itens deste carrinho
         const cartGroupId = `cart_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         // Calcular total bruto do carrinho
         let cartTotalValue = 0;
@@ -1360,7 +1360,7 @@ export default function Home() {
         for (let i = 0; i < cartItems.length; i++) {
           const item = cartItems[i];
           setSubmitProgress(`Enviando pedido ${i + 1} de ${cartItems.length}: ${item.product.name}...`);
-          // Calcular preço individual do item (sem desconto — o desconto é do carrinho todo)
+          // Calcular preÃ§o individual do item (sem desconto â€” o desconto Ã© do carrinho todo)
           const itemRawPrice = item.option?.price || undefined;
           try {
             await submitMutation.mutateAsync({
@@ -1370,7 +1370,7 @@ export default function Home() {
               referrerName: referrerName.trim() || undefined,
               referrerPhone: referrerPhone.trim() || undefined,
               bypassCode: bypassCode.trim() || undefined,
-              // Documentos: apenas no primeiro item (cartItemIndex=0), os demais não têm docs próprios
+              // Documentos: apenas no primeiro item (cartItemIndex=0), os demais nÃ£o tÃªm docs prÃ³prios
               documents: i === 0 && dynamicDocsArray.length > 0 ? dynamicDocsArray : undefined,
               profilePhoto: undefined,
               carDocument: undefined,
@@ -1427,7 +1427,7 @@ export default function Home() {
           clientPhone: phone,
           clientCity: clientCity.trim(),
         });
-        // Sessão VIP mantida até o cliente confirmar no WhatsApp
+        // SessÃ£o VIP mantida atÃ© o cliente confirmar no WhatsApp
         setSuccessMessage(`${successCount} pedido(s) enviado(s) com sucesso!`);
         setIsSubmitting(false);
         setPostOrderReferralStep(wasExistingCustomer ? 'done' : 'question');
@@ -1445,7 +1445,7 @@ export default function Home() {
         : 'N/A';
       const result = await submitMutation.mutateAsync({
         clientName: clientName.trim() || 'Cliente',
-        service: selectedProduct?.name || 'Não especificado',
+        service: selectedProduct?.name || 'NÃ£o especificado',
         nameOption: nameOptionWithTier,
         referrerName: referrerName.trim() || undefined,
         referrerPhone: referrerPhone.trim() || undefined,
@@ -1495,7 +1495,7 @@ export default function Home() {
               customerPhone: phone,
               optionId: selectedOption.id,
             });
-          } catch (e) { /* silencioso — não bloqueia o fluxo */ }
+          } catch (e) { /* silencioso â€” nÃ£o bloqueia o fluxo */ }
         }
         // Salvar dados do pedido para mensagem WhatsApp
         const singlePrice = (() => {
@@ -1519,7 +1519,7 @@ export default function Home() {
           clientPhone: phone,
           clientCity: clientCity.trim(),
         });
-        // Sessão VIP mantida até o cliente confirmar no WhatsApp
+        // SessÃ£o VIP mantida atÃ© o cliente confirmar no WhatsApp
         setSuccessMessage('Arquivos enviados com sucesso!');
         if ((result as any).trackingPin) setTrackingPinFromServer((result as any).trackingPin);
         setIsSubmitting(false);
@@ -1534,15 +1534,15 @@ export default function Home() {
       console.error('Erro no envio:', error);
       const msg = error?.message || 'Erro ao enviar. Tente novamente.';
       if (msg.includes('Timeout') || msg.includes('timeout') || msg.includes('network') || msg.includes('Network')) {
-        toast.error('Conexão lenta. Verifique sua internet e tente novamente.', { duration: 6000 });
+        toast.error('ConexÃ£o lenta. Verifique sua internet e tente novamente.', { duration: 6000 });
       } else if (msg === 'UPLOAD_FAILED') {
-        // Upload de algum arquivo falhou — orientar reenvio (pode ser arquivo muito grande ou conexão instável)
-        toast.error('Não foi possível enviar um dos arquivos. Tente uma foto menor/mais leve ou reenvie em uma conexão mais estável.', { duration: 9000 });
+        // Upload de algum arquivo falhou â€” orientar reenvio (pode ser arquivo muito grande ou conexÃ£o instÃ¡vel)
+        toast.error('NÃ£o foi possÃ­vel enviar um dos arquivos. Tente uma foto menor/mais leve ou reenvie em uma conexÃ£o mais estÃ¡vel.', { duration: 9000 });
       } else if (msg.includes('ler arquivo') || msg.includes('Leitura') || msg.includes('cancelada')) {
-        // Limpar o comprovante para forçar nova seleção
+        // Limpar o comprovante para forÃ§ar nova seleÃ§Ã£o
         setPaymentProof(null);
         setPaymentProofPreview(null);
-        toast.error('Não foi possível ler o arquivo. Por favor, selecione o comprovante novamente.', { duration: 8000 });
+        toast.error('NÃ£o foi possÃ­vel ler o arquivo. Por favor, selecione o comprovante novamente.', { duration: 8000 });
       } else {
         toast.error(msg, { duration: 6000 });
       }
@@ -1554,7 +1554,7 @@ export default function Home() {
   };
 
   const needsFileUpload = (product: Product | null, option?: ProductOption | null): boolean => {
-    // Se tem opção selecionada, verificar documentos dinâmicos primeiro
+    // Se tem opÃ§Ã£o selecionada, verificar documentos dinÃ¢micos primeiro
     if (option) {
       if (option.documents && option.documents.length > 0) return true;
       return option.requireProfilePhoto === 1 ||
@@ -1562,7 +1562,7 @@ export default function Home() {
         option.requireAlvara === 1 ||
         option.requireCondutaxi === 1;
     }
-    // Fallback para produto (sem opções)
+    // Fallback para produto (sem opÃ§Ãµes)
     if (!product) return false;
     return product.requireProfilePhoto === 1 ||
       product.requireCarDocument === 1 ||
@@ -1604,7 +1604,7 @@ export default function Home() {
     setRestoredFileUrls({ dynamicDocs: {} });
     localStorage.removeItem(UPLOADED_FILES_KEY);
     if (product.options.length === 0) {
-      // Sem opções - sem perguntas
+      // Sem opÃ§Ãµes - sem perguntas
       setSelectedOption(null);
       if (product.isPdfOnly === 1) {
         setStep("pdf-upload");
@@ -1647,7 +1647,7 @@ export default function Home() {
   const hasResellerDiscount = getResellerDiscountAmount() > 0;
   const finalValue = (couponDiscount || hasResellerDiscount) ? calculateDiscountedValue(originalValue) : originalValue;
 
-  // Calcular valor total do carrinho (quando há múltiplos itens)
+  // Calcular valor total do carrinho (quando hÃ¡ mÃºltiplos itens)
   const cartTotal = useMemo(() => {
     if (cart.length <= 1) return null;
     let total = 0;
@@ -1670,7 +1670,7 @@ export default function Home() {
       setProfilePhotoPreview(url);
       return () => URL.revokeObjectURL(url);
     } else if (!restoredFileUrls.profilePhoto) {
-      // Só limpa preview se NÃO houver URL restaurada do banco
+      // SÃ³ limpa preview se NÃƒO houver URL restaurada do banco
       setProfilePhotoPreview(null);
     }
   }, [profilePhoto, restoredFileUrls.profilePhoto]);
@@ -1679,13 +1679,13 @@ export default function Home() {
   const displayPhotoUrl = profilePhotoPreview || EXAMPLE_PHOTO_URL;
   const isClientPhoto = !!profilePhotoPreview;
 
-  // Detectar se um documento dinâmico é "Foto de Perfil" pelo label
+  // Detectar se um documento dinÃ¢mico Ã© "Foto de Perfil" pelo label
   const isProfilePhotoDoc = (label: string): boolean => {
     const normalized = label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     return normalized.includes('foto') && (normalized.includes('perfil') || normalized.includes('profile'));
   };
 
-  // Gerar previews para documentos dinâmicos (imagens)
+  // Gerar previews para documentos dinÃ¢micos (imagens)
   useEffect(() => {
     const newPreviews: Record<number, string> = {};
     const toRevoke: string[] = [];
@@ -1696,7 +1696,7 @@ export default function Home() {
         newPreviews[id] = url;
       }
     });
-    // Preservar previews restaurados do banco (URLs do servidor) que não foram substituídos por File local
+    // Preservar previews restaurados do banco (URLs do servidor) que nÃ£o foram substituÃ­dos por File local
     Object.entries(restoredFileUrls.dynamicDocs).forEach(([idStr, serverUrl]) => {
       const id = Number(idStr);
       if (!newPreviews[id]) {
@@ -1707,7 +1707,7 @@ export default function Home() {
     if (restoredFileUrls.carDocument && !newPreviews[-1]) {
       newPreviews[-1] = restoredFileUrls.carDocument;
     }
-    // Revocar URLs antigas (apenas objectURLs criadas localmente, não URLs do servidor)
+    // Revocar URLs antigas (apenas objectURLs criadas localmente, nÃ£o URLs do servidor)
     Object.values(docFilePreviews).forEach(url => {
       if (url.startsWith('blob:') && !Object.values(newPreviews).includes(url)) toRevoke.push(url);
     });
@@ -1715,7 +1715,7 @@ export default function Home() {
     return () => { toRevoke.forEach(url => URL.revokeObjectURL(url)); };
   }, [docFiles, restoredFileUrls.dynamicDocs, restoredFileUrls.carDocument]);
 
-  // ========== COMPONENTES DE UPLOAD REUTILIZÁVEIS ==========
+  // ========== COMPONENTES DE UPLOAD REUTILIZÃVEIS ==========
   const renderPhotoExample = () => (
     <div className="bg-blue-900/40 border border-blue-500/40 rounded-xl p-3">
       <p className="text-blue-300 font-bold text-sm mb-2 text-center">{isClientPhoto ? "Sua foto de perfil" : "Exemplo de foto de perfil"} <span className="text-blue-400/70 text-xs">(toque para ampliar)</span>:</p>
@@ -1736,9 +1736,9 @@ export default function Home() {
           ) : (
             <ul className="text-blue-200/80 text-xs space-y-0.5">
               <li>Foto frontal do rosto, bem iluminada</li>
-              <li>Sem óculos escuros ou boné</li>
+              <li>Sem Ã³culos escuros ou bonÃ©</li>
               <li>Fundo neutro (parede branca ou clara)</li>
-              <li>Somente você na foto</li>
+              <li>Somente vocÃª na foto</li>
             </ul>
           )}
         </div>
@@ -1752,7 +1752,7 @@ export default function Home() {
     
     return (
       <div>
-        <label className="block text-black font-semibold mb-2 bg-white px-2 py-1 rounded">Foto de Perfil OBRIGATÓRIO</label>
+        <label className="block text-black font-semibold mb-2 bg-white px-2 py-1 rounded">Foto de Perfil OBRIGATÃ“RIO</label>
         
         <input 
           type="file" 
@@ -1817,22 +1817,22 @@ export default function Home() {
           <button 
             onClick={() => document.getElementById(cameraInputId)?.click()}
             className="flex-1 px-4 py-2 bg-blue-600 border border-blue-700 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm">
-            📷 Câmera
+            ðŸ“· CÃ¢mera
           </button>
           <button 
             onClick={() => document.getElementById(galleryInputId)?.click()}
             className="flex-1 px-4 py-2 bg-purple-600 border border-purple-700 hover:bg-purple-700 text-white font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm">
-            🖼️ Galeria
+            ðŸ–¼ï¸ Galeria
           </button>
         </div>
         
         {profilePhoto ? (
           <div className="mt-2 text-green-400 text-sm font-semibold flex items-center gap-2">
-            ✓ {profilePhoto.name}
+            âœ“ {profilePhoto.name}
           </div>
         ) : restoredFileUrls.profilePhoto ? (
           <div className="mt-2 text-green-400 text-sm font-semibold flex items-center gap-2">
-            ✅ Foto já enviada anteriormente
+            âœ… Foto jÃ¡ enviada anteriormente
           </div>
         ) : null}
       </div>
@@ -1848,8 +1848,8 @@ export default function Home() {
             <Car className="w-5 h-5 text-amber-400" />
           </div>
           <div>
-            <p className="text-amber-300 font-bold text-sm flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> ATENÇÃO</p>
-            <p className="text-amber-200/80 text-xs mt-0.5">O veículo deve ser a partir do <strong className="text-amber-100">ano 2016</strong>.</p>
+            <p className="text-amber-300 font-bold text-sm flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> ATENÃ‡ÃƒO</p>
+            <p className="text-amber-200/80 text-xs mt-0.5">O veÃ­culo deve ser a partir do <strong className="text-amber-100">ano 2016</strong>.</p>
           </div>
         </div>
       </div>
@@ -1858,7 +1858,7 @@ export default function Home() {
 
   const renderCarDocInput = (inputId: string) => (
     <div>
-      <label className="block text-black font-semibold mb-2 bg-white px-2 py-1 rounded">Documento do Carro (PDF ou JPG) OBRIGATÓRIO</label>
+      <label className="block text-black font-semibold mb-2 bg-white px-2 py-1 rounded">Documento do Carro (PDF ou JPG) OBRIGATÃ“RIO</label>
       <input type="file" id={inputId} accept=".pdf,.jpg,.jpeg" className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -1880,7 +1880,7 @@ export default function Home() {
       />
       <button onClick={() => document.getElementById(inputId)?.click()}
         className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${(carDocument || restoredFileUrls.carDocument) ? 'bg-green-700 border-green-600 text-green-200' : 'bg-red-700 border-red-800 hover:bg-red-800 text-green-400'}`}>
-        📎 {carDocument ? carDocument.name : restoredFileUrls.carDocument ? '✅ Já enviado' : "Selecionar Documento"}
+        ðŸ“Ž {carDocument ? carDocument.name : restoredFileUrls.carDocument ? 'âœ… JÃ¡ enviado' : "Selecionar Documento"}
       </button>
     </div>
   );
@@ -1891,13 +1891,13 @@ export default function Home() {
     if (reqSrc?.requireAlvara === 1) {
       extras.push(
         <div key="alvara">
-          <label className="block text-black font-semibold mb-2 bg-white px-2 py-1 rounded">Alvará (PDF ou JPG) OBRIGATÓRIO</label>
+          <label className="block text-black font-semibold mb-2 bg-white px-2 py-1 rounded">AlvarÃ¡ (PDF ou JPG) OBRIGATÃ“RIO</label>
           <input type="file" id="alvara-upload" accept=".pdf,.jpg,.jpeg" className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
-                if (!["application/pdf", "image/jpeg", "image/jpg"].includes(file.type)) { toast.error("Alvará deve ser PDF ou JPG"); return; }
-                setAlvaraFile(file); toast.success(`Alvará ${file.name} selecionado`);
+                if (!["application/pdf", "image/jpeg", "image/jpg"].includes(file.type)) { toast.error("AlvarÃ¡ deve ser PDF ou JPG"); return; }
+                setAlvaraFile(file); toast.success(`AlvarÃ¡ ${file.name} selecionado`);
                 // Upload imediato ao S3
                 void (async () => {
                   const phone = clientPhone.trim() || 'temp';
@@ -1913,7 +1913,7 @@ export default function Home() {
           />
           <button onClick={() => document.getElementById("alvara-upload")?.click()}
             className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${(alvaraFile || restoredFileUrls.alvara) ? 'bg-green-700 border-green-600 text-green-200' : 'bg-red-700 border-red-800 hover:bg-red-800 text-green-400'}`}>
-            📎 {alvaraFile ? alvaraFile.name : restoredFileUrls.alvara ? '✅ Já enviado' : "Selecionar Alvará"}
+            ðŸ“Ž {alvaraFile ? alvaraFile.name : restoredFileUrls.alvara ? 'âœ… JÃ¡ enviado' : "Selecionar AlvarÃ¡"}
           </button>
         </div>
       );
@@ -1921,7 +1921,7 @@ export default function Home() {
     if (reqSrc?.requireCondutaxi === 1) {
       extras.push(
         <div key="condutaxi">
-          <label className="block text-black font-semibold mb-2 bg-white px-2 py-1 rounded">Condutaxi (PDF ou JPG) OBRIGATÓRIO</label>
+          <label className="block text-black font-semibold mb-2 bg-white px-2 py-1 rounded">Condutaxi (PDF ou JPG) OBRIGATÃ“RIO</label>
           <input type="file" id="condutaxi-upload" accept=".pdf,.jpg,.jpeg" className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -1943,7 +1943,7 @@ export default function Home() {
           />
           <button onClick={() => document.getElementById("condutaxi-upload")?.click()}
             className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${(condutaxiFile || restoredFileUrls.condutaxi) ? 'bg-green-700 border-green-600 text-green-200' : 'bg-red-700 border-red-800 hover:bg-red-800 text-green-400'}`}>
-            📎 {condutaxiFile ? condutaxiFile.name : restoredFileUrls.condutaxi ? '✅ Já enviado' : "Selecionar Condutaxi"}
+            ðŸ“Ž {condutaxiFile ? condutaxiFile.name : restoredFileUrls.condutaxi ? 'âœ… JÃ¡ enviado' : "Selecionar Condutaxi"}
           </button>
         </div>
       );
@@ -1955,9 +1955,9 @@ export default function Home() {
     const qs = selectedOption?.questions || [];
     if (qs.length === 0) return null;
 
-    // Determinar quais perguntas estão visíveis com base nas respostas atuais
+    // Determinar quais perguntas estÃ£o visÃ­veis com base nas respostas atuais
     const isQuestionVisible = (q: ProductQuestion): boolean => {
-      if (!q.parentQuestionId) return true; // sem pai = sempre visível
+      if (!q.parentQuestionId) return true; // sem pai = sempre visÃ­vel
       const parentAnswer = questionAnswers[q.parentQuestionId]?.trim() || "";
       if (!q.triggerOption) return !!parentAnswer; // qualquer resposta ativa
       return parentAnswer === q.triggerOption;
@@ -1965,7 +1965,7 @@ export default function Home() {
 
     return (
       <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
-        <p className="text-purple-400 font-bold text-sm mb-3 text-center">INFORMAÇÕES ADICIONAIS</p>
+        <p className="text-purple-400 font-bold text-sm mb-3 text-center">INFORMAÃ‡Ã•ES ADICIONAIS</p>
         <div className="space-y-3">
           {qs.filter(q => isQuestionVisible(q)).map(q => (
             <div key={q.id} ref={el => { questionRefs.current[q.id] = el; }}>
@@ -1973,7 +1973,7 @@ export default function Home() {
                 {q.question} {q.isRequired === 1 && <span className="text-red-400">*</span>}
               </Label>
               {q.fieldType === 'select' && q.options ? (() => {
-                // Verificar se as opções têm cores (formato JSON enriquecido)
+                // Verificar se as opÃ§Ãµes tÃªm cores (formato JSON enriquecido)
                 let parsedOpts: Array<{ label: string; color: string | null }> | null = null;
                 try {
                   const p = JSON.parse(q.options!);
@@ -2007,7 +2007,7 @@ export default function Home() {
                                 localStorage.removeItem('walk_client_phone');
                                 setBlockedByQuestion({ question: q.question, answer: opt.label });
                               } else {
-                                // Limpar bloqueio se mudou para opção não-bloqueante
+                                // Limpar bloqueio se mudou para opÃ§Ã£o nÃ£o-bloqueante
                                 setBlockedByQuestion(null);
                                 scrollToNextQuestion(q.id, qs, opt.label);
                               }
@@ -2078,10 +2078,10 @@ export default function Home() {
   const hasQuestions = selectedOption?.questions && selectedOption.questions.length > 0;
 
   const validateUploadsAndProceed = () => {
-    // Validar documentos dinâmicos
+    // Validar documentos dinÃ¢micos
     if (hasDynamicDocs) {
       for (const doc of dynamicDocs) {
-        // Aceitar File local OU URL já salva no servidor
+        // Aceitar File local OU URL jÃ¡ salva no servidor
         if (!docFiles[doc.id] && !restoredFileUrls.dynamicDocs[doc.id]) {
           toast.error(`Envie o documento: ${doc.label}`);
           return;
@@ -2091,7 +2091,7 @@ export default function Home() {
       const reqSrc = selectedOption || selectedProduct;
       if (reqSrc?.requireProfilePhoto === 1 && !profilePhoto && !restoredFileUrls.profilePhoto) { toast.error('Selecione a foto de perfil'); return; }
       if (reqSrc?.requireCarDocument === 1 && !carDocument && !restoredFileUrls.carDocument) { toast.error('Selecione o documento do carro'); return; }
-      if (reqSrc?.requireAlvara === 1 && !alvaraFile && !restoredFileUrls.alvara) { toast.error('Selecione o Alvará'); return; }
+      if (reqSrc?.requireAlvara === 1 && !alvaraFile && !restoredFileUrls.alvara) { toast.error('Selecione o AlvarÃ¡'); return; }
       if (reqSrc?.requireCondutaxi === 1 && !condutaxiFile && !restoredFileUrls.condutaxi) { toast.error('Selecione o Condutaxi'); return; }
     }
     if (hasQuestions) { setStep("questions"); setCurrentQuestionIndex(0); } else { setStep("cadastro"); setCadastroSubStep('dados'); }
@@ -2101,7 +2101,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
 
-      {/* ========== MODAL DE PROPAGANDA OBRIGATÓRIA ========== */}
+      {/* ========== MODAL DE PROPAGANDA OBRIGATÃ“RIA ========== */}
       {adVisible && adCampaign && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md p-2 sm:p-4">
           <div
@@ -2109,7 +2109,7 @@ export default function Home() {
             style={{ border: '1.5px solid rgba(0,200,255,0.35)', boxShadow: '0 0 40px 4px rgba(0,180,255,0.15), 0 8px 32px rgba(0,0,0,0.8)', maxWidth: '520px', maxHeight: '96vh' }}
           >
             <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 border border-white/10">
-              <span className="text-xs text-gray-300 font-medium">Exibição obrigatória</span>
+              <span className="text-xs text-gray-300 font-medium">ExibiÃ§Ã£o obrigatÃ³ria</span>
             </div>
             <div className="bg-[#080c1e] flex flex-col">
               {adCampaign.type === 'image' && adCampaign.imageUrl ? (
@@ -2142,7 +2142,7 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="w-full h-40 flex items-center justify-center bg-gradient-to-br from-blue-900/40 to-cyan-900/30">
-                  <span className="text-4xl">📢</span>
+                  <span className="text-4xl">ðŸ“¢</span>
                 </div>
               )}
               {(adCampaign.title || adCampaign.description) && (
@@ -2153,7 +2153,7 @@ export default function Home() {
               )}
               <div className="px-4 pt-3 pb-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-400">{adCanClose ? 'Propaganda concluída' : `Encerrando em ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s`}</span>
+                  <span className="text-xs text-gray-400">{adCanClose ? 'Propaganda concluÃ­da' : `Encerrando em ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s`}</span>
                   <span className="text-xs font-bold" style={{ color: adProgress < 30 ? '#ef4444' : adProgress < 70 ? '#f59e0b' : adProgress < 100 ? '#00d4ff' : '#22c55e' }}>{adProgress}%</span>
                 </div>
                 <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
@@ -2165,7 +2165,7 @@ export default function Home() {
                   </a>
                 )}
                 <button onClick={() => adCanClose && setAdVisible(false)} disabled={!adCanClose} className="mt-3 w-full py-2.5 rounded-lg text-sm font-semibold transition-all" style={{ background: adCanClose ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)', color: adCanClose ? '#fff' : '#555', border: adCanClose ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(255,255,255,0.05)', cursor: adCanClose ? 'pointer' : 'not-allowed' }}>
-                  {adCanClose ? 'Fechar propaganda ✕' : `Aguarde ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s para fechar`}
+                  {adCanClose ? 'Fechar propaganda âœ•' : `Aguarde ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s para fechar`}
                 </button>
               </div>
             </div>
@@ -2178,26 +2178,26 @@ export default function Home() {
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="backdrop-blur-md border border-yellow-500/40 rounded-2xl p-6 max-w-sm w-full shadow-2xl" style={{ backgroundColor: 'rgba(10, 10, 30, 0.97)' }}>
             <div className="text-center mb-4">
-              <div className="text-4xl mb-2">⏸️</div>
+              <div className="text-4xl mb-2">â¸ï¸</div>
               <h3 className="text-xl font-bold text-white">Pedido em andamento</h3>
-              <p className="text-white/60 text-sm mt-1">Você tem um pedido não finalizado:</p>
+              <p className="text-white/60 text-sm mt-1">VocÃª tem um pedido nÃ£o finalizado:</p>
               <div className="mt-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
                 <p className="text-yellow-300 font-semibold text-sm">{savedProgressLabel}</p>
               </div>
             </div>
-            <p className="text-white/70 text-sm text-center mb-5">Deseja continuar de onde parou ou começar um novo pedido?</p>
+            <p className="text-white/70 text-sm text-center mb-5">Deseja continuar de onde parou ou comeÃ§ar um novo pedido?</p>
             <div className="space-y-3">
               <button
                 onClick={restoreProgress}
                 className="w-full px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold rounded-xl transition-all duration-200 text-sm"
               >
-                ▶️ Continuar de onde parei
+                â–¶ï¸ Continuar de onde parei
               </button>
               <button
                 onClick={handleStartFresh}
                 className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white/80 font-semibold rounded-xl transition-all duration-200 text-sm"
               >
-                🔄 Começar do início
+                ðŸ”„ ComeÃ§ar do inÃ­cio
               </button>
             </div>
           </div>
@@ -2237,7 +2237,7 @@ export default function Home() {
                     onClick={() => setFaqOpenIndex(faqOpenIndex === idx ? null : idx)}
                   >
                     <span className="font-semibold text-sm" style={{ color: faqData.config.accentColor }}>
-                      ❓ {item.question}
+                      â“ {item.question}
                     </span>
                     <ChevronDown
                       size={16}
@@ -2267,7 +2267,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Lightbox - documentos dinâmicos (foto de perfil) */}
+      {/* Lightbox - documentos dinÃ¢micos (foto de perfil) */}
       {showDocPhotoPreview !== null && (() => {
         const activeDoc = dynamicDocs.find(d => d.id === showDocPhotoPreview);
         const docPreviewUrl = docFilePreviews[showDocPhotoPreview] || activeDoc?.exampleImageUrl || EXAMPLE_PHOTO_URL;
@@ -2281,7 +2281,7 @@ export default function Home() {
         );
       })()}
 
-      {/* ========== MODAL: SELEÇÃO DE OPÇÃO ========== */}
+      {/* ========== MODAL: SELEÃ‡ÃƒO DE OPÃ‡ÃƒO ========== */}
       {step === "name-select" && selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="backdrop-blur-md border border-primary/30 rounded-2xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto" style={{ backgroundColor: 'rgba(10, 10, 30, 0.95)' }}>
@@ -2297,11 +2297,11 @@ export default function Home() {
                   className="w-full px-4 py-3 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 animate-pulse hover:animate-none hover:scale-105 active:scale-95 transition-all duration-200 border-2 border-white/30"
                 >
                   <span className="font-black text-sm text-center leading-snug w-full">{faqData.config.buttonLabel}</span>
-                  <span className="text-base animate-bounce">👉 Clique aqui</span>
+                  <span className="text-base animate-bounce">ðŸ‘‰ Clique aqui</span>
                 </button>
               </div>
             )}
-            <h3 className="text-2xl font-bold text-white mb-2">Selecione uma Opção</h3>
+            <h3 className="text-2xl font-bold text-white mb-2">Selecione uma OpÃ§Ã£o</h3>
             <p className="text-white/70 mb-4">{selectedProduct.name}</p>
             <div className="space-y-3">
               {selectedProduct.options.filter(o => o.isActive === 1).map((option, optIdx) => {
@@ -2316,7 +2316,7 @@ export default function Home() {
                 const hc = headerColors[optIdx % headerColors.length];
                 return (
                   <div key={option.id} className="rounded-xl overflow-hidden" style={{ border: '2px solid rgba(255,255,255,0.15)', boxShadow: `0 0 18px ${hc.shadow}` }}>
-                    {/* Cabeçalho da opção */}
+                    {/* CabeÃ§alho da opÃ§Ã£o */}
                     <div className="flex items-center justify-between px-4 py-3" style={{ background: hc.bg }}>
                       <span className="font-black text-base tracking-wide" style={{ color: hc.text, textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{option.label}</span>
                       {!hasTiers && (
@@ -2328,23 +2328,23 @@ export default function Home() {
                         </div>
                       )}
                     </div>
-                    {/* Especificação/Descrição da opção */}
+                    {/* EspecificaÃ§Ã£o/DescriÃ§Ã£o da opÃ§Ã£o */}
                     {(option as any).description && (option as any).description.trim() !== '' && (
                       <div className="px-4 py-2 bg-cyan-950/30 border-t border-cyan-500/20">
                         <p className="text-cyan-200 text-xs leading-relaxed whitespace-pre-line">{(option as any).description}</p>
                       </div>
                     )}
-                    {/* Garantia da opção (legado - texto simples) */}
+                    {/* Garantia da opÃ§Ã£o (legado - texto simples) */}
                     {!hasTiers && (option as any).warranty && (option as any).warranty.trim() !== '' && (
                       <div className="px-4 py-1.5 bg-emerald-900/30 border-t border-emerald-500/20 flex items-center gap-1.5">
-                        <span className="text-emerald-400 text-xs">🛡️</span>
+                        <span className="text-emerald-400 text-xs">ðŸ›¡ï¸</span>
                         <span className="text-emerald-300 text-xs font-medium">Garantia: {(option as any).warranty}</span>
                       </div>
                     )}
-                    {/* Tiers de Garantia - seletor de garantia com preço dinâmico */}
+                    {/* Tiers de Garantia - seletor de garantia com preÃ§o dinÃ¢mico */}
                     {hasTiers && (
                       <div className="px-4 py-3 bg-emerald-950/30 border-t border-emerald-500/20 space-y-2">
-                        <p className="text-emerald-400 text-xs font-bold">🛡️ Escolha a Garantia:</p>
+                        <p className="text-emerald-400 text-xs font-bold">ðŸ›¡ï¸ Escolha a Garantia:</p>
                         <div className="space-y-1.5">
                           {(option.warrantyTiers || []).map(tier => {
                             const tierLabel = tier.warrantyValue > 0
@@ -2381,13 +2381,13 @@ export default function Home() {
                         </div>
                       </div>
                     )}
-                    {/* Aviso de garantia obrigatória */}
+                    {/* Aviso de garantia obrigatÃ³ria */}
                     {hasTiers && !(selectedOption?.id === option.id && selectedTier) && (
                       <div className="px-4 py-2 bg-red-900/30 border-t border-red-500/30">
-                        <p className="text-red-400 text-xs font-semibold text-center">⚠️ Selecione uma garantia para continuar</p>
+                        <p className="text-red-400 text-xs font-semibold text-center">âš ï¸ Selecione uma garantia para continuar</p>
                       </div>
                     )}
-                    {/* Botões de ação */}
+                    {/* BotÃµes de aÃ§Ã£o */}
                     {(() => {
                       const tierSelected = !hasTiers || (selectedOption?.id === option.id && !!selectedTier);
                       return (
@@ -2448,7 +2448,7 @@ export default function Home() {
             <h3 className="text-2xl font-bold text-white mb-2">Enviar Arquivos</h3>
             <p className="text-white/70 mb-6">Selecione seus arquivos</p>
             <div className="space-y-4">
-              {/* Documentos dinâmicos (novo sistema) */}
+              {/* Documentos dinÃ¢micos (novo sistema) */}
               {hasDynamicDocs ? (
                 <>
                   {dynamicDocs.map(doc => {
@@ -2456,7 +2456,7 @@ export default function Home() {
                     const hasCustomExample = !!doc.exampleImageUrl;
                     const hasFile = !!docFiles[doc.id] || !!restoredFileUrls.dynamicDocs[doc.id];
                     const previewUrl = docFilePreviews[doc.id];
-                    // Prioridade: preview do cliente > foto exemplo personalizada > foto exemplo padrão (só para foto de perfil)
+                    // Prioridade: preview do cliente > foto exemplo personalizada > foto exemplo padrÃ£o (sÃ³ para foto de perfil)
                     const docExampleUrl = doc.exampleImageUrl || (isPhotoProfile ? EXAMPLE_PHOTO_URL : null);
                     const docDisplayUrl = previewUrl || docExampleUrl;
                     const isClientPhotoDoc = hasFile && !!previewUrl;
@@ -2464,7 +2464,7 @@ export default function Home() {
 
                     return (
                       <div key={doc.id}>
-                        {/* Se tem foto exemplo (personalizada ou padrão para foto de perfil), mostrar modelo/preview */}
+                        {/* Se tem foto exemplo (personalizada ou padrÃ£o para foto de perfil), mostrar modelo/preview */}
                         {showPhotoPreview && (
                           <div className="bg-blue-900/40 border border-blue-500/40 rounded-xl p-3 mb-2">
                             <p className="text-blue-300 font-bold text-sm mb-2 text-center">
@@ -2483,16 +2483,16 @@ export default function Home() {
                                 {isClientPhotoDoc ? (
                                   <div className="text-green-300 text-xs space-y-0.5">
                                     <p className="font-bold text-green-400">{isPhotoProfile ? 'Foto selecionada!' : 'Arquivo selecionado!'}</p>
-                                    <p>{docFiles[doc.id]?.name || '✅ Já enviado anteriormente'}</p>
+                                    <p>{docFiles[doc.id]?.name || 'âœ… JÃ¡ enviado anteriormente'}</p>
                                   </div>
                                 ) : (doc as any).exampleText && (doc as any).exampleText.trim() !== '' ? (
                                   <p className="text-blue-200/80 text-xs whitespace-pre-line leading-relaxed">{(doc as any).exampleText}</p>
                                 ) : isPhotoProfile ? (
                                   <ul className="text-blue-200/80 text-xs space-y-0.5">
                                     <li>Foto frontal do rosto, bem iluminada</li>
-                                    <li>Sem óculos escuros ou boné</li>
+                                    <li>Sem Ã³culos escuros ou bonÃ©</li>
                                     <li>Fundo neutro (parede branca ou clara)</li>
-                                    <li>Somente você na foto</li>
+                                    <li>Somente vocÃª na foto</li>
                                   </ul>
                                 ) : (
                                   <p className="text-blue-200/80 text-xs">Envie o documento conforme o exemplo ao lado</p>
@@ -2502,21 +2502,21 @@ export default function Home() {
                           </div>
                         )}
 
-                        <label className="block text-black font-semibold mb-2 bg-white px-2 py-1 rounded">{doc.label} OBRIGATÓRIO</label>
-                        {/* Instrução do documento */}
+                        <label className="block text-black font-semibold mb-2 bg-white px-2 py-1 rounded">{doc.label} OBRIGATÃ“RIO</label>
+                        {/* InstruÃ§Ã£o do documento */}
                         {(doc as any).instruction && (doc as any).instruction.trim() !== '' && (
                           <div className="mb-2 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-500/40">
-                            <p className="text-amber-200 text-xs leading-relaxed whitespace-pre-line">📌 {(doc as any).instruction}</p>
+                            <p className="text-amber-200 text-xs leading-relaxed whitespace-pre-line">ðŸ“Œ {(doc as any).instruction}</p>
                           </div>
                         )}
                         
-                        {/* Renderizar inputs de câmera e galeria conforme inputSource */}
+                        {/* Renderizar inputs de cÃ¢mera e galeria conforme inputSource */}
                         {(doc.inputSource === 'both' || doc.inputSource === 'camera') && (
                           <input type="file" id={`doc-upload-${doc.id}-camera`} accept={isPhotoProfile ? ".jpg,.jpeg" : ".jpg,.jpeg,.png,.pdf,.webp"} capture="user" className="hidden"
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (file) {
-                                if (file.size > 10 * 1024 * 1024) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
+                                if (file.size > 10 * 1024 * 1024) { toast.error('Arquivo muito grande. MÃ¡ximo 10MB.'); return; }
                                 if (isPhotoProfile && !["image/jpeg", "image/jpg"].includes(file.type)) { toast.error("Foto de perfil deve ser JPG"); return; }
                                 setDocFiles(prev => ({ ...prev, [doc.id]: file }));
                                 toast.success(`${doc.label}: ${file.name} selecionado`);
@@ -2539,7 +2539,7 @@ export default function Home() {
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (file) {
-                                if (file.size > 10 * 1024 * 1024) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
+                                if (file.size > 10 * 1024 * 1024) { toast.error('Arquivo muito grande. MÃ¡ximo 10MB.'); return; }
                                 if (isPhotoProfile && !["image/jpeg", "image/jpg"].includes(file.type)) { toast.error("Foto de perfil deve ser JPG"); return; }
                                 setDocFiles(prev => ({ ...prev, [doc.id]: file }));
                                 toast.success(`${doc.label}: ${file.name} selecionado`);
@@ -2558,32 +2558,32 @@ export default function Home() {
                           />
                         )}
                         
-                        {/* Mostrar botões conforme inputSource */}
+                        {/* Mostrar botÃµes conforme inputSource */}
                         {doc.inputSource === 'both' ? (
                           <div className="flex gap-2">
                             <button onClick={() => document.getElementById(`doc-upload-${doc.id}-camera`)?.click()}
                               className={`flex-1 px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${hasFile ? 'bg-green-700 border-green-600 text-green-200' : 'bg-blue-600 border-blue-700 text-white hover:bg-blue-700'}`}>
-                              📷 Câmera
+                              ðŸ“· CÃ¢mera
                             </button>
                             <button onClick={() => document.getElementById(`doc-upload-${doc.id}-gallery`)?.click()}
                               className={`flex-1 px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${hasFile ? 'bg-green-700 border-green-600 text-green-200' : 'bg-purple-600 border-purple-700 text-white hover:bg-purple-700'}`}>
-                              🖼️ Galeria
+                              ðŸ–¼ï¸ Galeria
                             </button>
                           </div>
                         ) : doc.inputSource === 'camera' ? (
                           <button onClick={() => document.getElementById(`doc-upload-${doc.id}-camera`)?.click()}
                             className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${hasFile ? 'bg-green-700 border-green-600 text-green-200' : 'bg-blue-600 border-blue-700 text-white hover:bg-blue-700'}`}>
-                            📷 {hasFile ? (docFiles[doc.id]?.name || '✅ Já enviado') : `Tirar Foto - ${doc.label}`}
+                            ðŸ“· {hasFile ? (docFiles[doc.id]?.name || 'âœ… JÃ¡ enviado') : `Tirar Foto - ${doc.label}`}
                           </button>
                         ) : doc.inputSource === 'gallery' ? (
                           <button onClick={() => document.getElementById(`doc-upload-${doc.id}-gallery`)?.click()}
                             className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${hasFile ? 'bg-green-700 border-green-600 text-green-200' : 'bg-purple-600 border-purple-700 text-white hover:bg-purple-700'}`}>
-                            🖼️ {hasFile ? (docFiles[doc.id]?.name || '✅ Já enviado') : `Selecionar Galeria - ${doc.label}`}
+                            ðŸ–¼ï¸ {hasFile ? (docFiles[doc.id]?.name || 'âœ… JÃ¡ enviado') : `Selecionar Galeria - ${doc.label}`}
                           </button>
                         ) : (
                           <button onClick={() => document.getElementById(`doc-upload-${doc.id}-gallery`)?.click()}
                             className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${hasFile ? 'bg-green-700 border-green-600 text-green-200' : 'bg-red-600 border-red-700 text-green-400 hover:bg-red-700'}`}>
-                            📎 {hasFile ? (docFiles[doc.id]?.name || '✅ Já enviado') : `Selecionar ${doc.label}`}
+                            ðŸ“Ž {hasFile ? (docFiles[doc.id]?.name || 'âœ… JÃ¡ enviado') : `Selecionar ${doc.label}`}
                           </button>
                         )}
                       </div>
@@ -2602,7 +2602,7 @@ export default function Home() {
               )}
               <button onClick={validateUploadsAndProceed}
                 className="w-full px-4 py-3 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/80 hover:to-purple-600/80 text-white font-semibold rounded-lg transition-all duration-300 transform hover:scale-105 mt-4">
-                PRÓXIMO
+                PRÃ“XIMO
               </button>
               <button onClick={() => {
                 setSelectedOption(null); setDocFiles({}); setDocFilePreviews({}); setShowDocPhotoPreview(null); setStep("name-select");
@@ -2644,7 +2644,7 @@ export default function Home() {
                 />
                 <button onClick={() => document.getElementById("pdf-doc-upload")?.click()}
                   className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${(carDocument || restoredFileUrls.carDocument) ? 'bg-green-700 border-green-600 text-green-200' : 'bg-black border-white/20 hover:bg-white/10 text-white'}`}>
-                  📎 {carDocument ? carDocument.name : restoredFileUrls.carDocument ? '✅ Já enviado' : "Selecionar PDF"}
+                  ðŸ“Ž {carDocument ? carDocument.name : restoredFileUrls.carDocument ? 'âœ… JÃ¡ enviado' : "Selecionar PDF"}
                 </button>
               </div>
               {selectedProduct?.showYearField === 1 && (
@@ -2664,7 +2664,7 @@ export default function Home() {
                 if (selectedProduct?.showYearField === 1 && !carDocumentYear) { toast.error("Selecione o ano"); return; }
                 if (hasQuestions) { setStep("questions"); setCurrentQuestionIndex(0); } else { setStep("cadastro"); setCadastroSubStep('dados'); }
               }} className="w-full px-4 py-3 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/80 hover:to-purple-600/80 text-white font-semibold rounded-lg transition-all duration-300 transform hover:scale-105">
-                Próximo
+                PrÃ³ximo
               </button>
               <button onClick={() => { setStep("name-select"); setCarDocument(null); setCarDocumentYear(""); }}
                 className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg transition-all duration-300">
@@ -2679,13 +2679,13 @@ export default function Home() {
       {step === "questions" && (() => {
         const allQsModal = selectedOption?.questions || [];
 
-        // Constrói lista ordenada: perguntas raiz em ordem, sub-perguntas logo após o pai
+        // ConstrÃ³i lista ordenada: perguntas raiz em ordem, sub-perguntas logo apÃ³s o pai
         const buildOrderedQs = (answers: Record<number, string>): ProductQuestion[] => {
           const roots = allQsModal.filter(q => !q.parentQuestionId).sort((a, b) => a.sortOrder - b.sortOrder);
           const result: ProductQuestion[] = [];
           for (const root of roots) {
             result.push(root);
-            // Inserir sub-perguntas visíveis logo após o pai
+            // Inserir sub-perguntas visÃ­veis logo apÃ³s o pai
             const subs = allQsModal
               .filter(q => q.parentQuestionId === root.id)
               .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -2694,7 +2694,7 @@ export default function Home() {
               const isVisible = !sub.triggerOption || parentAnswer === sub.triggerOption;
               if (isVisible) {
                 result.push(sub);
-                // Inserir sub-sub-perguntas visíveis logo após a sub-pergunta pai
+                // Inserir sub-sub-perguntas visÃ­veis logo apÃ³s a sub-pergunta pai
                 const subSubs = allQsModal
                   .filter(q => q.parentQuestionId === sub.id)
                   .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -2716,10 +2716,10 @@ export default function Home() {
         const isLastQuestion = safeIndex === totalQs - 1;
         const progressPct = totalQs > 0 ? Math.round(((safeIndex) / totalQs) * 100) : 0;
 
-        // Calcula o próximo índice considerando sub-perguntas que podem aparecer após responder
+        // Calcula o prÃ³ximo Ã­ndice considerando sub-perguntas que podem aparecer apÃ³s responder
         const getNextIndex = (newAnswers: Record<number, string>): number => {
           const nextList = buildOrderedQs(newAnswers);
-          // Encontrar a posição atual na nova lista
+          // Encontrar a posiÃ§Ã£o atual na nova lista
           const currentIdInNew = nextList.findIndex(q => q.id === currentQ?.id);
           if (currentIdInNew === -1) return safeIndex + 1;
           return currentIdInNew + 1;
@@ -2733,7 +2733,7 @@ export default function Home() {
           }
           if (isLastQuestion) {
             if (blockedByQuestion) {
-              toast.error('Não é possível continuar. Você selecionou uma opção que impede o pedido.');
+              toast.error('NÃ£o Ã© possÃ­vel continuar. VocÃª selecionou uma opÃ§Ã£o que impede o pedido.');
               return;
             }
             const missing = visibleQs.find(q => q.isRequired === 1 && !questionAnswers[q.id]?.trim());
@@ -2778,8 +2778,8 @@ export default function Home() {
                             setBlockedByQuestion({ question: q.question, answer: opt.label });
                           } else {
                             setBlockedByQuestion(null);
-                            // Auto-avança para próxima pergunta após breve delay
-                            // Usa getNextIndex com as novas respostas para incluir sub-perguntas que acabaram de ficar visíveis
+                            // Auto-avanÃ§a para prÃ³xima pergunta apÃ³s breve delay
+                            // Usa getNextIndex com as novas respostas para incluir sub-perguntas que acabaram de ficar visÃ­veis
                             const newAnswers = { ...questionAnswers, [q.id]: opt.label };
                             const nextIdx = getNextIndex(newAnswers);
                             const nextList = buildOrderedQs(newAnswers);
@@ -2811,7 +2811,7 @@ export default function Home() {
                             <span className="w-2 h-2 rounded-full bg-white block" />
                           )}
                         </span>
-                        {/* Texto da opção */}
+                        {/* Texto da opÃ§Ã£o */}
                         <span
                           className="text-sm font-semibold flex-1"
                           style={{
@@ -2828,7 +2828,7 @@ export default function Home() {
                 </div>
               );
             }
-            // Fallback: opções simples (string separada por vírgula) — também vira radio buttons
+            // Fallback: opÃ§Ãµes simples (string separada por vÃ­rgula) â€” tambÃ©m vira radio buttons
             const simpleOpts = q.options!.split(',').map(o => o.trim()).filter(Boolean);
             return (
               <div className="flex flex-col gap-3 w-full">
@@ -2911,9 +2911,9 @@ export default function Home() {
         return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" style={{ overscrollBehavior: 'contain' }}>
           <div className="rounded-2xl max-w-md w-full shadow-2xl flex flex-col" style={{ backgroundColor: '#020617', border: '1px solid rgba(37,99,235,0.25)', maxHeight: '90dvh' }}>
-            {/* Cabeçalho fixo */}
+            {/* CabeÃ§alho fixo */}
             <div className="px-6 pt-6 pb-4 flex-shrink-0">
-            <h3 className="text-xl font-bold text-white mb-4 text-center tracking-wide">Informações Adicionais</h3>
+            <h3 className="text-xl font-bold text-white mb-4 text-center tracking-wide">InformaÃ§Ãµes Adicionais</h3>
             {/* Indicador de progresso */}
             <div>
               <div className="flex justify-between text-xs mb-2" style={{ color: '#94A3B8' }}>
@@ -2928,7 +2928,7 @@ export default function Home() {
               </div>
             </div>
             </div>
-            {/* Área scrollável: pergunta + opções */}
+            {/* Ãrea scrollÃ¡vel: pergunta + opÃ§Ãµes */}
             <div className="flex-1 overflow-y-auto px-6 pb-2" style={{ overscrollBehavior: 'contain' }}>
             {/* Pergunta atual */}
             {currentQ && (
@@ -2944,7 +2944,7 @@ export default function Home() {
               </div>
             )}
             </div>
-            {/* Botões de navegação fixos no rodapé */}
+            {/* BotÃµes de navegaÃ§Ã£o fixos no rodapÃ© */}
             <div className="px-6 pb-6 pt-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
             <div className="flex gap-3">
               {safeIndex > 0 && (
@@ -2953,7 +2953,7 @@ export default function Home() {
                   className="flex-1 px-4 py-3 font-semibold rounded-xl transition-all duration-200 active:scale-95"
                   style={{ backgroundColor: '#1E293B', color: '#94A3B8', border: '1px solid rgba(255,255,255,0.08)' }}
                 >
-                  ← Voltar
+                  â† Voltar
                 </button>
               )}
               {safeIndex === 0 && (
@@ -2975,18 +2975,18 @@ export default function Home() {
                 className="flex-1 px-4 py-3 font-bold rounded-xl transition-all duration-200 active:scale-95"
                 style={{ backgroundColor: '#2563EB', color: '#FFFFFF', boxShadow: '0 0 16px rgba(37,99,235,0.5)', border: '1px solid rgba(37,99,235,0.6)' }}
               >
-                {isLastQuestion ? 'PRÓXIMO' : 'Continuar →'}
+                {isLastQuestion ? 'PRÃ“XIMO' : 'Continuar â†’'}
                             </button>
             </div>
-            </div>{/* fim rodapé */}
+            </div>{/* fim rodapÃ© */}
             {/* Modal de bloqueio */}
             {blockedByQuestion && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-6">
                 <div className="bg-gray-950 border-2 border-red-600 rounded-2xl p-8 max-w-sm w-full text-center space-y-5 shadow-2xl">
-                  <div className="text-6xl">🚫</div>
+                  <div className="text-6xl">ðŸš«</div>
                   <p className="text-red-400 font-bold text-xl">Atendimento Encerrado</p>
-                  <p className="text-white/90 text-base leading-relaxed">Não podemos continuar com o atendimento ou venda.</p>
-                  <p className="text-white/50 text-xs">Sua sessão foi encerrada.</p>
+                  <p className="text-white/90 text-base leading-relaxed">NÃ£o podemos continuar com o atendimento ou venda.</p>
+                  <p className="text-white/50 text-xs">Sua sessÃ£o foi encerrada.</p>
                   <button onClick={() => { window.location.reload(); }} className="w-full px-4 py-3 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors text-sm">Fechar</button>
                 </div>
               </div>
@@ -3038,12 +3038,12 @@ export default function Home() {
                       <p className="text-yellow-300 text-xs mt-1 text-center">Buscando dados...</p>
                     )}
                     {customerAutoFilled && (
-                      <p className="text-green-300 text-xs mt-1 text-center">✅ Dados preenchidos automaticamente</p>
+                      <p className="text-green-300 text-xs mt-1 text-center">âœ… Dados preenchidos automaticamente</p>
                     )}
                   </div>
                   <div>
                     <Label className="text-white mb-1 block text-xs">Cidade</Label>
-                    <Input type="text" placeholder="São Paulo" value={clientCity} onChange={(e) => setClientCity(e.target.value)}
+                    <Input type="text" placeholder="SÃ£o Paulo" value={clientCity} onChange={(e) => setClientCity(e.target.value)}
                       className="border-2 text-center placeholder-black/50" style={{ backgroundColor: '#ffffff', color: '#000000', fontSize: '18px', borderStyle: 'double', borderColor: '#000' }} />
                   </div>
                   <div>
@@ -3053,17 +3053,17 @@ export default function Home() {
                     <Input type="email" placeholder="seu@email.com" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)}
                       className="border-2 text-center placeholder-black/50" style={{ backgroundColor: '#ffffff', color: '#000000', fontSize: '16px', borderStyle: 'double', borderColor: '#000' }} />
                     <div className="mt-1.5 flex items-start gap-1.5 bg-yellow-500/20 border border-yellow-500/40 rounded-lg px-2.5 py-2">
-                      <span className="text-yellow-400 text-xs flex-shrink-0 mt-0.5">⚠️</span>
+                      <span className="text-yellow-400 text-xs flex-shrink-0 mt-0.5">âš ï¸</span>
                       <p className="text-yellow-200 text-xs leading-relaxed">
-                        <strong>O email não é para criar conta.</strong> Usado apenas para você receber atualizações sobre o seu pedido.
+                        <strong>O email nÃ£o Ã© para criar conta.</strong> Usado apenas para vocÃª receber atualizaÃ§Ãµes sobre o seu pedido.
                       </p>
                     </div>
                   </div>
                   
-                  {/* INDICADOR OBRIGATÓRIO OU CÓDIGO DE BYPASS */}
+                  {/* INDICADOR OBRIGATÃ“RIO OU CÃ“DIGO DE BYPASS */}
                   {referrerName && (
                     <div className="border-2 border-green-500/50 rounded-lg p-3 bg-green-500/10">
-                      <p className="text-green-400 font-bold text-sm mb-2">✅ INDICADOR CONFIRMADO</p>
+                      <p className="text-green-400 font-bold text-sm mb-2">âœ… INDICADOR CONFIRMADO</p>
                       <div className="bg-green-900/30 border border-green-500/40 rounded-lg p-3">
                         <p className="text-sm text-green-300 font-bold">{referrerName}</p>
                       </div>
@@ -3072,13 +3072,13 @@ export default function Home() {
                   {!referrerName && (
                     <div className="border-2 border-blue-500/40 rounded-lg p-3 bg-blue-500/10">
                       <p className="text-blue-300 font-bold text-sm">Indicador (opcional)</p>
-                      <p className="text-blue-200 text-xs mt-1">Se você tiver um indicador, pode informar. Não é obrigatório para continuar.</p>
+                      <p className="text-blue-200 text-xs mt-1">Se vocÃª tiver um indicador, pode informar. NÃ£o Ã© obrigatÃ³rio para continuar.</p>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* BOTÃO CONTINUAR PARA PAGAMENTO */}
+              {/* BOTÃƒO CONTINUAR PARA PAGAMENTO */}
               <button onClick={async () => {
                 if (!clientName.trim()) { alert('Preencha seu nome completo'); return; }
                 const rawPhone = clientPhone.replace(/\D/g, '');
@@ -3086,7 +3086,7 @@ export default function Home() {
                 if (!clientCity.trim()) { alert('Preencha sua cidade'); return; }
                 if (!clientEmail.trim()) { alert('Preencha seu email'); return; }
                 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                if (!emailRegex.test(clientEmail.trim())) { alert('Digite um email válido'); return; }
+                if (!emailRegex.test(clientEmail.trim())) { alert('Digite um email vÃ¡lido'); return; }
                 if (rawPhone.length >= 10 && customerCheck.data?.exists) {
                   try { await updateEmailMutation.mutateAsync({ phone: rawPhone, email: clientEmail.trim() }); } catch (e) { /* silencioso */ }
                 }
@@ -3128,35 +3128,35 @@ export default function Home() {
                 .pix-logo { width: 56px; height: 56px; border: 2px solid #38bdf8; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: rgba(56,189,248,0.1); }
               `}</style>
 
-              {/* CABEÇALHO PAGAMENTO */}
+              {/* CABEÃ‡ALHO PAGAMENTO */}
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-12 h-12 rounded-xl bg-green-500/20 border-2 border-green-400 flex items-center justify-center">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
                 </div>
                 <div>
                   <h3 className="text-2xl font-black text-white tracking-wide">{cadastroSubStep === 'resumo' ? 'RESUMO' : 'PAGAMENTO'}</h3>
-                  <p className="text-green-400 text-xs flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 24 24" fill="#4ade80"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> {cadastroSubStep === 'resumo' ? 'Confira os dados do seu pedido' : 'Faça o PIX e envie o comprovante'}</p>
+                  <p className="text-green-400 text-xs flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 24 24" fill="#4ade80"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> {cadastroSubStep === 'resumo' ? 'Confira os dados do seu pedido' : 'FaÃ§a o PIX e envie o comprovante'}</p>
                 </div>
               </div>
 
-              {/* RESUMO DO PEDIDO - só no substep resumo */}
+              {/* RESUMO DO PEDIDO - sÃ³ no substep resumo */}
               {cadastroSubStep === 'resumo' && <div className="neon-green-border p-4" style={{background:'rgba(0,0,0,0.7)'}}>
                 <div className="flex items-center justify-center gap-2 mb-3">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
                   <p className="text-green-400 font-black text-base tracking-widest">RESUMO DO PEDIDO</p>
                 </div>
                 {cart.length > 1 ? (
-                  // Múltiplos itens do carrinho
+                  // MÃºltiplos itens do carrinho
                   <div className="space-y-2 mb-3">
                     {cart.map((item, idx) => (
                       <div key={item.id} className="bg-black/50 rounded-lg p-3">
                         <div className="flex justify-between items-center mb-1">
-                          <span className="text-white/70 text-xs">#{idx + 1} Serviço:</span>
+                          <span className="text-white/70 text-xs">#{idx + 1} ServiÃ§o:</span>
                           <span className="text-white font-bold text-xs">{item.product.name}</span>
                         </div>
                         {item.option && (
                           <div className="flex justify-between items-center mb-1">
-                            <span className="text-white/70 text-xs">Opção:</span>
+                            <span className="text-white/70 text-xs">OpÃ§Ã£o:</span>
                             <span className="text-white text-xs">{item.option.label}</span>
                           </div>
                         )}
@@ -3181,9 +3181,9 @@ export default function Home() {
                       {(couponDiscount || hasResellerDiscount) && cartTotalFormatted && (
                         <div className="flex justify-between items-center mt-1">
                           <span className="text-green-300 text-xs">
-                            {hasResellerDiscount && !couponDiscount && `🏷️ Desconto revendedor aplicado`}
-                            {couponDiscount && !hasResellerDiscount && `🎫 Cupom aplicado`}
-                            {couponDiscount && hasResellerDiscount && `🏷️ Revendedor + 🎫 Cupom`}
+                            {hasResellerDiscount && !couponDiscount && `ðŸ·ï¸ Desconto revendedor aplicado`}
+                            {couponDiscount && !hasResellerDiscount && `ðŸŽ« Cupom aplicado`}
+                            {couponDiscount && hasResellerDiscount && `ðŸ·ï¸ Revendedor + ðŸŽ« Cupom`}
                           </span>
                           <span className="text-green-300 text-xs font-bold">
                             Economia: R$ {(parseFloat(cartTotalFormatted.replace('R$ ', '').replace('.', '').replace(',', '.')) - parseFloat((cartTotalWithDiscount || cartTotalFormatted).replace('R$ ', '').replace('.', '').replace(',', '.'))).toFixed(2).replace('.', ',')}
@@ -3193,15 +3193,15 @@ export default function Home() {
                     </div>
                   </div>
                 ) : (
-                  // Item único
+                  // Item Ãºnico
                   <div className="bg-black/50 rounded-lg p-3 mb-3">
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-white/70 text-sm">Serviço:</span>
+                      <span className="text-white/70 text-sm">ServiÃ§o:</span>
                       <span className="text-white font-bold text-sm">{selectedProduct?.name || 'N/A'}</span>
                     </div>
                     {selectedOption && (
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-white/70 text-sm">Opção:</span>
+                        <span className="text-white/70 text-sm">OpÃ§Ã£o:</span>
                         <span className="text-white text-sm">{selectedOption.label}</span>
                       </div>
                     )}
@@ -3220,9 +3220,9 @@ export default function Home() {
                       {(couponDiscount || hasResellerDiscount) && (
                         <div className="flex justify-between items-center mt-1">
                           <span className="text-green-300 text-xs">
-                            {hasResellerDiscount && !couponDiscount && `🏷️ Desconto revendedor: -R$ ${getResellerDiscountAmount().toFixed(2).replace('.', ',')}`}
-                            {couponDiscount && !hasResellerDiscount && `🎫 Cupom aplicado`}
-                            {couponDiscount && hasResellerDiscount && `🏷️ Revendedor + 🎫 Cupom`}
+                            {hasResellerDiscount && !couponDiscount && `ðŸ·ï¸ Desconto revendedor: -R$ ${getResellerDiscountAmount().toFixed(2).replace('.', ',')}`}
+                            {couponDiscount && !hasResellerDiscount && `ðŸŽ« Cupom aplicado`}
+                            {couponDiscount && hasResellerDiscount && `ðŸ·ï¸ Revendedor + ðŸŽ« Cupom`}
                           </span>
                           <span className="text-green-300 text-xs font-bold">
                             Economia: R$ {(parseFloat(originalValue.replace('R$ ', '').replace('.', '').replace(',', '.')) - parseFloat(finalValue.replace('R$ ', '').replace('.', '').replace(',', '.'))).toFixed(2).replace('.', ',')}
@@ -3239,7 +3239,7 @@ export default function Home() {
                     <Ticket className="w-4 h-4" /> Cupom de Desconto (opcional)
                   </Label>
                   <div className="flex gap-2">
-                    <Input type="text" placeholder="Digite o código" value={couponCode}
+                    <Input type="text" placeholder="Digite o cÃ³digo" value={couponCode}
                       onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponValid(null); setCouponDiscount(null); setCouponMessage(''); }}
                       className="border-2 text-center placeholder-black/50 flex-1" style={{ backgroundColor: '#ffffff', color: '#000000', fontSize: '16px', borderStyle: 'double', borderColor: '#000' }} />
                     <button onClick={handleValidateCoupon} disabled={isValidatingCoupon || !couponCode.trim()}
@@ -3254,7 +3254,7 @@ export default function Home() {
                 {resellerInfo?.isReseller && (
                   <div className="border-t border-blue-500/20 pt-3">
                     <Label className="text-blue-400 mb-2 block flex items-center gap-1 text-xs">
-                      👤 Para quem é este pedido? (opcional)
+                      ðŸ‘¤ Para quem Ã© este pedido? (opcional)
                     </Label>
                     <Input
                       type="text"
@@ -3272,7 +3272,7 @@ export default function Home() {
                       className="border-2 text-center placeholder-black/50 mt-2"
                       style={{ backgroundColor: '#ffffff', color: '#000000', fontSize: '16px', borderStyle: 'double', borderColor: '#3b82f6' }}
                     />
-                    <p className="text-xs text-blue-300/70 mt-1">Informe o nome e telefone da pessoa para quem está revendendo (não obrigatório)</p>
+                    <p className="text-xs text-blue-300/70 mt-1">Informe o nome e telefone da pessoa para quem estÃ¡ revendendo (nÃ£o obrigatÃ³rio)</p>
                     {/* Desconto de revendedor */}
                     {getResellerDiscountAmount() > 0 && (() => {
                       const effectivePct = getEffectiveResellerDiscountPercent();
@@ -3280,7 +3280,7 @@ export default function Home() {
                       return (
                         <div className="mt-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 flex items-center justify-between">
                           <span className="text-xs text-yellow-300">
-                            🏷️ {isProductSpecific ? 'Desconto deste produto' : 'Desconto revendedor'}: {effectivePct}%
+                            ðŸ·ï¸ {isProductSpecific ? 'Desconto deste produto' : 'Desconto revendedor'}: {effectivePct}%
                           </span>
                           <span className="text-xs font-bold text-yellow-300">
                             -{effectivePct}% = -R$ {getResellerDiscountAmount().toFixed(2).replace('.', ',')}
@@ -3290,18 +3290,18 @@ export default function Home() {
                     })()}
                     {hasActivePromotion() && resellerInfo?.isReseller && (
                       <div className="mt-2 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2">
-                        <span className="text-xs text-amber-300">⚠️ Promoção ativa — desconto de revendedor não acumula</span>
+                        <span className="text-xs text-amber-300">âš ï¸ PromoÃ§Ã£o ativa â€” desconto de revendedor nÃ£o acumula</span>
                       </div>
                     )}
                   </div>
                 )}
               </div>}
-              {/* BOTÃO AVANÇAR PARA PAGAMENTO - só aparece no resumo */}
+              {/* BOTÃƒO AVANÃ‡AR PARA PAGAMENTO - sÃ³ aparece no resumo */}
               {cadastroSubStep === 'resumo' && (
                 <>
                 <button onClick={() => setCadastroSubStep('pagamento')}
                   className="w-full px-4 py-4 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white font-black rounded-xl transition-all duration-300 transform hover:scale-105 text-lg tracking-wider shadow-[0_0_20px_rgba(34,197,94,0.4)]">
-                  AVANÇAR PARA PAGAMENTO
+                  AVANÃ‡AR PARA PAGAMENTO
                 </button>
                 <button onClick={() => setCadastroSubStep('dados')}
                   className="w-full px-4 py-3 bg-white/5 hover:bg-white/10 text-white/70 font-semibold rounded-xl transition-all duration-300 border border-white/10 flex items-center justify-center gap-2">
@@ -3310,7 +3310,7 @@ export default function Home() {
                 </button>
                 </>
               )}
-              {/* PAGAMENTO PIX - só aparece no substep pagamento */}
+              {/* PAGAMENTO PIX - sÃ³ aparece no substep pagamento */}
               {cadastroSubStep === 'pagamento' && (<>
               <div className="neon-blue-border p-4" style={{background:'rgba(0,0,0,0.8)'}}>
                 <div className="flex items-center justify-center gap-2 mb-3">
@@ -3355,28 +3355,28 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-1.5 mb-3">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="#eab308"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12" stroke="#000" strokeWidth="2"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="#000" strokeWidth="2"/></svg>
-                  <p className="text-yellow-200/80 text-xs">Após realizar o PIX, envie a captura de tela do comprovante</p>
+                  <p className="text-yellow-200/80 text-xs">ApÃ³s realizar o PIX, envie a captura de tela do comprovante</p>
                 </div>
                 {paymentProofPreview ? (
                   <div className="relative mb-2">
                     {paymentProofPreview === 'pdf' ? (
                       <div className="w-full flex flex-col items-center justify-center py-4 rounded-xl border border-yellow-500/40 bg-white/5">
                         <FileUp className="w-10 h-10 text-yellow-400 mb-1" />
-                        <p className="text-white/80 text-xs">{paymentProof?.name || '✅ Comprovante já enviado'}</p>
+                        <p className="text-white/80 text-xs">{paymentProof?.name || 'âœ… Comprovante jÃ¡ enviado'}</p>
                       </div>
                     ) : (
                       <img src={paymentProofPreview} alt="Comprovante" className="w-full max-h-40 object-contain rounded-xl border border-yellow-500/40" />
                     )}
                     <button onClick={() => { setPaymentProof(null); setPaymentProofPreview(null); setRestoredFileUrls(prev => ({ ...prev, paymentProof: undefined })); }} type="button"
-                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-500">✕</button>
-                    <p className="text-green-400 text-xs mt-2 font-black text-center">✓ Comprovante anexado com sucesso!</p>
+                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-500">âœ•</button>
+                    <p className="text-green-400 text-xs mt-2 font-black text-center">âœ“ Comprovante anexado com sucesso!</p>
                   </div>
                 ) : (
                   <label className="cursor-pointer block">
                     <div className="rounded-xl p-5 flex flex-col items-center gap-2 hover:bg-yellow-500/10 transition-all">
                       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#eab308" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                       <p className="text-white font-black text-base text-center tracking-wide">CLIQUE PARA ENVIAR COMPROVANTE</p>
-                      <p className="text-white/50 text-xs text-center">Imagens ou PDF • a imagem é otimizada automaticamente</p>
+                      <p className="text-white/50 text-xs text-center">Imagens ou PDF â€¢ a imagem Ã© otimizada automaticamente</p>
                     </div>
                     <input type="file" accept="image/*,application/pdf,.heic,.heif" className="hidden" onChange={handlePaymentProofSelect} />
                   </label>
@@ -3396,7 +3396,7 @@ export default function Home() {
                   <p className="text-white/40 text-xs text-center">Por favor, aguarde. Isso pode levar alguns segundos...</p>
                 </div>
               )}
-              {/* Botão FINALIZAR — pulsa neon verde somente quando comprovante carregado */}
+              {/* BotÃ£o FINALIZAR â€” pulsa neon verde somente quando comprovante carregado */}
               <button data-tour="finalizar" onClick={handleFinalSubmit} disabled={(!paymentProof && !restoredFileUrls.paymentProof) || isSubmitting}
                 className={`w-full px-4 py-4 font-black rounded-xl transition-all duration-300 text-lg flex items-center justify-center gap-3 tracking-wider ${
                   isSubmitting ? 'bg-gray-700 text-gray-400 cursor-not-allowed' :
@@ -3406,7 +3406,7 @@ export default function Home() {
                 {isSubmitting ? (
                   <><Loader2 className="w-5 h-5 animate-spin" /> {submitProgress || 'ENVIANDO...'}</>
                 ) : (paymentProof || restoredFileUrls.paymentProof) ? (
-                  <><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0"><svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6 2l.01 6L10 12l-3.99 4.01L6 22h12v-6l-4-4 4-3.99V2H6zm10 14.5V20H8v-3.5l4-4 4 4z"/></svg></div><div className="text-left"><p className="text-white font-black text-base">CLIQUE AQUI PARA FINALIZAR</p><p className="text-green-200 text-xs font-normal">Seu pedido será liberado após a confirmação do pagamento.</p></div><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polyline points="9 18 15 12 9 6"/></svg></>
+                  <><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0"><svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6 2l.01 6L10 12l-3.99 4.01L6 22h12v-6l-4-4 4-3.99V2H6zm10 14.5V20H8v-3.5l4-4 4 4z"/></svg></div><div className="text-left"><p className="text-white font-black text-base">CLIQUE AQUI PARA FINALIZAR</p><p className="text-green-200 text-xs font-normal">Seu pedido serÃ¡ liberado apÃ³s a confirmaÃ§Ã£o do pagamento.</p></div><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polyline points="9 18 15 12 9 6"/></svg></>
                 ) : 'ENVIE O COMPROVANTE PARA FINALIZAR'}
               </button>
               <button onClick={() => setCadastroSubStep('resumo')} disabled={isSubmitting}
@@ -3421,7 +3421,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* ========== TELA DE CONFIRMAÇÃO PÓS-ENVIO ========== */}
+      {/* ========== TELA DE CONFIRMAÃ‡ÃƒO PÃ“S-ENVIO ========== */}
       {step === "success" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md overflow-y-auto py-4">
           <div className="bg-black/90 backdrop-blur-md border-2 border-green-500/60 rounded-2xl p-6 md:p-8 max-w-md mx-4 shadow-2xl text-center">
@@ -3460,10 +3460,10 @@ export default function Home() {
               </div>
             ) : null}
 
-            {/* ===== FORMULÁRIO DE INDICAÇÃO PÓS-PEDIDO ===== */}
-            {/* Só aparece para clientes NOVOS (primeiro pedido) */}
+            {/* ===== FORMULÃRIO DE INDICAÃ‡ÃƒO PÃ“S-PEDIDO ===== */}
+            {/* SÃ³ aparece para clientes NOVOS (primeiro pedido) */}
             {!isNewCustomerOrder && postOrderReferralStep === 'question' && (
-              // Cliente já existente: pular direto para 'done' sem mostrar o formulário
+              // Cliente jÃ¡ existente: pular direto para 'done' sem mostrar o formulÃ¡rio
               // (useEffect abaixo cuida disso)
               null
             )}
@@ -3480,18 +3480,18 @@ export default function Home() {
                 <div className="absolute -bottom-6 -left-6 w-24 h-24 rounded-full blur-xl pointer-events-none" style={{ background: 'rgba(99,102,241,0.4)' }} />
                 {/* Faixa superior chamativa */}
                 <div className="w-full py-2 text-center font-black text-xs uppercase tracking-widest" style={{ background: 'rgba(0,0,0,0.3)', color: '#fde68a', letterSpacing: '0.2em' }}>
-                  ⚡ ATENÇÃO — PASSO IMPORTANTE ⚡
+                  âš¡ ATENÃ‡ÃƒO â€” PASSO IMPORTANTE âš¡
                 </div>
                 <div className="relative p-6">
                   <div className="flex items-center gap-2 justify-center mb-3">
-                    <span className="text-4xl" style={{ animation: 'bounce 1.5s infinite' }}>🎁</span>
-                    <p className="font-black text-xl uppercase tracking-wider" style={{ color: '#fde68a', textShadow: '0 0 10px rgba(253,230,138,0.6)' }}>ALGUÉM TE INDICOU?</p>
+                    <span className="text-4xl" style={{ animation: 'bounce 1.5s infinite' }}>ðŸŽ</span>
+                    <p className="font-black text-xl uppercase tracking-wider" style={{ color: '#fde68a', textShadow: '0 0 10px rgba(253,230,138,0.6)' }}>ALGUÃ‰M TE INDICOU?</p>
                   </div>
                   <div className="rounded-xl p-4 mb-5 text-center" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(253,230,138,0.3)' }}>
                     <p className="font-bold text-sm leading-relaxed" style={{ color: '#ffffff' }}>
                       Informe o telefone de quem te indicou.
                     </p>
-                    <p className="font-black text-sm mt-2" style={{ color: '#fde68a' }}>⭐ Quem indicou ganha bônus e vantagens!</p>
+                    <p className="font-black text-sm mt-2" style={{ color: '#fde68a' }}>â­ Quem indicou ganha bÃ´nus e vantagens!</p>
                   </div>
                   <div className="flex gap-3">
                     <button
@@ -3507,7 +3507,7 @@ export default function Home() {
                         fontSize: '0.9rem'
                       }}
                     >
-                      ✅ SIM, TENHO INDICADOR
+                      âœ… SIM, TENHO INDICADOR
                     </button>
                     <button
                       data-tour="indicador-sim"
@@ -3520,7 +3520,7 @@ export default function Home() {
                         color: '#e2e8f0'
                       }}
                     >
-                      Não
+                      NÃ£o
                     </button>
                   </div>
                 </div>
@@ -3530,7 +3530,7 @@ export default function Home() {
             {postOrderReferralStep === 'form' && (
               <div className="bg-yellow-500/10 border-2 border-yellow-500/40 rounded-xl p-5 mb-5 space-y-4">
                 <div className="text-center">
-                  <p className="text-yellow-300 font-black text-sm uppercase tracking-wide mb-1">🎁 Quem te indicou?</p>
+                  <p className="text-yellow-300 font-black text-sm uppercase tracking-wide mb-1">ðŸŽ Quem te indicou?</p>
                   <p className="text-white/60 text-xs">Digite o telefone de quem te indicou (com DDD)</p>
                 </div>
                 <div>
@@ -3556,7 +3556,7 @@ export default function Home() {
                   onClick={async () => {
                     const selfDigits = clientPhone.replace(/\D/g, '');
                     if (postOrderReferralPhone === selfDigits) {
-                      setPostOrderReferralError('Você não pode indicar a si mesmo!');
+                      setPostOrderReferralError('VocÃª nÃ£o pode indicar a si mesmo!');
                       return;
                     }
                     setPostOrderReferralSaving(true);
@@ -3564,18 +3564,18 @@ export default function Home() {
                     try {
                       const result = await updateReferralMutation.mutateAsync({
                         phone: selfDigits,
-                        referredBy: postOrderReferralName || 'Informado pós-pedido',
+                        referredBy: postOrderReferralName || 'Informado pÃ³s-pedido',
                         referredByPhone: postOrderReferralPhone,
                       });
                       if (!result.success) {
-                        setPostOrderReferralError((result as any).message || 'Telefone do indicador não encontrado. Verifique o número.');
+                        setPostOrderReferralError((result as any).message || 'Telefone do indicador nÃ£o encontrado. Verifique o nÃºmero.');
                         return;
                       }
                       setReferrerPhone(postOrderReferralPhone);
                       setReferrerName(postOrderReferralName || 'Indicador');
                       setPostOrderReferralStep('done');
                     } catch (err: any) {
-                      const msg = err?.message || 'Erro ao salvar indicação. Tente novamente.';
+                      const msg = err?.message || 'Erro ao salvar indicaÃ§Ã£o. Tente novamente.';
                       setPostOrderReferralError(msg);
                     } finally {
                       setPostOrderReferralSaving(false);
@@ -3591,7 +3591,7 @@ export default function Home() {
                   onClick={() => { setPostOrderReferralStep('done'); setPostOrderReferralError(''); }}
                   className="w-full py-3 mt-2 text-white font-bold text-sm rounded-xl border-2 border-red-400/60 bg-red-500/20 hover:bg-red-500/30 transition-all active:scale-95"
                 >
-                  Não tenho indicador - PULAR
+                  NÃ£o tenho indicador - PULAR
                 </button>
               </div>
             )}
@@ -3599,38 +3599,38 @@ export default function Home() {
             {postOrderReferralStep === 'done' && referrerPhone && postOrderReferralPhone && (
               <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/50 rounded-2xl p-4 mb-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-3xl">🎉</span>
+                  <span className="text-3xl">ðŸŽ‰</span>
                   <div>
-                    <p className="text-green-300 font-black text-sm uppercase tracking-wide">Indicação registrada!</p>
-                    <p className="text-white/70 text-xs mt-0.5">Obrigado! Quem te indicou será bonificado. ❤️</p>
+                    <p className="text-green-300 font-black text-sm uppercase tracking-wide">IndicaÃ§Ã£o registrada!</p>
+                    <p className="text-white/70 text-xs mt-0.5">Obrigado! Quem te indicou serÃ¡ bonificado. â¤ï¸</p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Aviso e botão WhatsApp — só aparecem após responder a pergunta de indicação */}
+            {/* Aviso e botÃ£o WhatsApp â€” sÃ³ aparecem apÃ³s responder a pergunta de indicaÃ§Ã£o */}
             {postOrderReferralStep === 'done' && (
             <>
-            {/* Aviso OBRIGATÓRIO */}
+            {/* Aviso OBRIGATÃ“RIO */}
             <div className="bg-red-500/15 border-2 border-red-500/50 rounded-xl p-4 mb-5">
               <div className="flex items-center gap-2 justify-center mb-2">
                 <AlertTriangle className="w-5 h-5 text-red-400" />
-                <p className="text-red-400 font-black text-sm">ATENÇÃO - PASSO OBRIGATÓRIO</p>
+                <p className="text-red-400 font-black text-sm">ATENÃ‡ÃƒO - PASSO OBRIGATÃ“RIO</p>
               </div>
               <p className="text-white font-semibold text-sm leading-relaxed">
-                Para concluir seu pedido, você <span className="text-red-400 font-black underline">PRECISA</span> clicar no botão abaixo e enviar a mensagem no WhatsApp.
+                Para concluir seu pedido, vocÃª <span className="text-red-400 font-black underline">PRECISA</span> clicar no botÃ£o abaixo e enviar a mensagem no WhatsApp.
               </p>
               <p className="text-white/60 text-xs mt-2">
-                Sem essa confirmação, seu pedido não será processado.
+                Sem essa confirmaÃ§Ã£o, seu pedido nÃ£o serÃ¡ processado.
               </p>
             </div>
 
-            {/* Botão GRANDE do WhatsApp */}
+            {/* BotÃ£o GRANDE do WhatsApp */}
             <button onClick={() => {
               const od = submittedOrderData;
               let msg = `NOVO PEDIDO - ${SITE_NAME}`;
 
-              // Quem indicou (só se preenchido)
+              // Quem indicou (sÃ³ se preenchido)
               const rName = od?.referrerName || referrerName.trim();
               const rPhone = od?.referrerPhone || referrerPhone.trim();
               if (rName || rPhone) {
@@ -3645,7 +3645,7 @@ export default function Home() {
               msg += `\nTelefone: ${od?.clientPhone || clientPhone}`;
               if (od?.clientCity || clientCity) msg += `\nCidade: ${od?.clientCity || clientCity}`;
 
-              // Serviços
+              // ServiÃ§os
               const items = od?.cartItems || [];
               if (items.length > 1) {
                 items.forEach((item, idx) => {
@@ -3668,7 +3668,7 @@ export default function Home() {
 
               msg += `\nComprovante PIX: Enviado`;
 
-              // Respostas do formulário
+              // Respostas do formulÃ¡rio
               const answers = od?.answers || [];
               if (answers.length > 0) {
                 msg += `\n\nRESPOSTAS DO FORMULARIO:`;
@@ -3724,12 +3724,12 @@ export default function Home() {
                   window.location.reload();
                 }}
                   className="w-full px-4 py-3 bg-green-600/80 hover:bg-green-500 text-white font-semibold rounded-lg transition-all duration-300 text-sm">
-                  Já enviei no WhatsApp - Concluir
+                  JÃ¡ enviei no WhatsApp - Concluir
                 </button>
               </>
             ) : (
               <p className="text-red-400/70 text-xs font-semibold">
-                Clique no botão verde acima para abrir o WhatsApp primeiro.
+                Clique no botÃ£o verde acima para abrir o WhatsApp primeiro.
               </p>
             )}
             </>
@@ -3737,11 +3737,11 @@ export default function Home() {
           </div>
         </div>
       )}
-      {/* ===== MODAL: SELETOR DE OPÇÃO PARA CARRINHO ===== */}
+      {/* ===== MODAL: SELETOR DE OPÃ‡ÃƒO PARA CARRINHO ===== */}
       {cartPendingProduct && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="backdrop-blur-md border border-primary/30 rounded-2xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto" style={{ backgroundColor: 'rgba(10, 10, 30, 0.97)' }}>
-            <h3 className="text-xl font-bold text-white mb-2">Selecione uma Opção</h3>
+            <h3 className="text-xl font-bold text-white mb-2">Selecione uma OpÃ§Ã£o</h3>
             <p className="text-white/70 mb-4 text-sm">{cartPendingProduct.name}</p>
             <div className="space-y-2">
               {cartPendingProduct.options.filter(o => o.isActive === 1).map(option => (
@@ -3838,7 +3838,7 @@ export default function Home() {
                 })()}
 
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-4">
-                  <p className="text-blue-300 text-xs text-center">📋 Você preencherá seus dados <strong>uma única vez</strong> e criaremos um pedido para cada produto selecionado.</p>
+                  <p className="text-blue-300 text-xs text-center">ðŸ“‹ VocÃª preencherÃ¡ seus dados <strong>uma Ãºnica vez</strong> e criaremos um pedido para cada produto selecionado.</p>
                 </div>
 
                 <button onClick={startCartCheckout}
@@ -3866,8 +3866,8 @@ export default function Home() {
             <h1 className="text-xl font-bold text-white">{SITE_NAME}</h1>
           </div>
           <div className="flex items-center gap-3">
-            <p className="hidden md:block text-sm text-white/70">Atendimento Rápido no WhatsApp</p>
-            {/* Botão do Carrinho */}
+            <p className="hidden md:block text-sm text-white/70">Atendimento RÃ¡pido no WhatsApp</p>
+            {/* BotÃ£o do Carrinho */}
             <button
               onClick={() => setShowCart(true)}
               className="relative flex items-center gap-1.5 px-3 py-1.5 bg-primary/20 hover:bg-primary/30 border border-primary/40 text-white rounded-lg text-xs font-medium transition-colors"
@@ -3919,7 +3919,7 @@ export default function Home() {
       <section className="relative overflow-hidden py-4 md:py-20">
         <div className="container">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
-            {/* Vídeo mobile — só exibe se houver URL e não houver erro */}
+            {/* VÃ­deo mobile â€” sÃ³ exibe se houver URL e nÃ£o houver erro */}
             {VIDEO_URL && !videoError && (
               <div className={`relative md:hidden order-first -mx-4 px-4 mb-4 transition-all duration-300 ${videoLoaded ? 'opacity-100' : 'h-0 overflow-hidden opacity-0'}`}>
                 <video key={VIDEO_URL} autoPlay muted loop playsInline preload="auto" className="relative rounded-xl shadow-lg w-full max-h-48 object-cover" onError={() => setVideoError(true)} onLoadedData={() => setVideoLoaded(true)} ref={(el) => { if (el) { el.muted = true; el.play().catch(() => {}); } }}>
@@ -3928,7 +3928,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Conteúdo */}
+            {/* ConteÃºdo */}
             <div className="space-y-6">
               <div className="space-y-3">
                 {HERO_TITLE && <h2 className="text-4xl md:text-5xl font-bold text-foreground leading-tight" dangerouslySetInnerHTML={{ __html: HERO_TITLE }} />}
@@ -3958,7 +3958,7 @@ export default function Home() {
               )}
             </div>
 
-            {/* Vídeo desktop — só exibe se houver URL e não houver erro */}
+            {/* VÃ­deo desktop â€” sÃ³ exibe se houver URL e nÃ£o houver erro */}
             {VIDEO_URL && !videoError && (
               <div className="relative hidden md:block">
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-3xl blur-3xl"></div>
@@ -3973,7 +3973,7 @@ export default function Home() {
 
 
 
-      {/* Serviços Extras / Consultas — TOPO */}
+      {/* ServiÃ§os Extras / Consultas â€” TOPO */}
       {clientPhoneFromSession && (
         <section className="px-4 pt-4 pb-2">
           <div className="container max-w-2xl">
@@ -3988,7 +3988,7 @@ export default function Home() {
         </section>
       )}
 
-      {/* Banner de Promoções em Destaque */}
+      {/* Banner de PromoÃ§Ãµes em Destaque */}
       {(() => {
         const now = Date.now();
         const allPromoOptions = (products || []).flatMap((p: Product) =>
@@ -4003,18 +4003,18 @@ export default function Home() {
         return (
           <section className="py-6 px-4">
             <div className="container">
-              {/* Header da seção */}
+              {/* Header da seÃ§Ã£o */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl">🔥</span>
-                  <h3 className="text-xl font-black text-white tracking-wide">PROMOÇÕES ATIVAS</h3>
+                  <span className="text-2xl">ðŸ”¥</span>
+                  <h3 className="text-xl font-black text-white tracking-wide">PROMOÃ‡Ã•ES ATIVAS</h3>
                   <span className="bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full animate-bounce">
                     {allPromoOptions.length} oferta{allPromoOptions.length > 1 ? 's' : ''}
                   </span>
                 </div>
               </div>
 
-              {/* Grid de cards de promoção */}
+              {/* Grid de cards de promoÃ§Ã£o */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {allPromoOptions.map(({ product: p, option: o }) => (
                   <PromoCard
@@ -4042,7 +4042,7 @@ export default function Home() {
         );
       })()}
 
-      {/* Seção de Serviços */}
+      {/* SeÃ§Ã£o de ServiÃ§os */}
       <section className="py-16 md:py-24 bg-black/10">
         <div className="container">
           <div className="text-center mb-12">
@@ -4052,7 +4052,7 @@ export default function Home() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {(products || []).filter((product: Product) => {
-              // Filtro 1: restrição por senha VIP (salvo no sessionStorage ao logar)
+              // Filtro 1: restriÃ§Ã£o por senha VIP (salvo no sessionStorage ao logar)
               const vipAllowedRaw = localStorage.getItem('vip_allowed_products');
               if (vipAllowedRaw) {
                 try {
@@ -4060,11 +4060,11 @@ export default function Home() {
                   if (vipIds.length > 0 && !vipIds.includes(product.id)) return false;
                 } catch { /* ignore */ }
               }
-              // Filtro 2: restrição por senha fixa individual do cliente
+              // Filtro 2: restriÃ§Ã£o por senha fixa individual do cliente
               if (allowedProductsQuery.data?.restricted && allowedProductsQuery.data.productIds.length > 0) {
                 return allowedProductsQuery.data.productIds.includes(product.id);
               }
-              return true; // Sem restrição = vê tudo
+              return true; // Sem restriÃ§Ã£o = vÃª tudo
             }).map((product: Product) => {
               const cardStyle: React.CSSProperties = {
                 borderColor: product.cardColor || 'rgba(var(--primary), 0.3)',
@@ -4099,7 +4099,7 @@ export default function Home() {
                   {productDiscountPct !== null && (
                     <div className="absolute top-3 right-3 z-10">
                       <div className="bg-yellow-400 text-black text-[11px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg">
-                        <span>🏷️</span>
+                        <span>ðŸ·ï¸</span>
                         <span>{productDiscountPct}% OFF</span>
                       </div>
                     </div>
@@ -4107,7 +4107,7 @@ export default function Home() {
 
                   {/* Corpo do card */}
                   <div className="p-5 flex-1 flex flex-col">
-                    {/* Ícone + Título em linha */}
+                    {/* Ãcone + TÃ­tulo em linha */}
                     <div className="flex items-center gap-3 mb-3">
                       {product.iconUrl ? (
                         <div className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}>
@@ -4122,7 +4122,7 @@ export default function Home() {
                     {/* Separador */}
                     <div className="h-px mb-3" style={{ background: `linear-gradient(90deg, ${product.cardColor || 'rgba(139,92,246,0.5)'}, transparent)` }} />
 
-                    {/* Descrição */}
+                    {/* DescriÃ§Ã£o */}
                     {product.description && (
                       <div className="flex-1 mb-4 text-sm leading-relaxed whitespace-pre-wrap"
                         style={{ color: product.cardTextColor ? product.cardTextColor + 'cc' : 'rgba(255,255,255,0.75)' }}
@@ -4130,7 +4130,7 @@ export default function Home() {
                       />
                     )}
 
-                    {/* Botões */}
+                    {/* BotÃµes */}
                     <div className="flex flex-col gap-2 mt-auto">
                       <button
                         onClick={() => handleServiceClick(product)}
@@ -4162,7 +4162,7 @@ export default function Home() {
             })}
           </div>
           
-          {/* Cards de Destaque Dinâmicos */}
+          {/* Cards de Destaque DinÃ¢micos */}
           {featureCardsList.filter((c: any) => c.isActive).length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
               {featureCardsList.filter((c: any) => c.isActive).map((card: any) => (
@@ -4171,7 +4171,7 @@ export default function Home() {
                     {card.logoUrl ? (
                       <img src={card.logoUrl} alt={card.title} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
                     ) : (
-                      <div className="w-14 h-14 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0 text-2xl">📋</div>
+                      <div className="w-14 h-14 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0 text-2xl">ðŸ“‹</div>
                     )}
                     <div className="flex-1 min-w-0">
                       <h3 className="text-base font-black leading-tight" style={{ color: card.titleColor }}>{card.title}</h3>
@@ -4194,7 +4194,7 @@ export default function Home() {
             </div>
           )}
           
-          {/* Banners Informativos — no mesmo grid dos cards, mesma largura de coluna */}
+          {/* Banners Informativos â€” no mesmo grid dos cards, mesma largura de coluna */}
           {activeBanners.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
               {activeBanners.map(b => (
@@ -4203,7 +4203,7 @@ export default function Home() {
                   className="rounded-xl px-4 py-3 border border-white/10 flex items-start gap-3"
                   style={{ backgroundColor: b.bgColor, color: b.textColor }}
                 >
-                  <span className="text-base flex-shrink-0 mt-0.5">📢</span>
+                  <span className="text-base flex-shrink-0 mt-0.5">ðŸ“¢</span>
                   <div className="min-w-0">
                     {b.title && <p className="text-sm font-bold leading-tight mb-0.5">{b.title}</p>}
                     <p className="text-xs leading-relaxed whitespace-pre-wrap opacity-90">{b.content}</p>
@@ -4223,17 +4223,17 @@ export default function Home() {
               {/* Header */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-purple-500/20">
                 <div className="w-9 h-9 rounded-xl bg-purple-600/30 flex items-center justify-center flex-shrink-0">
-                  <span className="text-lg">🔒</span>
+                  <span className="text-lg">ðŸ”’</span>
                 </div>
                 <div>
                   <p className="text-white font-bold text-sm">{activeProtectedPhoto.title}</p>
-                  <p className="text-purple-300/70 text-xs">Conteúdo exclusivo para clientes cadastrados</p>
+                  <p className="text-purple-300/70 text-xs">ConteÃºdo exclusivo para clientes cadastrados</p>
                 </div>
               </div>
 
               {/* Imagem */}
               <div className="relative">
-                {/* Verificar acesso: sessão existente OU acesso manual verificado */}
+                {/* Verificar acesso: sessÃ£o existente OU acesso manual verificado */}
                 {(photoAccessQuery.data?.hasAccess || protectedPhotoAccess === true) ? (
                   // ACESSO LIBERADO
                   <div>
@@ -4244,7 +4244,7 @@ export default function Home() {
                       style={{ maxHeight: '70vh' }}
                       onClick={() => setProtectedPhotoExpanded(true)}
                     />
-                    <p className="text-center text-xs text-green-400/80 py-2">✅ Acesso liberado — clique na imagem para ampliar</p>
+                    <p className="text-center text-xs text-green-400/80 py-2">âœ… Acesso liberado â€” clique na imagem para ampliar</p>
                   </div>
                 ) : (
                   // ACESSO BLOQUEADO
@@ -4257,10 +4257,10 @@ export default function Home() {
                     />
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
                       <div className="bg-black/80 backdrop-blur-sm border border-purple-500/40 rounded-2xl p-6 max-w-sm w-full space-y-4">
-                        <div className="text-4xl">🔒</div>
+                        <div className="text-4xl">ðŸ”’</div>
                         <p className="text-white font-bold text-base whitespace-pre-wrap">{activeProtectedPhoto.message}</p>
                         {protectedPhotoAccess === false && (
-                          <p className="text-red-400 text-sm font-semibold">❌ Número não encontrado. Faça seu cadastro primeiro.</p>
+                          <p className="text-red-400 text-sm font-semibold">âŒ NÃºmero nÃ£o encontrado. FaÃ§a seu cadastro primeiro.</p>
                         )}
                         {/* Input de telefone para verificar acesso */}
                         <div className="space-y-2">
@@ -4268,7 +4268,7 @@ export default function Home() {
                             type="tel"
                             value={protectedPhotoPhone}
                             onChange={e => setProtectedPhotoPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                            placeholder="Digite seu telefone (11 dígitos)"
+                            placeholder="Digite seu telefone (11 dÃ­gitos)"
                             className="w-full px-4 py-2.5 rounded-xl text-white text-sm text-center"
                             style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(139,92,246,0.5)', outline: 'none' }}
                           />
@@ -4278,7 +4278,7 @@ export default function Home() {
                               if (protectedPhotoPhone.length < 10) return;
                               setCheckingPhotoAccess(true);
                               try {
-                                // Usar fetch direto para não criar hook condicional
+                                // Usar fetch direto para nÃ£o criar hook condicional
                                 const res = await fetch('/api/trpc/protectedPhotos.checkAccess?input=' + encodeURIComponent(JSON.stringify({ phone: protectedPhotoPhone })));
                                 const json = await res.json();
                                 const hasAccess = json?.result?.data?.json?.hasAccess ?? false;
@@ -4292,7 +4292,7 @@ export default function Home() {
                             className="w-full py-2.5 rounded-xl font-bold text-sm transition-all"
                             style={{ background: checkingPhotoAccess || protectedPhotoPhone.length < 10 ? 'rgba(139,92,246,0.3)' : 'rgba(139,92,246,0.8)', color: '#fff', cursor: checkingPhotoAccess || protectedPhotoPhone.length < 10 ? 'not-allowed' : 'pointer' }}
                           >
-                            {checkingPhotoAccess ? 'Verificando...' : '🔓 Verificar Acesso'}
+                            {checkingPhotoAccess ? 'Verificando...' : 'ðŸ”“ Verificar Acesso'}
                           </button>
                         </div>
                       </div>
@@ -4320,7 +4320,7 @@ export default function Home() {
           <button
             onClick={() => setProtectedPhotoExpanded(false)}
             className="absolute top-4 right-4 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white font-bold text-xl"
-          >✕</button>
+          >âœ•</button>
         </div>
       )}
 
@@ -4332,15 +4332,15 @@ export default function Home() {
               <div className="relative overflow-hidden bg-gradient-to-r from-yellow-500/20 via-yellow-600/30 to-yellow-500/20 border-2 border-yellow-500/60 rounded-2xl p-5 md:p-6 animate-pulse-slow">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,215,0,0.1),transparent_70%)]" />
                 <div className="relative flex items-center justify-center gap-3 flex-wrap">
-                  <span className="text-3xl">🎉</span>
+                  <span className="text-3xl">ðŸŽ‰</span>
                   <div className="text-center">
                     <p className="text-yellow-400 font-black text-lg md:text-xl uppercase tracking-wide">Participe do Sorteio!</p>
-                    <p className="text-white/80 text-sm md:text-base mt-1">Escolha seu número da sorte de 1 a 100 e concorra ao prêmio!</p>
+                    <p className="text-white/80 text-sm md:text-base mt-1">Escolha seu nÃºmero da sorte de 1 a 100 e concorra ao prÃªmio!</p>
                   </div>
-                  <span className="text-3xl">🎁</span>
+                  <span className="text-3xl">ðŸŽ</span>
                 </div>
                 <div className="text-center mt-3 flex items-center justify-center gap-3 flex-wrap">
-                  <span className="inline-block bg-yellow-500 text-black font-bold text-sm px-4 py-1.5 rounded-full">CLIQUE AQUI PARA PARTICIPAR ↓</span>
+                  <span className="inline-block bg-yellow-500 text-black font-bold text-sm px-4 py-1.5 rounded-full">CLIQUE AQUI PARA PARTICIPAR â†“</span>
                   {raffleResult && (
                     <button
                       onClick={(e) => {
@@ -4350,7 +4350,7 @@ export default function Home() {
                       }}
                       className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/30 text-white font-bold text-sm px-4 py-1.5 rounded-full transition-colors"
                     >
-                      🏆 Ver resultado
+                      ðŸ† Ver resultado
                     </button>
                   )}
                 </div>
@@ -4360,7 +4360,7 @@ export default function Home() {
         </section>
       )}
 
-      {/* Seção de Sorteio */}
+      {/* SeÃ§Ã£o de Sorteio */}
       {activeRaffle && (
         <section id="sorteio" className="py-16 md:py-24 bg-gradient-to-b from-purple-900/20 to-black/20">
           <div className="container max-w-4xl">
@@ -4370,20 +4370,20 @@ export default function Home() {
               </div>
               <h2 className="text-3xl md:text-4xl font-bold mb-3" style={{ color: '#FFD700' }}>{activeRaffle.title}</h2>
               {activeRaffle.description && <p className="text-lg text-white/70">{activeRaffle.description}</p>}
-              {!(myRaffleEntry?.hasEntry || raffleSubmitted) && <p className="text-white/60 mt-2">Escolha um número de 1 a 100 para participar!</p>}
+              {!(myRaffleEntry?.hasEntry || raffleSubmitted) && <p className="text-white/60 mt-2">Escolha um nÃºmero de 1 a 100 para participar!</p>}
             </div>
 
-            {/* Cliente já escolheu número - mostrar sem permitir alterar */}
+            {/* Cliente jÃ¡ escolheu nÃºmero - mostrar sem permitir alterar */}
             {(myRaffleEntry?.hasEntry || raffleSubmitted) ? (
               <div className="bg-green-900/30 border border-green-500/40 rounded-2xl p-6 text-center">
-                <div className="text-4xl mb-3">✅</div>
-                <h3 className="text-xl font-bold text-green-400 mb-2">Você já está participando!</h3>
-                <p className="text-white/70">Seu número escolhido: <span className="text-yellow-400 font-bold text-3xl">{myRaffleEntry?.number ?? raffleSelectedNumber}</span></p>
-                <p className="text-white/50 text-sm mt-3">Não é possível alterar o número após a escolha. Boa sorte!</p>
+                <div className="text-4xl mb-3">âœ…</div>
+                <h3 className="text-xl font-bold text-green-400 mb-2">VocÃª jÃ¡ estÃ¡ participando!</h3>
+                <p className="text-white/70">Seu nÃºmero escolhido: <span className="text-yellow-400 font-bold text-3xl">{myRaffleEntry?.number ?? raffleSelectedNumber}</span></p>
+                <p className="text-white/50 text-sm mt-3">NÃ£o Ã© possÃ­vel alterar o nÃºmero apÃ³s a escolha. Boa sorte!</p>
               </div>
             ) : (
               <>
-                {/* Grid de números */}
+                {/* Grid de nÃºmeros */}
                 <div className="bg-black/40 backdrop-blur-md border border-yellow-500/30 rounded-2xl p-4 md:p-6 mb-6">
                   <div className="grid grid-cols-10 gap-1 md:gap-2">
                     {Array.from({ length: 100 }, (_, i) => i + 1).map(num => {
@@ -4418,16 +4418,16 @@ export default function Home() {
                     })}
                   </div>
                   <div className="flex items-center gap-4 mt-4 text-xs text-white/60">
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-white/10 border border-white/10"></span> Disponível</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-white/10 border border-white/10"></span> DisponÃ­vel</span>
                     <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-600/60"></span> Ocupado</span>
                     <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-500"></span> Selecionado</span>
                   </div>
                 </div>
 
-                {/* Formulário de confirmação */}
+                {/* FormulÃ¡rio de confirmaÃ§Ã£o */}
                 {raffleSelectedNumber && (
                   <div className="bg-black/40 backdrop-blur-md border border-yellow-500/30 rounded-2xl p-6">
-                    <h3 className="text-xl font-bold text-yellow-400 mb-4 text-center">Confirmar Número {raffleSelectedNumber}</h3>
+                    <h3 className="text-xl font-bold text-yellow-400 mb-4 text-center">Confirmar NÃºmero {raffleSelectedNumber}</h3>
                     <div className="space-y-3 max-w-sm mx-auto">
                       <div>
                         <label className="text-white/80 text-sm mb-1 block">Seu Nome *</label>
@@ -4449,7 +4449,7 @@ export default function Home() {
                       </div>
                       <button onClick={handleRaffleSubmit} disabled={raffleSubmitting}
                         className="w-full py-3 rounded-lg font-bold text-black bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 transition-all duration-300 disabled:opacity-50">
-                        {raffleSubmitting ? 'Confirmando...' : 'CONFIRMAR NÚMERO'}
+                        {raffleSubmitting ? 'Confirmando...' : 'CONFIRMAR NÃšMERO'}
                       </button>
                     </div>
                   </div>
@@ -4465,11 +4465,11 @@ export default function Home() {
         <section id="raffle-result" className="py-16 md:py-24 bg-gradient-to-b from-yellow-900/10 to-black/20">
           <div className="container max-w-2xl text-center">
             <div className="bg-black/40 backdrop-blur-md border border-yellow-500/40 rounded-2xl p-8">
-              <div className="text-5xl mb-4">🏆</div>
+              <div className="text-5xl mb-4">ðŸ†</div>
               <h2 className="text-3xl font-bold text-yellow-400 mb-2">Resultado do Sorteio</h2>
               <p className="text-white/70 mb-6">{raffleResult.title}</p>
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-6">
-                <p className="text-white/60 text-sm mb-1">Número Sorteado</p>
+                <p className="text-white/60 text-sm mb-1">NÃºmero Sorteado</p>
                 <p className="text-5xl font-bold text-yellow-400 mb-4">{raffleResult.winnerNumber}</p>
                 <p className="text-white/60 text-sm mb-2">Ganhador</p>
                 {/* Foto de perfil do ganhador */}
@@ -4503,7 +4503,7 @@ export default function Home() {
               {FOOTER_TEXT && <p className="text-white/70">{FOOTER_TEXT}</p>}
             </div>
             <div>
-              <h4 className="font-bold mb-3">Serviços</h4>
+              <h4 className="font-bold mb-3">ServiÃ§os</h4>
               <ul className="space-y-2 text-white/70">
                 {(products || []).map((p: Product) => <li key={p.id}>{p.name}</li>)}
               </ul>
@@ -4511,7 +4511,7 @@ export default function Home() {
             <div>
               <h4 className="font-bold mb-3">Contato</h4>
               <p className="text-white/70 mb-2">WhatsApp: {WHATSAPP_DISPLAY}</p>
-              <p className="text-white/70">Disponível 24H</p>
+              <p className="text-white/70">DisponÃ­vel 24H</p>
             </div>
           </div>
           <div className="border-t border-primary/30 pt-8 text-center text-white/70">
@@ -4539,7 +4539,7 @@ export default function Home() {
               )}
               <div>
                 <h2 className="text-base font-bold text-foreground">Meus Dados</h2>
-                <p className="text-xs text-muted-foreground">Somente visualização</p>
+                <p className="text-xs text-muted-foreground">Somente visualizaÃ§Ã£o</p>
               </div>
             </div>
 
@@ -4578,7 +4578,7 @@ export default function Home() {
                 <p className="text-xs text-muted-foreground text-center">Para alterar seus dados, entre em contato pelo WhatsApp.</p>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">Dados não encontrados.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">Dados nÃ£o encontrados.</p>
             )}
           </div>
         </div>

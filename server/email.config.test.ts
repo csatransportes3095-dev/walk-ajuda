@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import nodemailer from 'nodemailer';
 
 describe('Email configuration', () => {
-  it('should have EMAIL_USER set to walkajuda@gmail.com', () => {
-    expect(process.env.EMAIL_USER).toBe('walkajuda@gmail.com');
+  it('should have EMAIL_USER set to h2@h2colombiano.com', () => {
+    expect(process.env.EMAIL_USER).toBe('h2@h2colombiano.com');
   });
 
   it('should have EMAIL_PASSWORD configured', () => {

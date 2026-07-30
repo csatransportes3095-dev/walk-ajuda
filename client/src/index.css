@@ -43,13 +43,13 @@
 }
 
 :root {
-  /* WALK AJUDA - Design Neon Energético */
-  /* Cores primárias: Azul elétrico, Roxo/Magenta, Laranja neon */
-  --primary: oklch(0.65 0.35 270);  /* Azul elétrico #0066FF */
+  /* H2 COLOMBIANO - Design Neon EnergÃ©tico */
+  /* Cores primÃ¡rias: Azul elÃ©trico, Roxo/Magenta, Laranja neon */
+  --primary: oklch(0.65 0.35 270);  /* Azul elÃ©trico #0066FF */
   --primary-foreground: oklch(1 0 0);  /* Branco */
   --sidebar-primary: oklch(0.65 0.35 270);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --chart-1: oklch(0.65 0.35 270);  /* Azul elétrico */
+  --chart-1: oklch(0.65 0.35 270);  /* Azul elÃ©trico */
   --chart-2: oklch(0.60 0.38 300);  /* Roxo/Magenta */
   --chart-3: oklch(0.70 0.32 280);  /* Azul roxo */
   --chart-4: oklch(0.65 0.35 35);   /* Laranja neon */
@@ -71,13 +71,13 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.30 0.05 270);  /* Azul com borda neon */
   --input: oklch(0.18 0.03 270);  /* Azul escuro para inputs */
-  --ring: oklch(0.65 0.35 270);  /* Azul elétrico (para focus) */
+  --ring: oklch(0.65 0.35 270);  /* Azul elÃ©trico (para focus) */
   --sidebar: oklch(0.15 0.03 270);  /* Azul muito escuro */
   --sidebar-foreground: oklch(0.95 0.01 0);  /* Branco quase puro */
-  --sidebar-accent: oklch(0.65 0.35 270);  /* Azul elétrico */
+  --sidebar-accent: oklch(0.65 0.35 270);  /* Azul elÃ©trico */
   --sidebar-accent-foreground: oklch(1 0 0);  /* Branco */
   --sidebar-border: oklch(0.30 0.05 270);  /* Azul com borda neon */
-  --sidebar-ring: oklch(0.65 0.35 270);  /* Azul elétrico */
+  --sidebar-ring: oklch(0.65 0.35 270);  /* Azul elÃ©trico */
 }
 
 .dark {
@@ -341,7 +341,7 @@
   }
 }
 
-/* ── Equalizer / Volume bars animation ─────────────────────────────────── */
+/* â”€â”€ Equalizer / Volume bars animation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes eq-bar-1 {
   0%, 100% { height: 4px; }
   25% { height: 18px; }

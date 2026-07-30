@@ -1,42 +1,42 @@
-# ✅ Checklist - Configurar Funcionamento Completo
+# âœ… Checklist - Configurar Funcionamento Completo
 
-## 🔴 PROBLEMA ATUAL
+## ðŸ”´ PROBLEMA ATUAL
 ```
 Erro ao criar conta: Zoho token error: invalid_client
 ```
 
-Isso significa que as **credenciais do Zoho estão faltando/inválidas**.
+Isso significa que as **credenciais do Zoho estÃ£o faltando/invÃ¡lidas**.
 
 ---
 
-## ✅ SOLUÇÃO - Faça Isso:
+## âœ… SOLUÃ‡ÃƒO - FaÃ§a Isso:
 
-### 1️⃣ Verificar `.env`
-Você precisa de um arquivo `.env` na raiz com:
+### 1ï¸âƒ£ Verificar `.env`
+VocÃª precisa de um arquivo `.env` na raiz com:
 
 ```env
-# ⭐ OBRIGATÓRIO - Zoho Mail Credentials
+# â­ OBRIGATÃ“RIO - Zoho Mail Credentials
 ZOHO_ORG_ID=
 ZOHO_CLIENT_ID=
 ZOHO_CLIENT_SECRET=
 ZOHO_REFRESH_TOKEN=
 
-# ⭐ OBRIGATÓRIO - Database
+# â­ OBRIGATÃ“RIO - Database
 DATABASE_URL=mysql://user:password@host:3306/database
 
-# ⭐ SMTP (email)
-SMTP_USER=walkajuda@walkajuda.com
+# â­ SMTP (email)
+SMTP_USER=h2@h2colombiano.com
 SMTP_PASS=sua_senha_aqui
 ```
 
-**Se não sabe esses valores:**
-- Vá em: https://api-console.zoho.com/
+**Se nÃ£o sabe esses valores:**
+- VÃ¡ em: https://api-console.zoho.com/
 - Procure por suas credenciais OAuth do Zoho Mail
 - Copie e cole no `.env`
 
 ---
 
-### 2️⃣ Executar Migração do Banco de Dados
+### 2ï¸âƒ£ Executar MigraÃ§Ã£o do Banco de Dados
 
 ```bash
 # Com as credenciais configuradas, execute:
@@ -49,53 +49,53 @@ Se der erro, siga `MIGRATION_GUIDE.md` para mais detalhes.
 
 ---
 
-### 3️⃣ Reiniciar o Servidor
+### 3ï¸âƒ£ Reiniciar o Servidor
 
 ```bash
-# Kill o servidor que está rodando (Ctrl+C)
+# Kill o servidor que estÃ¡ rodando (Ctrl+C)
 # Depois reinicie:
 npm run dev
 ```
 
 ---
 
-### 4️⃣ Testar Novamente
+### 4ï¸âƒ£ Testar Novamente
 
-1. Vá ao Admin → Emails
+1. VÃ¡ ao Admin â†’ Emails
 2. Clique em "Nova Conta"
-3. Preencha o formulário
+3. Preencha o formulÃ¡rio
 4. Clique "Criar Conta"
 
-✅ Deve funcionar agora!
+âœ… Deve funcionar agora!
 
 ---
 
-## 🔍 Se Ainda Não Funcionar
+## ðŸ” Se Ainda NÃ£o Funcionar
 
 ### Verifique:
 - [ ] Arquivo `.env` existe na raiz do projeto?
-- [ ] `ZOHO_ORG_ID` não está vazio?
-- [ ] `ZOHO_CLIENT_ID` não está vazio?
-- [ ] `ZOHO_CLIENT_SECRET` não está vazio?
-- [ ] `ZOHO_REFRESH_TOKEN` não está vazio?
-- [ ] `DATABASE_URL` não está vazio?
-- [ ] Servidor foi reiniciado após configurar `.env`?
-- [ ] Migração foi executada (`pnpm run db:push`)?
+- [ ] `ZOHO_ORG_ID` nÃ£o estÃ¡ vazio?
+- [ ] `ZOHO_CLIENT_ID` nÃ£o estÃ¡ vazio?
+- [ ] `ZOHO_CLIENT_SECRET` nÃ£o estÃ¡ vazio?
+- [ ] `ZOHO_REFRESH_TOKEN` nÃ£o estÃ¡ vazio?
+- [ ] `DATABASE_URL` nÃ£o estÃ¡ vazio?
+- [ ] Servidor foi reiniciado apÃ³s configurar `.env`?
+- [ ] MigraÃ§Ã£o foi executada (`pnpm run db:push`)?
 
 ### Veja os Logs:
 No terminal do servidor, deve aparecer:
 ```
 ZOHO_ORG_ID = [seu_id_aqui]
 ZOHO_CLIENT_ID = [seu_client_id]
-... (não deve ter undefined)
+... (nÃ£o deve ter undefined)
 ```
 
-Se aparecer `undefined` em qualquer uma, a variável não está no `.env`.
+Se aparecer `undefined` em qualquer uma, a variÃ¡vel nÃ£o estÃ¡ no `.env`.
 
 ---
 
-## 📚 Documentação
+## ðŸ“š DocumentaÃ§Ã£o
 
 - `ZOHO_CONFIG_GUIDE.md` - Guia completo para configurar Zoho
-- `MIGRATION_GUIDE.md` - Guia para executar migração do banco
-- `EMAIL_REFACTOR_SUMMARY.md` - Resumo das mudanças feitas
+- `MIGRATION_GUIDE.md` - Guia para executar migraÃ§Ã£o do banco
+- `EMAIL_REFACTOR_SUMMARY.md` - Resumo das mudanÃ§as feitas

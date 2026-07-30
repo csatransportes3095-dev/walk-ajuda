@@ -36,7 +36,7 @@ export const accessCodes = mysqlTable("accessCodes", {
 export type AccessCode = typeof accessCodes.$inferSelect;
 export type InsertAccessCode = typeof accessCodes.$inferInsert;
 
-// Histórico de telefones que acessaram cada senha VIP
+// HistÃ³rico de telefones que acessaram cada senha VIP
 export const accessCodePhones = mysqlTable("accessCodePhones", {
   id: int("id").autoincrement().primaryKey(),
   codeId: int("codeId").notNull(),
@@ -46,20 +46,20 @@ export const accessCodePhones = mysqlTable("accessCodePhones", {
   rgCnhApproved: int('rgCnhApproved').notNull().default(0), // 1 = pasta RG/CNH Aprovado
   orderSource: varchar('orderSource', { length: 16 }).notNull().default('auto'), // 'auto' = gerado automaticamente, 'manual' = inserido manualmente
   accessedAt: timestamp('accessedAt').defaultNow().notNull(),
-  refCode: varchar('refCode', { length: 64 }),       // código do link de indicação usado
-  refExpiresAt: bigint('refExpiresAt', { mode: 'number' }), // timestamp ms de expiração do acesso sem senha
+  refCode: varchar('refCode', { length: 64 }),       // cÃ³digo do link de indicaÃ§Ã£o usado
+  refExpiresAt: bigint('refExpiresAt', { mode: 'number' }), // timestamp ms de expiraÃ§Ã£o do acesso sem senha
   refOwnerName: varchar('refOwnerName', { length: 128 }), // nome do cliente dono do link
-  deletedAt: timestamp('deletedAt'), // Lixeira: data de exclusão (null = ativo)
-  deletedReason: varchar('deletedReason', { length: 256 }), // Motivo da exclusão
+  deletedAt: timestamp('deletedAt'), // Lixeira: data de exclusÃ£o (null = ativo)
+  deletedReason: varchar('deletedReason', { length: 256 }), // Motivo da exclusÃ£o
   // Revendedor: nome do cliente final (terceiro) e desconto aplicado
   thirdPartyName: varchar('thirdPartyName', { length: 128 }), // nome do cliente final (terceiro)
   resellerDiscountApplied: decimal('resellerDiscountApplied', { precision: 10, scale: 2 }), // valor do desconto aplicado em R$
-  // Agrupamento de carrinho: múltiplos produtos em um único pagamento
-  cartGroupId: varchar('cartGroupId', { length: 64 }), // ID único do grupo de carrinho (null = pedido único)
+  // Agrupamento de carrinho: mÃºltiplos produtos em um Ãºnico pagamento
+  cartGroupId: varchar('cartGroupId', { length: 64 }), // ID Ãºnico do grupo de carrinho (null = pedido Ãºnico)
   cartTotal: decimal('cartTotal', { precision: 10, scale: 2 }), // total bruto do carrinho (soma dos produtos)
   cartCouponCode: varchar('cartCouponCode', { length: 64 }), // cupom aplicado no carrinho
   cartCouponDiscount: decimal('cartCouponDiscount', { precision: 10, scale: 2 }), // valor do desconto do cupom
-  cartItemIndex: int('cartItemIndex').default(0), // índice do item no carrinho (0 = primeiro, 1 = segundo, etc.)
+  cartItemIndex: int('cartItemIndex').default(0), // Ã­ndice do item no carrinho (0 = primeiro, 1 = segundo, etc.)
 });
 
 export type AccessCodePhone = typeof accessCodePhones.$inferSelect;
@@ -83,14 +83,14 @@ export const coupons = mysqlTable("coupons", {
 export type Coupon = typeof coupons.$inferSelect;
 export type InsertCoupon = typeof coupons.$inferInsert;
 
-// Tabela de produtos/serviços (cards)
+// Tabela de produtos/serviÃ§os (cards)
 export const products = mysqlTable("products", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 128 }).notNull(),
   description: text("description"),
   iconUrl: text("iconUrl"),
   buttonText: varchar("buttonText", { length: 128 }).notNull().default("COMPRAR"),
-  // Quais arquivos são exigidos
+  // Quais arquivos sÃ£o exigidos
   requireProfilePhoto: int("requireProfilePhoto").notNull().default(1),
   requireCarDocument: int("requireCarDocument").notNull().default(1),
   requireAlvara: int("requireAlvara").notNull().default(0),
@@ -112,15 +112,15 @@ export const products = mysqlTable("products", {
 export type Product = typeof products.$inferSelect;
 export type InsertProduct = typeof products.$inferInsert;
 
-// Opções individuais por produto (ex: "Nome Aleatório R$400", "Primeiro Nome R$550")
+// OpÃ§Ãµes individuais por produto (ex: "Nome AleatÃ³rio R$400", "Primeiro Nome R$550")
 export const productOptions = mysqlTable("productOptions", {
   id: int("id").autoincrement().primaryKey(),
   productId: int("productId").notNull(),
-  label: varchar("label", { length: 128 }).notNull(), // ex: "Nome Aleatório", "Primeiro Nome", "Nome Completo", "SUBIR DOC"
+  label: varchar("label", { length: 128 }).notNull(), // ex: "Nome AleatÃ³rio", "Primeiro Nome", "Nome Completo", "SUBIR DOC"
   price: varchar("price", { length: 64 }).notNull(), // ex: "R$ 400,00"
-  originalPrice: varchar("originalPrice", { length: 64 }).default(""), // valor original riscado (promoção)
+  originalPrice: varchar("originalPrice", { length: 64 }).default(""), // valor original riscado (promoÃ§Ã£o)
   type: varchar("type", { length: 32 }).notNull().default("standard"), // standard, pdf_only
-  // Requisitos de documentos por opção
+  // Requisitos de documentos por opÃ§Ã£o
   requireProfilePhoto: int("requireProfilePhoto").notNull().default(0),
   requireCarDocument: int("requireCarDocument").notNull().default(0),
   requireAlvara: int("requireAlvara").notNull().default(0),
@@ -133,28 +133,28 @@ export const productOptions = mysqlTable("productOptions", {
   docCustomName: varchar("docCustomName", { length: 128 }).default(""), // nome personalizado quando docNameMode = custom
   sortOrder: int("sortOrder").notNull().default(0),
   isActive: int("isActive").notNull().default(1),
-  warranty: varchar("warranty", { length: 255 }).default(""), // texto de garantia da opção
-  commissionValue: int("commissionValue").notNull().default(0), // valor de comissão em centavos (ex: 5000 = R$50,00)
-  description: text("description").default(""), // especificação/descrição da opção exibida ao cliente
-  resellerDiscount: decimal("resellerDiscount", { precision: 5, scale: 2 }), // % de desconto para revendedores nesta opção (prioridade sobre % global)
-  promoEndsAt: bigint("promoEndsAt", { mode: "number" }), // timestamp ms UTC — quando a promoção expira (null = sem prazo)
+  warranty: varchar("warranty", { length: 255 }).default(""), // texto de garantia da opÃ§Ã£o
+  commissionValue: int("commissionValue").notNull().default(0), // valor de comissÃ£o em centavos (ex: 5000 = R$50,00)
+  description: text("description").default(""), // especificaÃ§Ã£o/descriÃ§Ã£o da opÃ§Ã£o exibida ao cliente
+  resellerDiscount: decimal("resellerDiscount", { precision: 5, scale: 2 }), // % de desconto para revendedores nesta opÃ§Ã£o (prioridade sobre % global)
+  promoEndsAt: bigint("promoEndsAt", { mode: "number" }), // timestamp ms UTC â€” quando a promoÃ§Ã£o expira (null = sem prazo)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type ProductOption = typeof productOptions.$inferSelect;
 export type InsertProductOption = typeof productOptions.$inferInsert;
 
-// Perguntas customizáveis por opção de compra (formulário dinâmico)
+// Perguntas customizÃ¡veis por opÃ§Ã£o de compra (formulÃ¡rio dinÃ¢mico)
 export const productQuestions = mysqlTable("productQuestions", {
   id: int("id").autoincrement().primaryKey(),
   productId: int("productId").notNull(), // mantido para compatibilidade
-  optionId: int("optionId"),  // nova FK - pergunta vinculada à opção
+  optionId: int("optionId"),  // nova FK - pergunta vinculada Ã  opÃ§Ã£o
   question: varchar("question", { length: 256 }).notNull(),
   fieldType: mysqlEnum("fieldType", ["text", "select", "textarea"]).notNull().default("text"),
-  options: text("options"), // JSON array para select: ["Opção 1", "Opção 2"]
+  options: text("options"), // JSON array para select: ["OpÃ§Ã£o 1", "OpÃ§Ã£o 2"]
   isRequired: int("isRequired").notNull().default(1),
   sortOrder: int("sortOrder").notNull().default(0),
-  // Pergunta condicional: só aparece quando a pergunta pai tem a resposta triggerOption
+  // Pergunta condicional: sÃ³ aparece quando a pergunta pai tem a resposta triggerOption
   parentQuestionId: int("parentQuestionId"), // ID da pergunta pai (null = sempre exibida)
   triggerOption: varchar("triggerOption", { length: 256 }), // Resposta que ativa esta pergunta
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -163,15 +163,15 @@ export const productQuestions = mysqlTable("productQuestions", {
 export type ProductQuestion = typeof productQuestions.$inferSelect;
 export type InsertProductQuestion = typeof productQuestions.$inferInsert;
 
-// Documentos dinâmicos por opção de compra (admin define nomes livremente)
+// Documentos dinÃ¢micos por opÃ§Ã£o de compra (admin define nomes livremente)
 export const optionDocuments = mysqlTable("optionDocuments", {
   id: int("id").autoincrement().primaryKey(),
   optionId: int("optionId").notNull(),
-  label: varchar("label", { length: 128 }).notNull(), // ex: "CNH", "Foto Perfil", "Comprovante de Residência"
+  label: varchar("label", { length: 128 }).notNull(), // ex: "CNH", "Foto Perfil", "Comprovante de ResidÃªncia"
   exampleImageUrl: varchar("exampleImageUrl", { length: 512 }), // URL da foto exemplo personalizada
   inputSource: mysqlEnum("inputSource", ["camera", "gallery", "both"]).notNull().default("both"), // camera, gallery, ou both
   sortOrder: int("sortOrder").notNull().default(0),
-  instruction: text("instruction"), // instrução exibida ao cliente na tela de upload
+  instruction: text("instruction"), // instruÃ§Ã£o exibida ao cliente na tela de upload
   exampleText: text("exampleText"), // texto exibido ao lado da foto de exemplo (bloco azul)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -196,12 +196,12 @@ export const customers = mysqlTable("customers", {
   fixedPassword: varchar("fixedPassword", { length: 64 }),
   fixedPasswordActive: int("fixedPasswordActive").notNull().default(0),
   adminNotes: text("adminNotes"), // Notas/avisos do admin (ex: recusou pergunta bloqueante)
-  // Desconto de revendedor (cliente que faz pedidos para terceiros com preço de custo)
-  isReseller: int("isReseller").notNull().default(0), // 1 = cliente é revendedor
+  // Desconto de revendedor (cliente que faz pedidos para terceiros com preÃ§o de custo)
+  isReseller: int("isReseller").notNull().default(0), // 1 = cliente Ã© revendedor
   resellerDiscountType: mysqlEnum("resellerDiscountType", ["percent", "fixed"]).default("percent"), // tipo de desconto
   resellerDiscountValue: decimal("resellerDiscountValue", { precision: 10, scale: 2 }).default("0.00"), // valor do desconto (% ou R$)
-  deletedAt: timestamp("deletedAt"), // Lixeira: data de exclusão (null = ativo)
-  deletedReason: varchar("deletedReason", { length: 256 }), // Motivo da exclusão
+  deletedAt: timestamp("deletedAt"), // Lixeira: data de exclusÃ£o (null = ativo)
+  deletedReason: varchar("deletedReason", { length: 256 }), // Motivo da exclusÃ£o
   blocked: int("blocked").notNull().default(0), // 1 = cliente bloqueado pelo admin
   blockReason: varchar("blockReason", { length: 512 }), // Motivo do bloqueio
   blockedAt: timestamp("blockedAt"), // Data do bloqueio
@@ -212,7 +212,7 @@ export const customers = mysqlTable("customers", {
 export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = typeof customers.$inferInsert;
 
-// Histórico de status dos pedidos
+// HistÃ³rico de status dos pedidos
 export const orderStatusHistory = mysqlTable("orderStatusHistory", {
   id: int("id").autoincrement().primaryKey(),
   registrationId: int("registrationId").notNull(),
@@ -226,11 +226,11 @@ export const orderStatusHistory = mysqlTable("orderStatusHistory", {
   answers: text("answers"),
   isUrgent: int("isUrgent").notNull().default(0),
   commissionPaid: int("commissionPaid").notNull().default(0),
-  deliveryEstimate: bigint("deliveryEstimate", { mode: "number" }), // Unix timestamp (ms) da previsão de entrega
-  // Fluxo de aprovação de pedidos novos: 'approved' = visível no fluxo normal; 'pending' = aguardando aprovação do admin
+  deliveryEstimate: bigint("deliveryEstimate", { mode: "number" }), // Unix timestamp (ms) da previsÃ£o de entrega
+  // Fluxo de aprovaÃ§Ã£o de pedidos novos: 'approved' = visÃ­vel no fluxo normal; 'pending' = aguardando aprovaÃ§Ã£o do admin
   approval: varchar("approval", { length: 16 }).notNull().default("approved"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  // Data/hora em que o e-mail ou WhatsApp de notificação de entrega foi enviado ao cliente
+  // Data/hora em que o e-mail ou WhatsApp de notificaÃ§Ã£o de entrega foi enviado ao cliente
   deliveredNotifiedAt: timestamp("deliveredNotifiedAt"),
 });
 
@@ -271,7 +271,7 @@ export const raffles = mysqlTable("raffles", {
 export type Raffle = typeof raffles.$inferSelect;
 export type InsertRaffle = typeof raffles.$inferInsert;
 
-// Entradas de sorteio (números escolhidos pelos clientes)
+// Entradas de sorteio (nÃºmeros escolhidos pelos clientes)
 export const raffleEntries = mysqlTable("raffleEntries", {
   id: int("id").autoincrement().primaryKey(),
   raffleId: int("raffleId").notNull(),
@@ -285,7 +285,7 @@ export const raffleEntries = mysqlTable("raffleEntries", {
 export type RaffleEntry = typeof raffleEntries.$inferSelect;
 export type InsertRaffleEntry = typeof raffleEntries.$inferInsert;
 
-// Configurações gerais do site (chave-valor)
+// ConfiguraÃ§Ãµes gerais do site (chave-valor)
 export const siteSettings = mysqlTable("siteSettings", {
   id: int("id").autoincrement().primaryKey(),
   settingKey: varchar("settingKey", { length: 128 }).notNull().unique(),
@@ -307,7 +307,7 @@ export const adminCredentials = mysqlTable("adminCredentials", {
 export type AdminCredential = typeof adminCredentials.$inferSelect;
 export type InsertAdminCredential = typeof adminCredentials.$inferInsert;
 
-// Bloqueio de PIN após tentativas erradas na página de acompanhamento
+// Bloqueio de PIN apÃ³s tentativas erradas na pÃ¡gina de acompanhamento
 export const pinBlocks = mysqlTable("pinBlocks", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull().unique(),
@@ -319,7 +319,7 @@ export const pinBlocks = mysqlTable("pinBlocks", {
 export type PinBlock = typeof pinBlocks.$inferSelect;
 export type InsertPinBlock = typeof pinBlocks.$inferInsert;
 
-// Configurações globais do app (chave/valor)
+// ConfiguraÃ§Ãµes globais do app (chave/valor)
 export const appSettings = mysqlTable("appSettings", {
   id: int("id").autoincrement().primaryKey(),
   key: varchar("key", { length: 128 }).notNull().unique(),
@@ -331,7 +331,7 @@ export type InsertAppSetting = typeof appSettings.$inferInsert;
 
 // ========== SISTEMA DE PLANILHA DE MOTORISTA ==========
 
-// Tabela de licenças (grátis/premium)
+// Tabela de licenÃ§as (grÃ¡tis/premium)
 export const spreadsheetLicenses = mysqlTable("spreadsheetLicenses", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
@@ -348,7 +348,7 @@ export const spreadsheetLicenses = mysqlTable("spreadsheetLicenses", {
 export type SpreadsheetLicense = typeof spreadsheetLicenses.$inferSelect;
 export type InsertSpreadsheetLicense = typeof spreadsheetLicenses.$inferInsert;
 
-// Tabela de ganhos diários
+// Tabela de ganhos diÃ¡rios
 export const spreadsheetEarnings = mysqlTable("spreadsheetEarnings", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
@@ -367,7 +367,7 @@ export const spreadsheetEarnings = mysqlTable("spreadsheetEarnings", {
 export type SpreadsheetEarning = typeof spreadsheetEarnings.$inferSelect;
 export type InsertSpreadsheetEarning = typeof spreadsheetEarnings.$inferInsert;
 
-// Tabela de gastos diários
+// Tabela de gastos diÃ¡rios
 export const spreadsheetExpenses = mysqlTable("spreadsheetExpenses", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
@@ -430,7 +430,7 @@ export const spreadsheetGoals = mysqlTable("spreadsheetGoals", {
 export type SpreadsheetGoal = typeof spreadsheetGoals.$inferSelect;
 export type InsertSpreadsheetGoal = typeof spreadsheetGoals.$inferInsert;
 
-// Permissões de produto por cliente (controle de acesso via senha fixa)
+// PermissÃµes de produto por cliente (controle de acesso via senha fixa)
 export const customerProductAccess = mysqlTable("customerProductAccess", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull(),
@@ -440,17 +440,17 @@ export const customerProductAccess = mysqlTable("customerProductAccess", {
 export type CustomerProductAccess = typeof customerProductAccess.$inferSelect;
 export type InsertCustomerProductAccess = typeof customerProductAccess.$inferInsert;
 
-// Tipos de status de pedido editáveis pelo admin
+// Tipos de status de pedido editÃ¡veis pelo admin
 export const orderStatusTypes = mysqlTable("orderStatusTypes", {
   id: int("id").autoincrement().primaryKey(),
   key: varchar("key", { length: 64 }).notNull().unique(),       // ex: "aguardando_ativa"
   label: varchar("label", { length: 128 }).notNull(),           // ex: "Aguardando Ficar Ativa"
   color: varchar("color", { length: 64 }).notNull().default("text-gray-400"),   // classe Tailwind
   bgColor: varchar("bgColor", { length: 128 }).notNull().default("bg-gray-500/20 border-gray-500/40"),
-  icon: varchar("icon", { length: 32 }).notNull().default("Clock"),             // nome do ícone Lucide
+  icon: varchar("icon", { length: 32 }).notNull().default("Clock"),             // nome do Ã­cone Lucide
   description: text("description"),                             // texto explicativo para o cliente
   sortOrder: int("sortOrder").notNull().default(0),
-  isSystem: int("isSystem").notNull().default(0),               // 1 = protegido, não pode excluir
+  isSystem: int("isSystem").notNull().default(0),               // 1 = protegido, nÃ£o pode excluir
   isActive: int("isActive").notNull().default(1),
   pulseColor: varchar("pulseColor", { length: 32 }).default("#ffffff"),  // cor hex do neon/pulso
   showInProgress: int("showInProgress").notNull().default(0),  // 1 = aparece na barra de progresso do cliente
@@ -468,7 +468,7 @@ export const orderCounter = mysqlTable("orderCounter", {
 });
 export type OrderCounter = typeof orderCounter.$inferSelect;
 
-// Banners informativos editáveis pelo admin
+// Banners informativos editÃ¡veis pelo admin
 export const infoBanners = mysqlTable("infoBanners", {
   id: int("id").autoincrement().primaryKey(),
   title: varchar("title", { length: 256 }).notNull(),
@@ -484,7 +484,7 @@ export const infoBanners = mysqlTable("infoBanners", {
 export type InfoBanner = typeof infoBanners.$inferSelect;
 export type InsertInfoBanner = typeof infoBanners.$inferInsert;
 
-// Anotações internas do admin por pedido (não visíveis ao cliente)
+// AnotaÃ§Ãµes internas do admin por pedido (nÃ£o visÃ­veis ao cliente)
 export const orderNotes = mysqlTable("orderNotes", {
   id: int("id").autoincrement().primaryKey(),
   registrationId: int("registrationId").notNull(),
@@ -502,15 +502,15 @@ export const hiddenSubOrders = mysqlTable("hiddenSubOrders", {
   registrationId: int("registrationId").notNull(),
   subOrderIndex: int("subOrderIndex").notNull(),
   hiddenAt: timestamp("hiddenAt").defaultNow().notNull(),
-  deletedReason: varchar("deletedReason", { length: 256 }), // Motivo da exclusão
+  deletedReason: varchar("deletedReason", { length: 256 }), // Motivo da exclusÃ£o
   customerPhone: varchar("customerPhone", { length: 32 }), // Telefone do cliente (para exibir na lixeira)
   customerName: varchar("customerName", { length: 128 }), // Nome do cliente (para exibir na lixeira)
-  serviceName: varchar("serviceName", { length: 256 }), // Nome do serviço (para exibir na lixeira)
+  serviceName: varchar("serviceName", { length: 256 }), // Nome do serviÃ§o (para exibir na lixeira)
 });
 export type HiddenSubOrder = typeof hiddenSubOrders.$inferSelect;
 export type InsertHiddenSubOrder = typeof hiddenSubOrders.$inferInsert;
 
-// Dados de login liberado pelo admin por pedido (login, senha, código autenticador)
+// Dados de login liberado pelo admin por pedido (login, senha, cÃ³digo autenticador)
 export const orderLoginData = mysqlTable("orderLoginData", {
   id: int("id").autoincrement().primaryKey(),
   registrationId: int("registrationId").notNull(),
@@ -529,20 +529,20 @@ export type OrderLoginData = typeof orderLoginData.$inferSelect;
 export type InsertOrderLoginData = typeof orderLoginData.$inferInsert;
 
 // Senha personalizada do cliente para acompanhar pedido
-// firstAccess=1: cliente ainda não criou senha pessoal (usa 4 últimos dígitos do telefone)
-// firstAccess=0: cliente já criou senha pessoal
+// firstAccess=1: cliente ainda nÃ£o criou senha pessoal (usa 4 Ãºltimos dÃ­gitos do telefone)
+// firstAccess=0: cliente jÃ¡ criou senha pessoal
 export const customerPins = mysqlTable("customerPins", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull().unique(),
-  pin: varchar("pin", { length: 4 }),           // senha personalizada (null = ainda não criou)
-  firstAccess: int("firstAccess").notNull().default(1), // 1=primeiro acesso, 0=já criou senha
+  pin: varchar("pin", { length: 4 }),           // senha personalizada (null = ainda nÃ£o criou)
+  firstAccess: int("firstAccess").notNull().default(1), // 1=primeiro acesso, 0=jÃ¡ criou senha
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type CustomerPin = typeof customerPins.$inferSelect;
 export type InsertCustomerPin = typeof customerPins.$inferInsert;
 
-// Solicitações de documentos pendentes pelo admin
+// SolicitaÃ§Ãµes de documentos pendentes pelo admin
 // status: 'pending' = aguardando cliente, 'answered' = cliente respondeu, 'closed' = encerrado
 export const docRequests = mysqlTable("docRequests", {
   id: int("id").autoincrement().primaryKey(),
@@ -558,7 +558,7 @@ export const docRequests = mysqlTable("docRequests", {
 export type DocRequest = typeof docRequests.$inferSelect;
 export type InsertDocRequest = typeof docRequests.$inferInsert;
 
-// Tabela para sessões de upload em chunks (persistente entre instâncias do Cloud Run)
+// Tabela para sessÃµes de upload em chunks (persistente entre instÃ¢ncias do Cloud Run)
 export const uploadSessions = mysqlTable("uploadSessions", {
   uploadId: varchar("uploadId", { length: 64 }).primaryKey(),
   registrationId: varchar("registrationId", { length: 32 }).notNull(),
@@ -590,7 +590,7 @@ export const blocklist = mysqlTable("blocklist", {
 export type Blocklist = typeof blocklist.$inferSelect;
 export type InsertBlocklist = typeof blocklist.$inferInsert;
 
-// Tabela de configurações do sistema (fuso horário, etc.)
+// Tabela de configuraÃ§Ãµes do sistema (fuso horÃ¡rio, etc.)
 export const systemConfig = mysqlTable("system_config", {
   id: int("id").autoincrement().primaryKey(),
   configKey: varchar("config_key", { length: 100 }).notNull().unique(),
@@ -672,7 +672,7 @@ export const broadcastQueue = mysqlTable("broadcastQueue", {
 export type BroadcastQueue = typeof broadcastQueue.$inferSelect;
 export type InsertBroadcastQueue = typeof broadcastQueue.$inferInsert;
 
-// Tabela de tentativas de acesso bloqueado (números na lista negra)
+// Tabela de tentativas de acesso bloqueado (nÃºmeros na lista negra)
 export const blockedAccessAttempts = mysqlTable("blockedAccessAttempts", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull(),
@@ -683,7 +683,7 @@ export const blockedAccessAttempts = mysqlTable("blockedAccessAttempts", {
 });
 export type BlockedAccessAttempt = typeof blockedAccessAttempts.$inferSelect;
 
-// Contas PIX - múltiplas contas com seleção de ativa
+// Contas PIX - mÃºltiplas contas com seleÃ§Ã£o de ativa
 export const pixAccounts = mysqlTable("pixAccounts", {
   id: int("id").autoincrement().primaryKey(),
   label: varchar("label", { length: 128 }).notNull().default("PIX Principal"),
@@ -697,7 +697,7 @@ export const pixAccounts = mysqlTable("pixAccounts", {
 export type PixAccount = typeof pixAccounts.$inferSelect;
 export type InsertPixAccount = typeof pixAccounts.$inferInsert;
 
-// ── SISTEMA DE REVENDEDORES ───────────────────────────────────────────────────
+// â”€â”€ SISTEMA DE REVENDEDORES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Tabela de revendedores
 export const resellers = mysqlTable("resellers", {
@@ -705,25 +705,25 @@ export const resellers = mysqlTable("resellers", {
   name: varchar("name", { length: 128 }).notNull(),
   phone: varchar("phone", { length: 32 }).notNull().unique(),
   email: varchar("email", { length: 320 }),
-  slug: varchar("slug", { length: 64 }).notNull().unique(), // ex: "rafael" → walkajuda.com/r/rafael
+  slug: varchar("slug", { length: 64 }).notNull().unique(), // ex: "rafael" â†’ h2colombiano.com/r/rafael
   username: varchar("username", { length: 64 }).notNull().unique(),
   passwordHash: varchar("passwordHash", { length: 256 }).notNull(),
   isActive: int("isActive").notNull().default(1),
-  notes: text("notes"), // anotações internas do admin
+  notes: text("notes"), // anotaÃ§Ãµes internas do admin
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type Reseller = typeof resellers.$inferSelect;
 export type InsertReseller = typeof resellers.$inferInsert;
 
-// Preços de venda do revendedor por opção de produto
-// O revendedor define quanto cobra do cliente por cada opção
+// PreÃ§os de venda do revendedor por opÃ§Ã£o de produto
+// O revendedor define quanto cobra do cliente por cada opÃ§Ã£o
 export const resellerPrices = mysqlTable("resellerPrices", {
   id: int("id").autoincrement().primaryKey(),
   resellerId: int("resellerId").notNull(),
   optionId: int("optionId").notNull(), // FK para productOptions.id
-  salePrice: varchar("salePrice", { length: 64 }).notNull(), // ex: "R$ 80,00" (preço que o cliente vê)
-  costPrice: varchar("costPrice", { length: 64 }).notNull().default(""), // ex: "R$ 50,00" (preço de custo definido pelo admin)
+  salePrice: varchar("salePrice", { length: 64 }).notNull(), // ex: "R$ 80,00" (preÃ§o que o cliente vÃª)
+  costPrice: varchar("costPrice", { length: 64 }).notNull().default(""), // ex: "R$ 50,00" (preÃ§o de custo definido pelo admin)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -737,16 +737,16 @@ export const resellerOrders = mysqlTable("resellerOrders", {
   resellerId: int("resellerId").notNull(),
   registrationId: int("registrationId").notNull(), // FK para accessCodePhones.id
   customerPhone: varchar("customerPhone", { length: 32 }).notNull(),
-  salePrice: varchar("salePrice", { length: 64 }).notNull(), // preço cobrado do cliente
-  costPrice: varchar("costPrice", { length: 64 }).notNull().default(""), // preço de custo do admin
-  commissionPaid: int("commissionPaid").notNull().default(0), // 1 = admin já pagou o revendedor
+  salePrice: varchar("salePrice", { length: 64 }).notNull(), // preÃ§o cobrado do cliente
+  costPrice: varchar("costPrice", { length: 64 }).notNull().default(""), // preÃ§o de custo do admin
+  commissionPaid: int("commissionPaid").notNull().default(0), // 1 = admin jÃ¡ pagou o revendedor
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type ResellerOrder = typeof resellerOrders.$inferSelect;
 export type InsertResellerOrder = typeof resellerOrders.$inferInsert;
 
-// ─── Controle Financeiro ────────────────────────────────────────────────────
-// Registro de vendas para o módulo financeiro
+// â”€â”€â”€ Controle Financeiro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Registro de vendas para o mÃ³dulo financeiro
 // Criado automaticamente ao submeter pedido; atualizado ao mudar status
 export const financialSales = mysqlTable("financialSales", {
   id: int("id").autoincrement().primaryKey(),
@@ -756,11 +756,11 @@ export const financialSales = mysqlTable("financialSales", {
   productName: varchar("productName", { length: 256 }).notNull().default(""),
   productOption: varchar("productOption", { length: 256 }).notNull().default(""),
   saleValue: int("saleValue").notNull().default(0), // em centavos
-  costValue: int("costValue").notNull().default(0), // custo/comissão em centavos
+  costValue: int("costValue").notNull().default(0), // custo/comissÃ£o em centavos
   paymentMethod: varchar("paymentMethod", { length: 64 }).notNull().default("pix"), // pix | dinheiro | cartao | outro
   status: varchar("status", { length: 32 }).notNull().default("pendente"), // pendente | pago | cancelado
   saleDate: bigint("saleDate", { mode: "number" }).notNull(), // timestamp ms
-  receivedDate: bigint("receivedDate", { mode: "number" }), // timestamp ms (null = não recebido)
+  receivedDate: bigint("receivedDate", { mode: "number" }), // timestamp ms (null = nÃ£o recebido)
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -768,17 +768,17 @@ export const financialSales = mysqlTable("financialSales", {
 export type FinancialSale = typeof financialSales.$inferSelect;
 export type InsertFinancialSale = typeof financialSales.$inferInsert;
 
-// ─── Links de Indicação por Cliente ─────────────────────────────────────────
-// Cada cliente pode ter múltiplos links de indicação com comissão configurável
+// â”€â”€â”€ Links de IndicaÃ§Ã£o por Cliente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Cada cliente pode ter mÃºltiplos links de indicaÃ§Ã£o com comissÃ£o configurÃ¡vel
 export const referralLinks = mysqlTable("referralLinks", {
   id: int("id").autoincrement().primaryKey(),
   customerId: int("customerId").notNull(), // FK para customers.id
   customerName: varchar("customerName", { length: 128 }).notNull().default(""),
-  code: varchar("code", { length: 32 }).notNull().unique(), // código único ex: JOAO-A1B2
+  code: varchar("code", { length: 32 }).notNull().unique(), // cÃ³digo Ãºnico ex: JOAO-A1B2
   commissionValue: int("commissionValue").notNull().default(0), // em centavos
   commissionType: varchar("commissionType", { length: 16 }).notNull().default("fixed"), // fixed | percent
-  productId: int("productId"), // produto específico que gera comissão (null = qualquer produto)
-  productName: varchar("productName", { length: 256 }), // nome do produto para exibição
+  productId: int("productId"), // produto especÃ­fico que gera comissÃ£o (null = qualquer produto)
+  productName: varchar("productName", { length: 256 }), // nome do produto para exibiÃ§Ã£o
   usageCount: int("usageCount").notNull().default(0), // quantas vezes foi usado
   active: int("active").notNull().default(1),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -786,34 +786,34 @@ export const referralLinks = mysqlTable("referralLinks", {
 export type ReferralLink = typeof referralLinks.$inferSelect;
 export type InsertReferralLink = typeof referralLinks.$inferInsert;
 
-// Registro de cada uso do link de indicação
+// Registro de cada uso do link de indicaÃ§Ã£o
 export const referralUsages = mysqlTable("referralUsages", {
   id: int("id").autoincrement().primaryKey(),
   referralLinkId: int("referralLinkId").notNull(),
   registrationId: int("registrationId"), // FK para accessCodePhones.id
   clientName: varchar("clientName", { length: 128 }).notNull().default(""),
   clientPhone: varchar("clientPhone", { length: 32 }).notNull().default(""),
-  commissionPaid: int("commissionPaid").notNull().default(0), // 1 = comissão paga
+  commissionPaid: int("commissionPaid").notNull().default(0), // 1 = comissÃ£o paga
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type ReferralUsage = typeof referralUsages.$inferSelect;
 export type InsertReferralUsage = typeof referralUsages.$inferInsert;
 
-// ─── Formulário Dinâmico - Tela de Acompanhamento ────────────────────────────
+// â”€â”€â”€ FormulÃ¡rio DinÃ¢mico - Tela de Acompanhamento â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Perguntas criadas pelo admin que aparecem na tela /acompanhar
 export const trackingQuestions = mysqlTable("trackingQuestions", {
   id: int("id").autoincrement().primaryKey(),
   text: varchar("text", { length: 512 }).notNull(),
   options: text("options").notNull().default("[]"), // JSON: [{label, color, blocking}]
   isActive: int("isActive").notNull().default(1),
-  showOnce: int("showOnce").notNull().default(1), // 1 = aparece só uma vez por pedido
+  showOnce: int("showOnce").notNull().default(1), // 1 = aparece sÃ³ uma vez por pedido
   sortOrder: int("sortOrder").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type TrackingQuestion = typeof trackingQuestions.$inferSelect;
 export type InsertTrackingQuestion = typeof trackingQuestions.$inferInsert;
 
-// Respostas dos clientes às perguntas de acompanhamento
+// Respostas dos clientes Ã s perguntas de acompanhamento
 export const trackingAnswers = mysqlTable("trackingAnswers", {
   id: int("id").autoincrement().primaryKey(),
   orderId: int("orderId").notNull(),
@@ -826,7 +826,7 @@ export const trackingAnswers = mysqlTable("trackingAnswers", {
 export type TrackingAnswer = typeof trackingAnswers.$inferSelect;
 export type InsertTrackingAnswer = typeof trackingAnswers.$inferInsert;
 
-// Perguntas enviadas individualmente pelo admin para um pedido específico
+// Perguntas enviadas individualmente pelo admin para um pedido especÃ­fico
 export const trackingQuestionAssignments = mysqlTable("trackingQuestionAssignments", {
   id: int("id").autoincrement().primaryKey(),
   orderId: int("orderId").notNull(),
@@ -840,12 +840,12 @@ export const trackingQuestionAssignments = mysqlTable("trackingQuestionAssignmen
 export type TrackingQuestionAssignment = typeof trackingQuestionAssignments.$inferSelect;
 export type InsertTrackingQuestionAssignment = typeof trackingQuestionAssignments.$inferInsert;
 
-// ─── Foto Protegida ────────────────────────────────────────────────────────────
-// Admin faz upload de uma foto que só é liberada para clientes com número cadastrado
+// â”€â”€â”€ Foto Protegida â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Admin faz upload de uma foto que sÃ³ Ã© liberada para clientes com nÃºmero cadastrado
 export const protectedPhotos = mysqlTable("protectedPhotos", {
   id: int("id").autoincrement().primaryKey(),
-  title: varchar("title", { length: 256 }).notNull().default("📸 Foto protegida"),
-  message: text("message").notNull().default("Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\n✅ O acesso será registrado automaticamente."),
+  title: varchar("title", { length: 256 }).notNull().default("ðŸ“¸ Foto protegida"),
+  message: text("message").notNull().default("Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\nâœ… O acesso serÃ¡ registrado automaticamente."),
   imageUrl: text("imageUrl").notNull(),
   imageKey: varchar("imageKey", { length: 512 }).notNull(),
   isActive: int("isActive").notNull().default(1),
@@ -855,8 +855,8 @@ export const protectedPhotos = mysqlTable("protectedPhotos", {
 export type ProtectedPhoto = typeof protectedPhotos.$inferSelect;
 export type InsertProtectedPhoto = typeof protectedPhotos.$inferInsert;
 
-// ─── Logs de Acesso à Foto Protegida ──────────────────────────────────────────
-// Registra quais números de telefone acessaram e visualizaram a foto protegida
+// â”€â”€â”€ Logs de Acesso Ã  Foto Protegida â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Registra quais nÃºmeros de telefone acessaram e visualizaram a foto protegida
 export const photoAccessLogs = mysqlTable("photoAccessLogs", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull(),
@@ -867,9 +867,9 @@ export const photoAccessLogs = mysqlTable("photoAccessLogs", {
 export type PhotoAccessLog = typeof photoAccessLogs.$inferSelect;
 export type InsertPhotoAccessLog = typeof photoAccessLogs.$inferInsert;
 
-// ─── Configuração de Progresso por Pedido ─────────────────────────────────────
+// â”€â”€â”€ ConfiguraÃ§Ã£o de Progresso por Pedido â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Permite ao admin definir quais status aparecem na barra de progresso do cliente
-// para cada pedido específico, e em qual ordem
+// para cada pedido especÃ­fico, e em qual ordem
 export const orderProgressConfig = mysqlTable("orderProgressConfig", {
   id: int("id").autoincrement().primaryKey(),
   registrationId: int("registrationId").notNull(),
@@ -881,7 +881,7 @@ export const orderProgressConfig = mysqlTable("orderProgressConfig", {
 export type OrderProgressConfig = typeof orderProgressConfig.$inferSelect;
 export type InsertOrderProgressConfig = typeof orderProgressConfig.$inferInsert;
 
-// ─── Tentativas de Login Admin ────────────────────────────────────────────────
+// â”€â”€â”€ Tentativas de Login Admin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Registra tentativas de login no painel admin por IP
 export const adminLoginAttempts = mysqlTable("adminLoginAttempts", {
   id: int("id").autoincrement().primaryKey(),
@@ -895,13 +895,13 @@ export const adminLoginAttempts = mysqlTable("adminLoginAttempts", {
 export type AdminLoginAttempt = typeof adminLoginAttempts.$inferSelect;
 export type InsertAdminLoginAttempt = typeof adminLoginAttempts.$inferInsert;
 
-// ─── FAQ / Caixa de Ajuda ─────────────────────────────────────────────────────
-// Configuração geral do FAQ (título, cores, visibilidade)
+// â”€â”€â”€ FAQ / Caixa de Ajuda â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ConfiguraÃ§Ã£o geral do FAQ (tÃ­tulo, cores, visibilidade)
 export const faqConfig = mysqlTable("faqConfig", {
   id: int("id").autoincrement().primaryKey(),
-  title: varchar("title", { length: 256 }).notNull().default("Tire suas dúvidas antes de finalizar seu pedido"),
+  title: varchar("title", { length: 256 }).notNull().default("Tire suas dÃºvidas antes de finalizar seu pedido"),
   subtitle: varchar("subtitle", { length: 512 }),
-  buttonLabel: varchar("buttonLabel", { length: 128 }).notNull().default("Tire suas dúvidas"),
+  buttonLabel: varchar("buttonLabel", { length: 128 }).notNull().default("Tire suas dÃºvidas"),
   buttonColor: varchar("buttonColor", { length: 32 }).notNull().default("#8b5cf6"),
   buttonTextColor: varchar("buttonTextColor", { length: 32 }).notNull().default("#ffffff"),
   headerColor: varchar("headerColor", { length: 32 }).notNull().default("#1e1b4b"),
@@ -926,27 +926,27 @@ export const faqItems = mysqlTable("faqItems", {
 export type FaqItem = typeof faqItems.$inferSelect;
 export type InsertFaqItem = typeof faqItems.$inferInsert;
 
-// ─── SISTEMA DE AGENDAMENTO DE ATENDIMENTO ────────────────────────────────────
-// Slots de data/hora disponíveis definidos pelo admin.
-// Cada slot representa um horário único que o cliente pode escolher.
+// â”€â”€â”€ SISTEMA DE AGENDAMENTO DE ATENDIMENTO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Slots de data/hora disponÃ­veis definidos pelo admin.
+// Cada slot representa um horÃ¡rio Ãºnico que o cliente pode escolher.
 // status: 'available' = livre, 'booked' = reservado por um cliente, 'disabled' = desativado pelo admin
 export const scheduleSlots = mysqlTable("scheduleSlots", {
   id: int("id").autoincrement().primaryKey(),
   templateId: int("templateId"),                           // FK para scheduleTemplates.id (null = geral, vale para qualquer modelo)
   slotDate: varchar("slotDate", { length: 16 }).notNull(), // formato YYYY-MM-DD
   slotTime: varchar("slotTime", { length: 8 }).notNull(),  // formato HH:MM (24h)
-  capacity: int("capacity").notNull().default(1),          // quantos clientes cabem neste horário
-  bookedCount: int("bookedCount").notNull().default(0),    // quantos já agendaram
+  capacity: int("capacity").notNull().default(1),          // quantos clientes cabem neste horÃ¡rio
+  bookedCount: int("bookedCount").notNull().default(0),    // quantos jÃ¡ agendaram
   status: mysqlEnum("status", ["available", "disabled"]).notNull().default("available"),
-  note: varchar("note", { length: 256 }),                  // observação interna opcional
+  note: varchar("note", { length: 256 }),                  // observaÃ§Ã£o interna opcional
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type ScheduleSlot = typeof scheduleSlots.$inferSelect;
 export type InsertScheduleSlot = typeof scheduleSlots.$inferInsert;
 
-// Agendamentos confirmados, vinculados a um pedido específico (registrationId + subOrderIndex).
-// Cada pedido recebe um token único usado no link individual (/agendar/:token).
-// status: 'pending' = link enviado, cliente ainda não escolheu; 'confirmed' = cliente escolheu data/hora;
+// Agendamentos confirmados, vinculados a um pedido especÃ­fico (registrationId + subOrderIndex).
+// Cada pedido recebe um token Ãºnico usado no link individual (/agendar/:token).
+// status: 'pending' = link enviado, cliente ainda nÃ£o escolheu; 'confirmed' = cliente escolheu data/hora;
 //         'cancelled' = cancelado pelo admin/cliente
 export const scheduleAppointments = mysqlTable("scheduleAppointments", {
   id: int("id").autoincrement().primaryKey(),
@@ -959,52 +959,52 @@ export const scheduleAppointments = mysqlTable("scheduleAppointments", {
   customerPhotoUrl: text("customerPhotoUrl"),  // URL da foto do cliente
   serviceName: varchar("serviceName", { length: 256 }),
   templateId: int("templateId"),                             // FK para scheduleTemplates.id (modelo aplicado neste agendamento)
-  slotId: int("slotId"),                                     // FK para scheduleSlots.id (null enquanto não escolheu)
+  slotId: int("slotId"),                                     // FK para scheduleSlots.id (null enquanto nÃ£o escolheu)
   slotDate: varchar("slotDate", { length: 16 }),             // copiado do slot ao confirmar
   slotTime: varchar("slotTime", { length: 8 }),              // copiado do slot ao confirmar
   status: mysqlEnum("status", ["pending", "confirmed", "cancelled", "completed"]).notNull().default("pending"),
   instructions: text("instructions"),                        // mensagem explicativa enviada ao cliente
   sentByEmail: int("sentByEmail").notNull().default(0),      // 1 = link enviado por email
   confirmedAt: timestamp("confirmedAt"),
-  adminSeenConfirmedAt: timestamp("adminSeenConfirmedAt"),  // quando admin dispensou o alerta de confirmação
-  hasScheduleNotification: int("hasScheduleNotification").notNull().default(0),  // 1 = notificação de agendamento enviada
+  adminSeenConfirmedAt: timestamp("adminSeenConfirmedAt"),  // quando admin dispensou o alerta de confirmaÃ§Ã£o
+  hasScheduleNotification: int("hasScheduleNotification").notNull().default(0),  // 1 = notificaÃ§Ã£o de agendamento enviada
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type ScheduleAppointment = typeof scheduleAppointments.$inferSelect;
 export type InsertScheduleAppointment = typeof scheduleAppointments.$inferInsert;
 
-// Configuração global do agendamento (mensagem explicativa reutilizável, título, instruções padrão).
-// Uma única linha (id=1) que o admin edita e é aplicada a todos os envios.
+// ConfiguraÃ§Ã£o global do agendamento (mensagem explicativa reutilizÃ¡vel, tÃ­tulo, instruÃ§Ãµes padrÃ£o).
+// Uma Ãºnica linha (id=1) que o admin edita e Ã© aplicada a todos os envios.
 export const scheduleConfig = mysqlTable("scheduleConfig", {
   id: int("id").autoincrement().primaryKey(),
   title: varchar("title", { length: 256 }).notNull().default("Agende seu atendimento"),
-  introMessage: text("introMessage").notNull().default("Seu pedido precisa ser agendado. Escolha abaixo a melhor data e horário disponível para o seu atendimento."),
-  emailSubject: varchar("emailSubject", { length: 256 }).notNull().default("Agende seu atendimento - WALK AJUDA"),
-  emailMessage: text("emailMessage").notNull().default("Olá! Seu pedido precisa ser agendado. Clique no link abaixo para escolher a data e o horário do seu atendimento."),
-  whatsappMessage: text("whatsappMessage").notNull().default("Olá! Seu pedido na WALK AJUDA precisa ser agendado. Acesse o link para escolher a data e o horário do seu atendimento:"),
-  scheduledWhatsappMessage: text("scheduledWhatsappMessage").notNull().default("Olá {nome}! Seu atendimento está confirmado para o dia {data} às {hora}. Fique disponível no WhatsApp nesse horário. Qualquer dúvida, estamos à disposição!"),
-  confirmationMessage: text("confirmationMessage").notNull().default("Seu atendimento foi agendado com sucesso! Guarde a data e o horário escolhidos. O atendimento será feito pelo WhatsApp nesse horário."),
-  // Aviso exibido ao cliente: se não comparecer quando chamado, terá que reagendar
-  noShowWarning: text("noShowWarning").notNull().default("ATENÇÃO: O atendimento será feito pelo WhatsApp no horário escolhido. Fique disponível no seu WhatsApp nesse horário. Se você não atender quando for chamado, será necessário reagendar."),
+  introMessage: text("introMessage").notNull().default("Seu pedido precisa ser agendado. Escolha abaixo a melhor data e horÃ¡rio disponÃ­vel para o seu atendimento."),
+  emailSubject: varchar("emailSubject", { length: 256 }).notNull().default("Agende seu atendimento - H2 COLOMBIANO"),
+  emailMessage: text("emailMessage").notNull().default("OlÃ¡! Seu pedido precisa ser agendado. Clique no link abaixo para escolher a data e o horÃ¡rio do seu atendimento."),
+  whatsappMessage: text("whatsappMessage").notNull().default("OlÃ¡! Seu pedido na H2 COLOMBIANO precisa ser agendado. Acesse o link para escolher a data e o horÃ¡rio do seu atendimento:"),
+  scheduledWhatsappMessage: text("scheduledWhatsappMessage").notNull().default("OlÃ¡ {nome}! Seu atendimento estÃ¡ confirmado para o dia {data} Ã s {hora}. Fique disponÃ­vel no WhatsApp nesse horÃ¡rio. Qualquer dÃºvida, estamos Ã  disposiÃ§Ã£o!"),
+  confirmationMessage: text("confirmationMessage").notNull().default("Seu atendimento foi agendado com sucesso! Guarde a data e o horÃ¡rio escolhidos. O atendimento serÃ¡ feito pelo WhatsApp nesse horÃ¡rio."),
+  // Aviso exibido ao cliente: se nÃ£o comparecer quando chamado, terÃ¡ que reagendar
+  noShowWarning: text("noShowWarning").notNull().default("ATENÃ‡ÃƒO: O atendimento serÃ¡ feito pelo WhatsApp no horÃ¡rio escolhido. Fique disponÃ­vel no seu WhatsApp nesse horÃ¡rio. Se vocÃª nÃ£o atender quando for chamado, serÃ¡ necessÃ¡rio reagendar."),
   accentColor: varchar("accentColor", { length: 32 }).notNull().default("#8b5cf6"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type ScheduleConfig = typeof scheduleConfig.$inferSelect;
 export type InsertScheduleConfig = typeof scheduleConfig.$inferInsert;
 
-// Modelos de agendamento PRÉ-FEITOS criados pelo admin (reutilizáveis em qualquer pedido).
-// Ex.: "Agendamento para foto de perfil" com sua mensagem própria.
+// Modelos de agendamento PRÃ‰-FEITOS criados pelo admin (reutilizÃ¡veis em qualquer pedido).
+// Ex.: "Agendamento para foto de perfil" com sua mensagem prÃ³pria.
 // O admin cria uma vez e aplica com um clique dentro de qualquer pedido.
 export const scheduleTemplates = mysqlTable("scheduleTemplates", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 256 }).notNull(),          // ex: "Agendamento para foto de perfil"
-  serviceName: varchar("serviceName", { length: 256 }).notNull().default(""), // o que será agendado (texto livre)
+  serviceName: varchar("serviceName", { length: 256 }).notNull().default(""), // o que serÃ¡ agendado (texto livre)
   instructions: text("instructions").notNull().default(""),  // mensagem explicativa para o cliente
   emailSubject: varchar("emailSubject", { length: 256 }),    // assunto do email (null = usa o global)
   emailMessage: text("emailMessage"),                        // corpo do email (null = usa o global)
   whatsappMessage: text("whatsappMessage"),                  // mensagem do whatsapp (null = usa o global)
-  scheduledWhatsappMessage: text("scheduledWhatsappMessage"), // mensagem quando horário confirmado (null = usa o global)
+  scheduledWhatsappMessage: text("scheduledWhatsappMessage"), // mensagem quando horÃ¡rio confirmado (null = usa o global)
   isActive: int("isActive").notNull().default(1),
   sortOrder: int("sortOrder").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -1017,7 +1017,7 @@ export type InsertScheduleTemplate = typeof scheduleTemplates.$inferInsert;
 export const customFolders = mysqlTable("customFolders", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 128 }).notNull(),
-  icon: varchar("icon", { length: 64 }).default("📁"),
+  icon: varchar("icon", { length: 64 }).default("ðŸ“"),
   color: varchar("color", { length: 32 }).default("#8b5cf6"),
   sortOrder: int("sortOrder").notNull().default(0),
   hidden: int("hidden").notNull().default(0),
@@ -1049,12 +1049,12 @@ export const fixedFolderOrders = mysqlTable("fixedFolderOrders", {
 export type FixedFolderOrder = typeof fixedFolderOrders.$inferSelect;
 export type InsertFixedFolderOrder = typeof fixedFolderOrders.$inferInsert;
 
-// Configuração das pastas fixas (Entregues, Arquivo, RG/CNH)
+// ConfiguraÃ§Ã£o das pastas fixas (Entregues, Arquivo, RG/CNH)
 export const folderConfig = mysqlTable("folderConfig", {
   id: int("id").autoincrement().primaryKey(),
   folderKey: varchar("folderKey", { length: 32 }).notNull().unique(), // 'entregues' | 'arquivo' | 'rgcnh'
   name: varchar("name", { length: 128 }).notNull(),
-  icon: varchar("icon", { length: 64 }).default("📁"),
+  icon: varchar("icon", { length: 64 }).default("ðŸ“"),
   color: varchar("color", { length: 32 }).default("#8b5cf6"),
   tabOrder: int("tabOrder").notNull().default(0),
   hidden: int("hidden").notNull().default(0),
@@ -1063,11 +1063,11 @@ export const folderConfig = mysqlTable("folderConfig", {
 export type FolderConfig = typeof folderConfig.$inferSelect;
 export type InsertFolderConfig = typeof folderConfig.$inferInsert;
 
-// ─── Tiers de Garantia por Opção de Produto ─────────────────────────────────
-// Cada opção pode ter múltiplos tiers de garantia com preços diferentes.
-// Ex: "Nome Aleatório" pode ter: 25 corridas → R$400,00 | 100 corridas → R$600,00
+// â”€â”€â”€ Tiers de Garantia por OpÃ§Ã£o de Produto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Cada opÃ§Ã£o pode ter mÃºltiplos tiers de garantia com preÃ§os diferentes.
+// Ex: "Nome AleatÃ³rio" pode ter: 25 corridas â†’ R$400,00 | 100 corridas â†’ R$600,00
 // warrantyType: 'corridas' | 'dias' | 'semanas' | 'meses' | 'anos' | 'livre'
-// warrantyValue: número inteiro (ex: 25, 100, 7)
+// warrantyValue: nÃºmero inteiro (ex: 25, 100, 7)
 // warrantyLabel: texto livre opcional para tipos personalizados (ex: "ou o que chegar primeiro")
 export const warrantyTiers = mysqlTable("warrantyTiers", {
   id: int("id").autoincrement().primaryKey(),
@@ -1075,8 +1075,8 @@ export const warrantyTiers = mysqlTable("warrantyTiers", {
   warrantyType: varchar("warrantyType", { length: 32 }).notNull().default("corridas"), // corridas | dias | semanas | meses | anos | livre
   warrantyValue: int("warrantyValue").notNull().default(0), // quantidade (ex: 25, 100)
   warrantyLabel: varchar("warrantyLabel", { length: 128 }).default(""), // texto extra opcional
-  price: varchar("price", { length: 64 }).notNull(), // preço para este tier (ex: "R$ 400,00")
-  originalPrice: varchar("originalPrice", { length: 64 }).default(""), // preço original riscado
+  price: varchar("price", { length: 64 }).notNull(), // preÃ§o para este tier (ex: "R$ 400,00")
+  originalPrice: varchar("originalPrice", { length: 64 }).default(""), // preÃ§o original riscado
   sortOrder: int("sortOrder").notNull().default(0),
   isActive: int("isActive").notNull().default(1),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -1084,29 +1084,29 @@ export const warrantyTiers = mysqlTable("warrantyTiers", {
 export type WarrantyTier = typeof warrantyTiers.$inferSelect;
 export type InsertWarrantyTier = typeof warrantyTiers.$inferInsert;
 
-// Marcação "Em atendimento": indica qual admin está mexendo num pedido específico
+// MarcaÃ§Ã£o "Em atendimento": indica qual admin estÃ¡ mexendo num pedido especÃ­fico
 export const orderAttention = mysqlTable("orderAttention", {
   id: int("id").autoincrement().primaryKey(),
   registrationId: int("registrationId").notNull(),
   adminName: varchar("adminName", { length: 128 }).notNull().default("Admin"),
   startedAt: timestamp("startedAt").defaultNow().notNull(),
-  expiresAt: timestamp("expiresAt").notNull(), // auto-expira após X minutos
+  expiresAt: timestamp("expiresAt").notNull(), // auto-expira apÃ³s X minutos
 });
 export type OrderAttention = typeof orderAttention.$inferSelect;
 export type InsertOrderAttention = typeof orderAttention.$inferInsert;
 
-// Botões da página inicial (customizáveis pelo admin)
+// BotÃµes da pÃ¡gina inicial (customizÃ¡veis pelo admin)
 export const homePageButtons = mysqlTable("homePageButtons", {
   id: int("id").autoincrement().primaryKey(),
   buttonNumber: int("buttonNumber").notNull(), // 1 ou 2
-  mainText: varchar("mainText", { length: 256 }).notNull(), // "FAÇA SEU PEDIDO"
+  mainText: varchar("mainText", { length: 256 }).notNull(), // "FAÃ‡A SEU PEDIDO"
   subText: varchar("subText", { length: 512 }).notNull(), // "Falta pouco! Finalize seu cadastro..."
   buttonBgColor: varchar("buttonBgColor", { length: 32 }).notNull().default("#800000"), // Cor do fundo
   mainTextColor: varchar("mainTextColor", { length: 32 }).notNull().default("#ffffff"), // Cor do texto principal
   subTextColor: varchar("subTextColor", { length: 32 }).notNull().default("#ffffff"), // Cor do subtexto
   fontFamily: varchar("fontFamily", { length: 128 }).notNull().default("Rajdhani"), // Fonte
   hoverEffect: varchar("hoverEffect", { length: 64 }).notNull().default("zoom"), // zoom, scale, brightness, etc
-  icon: varchar("icon", { length: 64 }).notNull().default("clipboard"), // ícone do botão
+  icon: varchar("icon", { length: 64 }).notNull().default("clipboard"), // Ã­cone do botÃ£o
   linkUrl: varchar("linkUrl", { length: 512 }).notNull().default(""), // destino: /rota interna, https://... ou wa.me
   isActive: int("isActive").notNull().default(1), // 1 = ativo, 0 = inativo
   sortOrder: int("sortOrder").notNull().default(0),
@@ -1121,22 +1121,22 @@ export type InsertHomePageButton = typeof homePageButtons.$inferInsert;
 export const customerDocuments = mysqlTable("customerDocuments", {
   id: int("id").autoincrement().primaryKey(),
   customerId: int("customerId").notNull(),
-  label: varchar("label", { length: 256 }).notNull(), // Descrição do documento (ex: "RG", "CNH", "Comprovante de Residência")
+  label: varchar("label", { length: 256 }).notNull(), // DescriÃ§Ã£o do documento (ex: "RG", "CNH", "Comprovante de ResidÃªncia")
   fileUrl: text("fileUrl").notNull(), // URL do arquivo no S3
   fileKey: varchar("fileKey", { length: 512 }).notNull(), // Chave do arquivo no S3
   mimeType: varchar("mimeType", { length: 64 }).notNull(), // Tipo MIME (image/jpeg, application/pdf, etc)
-  fileName: varchar("fileName", { length: 256 }), // Nome do arquivo original com extensão (ex: "rg_2026.psd")
+  fileName: varchar("fileName", { length: 256 }), // Nome do arquivo original com extensÃ£o (ex: "rg_2026.psd")
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type CustomerDocument = typeof customerDocuments.$inferSelect;
 export type InsertCustomerDocument = typeof customerDocuments.$inferInsert;
 
-// Etapas Internas do Fluxo de Atendimento (configuráveis pelo admin)
+// Etapas Internas do Fluxo de Atendimento (configurÃ¡veis pelo admin)
 export const internalStages = mysqlTable("internalStages", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 128 }).notNull(),
-  icon: varchar("icon", { length: 64 }).notNull().default("📋"),
+  icon: varchar("icon", { length: 64 }).notNull().default("ðŸ“‹"),
   color: varchar("color", { length: 32 }).notNull().default("#6366f1"),
   sortOrder: int("sortOrder").notNull().default(0),
   isActive: int("isActive").notNull().default(1),
@@ -1156,10 +1156,10 @@ export const orderStageHistory = mysqlTable("orderStageHistory", {
 export type OrderStageHistory = typeof orderStageHistory.$inferSelect;
 export type InsertOrderStageHistory = typeof orderStageHistory.$inferInsert;
 
-// Botões extras da tela inicial do cliente (antes do login) — gerenciáveis pelo admin
+// BotÃµes extras da tela inicial do cliente (antes do login) â€” gerenciÃ¡veis pelo admin
 export const homeButtons = mysqlTable("homeButtons", {
   id: int("id").autoincrement().primaryKey(),
-  text: varchar("text", { length: 128 }).notNull().default("NOVO BOTÃO"),
+  text: varchar("text", { length: 128 }).notNull().default("NOVO BOTÃƒO"),
   subtitle: varchar("subtitle", { length: 256 }).notNull().default(""),
   url: varchar("url", { length: 512 }).notNull().default("/sorteio"), // rota interna (/...) ou link externo (https://, wa.me)
   waMsg: text("waMsg"), // mensagem opcional para links wa.me
@@ -1198,20 +1198,20 @@ export type ReferrerBypassCode = typeof referrerBypassCodes.$inferSelect;
 export type InsertReferrerBypassCode = typeof referrerBypassCodes.$inferInsert;
 
 
-// Tabela de estatísticas de indicações (cache para performance)
+// Tabela de estatÃ­sticas de indicaÃ§Ãµes (cache para performance)
 export const referralStats = mysqlTable("referralStats", {
   id: int("id").autoincrement().primaryKey(),
   referrerPhone: varchar("referrerPhone", { length: 32 }).notNull().unique(),
   referrerName: varchar("referrerName", { length: 128 }),
   totalReferred: int("totalReferred").notNull().default(0), // Total de clientes indicados
-  lastReferralAt: timestamp("lastReferralAt"), // Data do último cliente indicado
+  lastReferralAt: timestamp("lastReferralAt"), // Data do Ãºltimo cliente indicado
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type ReferralStats = typeof referralStats.$inferSelect;
 export type InsertReferralStats = typeof referralStats.$inferInsert;
 
-// Tabela de histórico de indicações (para auditoria e rastreamento)
+// Tabela de histÃ³rico de indicaÃ§Ãµes (para auditoria e rastreamento)
 export const referralHistory = mysqlTable("referralHistory", {
   id: int("id").autoincrement().primaryKey(),
   referrerPhone: varchar("referrerPhone", { length: 32 }).notNull(),
@@ -1219,11 +1219,11 @@ export const referralHistory = mysqlTable("referralHistory", {
   referredCustomerId: int("referredCustomerId").notNull(),
   referredPhone: varchar("referredPhone", { length: 32 }).notNull(),
   referredName: varchar("referredName", { length: 128 }),
-  orderId: int("orderId"), // ID do pedido que gerou a indicação
-  commissionValue: int("commissionValue").notNull().default(0), // valor da comissão em centavos no momento do pedido
-  commissionPaid: int("commissionPaid").notNull().default(0), // 1 = comissão paga ao indicador
-  serviceName: varchar("serviceName", { length: 256 }), // nome do serviço/produto
-  serviceOption: varchar("serviceOption", { length: 256 }), // opção do serviço
+  orderId: int("orderId"), // ID do pedido que gerou a indicaÃ§Ã£o
+  commissionValue: int("commissionValue").notNull().default(0), // valor da comissÃ£o em centavos no momento do pedido
+  commissionPaid: int("commissionPaid").notNull().default(0), // 1 = comissÃ£o paga ao indicador
+  serviceName: varchar("serviceName", { length: 256 }), // nome do serviÃ§o/produto
+  serviceOption: varchar("serviceOption", { length: 256 }), // opÃ§Ã£o do serviÃ§o
   status: mysqlEnum("status", ["pending", "completed", "cancelled"]).notNull().default("pending"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -1232,14 +1232,14 @@ export const referralHistory = mysqlTable("referralHistory", {
 export type ReferralHistory = typeof referralHistory.$inferSelect;
 export type InsertReferralHistory = typeof referralHistory.$inferInsert;
 
-// Tabela de denúncias de indicados
+// Tabela de denÃºncias de indicados
 export const referralReports = mysqlTable("referralReports", {
   id: int("id").autoincrement().primaryKey(),
   reporterPhone: varchar("reporterPhone", { length: 32 }).notNull(), // Telefone de quem denunciou
   reportedCustomerId: int("reportedCustomerId").notNull(), // ID do cliente denunciado
   reportedPhone: varchar("reportedPhone", { length: 32 }).notNull(), // Telefone do cliente denunciado
   reportedName: varchar("reportedName", { length: 128 }), // Nome do cliente denunciado
-  reason: text("reason").notNull(), // Motivo da denúncia
+  reason: text("reason").notNull(), // Motivo da denÃºncia
   status: mysqlEnum("status", ["pending", "reviewed", "resolved"]).notNull().default("pending"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -1249,9 +1249,9 @@ export type ReferralReport = typeof referralReports.$inferSelect;
 export type InsertReferralReport = typeof referralReports.$inferInsert;
 
 
-// ===== TABELAS DE AUTENTICAÇÃO PARA PLANILHA DE MOTORISTA =====
+// ===== TABELAS DE AUTENTICAÃ‡ÃƒO PARA PLANILHA DE MOTORISTA =====
 
-// Tabela de clientes com acesso à planilha
+// Tabela de clientes com acesso Ã  planilha
 export const spreadsheetClients = mysqlTable("spreadsheetClients", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull().unique(),
@@ -1276,15 +1276,15 @@ export const spreadsheetPasswords = mysqlTable("spreadsheetPasswords", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   createdBy: int("createdBy"), // ID do admin que criou
   pendingApproval: int("pendingApproval").notNull().default(0), // 1 = cliente criou senha, aguardando admin definir validade
-  createdByClient: int("createdByClient").notNull().default(0), // 1 = senha criada pelo próprio cliente
+  createdByClient: int("createdByClient").notNull().default(0), // 1 = senha criada pelo prÃ³prio cliente
   clientCreatedAt: timestamp("clientCreatedAt"), // quando o cliente criou a senha
-  passwordLocked: int("passwordLocked").notNull().default(0), // 1 = senha bloqueada para alteração (já foi usada pelo cliente no primeiro acesso)
+  passwordLocked: int("passwordLocked").notNull().default(0), // 1 = senha bloqueada para alteraÃ§Ã£o (jÃ¡ foi usada pelo cliente no primeiro acesso)
 });
 
 export type SpreadsheetPassword = typeof spreadsheetPasswords.$inferSelect;
 export type InsertSpreadsheetPassword = typeof spreadsheetPasswords.$inferInsert;
 
-// Tabela de sessões de login
+// Tabela de sessÃµes de login
 export const spreadsheetSessions = mysqlTable("spreadsheetSessions", {
   id: int("id").autoincrement().primaryKey(),
   clientId: int("clientId").notNull().references(() => spreadsheetClients.id, { onDelete: "cascade" }),
@@ -1313,12 +1313,12 @@ export type SpreadsheetLoginAudit = typeof spreadsheetLoginAudit.$inferSelect;
 export type InsertSpreadsheetLoginAudit = typeof spreadsheetLoginAudit.$inferInsert;
 
 // ===== GRUPOS CUSTOMIZADOS DE PEDIDOS =====
-// Grupos criados pelo admin (tipo "EMERGÊNCIA", "PRIORIDADE", etc.)
+// Grupos criados pelo admin (tipo "EMERGÃŠNCIA", "PRIORIDADE", etc.)
 export const orderCustomGroups = mysqlTable("orderCustomGroups", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
   color: varchar("color", { length: 32 }).notNull().default("red"), // ex: "red", "orange", "blue", "purple", "green"
-  icon: varchar("icon", { length: 10 }).default("🔖"),
+  icon: varchar("icon", { length: 10 }).default("ðŸ”–"),
   position: int("position").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -1336,7 +1336,7 @@ export type OrderCustomGroupMember = typeof orderCustomGroupMembers.$inferSelect
 export type InsertOrderCustomGroupMember = typeof orderCustomGroupMembers.$inferInsert;
 
 // ===== CARDS DE DESTAQUE (Feature Cards) =====
-// Cards personalizáveis que aparecem na página inicial
+// Cards personalizÃ¡veis que aparecem na pÃ¡gina inicial
 export const featureCards = mysqlTable("featureCards", {
   id: int("id").autoincrement().primaryKey(),
   title: varchar("title", { length: 200 }).notNull(),
@@ -1357,14 +1357,14 @@ export type FeatureCard = typeof featureCards.$inferSelect;
 export type InsertFeatureCard = typeof featureCards.$inferInsert;
 
 // ===== ADMIN MEDIA FILES =====
-// Metadados de arquivos de mídia enviados pelo admin (vídeos e fotos)
+// Metadados de arquivos de mÃ­dia enviados pelo admin (vÃ­deos e fotos)
 // O arquivo em si fica no storage S3; aqui apenas metadados e URL permanente
 export const adminMediaFiles = mysqlTable("adminMediaFiles", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 512 }).notNull(),
   fileKey: varchar("fileKey", { length: 512 }).notNull(),
   url: text("url").notNull(),
-  videoSlug: varchar("videoSlug", { length: 128 }).unique(), // ex: "meu-video" → /video/meu-video
+  videoSlug: varchar("videoSlug", { length: 128 }).unique(), // ex: "meu-video" â†’ /video/meu-video
   mimeType: varchar("mimeType", { length: 64 }).notNull(),
   fileSize: bigint("fileSize", { mode: "number" }).notNull().default(0),
   uploadedAt: timestamp("uploadedAt").defaultNow().notNull(),
@@ -1372,41 +1372,41 @@ export const adminMediaFiles = mysqlTable("adminMediaFiles", {
 export type AdminMediaFile = typeof adminMediaFiles.$inferSelect;
 export type InsertAdminMediaFile = typeof adminMediaFiles.$inferInsert;
 
-// ===== SISTEMA DE PROPAGANDA OBRIGATÓRIA =====
-// Campanhas cadastradas pelo admin para exibição na Planilha de Gastos
+// ===== SISTEMA DE PROPAGANDA OBRIGATÃ“RIA =====
+// Campanhas cadastradas pelo admin para exibiÃ§Ã£o na Planilha de Gastos
 export const adCampaigns = mysqlTable("adCampaigns", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 256 }).notNull(), // Nome interno da campanha
   isActive: int("isActive").notNull().default(1), // 1 = ativa, 0 = inativa
-  type: mysqlEnum("type", ["image", "video"]).notNull().default("image"), // Tipo: banner ou vídeo
-  // Conteúdo
+  type: mysqlEnum("type", ["image", "video"]).notNull().default("image"), // Tipo: banner ou vÃ­deo
+  // ConteÃºdo
   imageUrl: text("imageUrl"), // URL da imagem (para type=image)
-  videoUrl: text("videoUrl"), // URL do vídeo (para type=video)
-  title: varchar("title", { length: 256 }), // Título opcional
-  description: text("description"), // Descrição opcional
+  videoUrl: text("videoUrl"), // URL do vÃ­deo (para type=video)
+  title: varchar("title", { length: 256 }), // TÃ­tulo opcional
+  description: text("description"), // DescriÃ§Ã£o opcional
   // Redirecionamento
   linkUrl: text("linkUrl"), // Link de destino (opcional)
-  linkText: varchar("linkText", { length: 128 }).default("Saiba Mais"), // Texto do botão de ação
+  linkText: varchar("linkText", { length: 128 }).default("Saiba Mais"), // Texto do botÃ£o de aÃ§Ã£o
   linkTarget: mysqlEnum("linkTarget", ["_self", "_blank"]).notNull().default("_blank"),
   // Controle de tempo
-  requiredSeconds: int("requiredSeconds").notNull().default(20), // Tempo obrigatório em segundos
-  // Controle de frequência
+  requiredSeconds: int("requiredSeconds").notNull().default(20), // Tempo obrigatÃ³rio em segundos
+  // Controle de frequÃªncia
   frequency: mysqlEnum("frequency", ["once", "every_access", "every_reload", "custom"]).notNull().default("every_access"),
-  frequencyMinutes: int("frequencyMinutes"), // Para frequência personalizada (em minutos)
-  // Período de vigência
-  startsAt: timestamp("startsAt"), // Data de início (null = imediato)
-  endsAt: timestamp("endsAt"), // Data de término (null = sem fim)
-  // Páginas de destino (CSV: 'gastos', 'acompanhar', 'pedidos' ou 'todas')
+  frequencyMinutes: int("frequencyMinutes"), // Para frequÃªncia personalizada (em minutos)
+  // PerÃ­odo de vigÃªncia
+  startsAt: timestamp("startsAt"), // Data de inÃ­cio (null = imediato)
+  endsAt: timestamp("endsAt"), // Data de tÃ©rmino (null = sem fim)
+  // PÃ¡ginas de destino (CSV: 'gastos', 'acompanhar', 'pedidos' ou 'todas')
   targetPages: varchar("targetPages", { length: 256 }).default("gastos"),
-  // Áudio do vídeo
-  enableAudio: int("enableAudio").notNull().default(0), // 1 = habilitar áudio no vídeo, 0 = silenciado
+  // Ãudio do vÃ­deo
+  enableAudio: int("enableAudio").notNull().default(0), // 1 = habilitar Ã¡udio no vÃ­deo, 0 = silenciado
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type AdCampaign = typeof adCampaigns.$inferSelect;
 export type InsertAdCampaign = typeof adCampaigns.$inferInsert;
 
-// Registro de exibições por cliente (para controle de frequência)
+// Registro de exibiÃ§Ãµes por cliente (para controle de frequÃªncia)
 export const adImpressions = mysqlTable("adImpressions", {
   id: int("id").autoincrement().primaryKey(),
   campaignId: int("campaignId").notNull().references(() => adCampaigns.id, { onDelete: "cascade" }),
@@ -1417,26 +1417,26 @@ export type AdImpression = typeof adImpressions.$inferSelect;
 export type InsertAdImpression = typeof adImpressions.$inferInsert;
 
 // ============================================================
-// SISTEMA DE SENHA DO CADASTRO (mesma lógica do Gestor de Gastos)
+// SISTEMA DE SENHA DO CADASTRO (mesma lÃ³gica do Gestor de Gastos)
 // ============================================================
 
-// Senhas dos clientes do cadastro (walkajuda.com/admin/customers)
+// Senhas dos clientes do cadastro (h2colombiano.com/admin/customers)
 export const customerPasswords = mysqlTable("customerPasswords", {
   id: int("id").autoincrement().primaryKey(),
-  phone: varchar("phone", { length: 32 }).notNull(), // telefone do cliente (chave de ligação com customers)
+  phone: varchar("phone", { length: 32 }).notNull(), // telefone do cliente (chave de ligaÃ§Ã£o com customers)
   password: varchar("password", { length: 255 }).notNull(), // hash bcrypt
   isActive: int("isActive").notNull().default(1), // 1 = ativa
   expiresAt: timestamp("expiresAt"), // null = pendente (aguardando ADM definir validade)
   pendingApproval: int("pendingApproval").notNull().default(0), // 1 = cliente criou, aguarda ADM liberar
-  createdByClient: int("createdByClient").notNull().default(0), // 1 = criada pelo próprio cliente
+  createdByClient: int("createdByClient").notNull().default(0), // 1 = criada pelo prÃ³prio cliente
   clientCreatedAt: timestamp("clientCreatedAt"), // quando o cliente criou
-  preservedExpiresAt: timestamp("preservedExpiresAt"), // vencimento preservado após reset
+  preservedExpiresAt: timestamp("preservedExpiresAt"), // vencimento preservado apÃ³s reset
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type CustomerPassword = typeof customerPasswords.$inferSelect;
 export type InsertCustomerPassword = typeof customerPasswords.$inferInsert;
 
-// Sessões de login do sistema de senha do cadastro
+// SessÃµes de login do sistema de senha do cadastro
 export const customerPasswordSessions = mysqlTable("customerPasswordSessions", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull(),
@@ -1448,7 +1448,7 @@ export const customerPasswordSessions = mysqlTable("customerPasswordSessions", {
 export type CustomerPasswordSession = typeof customerPasswordSessions.$inferSelect;
 export type InsertCustomerPasswordSession = typeof customerPasswordSessions.$inferInsert;
 
-// Histórico de logins do cliente (registra cada login)
+// HistÃ³rico de logins do cliente (registra cada login)
 export const customerLoginHistory = mysqlTable("customerLoginHistory", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull(),
@@ -1489,7 +1489,7 @@ export const chatMessages = mysqlTable("chatMessages", {
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type InsertChatMessage = typeof chatMessages.$inferInsert;
 
-// Tabela de status online dos usuários
+// Tabela de status online dos usuÃ¡rios
 export const spreadsheetOnlineStatus = mysqlTable("spreadsheetOnlineStatus", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull().unique(),
@@ -1513,7 +1513,7 @@ export const emailAccounts = mysqlTable("emailAccounts", {
 export type EmailAccount = typeof emailAccounts.$inferSelect;
 export type InsertEmailAccount = typeof emailAccounts.$inferInsert;
 
-// Tabela de configurações Zoho OAuth (múltiplos servidores)
+// Tabela de configuraÃ§Ãµes Zoho OAuth (mÃºltiplos servidores)
 export const zohoOAuthConfigs = mysqlTable("zohoOAuthConfigs", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 128 }).notNull(),
@@ -1530,7 +1530,7 @@ export const zohoOAuthConfigs = mysqlTable("zohoOAuthConfigs", {
 export type ZohoOAuthConfig = typeof zohoOAuthConfigs.$inferSelect;
 export type InsertZohoOAuthConfig = typeof zohoOAuthConfigs.$inferInsert;
 
-// Tabela de notificações de chat não lidas
+// Tabela de notificaÃ§Ãµes de chat nÃ£o lidas
 export const chatNotifications = mysqlTable("chatNotifications", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull(),
@@ -1538,7 +1538,7 @@ export const chatNotifications = mysqlTable("chatNotifications", {
   unreadCount: int("unreadCount").notNull().default(1),
   lastMessagePreview: text("lastMessagePreview"),
   lastMessageSenderPhone: varchar("lastMessageSenderPhone", { length: 32 }),
-  emailSent: int("emailSent").notNull().default(0), // 1 = email de notificação já enviado
+  emailSent: int("emailSent").notNull().default(0), // 1 = email de notificaÃ§Ã£o jÃ¡ enviado
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -1546,29 +1546,29 @@ export const chatNotifications = mysqlTable("chatNotifications", {
 export type ChatNotification = typeof chatNotifications.$inferSelect;
 export type InsertChatNotification = typeof chatNotifications.$inferInsert;
 
-// ─── Serviços Extras / Consultas ────────────────────────────────────────────
-// Formulários criados pelo ADM (consulta com campos ou link direto)
+// â”€â”€â”€ ServiÃ§os Extras / Consultas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// FormulÃ¡rios criados pelo ADM (consulta com campos ou link direto)
 export const consultaForms = mysqlTable("consultaForms", {
   id: int("id").autoincrement().primaryKey(),
-  title: varchar("title", { length: 128 }).notNull(), // ex: "Consulta de Veículo"
-  icon: varchar("icon", { length: 64 }).default("Search"), // nome do ícone Lucide
+  title: varchar("title", { length: 128 }).notNull(), // ex: "Consulta de VeÃ­culo"
+  icon: varchar("icon", { length: 64 }).default("Search"), // nome do Ã­cone Lucide
   type: mysqlEnum("type", ["consultation", "link"]).notNull().default("consultation"),
-  redirectUrl: varchar("redirectUrl", { length: 512 }).default(""), // só para type=link
+  redirectUrl: varchar("redirectUrl", { length: 512 }).default(""), // sÃ³ para type=link
   fields: text("fields").default("[]"), // JSON rows: [{id, cols, fields:[{id,key,label,type,required,placeholder,mask,options,isActive}]}]
   originalFields: text("originalFields").default("[]"), // snapshot original para restaurar
   isActive: int("isActive").notNull().default(1),
-  isBuiltin: int("isBuiltin").notNull().default(0), // 1 = formulário fixo (não pode excluir)
+  isBuiltin: int("isBuiltin").notNull().default(0), // 1 = formulÃ¡rio fixo (nÃ£o pode excluir)
   sortOrder: int("sortOrder").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type ConsultaForm = typeof consultaForms.$inferSelect;
 export type InsertConsultaForm = typeof consultaForms.$inferInsert;
 
-// Solicitações enviadas pelos clientes
+// SolicitaÃ§Ãµes enviadas pelos clientes
 export const consultaRequests = mysqlTable("consultaRequests", {
   id: int("id").autoincrement().primaryKey(),
   formId: int("formId").notNull(), // FK para consultaForms.id
-  formTitle: varchar("formTitle", { length: 128 }).notNull(), // snapshot do título
+  formTitle: varchar("formTitle", { length: 128 }).notNull(), // snapshot do tÃ­tulo
   customerPhone: varchar("customerPhone", { length: 32 }).notNull(),
   customerName: varchar("customerName", { length: 128 }).default(""),
   customerEmail: varchar("customerEmail", { length: 256 }).default(""),
@@ -1584,9 +1584,9 @@ export const consultaRequests = mysqlTable("consultaRequests", {
 export type ConsultaRequest = typeof consultaRequests.$inferSelect;
 export type InsertConsultaRequest = typeof consultaRequests.$inferInsert;
 
-// ─── MÓDULO DE EMPRÉSTIMOS ────────────────────────────────────────────────────
+// â”€â”€â”€ MÃ“DULO DE EMPRÃ‰STIMOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// Perfis de empréstimo
+// Perfis de emprÃ©stimo
 export const loanProfiles = mysqlTable("loanProfiles", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 50 }).notNull(),
@@ -1605,7 +1605,7 @@ export const loanProfiles = mysqlTable("loanProfiles", {
 export type LoanProfile = typeof loanProfiles.$inferSelect;
 export type InsertLoanProfile = typeof loanProfiles.$inferInsert;
 
-// Clientes de empréstimo
+// Clientes de emprÃ©stimo
 export const loanClients = mysqlTable("loanClients", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
@@ -1627,7 +1627,7 @@ export const loanClients = mysqlTable("loanClients", {
 export type LoanClient = typeof loanClients.$inferSelect;
 export type InsertLoanClient = typeof loanClients.$inferInsert;
 
-// Empréstimos
+// EmprÃ©stimos
 export const loans = mysqlTable("loans", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
@@ -1650,7 +1650,7 @@ export const loans = mysqlTable("loans", {
 export type Loan = typeof loans.$inferSelect;
 export type InsertLoan = typeof loans.$inferInsert;
 
-// Mensagens rápidas para WhatsApp
+// Mensagens rÃ¡pidas para WhatsApp
 export const whatsappTemplates = mysqlTable("whatsappTemplates", {
   id: int("id").autoincrement().primaryKey(),
   title: varchar("title", { length: 200 }).notNull(),
@@ -1897,7 +1897,7 @@ export const onlineSupportLogs = mysqlTable("onlineSupportLogs", {
 export type OnlineSupportLog = typeof onlineSupportLogs.$inferSelect;
 export type InsertOnlineSupportLog = typeof onlineSupportLogs.$inferInsert;
 
-// Árvore de fluxo de botões do chat (sistema recursivo)
+// Ãrvore de fluxo de botÃµes do chat (sistema recursivo)
 export const chatFlowNodes = mysqlTable("chatFlowNodes", {
   id: int("id").autoincrement().primaryKey(),
   parentId: int("parentId"),

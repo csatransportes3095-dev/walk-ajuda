@@ -17,7 +17,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // ── Presença ──────────────────────────────────────────────────────────────
+  // â”€â”€ PresenÃ§a â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const setOnlineMut = trpc.chat.setOnline.useMutation();
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
     };
   }, [phone]);
 
-  // ── Dados ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Dados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const { data: users = [] } = trpc.chatUsers.listAllUsers.useQuery(
     undefined,
     { refetchInterval: 30000 }
@@ -73,7 +73,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
     onSuccess: (chat: any) => {
       if (chat) {
         setActiveChatId(chat.id);
-        setActiveChatName('Grupo Geral Walk Ajuda');
+        setActiveChatName('Grupo Geral H2 COLOMBIANO');
         setActiveChatPhoto(null);
         setActiveView('chat');
         onChatSelect(chat.id);
@@ -129,7 +129,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
 
   const otherUsers = (users as any[]).filter((u: any) => u.phone !== phone);
 
-  // ── Estilos compartilhados ────────────────────────────────────────────────
+  // â”€â”€ Estilos compartilhados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const panelStyle: React.CSSProperties = {
     background: '#111827',
     border: '1.5px solid rgba(37,211,102,0.25)',
@@ -141,7 +141,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
     borderBottom: '1px solid rgba(37,211,102,0.2)',
   };
 
-  // ── Lista de contatos ─────────────────────────────────────────────────────
+  // â”€â”€ Lista de contatos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const ContactList = () => (
     <>
       {/* Header */}
@@ -172,17 +172,17 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
         >
           <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0"
             style={{ background: 'rgba(37,211,102,0.15)', border: '1px solid rgba(37,211,102,0.3)' }}>
-            👥
+            ðŸ‘¥
           </div>
           <div className="text-left flex-1">
             <p className="font-bold text-white text-sm">Grupo Geral</p>
-            <p className="text-xs text-green-400/80">Todos os usuários da planilha</p>
+            <p className="text-xs text-green-400/80">Todos os usuÃ¡rios da planilha</p>
           </div>
           {groupGeralMut.isPending && <span className="text-xs text-white/50">...</span>}
         </button>
       </div>
 
-      {/* Recentes — apenas conversas com mensagens */}
+      {/* Recentes â€” apenas conversas com mensagens */}
       {(() => {
         const chatsWithMessages = (chats as any[]).filter((chat: any) => !!(lastMessages as any)[chat.id]);
         if (chatsWithMessages.length === 0) return null;
@@ -223,14 +223,14 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
         );
       })()}
 
-      {/* Usuários */}
+      {/* UsuÃ¡rios */}
       <div className="flex-1 overflow-y-auto">
         <p className="text-[10px] font-bold text-green-400/60 px-4 pt-2.5 pb-1 uppercase tracking-widest sticky top-0"
           style={{ background: '#111827' }}>
-          Usuários ({otherUsers.length})
+          UsuÃ¡rios ({otherUsers.length})
         </p>
         {otherUsers.length === 0 ? (
-          <p className="text-center text-white/30 text-sm py-8">Nenhum usuário disponível</p>
+          <p className="text-center text-white/30 text-sm py-8">Nenhum usuÃ¡rio disponÃ­vel</p>
         ) : (
           otherUsers.map((user: any) => {
             const isOnline = onlinePhones.has(user.phone);
@@ -259,7 +259,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-semibold text-white text-sm truncate">{user.name}</p>
                   <p className="text-xs font-medium" style={{ color: isOnline ? '#25d366' : '#6b7280' }}>
-                    {isOnline ? '● online' : '○ offline'}
+                    {isOnline ? 'â— online' : 'â—‹ offline'}
                   </p>
                 </div>
               </button>
@@ -270,7 +270,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
     </>
   );
 
-  // ── Conversa aberta ───────────────────────────────────────────────────────
+  // â”€â”€ Conversa aberta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const ChatView = () => (
     <>
       {/* Header */}
@@ -379,7 +379,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
 
   return (
     <>
-      {/* ── Botão flutuante ── */}
+      {/* â”€â”€ BotÃ£o flutuante â”€â”€ */}
       <button
         id="chat-floating-btn"
         onClick={() => setIsOpen(!isOpen)}
@@ -394,7 +394,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
         <MessageCircle className="w-7 h-7 text-white drop-shadow" />
       </button>
 
-      {/* ── Painel: desktop (canto direito, 380px) / mobile (quase tela cheia) ── */}
+      {/* â”€â”€ Painel: desktop (canto direito, 380px) / mobile (quase tela cheia) â”€â”€ */}
       {isOpen && (
         <div
           className="fixed z-50 flex flex-col rounded-2xl overflow-hidden"

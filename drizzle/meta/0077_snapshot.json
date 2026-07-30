@@ -847,7 +847,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'📁'"
+          "default": "'ðŸ“'"
         },
         "color": {
           "name": "color",
@@ -1266,7 +1266,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'Tire suas dúvidas antes de finalizar seu pedido'"
+          "default": "'Tire suas dÃºvidas antes de finalizar seu pedido'"
         },
         "subtitle": {
           "name": "subtitle",
@@ -1281,7 +1281,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'Tire suas dúvidas'"
+          "default": "'Tire suas dÃºvidas'"
         },
         "buttonColor": {
           "name": "buttonColor",
@@ -1588,7 +1588,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'📁'"
+          "default": "'ðŸ“'"
         },
         "color": {
           "name": "color",
@@ -3181,7 +3181,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'📸 Foto protegida'"
+          "default": "'ðŸ“¸ Foto protegida'"
         },
         "message": {
           "name": "message",
@@ -3189,7 +3189,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "('Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\n✅ O acesso será registrado automaticamente.')"
+          "default": "('Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\nâœ… O acesso serÃ¡ registrado automaticamente.')"
         },
         "imageUrl": {
           "name": "imageUrl",
@@ -4043,7 +4043,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "('Seu pedido precisa ser agendado. Escolha abaixo a melhor data e horário disponível para o seu atendimento.')"
+          "default": "('Seu pedido precisa ser agendado. Escolha abaixo a melhor data e horÃ¡rio disponÃ­vel para o seu atendimento.')"
         },
         "emailSubject": {
           "name": "emailSubject",
@@ -4051,7 +4051,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'Agende seu atendimento - WALK AJUDA'"
+          "default": "'Agende seu atendimento - H2 COLOMBIANO'"
         },
         "emailMessage": {
           "name": "emailMessage",
@@ -4059,7 +4059,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "('Olá! Seu pedido precisa ser agendado. Clique no link abaixo para escolher a data e o horário do seu atendimento.')"
+          "default": "('OlÃ¡! Seu pedido precisa ser agendado. Clique no link abaixo para escolher a data e o horÃ¡rio do seu atendimento.')"
         },
         "whatsappMessage": {
           "name": "whatsappMessage",
@@ -4067,7 +4067,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "('Olá! Seu pedido na WALK AJUDA precisa ser agendado. Acesse o link para escolher a data e o horário do seu atendimento:')"
+          "default": "('OlÃ¡! Seu pedido na H2 COLOMBIANO precisa ser agendado. Acesse o link para escolher a data e o horÃ¡rio do seu atendimento:')"
         },
         "confirmationMessage": {
           "name": "confirmationMessage",
@@ -4075,7 +4075,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "('Seu atendimento foi agendado com sucesso! Guarde a data e o horário escolhidos. O atendimento será feito pelo WhatsApp nesse horário.')"
+          "default": "('Seu atendimento foi agendado com sucesso! Guarde a data e o horÃ¡rio escolhidos. O atendimento serÃ¡ feito pelo WhatsApp nesse horÃ¡rio.')"
         },
         "noShowWarning": {
           "name": "noShowWarning",
@@ -4083,7 +4083,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "('ATENÇÃO: O atendimento será feito pelo WhatsApp no horário escolhido. Fique disponível no seu WhatsApp nesse horário. Se você não atender quando for chamado, será necessário reagendar.')"
+          "default": "('ATENÃ‡ÃƒO: O atendimento serÃ¡ feito pelo WhatsApp no horÃ¡rio escolhido. Fique disponÃ­vel no seu WhatsApp nesse horÃ¡rio. Se vocÃª nÃ£o atender quando for chamado, serÃ¡ necessÃ¡rio reagendar.')"
         },
         "accentColor": {
           "name": "accentColor",

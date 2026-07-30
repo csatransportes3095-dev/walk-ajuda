@@ -81,7 +81,7 @@ type Order = {
   thirdPartyName?: string | null;
   resellerDiscountApplied?: number | null;
 };
-// Helper para gerar chave única de cada sub-pedidoo
+// Helper para gerar chave Ãºnica de cada sub-pedidoo
 const getOrderKey = (order: Order): string => `${order.id}_${order.subOrderIndex ?? 0}`;
 const getIdFromKey = (key: string): number => parseInt(key.split('_')[0], 10);
 
@@ -111,7 +111,7 @@ function EmailTrackingBadge({ registrationId, subOrderIndex }: { registrationId:
     }`}>
       {tracking.opened ? (
         <>
-          <span className="text-green-400">✉️</span>
+          <span className="text-green-400">âœ‰ï¸</span>
           <span>Email lido</span>
           {tracking.openedAt && (
             <span className="text-green-500/70 ml-auto">
@@ -124,8 +124,8 @@ function EmailTrackingBadge({ registrationId, subOrderIndex }: { registrationId:
         </>
       ) : (
         <>
-          <span>📧</span>
-          <span>Email enviado (não lido)</span>
+          <span>ðŸ“§</span>
+          <span>Email enviado (nÃ£o lido)</span>
         </>
       )}
     </div>
@@ -142,7 +142,7 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   );
 }
 
-// Componente separado para o painel de configuração de progresso por pedido
+// Componente separado para o painel de configuraÃ§Ã£o de progresso por pedido
 // Componente para buscar automaticamente o nome do indicador pelo telefone
 function ReferrerLookup({
   phone,
@@ -165,8 +165,8 @@ function ReferrerLookup({
 
   if (cleanPhone.length < 10) return null;
   if (lookupQuery.isLoading) return <span className="text-xs text-muted-foreground">Buscando...</span>;
-  if (lookupQuery.data?.found) return <span className="text-xs text-green-400">✓ {lookupQuery.data.name}</span>;
-  return <span className="text-xs text-yellow-400">⚠ Telefone não encontrado no sistema</span>;
+  if (lookupQuery.data?.found) return <span className="text-xs text-green-400">âœ“ {lookupQuery.data.name}</span>;
+  return <span className="text-xs text-yellow-400">âš  Telefone nÃ£o encontrado no sistema</span>;
 }
 
 function ProgressConfigPanel({
@@ -218,7 +218,7 @@ function ProgressConfigPanel({
   return (
     <div className="border border-purple-500/30 bg-purple-500/5 rounded-xl p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-purple-300">📊 Progresso visível ao cliente</p>
+        <p className="text-xs font-semibold text-purple-300">ðŸ“Š Progresso visÃ­vel ao cliente</p>
         <button
           onClick={() => onSave(localKeys)}
           disabled={isSaving}
@@ -294,7 +294,7 @@ function FolderOrderStatusTab({ ar, folderId, customFolders, moveToFolderMut, re
                 : 'bg-purple-500/10 border-purple-500/30 text-purple-300 hover:bg-purple-500/20'
             }`}
           >
-            📂 Mover para outra pasta {movePastaOpen ? '▲' : '▼'}
+            ðŸ“‚ Mover para outra pasta {movePastaOpen ? 'â–²' : 'â–¼'}
           </button>
           {movePastaOpen && (
             <div className="mt-1 flex flex-col border border-border rounded-lg overflow-hidden">
@@ -308,7 +308,7 @@ function FolderOrderStatusTab({ ar, folderId, customFolders, moveToFolderMut, re
                   disabled={moveToFolderMut?.isPending}
                   className="text-left px-3 py-2 text-xs text-foreground hover:bg-muted/40 transition-colors border-b border-border last:border-0"
                 >
-                  {f.icon ? `${f.icon} ` : '📁 '}{f.name}
+                  {f.icon ? `${f.icon} ` : 'ðŸ“ '}{f.name}
                 </button>
               ))}
             </div>
@@ -373,7 +373,7 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
                 cfSortKey === k ? 'bg-purple-500/20 border-purple-500/50 text-purple-300' : 'bg-card border-border text-muted-foreground hover:border-purple-500/40'
               }`}
             >
-              {k === 'number' ? '*Número' : k === 'name' ? 'A–Z Nome' : 'Data'}
+              {k === 'number' ? '*NÃºmero' : k === 'name' ? 'Aâ€“Z Nome' : 'Data'}
               {cfSortKey === k && (cfSortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
             </button>
           ))}
@@ -390,7 +390,7 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
           <div className="text-center py-8 text-muted-foreground">
             <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-30" />
             <p className="text-sm">Nenhum pedido nesta pasta</p>
-            <p className="text-xs mt-1">Mova pedidos para cá usando o botão "Mover para Pasta" nos pedidos</p>
+            <p className="text-xs mt-1">Mova pedidos para cÃ¡ usando o botÃ£o "Mover para Pasta" nos pedidos</p>
           </div>
         )}
         {orders.map((ar) => {
@@ -423,13 +423,13 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {ar.customerNumber && (
-                      <span className="flex-shrink-0 text-[11px] font-mono font-bold text-cyan-400/80 bg-cyan-500/10 border border-cyan-500/20 rounded px-1.5 py-0.5 leading-none" title="Número de cadastro">
+                      <span className="flex-shrink-0 text-[11px] font-mono font-bold text-cyan-400/80 bg-cyan-500/10 border border-cyan-500/20 rounded px-1.5 py-0.5 leading-none" title="NÃºmero de cadastro">
                         *{ar.customerNumber}
                       </span>
                     )}
                     <p className="text-sm font-semibold text-foreground truncate">{ar.customerName || 'Cliente'}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">{ar.customerPhone} {ar.city ? `• ${ar.city}` : ''}</p>
+                  <p className="text-xs text-muted-foreground">{ar.customerPhone} {ar.city ? `â€¢ ${ar.city}` : ''}</p>
                 </div>
                 {ar.serviceName && (
                   <span className="text-xs px-2 py-0.5 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-full">{ar.serviceName}</span>
@@ -451,7 +451,7 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
                       }}
                     />
                     <button onClick={() => updatePriceMutation.mutate({ registrationId: ar.registrationId!, pricePaid: editingPrice[String(ar.registrationId)] })} className="text-xs px-1.5 py-0.5 bg-green-600 text-white rounded">OK</button>
-                    <button onClick={() => setEditingPrice(prev => { const n = { ...prev }; delete n[String(ar.registrationId)]; return n; })} className="text-xs px-1.5 py-0.5 bg-gray-600 text-white rounded">✕</button>
+                    <button onClick={() => setEditingPrice(prev => { const n = { ...prev }; delete n[String(ar.registrationId)]; return n; })} className="text-xs px-1.5 py-0.5 bg-gray-600 text-white rounded">âœ•</button>
                   </span>
                 ) : (
                   <span
@@ -460,7 +460,7 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
                     onClick={e => { e.stopPropagation(); setEditingPrice(prev => ({ ...prev, [String(ar.registrationId)]: ar.pricePaid || '' })); }}
                     title="Clique para editar o valor"
                   >
-                    💰 {ar.pricePaid || 'R$ 0,00'} ✏️
+                    ðŸ’° {ar.pricePaid || 'R$ 0,00'} âœï¸
                   </span>
                 )}
                 {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
@@ -481,7 +481,7 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        {tab === 'status' ? 'Status' : tab === 'cliente' ? 'Cliente' : tab === 'historico' ? 'Histórico' : tab === 'documentos' ? 'Docs' : 'Notas'}
+                        {tab === 'status' ? 'Status' : tab === 'cliente' ? 'Cliente' : tab === 'historico' ? 'HistÃ³rico' : tab === 'documentos' ? 'Docs' : 'Notas'}
                       </button>
                     ))}
                   </div>
@@ -505,8 +505,8 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
                         <div><p className="text-xs text-muted-foreground">Telefone</p><p className="text-sm text-foreground">{ar.customerPhone || '-'}</p></div>
                         <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm text-foreground">{ar.email || '-'}</p></div>
                         <div><p className="text-xs text-muted-foreground">Cidade</p><p className="text-sm text-foreground">{ar.city ? `${ar.city}${ar.uf ? `/${ar.uf}` : ''}` : '-'}</p></div>
-                        <div><p className="text-xs text-muted-foreground">Serviço</p><p className="text-sm text-foreground">{ar.serviceName || '-'}</p></div>
-                        <div><p className="text-xs text-muted-foreground">Opção</p><div className="text-sm text-foreground space-y-1">{ar.serviceOption ? ar.serviceOption.split(/(?=Garantia)/i).map((part, idx) => <p key={idx}>— {part}</p>) : '-'}</div></div>
+                        <div><p className="text-xs text-muted-foreground">ServiÃ§o</p><p className="text-sm text-foreground">{ar.serviceName || '-'}</p></div>
+                        <div><p className="text-xs text-muted-foreground">OpÃ§Ã£o</p><div className="text-sm text-foreground space-y-1">{ar.serviceOption ? ar.serviceOption.split(/(?=Garantia)/i).map((part, idx) => <p key={idx}>â€” {part}</p>) : '-'}</div></div>
                       </div>
                       {waPhone && (
                         <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 mt-2 px-3 py-2 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-medium hover:bg-green-600/30 transition-colors">
@@ -516,11 +516,11 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
                     </div>
                   )}
 
-                  {/* Histórico tab */}
+                  {/* HistÃ³rico tab */}
                   {(activeTab[cfKey] || 'status') === 'historico' && (
                     <div className="space-y-2">
                       {historyQuery.isLoading && <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-5 w-5 border-t-2 border-primary" /></div>}
-                      {historyQuery.data && historyQuery.data.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">Nenhum histórico</p>}
+                      {historyQuery.data && historyQuery.data.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">Nenhum histÃ³rico</p>}
                       {historyQuery.data && historyQuery.data.map((h: any) => (
                         <div key={h.id} className="flex items-start gap-2 bg-muted/30 border border-border rounded-lg px-3 py-2">
                           <div className="flex-1 min-w-0">
@@ -558,7 +558,7 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
                             rows={6}
                             value={noteText[cfKey] ?? (orderNoteQuery.data?.content || '')}
                             onChange={e => setNoteText((prev: any) => ({ ...prev, [cfKey]: e.target.value }))}
-                            placeholder="Escreva aqui informações internas..."
+                            placeholder="Escreva aqui informaÃ§Ãµes internas..."
                             className="w-full bg-muted/30 border border-border rounded-lg p-3 text-sm text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
                           />
                           <button
@@ -589,21 +589,21 @@ export default function AdminOrders() {
   const [location, navigate] = useLocation();
   const { isAdmin, isLoading: authLoading, username: adminUsername } = useAdminAuth();
 
-  // Lê parâmetro ?search=... da URL para navegação direta (ex: vindo de AdminCustomers)
+  // LÃª parÃ¢metro ?search=... da URL para navegaÃ§Ã£o direta (ex: vindo de AdminCustomers)
   const urlSearch = (() => {
     try { return new URLSearchParams(window.location.search).get('search') || ''; } catch { return ''; }
   })();
-  // Lê parâmetro ?open=ID para abrir card automaticamente (ex: vindo de Agendamentos)
+  // LÃª parÃ¢metro ?open=ID para abrir card automaticamente (ex: vindo de Agendamentos)
   const urlOpenId = (() => {
     try { return new URLSearchParams(window.location.search).get('open') || ''; } catch { return ''; }
   })();
   const [search, setSearch] = useState(urlSearch);
   const [searchPending, setSearchPending] = useState(false);
-  // Busca de emergência: ativada quando o termo começa com '/'
+  // Busca de emergÃªncia: ativada quando o termo comeÃ§a com '/'
   const isEmergencySearch = search.trimStart().startsWith('/');
   const emergencyTerm = isEmergencySearch ? search.trimStart().slice(1).trim() : '';
   const [emergencySearchEnabled, setEmergencySearchEnabled] = useState(false);
-  // Ativa a busca de emergência com debounce de 500ms após digitar
+  // Ativa a busca de emergÃªncia com debounce de 500ms apÃ³s digitar
   const emergencyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
     if (emergencyTimerRef.current) clearTimeout(emergencyTimerRef.current);
@@ -634,11 +634,11 @@ export default function AdminOrders() {
   const [csvImporting, setCsvImporting] = useState(false);
   const [csvImportResult, setCsvImportResult] = useState<{ imported: number; duplicates: number; errors: number; details: string[] } | null>(null);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
-  // IDs arquivados localmente para remoção imediata da lista (sem esperar refetch)
+  // IDs arquivados localmente para remoÃ§Ã£o imediata da lista (sem esperar refetch)
   const [localArchivedIds, setLocalArchivedIds] = useState<Set<string>>(new Set());
-  // Overrides de status locais para atualização imediata sem esperar refetch
+  // Overrides de status locais para atualizaÃ§Ã£o imediata sem esperar refetch
   const [localStatusOverrides, setLocalStatusOverrides] = useState<Record<string, string>>({});
-  // Status e expansão para cards arquivados
+  // Status e expansÃ£o para cards arquivados
   const [archivedStatusExpanded, setArchivedStatusExpanded] = useState<Set<string>>(new Set());
   const [archivedSelectedStatus, setArchivedSelectedStatus] = useState<Record<string, string>>({});
   const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month" | "custom">("all");
@@ -647,7 +647,7 @@ export default function AdminOrders() {
   const [showFilters, setShowFilters] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [sortBy, setSortBy] = useState<"date" | "status_date" | "name">("date");
-  // Ordenação para abas Arquivo e Entregues
+  // OrdenaÃ§Ã£o para abas Arquivo e Entregues
   type FolderSortKey = "number" | "name" | "date";
   type DeliveredSortKey = "number" | "name" | "date" | "notified";
   type FolderSortDir = "asc" | "desc";
@@ -661,12 +661,12 @@ export default function AdminOrders() {
   // Estado para expandir cards individuais de ARQUIVO e RG/CNH
   const [expandedArchivedId, setExpandedArchivedId] = useState<string | null>(null);
   const [expandedRgCnhId, setExpandedRgCnhId] = useState<string | null>(null);
-  // Status e expansão para cards RG/CNH Aprovado
+  // Status e expansÃ£o para cards RG/CNH Aprovado
   const [rgCnhStatusExpanded, setRgCnhStatusExpanded] = useState<Set<string>>(new Set());
   const [rgCnhSelectedStatus, setRgCnhSelectedStatus] = useState<Record<string, string>>({});
   const [rgCnhSortKey, setRgCnhSortKey] = useState<FolderSortKey>("number");
   const [rgCnhSortDir, setRgCnhSortDir] = useState<FolderSortDir>("asc");
-  // IDs movidos para RG/CNH localmente para remoção imediata da lista
+  // IDs movidos para RG/CNH localmente para remoÃ§Ã£o imediata da lista
   const [localRgCnhIds, setLocalRgCnhIds] = useState<Set<string>>(new Set());
   // Aba Perguntas
   const TQ_COLORS_ADM = ['#22c55e','#ef4444','#eab308','#3b82f6','#a855f7','#f97316','#6b7280'];
@@ -686,7 +686,7 @@ export default function AdminOrders() {
     pricePaid: string;
     answers: Array<{ question: string; answer: string }>;
   }>>({})
-  // Edição inline do valor pago
+  // EdiÃ§Ã£o inline do valor pago
   const [editingPrice, setEditingPrice] = useState<Record<string, string>>({});
   const updatePriceMutation = trpc.orderStatus.updateOrderData.useMutation({
     onSuccess: (_, vars) => {
@@ -735,7 +735,7 @@ export default function AdminOrders() {
     } catch { /* sem suporte a AudioContext */ }
   };
 
-  // Rastrear pedidos já visualizados pelo admin (persiste no localStorage)
+  // Rastrear pedidos jÃ¡ visualizados pelo admin (persiste no localStorage)
   const VIEWED_KEY = "walk_viewed_orders";
   const [viewedOrders, setViewedOrders] = useState<Set<string>>(() => {
     try {
@@ -773,23 +773,23 @@ export default function AdminOrders() {
 
   const productsQuery = trpc.products.list.useQuery();
   const allProductNames = (productsQuery.data ?? []).map(p => p.name as string);
-  // Status dinâmicos do banco
+  // Status dinÃ¢micos do banco
   const statusTypesQuery = trpc.statusTypes.list.useQuery();
   const dynamicStatuses = statusTypesQuery.data ?? [];
-  // Template editável da mensagem WhatsApp de pedidos
+  // Template editÃ¡vel da mensagem WhatsApp de pedidos
   const waOrderTemplateQuery = trpc.settings.getWhatsappOrderTemplate.useQuery();
   const waOrderTemplate = waOrderTemplateQuery.data?.template || null;
-  // Template editável da mensagem WhatsApp de login
+  // Template editÃ¡vel da mensagem WhatsApp de login
   const waLoginTemplateQuery = trpc.settings.getWhatsappLoginTemplate.useQuery();
   const waLoginTemplate = waLoginTemplateQuery.data?.template || null;
-  // Templates de mensagens rápidas WhatsApp
+  // Templates de mensagens rÃ¡pidas WhatsApp
   const waTemplatesQuery = trpc.whatsappTemplates.list.useQuery();
   const waTemplates = waTemplatesQuery.data ?? [];
-  // Estado do modal de seleção de mensagem rápida
+  // Estado do modal de seleÃ§Ã£o de mensagem rÃ¡pida
   const [waModalOrder, setWaModalOrder] = useState<any>(null);
   const [waModalMsg, setWaModalMsg] = useState("");
   const [waModalSelectedId, setWaModalSelectedId] = useState<number | null>(null);
-  // Mapa de ícones por nome (sincronizado com AdminStatusTypes)
+  // Mapa de Ã­cones por nome (sincronizado com AdminStatusTypes)
   const ICON_MAP: Record<string, React.ReactNode> = {
     Clock: <Clock className="w-4 h-4" />,
     Package: <Package className="w-4 h-4" />,
@@ -803,7 +803,7 @@ export default function AdminOrders() {
     AlertCircle: <AlertCircle className="w-4 h-4" />,
     Info: <Info className="w-4 h-4" />,
   };
-  // Constrói STATUS_CONFIG dinâmico — sempre usa o banco quando disponível
+  // ConstrÃ³i STATUS_CONFIG dinÃ¢mico â€” sempre usa o banco quando disponÃ­vel
   const ACTIVE_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode; description?: string }> =
     dynamicStatuses.length > 0
       ? Object.fromEntries(dynamicStatuses.map(s => [s.key, {
@@ -820,17 +820,17 @@ export default function AdminOrders() {
   const INITIAL_STATUS_KEY = ACTIVE_STATUS_ORDER[0] || 'recebido';
   const isManualSelectableStatus = (s: string) => s !== 'cancelado' && s !== 'recebido' && s !== INITIAL_STATUS_KEY;
 
-  // autoMarkUrgent automático REMOVIDO — urgência agora é somente manual pelo admin
+  // autoMarkUrgent automÃ¡tico REMOVIDO â€” urgÃªncia agora Ã© somente manual pelo admin
 
   const trpcUtils = trpc.useUtils();
 
-  // ─── MARCAÇÃO "EM ATENDIMENTO" ────────────────────────────────────────────────
+  // â”€â”€â”€ MARCAÃ‡ÃƒO "EM ATENDIMENTO" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const attentionQuery = trpc.attention.list.useQuery(undefined, {
     refetchInterval: 15000,
     staleTime: 0,
     refetchOnWindowFocus: true,
   });
-  // Mapa registrationId → adminName para acesso rápido
+  // Mapa registrationId â†’ adminName para acesso rÃ¡pido
   const attentionMap = new Map<number, string>(
     (attentionQuery.data ?? []).map((a: any) => [a.registrationId, a.adminName])
   );
@@ -848,18 +848,18 @@ export default function AdminOrders() {
       markAttentionMut.mutate({ registrationId, adminName: adminUsername || 'Admin' });
     }
   }
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const ordersQuery = trpc.orderStatus.listOrders.useQuery(undefined, {
     refetchInterval: 30000,
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchOnMount: true,
-    // Manter dados anteriores visíveis durante o refetch (evita lista vazia ao buscar)
+    // Manter dados anteriores visÃ­veis durante o refetch (evita lista vazia ao buscar)
     placeholderData: (prev: any) => prev,
   });
 
-  // Função de busca forçada: invalida cache e faz novo fetch do servidor
+  // FunÃ§Ã£o de busca forÃ§ada: invalida cache e faz novo fetch do servidor
   const handleForcedSearch = async () => {
     setSearchPending(true);
     try {
@@ -880,7 +880,7 @@ export default function AdminOrders() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // Query de busca de emergência — só executa quando o termo começa com '/'
+  // Query de busca de emergÃªncia â€” sÃ³ executa quando o termo comeÃ§a com '/'
   const emergencyQuery = trpc.orderStatus.emergencySearch.useQuery(
     { term: emergencyTerm || '_' },
     {
@@ -891,7 +891,7 @@ export default function AdminOrders() {
   );
   const emergencyResults = emergencyQuery.data ?? [];
 
-  // autoMarkUrgent automático REMOVIDO — urgência agora é somente manual pelo admin
+  // autoMarkUrgent automÃ¡tico REMOVIDO â€” urgÃªncia agora Ã© somente manual pelo admin
 
   // Abrir card automaticamente via ?open=registrationId (ex: vindo de Agendamentos)
   const openedViaUrl = React.useRef(false);
@@ -905,7 +905,7 @@ export default function AdminOrders() {
       setExpandedId(key);
       setActiveProductTab('__todos__');
       openedViaUrl.current = true;
-      // Scroll suave para o card após um tick
+      // Scroll suave para o card apÃ³s um tick
       setTimeout(() => {
         const el = document.getElementById(`order-card-${key}`);
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -934,7 +934,7 @@ export default function AdminOrders() {
 
   const updateMutation = trpc.orderStatus.updateStatus.useMutation({
     onMutate: async (vars) => {
-      // Atualização imediata via estado local (independente do cache tRPC)
+      // AtualizaÃ§Ã£o imediata via estado local (independente do cache tRPC)
       const orderKey = `${vars.registrationId}_${vars.subOrderIndex ?? 0}`;
       setLocalStatusOverrides(prev => ({ ...prev, [orderKey]: vars.status }));
       return { orderKey };
@@ -985,13 +985,13 @@ export default function AdminOrders() {
     onSuccess: () => {
       toast.success("Pedido arquivado! Acesse a aba Arquivo para consultar.");
       ordersQuery.refetch().then(() => {
-        // Após refetch confirmado, limpar o estado local (o servidor já filtra)
+        // ApÃ³s refetch confirmado, limpar o estado local (o servidor jÃ¡ filtra)
         setLocalArchivedIds(new Set());
       });
       archivedQuery.refetch();
     },
     onError: (_, vars) => {
-      // Reverter remoção local em caso de erro
+      // Reverter remoÃ§Ã£o local em caso de erro
       setLocalArchivedIds(prev => { const next = new Set(prev); next.delete(String(vars.registrationId)); return next; });
       toast.error("Erro ao arquivar pedido");
     },
@@ -1127,9 +1127,9 @@ export default function AdminOrders() {
     onError: () => toast.error('Erro ao ocultar/mostrar pasta'),
   });
 
-  // Carregar pedidos de cada pasta personalizada quando a aba é selecionada
+  // Carregar pedidos de cada pasta personalizada quando a aba Ã© selecionada
   const loadFolderOrders = async (folderId: number) => {
-    // Será feito via query individual por pasta
+    // SerÃ¡ feito via query individual por pasta
   };
 
   const deleteBulkMutation = trpc.orderStatus.deleteOrdersBulk.useMutation({
@@ -1149,7 +1149,7 @@ export default function AdminOrders() {
 
   const handlePhotoUpload = (orderId: string, phone: string, file: File) => {
     if (!file.type.startsWith('image/')) { toast.error('Selecione uma imagem'); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error('A foto deve ter no máximo 5MB'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error('A foto deve ter no mÃ¡ximo 5MB'); return; }
     setUploadingPhotoOrderId(orderId);
     const reader = new FileReader();
     reader.onload = () => {
@@ -1177,7 +1177,7 @@ export default function AdminOrders() {
 
   const toggleUrgentMutation = trpc.orderStatus.toggleUrgent.useMutation({
     onSuccess: () => ordersQuery.refetch(),
-    onError: () => toast.error("Erro ao atualizar urgência"),
+    onError: () => toast.error("Erro ao atualizar urgÃªncia"),
   });
 
   // ===== GRUPOS CUSTOMIZADOS =====
@@ -1190,14 +1190,14 @@ export default function AdminOrders() {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupColor, setNewGroupColor] = useState('red');
-  const [newGroupIcon, setNewGroupIcon] = useState('🔖');
+  const [newGroupIcon, setNewGroupIcon] = useState('ðŸ”–');
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
   const [editGroupName, setEditGroupName] = useState('');
   const [editGroupColor, setEditGroupColor] = useState('');
   const [editGroupIcon, setEditGroupIcon] = useState('');
   const [groupMenuOrderId, setGroupMenuOrderId] = useState<number | null>(null);
   const [groupMenuPos, setGroupMenuPos] = useState<{ top: number; left: number } | null>(null);
-  // Estado de colapso dos grupos extras (todos recolhidos por padrão)
+  // Estado de colapso dos grupos extras (todos recolhidos por padrÃ£o)
   const [collapsedExtraGroups, setCollapsedExtraGroups] = useState<Set<number>>(() => {
     try {
       const saved = localStorage.getItem('walk_collapsed_extra_groups');
@@ -1206,7 +1206,7 @@ export default function AdminOrders() {
     return new Set<number>();
   });
   const [extraGroupsInitialized, setExtraGroupsInitialized] = useState(false);
-  // Inicializar todos os grupos como recolhidos na primeira carga (se não houver estado salvo)
+  // Inicializar todos os grupos como recolhidos na primeira carga (se nÃ£o houver estado salvo)
   useEffect(() => {
     if (extraGroupsInitialized) return;
     const groups = customGroupsQuery.data;
@@ -1272,15 +1272,15 @@ export default function AdminOrders() {
   };
 
   const toggleCommissionPaidMutation = trpc.orderStatus.toggleCommissionPaid.useMutation({
-    onSuccess: () => { ordersQuery.refetch(); toast.success("Comissão atualizada!"); },
-    onError: () => toast.error("Erro ao atualizar comissão"),
+    onSuccess: () => { ordersQuery.refetch(); toast.success("ComissÃ£o atualizada!"); },
+    onError: () => toast.error("Erro ao atualizar comissÃ£o"),
   });
 
   const updateOrderSourceMutation = trpc.orderStatus.updateOrderSource.useMutation({
     onSuccess: (_, vars) => {
-      // Atualização otimista local
+      // AtualizaÃ§Ã£o otimista local
       ordersQuery.refetch();
-      toast.success(vars.orderSource === 'manual' ? 'Marcado como Manual' : 'Marcado como Automático');
+      toast.success(vars.orderSource === 'manual' ? 'Marcado como Manual' : 'Marcado como AutomÃ¡tico');
     },
     onError: () => toast.error('Erro ao atualizar origem do pedido'),
   });
@@ -1320,7 +1320,7 @@ export default function AdminOrders() {
     { enabled: !!expandedPhone && expandedId !== null && activeTab[expandedId!] === "status" }
   );
 
-  // Query e mutation de configuração de progresso por pedido
+  // Query e mutation de configuraÃ§Ã£o de progresso por pedido
   const progressConfigQuery = trpc.orderStatus.getProgressConfig.useQuery(
     { registrationId: expandedNumericId, subOrderIndex: expandedOrder?.subOrderIndex ?? 0 },
     { enabled: expandedId !== null && activeTab[expandedId!] === "status" }
@@ -1337,7 +1337,7 @@ export default function AdminOrders() {
   const deleteTQMutAdm = trpc.trackingQuestions.delete.useMutation({ onSuccess: () => { toast.success('Pergunta removida!'); tqListQuery.refetch(); }, onError: () => toast.error('Erro ao remover') });
   const toggleTQMutAdm = trpc.trackingQuestions.toggle.useMutation({ onSuccess: () => tqListQuery.refetch(), onError: () => toast.error('Erro ao alterar status') });
 
-  // Respostas do formulário dinâmico de acompanhamento
+  // Respostas do formulÃ¡rio dinÃ¢mico de acompanhamento
   const trackingAnswersQuery = trpc.trackingQuestions.getAnswersByOrder.useQuery(
     { orderId: expandedNumericId },
     { enabled: expandedId !== null && expandedNumericId > 0 && activeTab[expandedId!] === "status" }
@@ -1357,7 +1357,7 @@ export default function AdminOrders() {
     onError: () => toast.error('Erro ao remover pergunta'),
   });
 
-  // Solicitações de documentos pendentes
+  // SolicitaÃ§Ãµes de documentos pendentes
   const docRequestsQuery = trpc.docRequests.listByRegistration.useQuery(
     { registrationId: expandedNumericId },
     { enabled: expandedId !== null && activeTab[expandedId!] === "documentos" }
@@ -1367,21 +1367,21 @@ export default function AdminOrders() {
   const [showDocReqForm, setShowDocReqForm] = useState<string | null>(null);
   const createDocReqMut = trpc.docRequests.create.useMutation({
     onSuccess: () => {
-      toast.success('Solicitação enviada ao cliente!');
+      toast.success('SolicitaÃ§Ã£o enviada ao cliente!');
       setShowDocReqForm(null);
       setDocReqMsg(prev => ({ ...prev, [expandedId!]: '' }));
       docRequestsQuery.refetch();
     },
-    onError: () => toast.error('Erro ao criar solicitação'),
+    onError: () => toast.error('Erro ao criar solicitaÃ§Ã£o'),
   });
   const closeDocReqMut = trpc.docRequests.close.useMutation({
-    onSuccess: () => { toast.success('Solicitação encerrada'); docRequestsQuery.refetch(); },
+    onSuccess: () => { toast.success('SolicitaÃ§Ã£o encerrada'); docRequestsQuery.refetch(); },
   });
   const deleteDocReqMut = trpc.docRequests.delete.useMutation({
-    onSuccess: () => { toast.success('Solicitação removida'); docRequestsQuery.refetch(); },
+    onSuccess: () => { toast.success('SolicitaÃ§Ã£o removida'); docRequestsQuery.refetch(); },
   });
   const [loginFields, setLoginFields] = useState<Record<string, { loginPhone: string; loginEmail: string; loginPassword: string; authCode: string; emailLink: string; loginNotes: string; loginGroupLink: string }>>({})
-  // Inicializar loginFields com dados do banco somente se o admin ainda não editou esse pedido
+  // Inicializar loginFields com dados do banco somente se o admin ainda nÃ£o editou esse pedido
   useEffect(() => {
     if (!loginDataQuery.data || !expandedId) return;
     const key = expandedId;
@@ -1408,12 +1408,12 @@ export default function AdminOrders() {
     onError: () => toast.error('Erro ao salvar dados de login'),
   });
   const saveNoteMut = trpc.orderNotes.save.useMutation({
-    onSuccess: () => { toast.success('Anotação salva!'); orderNoteQuery.refetch(); },
-    onError: () => toast.error('Erro ao salvar anotação'),
+    onSuccess: () => { toast.success('AnotaÃ§Ã£o salva!'); orderNoteQuery.refetch(); },
+    onError: () => toast.error('Erro ao salvar anotaÃ§Ã£o'),
   });
   const deleteNoteMut = trpc.orderNotes.delete.useMutation({
-    onSuccess: () => { toast.success('Anotação removida!'); orderNoteQuery.refetch(); },
-    onError: () => toast.error('Erro ao remover anotação'),
+    onSuccess: () => { toast.success('AnotaÃ§Ã£o removida!'); orderNoteQuery.refetch(); },
+    onError: () => toast.error('Erro ao remover anotaÃ§Ã£o'),
   });
   const [noteText, setNoteText] = useState<Record<string, string>>({});
 
@@ -1423,7 +1423,7 @@ export default function AdminOrders() {
   const [newAdminDocLabel, setNewAdminDocLabel] = useState<Record<string, string>>({});
   const [showAdminUploadFor, setShowAdminUploadFor] = useState<string | null>(null);
   const [uploadingAdminDocFor, setUploadingAdminDocFor] = useState<string | null>(null);
-  // URL de vídeo externo
+  // URL de vÃ­deo externo
   const [showVideoUrlFor, setShowVideoUrlFor] = useState<string | null>(null);
   const [videoUrlInput, setVideoUrlInput] = useState<Record<string, string>>({});
   const [videoUrlLabel, setVideoUrlLabel] = useState<Record<string, string>>({});
@@ -1460,12 +1460,12 @@ export default function AdminOrders() {
 
   const addVideoUrlMut = trpc.orderStatus.addVideoUrl.useMutation({
     onSuccess: () => {
-      toast.success('Vídeo adicionado ao cliente!');
+      toast.success('VÃ­deo adicionado ao cliente!');
       setSavingVideoUrlFor(null);
       setShowVideoUrlFor(null);
       filesQuery.refetch();
     },
-    onError: () => { toast.error('Erro ao salvar URL do vídeo'); setSavingVideoUrlFor(null); },
+    onError: () => { toast.error('Erro ao salvar URL do vÃ­deo'); setSavingVideoUrlFor(null); },
   });
 
   const reuseFileMut = trpc.orderStatus.reuseFile.useMutation({
@@ -1478,7 +1478,7 @@ export default function AdminOrders() {
     onError: () => { toast.error('Erro ao reutilizar documento'); setReusingFileId(null); },
   });
 
-  // Observação editável do status Entregue
+  // ObservaÃ§Ã£o editÃ¡vel do status Entregue
   const [deliveryNote, setDeliveryNote] = useState<Record<string, string>>({});
   const [savingNote, setSavingNote] = useState<string | null>(null);
   const [deliveryEstimate, setDeliveryEstimate] = useState<Record<string, string>>({});
@@ -1490,9 +1490,9 @@ export default function AdminOrders() {
     onSuccess: (_, vars) => {
       ordersQuery.refetch();
       setSavingOrderNumber(null);
-      toast.success(vars.orderNumber ? `Número #${vars.orderNumber} salvo!` : 'Número removido!');
+      toast.success(vars.orderNumber ? `NÃºmero #${vars.orderNumber} salvo!` : 'NÃºmero removido!');
     },
-    onError: () => { setSavingOrderNumber(null); toast.error('Erro ao salvar número do pedido'); },
+    onError: () => { setSavingOrderNumber(null); toast.error('Erro ao salvar nÃºmero do pedido'); },
   });
 
   // Desbloqueio de PIN
@@ -1500,12 +1500,12 @@ export default function AdminOrders() {
     onSuccess: () => toast.success('PIN desbloqueado! O cliente pode tentar novamente.'),
     onError: () => toast.error('Erro ao desbloquear PIN'),
   });
-  // Reset de senha do cliente (volta para 4 últimos dígitos do telefone)
+  // Reset de senha do cliente (volta para 4 Ãºltimos dÃ­gitos do telefone)
   const resetPinMut = trpc.customerPin.adminReset.useMutation({
     onSuccess: () => { toast.success('Senha resetada!'); customerPinQuery.refetch(); },
     onError: () => toast.error('Erro ao resetar senha'),
   });
-  // Edição manual do PIN pelo admin
+  // EdiÃ§Ã£o manual do PIN pelo admin
   const [adminPinEdit, setAdminPinEdit] = useState<Record<string, string>>({});
   const setAdminPinMut = trpc.customerPin.adminSet.useMutation({
     onSuccess: () => { toast.success('Senha de acompanhamento atualizada!'); customerPinQuery.refetch(); },
@@ -1514,17 +1514,17 @@ export default function AdminOrders() {
 
   const updateNoteMut = trpc.orderStatus.updateNote.useMutation({
     onSuccess: () => {
-      toast.success('Observação salva!');
+      toast.success('ObservaÃ§Ã£o salva!');
       setSavingNote(null);
       historyQuery.refetch();
     },
-    onError: () => { toast.error('Erro ao salvar observação'); setSavingNote(null); },
+    onError: () => { toast.error('Erro ao salvar observaÃ§Ã£o'); setSavingNote(null); },
   });
 
-  // ─── ETAPAS INTERNAS ──────────────────────────────────────────────────────
+  // â”€â”€â”€ ETAPAS INTERNAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const stagesListQuery = trpc.stages.list.useQuery();
   const [selectedStageId, setSelectedStageId] = useState<Record<number, number | null>>({});
-  // IDs de todos os pedidos visíveis para batch query de etapas
+  // IDs de todos os pedidos visÃ­veis para batch query de etapas
   const allVisibleOrderIds = React.useMemo(
     () => ((ordersQuery.data || []) as Order[]).map(o => o.id),
     [ordersQuery.data]
@@ -1549,15 +1549,15 @@ export default function AdminOrders() {
     },
     onError: () => toast.error('Erro ao atualizar etapa'),
   });
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const updateDeliveryEstimateMut = trpc.orderStatus.updateDeliveryEstimate.useMutation({
     onSuccess: () => {
-      toast.success('Previsão de entrega salva!');
+      toast.success('PrevisÃ£o de entrega salva!');
       setSavingEstimate(null);
       ordersQuery.refetch();
     },
-    onError: (err) => { console.error('[updateDeliveryEstimate] erro:', err); toast.error('Erro ao salvar previsão de entrega'); setSavingEstimate(null); },
+    onError: (err) => { console.error('[updateDeliveryEstimate] erro:', err); toast.error('Erro ao salvar previsÃ£o de entrega'); setSavingEstimate(null); },
   });
 
   const handleDocUpload = async (order: Order, file: File) => {
@@ -1565,11 +1565,11 @@ export default function AdminOrders() {
     if (!label) { toast.error('Informe o nome do documento'); return; }
     const isVideo = file.type.startsWith('video/');
     const maxSize = isVideo ? 200 * 1024 * 1024 : 20 * 1024 * 1024;
-    if (file.size > maxSize) { toast.error(isVideo ? 'Vídeo muito grande (máx 200MB)' : 'Arquivo muito grande (máx 20MB)'); return; }
+    if (file.size > maxSize) { toast.error(isVideo ? 'VÃ­deo muito grande (mÃ¡x 200MB)' : 'Arquivo muito grande (mÃ¡x 20MB)'); return; }
     setUploadingDocFor(getOrderKey(order));
     try {
       if (isVideo) {
-        // Vídeo: upload chunked
+        // VÃ­deo: upload chunked
         const CHUNK_SIZE = 20 * 1024 * 1024;
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
         const initResp = await fetch('/api/upload/init-chunked', {
@@ -1590,7 +1590,7 @@ export default function AdminOrders() {
         }
         const finalResp = await fetch('/api/upload/finalize-chunked', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uploadId }) });
         if (!finalResp.ok) { const err = await finalResp.json().catch(() => ({})); throw new Error(err.error || 'Erro ao finalizar upload'); }
-        toast.success('Vídeo enviado com sucesso!');
+        toast.success('VÃ­deo enviado com sucesso!');
       } else {
         // Imagem/PDF: upload multipart direto (sem base64, sem tRPC)
         const formData = new FormData();
@@ -1621,11 +1621,11 @@ export default function AdminOrders() {
     if (!label) { toast.error('Informe o nome do documento'); return; }
     const isVideo = file.type.startsWith('video/');
     const maxSize = isVideo ? 200 * 1024 * 1024 : 20 * 1024 * 1024;
-    if (file.size > maxSize) { toast.error(isVideo ? 'Vídeo muito grande (máx 200MB)' : 'Arquivo muito grande (máx 20MB)'); return; }
+    if (file.size > maxSize) { toast.error(isVideo ? 'VÃ­deo muito grande (mÃ¡x 200MB)' : 'Arquivo muito grande (mÃ¡x 20MB)'); return; }
     setUploadingAdminDocFor(getOrderKey(order));
     try {
       if (isVideo) {
-        // Vídeo: upload em chunks de 20MB
+        // VÃ­deo: upload em chunks de 20MB
         const CHUNK_SIZE = 20 * 1024 * 1024;
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
         const initResp = await fetch('/api/upload/init-chunked', {
@@ -1654,11 +1654,11 @@ export default function AdminOrders() {
               if (attempt < 2) await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
             }
           }
-          if (!chunkSent) throw lastChunkErr || new Error(`Falha no chunk ${i} após 3 tentativas`);
+          if (!chunkSent) throw lastChunkErr || new Error(`Falha no chunk ${i} apÃ³s 3 tentativas`);
         }
         const finalResp = await fetch('/api/upload/finalize-chunked', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uploadId }) });
         if (!finalResp.ok) { const err = await finalResp.json().catch(() => ({})); throw new Error(err.error || 'Erro ao finalizar upload'); }
-        toast.success('Vídeo enviado com sucesso!');
+        toast.success('VÃ­deo enviado com sucesso!');
       } else {
         // Imagem/PDF: upload multipart direto (sem base64, sem tRPC)
         const formData = new FormData();
@@ -1708,12 +1708,12 @@ export default function AdminOrders() {
   );
   if (!isAdmin) return null;
 
-  // Filtrar pedidos arquivados/RG-CNH localmente para remoção imediata sem esperar refetch
-  // Aplicar overrides de status locais para atualização imediata
+  // Filtrar pedidos arquivados/RG-CNH localmente para remoÃ§Ã£o imediata sem esperar refetch
+  // Aplicar overrides de status locais para atualizaÃ§Ã£o imediata
   const orders: Order[] = ((ordersQuery.data || []) as Order[])
     .filter(o => !localArchivedIds.has(String(o.id)))
     .filter(o => !localRgCnhIds.has(String(o.id)))
-    .filter(o => !o.folderName) // Pedidos em pastas personalizadas ficam somente na pasta (Opção A)
+    .filter(o => !o.folderName) // Pedidos em pastas personalizadas ficam somente na pasta (OpÃ§Ã£o A)
     .map(o => {
       const key = getOrderKey(o);
       if (localStatusOverrides[key] !== undefined) {
@@ -1723,7 +1723,7 @@ export default function AdminOrders() {
     });
 
   const exportCSV = () => {
-    const headers = ["Nome", "Telefone", "Email", "Cidade", "UF", "Serviço", "Opção", "Status", "Data do Pedido"];
+    const headers = ["Nome", "Telefone", "Email", "Cidade", "UF", "ServiÃ§o", "OpÃ§Ã£o", "Status", "Data do Pedido"];
     const rows = filtered.map(o => [
       o.customerName || o.codeClientName || "",
       o.phone || "",
@@ -1762,10 +1762,10 @@ export default function AdminOrders() {
     if (["uf", "estado"].includes(normalized)) return "uf";
     if (["referredby", "referred by", "indicacao", "indicado por", "recomendado por", "indicador"].includes(normalized)) return "referredBy";
     if (["referredbyphone", "referred by phone", "telefone do indicado", "telefone indicador", "telefone indicacao"].includes(normalized)) return "referredByPhone";
-    if (["service", "servico", "serviço", "servicename", "nome do servico"].includes(normalized)) return "serviceName";
-    if (["serviceoption", "service option", "opcao", "opção", "opcao do servico", "opção do serviço"].includes(normalized)) return "serviceOption";
-    if (["status", "situacao", "situação"].includes(normalized)) return "status";
-    if (["note", "observacao", "observação", "obs"].includes(normalized)) return "note";
+    if (["service", "servico", "serviÃ§o", "servicename", "nome do servico"].includes(normalized)) return "serviceName";
+    if (["serviceoption", "service option", "opcao", "opÃ§Ã£o", "opcao do servico", "opÃ§Ã£o do serviÃ§o"].includes(normalized)) return "serviceOption";
+    if (["status", "situacao", "situaÃ§Ã£o"].includes(normalized)) return "status";
+    if (["note", "observacao", "observaÃ§Ã£o", "obs"].includes(normalized)) return "note";
     if (["answers", "respostas", "answer"].includes(normalized)) return "answers";
     if (["date", "data", "data do pedido", "order date", "orderdate"].includes(normalized)) return "date";
     return null;
@@ -1815,7 +1815,7 @@ export default function AdminOrders() {
     };
     reader.onerror = () => {
       setCsvPreview(null);
-      setCsvErrors(["Não foi possível ler o arquivo CSV."]);
+      setCsvErrors(["NÃ£o foi possÃ­vel ler o arquivo CSV."]);
       setCsvImportResult(null);
     };
     reader.readAsText(file, "UTF-8");
@@ -1860,7 +1860,7 @@ export default function AdminOrders() {
           errors: Number(data.errors ?? 0),
           details: Array.isArray(data.details) ? data.details.slice(0, 10) : [],
         });
-        toast.success(`Importação concluída: ${data.imported ?? 0} pedidos importados.`);
+        toast.success(`ImportaÃ§Ã£o concluÃ­da: ${data.imported ?? 0} pedidos importados.`);
         await ordersQuery.refetch();
       }
     } catch (error) {
@@ -1871,24 +1871,24 @@ export default function AdminOrders() {
     }
   };
 
-  // Helper para verificar se um status é "entregue" — declarado antes de filtered para uso global
+  // Helper para verificar se um status Ã© "entregue" â€” declarado antes de filtered para uso global
   const isDeliveredStatus = (status: string | null) =>
     status === "entregue" || status === "login_de_acesso" || status === "pedido_entregue";
 
   const filtered = orders.filter(o => {
     const name = (o.customerName || o.codeClientName || "").toLowerCase();
     const phone = (o.phone || "").toLowerCase();
-    const phoneDigits = (o.phone || "").replace(/\D/g, ""); // telefone só com dígitos para busca
+    const phoneDigits = (o.phone || "").replace(/\D/g, ""); // telefone sÃ³ com dÃ­gitos para busca
     const email = (o.customerEmail || "").toLowerCase();
     const numericPrefix = (o.customerName || o.codeClientName || "").trim().match(/^(\d+)/)?.[1] || "";
     const rawTerm = search.trim();
     const term = rawTerm.toLowerCase();
-    const termDigits = rawTerm.replace(/\D/g, ""); // termo de busca só com dígitos
+    const termDigits = rawTerm.replace(/\D/g, ""); // termo de busca sÃ³ com dÃ­gitos
 
     // Detectar tipo de busca:
-    // #10001 → busca por número de pedido exato
-    // *37 ou 37 (número puro) → busca por número de cadastro exato
-    // texto → busca por nome/telefone/email
+    // #10001 â†’ busca por nÃºmero de pedido exato
+    // *37 ou 37 (nÃºmero puro) â†’ busca por nÃºmero de cadastro exato
+    // texto â†’ busca por nome/telefone/email
     const isOrderSearch = rawTerm.startsWith("#");
     const isCadastroSearch = rawTerm.startsWith("*");
     const orderSearchNum = isOrderSearch ? rawTerm.slice(1) : "";
@@ -1899,17 +1899,17 @@ export default function AdminOrders() {
     if (!rawTerm) {
       matchSearch = true;
     } else if (isOrderSearch) {
-      // Busca por #número: match exato no orderNumber
+      // Busca por #nÃºmero: match exato no orderNumber
       matchSearch = o.orderNumber != null && String(o.orderNumber) === orderSearchNum;
     } else if (isCadastroSearch) {
-      // Busca por *número: match exato no customerNumber
+      // Busca por *nÃºmero: match exato no customerNumber
       matchSearch = o.customerNumber != null && String(o.customerNumber) === cadastroSearchNum;
     } else if (isPureNumber) {
-      // Número puro: match exato por customerNumber (número de cadastro)
+      // NÃºmero puro: match exato por customerNumber (nÃºmero de cadastro)
       const exactMatch = o.customerNumber != null && String(o.customerNumber) === term;
-      // Se tem 8+ dígitos, também busca por telefone (número digitado sem formatação)
+      // Se tem 8+ dÃ­gitos, tambÃ©m busca por telefone (nÃºmero digitado sem formataÃ§Ã£o)
       const phoneMatch = termDigits.length >= 8 && phoneDigits.includes(termDigits);
-      // Fallback: se não achar por cadastro, busca por orderNumber, prefixo numérico do nome ou telefone
+      // Fallback: se nÃ£o achar por cadastro, busca por orderNumber, prefixo numÃ©rico do nome ou telefone
       const fallback = !exactMatch && (
         (o.orderNumber != null && String(o.orderNumber) === term) ||
         (!!numericPrefix && numericPrefix === term) ||
@@ -1917,7 +1917,7 @@ export default function AdminOrders() {
       );
       matchSearch = exactMatch || fallback;
     } else {
-      // Busca textual normal — compara nome, email e telefone (com e sem formatação)
+      // Busca textual normal â€” compara nome, email e telefone (com e sem formataÃ§Ã£o)
       const phoneMatch = phone.includes(term) || (termDigits.length >= 6 && phoneDigits.includes(termDigits));
       matchSearch = name.includes(term) || phoneMatch || email.includes(term) ||
         (!!numericPrefix && numericPrefix.startsWith(term));
@@ -1965,7 +1965,7 @@ export default function AdminOrders() {
       }
     }
     // Se houver busca ativa, ignorar filtros de status e data (busca global)
-    // Sempre excluir entregues do filtered — entregues ficam somente na aba Entregues
+    // Sempre excluir entregues do filtered â€” entregues ficam somente na aba Entregues
     const isDelivered = isDeliveredStatus(o.latestStatus);
     if (rawTerm) return matchSearch && !isDelivered;
     return matchSearch && matchStatus && matchUrgent && matchIndicador && matchDate && !isDelivered;
@@ -2004,7 +2004,7 @@ export default function AdminOrders() {
   const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selected.has(id as string));
   const someSelected = selected.size > 0;
 
-  // activeOrders: sorted já não inclui entregues (filtered exclui entregues)
+  // activeOrders: sorted jÃ¡ nÃ£o inclui entregues (filtered exclui entregues)
   const activeOrders = sorted;
 
   // Agrupar pedidos com mesmo cartGroupId em grupos de carrinho
@@ -2022,7 +2022,7 @@ export default function AdminOrders() {
       }
       const group = cartGroupMap.get(cgId)!;
       group.orders.push(o);
-      // O primaryOrder é o item com cartItemIndex=0 (ou o primeiro encontrado)
+      // O primaryOrder Ã© o item com cartItemIndex=0 (ou o primeiro encontrado)
       if ((o.cartItemIndex ?? 0) < (group.primaryOrder.cartItemIndex ?? 0)) {
         group.primaryOrder = o;
       }
@@ -2038,7 +2038,7 @@ export default function AdminOrders() {
     }
   }
 
-  // Helper de ordenação para pastas (Arquivo e Entregues)
+  // Helper de ordenaÃ§Ã£o para pastas (Arquivo e Entregues)
   function sortFolderOrders<T extends { customerName?: string | null; customerNumber?: number | null; orderNumber?: number | null; latestStatusAt?: number | null; accessedAt?: number | null }>(list: T[], key: "number" | "name" | "date", dir: "asc" | "desc"): T[] {
     return [...list].sort((a, b) => {
       let cmp = 0;
@@ -2082,7 +2082,7 @@ export default function AdminOrders() {
     });
   }
 
-  // deliveredOrders: buscar diretamente de orders (não de sorted, pois filtered já exclui entregues)
+  // deliveredOrders: buscar diretamente de orders (nÃ£o de sorted, pois filtered jÃ¡ exclui entregues)
   const deliveredPhoneClean = deliveredPhoneFilter.replace(/\D/g, '');
   const deliveredOrders = sortDeliveredOrders(
     orders.filter(o => {
@@ -2103,7 +2103,7 @@ export default function AdminOrders() {
     if (!groupMap.has(key)) groupMap.set(key, []);
     groupMap.get(key)!.push(o);
   }
-  // Ordenar grupos: produtos com mais pedidos primeiro, "Sem produto" por último
+  // Ordenar grupos: produtos com mais pedidos primeiro, "Sem produto" por Ãºltimo
   const sortedGroupKeys = Array.from(groupMap.keys()).sort((a, b) => {
     if (a === SEM_PRODUTO) return 1;
     if (b === SEM_PRODUTO) return -1;
@@ -2111,7 +2111,7 @@ export default function AdminOrders() {
   });
   for (const key of sortedGroupKeys) productGroups.push({ name: key, orders: groupMap.get(key)! });
   // Adicionar produtos sem pedidos (da lista completa de produtos)
-  // Usa comparação normalizada (trim + lowercase) para evitar duplicatas por espaços/acentos
+  // Usa comparaÃ§Ã£o normalizada (trim + lowercase) para evitar duplicatas por espaÃ§os/acentos
   for (const prodName of allProductNames) {
     const normalizedNew = prodName.trim().toLowerCase();
     const alreadyExists = productGroups.some(g => g.name.trim().toLowerCase() === normalizedNew);
@@ -2119,12 +2119,12 @@ export default function AdminOrders() {
       productGroups.push({ name: prodName, orders: [] });
     }
   }
-  // Mapear produto -> índice de cor
+  // Mapear produto -> Ã­ndice de cor
   const productColorIndex = new Map<string, number>();
   productGroups.forEach((g, i) => productColorIndex.set(g.name, i % PRODUCT_COLORS.length));
 
-  // Sub-agrupar por opção (serviceOption) dentro de cada produto
-  const SEM_OPCAO = "(Sem opção)";
+  // Sub-agrupar por opÃ§Ã£o (serviceOption) dentro de cada produto
+  const SEM_OPCAO = "(Sem opÃ§Ã£o)";
   type OptionGroup = { name: string; orders: typeof sorted };
   function buildOptionGroups(orders: typeof sorted): OptionGroup[] {
     const optMap = new Map<string, typeof sorted>();
@@ -2133,7 +2133,7 @@ export default function AdminOrders() {
       if (!optMap.has(key)) optMap.set(key, []);
       optMap.get(key)!.push(o);
     }
-    // Se só há uma opção ou nenhuma, não sub-agrupar
+    // Se sÃ³ hÃ¡ uma opÃ§Ã£o ou nenhuma, nÃ£o sub-agrupar
     if (optMap.size <= 1) return [{ name: "", orders }];
     const sortedOptKeys = Array.from(optMap.keys()).sort((a, b) => {
       if (a === SEM_OPCAO) return 1;
@@ -2159,9 +2159,9 @@ export default function AdminOrders() {
 
   const handleUpdateStatus = (order: Order) => {
     const status = selectedStatus[getOrderKey(order)] || order.latestStatus || "em_andamento";
-    // Nunca enviar 'recebido' manualmente — criaria sub-pedido duplicado
+    // Nunca enviar 'recebido' manualmente â€” criaria sub-pedido duplicado
     if (status === 'recebido') {
-      toast.error('Status "Recebido" é gerado automaticamente e não pode ser definido manualmente.');
+      toast.error('Status "Recebido" Ã© gerado automaticamente e nÃ£o pode ser definido manualmente.');
       return;
     }
     updateMutation.mutate({
@@ -2185,7 +2185,7 @@ export default function AdminOrders() {
   const handleUpdateStatusSilent = (order: Order) => {
     const status = selectedStatus[getOrderKey(order)] || order.latestStatus || "em_andamento";
     if (status === 'recebido') {
-      toast.error('Status "Recebido" é gerado automaticamente e não pode ser definido manualmente.');
+      toast.error('Status "Recebido" Ã© gerado automaticamente e nÃ£o pode ser definido manualmente.');
       return;
     }
     updateMutation.mutate({
@@ -2246,17 +2246,17 @@ export default function AdminOrders() {
   };
 
   const handleSaveCustomer = (order: Order) => {
-    if (!order.customerId) { toast.error("Cliente não encontrado no banco"); return; }
+    if (!order.customerId) { toast.error("Cliente nÃ£o encontrado no banco"); return; }
     const data = editingCustomer[getOrderKey(order)];
     if (!data) return;
     const phoneDigits = data.phone.replace(/\D/g, "");
     if (phoneDigits && phoneDigits.length < 10) {
-      toast.error("Telefone inválido (mínimo 10 dígitos)");
+      toast.error("Telefone invÃ¡lido (mÃ­nimo 10 dÃ­gitos)");
       return;
     }
     const parsedCustomerNumber = data.customerNumber ? parseInt(data.customerNumber, 10) : null;
     if (data.customerNumber && (isNaN(parsedCustomerNumber!) || parsedCustomerNumber! <= 0)) {
-      toast.error("Número de cadastro inválido");
+      toast.error("NÃºmero de cadastro invÃ¡lido");
       return;
     }
     updateCustomerMutation.mutate({
@@ -2319,11 +2319,11 @@ export default function AdminOrders() {
         icon={<Package className="w-5 h-5" />}
         rightContent={
           <div className="flex items-center gap-1">
-            {/* Dropdown de ordenação */}
+            {/* Dropdown de ordenaÃ§Ã£o */}
             <div className="relative group">
               <button
                 className="flex items-center gap-1 px-2 py-1.5 bg-card border border-border rounded-lg text-xs font-medium hover:border-primary/50 transition-colors"
-                title="Ordenação"
+                title="OrdenaÃ§Ã£o"
                 onClick={() => setSortOrder(prev => prev === "asc" ? "desc" : "asc")}
               >
                 {sortOrder === "asc" ? <ArrowUp className="w-3.5 h-3.5 text-primary" /> : <ArrowDown className="w-3.5 h-3.5 text-primary" />}
@@ -2348,7 +2348,7 @@ export default function AdminOrders() {
                   </button>
                 ))}
                 <div className="border-t border-border my-1" />
-                <div className="px-3 py-1 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Direção</div>
+                <div className="px-3 py-1 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">DireÃ§Ã£o</div>
                 <button
                   onClick={() => setSortOrder("asc")}
                   className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/30 transition-colors ${
@@ -2376,7 +2376,7 @@ export default function AdminOrders() {
             )}
             {commissionPendingCount > 0 && (
               <button onClick={() => navigate("/admin/commissions")} className="flex items-center gap-1 px-2 py-1.5 bg-amber-500/20 border border-amber-500/50 text-amber-400 rounded-lg text-xs font-semibold hover:bg-amber-500/30 transition-colors animate-pulse">
-                💰{commissionPendingCount}
+                ðŸ’°{commissionPendingCount}
               </button>
             )}
             <button onClick={() => navigate("/admin/orders/new")} className="flex items-center gap-1 px-2 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors">
@@ -2401,7 +2401,7 @@ export default function AdminOrders() {
             <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
               <div>
                 <h2 className="text-lg font-semibold">Importar pedidos CSV</h2>
-                <p className="text-sm text-muted-foreground">Envie um arquivo CSV com os pedidos. Os valores duplicados por telefone/data serão ignorados.</p>
+                <p className="text-sm text-muted-foreground">Envie um arquivo CSV com os pedidos. Os valores duplicados por telefone/data serÃ£o ignorados.</p>
               </div>
               <button onClick={() => setShowCsvImportModal(false)} className="rounded-full p-2 text-muted-foreground hover:bg-card transition-colors">
                 <X className="w-4 h-4" />
@@ -2433,7 +2433,7 @@ export default function AdminOrders() {
               )}
               {csvImportResult && (
                 <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm text-foreground">
-                  <div className="font-semibold">Resultado da importação</div>
+                  <div className="font-semibold">Resultado da importaÃ§Ã£o</div>
                   <div className="mt-2 grid gap-1 text-sm text-muted-foreground">
                     <div>Importados: {csvImportResult.imported}</div>
                     <div>Duplicatas ignoradas: {csvImportResult.duplicates}</div>
@@ -2442,7 +2442,7 @@ export default function AdminOrders() {
                   {csvImportResult.details.length > 0 && (
                     <div className="mt-3 space-y-1 text-xs text-muted-foreground">
                       {csvImportResult.details.map((detail, index) => (
-                        <div key={index}>• {detail}</div>
+                        <div key={index}>â€¢ {detail}</div>
                       ))}
                     </div>
                   )}
@@ -2531,7 +2531,7 @@ export default function AdminOrders() {
                     };
                     // Tenta abrir imediatamente (cache hit)
                     if (!tryOpen()) {
-                      // Se não abriu, aguarda refetch e tenta novamente
+                      // Se nÃ£o abriu, aguarda refetch e tenta novamente
                       await handleForcedSearch();
                       setTimeout(() => {
                       const currentFiltered = (ordersQuery.data ?? []).filter(o => {
@@ -2575,11 +2575,11 @@ export default function AdminOrders() {
               />
               {isEmergencySearch && (
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-orange-400 bg-orange-950/60 px-1.5 py-0.5 rounded">
-                  🚨 GLOBAL
+                  ðŸš¨ GLOBAL
                 </span>
               )}
             </div>
-            {/* Botão de busca dedicado */}
+            {/* BotÃ£o de busca dedicado */}
             <button
               onClick={handleForcedSearch}
               disabled={searchPending}
@@ -2614,11 +2614,11 @@ export default function AdminOrders() {
             </button>
           </div>
 
-          {/* Filtros colápsáveis */}
+          {/* Filtros colÃ¡psÃ¡veis */}
           {showFilters && (<>
-          {/* Cabeçalho dos filtros com botão Limpar */}
+          {/* CabeÃ§alho dos filtros com botÃ£o Limpar */}
           <div className="flex items-center justify-between pb-0.5">
-            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Período</span>
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">PerÃ­odo</span>
             {(dateFilter !== "all" || filterStatus !== "all") && (
               <button
                 onClick={() => { setDateFilter("all"); setDateFrom(""); setDateTo(""); setFilterStatus("all"); }}
@@ -2628,14 +2628,14 @@ export default function AdminOrders() {
               </button>
             )}
           </div>
-          {/* Filtros de período - grid 5 colunas */}
+          {/* Filtros de perÃ­odo - grid 5 colunas */}
           <div className="grid grid-cols-5 gap-1.5">
             {([
-              { value: "all", label: "Todos", icon: "📋" },
-              { value: "today", label: "Hoje", icon: "📅" },
-              { value: "week", label: "7 dias", icon: "📆" },
-              { value: "month", label: "30 dias", icon: "🗓️" },
-              { value: "custom", label: "Intervalo", icon: "🔎" },
+              { value: "all", label: "Todos", icon: "ðŸ“‹" },
+              { value: "today", label: "Hoje", icon: "ðŸ“…" },
+              { value: "week", label: "7 dias", icon: "ðŸ“†" },
+              { value: "month", label: "30 dias", icon: "ðŸ—“ï¸" },
+              { value: "custom", label: "Intervalo", icon: "ðŸ”Ž" },
             ] as const).map(f => (
               <button
                 key={f.value}
@@ -2664,7 +2664,7 @@ export default function AdminOrders() {
                 />
               </div>
               <div className="flex-1">
-                <label className="text-[10px] text-muted-foreground font-semibold block mb-0.5">Até</label>
+                <label className="text-[10px] text-muted-foreground font-semibold block mb-0.5">AtÃ©</label>
                 <input
                   type="date"
                   value={dateTo}
@@ -2699,7 +2699,7 @@ export default function AdminOrders() {
                   : "bg-card border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
               }`}
             >
-              <span className="text-base leading-none">📊</span>
+              <span className="text-base leading-none">ðŸ“Š</span>
               <span>Todos</span>
             </button>
             {/* Urgente */}
@@ -2716,7 +2716,7 @@ export default function AdminOrders() {
               {urgentCount > 0 && filterStatus !== "urgente" && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold">{urgentCount > 9 ? '9+' : urgentCount}</span>
               )}
-              <span className="text-base leading-none">🚨</span>
+              <span className="text-base leading-none">ðŸš¨</span>
               <span>Urgente</span>
             </button>
             {/* Com Indicador */}
@@ -2735,7 +2735,7 @@ export default function AdminOrders() {
               {commissionPendingCount > 0 && filterStatus !== "com_indicador" && (
                 <span className="absolute -top-1 -right-1 bg-amber-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold">{commissionPendingCount > 9 ? '9+' : commissionPendingCount}</span>
               )}
-              <span className="text-base leading-none">💰</span>
+              <span className="text-base leading-none">ðŸ’°</span>
               <span>Indicador</span>
             </button>
             {/* Sem Status */}
@@ -2747,10 +2747,10 @@ export default function AdminOrders() {
                   : "bg-card border-border text-muted-foreground hover:border-gray-500/50 hover:text-foreground"
               }`}
             >
-              <span className="text-base leading-none">❓</span>
+              <span className="text-base leading-none">â“</span>
               <span>Sem status</span>
             </button>
-            {/* Status dinâmicos */}
+            {/* Status dinÃ¢micos */}
             {ACTIVE_STATUS_ORDER.map(s => {
               const cfg = ACTIVE_STATUS_CONFIG[s];
               const statusCount = (orders || []).filter((o: any) => !isDeliveredStatus(o.latestStatus) && o.latestStatus === s).length;
@@ -2768,7 +2768,7 @@ export default function AdminOrders() {
                   {statusCount > 0 && filterStatus !== s && (
                     <span className="absolute -top-1 -right-1 bg-zinc-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold">{statusCount > 9 ? '9+' : statusCount}</span>
                   )}
-                  <span className="text-base leading-none">{cfg?.icon ?? "📦"}</span>
+                  <span className="text-base leading-none">{cfg?.icon ?? "ðŸ“¦"}</span>
                   <span className="text-center leading-tight line-clamp-2">{cfg?.label || s}</span>
                 </button>
               );
@@ -2792,7 +2792,7 @@ export default function AdminOrders() {
                   {count > 0 && filterStatus !== groupKey && (
                     <span className={`absolute -top-1 -right-1 ${c.badge} text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold`}>{count > 9 ? '9+' : count}</span>
                   )}
-                  <span className="text-base leading-none">{g.icon || '🔖'}</span>
+                  <span className="text-base leading-none">{g.icon || 'ðŸ”–'}</span>
                   <span className="text-center leading-tight line-clamp-2">{g.name}</span>
                 </button>
               );
@@ -2801,7 +2801,7 @@ export default function AdminOrders() {
 
           </>)}
 
-          {/* Seleção em massa */}
+          {/* SeleÃ§Ã£o em massa */}
           {filtered.length > 0 && (
             <div className="flex items-center gap-3 pb-1">
               <button onClick={toggleSelectAll} className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors">
@@ -2819,13 +2819,13 @@ export default function AdminOrders() {
         </div>
       </div>
 
-      {/* Modal de confirmação de deleção em massa */}
+      {/* Modal de confirmaÃ§Ã£o de deleÃ§Ã£o em massa */}
       {confirmBulkDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full space-y-4">
             <h3 className="font-bold text-base text-red-400">Deletar {selected.size} pedido(s)?</h3>
             <p className="text-sm text-muted-foreground">
-              Esta ação é irreversível. Os pedidos e todo o histórico de status serão removidos permanentemente.
+              Esta aÃ§Ã£o Ã© irreversÃ­vel. Os pedidos e todo o histÃ³rico de status serÃ£o removidos permanentemente.
             </p>
             <div className="flex gap-3">
               <button
@@ -2835,7 +2835,7 @@ export default function AdminOrders() {
                 disabled={deleteBulkMutation.isPending}
                 className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                {deleteBulkMutation.isPending ? "Deletando..." : "Confirmar Deleção"}
+                {deleteBulkMutation.isPending ? "Deletando..." : "Confirmar DeleÃ§Ã£o"}
               </button>
               <button
                 onClick={() => setConfirmBulkDelete(false)}
@@ -2848,13 +2848,13 @@ export default function AdminOrders() {
         </div>
       )}
 
-      {/* ===== PAINEL DE URGÊNCIAS ===== */}
+      {/* ===== PAINEL DE URGÃŠNCIAS ===== */}
       {filtered.filter(o => o.isUrgent === 1 && !isDeliveredStatus(o.latestStatus)).length > 0 && (
         <div className="mx-4 mt-4 mb-2 border-2 border-red-500/60 rounded-xl overflow-hidden bg-red-950/20">
-          {/* Cabeçalho do painel */}
+          {/* CabeÃ§alho do painel */}
           <div className="flex items-center justify-between px-4 py-2.5 bg-red-600/30 border-b border-red-500/40">
             <div className="flex items-center gap-2">
-              <span className="text-red-400 animate-pulse text-base">🚨</span>
+              <span className="text-red-400 animate-pulse text-base">ðŸš¨</span>
               <span className="text-red-300 font-black text-sm uppercase tracking-wider">Pedidos Urgentes</span>
               <span className="bg-red-500 text-white text-[11px] font-bold rounded-full px-2 py-0.5">
                 {filtered.filter(o => o.isUrgent === 1 && !isDeliveredStatus(o.latestStatus)).length}
@@ -2872,7 +2872,7 @@ export default function AdminOrders() {
                   className="bg-red-950/40 border border-red-500/50 rounded-xl p-3 flex flex-col gap-2 cursor-pointer hover:border-red-400 hover:bg-red-950/60 transition-all"
                   onClick={() => {
                     setExpandedId(getOrderKey(order) === expandedId ? null : getOrderKey(order));
-                    // Scroll até o card na lista principal
+                    // Scroll atÃ© o card na lista principal
                     setTimeout(() => {
                       const el = document.getElementById(`order-card-${getOrderKey(order)}`);
                       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2897,7 +2897,7 @@ export default function AdminOrders() {
                         toggleUrgentMutation.mutate({ registrationId: order.id, urgent: false });
                       }}
                       className="flex-shrink-0 p-1 rounded-full bg-red-500/20 hover:bg-red-500/40 text-red-400 transition-colors"
-                      title="Remover urgência"
+                      title="Remover urgÃªncia"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -2929,10 +2929,10 @@ export default function AdminOrders() {
         const groups = customGroupsQuery.data || [];
         const allOrders = ordersQuery.data || [];
         const COLORS = Object.keys(GROUP_COLOR_MAP);
-        const ICONS = ['🔖', '⚠️', '🔥', '⭐', '🚨', '🎯', '📌', '🔴', '🟡', '🟢', '🔵', '🟣'];
+        const ICONS = ['ðŸ”–', 'âš ï¸', 'ðŸ”¥', 'â­', 'ðŸš¨', 'ðŸŽ¯', 'ðŸ“Œ', 'ðŸ”´', 'ðŸŸ¡', 'ðŸŸ¢', 'ðŸ”µ', 'ðŸŸ£'];
         return (
           <>
-            {/* Botão criar grupo + Alterar Ordem */}
+            {/* BotÃ£o criar grupo + Alterar Ordem */}
             <div className="mx-4 mt-3 flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setShowCreateGroup(v => !v)}
@@ -2955,7 +2955,7 @@ export default function AdminOrders() {
               )}
             </div>
 
-            {/* Modal de reordenação de grupos */}
+            {/* Modal de reordenaÃ§Ã£o de grupos */}
             {showReorderGroups && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setShowReorderGroups(false)}>
                 <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-5 w-full max-w-sm mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -2963,7 +2963,7 @@ export default function AdminOrders() {
                     <h3 className="text-sm font-bold text-white">Alterar Ordem dos Grupos</h3>
                     <button onClick={() => setShowReorderGroups(false)} className="text-zinc-400 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
                   </div>
-                  <p className="text-xs text-zinc-500 mb-3">Arraste ou use os botões para reorganizar. Clique em "Salvar Ordem" para confirmar.</p>
+                  <p className="text-xs text-zinc-500 mb-3">Arraste ou use os botÃµes para reorganizar. Clique em "Salvar Ordem" para confirmar.</p>
                   <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     {reorderList.map((g: any, idx: number) => {
                       const c = GROUP_COLOR_MAP[g.color] || GROUP_COLOR_MAP.red;
@@ -3036,13 +3036,13 @@ export default function AdminOrders() {
               </div>
             )}
 
-            {/* Formulário criar grupo */}
+            {/* FormulÃ¡rio criar grupo */}
             {showCreateGroup && (
               <div className="mx-4 mt-2 p-3 bg-zinc-900 border border-zinc-700 rounded-xl space-y-3">
                 <p className="text-xs font-semibold text-zinc-300">Novo Grupo</p>
                 <input
                   type="text"
-                  placeholder="Nome do grupo (ex: EMERGÊNCIA, PRIORIDADE...)"
+                  placeholder="Nome do grupo (ex: EMERGÃŠNCIA, PRIORIDADE...)"
                   value={newGroupName}
                   onChange={e => setNewGroupName(e.target.value)}
                   className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500"
@@ -3052,9 +3052,9 @@ export default function AdminOrders() {
                     <p className="text-[10px] text-zinc-500 mb-1">Cor</p>
                     <div className="space-y-2">
                       {[
-                        { label: '🔴 Quentes', keys: ['red','rose','pink','fuchsia','orange','amber','yellow'] },
-                        { label: '🟢 Frios', keys: ['lime','green','emerald','teal','cyan','sky','blue'] },
-                        { label: '🟣 Outros', keys: ['indigo','violet','purple','slate','zinc','white'] },
+                        { label: 'ðŸ”´ Quentes', keys: ['red','rose','pink','fuchsia','orange','amber','yellow'] },
+                        { label: 'ðŸŸ¢ Frios', keys: ['lime','green','emerald','teal','cyan','sky','blue'] },
+                        { label: 'ðŸŸ£ Outros', keys: ['indigo','violet','purple','slate','zinc','white'] },
                       ].map(group => (
                         <div key={group.label}>
                           <p className="text-[9px] text-zinc-600 mb-1">{group.label}</p>
@@ -3074,7 +3074,7 @@ export default function AdminOrders() {
                     </div>
                   </div>
                   <div>
-                    <p className="text-[10px] text-zinc-500 mb-1">Ícone</p>
+                    <p className="text-[10px] text-zinc-500 mb-1">Ãcone</p>
                     <div className="flex gap-1 flex-wrap">
                       {ICONS.map(ic => (
                         <button
@@ -3103,12 +3103,12 @@ export default function AdminOrders() {
             {groups.map((group: any) => {
               const colorCfg = GROUP_COLOR_MAP[group.color] || GROUP_COLOR_MAP.red;
               const groupOrders = allOrders.filter((o: any) => group.memberIds.includes(o.id) && !isDeliveredStatus(o.latestStatus));
-              // Ocultar grupo inteiro se há card expandido que não pertence a este grupo
+              // Ocultar grupo inteiro se hÃ¡ card expandido que nÃ£o pertence a este grupo
               const groupHasExpanded = expandedId !== null && groupOrders.some((o: any) => getOrderKey(o) === expandedId);
               if (expandedId !== null && !groupHasExpanded) return null;
               return (
                 <div key={group.id} className={`mx-4 mt-3 border-2 ${colorCfg.border} rounded-xl overflow-hidden`}>
-                  {/* Cabeçalho */}
+                  {/* CabeÃ§alho */}
                   <div className={`flex items-center justify-between px-4 py-2.5 ${colorCfg.header} border-b`}>
                     <div className="flex items-center gap-2">
                       <span className="text-base">{group.icon}</span>
@@ -3161,7 +3161,7 @@ export default function AdminOrders() {
                       <span className={`${colorCfg.badge} text-white text-[11px] font-bold rounded-full px-2 py-0.5`}>{groupOrders.length}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      {/* Botão colapsar/expandir grupo */}
+                      {/* BotÃ£o colapsar/expandir grupo */}
                       <button
                         onClick={() => toggleExtraGroup(group.id)}
                         className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white/60 hover:text-white transition-colors"
@@ -3171,7 +3171,7 @@ export default function AdminOrders() {
                           ? <ChevronDown className="w-3.5 h-3.5" />
                           : <ChevronUp className="w-3.5 h-3.5" />}
                       </button>
-                      {/* Botão filtrar por este grupo */}
+                      {/* BotÃ£o filtrar por este grupo */}
                       <button
                         onClick={() => setFilterStatus(filterStatus === `group_${group.id}` ? 'all' : `group_${group.id}`)}
                         className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
@@ -3181,15 +3181,15 @@ export default function AdminOrders() {
                         }`}
                         title={filterStatus === `group_${group.id}` ? 'Mostrar todos os pedidos' : 'Filtrar somente este grupo'}
                       >
-                        <span>{filterStatus === `group_${group.id}` ? '✕ Limpar filtro' : '🔍 Ver só este grupo'}</span>
+                        <span>{filterStatus === `group_${group.id}` ? 'âœ• Limpar filtro' : 'ðŸ” Ver sÃ³ este grupo'}</span>
                       </button>
                       <button
-                        onClick={() => { setEditingGroupId(group.id); setEditGroupName(group.name); setEditGroupColor(group.color); setEditGroupIcon(group.icon || '🔖'); }}
+                        onClick={() => { setEditingGroupId(group.id); setEditGroupName(group.name); setEditGroupColor(group.color); setEditGroupIcon(group.icon || 'ðŸ”–'); }}
                         className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white/50 hover:text-white transition-colors"
                         title="Editar grupo"
                       ><Edit3 className="w-3.5 h-3.5" /></button>
                       <button
-                        onClick={() => { if (confirm(`Deletar o grupo "${group.name}"? Os pedidos não serão apagados.`)) deleteGroupMut.mutate({ id: group.id }); }}
+                        onClick={() => { if (confirm(`Deletar o grupo "${group.name}"? Os pedidos nÃ£o serÃ£o apagados.`)) deleteGroupMut.mutate({ id: group.id }); }}
                         className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/30 text-red-400/60 hover:text-red-400 transition-colors"
                         title="Deletar grupo"
                       ><Trash2 className="w-3.5 h-3.5" /></button>
@@ -3198,7 +3198,7 @@ export default function AdminOrders() {
                   {/* Cards dos pedidos do grupo - ocultos se recolhido */}
                   {!collapsedExtraGroups.has(group.id) && groupOrders.length === 0 && (
                     <div className="px-4 py-4 text-center text-xs text-zinc-500">
-                      Nenhum pedido neste grupo. Use o botão 🔖 nos pedidos abaixo para adicionar.
+                      Nenhum pedido neste grupo. Use o botÃ£o ðŸ”– nos pedidos abaixo para adicionar.
                     </div>
                   )}
                   {!collapsedExtraGroups.has(group.id) && groupOrders.length > 0 && (
@@ -3206,7 +3206,7 @@ export default function AdminOrders() {
                       {groupOrders.map((order: any) => {
                         const statusCfg = order.latestStatus ? ACTIVE_STATUS_CONFIG[order.latestStatus] : null;
                         const name = order.customerName || order.codeClientName || 'Cliente';
-                        // Ocultar cards do grupo que não estão expandidos
+                        // Ocultar cards do grupo que nÃ£o estÃ£o expandidos
                         if (expandedId !== null && getOrderKey(order) !== expandedId) return null;
                         const isExpandedGroupCard = expandedId === getOrderKey(order);
                         return (
@@ -3234,11 +3234,11 @@ export default function AdminOrders() {
                                 <p className="text-white font-bold text-xs truncate">{name}</p>
                                 <div className="flex items-center gap-1 mt-0.5">
                                   {order.customerNumber && (
-                                    <span className="flex-shrink-0 text-[10px] font-mono font-bold text-cyan-400 bg-cyan-500/15 border border-cyan-500/30 rounded px-1 py-0.5 leading-none" title="Número de cadastro">
+                                    <span className="flex-shrink-0 text-[10px] font-mono font-bold text-cyan-400 bg-cyan-500/15 border border-cyan-500/30 rounded px-1 py-0.5 leading-none" title="NÃºmero de cadastro">
                                       *{order.customerNumber}
                                     </span>
                                   )}
-                                  {order.customerNumber && <span className="text-white/20 text-[10px]">·</span>}
+                                  {order.customerNumber && <span className="text-white/20 text-[10px]">Â·</span>}
                                   <p className={`${colorCfg.text} opacity-70 text-[11px] truncate`}>{order.phone}</p>
                                 </div>
                               </div>
@@ -3284,7 +3284,7 @@ export default function AdminOrders() {
 
         {/* ===== ABAS HORIZONTAIS DE PRODUTO ===== */}
         {!ordersQuery.isLoading && (() => {
-          // Nomes das pastas fixas (editáveis)
+          // Nomes das pastas fixas (editÃ¡veis)
           const fixedFolderConfig = (folderConfigQuery.data || {}) as Record<string, { id: number; name: string; icon: string; color: string; tabOrder: number; hidden: number }>;
           const fixedKeyMap: Record<string, string> = { '__entregue__': 'entregues', '__arquivo__': 'arquivo', '__rgcnh__': 'rgcnh', '__perguntas__': 'perguntas' };
           const getFixedName = (key: string, defaultName: string) => {
@@ -3300,10 +3300,10 @@ export default function AdminOrders() {
             '__perguntas__': fixedFolderConfig['perguntas']?.tabOrder ?? 3,
           };
           const sortableFixedTabs = [
-            ...(deliveredOrders.length > 0 && !(fixedFolderConfig['entregues']?.hidden === 1) ? [{ key: "__entregue__", label: getFixedName('__entregue__', '📦 Entregues'), orders: deliveredOrders, colorIdx: -1, isDelivered: true, isAll: false, _order: fixedTabOrder['__entregue__'] }] : []),
-            ...(fixedFolderConfig['arquivo']?.hidden === 1 ? [] : [{ key: "__arquivo__", label: getFixedName('__arquivo__', '📁 Arquivo'), orders: [] as Order[], colorIdx: -3, isDelivered: false, isAll: false, archivedCount: (archivedQuery.data || []).length, _order: fixedTabOrder['__arquivo__'] }]),
-            ...(fixedFolderConfig['rgcnh']?.hidden === 1 ? [] : [{ key: "__rgcnh__", label: getFixedName('__rgcnh__', '🪷 RG/CNH Aprovado'), orders: [] as Order[], colorIdx: -5, isDelivered: false, isAll: false, rgCnhCount: (rgCnhQuery.data || []).length, _order: fixedTabOrder['__rgcnh__'] }]),
-            ...(fixedFolderConfig['perguntas']?.hidden === 1 ? [] : [{ key: "__perguntas__", label: getFixedName('__perguntas__', '❓ Perguntas'), orders: [] as Order[], colorIdx: -4, isDelivered: false, isAll: false, _order: fixedTabOrder['__perguntas__'] }]),
+            ...(deliveredOrders.length > 0 && !(fixedFolderConfig['entregues']?.hidden === 1) ? [{ key: "__entregue__", label: getFixedName('__entregue__', 'ðŸ“¦ Entregues'), orders: deliveredOrders, colorIdx: -1, isDelivered: true, isAll: false, _order: fixedTabOrder['__entregue__'] }] : []),
+            ...(fixedFolderConfig['arquivo']?.hidden === 1 ? [] : [{ key: "__arquivo__", label: getFixedName('__arquivo__', 'ðŸ“ Arquivo'), orders: [] as Order[], colorIdx: -3, isDelivered: false, isAll: false, archivedCount: (archivedQuery.data || []).length, _order: fixedTabOrder['__arquivo__'] }]),
+            ...(fixedFolderConfig['rgcnh']?.hidden === 1 ? [] : [{ key: "__rgcnh__", label: getFixedName('__rgcnh__', 'ðŸª· RG/CNH Aprovado'), orders: [] as Order[], colorIdx: -5, isDelivered: false, isAll: false, rgCnhCount: (rgCnhQuery.data || []).length, _order: fixedTabOrder['__rgcnh__'] }]),
+            ...(fixedFolderConfig['perguntas']?.hidden === 1 ? [] : [{ key: "__perguntas__", label: getFixedName('__perguntas__', 'â“ Perguntas'), orders: [] as Order[], colorIdx: -4, isDelivered: false, isAll: false, _order: fixedTabOrder['__perguntas__'] }]),
             ...customFolders.filter((f: any) => f.hidden !== 1).map((f: any) => ({ key: `__custom_${f.id}__`, label: f.icon ? `${f.icon} ${f.name}` : f.name, orders: [] as Order[], colorIdx: -6, isDelivered: false, isAll: false, customFolderId: f.id, customFolderCount: f.orderCount ?? 0, _order: f.sortOrder ?? 99 })),
           ].sort((a, b) => (a._order ?? 99) - (b._order ?? 99));
           const allTabs = [
@@ -3336,7 +3336,7 @@ export default function AdminOrders() {
                       onClick={() => setActiveProductTab(tab.key)}
                       className="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all"
                       style={(() => {
-                        // Determine base color for this tab type — always solid
+                        // Determine base color for this tab type â€” always solid
                         if (tab.isDelivered) {
                           return isActive
                             ? { backgroundColor: '#0d9488', borderColor: '#14b8a6', color: '#fff' }
@@ -3386,12 +3386,12 @@ export default function AdminOrders() {
                                     : { backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff' }
                         ) : { backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}
                       >{displayCount}</span>
-                      {tabUrgent > 0 && <span className="text-[10px] font-bold text-red-400 animate-pulse">🚨{tabUrgent}</span>}
+                      {tabUrgent > 0 && <span className="text-[10px] font-bold text-red-400 animate-pulse">ðŸš¨{tabUrgent}</span>}
                       {tabNew > 0 && <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">{tabNew > 99 ? "99+" : tabNew}</span>}
                     </button>
                   );
                 })}
-                {/* Botão Gerenciar Pastas */}
+                {/* BotÃ£o Gerenciar Pastas */}
                 <button
                   onClick={() => setShowFolderManager(prev => !prev)}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
@@ -3414,10 +3414,10 @@ export default function AdminOrders() {
                   {(() => {
                     // Montar lista unificada de todas as abas (fixas + personalizadas) para reordenar
                     const FIXED_TABS = [
-                      { key: '__entregue__', dbKey: 'entregues', defaultName: '📦 Entregues' },
-                      { key: '__arquivo__', dbKey: 'arquivo', defaultName: '📁 Arquivo' },
-                      { key: '__rgcnh__', dbKey: 'rgcnh', defaultName: '🪷 RG/CNH Aprovado' },
-                      { key: '__perguntas__', dbKey: 'perguntas', defaultName: '❓ Perguntas' },
+                      { key: '__entregue__', dbKey: 'entregues', defaultName: 'ðŸ“¦ Entregues' },
+                      { key: '__arquivo__', dbKey: 'arquivo', defaultName: 'ðŸ“ Arquivo' },
+                      { key: '__rgcnh__', dbKey: 'rgcnh', defaultName: 'ðŸª· RG/CNH Aprovado' },
+                      { key: '__perguntas__', dbKey: 'perguntas', defaultName: 'â“ Perguntas' },
                     ];
                     // Combinar fixas (com tabOrder) + personalizadas (com sortOrder) em lista ordenada
                     type TabItem = { type: 'fixed'; key: string; dbKey: string | null; defaultName: string; order: number; hidden?: number } | { type: 'custom'; id: number; name: string; icon: string; order: number; hidden?: number };
@@ -3456,7 +3456,7 @@ export default function AdminOrders() {
                                 {tab.type === 'fixed' && (
                                   <span className="text-[10px] text-muted-foreground/50 bg-muted/40 px-1.5 py-0.5 rounded">fixa</span>
                                 )}
-                                {/* Botão Ocultar/Mostrar */}
+                                {/* BotÃ£o Ocultar/Mostrar */}
                                 <button
                                   onClick={() => {
                                     if (tab.type === 'fixed' && (tab as any).dbKey) {
@@ -3468,7 +3468,7 @@ export default function AdminOrders() {
                                   className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${isHidden ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'}`}
                                   title={isHidden ? 'Mostrar aba' : 'Ocultar aba'}
                                 >
-                                  {isHidden ? '👁 Mostrar' : '🙈 Ocultar'}
+                                  {isHidden ? 'ðŸ‘ Mostrar' : 'ðŸ™ˆ Ocultar'}
                                 </button>
                                 <div className="flex gap-1">
                                   <button
@@ -3496,7 +3496,7 @@ export default function AdminOrders() {
                     );
                   })()}
 
-                  {/* Pastas fixas editáveis */}
+                  {/* Pastas fixas editÃ¡veis */}
                   <div>
                     <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Pastas fixas (renomear)</p>
                     <div className="space-y-2">
@@ -3532,7 +3532,7 @@ export default function AdminOrders() {
                         <div key={f.id} className="flex items-center gap-2">
                           {editingFolderId === f.id ? (
                             <>
-                              <input value={editFolderIcon} onChange={e => setEditFolderIcon(e.target.value)} className="w-12 bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-center" placeholder="📂" />
+                              <input value={editFolderIcon} onChange={e => setEditFolderIcon(e.target.value)} className="w-12 bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-center" placeholder="ðŸ“‚" />
                               <input value={editFolderName} onChange={e => setEditFolderName(e.target.value)} className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-foreground" placeholder="Nome da pasta" />
                               <button onClick={() => updateFolderMut.mutate({ id: f.id, name: editFolderName, icon: editFolderIcon || undefined })} className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium">Salvar</button>
                               <button onClick={() => setEditingFolderId(null)} className="px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-xs">Cancelar</button>
@@ -3542,7 +3542,7 @@ export default function AdminOrders() {
                               <span className="flex-1 text-sm text-foreground">{f.icon ? `${f.icon} ` : ''}{f.name}</span>
                               <span className="text-xs text-muted-foreground">{f.orderCount ?? 0} pedidos</span>
                               <button onClick={() => { setEditingFolderId(f.id); setEditFolderName(f.name); setEditFolderIcon(f.icon || ''); }} className="px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-xs hover:text-foreground">Editar</button>
-                              <button onClick={() => { if (confirm(`Remover pasta "${f.name}"? Os pedidos serão restaurados.`)) deleteFolderMut.mutate({ id: f.id }); }} className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs hover:bg-red-500/30">Remover</button>
+                              <button onClick={() => { if (confirm(`Remover pasta "${f.name}"? Os pedidos serÃ£o restaurados.`)) deleteFolderMut.mutate({ id: f.id }); }} className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs hover:bg-red-500/30">Remover</button>
                             </>
                           )}
                         </div>
@@ -3582,7 +3582,7 @@ export default function AdminOrders() {
                 }>;
                 return (
                   <div className="border border-zinc-500/40 rounded-xl overflow-hidden">
-                    {/* Barra de ordenação do Arquivo */}
+                    {/* Barra de ordenaÃ§Ã£o do Arquivo */}
                     {archivedOrders.length > 0 && (
                       <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-600/30 bg-zinc-500/5">
                         <span className="text-xs text-muted-foreground mr-1">Ordenar:</span>
@@ -3599,7 +3599,7 @@ export default function AdminOrders() {
                                 : "bg-card border-border text-muted-foreground hover:border-zinc-400/40"
                             }`}
                           >
-                            {k === "number" ? "*Número" : k === "name" ? "A–Z Nome" : "Data"}
+                            {k === "number" ? "*NÃºmero" : k === "name" ? "Aâ€“Z Nome" : "Data"}
                             {archivedSortKey === k && (
                               archivedSortDir === "asc"
                                 ? <ArrowUp className="w-3 h-3" />
@@ -3618,7 +3618,7 @@ export default function AdminOrders() {
                       )}
                       {!archivedQuery.isLoading && archivedOrders.length === 0 && (
                         <div className="text-center py-12">
-                          <div className="text-4xl mb-3">📁</div>
+                          <div className="text-4xl mb-3">ðŸ“</div>
                           <p className="text-muted-foreground text-sm">Nenhum pedido arquivado</p>
                           <p className="text-muted-foreground/60 text-xs mt-1">Pedidos arquivados aparecem aqui e podem ser restaurados a qualquer momento</p>
                         </div>
@@ -3661,7 +3661,7 @@ export default function AdminOrders() {
                               <div key={ar.registrationId} className={`bg-card border rounded-xl overflow-hidden cursor-pointer transition-all ${
                                 isExpanded ? "border-zinc-400/60 col-span-full" : "border-zinc-600/40"
                               }`} onClick={() => { const newId = isExpanded ? null : String(ar.registrationId); setExpandedArchivedId(newId); setExpandedId(newId ? `${ar.registrationId}_0` : null); }}>
-                                {/* Cabeçalho com foto + nome */}
+                                {/* CabeÃ§alho com foto + nome */}
                                 <div className="px-4 py-3 border-b border-border">
                                   <div className="flex items-center gap-3">
                                     {ar.profilePhotoUrl && ar.profilePhotoUrl !== 'NULL' ? (
@@ -3678,28 +3678,28 @@ export default function AdminOrders() {
                                       </div>
                                       <div className="flex items-center gap-1 mt-0.5">
                                         {ar.customerNumber && (
-                                          <span className="flex-shrink-0 text-[11px] font-mono font-bold text-cyan-400 bg-cyan-500/15 border border-cyan-500/30 rounded px-1.5 py-0.5 leading-none" title="Número de cadastro">
+                                          <span className="flex-shrink-0 text-[11px] font-mono font-bold text-cyan-400 bg-cyan-500/15 border border-cyan-500/30 rounded px-1.5 py-0.5 leading-none" title="NÃºmero de cadastro">
                                             *{ar.customerNumber}
                                           </span>
                                         )}
-                                        {ar.customerNumber && <span className="text-muted-foreground/40 text-xs">·</span>}
+                                        {ar.customerNumber && <span className="text-muted-foreground/40 text-xs">Â·</span>}
                                         <span className="text-xs text-muted-foreground">{ar.customerPhone}</span>
                                       </div>
                                     </div>
                                   </div>
                                 </div>
-                                {/* Corpo com serviço, cidade e status */}
+                                {/* Corpo com serviÃ§o, cidade e status */}
                                 {!isExpanded && (
                                 <div className="px-4 py-3 space-y-2">
                                   {svcName && (
                                     <div className="text-xs">
                                       <span className="font-semibold text-foreground/90">{svcName}</span>
-                                      {svcOpt && <span className="text-muted-foreground"> · {svcOpt}</span>}
+                                      {svcOpt && <span className="text-muted-foreground"> Â· {svcOpt}</span>}
                                     </div>
                                   )}
                                   {(ar.city || ar.uf) && (
                                     <div className="text-xs text-muted-foreground">
-                                      📍 {[ar.city, ar.uf].filter(Boolean).join(' — ')}
+                                      ðŸ“ {[ar.city, ar.uf].filter(Boolean).join(' â€” ')}
                                     </div>
                                   )}
                                   {statusCfg ? (
@@ -3730,12 +3730,12 @@ export default function AdminOrders() {
                                             : 'text-muted-foreground hover:text-foreground'
                                         }`}
                                       >
-                                        {t === 'status' ? '📋 Status' : t === 'cliente' ? '👤 Cliente' : t === 'historico' ? '🕐 Histórico' : t === 'documentos' ? '📁 Docs' : '📝 Notas'}
+                                        {t === 'status' ? 'ðŸ“‹ Status' : t === 'cliente' ? 'ðŸ‘¤ Cliente' : t === 'historico' ? 'ðŸ• HistÃ³rico' : t === 'documentos' ? 'ðŸ“ Docs' : 'ðŸ“ Notas'}
                                       </button>
                                     ))}
                                   </div>
 
-                                  {/* Conteúdo das abas */}
+                                  {/* ConteÃºdo das abas */}
                                   <div className="p-4">
                                     {(activeTab[`arquivo_${ar.registrationId}`] || 'status') === 'status' && (
                                       <div className="space-y-3">
@@ -3786,7 +3786,7 @@ export default function AdminOrders() {
                                           {unarchiveMutation.isPending ? (
                                             <>Restaurando...</>
                                           ) : (
-                                            <>↩ Restaurar para Ativos</>
+                                            <>â†© Restaurar para Ativos</>
                                           )}
                                         </button>
 
@@ -3815,7 +3815,7 @@ export default function AdminOrders() {
                                                     placeholder="_ _ _ _"
                                                     className="w-24 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-300 font-mono font-bold tracking-widest text-center text-base focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                                                   />
-                                                  <button onClick={() => { if (currentPin.length === 4) { setAdminPinMut.mutate({ phone: ar.customerPhone || '', pin: currentPin }); } else { toast.error('A senha deve ter exatamente 4 dígitos'); } }} disabled={setAdminPinMut.isPending} className="px-2.5 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50">Salvar</button>
+                                                  <button onClick={() => { if (currentPin.length === 4) { setAdminPinMut.mutate({ phone: ar.customerPhone || '', pin: currentPin }); } else { toast.error('A senha deve ter exatamente 4 dÃ­gitos'); } }} disabled={setAdminPinMut.isPending} className="px-2.5 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50">Salvar</button>
                                                   <button onClick={() => { const newPin = Math.floor(1000 + Math.random() * 9000).toString(); setAdminPinEdit(prev => ({ ...prev, [pinKey]: newPin })); setAdminPinMut.mutate({ phone: ar.customerPhone || '', pin: newPin }); }} disabled={setAdminPinMut.isPending} className="px-2.5 py-1.5 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-lg text-xs font-semibold hover:bg-purple-500/30 transition-colors disabled:opacity-50">Gerar</button>
                                                   <button onClick={() => { navigator.clipboard.writeText(currentPin); toast.success('Senha copiada!'); }} className="p-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg hover:bg-blue-500/30 transition-colors" title="Copiar senha">
                                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
@@ -3827,7 +3827,7 @@ export default function AdminOrders() {
                                               {/* Perguntas enviadas */}
                                               {trackingAnswersQuery.data && trackingAnswersQuery.data.length > 0 && (
                                                 <div className="bg-blue-500/5 border border-blue-500/30 rounded-lg p-3 space-y-2">
-                                                  <p className="text-xs font-semibold text-blue-400">Respostas do Formulário de Acompanhamento</p>
+                                                  <p className="text-xs font-semibold text-blue-400">Respostas do FormulÃ¡rio de Acompanhamento</p>
                                                   {trackingAnswersQuery.data.map((ans: any) => (
                                                     <div key={ans.id} className="bg-black/20 border border-white/5 rounded-lg px-3 py-2">
                                                       <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{ans.questionText}</p>
@@ -3845,25 +3845,25 @@ export default function AdminOrders() {
                                                   Dados de Login para o Cliente
                                                 </p>
                                                 <div className="space-y-2">
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">📱 Número de Telefone</label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">Login enviado pelo administrador</label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">Senha enviada pelo administrador</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label><div className="flex gap-1"><input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))} placeholder="Ex: GJ6W76PV4B23..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">🔗 Link de Acesso ao E-mail</label><div className="flex gap-1"><input type="text" value={fields.emailLink} onChange={e => setField('emailLink', e.target.value)} placeholder="Ex: https://mail.google.com/..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.emailLink && <button onClick={() => setField('emailLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">👥 Link do Grupo</label><div className="flex gap-1"><input type="text" value={fields.loginGroupLink} onChange={e => setField('loginGroupLink', e.target.value)} placeholder="Ex: https://chat.whatsapp.com/..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginGroupLink && <button onClick={() => setField('loginGroupLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">📝 Texto / Instruções para o Cliente</label><div className="flex gap-1 items-start"><textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)} placeholder="Ex: Acesse o app, vá em configurações e ative a conta..." rows={3} className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />{fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
+                                                  <div><label className="text-xs text-muted-foreground mb-1 block">ðŸ“± NÃºmero de Telefone</label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">Login enviado pelo administrador</label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
+                                                  <div><label className="text-xs text-muted-foreground mb-1 block">Senha enviada pelo administrador</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
+                                                  <div><label className="text-xs text-muted-foreground mb-1 block">CÃ³digo Autenticador</label><div className="flex gap-1"><input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))} placeholder="Ex: GJ6W76PV4B23..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
+                                                  <div><label className="text-xs text-muted-foreground mb-1 block">ðŸ”— Link de Acesso ao E-mail</label><div className="flex gap-1"><input type="text" value={fields.emailLink} onChange={e => setField('emailLink', e.target.value)} placeholder="Ex: https://mail.google.com/..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.emailLink && <button onClick={() => setField('emailLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
+                                                  <div><label className="text-xs text-muted-foreground mb-1 block">ðŸ‘¥ Link do Grupo</label><div className="flex gap-1"><input type="text" value={fields.loginGroupLink} onChange={e => setField('loginGroupLink', e.target.value)} placeholder="Ex: https://chat.whatsapp.com/..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginGroupLink && <button onClick={() => setField('loginGroupLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
+                                                  <div><label className="text-xs text-muted-foreground mb-1 block">ðŸ“ Texto / InstruÃ§Ãµes para o Cliente</label><div className="flex gap-1 items-start"><textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)} placeholder="Ex: Acesse o app, vÃ¡ em configuraÃ§Ãµes e ative a conta..." rows={3} className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />{fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
                                                 </div>
                                                 <div className="flex gap-2">
                                                   <button onClick={() => saveLoginDataMut.mutate({ registrationId: ar.registrationId, customerPhone: ar.customerPhone || '', loginPhone: fields.loginPhone, loginEmail: fields.loginEmail, loginPassword: fields.loginPassword, authCode: fields.authCode, emailLink: fields.emailLink, loginNotes: fields.loginNotes, loginGroupLink: fields.loginGroupLink })} disabled={saveLoginDataMut.isPending} className="flex-1 py-1.5 px-3 bg-lime-500/20 border border-lime-500/40 text-lime-300 rounded-lg text-xs font-semibold hover:bg-lime-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                                                     {saveLoginDataMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-lime-300" />Salvando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Dados de Login</>)}
                                                   </button>
                                                   {waPhone && hasLoginData && (
-                                                    <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent('🔐 Seus dados de acesso estão prontos! Acesse: https://walkajuda.com/acompanhar')}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
+                                                    <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent('ðŸ” Seus dados de acesso estÃ£o prontos! Acesse: https://h2colombiano.com/acompanhar')}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
                                                       <MessageCircle className="w-3.5 h-3.5" />WhatsApp
                                                     </a>
                                                   )}
                                                 </div>
                                                 {saved && (saved.loginEmail || saved.loginPassword || saved.authCode || (saved as any).emailLink || (saved as any).loginNotes || (saved as any).loginGroupLink) && (
-                                                  <p className="text-xs text-lime-400/70 text-center">✓ Dados salvos — visíveis para o cliente quando status for Entregue</p>
+                                                  <p className="text-xs text-lime-400/70 text-center">âœ“ Dados salvos â€” visÃ­veis para o cliente quando status for Entregue</p>
                                                 )}
                                               </div>
 
@@ -3877,21 +3877,21 @@ export default function AdminOrders() {
                                                 customerPhotoUrl={ar.profilePhotoUrl || ''}
                                               />
 
-                                              {/* Previsão de Entrega */}
+                                              {/* PrevisÃ£o de Entrega */}
                                               <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-2">
-                                                <p className="text-xs font-semibold text-blue-400 flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Previsão de Entrega</p>
+                                                <p className="text-xs font-semibold text-blue-400 flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />PrevisÃ£o de Entrega</p>
                                                 <div className="flex gap-2">
                                                   <input type="date" value={deliveryEstimate[arKey] ? deliveryEstimate[arKey].split('T')[0] : ''} onChange={e => { const time = deliveryEstimate[arKey]?.split('T')[1] || '18:00'; setDeliveryEstimate(prev => ({ ...prev, [arKey]: `${e.target.value}T${time}` })); }} className="flex-1 px-3 py-2 bg-background border border-blue-500/30 rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
                                                   <input type="time" value={deliveryEstimate[arKey] ? deliveryEstimate[arKey].split('T')[1]?.slice(0,5) : '18:00'} onChange={e => { const date = deliveryEstimate[arKey]?.split('T')[0] || new Date().toISOString().slice(0,10); setDeliveryEstimate(prev => ({ ...prev, [arKey]: `${date}T${e.target.value}` })); }} className="w-28 px-3 py-2 bg-background border border-blue-500/30 rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
                                                 </div>
                                                 <button type="button" onClick={() => { const val = deliveryEstimate[arKey]; if (!val) { toast.error('Selecione uma data e hora'); return; } setSavingEstimate(arKey); updateDeliveryEstimateMut.mutate({ registrationId: ar.registrationId, deliveryEstimate: new Date(val).getTime() }); }} disabled={savingEstimate === arKey} className="w-full py-1.5 px-3 bg-blue-500/20 border border-blue-500/40 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                                                  {savingEstimate === arKey ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-blue-300" />Salvando...</>) : (<><Calendar className="w-3.5 h-3.5" />Salvar Previsão</>)}
+                                                  {savingEstimate === arKey ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-blue-300" />Salvando...</>) : (<><Calendar className="w-3.5 h-3.5" />Salvar PrevisÃ£o</>)}
                                                 </button>
                                               </div>
 
-                                              {/* Número do Pedido */}
+                                              {/* NÃºmero do Pedido */}
                                               <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-2">
-                                                <p className="text-xs font-semibold text-blue-400 flex items-center gap-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>Número do Pedido</p>
+                                                <p className="text-xs font-semibold text-blue-400 flex items-center gap-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>NÃºmero do Pedido</p>
                                                 <div className="flex gap-2">
                                                   <input type="number" placeholder="Ex: 430001" value={editOrderNumber[arKey] ?? ''} onChange={e => setEditOrderNumber(prev => ({ ...prev, [arKey]: e.target.value }))} className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500" />
                                                   <button onClick={() => { const val = editOrderNumber[arKey]; setSavingOrderNumber(arKey); updateOrderNumberMutation.mutate({ registrationId: ar.registrationId, subOrderIndex: 0, orderNumber: val ? parseInt(val) : null }); setEditOrderNumber(prev => ({ ...prev, [arKey]: '' })); }} disabled={savingOrderNumber === arKey} className="py-1.5 px-3 bg-blue-500/20 border border-blue-500/40 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50 flex items-center gap-1">
@@ -3939,13 +3939,13 @@ export default function AdminOrders() {
                                         )}
                                         {(ar.city || ar.uf) && (
                                           <div>
-                                            <p className="text-xs font-semibold text-muted-foreground mb-1">Localização</p>
+                                            <p className="text-xs font-semibold text-muted-foreground mb-1">LocalizaÃ§Ã£o</p>
                                             <p className="text-sm text-foreground">{[ar.city, ar.uf].filter(Boolean).join(' - ')}</p>
                                           </div>
                                         )}
                                         {svcName && (
                                           <div>
-                                            <p className="text-xs font-semibold text-muted-foreground mb-1">Serviço</p>
+                                            <p className="text-xs font-semibold text-muted-foreground mb-1">ServiÃ§o</p>
                                             <p className="text-sm text-foreground">{svcName}{svcOpt && ` - ${svcOpt}`}</p>
                                           </div>
                                         )}
@@ -3954,14 +3954,14 @@ export default function AdminOrders() {
 
                                     {(activeTab[`arquivo_${ar.registrationId}`] || 'status') === 'historico' && (
                                       <div className="p-0 space-y-2">
-                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Histórico de Status</p>
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">HistÃ³rico de Status</p>
                                         {historyQuery.isLoading && (
                                           <div className="flex justify-center py-4">
                                             <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-primary" />
                                           </div>
                                         )}
                                         {historyQuery.data && historyQuery.data.length === 0 && (
-                                          <p className="text-xs text-muted-foreground text-center py-4">Nenhum histórico registrado</p>
+                                          <p className="text-xs text-muted-foreground text-center py-4">Nenhum histÃ³rico registrado</p>
                                         )}
                                         {historyQuery.data && historyQuery.data.map(h => {
                                           const cfg = ACTIVE_STATUS_CONFIG[h.status];
@@ -4038,7 +4038,7 @@ export default function AdminOrders() {
                 }>;
                 return (
                   <div className="border border-green-500/40 rounded-xl overflow-hidden">
-                    {/* Barra de ordenação */}
+                    {/* Barra de ordenaÃ§Ã£o */}
                     {rgCnhOrders.length > 0 && (
                       <div className="flex items-center gap-2 px-3 py-2 border-b border-green-600/30 bg-green-500/5">
                         <span className="text-xs text-muted-foreground mr-1">Ordenar:</span>
@@ -4055,7 +4055,7 @@ export default function AdminOrders() {
                                 : "bg-card border-border text-muted-foreground hover:border-green-400/40"
                             }`}
                           >
-                            {k === "number" ? "*Número" : k === "name" ? "A–Z Nome" : "Data"}
+                            {k === "number" ? "*NÃºmero" : k === "name" ? "Aâ€“Z Nome" : "Data"}
                             {rgCnhSortKey === k && (
                               rgCnhSortDir === "asc"
                                 ? <ArrowUp className="w-3 h-3" />
@@ -4074,7 +4074,7 @@ export default function AdminOrders() {
                       )}
                       {!rgCnhQuery.isLoading && rgCnhOrders.length === 0 && (
                         <div className="text-center py-12">
-                          <div className="text-4xl mb-3">🪪</div>
+                          <div className="text-4xl mb-3">ðŸªª</div>
                           <p className="text-muted-foreground text-sm">Nenhum pedido nesta pasta</p>
                           <p className="text-muted-foreground/60 text-xs mt-1">Pedidos com RG/CNH aprovado aparecem aqui e podem ser restaurados a qualquer momento</p>
                         </div>
@@ -4117,7 +4117,7 @@ export default function AdminOrders() {
                                           <div key={ar.registrationId} className={`bg-card border rounded-xl overflow-hidden cursor-pointer transition-all ${
                                             isExpanded ? "border-green-400/60 col-span-full" : "border-green-600/40"
                                           }`} onClick={() => { const newId = isExpanded ? null : String(ar.registrationId); setExpandedRgCnhId(newId); setExpandedId(newId ? `${ar.registrationId}_0` : null); }}>
-                                            {/* Cabeçalho com foto + nome */}
+                                            {/* CabeÃ§alho com foto + nome */}
                                             <div className="px-4 py-3 border-b border-border">
                                               <div className="flex items-center gap-3">
                                                 {ar.profilePhotoUrl && ar.profilePhotoUrl !== 'NULL' ? (
@@ -4134,28 +4134,28 @@ export default function AdminOrders() {
                                                   </div>
                                                   <div className="flex items-center gap-1 mt-0.5">
                                                     {ar.customerNumber && (
-                                                      <span className="flex-shrink-0 text-[11px] font-mono font-bold text-cyan-400 bg-cyan-500/15 border border-cyan-500/30 rounded px-1.5 py-0.5 leading-none" title="Número de cadastro">
+                                                      <span className="flex-shrink-0 text-[11px] font-mono font-bold text-cyan-400 bg-cyan-500/15 border border-cyan-500/30 rounded px-1.5 py-0.5 leading-none" title="NÃºmero de cadastro">
                                                         *{ar.customerNumber}
                                                       </span>
                                                     )}
-                                                    {ar.customerNumber && <span className="text-muted-foreground/40 text-xs">·</span>}
+                                                    {ar.customerNumber && <span className="text-muted-foreground/40 text-xs">Â·</span>}
                                                     <span className="text-xs text-muted-foreground">{ar.customerPhone}</span>
                                                   </div>
                                                 </div>
                                               </div>
                                             </div>
-                                            {/* Corpo com serviço, cidade e status */}
+                                            {/* Corpo com serviÃ§o, cidade e status */}
                                             {!isExpanded && (
                                             <div className="px-4 py-3 space-y-2">
                                               {svcName && (
                                                 <div className="text-xs">
                                                   <span className="font-semibold text-foreground/90">{svcName}</span>
-                                                  {svcOpt && <span className="text-muted-foreground"> · {svcOpt}</span>}
+                                                  {svcOpt && <span className="text-muted-foreground"> Â· {svcOpt}</span>}
                                                 </div>
                                               )}
                                               {(ar.city || ar.uf) && (
                                                 <div className="text-xs text-muted-foreground">
-                                                  📍 {[ar.city, ar.uf].filter(Boolean).join(' — ')}
+                                                  ðŸ“ {[ar.city, ar.uf].filter(Boolean).join(' â€” ')}
                                                 </div>
                                               )}
                                               {statusCfg ? (
@@ -4186,12 +4186,12 @@ export default function AdminOrders() {
                                                         : 'text-muted-foreground hover:text-foreground'
                                                     }`}
                                                   >
-                                                    {t === 'status' ? '📋 Status' : t === 'cliente' ? '👤 Cliente' : t === 'historico' ? '🕐 Histórico' : t === 'documentos' ? '📁 Docs' : '📝 Notas'}
+                                                    {t === 'status' ? 'ðŸ“‹ Status' : t === 'cliente' ? 'ðŸ‘¤ Cliente' : t === 'historico' ? 'ðŸ• HistÃ³rico' : t === 'documentos' ? 'ðŸ“ Docs' : 'ðŸ“ Notas'}
                                                   </button>
                                                 ))}
                                               </div>
 
-                                              {/* Conteúdo das abas */}
+                                              {/* ConteÃºdo das abas */}
                                               <div className="p-4">
                                                 {(activeTab[`rgcnh_${ar.registrationId}`] || 'status') === 'status' && (
                                                   <div className="space-y-3">
@@ -4242,7 +4242,7 @@ export default function AdminOrders() {
                                                       {removeFromRgCnhMutation.isPending ? (
                                                         <>Restaurando...</>
                                                       ) : (
-                                                        <>↩ Restaurar para Ativos</>
+                                                        <>â†© Restaurar para Ativos</>
                                                       )}
                                                     </button>
 
@@ -4271,7 +4271,7 @@ export default function AdminOrders() {
                                                                 placeholder="_ _ _ _"
                                                                 className="w-24 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-300 font-mono font-bold tracking-widest text-center text-base focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                                                               />
-                                                              <button onClick={() => { if (currentPin.length === 4) { setAdminPinMut.mutate({ phone: ar.customerPhone || '', pin: currentPin }); } else { toast.error('A senha deve ter exatamente 4 dígitos'); } }} disabled={setAdminPinMut.isPending} className="px-2.5 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50">Salvar</button>
+                                                              <button onClick={() => { if (currentPin.length === 4) { setAdminPinMut.mutate({ phone: ar.customerPhone || '', pin: currentPin }); } else { toast.error('A senha deve ter exatamente 4 dÃ­gitos'); } }} disabled={setAdminPinMut.isPending} className="px-2.5 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50">Salvar</button>
                                                               <button onClick={() => { const newPin = Math.floor(1000 + Math.random() * 9000).toString(); setAdminPinEdit(prev => ({ ...prev, [pinKey]: newPin })); setAdminPinMut.mutate({ phone: ar.customerPhone || '', pin: newPin }); }} disabled={setAdminPinMut.isPending} className="px-2.5 py-1.5 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-lg text-xs font-semibold hover:bg-purple-500/30 transition-colors disabled:opacity-50">Gerar</button>
                                                               <button onClick={() => { navigator.clipboard.writeText(currentPin); toast.success('Senha copiada!'); }} className="p-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg hover:bg-blue-500/30 transition-colors" title="Copiar senha">
                                                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
@@ -4283,7 +4283,7 @@ export default function AdminOrders() {
                                                           {/* Perguntas enviadas */}
                                                           {trackingAnswersQuery.data && trackingAnswersQuery.data.length > 0 && (
                                                             <div className="bg-blue-500/5 border border-blue-500/30 rounded-lg p-3 space-y-2">
-                                                              <p className="text-xs font-semibold text-blue-400">Respostas do Formulário de Acompanhamento</p>
+                                                              <p className="text-xs font-semibold text-blue-400">Respostas do FormulÃ¡rio de Acompanhamento</p>
                                                               {trackingAnswersQuery.data.map((ans: any) => (
                                                                 <div key={ans.id} className="bg-black/20 border border-white/5 rounded-lg px-3 py-2">
                                                                   <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{ans.questionText}</p>
@@ -4301,25 +4301,25 @@ export default function AdminOrders() {
                                                               Dados de Login para o Cliente
                                                             </p>
                                                             <div className="space-y-2">
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">📱 Número de Telefone</label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">Login enviado pelo administrador</label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">Senha enviada pelo administrador</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label><div className="flex gap-1"><input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))} placeholder="Ex: GJ6W76PV4B23..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">🔗 Link de Acesso ao E-mail</label><div className="flex gap-1"><input type="text" value={fields.emailLink} onChange={e => setField('emailLink', e.target.value)} placeholder="Ex: https://mail.google.com/..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.emailLink && <button onClick={() => setField('emailLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">👥 Link do Grupo</label><div className="flex gap-1"><input type="text" value={fields.loginGroupLink} onChange={e => setField('loginGroupLink', e.target.value)} placeholder="Ex: https://chat.whatsapp.com/..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginGroupLink && <button onClick={() => setField('loginGroupLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">📝 Texto / Instruções para o Cliente</label><div className="flex gap-1 items-start"><textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)} placeholder="Ex: Acesse o app, vá em configurações e ative a conta..." rows={3} className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />{fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
+                                                              <div><label className="text-xs text-muted-foreground mb-1 block">ðŸ“± NÃºmero de Telefone</label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">Login enviado pelo administrador</label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
+                                                              <div><label className="text-xs text-muted-foreground mb-1 block">Senha enviada pelo administrador</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
+                                                              <div><label className="text-xs text-muted-foreground mb-1 block">CÃ³digo Autenticador</label><div className="flex gap-1"><input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))} placeholder="Ex: GJ6W76PV4B23..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
+                                                              <div><label className="text-xs text-muted-foreground mb-1 block">ðŸ”— Link de Acesso ao E-mail</label><div className="flex gap-1"><input type="text" value={fields.emailLink} onChange={e => setField('emailLink', e.target.value)} placeholder="Ex: https://mail.google.com/..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.emailLink && <button onClick={() => setField('emailLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
+                                                              <div><label className="text-xs text-muted-foreground mb-1 block">ðŸ‘¥ Link do Grupo</label><div className="flex gap-1"><input type="text" value={fields.loginGroupLink} onChange={e => setField('loginGroupLink', e.target.value)} placeholder="Ex: https://chat.whatsapp.com/..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginGroupLink && <button onClick={() => setField('loginGroupLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
+                                                              <div><label className="text-xs text-muted-foreground mb-1 block">ðŸ“ Texto / InstruÃ§Ãµes para o Cliente</label><div className="flex gap-1 items-start"><textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)} placeholder="Ex: Acesse o app, vÃ¡ em configuraÃ§Ãµes e ative a conta..." rows={3} className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />{fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">âœ•</button>}</div></div>
                                                             </div>
                                                             <div className="flex gap-2">
                                                               <button onClick={() => saveLoginDataMut.mutate({ registrationId: ar.registrationId, customerPhone: ar.customerPhone || '', loginPhone: fields.loginPhone, loginEmail: fields.loginEmail, loginPassword: fields.loginPassword, authCode: fields.authCode, emailLink: fields.emailLink, loginNotes: fields.loginNotes, loginGroupLink: fields.loginGroupLink })} disabled={saveLoginDataMut.isPending} className="flex-1 py-1.5 px-3 bg-lime-500/20 border border-lime-500/40 text-lime-300 rounded-lg text-xs font-semibold hover:bg-lime-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                                                                 {saveLoginDataMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-lime-300" />Salvando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Dados de Login</>)}
                                                               </button>
                                                               {waPhone && hasLoginData && (
-                                                                <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent('🔐 Seus dados de acesso estão prontos! Acesse: https://walkajuda.com/acompanhar')}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
+                                                                <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent('ðŸ” Seus dados de acesso estÃ£o prontos! Acesse: https://h2colombiano.com/acompanhar')}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
                                                                   <MessageCircle className="w-3.5 h-3.5" />WhatsApp
                                                                 </a>
                                                               )}
                                                             </div>
                                                             {saved && (saved.loginEmail || saved.loginPassword || saved.authCode || (saved as any).emailLink || (saved as any).loginNotes || (saved as any).loginGroupLink) && (
-                                                              <p className="text-xs text-lime-400/70 text-center">✓ Dados salvos — visíveis para o cliente quando status for Entregue</p>
+                                                              <p className="text-xs text-lime-400/70 text-center">âœ“ Dados salvos â€” visÃ­veis para o cliente quando status for Entregue</p>
                                                             )}
                                                           </div>
 
@@ -4333,21 +4333,21 @@ export default function AdminOrders() {
                                                             customerPhotoUrl={ar.profilePhotoUrl || ''}
                                                           />
 
-                                                          {/* Previsão de Entrega */}
+                                                          {/* PrevisÃ£o de Entrega */}
                                                           <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-2">
-                                                            <p className="text-xs font-semibold text-blue-400 flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Previsão de Entrega</p>
+                                                            <p className="text-xs font-semibold text-blue-400 flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />PrevisÃ£o de Entrega</p>
                                                             <div className="flex gap-2">
                                                               <input type="date" value={deliveryEstimate[arKey] ? deliveryEstimate[arKey].split('T')[0] : ''} onChange={e => { const time = deliveryEstimate[arKey]?.split('T')[1] || '18:00'; setDeliveryEstimate(prev => ({ ...prev, [arKey]: `${e.target.value}T${time}` })); }} className="flex-1 px-3 py-2 bg-background border border-blue-500/30 rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
                                                               <input type="time" value={deliveryEstimate[arKey] ? deliveryEstimate[arKey].split('T')[1]?.slice(0,5) : '18:00'} onChange={e => { const date = deliveryEstimate[arKey]?.split('T')[0] || new Date().toISOString().slice(0,10); setDeliveryEstimate(prev => ({ ...prev, [arKey]: `${date}T${e.target.value}` })); }} className="w-28 px-3 py-2 bg-background border border-blue-500/30 rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
                                                             </div>
                                                             <button type="button" onClick={() => { const val = deliveryEstimate[arKey]; if (!val) { toast.error('Selecione uma data e hora'); return; } setSavingEstimate(arKey); updateDeliveryEstimateMut.mutate({ registrationId: ar.registrationId, deliveryEstimate: new Date(val).getTime() }); }} disabled={savingEstimate === arKey} className="w-full py-1.5 px-3 bg-blue-500/20 border border-blue-500/40 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                                                              {savingEstimate === arKey ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-blue-300" />Salvando...</>) : (<><Calendar className="w-3.5 h-3.5" />Salvar Previsão</>)}
+                                                              {savingEstimate === arKey ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-blue-300" />Salvando...</>) : (<><Calendar className="w-3.5 h-3.5" />Salvar PrevisÃ£o</>)}
                                                             </button>
                                                           </div>
 
-                                                          {/* Número do Pedido */}
+                                                          {/* NÃºmero do Pedido */}
                                                           <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-2">
-                                                            <p className="text-xs font-semibold text-blue-400 flex items-center gap-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>Número do Pedido</p>
+                                                            <p className="text-xs font-semibold text-blue-400 flex items-center gap-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>NÃºmero do Pedido</p>
                                                             <div className="flex gap-2">
                                                               <input type="number" placeholder="Ex: 430001" value={editOrderNumber[arKey] ?? ''} onChange={e => setEditOrderNumber(prev => ({ ...prev, [arKey]: e.target.value }))} className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500" />
                                                               <button onClick={() => { const val = editOrderNumber[arKey]; setSavingOrderNumber(arKey); updateOrderNumberMutation.mutate({ registrationId: ar.registrationId, subOrderIndex: 0, orderNumber: val ? parseInt(val) : null }); setEditOrderNumber(prev => ({ ...prev, [arKey]: '' })); }} disabled={savingOrderNumber === arKey} className="py-1.5 px-3 bg-blue-500/20 border border-blue-500/40 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50 flex items-center gap-1">
@@ -4395,13 +4395,13 @@ export default function AdminOrders() {
                                                     )}
                                                     {(ar.city || ar.uf) && (
                                                       <div>
-                                                        <p className="text-xs font-semibold text-muted-foreground mb-1">Localização</p>
+                                                        <p className="text-xs font-semibold text-muted-foreground mb-1">LocalizaÃ§Ã£o</p>
                                                         <p className="text-sm text-foreground">{[ar.city, ar.uf].filter(Boolean).join(' - ')}</p>
                                                       </div>
                                                     )}
                                                     {svcName && (
                                                       <div>
-                                                        <p className="text-xs font-semibold text-muted-foreground mb-1">Serviço</p>
+                                                        <p className="text-xs font-semibold text-muted-foreground mb-1">ServiÃ§o</p>
                                                         <p className="text-sm text-foreground">{svcName}{svcOpt && ` - ${svcOpt}`}</p>
                                                       </div>
                                                     )}
@@ -4410,14 +4410,14 @@ export default function AdminOrders() {
 
                                                 {(activeTab[`rgcnh_${ar.registrationId}`] || 'status') === 'historico' && (
                                                   <div className="space-y-2">
-                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Histórico de Status</p>
+                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">HistÃ³rico de Status</p>
                                                     {historyQuery.isLoading && (
                                                       <div className="flex justify-center py-4">
                                                         <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-primary" />
                                                       </div>
                                                     )}
                                                     {historyQuery.data && historyQuery.data.length === 0 && (
-                                                      <p className="text-xs text-muted-foreground text-center py-4">Nenhum histórico registrado</p>
+                                                      <p className="text-xs text-muted-foreground text-center py-4">Nenhum histÃ³rico registrado</p>
                                                     )}
                                                     {historyQuery.data && historyQuery.data.map(h => {
                                                       const cfg = ACTIVE_STATUS_CONFIG[h.status];
@@ -4501,23 +4501,23 @@ export default function AdminOrders() {
                     </button>
                   </div>
 
-                  {/* Formulário nova pergunta */}
+                  {/* FormulÃ¡rio nova pergunta */}
                   {showNewTQAdm && (
                     <div className="bg-[#111128] border border-purple-500/30 rounded-xl p-5 space-y-4">
                       <h3 className="text-sm font-bold text-purple-400">Nova Pergunta</h3>
                       <div>
                         <label className="text-xs text-gray-400 mb-1 block">Texto da Pergunta</label>
-                        <input value={newTQTextAdm} onChange={e => setNewTQTextAdm(e.target.value)} placeholder="Ex: Você tem CNH válida?" className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
+                        <input value={newTQTextAdm} onChange={e => setNewTQTextAdm(e.target.value)} placeholder="Ex: VocÃª tem CNH vÃ¡lida?" className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <label className="text-xs text-gray-400">Opções de Resposta</label>
-                          <button onClick={() => setNewTQOptionsAdm(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar opção</button>
+                          <label className="text-xs text-gray-400">OpÃ§Ãµes de Resposta</label>
+                          <button onClick={() => setNewTQOptionsAdm(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar opÃ§Ã£o</button>
                         </div>
                         <div className="space-y-2">
                           {newTQOptionsAdm.map((opt, i) => (
                             <div key={i} className="flex items-center gap-2">
-                              <input value={opt.label} onChange={e => setNewTQOptionsAdm(prev => prev.map((o, j) => j === i ? { ...o, label: e.target.value } : o))} placeholder={`Opção ${i + 1}`} className="flex-1 bg-[#0a0a1a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
+                              <input value={opt.label} onChange={e => setNewTQOptionsAdm(prev => prev.map((o, j) => j === i ? { ...o, label: e.target.value } : o))} placeholder={`OpÃ§Ã£o ${i + 1}`} className="flex-1 bg-[#0a0a1a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                               <div className="flex gap-1">
                                 {TQ_COLORS_ADM.map(c => (
                                   <button key={c} onClick={() => setNewTQOptionsAdm(prev => prev.map((o, j) => j === i ? { ...o, color: c } : o))} className={`w-5 h-5 rounded-full border-2 transition-all ${opt.color === c ? 'border-white scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />
@@ -4545,7 +4545,7 @@ export default function AdminOrders() {
                   {(tqListQuery.data || []).length === 0 && !showNewTQAdm && (
                     <div className="bg-[#111128] border border-white/10 rounded-xl p-8 text-center">
                       <p className="text-gray-400 text-sm">Nenhuma pergunta criada ainda.</p>
-                      <p className="text-gray-500 text-xs mt-1">Clique em "Nova Pergunta" para começar.</p>
+                      <p className="text-gray-500 text-xs mt-1">Clique em "Nova Pergunta" para comeÃ§ar.</p>
                     </div>
                   )}
 
@@ -4569,7 +4569,7 @@ export default function AdminOrders() {
                                   <button onClick={() => setEditTQOptionsAdm(prev => prev.filter((_, j) => j !== i))} className="text-red-400 p-1"><X className="w-3.5 h-3.5" /></button>
                                 </div>
                               ))}
-                              <button onClick={() => setEditTQOptionsAdm(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar opção</button>
+                              <button onClick={() => setEditTQOptionsAdm(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar opÃ§Ã£o</button>
                             </div>
                             <div className="flex items-center gap-2">
                               <input type="checkbox" checked={editTQShowOnceAdm} onChange={e => setEditTQShowOnceAdm(e.target.checked)} className="w-4 h-4 accent-purple-500" />
@@ -4612,7 +4612,7 @@ export default function AdminOrders() {
                 </div>
               )}
 
-              {/* Conteúdo da aba ativa */}
+              {/* ConteÃºdo da aba ativa */}
               {currentTab && currentTabKey !== "__arquivo__" && currentTabKey !== "__perguntas__" && currentTabKey !== "__rgcnh__" && !currentTabKey?.startsWith('__custom_') && (() => {
                 const group = currentTab;
                 const colorIdx = group.colorIdx;
@@ -4630,16 +4630,16 @@ export default function AdminOrders() {
           }
           return (
             <div key={group.key} className={`border rounded-xl overflow-hidden ${group.isDelivered ? "border-teal-500/40" : isAllTab ? "border-amber-500/40" : color ? color.border : "border-border"}`}>
-              {/* Cabeçalho do grupo — oculto pois usamos abas */}
-              {/* Barra de ordenação para aba Todos */}
+              {/* CabeÃ§alho do grupo â€” oculto pois usamos abas */}
+              {/* Barra de ordenaÃ§Ã£o para aba Todos */}
               {isAllTab && (
                 <div className={`flex items-center gap-2 px-3 py-2 border-b ${
                   isEmergencySearch ? 'border-orange-500/30 bg-orange-500/8' : 'border-amber-500/20 bg-amber-500/5'
                 }`}>
                   {isEmergencySearch ? (
                     <>
-                      <span className="text-orange-400 text-xs font-bold">🚨 BUSCA GLOBAL</span>
-                      <span className="text-orange-300/60 text-xs">— todas as pastas</span>
+                      <span className="text-orange-400 text-xs font-bold">ðŸš¨ BUSCA GLOBAL</span>
+                      <span className="text-orange-300/60 text-xs">â€” todas as pastas</span>
                       {emergencyTerm.length >= 2 && (
                         <span className="bg-orange-500 text-white text-[11px] font-bold rounded-full px-2 py-0.5 ml-1">
                           {emergencyQuery.isLoading ? '...' : emergencyResults.length}
@@ -4665,7 +4665,7 @@ export default function AdminOrders() {
                               : "bg-card border-border text-muted-foreground hover:border-amber-500/40"
                           }`}
                         >
-                          {k === "number" ? "*Número" : k === "name" ? "A–Z Nome" : "Data"}
+                          {k === "number" ? "*NÃºmero" : k === "name" ? "Aâ€“Z Nome" : "Data"}
                           {todosSortKey === k && (
                             todosSortDir === "asc"
                               ? <ArrowUp className="w-3 h-3" />
@@ -4678,7 +4678,7 @@ export default function AdminOrders() {
                   )}
                 </div>
               )}
-              {/* Barra de ordenação para aba Entregues */}
+              {/* Barra de ordenaÃ§Ã£o para aba Entregues */}
               {group.isDelivered && (
                 <div className="flex flex-col gap-2 px-3 py-2 border-b border-teal-500/20 bg-teal-500/5">
                   {/* Filtro por telefone */}
@@ -4691,7 +4691,7 @@ export default function AdminOrders() {
                       className="flex-1 h-8 px-3 rounded-lg bg-black/30 border border-teal-500/30 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-teal-400/60"
                     />
                     {deliveredPhoneFilter && (
-                      <button onClick={() => setDeliveredPhoneFilter('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30">✕ Limpar</button>
+                      <button onClick={() => setDeliveredPhoneFilter('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30">âœ• Limpar</button>
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -4711,14 +4711,14 @@ export default function AdminOrders() {
                           : "bg-card border-border text-muted-foreground hover:border-teal-500/40"
                       }`}
                     >
-                      {k === "number" ? "*Número"
-                        : k === "name" ? "A–Z Nome"
+                      {k === "number" ? "*NÃºmero"
+                        : k === "name" ? "Aâ€“Z Nome"
                         : k === "notified"
                           ? (deliveredSortKey === k
-                            ? (deliveredSortDir === "desc" ? "✉️ ↓ Notificado" : "✉️ ↑ Notificado")
-                            : "✉️ Notificado")
+                            ? (deliveredSortDir === "desc" ? "âœ‰ï¸ â†“ Notificado" : "âœ‰ï¸ â†‘ Notificado")
+                            : "âœ‰ï¸ Notificado")
                           : (deliveredSortKey === k
-                            ? (deliveredSortDir === "desc" ? "↓ Mais Recente" : "↑ Mais Antigo")
+                            ? (deliveredSortDir === "desc" ? "â†“ Mais Recente" : "â†‘ Mais Antigo")
                             : "Mais Recente")}
                       {deliveredSortKey === k && (
                         deliveredSortDir === "asc"
@@ -4731,14 +4731,14 @@ export default function AdminOrders() {
                   </div>
                 </div>
               )}
-              {/* Cards dos pedidos dentro do grupo, sub-agrupados por opção */}
+              {/* Cards dos pedidos dentro do grupo, sub-agrupados por opÃ§Ã£o */}
               {true && (
                 <div className="p-3 space-y-4 bg-background/40">
                   {/* ===== MODO BUSCA GLOBAL (/) ===== */}
                   {isAllTab && isEmergencySearch && (() => {
                     if (emergencyTerm.length < 2) return (
                       <div className="py-6 text-center text-orange-300/60 text-sm">
-                        Digite ao menos 2 caracteres após <code className="bg-orange-900/30 px-1 rounded">/</code> para buscar em todas as pastas.
+                        Digite ao menos 2 caracteres apÃ³s <code className="bg-orange-900/30 px-1 rounded">/</code> para buscar em todas as pastas.
                       </div>
                     );
                     if (emergencyQuery.isLoading) return (
@@ -4784,7 +4784,7 @@ export default function AdminOrders() {
                               }`}>
                                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${badgeColor}`}>{r.folderLabel}</span>
                               </div>
-                              {/* Cabeçalho */}
+                              {/* CabeÃ§alho */}
                               <div className="px-4 py-3 border-b border-border">
                                 <div className="flex items-center gap-3">
                                   {r.profilePhotoUrl ? (
@@ -4809,7 +4809,7 @@ export default function AdminOrders() {
                               <div className="px-4 py-3 space-y-2">
                                 {r.serviceName && (
                                   <div className="text-xs space-y-2">
-                                    <div className="font-semibold text-foreground/90">📦 {r.serviceName}</div>
+                                    <div className="font-semibold text-foreground/90">ðŸ“¦ {r.serviceName}</div>
                                     {r.serviceOption && (() => {
                                       const garantiaMatch = r.serviceOption.match(/^(.*?)\s*-\s*(Garantia:.*)$/i);
                                       if (garantiaMatch) {
@@ -4817,17 +4817,17 @@ export default function AdminOrders() {
                                         const garantiaPart = garantiaMatch[2];
                                         return (
                                           <>
-                                            {servicePart && <div className="text-muted-foreground text-[11px] break-words">— {servicePart.trim()}</div>}
+                                            {servicePart && <div className="text-muted-foreground text-[11px] break-words">â€” {servicePart.trim()}</div>}
                                             {garantiaPart && (
                                               <div className="flex items-center gap-2 pt-1 border-t border-border/30">
-                                                <span className="text-amber-400">🛡️</span>
+                                                <span className="text-amber-400">ðŸ›¡ï¸</span>
                                                 <span className="text-amber-300 text-[11px] font-semibold">{garantiaPart.trim()}</span>
                                               </div>
                                             )}
                                           </>
                                         );
                                       } else {
-                                        return <div className="text-muted-foreground text-[11px] break-words">— {r.serviceOption}</div>;
+                                        return <div className="text-muted-foreground text-[11px] break-words">â€” {r.serviceOption}</div>;
                                       }
                                     })()}
                                   </div>
@@ -4842,9 +4842,9 @@ export default function AdminOrders() {
                                   <span className="text-[11px] text-muted-foreground/40">Sem status</span>
                                 )}
                               </div>
-                              {/* Ações */}
+                              {/* AÃ§Ãµes */}
                               <div className="px-4 py-2 border-t border-border flex flex-wrap gap-1.5">
-                                {/* Botão Restaurar para origem — aparece quando pedido está em Arquivo, RG/CNH ou pasta personalizada */}
+                                {/* BotÃ£o Restaurar para origem â€” aparece quando pedido estÃ¡ em Arquivo, RG/CNH ou pasta personalizada */}
                                 {(r.archived || r.rgCnhApproved || r.folderType === 'custom') && (
                                   <button onClick={() => {
                                     if (r.archived) unarchiveMutation.mutate({ registrationId: r.registrationId });
@@ -4852,34 +4852,34 @@ export default function AdminOrders() {
                                     else if (r.folderType === 'custom' && r.folderId) removeFromFolderMut.mutate({ registrationId: r.registrationId, subOrderIndex: r.subOrderIndex ?? 0 });
                                   }}
                                     className="text-[11px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40 border border-emerald-500/30 transition-colors font-semibold"
-                                  >↩ Restaurar</button>
+                                  >â†© Restaurar</button>
                                 )}
                                 {!r.archived && (
                                   <button onClick={() => archiveMutation.mutate({ registrationId: r.registrationId })}
                                     className="text-[11px] px-2 py-1 rounded bg-zinc-500/20 text-zinc-300 hover:bg-zinc-500/40 border border-zinc-500/30 transition-colors"
-                                  >📁 Arquivo</button>
+                                  >ðŸ“ Arquivo</button>
                                 )}
                                 {!r.rgCnhApproved && (
                                   <button onClick={() => moveToRgCnhMutation.mutate({ registrationId: r.registrationId })}
                                     className="text-[11px] px-2 py-1 rounded bg-green-500/20 text-green-300 hover:bg-green-500/40 border border-green-500/30 transition-colors"
-                                  >🪷 RG/CNH</button>
+                                  >ðŸª· RG/CNH</button>
                                 )}
                                 {r.folderType === 'custom' && r.folderId && (
                                   <button onClick={() => removeFromFolderMut.mutate({ registrationId: r.registrationId, subOrderIndex: r.subOrderIndex ?? 0 })}
                                     className="text-[11px] px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/40 border border-red-500/30 transition-colors"
-                                  >✕ Remover da pasta</button>
+                                  >âœ• Remover da pasta</button>
                                 )}
                               </div>
                               {/* Aviso de pasta */}
                               {(r.archived || r.rgCnhApproved || r.folderType === 'custom') && (
                                 <div className="text-[10px] text-muted-foreground/70 px-3 py-1.5 border-t border-border/30 bg-muted/20">
-                                  📂 {r.archived ? 'Em Arquivo' : r.rgCnhApproved ? 'RG/CNH Aprovado' : r.folderName || 'Pasta Personalizada'}
+                                  ðŸ“‚ {r.archived ? 'Em Arquivo' : r.rgCnhApproved ? 'RG/CNH Aprovado' : r.folderName || 'Pasta Personalizada'}
                                 </div>
                               )}
-                              {/* Botão Mover em estilo card */}
+                              {/* BotÃ£o Mover em estilo card */}
                               {((customFoldersQuery.data as any[]) || []).length > 0 && (
                                 <div className="mt-2 p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg">
-                                  <p className="text-xs font-semibold text-violet-300 mb-2">📂 Mover para Pasta</p>
+                                  <p className="text-xs font-semibold text-violet-300 mb-2">ðŸ“‚ Mover para Pasta</p>
                                   <div className="space-y-1 max-h-[200px] overflow-y-auto">
                                     {(customFoldersQuery.data as any[]).map((f: any) => (
                                       <button key={f.id}
@@ -4904,7 +4904,7 @@ export default function AdminOrders() {
                       : buildOptionGroups(group.orders)
                   ).map((optGroup) => (
                     <div key={optGroup.name || "__all__"}>
-                      {/* Cabeçalho da opção (só exibe se há sub-grupos e não é aba Todos) */}
+                      {/* CabeÃ§alho da opÃ§Ã£o (sÃ³ exibe se hÃ¡ sub-grupos e nÃ£o Ã© aba Todos) */}
                       {optGroup.name && !isAllTab && (
                         <div className="flex items-center gap-2 mb-2 px-1">
                           <div className="h-px flex-1 bg-border/50" />
@@ -4942,7 +4942,7 @@ export default function AdminOrders() {
                       const isSelectedCard = selected.has(getOrderKey(order));
                       const editData = editingCustomer[getOrderKey(order)];
 
-                      // Ocultar cards que não estão em foco quando algum está expandido
+                      // Ocultar cards que nÃ£o estÃ£o em foco quando algum estÃ¡ expandido
                       if (expandedId !== null && !isExpanded) return null;
 
                       return (
@@ -4966,7 +4966,7 @@ export default function AdminOrders() {
             >
               {(order.isUrgent === 1 || filterStatus === 'urgente') && (
                 <div className="bg-red-600/20 border-b border-red-500/40 px-4 py-1 flex items-center gap-2">
-                  <span className="text-red-400 text-xs font-bold animate-pulse">🚨 URGENTE</span>
+                  <span className="text-red-400 text-xs font-bold animate-pulse">ðŸš¨ URGENTE</span>
                 </div>
               )}
               {/* Faixa do grupo */}
@@ -4984,27 +4984,27 @@ export default function AdminOrders() {
               {/* Faixa "Em atendimento" */}
               {attentionMap.has(order.id) && (
                 <div className="bg-green-500/20 border-b border-green-400/60 px-4 py-1.5 flex items-center justify-between gap-2">
-                  <span className="text-green-300 text-xs font-bold tracking-wide" style={{textShadow:'0 0 8px #4ade80'}}>👤 EM ATENDIMENTO: {attentionMap.get(order.id)}</span>
+                  <span className="text-green-300 text-xs font-bold tracking-wide" style={{textShadow:'0 0 8px #4ade80'}}>ðŸ‘¤ EM ATENDIMENTO: {attentionMap.get(order.id)}</span>
                   <button
                     onClick={e => { e.stopPropagation(); clearAttentionMut.mutate({ registrationId: order.id }); }}
                     className="text-green-400/70 hover:text-red-400 text-xs transition-colors font-bold"
                     title="Liberar pedido"
-                  >✕</button>
+                  >âœ•</button>
                 </div>
               )}
-              {/* Faixa "Entregue em" — só na aba Entregues */}
+              {/* Faixa "Entregue em" â€” sÃ³ na aba Entregues */}
               {group.isDelivered && (order.deliveredNotifiedAt || order.latestStatusAt) && (
                 <div className="bg-teal-500/15 border-b border-teal-500/30 px-4 py-1.5 flex items-center gap-2">
                   <svg className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   <span className="text-teal-300 text-xs font-bold tracking-wide">
                     {order.deliveredNotifiedAt
-                      ? `✉️ Notificado em: ${formatDate(order.deliveredNotifiedAt)}`
+                      ? `âœ‰ï¸ Notificado em: ${formatDate(order.deliveredNotifiedAt)}`
                       : `Entregue em: ${formatDate(order.latestStatusAt)}`
                     }
                   </span>
                 </div>
               )}
-              {/* Cabeçalho do card */}
+              {/* CabeÃ§alho do card */}
               <div className="flex items-stretch">
                 {/* Checkbox */}
                 <button
@@ -5017,7 +5017,7 @@ export default function AdminOrders() {
                   }
                 </button>
 
-                {/* Conteúdo clicável */}
+                {/* ConteÃºdo clicÃ¡vel */}
                 <div
                   role="button"
                   tabIndex={0}
@@ -5102,13 +5102,13 @@ export default function AdminOrders() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {order.customerNumber && (
-                            <span className="flex-shrink-0 text-[11px] font-mono font-bold text-cyan-400/80 bg-cyan-500/10 border border-cyan-500/20 rounded px-1.5 py-0.5 leading-none" title="Número de cadastro">
+                            <span className="flex-shrink-0 text-[11px] font-mono font-bold text-cyan-400/80 bg-cyan-500/10 border border-cyan-500/20 rounded px-1.5 py-0.5 leading-none" title="NÃºmero de cadastro">
                               *{order.customerNumber}
                             </span>
                           )}
                           <p className="font-semibold text-sm">{name}</p>
                         </div>
-                        {/* Linha do telefone + botões Copiar Nome e Deletar na mesma largura */}
+                        {/* Linha do telefone + botÃµes Copiar Nome e Deletar na mesma largura */}
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                           <p className="text-xs text-muted-foreground">{formatPhone(order.phone)}</p>
                           {order.phone && (
@@ -5137,7 +5137,7 @@ export default function AdminOrders() {
                             </a>
                           )}
                         </div>
-                        {/* Botões Copiar Nome e Deletar — coluna, largura da linha do telefone */}
+                        {/* BotÃµes Copiar Nome e Deletar â€” coluna, largura da linha do telefone */}
                         <div className="flex flex-col gap-1 mt-1 w-fit" onClick={e => e.stopPropagation()}>
                           <button
                             onPointerDown={e => {
@@ -5164,7 +5164,7 @@ export default function AdminOrders() {
                                 onPointerDown={e => { e.stopPropagation(); setConfirmDelete(null); }}
                                 className="py-1 px-3 bg-card border border-border text-muted-foreground rounded text-[11px] font-medium hover:bg-muted/20 active:bg-muted/40 transition-colors touch-manipulation select-none"
                               >
-                                Não
+                                NÃ£o
                               </button>
                             </div>
                           ) : (
@@ -5217,7 +5217,7 @@ export default function AdminOrders() {
                                 }}
                               />
                               <button onClick={() => updatePriceMutation.mutate({ registrationId: order.id, pricePaid: editingPrice[String(order.id)] })} className="text-xs px-1.5 py-0.5 bg-green-600 text-white rounded">OK</button>
-                              <button onClick={() => setEditingPrice(prev => { const n = { ...prev }; delete n[String(order.id)]; return n; })} className="text-xs px-1.5 py-0.5 bg-gray-600 text-white rounded">✕</button>
+                              <button onClick={() => setEditingPrice(prev => { const n = { ...prev }; delete n[String(order.id)]; return n; })} className="text-xs px-1.5 py-0.5 bg-gray-600 text-white rounded">âœ•</button>
                             </span>
                           ) : (
                             <span
@@ -5226,14 +5226,14 @@ export default function AdminOrders() {
                               onClick={e => { e.stopPropagation(); setEditingPrice(prev => ({ ...prev, [String(order.id)]: order.pricePaid || '' })); }}
                               title="Clique para editar o valor"
                             >
-                              💰 {order.pricePaid || 'R$ 0,00'} ✏️
+                              ðŸ’° {order.pricePaid || 'R$ 0,00'} âœï¸
                             </span>
                           )}
                         </div>
                         {/* Bloco de carrinho: lista todos os produtos se for grupo de carrinho */}
                         {isCartGroup && cgItems.length > 1 ? (
                           <div className="mt-1 space-y-1">
-                            <p className="text-[10px] font-bold text-amber-400/80 uppercase tracking-wider">🛒 Carrinho ({cgItems.length} itens)</p>
+                            <p className="text-[10px] font-bold text-amber-400/80 uppercase tracking-wider">ðŸ›’ Carrinho ({cgItems.length} itens)</p>
                             {cgItems.map((item, idx) => {
                               const svcOpt = item.serviceOption;
                               const gMatch = svcOpt ? svcOpt.match(/^(.*?)\s*-?\s*(Garantia:.*)$/i) : null;
@@ -5244,9 +5244,9 @@ export default function AdminOrders() {
                                   <div className="flex items-start justify-between gap-1">
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs text-primary/90 font-semibold truncate">
-                                        {idx + 1}. {item.serviceName || '(Sem produto)'}{mainOpt ? ` — ${mainOpt}` : ''}
+                                        {idx + 1}. {item.serviceName || '(Sem produto)'}{mainOpt ? ` â€” ${mainOpt}` : ''}
                                       </p>
-                                      {gPart && <p className="text-[10px] text-amber-400/70 truncate">🛡️ {gPart}</p>}
+                                      {gPart && <p className="text-[10px] text-amber-400/70 truncate">ðŸ›¡ï¸ {gPart}</p>}
                                       {item.orderNumber && (
                                         <p className="text-[10px] text-primary/60">Pedido #{item.orderNumber}</p>
                                       )}
@@ -5258,7 +5258,7 @@ export default function AdminOrders() {
                                 </div>
                               );
                             })}
-                            {/* Rodapé do carrinho: total e desconto */}
+                            {/* RodapÃ© do carrinho: total e desconto */}
                             {(() => {
                               const cartTotalVal = order.cartTotal;
                               const cartDiscount = order.cartCouponDiscount;
@@ -5275,13 +5275,13 @@ export default function AdminOrders() {
                                   {cartDiscount && cartDiscount > 0 && (
                                     <div className="flex items-center justify-between text-[10px]">
                                       <span className="text-amber-400">
-                                        🏷️ Cupom{order.cartCouponCode ? ` (${order.cartCouponCode})` : ''}:
+                                        ðŸ·ï¸ Cupom{order.cartCouponCode ? ` (${order.cartCouponCode})` : ''}:
                                       </span>
                                       <span className="text-amber-400 font-bold">-R$ {cartDiscount.toFixed(2).replace('.', ',')}</span>
                                     </div>
                                   )}
                                   <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold text-green-300">💰 Total Pago:</span>
+                                    <span className="text-xs font-bold text-green-300">ðŸ’° Total Pago:</span>
                                     <span className="text-sm font-black text-green-300">R$ {totalPago.toFixed(2).replace('.', ',')}</span>
                                   </div>
                                 </div>
@@ -5297,11 +5297,11 @@ export default function AdminOrders() {
                           return (
                             <div className="mt-0.5">
                               <p className="text-xs text-primary/80 font-medium truncate">
-                                📦 {order.serviceName}{mainOpt ? ` — ${mainOpt}` : ''}
+                                ðŸ“¦ {order.serviceName}{mainOpt ? ` â€” ${mainOpt}` : ''}
                               </p>
                               {garantiaPart && (
                                 <p className="text-xs text-amber-400/80 font-medium truncate">
-                                  🛡️ {garantiaPart}
+                                  ðŸ›¡ï¸ {garantiaPart}
                                 </p>
                               )}
                             </div>
@@ -5309,13 +5309,13 @@ export default function AdminOrders() {
                         })()
                         )}
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                            {order.customerReferredBy === 'Não informou' ? (
+                            {order.customerReferredBy === 'NÃ£o informou' ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 border border-red-500/50 text-red-400">
-                                🚫 Não informou indicador
+                                ðŸš« NÃ£o informou indicador
                               </span>
                             ) : order.customerReferredBy ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/25 border border-amber-400/70 text-amber-300" style={{boxShadow: '0 0 6px rgba(251,191,36,0.3)'}}>
-                                👥 Indicado por: {order.customerReferredBy}
+                                ðŸ‘¥ Indicado por: {order.customerReferredBy}
                               </span>
                             ) : null}
                             {order.customerReferredByPhone && (
@@ -5325,7 +5325,7 @@ export default function AdminOrders() {
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-red-500/20 hover:border-red-500/50 hover:text-red-400 transition-colors"
                                   title="Clique para desfazer"
                                 >
-                                  ✅ Comissão Paga
+                                  âœ… ComissÃ£o Paga
                                 </button>
                               ) : (
                                 <button
@@ -5333,15 +5333,15 @@ export default function AdminOrders() {
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 border border-red-500/50 text-red-400 animate-pulse hover:bg-green-500/20 hover:border-green-500/50 hover:text-green-400 transition-colors"
                                   title="Clique para marcar como paga"
                                 >
-                                  💰 PAGAR COMISSÃO
+                                  ðŸ’° PAGAR COMISSÃƒO
                                 </button>
                               )
                             )}
                           </div>
                         <p className="text-xs text-muted-foreground mt-0.5">{formatDate(order.accessedAt)}</p>
-                        {/* Botões de ação abaixo da data/hora */}
+                        {/* BotÃµes de aÃ§Ã£o abaixo da data/hora */}
                         <div className="flex flex-wrap gap-1 mt-1.5">
-                          {/* Botão Automático/Manual */}
+                          {/* BotÃ£o AutomÃ¡tico/Manual */}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -5350,25 +5350,25 @@ export default function AdminOrders() {
                                 orderSource: (order.orderSource ?? 'auto') === 'auto' ? 'manual' : 'auto',
                               });
                             }}
-                            title={(order.orderSource ?? 'auto') === 'auto' ? 'Pedido Automático — clique para marcar como Manual' : 'Pedido Manual — clique para marcar como Automático'}
+                            title={(order.orderSource ?? 'auto') === 'auto' ? 'Pedido AutomÃ¡tico â€” clique para marcar como Manual' : 'Pedido Manual â€” clique para marcar como AutomÃ¡tico'}
                             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
                               (order.orderSource ?? 'auto') === 'manual'
                                 ? 'bg-orange-500/20 border-orange-500/50 text-orange-400 hover:bg-blue-500/20 hover:border-blue-500/50 hover:text-blue-400'
                                 : 'bg-blue-500/10 border-blue-500/30 text-blue-400/70 hover:bg-orange-500/20 hover:border-orange-500/50 hover:text-orange-400'
                             }`}
                           >
-                            {(order.orderSource ?? 'auto') === 'manual' ? '✋ Manual' : '🤖 Auto'}
+                            {(order.orderSource ?? 'auto') === 'manual' ? 'âœ‹ Manual' : 'ðŸ¤– Auto'}
                           </button>
-                          {/* Badge Link de Indicação */}
+                          {/* Badge Link de IndicaÃ§Ã£o */}
                           {order.refCode && (
                             <span
-                              title={`Acesso via link de indicação de: ${order.refOwnerName || 'desconhecido'}`}
+                              title={`Acesso via link de indicaÃ§Ã£o de: ${order.refOwnerName || 'desconhecido'}`}
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-purple-500/20 border-purple-500/50 text-purple-300 cursor-default"
                             >
-                              🔗 Link{order.refOwnerName ? ` • ${order.refOwnerName}` : ''}
+                              ðŸ”— Link{order.refOwnerName ? ` â€¢ ${order.refOwnerName}` : ''}
                             </span>
                           )}
-                          {/* Botão Grupos Customizados */}
+                          {/* BotÃ£o Grupos Customizados */}
                           {(() => {
                             const groups = customGroupsQuery.data || [];
                             if (groups.length === 0) return null;
@@ -5400,7 +5400,7 @@ export default function AdminOrders() {
                                     orderGroups.length > 0 ? 'text-yellow-400 hover:text-yellow-300' : 'text-muted-foreground/40 hover:text-yellow-400'
                                   }`}
                                 >
-                                  <span className="text-base leading-none">🔖</span>
+                                  <span className="text-base leading-none">ðŸ”–</span>
                                 </button>
                                 {isOpen && groupMenuPos && createPortal(
                                   <>
@@ -5433,7 +5433,7 @@ export default function AdminOrders() {
                                             key={g.id}
                                             onClick={() => {
                                               if (isMember) {
-                                                // Já está neste grupo → remover
+                                                // JÃ¡ estÃ¡ neste grupo â†’ remover
                                                 removeMemberMut.mutate({ groupId: g.id, registrationId: order.id });
                                               } else {
                                                 // Remover de todos os outros grupos antes de adicionar
@@ -5462,9 +5462,9 @@ export default function AdminOrders() {
                                             onMouseEnter={e => (e.currentTarget.style.background = isMember ? 'rgba(234,179,8,0.1)' : '#27272a')}
                                             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                           >
-                                            <span>{g.icon || '🔖'}</span>
+                                            <span>{g.icon || 'ðŸ”–'}</span>
                                             <span style={{ flex: 1 }}>{g.name}</span>
-                                            {isMember && <span style={{ fontSize: '10px', color: '#facc15' }}>✓ adicionado</span>}
+                                            {isMember && <span style={{ fontSize: '10px', color: '#facc15' }}>âœ“ adicionado</span>}
                                           </button>
                                         );
                                       })}
@@ -5475,32 +5475,32 @@ export default function AdminOrders() {
                               </div>
                             );
                           })()}
-                          {/* Botão urgente */}
+                          {/* BotÃ£o urgente */}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               toggleUrgentMutation.mutate({ registrationId: order.id, urgent: order.isUrgent !== 1 });
                             }}
-                            title={order.isUrgent === 1 ? 'Remover urgência' : 'Marcar como urgente'}
+                            title={order.isUrgent === 1 ? 'Remover urgÃªncia' : 'Marcar como urgente'}
                             className={`p-1 rounded-full transition-colors ${
                               order.isUrgent === 1
                                 ? 'text-red-400 hover:text-red-300'
                                 : 'text-muted-foreground/40 hover:text-red-400'
                             }`}
                           >
-                            <span className="text-base leading-none">🚨</span>
+                            <span className="text-base leading-none">ðŸš¨</span>
                           </button>
-                          {/* Botão Em atendimento */}
+                          {/* BotÃ£o Em atendimento */}
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleAttention(order.id); }}
-                            title={attentionMap.has(order.id) ? `Em atendimento: ${attentionMap.get(order.id)} — clique para liberar` : 'Marcar como em atendimento'}
+                            title={attentionMap.has(order.id) ? `Em atendimento: ${attentionMap.get(order.id)} â€” clique para liberar` : 'Marcar como em atendimento'}
                             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
                               attentionMap.has(order.id)
                                 ? 'bg-red-600/40 border-red-500 text-red-300 shadow-md shadow-red-500/40 animate-pulse'
                                 : 'bg-green-500/15 border-green-500/60 text-green-400 hover:bg-green-500/30 hover:border-green-400 hover:text-green-300'
                             }`}
                           >
-                            👤 {attentionMap.has(order.id) ? attentionMap.get(order.id) : 'Atender'}
+                            ðŸ‘¤ {attentionMap.has(order.id) ? attentionMap.get(order.id) : 'Atender'}
                           </button>
                           {/* Selo NOVO */}
                           {!viewedOrders.has(getOrderKey(order)) && (
@@ -5512,20 +5512,20 @@ export default function AdminOrders() {
                           {order.hasNewDocResponse && (
                             <button
                               onClick={e => { e.stopPropagation(); setTab(getOrderKey(order), 'documentos'); setExpandedId(getOrderKey(order)); }}
-                              title="Cliente respondeu solicitação de documento — clique para ver"
+                              title="Cliente respondeu solicitaÃ§Ã£o de documento â€” clique para ver"
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-black animate-pulse shadow-sm shadow-amber-500/50 hover:bg-amber-400 transition-colors"
                             >
-                              📄 DOC
+                              ðŸ“„ DOC
                             </button>
                           )}
                           {/* Selo RESPOSTA */}
                           {order.hasNewTrackingAnswer && (
                             <button
                               onClick={e => { e.stopPropagation(); setTab(getOrderKey(order), 'status'); setExpandedId(getOrderKey(order)); }}
-                              title="Cliente respondeu pergunta de acompanhamento — clique para ver"
+                              title="Cliente respondeu pergunta de acompanhamento â€” clique para ver"
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500 text-white animate-pulse shadow-sm shadow-violet-500/50 hover:bg-violet-400 transition-colors"
                             >
-                              💬 RESP
+                              ðŸ’¬ RESP
                             </button>
                           )}
                         </div>
@@ -5535,7 +5535,7 @@ export default function AdminOrders() {
                     <div className="flex flex-col items-center gap-2 flex-shrink-0">
                       {order.folderName && (
                         <span className="flex items-center justify-center gap-1 w-full px-2 py-0.5 rounded-2xl text-[10px] font-semibold border bg-amber-500/15 border-amber-500/40 text-amber-300 text-center leading-tight break-words" title={`Pasta: ${order.folderName}`}>
-                          {order.folderIcon || '📁'} {order.folderName}
+                          {order.folderIcon || 'ðŸ“'} {order.folderName}
                         </span>
                       )}
                       <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
@@ -5544,7 +5544,7 @@ export default function AdminOrders() {
                 </div>
               </div>
 
-              {/* Status do pedido (rodapé, largura total) */}
+              {/* Status do pedido (rodapÃ©, largura total) */}
               <div className="px-3 pt-2 border-t border-border">
                 {statusCfg ? (
                   <div className={`w-full rounded-2xl border-2 px-5 py-4 ${statusCfg.bg} ${statusCfg.color}`}>
@@ -5558,7 +5558,7 @@ export default function AdminOrders() {
                       {statusCfg.label}
                     </p>
                     <p className="text-sm opacity-70 leading-tight mt-1">
-                      Situação atual do atendimento
+                      SituaÃ§Ã£o atual do atendimento
                     </p>
                   </div>
                 ) : (
@@ -5579,23 +5579,23 @@ export default function AdminOrders() {
                 )}
               </div>
 
-              {/* Destaque do status de agendamento do cliente (rodapé, largura total) */}
+              {/* Destaque do status de agendamento do cliente (rodapÃ©, largura total) */}
               <div className="px-3 pt-2 pb-2">
                 <ScheduleStatusBadge registrationId={order.id} subOrderIndex={order.subOrderIndex ?? 0} customerPhone={order.phone} />
               </div>
 
-              {/* Aviso de pedido novo piscando no rodé do card */}
+              {/* Aviso de pedido novo piscando no rodÃ© do card */}
               {!viewedOrders.has(getOrderKey(order)) && (
                 <div className="flex items-center justify-between gap-2 px-3 py-2 bg-green-600/20 border-t border-green-500/40 animate-pulse">
                   <div className="flex items-center gap-2">
-                    <span className="text-base leading-none">🔔</span>
+                    <span className="text-base leading-none">ðŸ””</span>
                     <span className="text-xs font-bold text-green-400">Pedido novo! Confirmar recebimento</span>
                   </div>
                   <button
                     onClick={e => { e.stopPropagation(); markAsViewed(getOrderKey(order)); }}
                     className="flex-shrink-0 bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold px-3 py-1 rounded-full transition-colors"
                   >
-                    ✓ Confirmar
+                    âœ“ Confirmar
                   </button>
                 </div>
               )}
@@ -5615,7 +5615,7 @@ export default function AdminOrders() {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        {t === "status" ? "📋 Status" : t === "cliente" ? "👤 Cliente" : t === "historico" ? "🕐 Histórico" : t === "documentos" ? "📁 Docs" : "📝 Notas"}
+                        {t === "status" ? "ðŸ“‹ Status" : t === "cliente" ? "ðŸ‘¤ Cliente" : t === "historico" ? "ðŸ• HistÃ³rico" : t === "documentos" ? "ðŸ“ Docs" : "ðŸ“ Notas"}
                       </button>
                     ))}
                   </div>
@@ -5648,7 +5648,7 @@ export default function AdminOrders() {
                               {appliedAt && (
                                 <span className={`text-[10px] font-normal ${
                                   isSel ? 'opacity-70' : 'text-green-400/70'
-                                }`}>✓ {appliedAt}</span>
+                                }`}>âœ“ {appliedAt}</span>
                               )}
                             </button>
                           );
@@ -5673,7 +5673,7 @@ export default function AdminOrders() {
                       <textarea
                         value={note[getOrderKey(order)] || ""}
                         onChange={e => setNote(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
-                        placeholder="Observação para o cliente (opcional)..."
+                        placeholder="ObservaÃ§Ã£o para o cliente (opcional)..."
                         rows={2}
                         className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
                       />
@@ -5719,7 +5719,7 @@ export default function AdminOrders() {
                         </button>
                       )}
                       {!order.customerEmail && (
-                        <p className="text-xs text-yellow-400/80 text-center">⚠️ Cliente sem email — status será salvo mas sem notificação</p>
+                        <p className="text-xs text-yellow-400/80 text-center">âš ï¸ Cliente sem email â€” status serÃ¡ salvo mas sem notificaÃ§Ã£o</p>
                       )}
                       {/* Badge de leitura de e-mail */}
                       {order.customerEmail && (
@@ -5728,7 +5728,7 @@ export default function AdminOrders() {
                           subOrderIndex={order.subOrderIndex ?? 0}
                         />
                       )}
-                      {/* Botão WhatsApp */}
+                      {/* BotÃ£o WhatsApp */}
                       {order.phone && (() => {
                         const currentStatus = selectedStatus[getOrderKey(order)] || order.latestStatus || "recebido";
                         const statusCfgWa = ACTIVE_STATUS_CONFIG[currentStatus];
@@ -5741,7 +5741,7 @@ export default function AdminOrders() {
                         const opcao = order.serviceOption && order.serviceOption !== 'NULL' ? order.serviceOption : '';
                         const cidade = order.customerCity || '';
                         const uf = order.customerUf || '';
-                        const localidade = cidade && uf ? `${cidade} — ${uf}` : cidade || uf || '';
+                        const localidade = cidade && uf ? `${cidade} â€” ${uf}` : cidade || uf || '';
                         const previsao = order.deliveryEstimate ? new Date(order.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
                         const pinForWa = customerPinQuery.data?.pin || adminPinEdit[getOrderKey(order)] || '';
                         const observacao = note[getOrderKey(order)] || '';
@@ -5752,9 +5752,9 @@ export default function AdminOrders() {
                         const dia = String(now.getDate()).padStart(2, '0');
                         const mes = String(now.getMonth() + 1).padStart(2, '0');
                         const ano = String(now.getFullYear());
-                        const servicoCompleto = servico ? `${servico}${opcao ? ` — ${opcao}` : ''}` : '';
+                        const servicoCompleto = servico ? `${servico}${opcao ? ` â€” ${opcao}` : ''}` : '';
 
-                        // Usar template editável se disponível, senão usar mensagem padrão
+                        // Usar template editÃ¡vel se disponÃ­vel, senÃ£o usar mensagem padrÃ£o
                         let msg: string;
                         if (waOrderTemplate) {
                           msg = waOrderTemplate
@@ -5772,31 +5772,31 @@ export default function AdminOrders() {
                             .replace(/\{MES\}/g, mes)
                             .replace(/\{ANO\}/g, ano);
                         } else {
-                          // Mensagem padrão (fallback)
+                          // Mensagem padrÃ£o (fallback)
                           const linhas: string[] = [];
-                          linhas.push(`*Walk Ajuda* — Atualização de Pedido`);
+                          linhas.push(`*H2 COLOMBIANO* â€” AtualizaÃ§Ã£o de Pedido`);
                           linhas.push(``);
-                          linhas.push(`Olá, *${clientName}*! 👋`);
+                          linhas.push(`OlÃ¡, *${clientName}*! ðŸ‘‹`);
                           linhas.push(``);
-                          linhas.push(`*Status:* ✅ ${statusLabel}`);
+                          linhas.push(`*Status:* âœ… ${statusLabel}`);
                           linhas.push(``);
                           if (cleanDesc) { linhas.push(cleanDesc); linhas.push(``); }
                           if (numCadastro || numPedido || servicoCompleto || localidade || previsao) {
                             linhas.push(`*Detalhes do pedido:*`);
-                            if (numCadastro) linhas.push(`• Cadastro: *${numCadastro}*`);
-                            if (numPedido) linhas.push(`• Pedido: *${numPedido}*`);
-                            if (servicoCompleto) linhas.push(`• Serviço: ${servicoCompleto}`);
-                            if (localidade) linhas.push(`• Cidade: ${localidade}`);
-                            if (previsao) linhas.push(`• Previsão de Entrega: *${previsao}*`);
+                            if (numCadastro) linhas.push(`â€¢ Cadastro: *${numCadastro}*`);
+                            if (numPedido) linhas.push(`â€¢ Pedido: *${numPedido}*`);
+                            if (servicoCompleto) linhas.push(`â€¢ ServiÃ§o: ${servicoCompleto}`);
+                            if (localidade) linhas.push(`â€¢ Cidade: ${localidade}`);
+                            if (previsao) linhas.push(`â€¢ PrevisÃ£o de Entrega: *${previsao}*`);
                             linhas.push(``);
                           }
-                          if (observacao) { linhas.push(`*Observação:* _${observacao}_`); linhas.push(``); }
+                          if (observacao) { linhas.push(`*ObservaÃ§Ã£o:* _${observacao}_`); linhas.push(``); }
                           linhas.push(`Acompanhe seu pedido em:`);
-                          linhas.push(`https://walkajuda.com/acompanhar`);
+                          linhas.push(`https://h2colombiano.com/acompanhar`);
                           if (pinForWa) {
                             linhas.push(``);
-                            linhas.push(`🔐 *Senha de acesso:* ${pinForWa}`);
-                            linhas.push(`⚠️ _Não compartilhe esta senha com ningém para evitar bloqueios de acesso._`);
+                            linhas.push(`ðŸ” *Senha de acesso:* ${pinForWa}`);
+                            linhas.push(`âš ï¸ _NÃ£o compartilhe esta senha com ningÃ©m para evitar bloqueios de acesso._`);
                           }
                           msg = linhas.join('\n');
                         }
@@ -5806,7 +5806,7 @@ export default function AdminOrders() {
                         return (
                           <button
                             onClick={() => {
-                              // Encontrar template padrão para o status atual
+                              // Encontrar template padrÃ£o para o status atual
                               const currentStatus = order.latestStatus || '';
                               const defaultTemplate = (waTemplates as any[]).find((t: any) => t.statusKey === currentStatus && t.isDefault === 1)
                                 || (waTemplates as any[]).find((t: any) => t.statusKey === currentStatus)
@@ -5818,13 +5818,13 @@ export default function AdminOrders() {
                                   .replace(/\{status\}/gi, statusLabel)
                                   .replace(/\{pedido\}/gi, String(order.orderNumber || order.id))
                                   .replace(/\{telefone\}/gi, order.phone || '')
-                                  .replace(/\{servico\}/gi, order.serviceName && order.serviceName !== 'NULL' ? `${order.serviceName}${order.serviceOption && order.serviceOption !== 'NULL' ? ` — ${order.serviceOption}` : ''}` : '')
-                                  .replace(/\{cidade\}/gi, order.customerCity ? `${order.customerCity}${order.customerUf ? ` — ${order.customerUf}` : ''}` : '')
+                                  .replace(/\{servico\}/gi, order.serviceName && order.serviceName !== 'NULL' ? `${order.serviceName}${order.serviceOption && order.serviceOption !== 'NULL' ? ` â€” ${order.serviceOption}` : ''}` : '')
+                                  .replace(/\{cidade\}/gi, order.customerCity ? `${order.customerCity}${order.customerUf ? ` â€” ${order.customerUf}` : ''}` : '')
                                   .replace(/\{previsao\}/gi, order.deliveryEstimate ? new Date(order.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
                                 const mediaLines2: string[] = [];
-                                if ((defaultTemplate as any).imageUrl) mediaLines2.push(((defaultTemplate as any).imageTitle ? '🖼️ *' + (defaultTemplate as any).imageTitle + '*: ' : '🖼️ ') + (defaultTemplate as any).imageUrl);
-                                if ((defaultTemplate as any).videoUrl) mediaLines2.push(((defaultTemplate as any).videoTitle ? '🎥 *' + (defaultTemplate as any).videoTitle + '*: ' : '🎥 ') + (defaultTemplate as any).videoUrl);
-                                if ((defaultTemplate as any).mediaFileUrl) mediaLines2.push(((defaultTemplate as any).mediaType === 'video' ? '🎥 ' : '🖼️ ') + (defaultTemplate as any).mediaFileUrl);
+                                if ((defaultTemplate as any).imageUrl) mediaLines2.push(((defaultTemplate as any).imageTitle ? 'ðŸ–¼ï¸ *' + (defaultTemplate as any).imageTitle + '*: ' : 'ðŸ–¼ï¸ ') + (defaultTemplate as any).imageUrl);
+                                if ((defaultTemplate as any).videoUrl) mediaLines2.push(((defaultTemplate as any).videoTitle ? 'ðŸŽ¥ *' + (defaultTemplate as any).videoTitle + '*: ' : 'ðŸŽ¥ ') + (defaultTemplate as any).videoUrl);
+                                if ((defaultTemplate as any).mediaFileUrl) mediaLines2.push(((defaultTemplate as any).mediaType === 'video' ? 'ðŸŽ¥ ' : 'ðŸ–¼ï¸ ') + (defaultTemplate as any).mediaFileUrl);
                                 setWaModalMsg(mediaLines2.length > 0 ? baseMsg2 + '\n\n' + mediaLines2.join('\n') : baseMsg2);
                               } else {
                                 setWaModalMsg(msg);
@@ -5839,13 +5839,13 @@ export default function AdminOrders() {
                         );
                       })()}
 
-                      {/* Observação editável quando status é Entregue */}
-                      {/* === DADOS DE LOGIN — visível para o admin em QUALQUER status === */}
+                      {/* ObservaÃ§Ã£o editÃ¡vel quando status Ã© Entregue */}
+                      {/* === DADOS DE LOGIN â€” visÃ­vel para o admin em QUALQUER status === */}
                       {(() => {
                         const key = getOrderKey(order);
                         const saved = loginDataQuery.data;
                         // Usar loginFields[key] se existir (editado pelo admin ou inicializado pelo useEffect)
-                        // Fallback vazio — o useEffect popula os campos quando os dados chegam do banco
+                        // Fallback vazio â€” o useEffect popula os campos quando os dados chegam do banco
                         const fields = loginFields[key] ?? { loginPhone: '', loginEmail: '', loginPassword: '', authCode: '', emailLink: '', loginNotes: '', loginGroupLink: '' };
                         const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) =>
                           setLoginFields(prev => ({ ...prev, [key]: { ...(prev[key] ?? { loginPhone: '', loginEmail: '', loginPassword: '', authCode: '', emailLink: '', loginNotes: '', loginGroupLink: '' }), [f]: v } }));
@@ -5858,7 +5858,7 @@ export default function AdminOrders() {
                           const DIA = String(now.getDate()).padStart(2, '0');
                           const MES = String(now.getMonth() + 1).padStart(2, '0');
                           const ANO = String(now.getFullYear());
-                          // Usar template do banco se disponível
+                          // Usar template do banco se disponÃ­vel
                           if (waLoginTemplate) {
                             return waLoginTemplate
                               .replace(/\{nome\}/g, nome)
@@ -5868,42 +5868,42 @@ export default function AdminOrders() {
                               .replace(/\{MES\}/g, MES)
                               .replace(/\{ANO\}/g, ANO);
                           }
-                          // Fallback: mensagem padrão hardcoded
+                          // Fallback: mensagem padrÃ£o hardcoded
                           const linhas: string[] = [];
-                          linhas.push(`🔐 Seus dados de acesso estão prontos!`);
+                          linhas.push(`ðŸ” Seus dados de acesso estÃ£o prontos!`);
                           linhas.push(``);
-                          linhas.push(`Olá${nome ? `, ${nome}` : ''}!`);
+                          linhas.push(`OlÃ¡${nome ? `, ${nome}` : ''}!`);
                           linhas.push(``);
-                          linhas.push(`Seu pedido já foi liberado.`);
+                          linhas.push(`Seu pedido jÃ¡ foi liberado.`);
                           linhas.push(``);
-                          linhas.push(`⚠️ IMPORTANTE: Os dados de acesso não são enviados por mensagem. Eles devem ser resgatados exclusivamente através do site abaixo:`);
+                          linhas.push(`âš ï¸ IMPORTANTE: Os dados de acesso nÃ£o sÃ£o enviados por mensagem. Eles devem ser resgatados exclusivamente atravÃ©s do site abaixo:`);
                           linhas.push(``);
-                          linhas.push(`🌐 https://walkajuda.com/acompanhar`);
+                          linhas.push(`ðŸŒ https://h2colombiano.com/acompanhar`);
                           if (pinLogin) {
                             linhas.push(``);
-                            linhas.push(`🔐 *Senha de acesso:* ${pinLogin}`);
-                            linhas.push(`⚠️ _Não compartilhe esta senha com ninguém para evitar bloqueios de acesso._`);
+                            linhas.push(`ðŸ” *Senha de acesso:* ${pinLogin}`);
+                            linhas.push(`âš ï¸ _NÃ£o compartilhe esta senha com ninguÃ©m para evitar bloqueios de acesso._`);
                           }
                           linhas.push(``);
                           linhas.push(`Para resgatar seus dados:`);
                           linhas.push(``);
-                          linhas.push(`✅ Acesse o site`);
-                          linhas.push(`✅ Informe seu telefone e a senha de 4 dígitos`);
-                          linhas.push(`✅ Os dados de acesso serão exibidos na página do seu pedido`);
+                          linhas.push(`âœ… Acesse o site`);
+                          linhas.push(`âœ… Informe seu telefone e a senha de 4 dÃ­gitos`);
+                          linhas.push(`âœ… Os dados de acesso serÃ£o exibidos na pÃ¡gina do seu pedido`);
                           linhas.push(``);
-                          linhas.push(`❌ Não tente acessar diretamente pelo aplicativo`);
-                          linhas.push(`❌ Os dados não são fornecidos por WhatsApp`);
+                          linhas.push(`âŒ NÃ£o tente acessar diretamente pelo aplicativo`);
+                          linhas.push(`âŒ Os dados nÃ£o sÃ£o fornecidos por WhatsApp`);
                           linhas.push(``);
-                          linhas.push(`🔒 Por segurança, o resgate dos dados é realizado somente pela área do cliente.`);
+                          linhas.push(`ðŸ”’ Por seguranÃ§a, o resgate dos dados Ã© realizado somente pela Ã¡rea do cliente.`);
                           linhas.push(``);
-                          linhas.push(`Equipe Walk Ajuda`);
+                          linhas.push(`Equipe H2 COLOMBIANO`);
                           return linhas.join('\n');
                         };
                         const waPhone = order.phone ? (order.phone.replace(/\D/g, '').startsWith('55') ? order.phone.replace(/\D/g, '') : `55${order.phone.replace(/\D/g, '')}`) : '';
                         const hasLoginData = fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
                         return (
                           <div className="space-y-3">
-                            {/* Seção: Senha de Acompanhamento de Pedido */}
+                            {/* SeÃ§Ã£o: Senha de Acompanhamento de Pedido */}
                             {(() => {
                               const pinKey = getOrderKey(order);
                               const currentPin = adminPinEdit[pinKey] !== undefined ? adminPinEdit[pinKey] : (customerPinQuery.data?.pin ?? '');
@@ -5931,7 +5931,7 @@ export default function AdminOrders() {
                                         if (currentPin.length === 4) {
                                           setAdminPinMut.mutate({ phone: order.phone, pin: currentPin });
                                         } else {
-                                          toast.error('A senha deve ter exatamente 4 dígitos');
+                                          toast.error('A senha deve ter exatamente 4 dÃ­gitos');
                                         }
                                       }}
                                       disabled={setAdminPinMut.isPending}
@@ -5962,12 +5962,12 @@ export default function AdminOrders() {
                                 </div>
                               );
                             })()}
-                            {/* Seção: Respostas do Formulário de Acompanhamento */}
+                            {/* SeÃ§Ã£o: Respostas do FormulÃ¡rio de Acompanhamento */}
                             {trackingAnswersQuery.data && trackingAnswersQuery.data.length > 0 && (
                               <div className="bg-blue-500/5 border border-blue-500/30 rounded-lg p-3 space-y-2">
                                 <p className="text-xs font-semibold text-blue-400 flex items-center gap-1.5">
                                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                  Respostas do Formulário de Acompanhamento
+                                  Respostas do FormulÃ¡rio de Acompanhamento
                                 </p>
                                 {trackingAnswersQuery.data.map((ans: any) => (
                                   <div key={ans.id} className="bg-black/20 border border-white/5 rounded-lg px-3 py-2">
@@ -5981,7 +5981,7 @@ export default function AdminOrders() {
                               </div>
                             )}
 
-                            {/* Seção: Enviar Pergunta Individual para este Pedido */}
+                            {/* SeÃ§Ã£o: Enviar Pergunta Individual para este Pedido */}
                             {(() => {
                               const activeQs = (tqListQuery.data || []).filter((q: any) => q.isActive === 1);
                               const assignments = assignmentsQuery.data || [];
@@ -5993,10 +5993,10 @@ export default function AdminOrders() {
                                     Perguntas Enviadas para este Pedido
                                   </p>
 
-                                  {/* Perguntas já enviadas */}
+                                  {/* Perguntas jÃ¡ enviadas */}
                                   {assignments.length > 0 && (
                                     <div className="space-y-1.5">
-                                      <p className="text-[10px] text-white/40 uppercase tracking-wider">Já enviadas</p>
+                                      <p className="text-[10px] text-white/40 uppercase tracking-wider">JÃ¡ enviadas</p>
                                       {assignments.map((a: any) => (
                                         <div key={a.id} className="flex items-start gap-2 bg-black/20 border border-white/5 rounded-lg px-2.5 py-2">
                                           <div className="flex-1 min-w-0">
@@ -6035,8 +6035,8 @@ export default function AdminOrders() {
                                     </div>
                                   )}
 
-                                  {/* Perguntas disponíveis para enviar */}
-                                  {/* Lista de todas as perguntas (ativas e inativas) com ações */}
+                                  {/* Perguntas disponÃ­veis para enviar */}
+                                  {/* Lista de todas as perguntas (ativas e inativas) com aÃ§Ãµes */}
                                   {(tqListQuery.data || []).length > 0 && (
                                     <div className="space-y-1.5">
                                       <p className="text-[10px] text-white/40 uppercase tracking-wider">Enviar pergunta</p>
@@ -6067,7 +6067,7 @@ export default function AdminOrders() {
                                                     <button onClick={() => setEditTQOptionsAdm(prev => prev.filter((_, j) => j !== i))} className="text-red-400 p-0.5"><X className="w-3 h-3" /></button>
                                                   </div>
                                                 ))}
-                                                <button onClick={() => setEditTQOptionsAdm(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-[10px] text-purple-400 hover:text-purple-300">+ Opção</button>
+                                                <button onClick={() => setEditTQOptionsAdm(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-[10px] text-purple-400 hover:text-purple-300">+ OpÃ§Ã£o</button>
                                               </div>
                                               <div className="flex gap-1.5 justify-end">
                                                 <button onClick={() => setEditingTQIdAdm(null)} className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-[10px]">Cancelar</button>
@@ -6152,12 +6152,12 @@ export default function AdminOrders() {
                                             <input
                                               value={newTQTextAdm}
                                               onChange={e => setNewTQTextAdm(e.target.value)}
-                                              placeholder="Ex: Você tem CNH válida?"
+                                              placeholder="Ex: VocÃª tem CNH vÃ¡lida?"
                                               className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
                                             />
                                             <div>
                                               <div className="flex items-center justify-between mb-1.5">
-                                                <span className="text-[10px] text-white/40 uppercase tracking-wider">Opções de Resposta</span>
+                                                <span className="text-[10px] text-white/40 uppercase tracking-wider">OpÃ§Ãµes de Resposta</span>
                                                 <button onClick={() => setNewTQOptionsAdm(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-[10px] text-purple-400 hover:text-purple-300">+ Adicionar</button>
                                               </div>
                                               <div className="space-y-1.5">
@@ -6166,7 +6166,7 @@ export default function AdminOrders() {
                                                     <input
                                                       value={opt.label}
                                                       onChange={e => setNewTQOptionsAdm(prev => prev.map((o, j) => j === i ? { ...o, label: e.target.value } : o))}
-                                                      placeholder={`Opção ${i + 1}`}
+                                                      placeholder={`OpÃ§Ã£o ${i + 1}`}
                                                       className="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
                                                     />
                                                     <div className="flex gap-0.5">
@@ -6198,7 +6198,7 @@ export default function AdminOrders() {
                               );
                             })()}
 
-                            {/* Seção: Dados de Login do Serviço */}
+                            {/* SeÃ§Ã£o: Dados de Login do ServiÃ§o */}
                             <div className="bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3">
                             <p className="text-xs font-semibold text-lime-400 flex items-center gap-1.5">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
@@ -6206,12 +6206,12 @@ export default function AdminOrders() {
                             </p>
                             <div className="space-y-2">
                               <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">📱 Número de Telefone</label>
+                                <label className="text-xs text-muted-foreground mb-1 block">ðŸ“± NÃºmero de Telefone</label>
                                 <div className="flex gap-1">
                                   <input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)}
                                     placeholder="Ex: (21) 99999-9999"
                                     className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
-                                  {fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
+                                  {fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">âœ•</button>}
                                 </div>
                               </div>
                               <div>
@@ -6220,7 +6220,7 @@ export default function AdminOrders() {
                                   <input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)}
                                     placeholder="Ex: usuario@email.com ou (11) 99999-9999"
                                     className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
-                                  {fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
+                                  {fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">âœ•</button>}
                                 </div>
                               </div>
                               <div>
@@ -6229,44 +6229,44 @@ export default function AdminOrders() {
                                   <input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)}
                                     placeholder="Ex: senha123"
                                     className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
-                                  {fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
+                                  {fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">âœ•</button>}
                                 </div>
                               </div>
                               <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label>
+                                <label className="text-xs text-muted-foreground mb-1 block">CÃ³digo Autenticador</label>
                                 <div className="flex gap-1">
                                   <input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))}
                                     placeholder="Ex: GJ6W76PV4B23GNTUEP7ZRJKI46HTZ6DE"
                                     className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
-                                  {fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
+                                  {fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">âœ•</button>}
                                 </div>
                               </div>
                               <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">🔗 Link de Acesso ao E-mail</label>
+                                <label className="text-xs text-muted-foreground mb-1 block">ðŸ”— Link de Acesso ao E-mail</label>
                                 <div className="flex gap-1">
                                   <input type="text" value={fields.emailLink} onChange={e => setField('emailLink', e.target.value)}
                                     placeholder="Ex: https://mail.google.com/..."
                                     className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
-                                  {fields.emailLink && <button onClick={() => setField('emailLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
+                                  {fields.emailLink && <button onClick={() => setField('emailLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">âœ•</button>}
                                 </div>
                               </div>
                               <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">👥 Link do Grupo (WhatsApp, Telegram, etc.)</label>
+                                <label className="text-xs text-muted-foreground mb-1 block">ðŸ‘¥ Link do Grupo (WhatsApp, Telegram, etc.)</label>
                                 <div className="flex gap-1">
                                   <input type="text" value={fields.loginGroupLink} onChange={e => setField('loginGroupLink', e.target.value)}
                                     placeholder="Ex: https://chat.whatsapp.com/..."
                                     className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
-                                  {fields.loginGroupLink && <button onClick={() => setField('loginGroupLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
+                                  {fields.loginGroupLink && <button onClick={() => setField('loginGroupLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">âœ•</button>}
                                 </div>
                               </div>
                               <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">📝 Texto / Instruções para o Cliente</label>
+                                <label className="text-xs text-muted-foreground mb-1 block">ðŸ“ Texto / InstruÃ§Ãµes para o Cliente</label>
                                 <div className="flex gap-1 items-start">
                                   <textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)}
-                                    placeholder="Ex: Acesse o app, vá em configurações e ative a conta..."
+                                    placeholder="Ex: Acesse o app, vÃ¡ em configuraÃ§Ãµes e ative a conta..."
                                     rows={3}
                                     className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />
-                                  {fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
+                                  {fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">âœ•</button>}
                                 </div>
                               </div>
                             </div>
@@ -6296,7 +6296,7 @@ export default function AdminOrders() {
                               )}
                             </div>
                             {saved && (saved.loginEmail || saved.loginPassword || saved.authCode || (saved as any).emailLink || (saved as any).loginNotes || (saved as any).loginGroupLink) && (
-                              <p className="text-xs text-lime-400/70 text-center">✓ Dados salvos — visíveis para o cliente quando status for Entregue</p>
+                              <p className="text-xs text-lime-400/70 text-center">âœ“ Dados salvos â€” visÃ­veis para o cliente quando status for Entregue</p>
                             )}
                           </div>
                           </div>
@@ -6316,7 +6316,7 @@ export default function AdminOrders() {
                         <div className="bg-teal-500/5 border border-teal-500/20 rounded-lg p-3 space-y-2">
                           <p className="text-xs font-semibold text-teal-400 flex items-center gap-1">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                            Observação do Pedido Entregue
+                            ObservaÃ§Ã£o do Pedido Entregue
                           </p>
                           <textarea
                             value={deliveryNote[getOrderKey(order)] ?? (historyQuery.data?.find(h => h.status === 'entregue' || h.status === 'pedido_entregue')?.note ?? '')}
@@ -6340,17 +6340,17 @@ export default function AdminOrders() {
                             {savingNote === getOrderKey(order) ? (
                               <><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-teal-300" />Salvando...</>
                             ) : (
-                              <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Observação</>
+                              <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar ObservaÃ§Ã£o</>
                             )}
                           </button>
                         </div>
                       )}
 
-                      {/* Previsão de Entrega */}
+                      {/* PrevisÃ£o de Entrega */}
                       <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-2">
                         <p className="text-xs font-semibold text-blue-400 flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5" />
-                          Previsão de Entrega
+                          PrevisÃ£o de Entrega
                         </p>
                         {order.deliveryEstimate && !deliveryEstimate[getOrderKey(order)] && (
                           <p className="text-xs text-muted-foreground">
@@ -6385,7 +6385,7 @@ export default function AdminOrders() {
                           <button
                             type="button"
                             onClick={() => {
-                              // Usar estado local se alterado, senão usar valor do banco convertido
+                              // Usar estado local se alterado, senÃ£o usar valor do banco convertido
                               const localVal = deliveryEstimate[getOrderKey(order)];
                               const bankVal = order.deliveryEstimate
                                 ? new Date(Number(order.deliveryEstimate) - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
@@ -6404,7 +6404,7 @@ export default function AdminOrders() {
                             {savingEstimate === getOrderKey(order) ? (
                               <><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-blue-300" />Salvando...</>
                             ) : (
-                              <><Calendar className="w-3.5 h-3.5" />Salvar Previsão</>
+                              <><Calendar className="w-3.5 h-3.5" />Salvar PrevisÃ£o</>
                             )}
                           </button>
                           {order.deliveryEstimate && (
@@ -6427,11 +6427,11 @@ export default function AdminOrders() {
                         </div>
                       </div>
 
-                      {/* Número do Pedido */}
+                      {/* NÃºmero do Pedido */}
                       <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-2">
                         <p className="text-xs font-semibold text-blue-400 flex items-center gap-1">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>
-                          Número do Pedido
+                          NÃºmero do Pedido
                         </p>
                         {order.orderNumber && !editOrderNumber[getOrderKey(order)] && (
                           <p className="text-xs text-muted-foreground">
@@ -6522,7 +6522,7 @@ export default function AdminOrders() {
                           {archiveMutation.isPending ? (
                             <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-zinc-300" />
                           ) : (
-                            <span>📁</span>
+                            <span>ðŸ“</span>
                           )}
                           Arquivar
                         </button>
@@ -6537,7 +6537,7 @@ export default function AdminOrders() {
                           {moveToRgCnhMutation.isPending ? (
                             <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-white" />
                           ) : (
-                            <span>🢪</span>
+                            <span>ðŸ¢ª</span>
                           )}
                           {(folderConfigQuery.data as any)?.['rgcnh']?.name || 'RG/CNH'}
                         </button>
@@ -6571,7 +6571,7 @@ export default function AdminOrders() {
                                       disabled={moveToFolderMut.isPending}
                                       className="text-left px-3 py-2 text-xs text-foreground hover:bg-muted/40 transition-colors"
                                     >
-                                      {f.icon ? `${f.icon} ` : '📁 '}{f.name}
+                                      {f.icon ? `${f.icon} ` : 'ðŸ“ '}{f.name}
                                     </button>
                                   ))}
                                 </div>
@@ -6589,7 +6589,7 @@ export default function AdminOrders() {
                   {tab === "cliente" && (
                     <div className="p-4 space-y-3">
                       {editData ? (
-                        /* Formulário de edição */
+                        /* FormulÃ¡rio de ediÃ§Ã£o */
                         <div className="space-y-3">
                           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
                             <Edit3 className="w-3.5 h-3.5" /> Editando dados do cliente
@@ -6607,7 +6607,7 @@ export default function AdminOrders() {
                           </div>
 
                           <div>
-                            <label className="text-xs text-muted-foreground block mb-1">Número de Cadastro</label>
+                            <label className="text-xs text-muted-foreground block mb-1">NÃºmero de Cadastro</label>
                             <div className="flex items-center gap-2">
                               <span className="text-sm text-muted-foreground font-bold">*</span>
                               <input
@@ -6619,7 +6619,7 @@ export default function AdminOrders() {
                                 placeholder="Ex: 136"
                               />
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">Número de identificação do cliente (ex: *136)</p>
+                            <p className="text-xs text-muted-foreground mt-1">NÃºmero de identificaÃ§Ã£o do cliente (ex: *136)</p>
                           </div>
 
                           <div>
@@ -6637,7 +6637,7 @@ export default function AdminOrders() {
                               className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                               placeholder="(11) 99999-9999"
                             />
-                            <p className="text-xs text-amber-400 mt-1">⚠️ Alterar o telefone atualiza o cadastro do cliente</p>
+                            <p className="text-xs text-amber-400 mt-1">âš ï¸ Alterar o telefone atualiza o cadastro do cliente</p>
                           </div>
 
                           <div>
@@ -6652,7 +6652,7 @@ export default function AdminOrders() {
                             <div className="mt-1.5 flex items-start gap-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1.5">
                               <Mail className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" />
                               <p className="text-xs text-amber-300 leading-relaxed">
-                                <strong>Não é para criar conta.</strong> Usado apenas para notificações do pedido.
+                                <strong>NÃ£o Ã© para criar conta.</strong> Usado apenas para notificaÃ§Ãµes do pedido.
                               </p>
                             </div>
                           </div>
@@ -6728,7 +6728,7 @@ export default function AdminOrders() {
                           </div>
                         </div>
                       ) : (
-                        /* Visualização */
+                        /* VisualizaÃ§Ã£o */
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Dados do Cliente</p>
@@ -6769,7 +6769,7 @@ export default function AdminOrders() {
                                   )}
                                 </div>
                               </label>
-                              {/* Botão expandir foto */}
+                              {/* BotÃ£o expandir foto */}
                               {order.customerProfilePhotoUrl && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setPhotoLightboxUrl(order.customerProfilePhotoUrl); }}
@@ -6784,15 +6784,15 @@ export default function AdminOrders() {
 
 
                           <div className="space-y-2">
-                            <InfoRow icon={<User className="w-3.5 h-3.5" />} label="Nome" value={order.customerName || "—"} />
+                            <InfoRow icon={<User className="w-3.5 h-3.5" />} label="Nome" value={order.customerName || "â€”"} />
                             <InfoRow icon={<Phone className="w-3.5 h-3.5" />} label="Telefone" value={formatPhone(order.phone)} />
-                            <InfoRow icon={<Mail className="w-3.5 h-3.5" />} label="Email" value={order.customerEmail || "—"} />
+                            <InfoRow icon={<Mail className="w-3.5 h-3.5" />} label="Email" value={order.customerEmail || "â€”"} />
                             <InfoRow
                               icon={<MapPin className="w-3.5 h-3.5" />}
-                              label="Localização"
-                              value={[order.customerCity, order.customerUf].filter(Boolean).join(" - ") || "—"}
+                              label="LocalizaÃ§Ã£o"
+                              value={[order.customerCity, order.customerUf].filter(Boolean).join(" - ") || "â€”"}
                             />
-                            <InfoRow icon={<UserCheck className="w-3.5 h-3.5" />} label="Indicado por" value={order.customerReferredBy || "—"} />
+                            <InfoRow icon={<UserCheck className="w-3.5 h-3.5" />} label="Indicado por" value={order.customerReferredBy || "â€”"} />
                             {order.customerReferredByPhone && (
                               <InfoRow icon={<Phone className="w-3.5 h-3.5" />} label="Tel. indicador" value={formatPhone(order.customerReferredByPhone)} />
                             )}
@@ -6801,7 +6801,7 @@ export default function AdminOrders() {
                           {/* Produto e respostas */}
                           <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
                             <div className="flex items-center justify-between">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Informações do Pedido</p>
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">InformaÃ§Ãµes do Pedido</p>
                               {!editingOrderData[getOrderKey(order)] && (
                                 <button
                                   onClick={() => {
@@ -6828,24 +6828,24 @@ export default function AdminOrders() {
                             {editingOrderData[getOrderKey(order)] ? (
                               <div className="space-y-2 bg-card/50 border border-border rounded-lg p-3">
                                 <div>
-                                  <label className="text-xs text-muted-foreground">Serviço</label>
+                                  <label className="text-xs text-muted-foreground">ServiÃ§o</label>
                                   <select
                                     value={editingOrderData[getOrderKey(order)].serviceName}
                                     onChange={e => setEditingOrderData(prev => ({ ...prev, [getOrderKey(order)]: { ...prev[getOrderKey(order)], serviceName: e.target.value, serviceOption: '' } }))}
                                     className="w-full mt-0.5 px-2 py-1.5 bg-background border border-border rounded text-xs text-foreground"
                                   >
-                                    <option value="">— Selecione o serviço —</option>
+                                    <option value="">â€” Selecione o serviÃ§o â€”</option>
                                     {(productsQuery.data ?? []).map(p => (
                                       <option key={p.id} value={p.name}>{p.name}</option>
                                     ))}
                                   </select>
                                 </div>
                                 <div>
-                                  <label className="text-xs text-muted-foreground">Nome / Opção escolhida</label>
+                                  <label className="text-xs text-muted-foreground">Nome / OpÃ§Ã£o escolhida</label>
                                   {(() => {
                                     const selProd = (productsQuery.data ?? []).find(p => p.name === editingOrderData[getOrderKey(order)].serviceName);
                                     const opts = selProd?.options ?? [];
-                                    // Encontrar a opção que melhor corresponde ao serviceOption salvo (pode ter garantia concatenada)
+                                    // Encontrar a opÃ§Ã£o que melhor corresponde ao serviceOption salvo (pode ter garantia concatenada)
                                     const currentSvcOpt = (editingOrderData[getOrderKey(order)].serviceOption || '').trim();
                                     const matchedOptLabel = opts.find((o: any) => {
                                       const lbl = (o.label || '').trim();
@@ -6857,7 +6857,7 @@ export default function AdminOrders() {
                                         onChange={e => setEditingOrderData(prev => ({ ...prev, [getOrderKey(order)]: { ...prev[getOrderKey(order)], serviceOption: e.target.value } }))}
                                         className="w-full mt-0.5 px-2 py-1.5 bg-background border border-border rounded text-xs text-foreground"
                                       >
-                                        <option value="">— Selecione a opção —</option>
+                                        <option value="">â€” Selecione a opÃ§Ã£o â€”</option>
                                         {opts.map((opt: { id: number; label: string }) => (
                                           <option key={opt.id} value={opt.label}>{opt.label}</option>
                                         ))}
@@ -6886,7 +6886,7 @@ export default function AdminOrders() {
                                 {(() => {
                                   const ed = editingOrderData[getOrderKey(order)];
                                   const selProd = (productsQuery.data ?? []).find(p => p.name === ed.serviceName);
-                                  // Match flexível: serviceOption pode ter " - Garantia: ..." concatenado ou espaços extras
+                                  // Match flexÃ­vel: serviceOption pode ter " - Garantia: ..." concatenado ou espaÃ§os extras
                                   const svcOptTrimmed = (ed.serviceOption || '').trim();
                                   const selOpt = selProd?.options?.find((o: any) => {
                                     const lbl = (o.label || '').trim();
@@ -6895,7 +6895,7 @@ export default function AdminOrders() {
                                     if (lbl && svcOptTrimmed.toLowerCase().includes(lbl.toLowerCase())) return true;
                                     return false;
                                   });
-                                  // Se não encontrou option específica, buscar perguntas de todas as options do produto
+                                  // Se nÃ£o encontrou option especÃ­fica, buscar perguntas de todas as options do produto
                                   let productQs = selOpt?.questions ?? [];
                                   if (productQs.length === 0 && selProd?.options) {
                                     // Tentar todas as options do produto para encontrar perguntas
@@ -6906,7 +6906,7 @@ export default function AdminOrders() {
                                       }
                                     }
                                   }
-                                  // Se o pedido já tem respostas, mostra elas; senão carrega perguntas do produto
+                                  // Se o pedido jÃ¡ tem respostas, mostra elas; senÃ£o carrega perguntas do produto
                                   const displayAnswers = ed.answers.length > 0 ? ed.answers : productQs.map((q: any) => ({ question: q.text || q.question || q.label || '', answer: '' }));
 
                                   // Helper: parsear options de uma pergunta
@@ -6939,12 +6939,12 @@ export default function AdminOrders() {
                                     }) : undefined);
                                   };
 
-                                  // Helper: verificar se uma sub-pergunta deve ser visível baseado na resposta da pergunta pai
+                                  // Helper: verificar se uma sub-pergunta deve ser visÃ­vel baseado na resposta da pergunta pai
                                   const isSubQuestionVisible = (matchedQ: any) => {
-                                    if (!matchedQ?.parentQuestionId) return true; // pergunta raiz = sempre visível
+                                    if (!matchedQ?.parentQuestionId) return true; // pergunta raiz = sempre visÃ­vel
                                     // Encontrar a pergunta pai no productQs
                                     const parentQ = productQs.find((q: any) => q.id === matchedQ.parentQuestionId);
-                                    if (!parentQ) return true; // se não encontrar pai, mostrar
+                                    if (!parentQ) return true; // se nÃ£o encontrar pai, mostrar
                                     // Encontrar a resposta da pergunta pai nos displayAnswers
                                     const parentQText = (parentQ.question || '').trim().toLowerCase();
                                     const parentAnswer = displayAnswers.find((a: any) => {
@@ -6952,11 +6952,11 @@ export default function AdminOrders() {
                                       return aQ === parentQText || (parentQText.length > 3 && (aQ.includes(parentQText) || parentQText.includes(aQ)));
                                     });
                                     const parentAnswerVal = (parentAnswer?.answer || '').trim();
-                                    // Se tem triggerOption, só mostrar quando a resposta pai bate
+                                    // Se tem triggerOption, sÃ³ mostrar quando a resposta pai bate
                                     if (matchedQ.triggerOption) {
                                       return parentAnswerVal.toLowerCase() === matchedQ.triggerOption.trim().toLowerCase();
                                     }
-                                    // Se não tem triggerOption, mostrar quando pai tem qualquer resposta
+                                    // Se nÃ£o tem triggerOption, mostrar quando pai tem qualquer resposta
                                     return !!parentAnswerVal;
                                   };
 
@@ -6973,14 +6973,14 @@ export default function AdminOrders() {
                                     };
                                     return (
                                       <div key={i} className={indent ? 'ml-3 pl-2 border-l-2 border-blue-500/30' : ''}>
-                                        <label className="text-xs text-muted-foreground">{indent ? '└ ' : ''}{item.question}</label>
+                                        <label className="text-xs text-muted-foreground">{indent ? 'â”” ' : ''}{item.question}</label>
                                         {fieldType === 'select' && selectOptions.length > 0 ? (
                                           <select
                                             value={item.answer}
                                             onChange={e => handleChange(e.target.value)}
                                             className="w-full mt-0.5 px-2 py-1.5 bg-background border border-border rounded text-xs text-foreground"
                                           >
-                                            <option value="">— Selecione —</option>
+                                            <option value="">â€” Selecione â€”</option>
                                             {selectOptions.map((opt, oi) => (
                                               <option key={oi} value={opt.label}>{opt.label}</option>
                                             ))}
@@ -7003,7 +7003,7 @@ export default function AdminOrders() {
                                     );
                                   };
 
-                                  // Reorganizar: agrupar sub-perguntas logo após sua pergunta pai
+                                  // Reorganizar: agrupar sub-perguntas logo apÃ³s sua pergunta pai
                                   const orderedItems: Array<{item: any; idx: number; isChild: boolean}> = [];
                                   const usedIndices = new Set<number>();
                                   
@@ -7011,7 +7011,7 @@ export default function AdminOrders() {
                                   displayAnswers.forEach((item: any, i: number) => {
                                     if (usedIndices.has(i)) return;
                                     const matchedQ = findMatchedQ(item.question);
-                                    // Se é sub-pergunta, pular (será adicionada após o pai)
+                                    // Se Ã© sub-pergunta, pular (serÃ¡ adicionada apÃ³s o pai)
                                     if (matchedQ?.parentQuestionId) return;
                                     // Adicionar pergunta raiz
                                     orderedItems.push({ item, idx: i, isChild: false });
@@ -7031,7 +7031,7 @@ export default function AdminOrders() {
                                       });
                                     }
                                   });
-                                  // Adicionar itens restantes que não foram agrupados (sem match)
+                                  // Adicionar itens restantes que nÃ£o foram agrupados (sem match)
                                   displayAnswers.forEach((item: any, i: number) => {
                                     if (!usedIndices.has(i)) {
                                       const matchedQ = findMatchedQ(item.question);
@@ -7042,7 +7042,7 @@ export default function AdminOrders() {
 
                                   return orderedItems.length > 0 ? (
                                     <div className="space-y-1.5">
-                                      <p className="text-xs text-muted-foreground">Dados do formulário:</p>
+                                      <p className="text-xs text-muted-foreground">Dados do formulÃ¡rio:</p>
                                       {orderedItems.map(({ item, idx, isChild }) => {
                                         const matchedQ = findMatchedQ(item.question);
                                         return renderQuestionField(item, idx, matchedQ, isChild);
@@ -7079,20 +7079,20 @@ export default function AdminOrders() {
                               <>
                                 {order.serviceName ? (
                                   <div className="bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
-                                    <p className="text-xs text-muted-foreground">Serviço</p>
+                                    <p className="text-xs text-muted-foreground">ServiÃ§o</p>
                                     <p className="text-xs font-bold text-primary mt-0.5">{order.serviceName}</p>
                                   </div>
                                 ) : (
                                   <div className="bg-muted/10 border border-border/50 rounded-lg px-3 py-2">
-                                    <p className="text-xs text-muted-foreground">Serviço</p>
-                                    <p className="text-xs font-bold text-foreground mt-0.5">{order.codeClientName || '—'}</p>
+                                    <p className="text-xs text-muted-foreground">ServiÃ§o</p>
+                                    <p className="text-xs font-bold text-foreground mt-0.5">{order.codeClientName || 'â€”'}</p>
                                   </div>
                                 )}
 
                                 {order.serviceOption && (
                                   <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                                    <p className="text-xs text-muted-foreground">Nome / Opção escolhida</p>
-                                    <div className="text-xs font-bold text-amber-300 mt-0.5 space-y-1">{order.serviceOption?.split(/(?=Garantia)/i).map((part, idx) => <p key={idx}>— {part}</p>)}</div>
+                                    <p className="text-xs text-muted-foreground">Nome / OpÃ§Ã£o escolhida</p>
+                                    <div className="text-xs font-bold text-amber-300 mt-0.5 space-y-1">{order.serviceOption?.split(/(?=Garantia)/i).map((part, idx) => <p key={idx}>â€” {part}</p>)}</div>
                                   </div>
                                 )}
 
@@ -7103,7 +7103,7 @@ export default function AdminOrders() {
                                       <div className="space-y-2">
                                         <p className="text-xs font-semibold text-purple-400/80 flex items-center gap-1">
                                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                                          Respostas do Formulário
+                                          Respostas do FormulÃ¡rio
                                         </p>
                                         {parsed.map((item, i) => {
                                           // Tentar parsear optionsMeta para obter a cor da resposta
@@ -7136,11 +7136,11 @@ export default function AdminOrders() {
                                   } catch { return null; }
                                 })()}
 
-                                {/* Informações de Revendedor */}
+                                {/* InformaÃ§Ãµes de Revendedor */}
                                 {((order as any).thirdPartyName || (order as any).resellerDiscountApplied) && (
                                   <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-3 py-2 space-y-1">
                                     <p className="text-xs font-semibold text-blue-400 flex items-center gap-1">
-                                      🏷️ Pedido de Revendedor
+                                      ðŸ·ï¸ Pedido de Revendedor
                                     </p>
                                     {(order as any).thirdPartyName && (
                                       <div>
@@ -7158,14 +7158,14 @@ export default function AdminOrders() {
                                 )}
 
                                 {!order.serviceName && !order.serviceOption && !order.answers && !(order as any).thirdPartyName && !(order as any).resellerDiscountApplied && (
-                                  <p className="text-xs text-muted-foreground text-center py-2">Nenhuma informação adicional do pedido</p>
+                                  <p className="text-xs text-muted-foreground text-center py-2">Nenhuma informaÃ§Ã£o adicional do pedido</p>
                                 )}
                               </>
                             )}
                           </div>
 
                           {!order.customerId && (
-                            <p className="text-xs text-yellow-400/80 text-center">⚠️ Cliente não encontrado no cadastro</p>
+                            <p className="text-xs text-yellow-400/80 text-center">âš ï¸ Cliente nÃ£o encontrado no cadastro</p>
                           )}
                         </div>
                       )}
@@ -7175,7 +7175,7 @@ export default function AdminOrders() {
                   {/* === ABA DOCUMENTOS === */}
                   {tab === "documentos" && (
                     <div className="p-4 space-y-3">
-                      {/* === SEÇÃO: DOCUMENTOS DO ADMIN PARA O CLIENTE === */}
+                      {/* === SEÃ‡ÃƒO: DOCUMENTOS DO ADMIN PARA O CLIENTE === */}
                       <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
@@ -7186,10 +7186,10 @@ export default function AdminOrders() {
                             <button
                               onClick={() => { setShowVideoUrlFor(showVideoUrlFor === getOrderKey(order) ? null : getOrderKey(order)); setShowAdminUploadFor(null); }}
                               className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 font-medium transition-colors"
-                              title="Enviar vídeo por URL"
+                              title="Enviar vÃ­deo por URL"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                              Vídeo URL
+                              VÃ­deo URL
                             </button>
                             <button
                               onClick={() => { setShowAdminUploadFor(showAdminUploadFor === getOrderKey(order) ? null : getOrderKey(order)); setShowVideoUrlFor(null); }}
@@ -7201,12 +7201,12 @@ export default function AdminOrders() {
                           </div>
                         </div>
 
-                        {/* Formulário de upload do admin para cliente */}
+                        {/* FormulÃ¡rio de upload do admin para cliente */}
                         {showAdminUploadFor === getOrderKey(order) && (
                           <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 space-y-2">
                             <input
                               type="text"
-                              placeholder="Nome do documento (ex: Contrato, Guia de Ativação...)"
+                              placeholder="Nome do documento (ex: Contrato, Guia de AtivaÃ§Ã£o...)"
                               value={newAdminDocLabel[getOrderKey(order)] || ''}
                               onChange={e => setNewAdminDocLabel(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
                               className="w-full text-xs bg-background border border-emerald-500/30 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-emerald-400"
@@ -7231,20 +7231,20 @@ export default function AdminOrders() {
                             </label>
                           </div>
                         )}
-                        {/* Formulário de URL de vídeo externo */}
+                        {/* FormulÃ¡rio de URL de vÃ­deo externo */}
                         {showVideoUrlFor === getOrderKey(order) && (
                           <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-3 space-y-2">
-                            <p className="text-xs font-semibold text-purple-400">🎬 Enviar Vídeo por URL</p>
+                            <p className="text-xs font-semibold text-purple-400">ðŸŽ¬ Enviar VÃ­deo por URL</p>
                             <input
                               type="text"
-                              placeholder="Nome do vídeo (ex: Tutorial de Ativação...)"
+                              placeholder="Nome do vÃ­deo (ex: Tutorial de AtivaÃ§Ã£o...)"
                               value={videoUrlLabel[getOrderKey(order)] || ''}
                               onChange={e => setVideoUrlLabel(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
                               className="w-full text-xs bg-background border border-purple-500/30 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-400"
                             />
                             <input
                               type="url"
-                              placeholder="Cole aqui a URL do vídeo (YouTube, Google Drive, Vimeo...)"
+                              placeholder="Cole aqui a URL do vÃ­deo (YouTube, Google Drive, Vimeo...)"
                               value={videoUrlInput[getOrderKey(order)] || ''}
                               onChange={e => setVideoUrlInput(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
                               className="w-full text-xs bg-background border border-purple-500/30 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-400"
@@ -7270,7 +7270,7 @@ export default function AdminOrders() {
                               {savingVideoUrlFor === getOrderKey(order) ? (
                                 <><div className="animate-spin rounded-full h-3.5 w-3.5 border-t-2 border-white" /><span>Salvando...</span></>
                               ) : (
-                                <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg><span>Salvar URL do Vídeo</span></>
+                                <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg><span>Salvar URL do VÃ­deo</span></>
                               )}
                             </button>
                           </div>
@@ -7287,10 +7287,10 @@ export default function AdminOrders() {
                           return (
                             <div key={f.id} className="flex items-center justify-between gap-2 p-2.5 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
                               <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <span className="text-base flex-shrink-0">{isPdf ? '📄' : isImg ? '🖼️' : isVid ? '🎬' : '📎'}</span>
+                                <span className="text-base flex-shrink-0">{isPdf ? 'ðŸ“„' : isImg ? 'ðŸ–¼ï¸' : isVid ? 'ðŸŽ¬' : 'ðŸ“Ž'}</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-medium text-foreground truncate">{f.label}</p>
-                                  <p className="text-xs text-emerald-400/70">{isPdf ? 'PDF' : isImg ? 'Imagem' : isVid ? 'Vídeo' : 'Arquivo'} • Visível ao cliente</p>
+                                  <p className="text-xs text-emerald-400/70">{isPdf ? 'PDF' : isImg ? 'Imagem' : isVid ? 'VÃ­deo' : 'Arquivo'} â€¢ VisÃ­vel ao cliente</p>
                                 </div>
                               </div>
                               <div className="flex gap-1 flex-shrink-0">
@@ -7314,7 +7314,7 @@ export default function AdminOrders() {
                             <div className="mt-2 border-t border-orange-500/20 pt-2 space-y-1.5">
                               <p className="text-[10px] font-semibold text-orange-400 uppercase tracking-wider flex items-center gap-1">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                Visível ao cliente — enviado em outro pedido
+                                VisÃ­vel ao cliente â€” enviado em outro pedido
                               </p>
                               {otherDocs.map(f => {
                                 const isPdf = f.mimeType.includes('pdf');
@@ -7323,10 +7323,10 @@ export default function AdminOrders() {
                                 return (
                                   <div key={f.id} className="flex items-center justify-between gap-2 p-2.5 bg-orange-500/5 rounded-lg border border-orange-500/30">
                                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                                      <span className="text-base flex-shrink-0">{isPdf ? '📄' : isImg ? '🖼️' : isVid ? '🎬' : '📎'}</span>
+                                      <span className="text-base flex-shrink-0">{isPdf ? 'ðŸ“„' : isImg ? 'ðŸ–¼ï¸' : isVid ? 'ðŸŽ¬' : 'ðŸ“Ž'}</span>
                                       <div className="flex-1 min-w-0">
                                         <p className="text-xs font-medium text-foreground truncate">{f.label}</p>
-                                        <p className="text-xs text-orange-400/80">{isPdf ? 'PDF' : isImg ? 'Imagem' : isVid ? 'Vídeo' : 'Arquivo'} • De outro pedido (#{f.registrationId}){f.createdAt && <span className="ml-1.5 text-[10px] text-amber-400/80">📅 {new Date(f.createdAt instanceof Date ? f.createdAt.getTime() : f.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}</p>
+                                        <p className="text-xs text-orange-400/80">{isPdf ? 'PDF' : isImg ? 'Imagem' : isVid ? 'VÃ­deo' : 'Arquivo'} â€¢ De outro pedido (#{f.registrationId}){f.createdAt && <span className="ml-1.5 text-[10px] text-amber-400/80">ðŸ“… {new Date(f.createdAt instanceof Date ? f.createdAt.getTime() : f.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}</p>
                                       </div>
                                     </div>
                                     <div className="flex gap-1 flex-shrink-0">
@@ -7347,7 +7347,7 @@ export default function AdminOrders() {
                         })()}
                       </div>
 
-                      {/* === SEÇÃO: DOCUMENTOS DO CLIENTE === */}
+                      {/* === SEÃ‡ÃƒO: DOCUMENTOS DO CLIENTE === */}
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Documentos do Pedido (Cliente)</p>
                         <button
@@ -7359,7 +7359,7 @@ export default function AdminOrders() {
                         </button>
                       </div>
 
-                      {/* Formulário de upload do cliente */}
+                      {/* FormulÃ¡rio de upload do cliente */}
                       {showUploadFor === getOrderKey(order) && (
                         <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 space-y-2">
                           <p className="text-xs font-medium text-primary">Novo Documento</p>
@@ -7378,7 +7378,7 @@ export default function AdminOrders() {
                             {uploadingDocFor === getOrderKey(order) ? (
                               <><div className="animate-spin rounded-full h-3.5 w-3.5 border-t-2 border-primary" /><span className="text-xs">Enviando...</span></>
                             ) : (
-                              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg><span className="text-xs font-medium">Selecionar arquivo (imagem, PDF ou vídeo)</span></>
+                              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg><span className="text-xs font-medium">Selecionar arquivo (imagem, PDF ou vÃ­deo)</span></>
                             )}
                             <input
                               type="file"
@@ -7406,10 +7406,10 @@ export default function AdminOrders() {
                         return (
                           <div key={f.id} className="flex items-center justify-between gap-2 p-2.5 bg-card rounded-lg border border-border">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <span className="text-lg flex-shrink-0">{isPdf ? '📄' : isImg ? '🖼️' : '📎'}</span>
+                              <span className="text-lg flex-shrink-0">{isPdf ? 'ðŸ“„' : isImg ? 'ðŸ–¼ï¸' : 'ðŸ“Ž'}</span>
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium text-foreground truncate">{f.label}</p>
-                                <p className="text-xs text-muted-foreground">{isPdf ? 'PDF' : isImg ? 'Imagem' : 'Arquivo'}{uploadDate && <span className="ml-1.5 text-[10px] text-amber-400/80">📅 {uploadDate}</span>}</p>
+                                <p className="text-xs text-muted-foreground">{isPdf ? 'PDF' : isImg ? 'Imagem' : 'Arquivo'}{uploadDate && <span className="ml-1.5 text-[10px] text-amber-400/80">ðŸ“… {uploadDate}</span>}</p>
                               </div>
                             </div>
                             <div className="flex gap-1 flex-shrink-0">
@@ -7443,11 +7443,11 @@ export default function AdminOrders() {
                     </div>
                   )}
 
-                  {/* === SEÇÃO: REUTILIZAR DOCUMENTOS DO CADASTRO === */}
+                  {/* === SEÃ‡ÃƒO: REUTILIZAR DOCUMENTOS DO CADASTRO === */}
                   {tab === "documentos" && (() => {
                     const customerDocs = (filesByPhoneQuery.data ?? []).filter(f => Number(f.fromAdmin) !== 1);
                     if (customerDocs.length === 0) return null;
-                    // Bug fix: filtrar por registrationId (não por fileUrl) para excluir docs do pedido atual
+                    // Bug fix: filtrar por registrationId (nÃ£o por fileUrl) para excluir docs do pedido atual
                     const availableDocs = customerDocs.filter(f => f.registrationId !== expandedNumericId);
                     if (availableDocs.length === 0) return null;
                     return (
@@ -7466,7 +7466,7 @@ export default function AdminOrders() {
                               {showReuseDocsFor === getOrderKey(order) ? 'Ocultar' : 'Ver documentos'}
                             </button>
                           </div>
-                          <p className="text-[10px] text-violet-300/60">Documentos enviados pelo cliente em outros pedidos. Clique em "Usar" para adicioná-lo a este pedido sem novo upload.</p>
+                          <p className="text-[10px] text-violet-300/60">Documentos enviados pelo cliente em outros pedidos. Clique em "Usar" para adicionÃ¡-lo a este pedido sem novo upload.</p>
                           {showReuseDocsFor === getOrderKey(order) && (
                             <div className="space-y-1.5 pt-1">
                               {availableDocs.map(f => {
@@ -7476,10 +7476,10 @@ export default function AdminOrders() {
                                 return (
                                   <div key={f.id} className="flex items-center justify-between gap-2 p-2 bg-violet-500/5 rounded-lg border border-violet-500/20">
                                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                                      <span className="text-sm flex-shrink-0">{isPdf ? '📄' : isImg ? '🖼️' : '📎'}</span>
+                                      <span className="text-sm flex-shrink-0">{isPdf ? 'ðŸ“„' : isImg ? 'ðŸ–¼ï¸' : 'ðŸ“Ž'}</span>
                                       <div className="flex-1 min-w-0">
                                         <p className="text-xs font-medium text-foreground truncate">{f.label}</p>
-                                        <p className="text-[10px] text-violet-300/60">Pedido #{f.registrationId}{f.createdAt && <span className="ml-1.5">📅 {new Date(f.createdAt instanceof Date ? f.createdAt.getTime() : f.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}</p>
+                                        <p className="text-[10px] text-violet-300/60">Pedido #{f.registrationId}{f.createdAt && <span className="ml-1.5">ðŸ“… {new Date(f.createdAt instanceof Date ? f.createdAt.getTime() : f.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}</p>
                                       </div>
                                     </div>
                                     <div className="flex gap-1 flex-shrink-0">
@@ -7520,13 +7520,13 @@ export default function AdminOrders() {
                     );
                   })()}
 
-                  {/* === SEÇÃO: SOLICITAÇÕES DE DOCUMENTOS PENDENTES (dentro da aba documentos) === */}
+                  {/* === SEÃ‡ÃƒO: SOLICITAÃ‡Ã•ES DE DOCUMENTOS PENDENTES (dentro da aba documentos) === */}
                   {tab === "documentos" && (
                     <div className="px-4 pb-2 pt-0">
                       <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-sm">⚠️</span>
+                            <span className="text-sm">âš ï¸</span>
                             <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Solicitar Documento Pendente</p>
                             {(docRequestsQuery.data?.filter(r => r.status === 'pending').length ?? 0) > 0 && (
                               <span className="bg-amber-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full">
@@ -7539,17 +7539,17 @@ export default function AdminOrders() {
                             className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 font-medium transition-colors"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                            Nova solicitação
+                            Nova solicitaÃ§Ã£o
                           </button>
                         </div>
 
-                        {/* Formulário de nova solicitação */}
+                        {/* FormulÃ¡rio de nova solicitaÃ§Ã£o */}
                         {showDocReqForm === getOrderKey(order) && (
                           <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 space-y-2">
                             <p className="text-xs text-amber-300/70">Nome do documento solicitado:</p>
                             <input
                               type="text"
-                              placeholder="Ex: CNH, Comprovante de residência, Foto..."
+                              placeholder="Ex: CNH, Comprovante de residÃªncia, Foto..."
                               value={docReqLabel[getOrderKey(order)] || ''}
                               onChange={e => setDocReqLabel(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
                               className="w-full text-xs bg-background border border-amber-500/30 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-400"
@@ -7557,7 +7557,7 @@ export default function AdminOrders() {
                             <p className="text-xs text-amber-300/70">Mensagem para o cliente:</p>
                             <textarea
                               rows={3}
-                              placeholder="Ex: Sua CNH está ilegível, por favor reenvie uma foto mais nítida..."
+                              placeholder="Ex: Sua CNH estÃ¡ ilegÃ­vel, por favor reenvie uma foto mais nÃ­tida..."
                               value={docReqMsg[getOrderKey(order)] || ''}
                               onChange={e => setDocReqMsg(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
                               className="w-full text-xs bg-background border border-amber-500/30 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-400 resize-none"
@@ -7577,7 +7577,7 @@ export default function AdminOrders() {
                                 disabled={createDocReqMut.isPending}
                                 className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-xs font-semibold rounded transition-colors"
                               >
-                                {createDocReqMut.isPending ? 'Enviando...' : 'Enviar Solicitação'}
+                                {createDocReqMut.isPending ? 'Enviando...' : 'Enviar SolicitaÃ§Ã£o'}
                               </button>
                               <button
                                 onClick={() => setShowDocReqForm(null)}
@@ -7589,7 +7589,7 @@ export default function AdminOrders() {
                           </div>
                         )}
 
-                        {/* Lista de solicitações existentes */}
+                        {/* Lista de solicitaÃ§Ãµes existentes */}
                         {(docRequestsQuery.data?.length ?? 0) > 0 && (
                           <div className="space-y-1.5 mt-1">
                             {docRequestsQuery.data!.map(req => (
@@ -7598,19 +7598,19 @@ export default function AdminOrders() {
                                 req.status === 'answered' ? 'bg-emerald-500/5 border-emerald-500/20' :
                                 'bg-muted/30 border-border'
                               }`}>
-                                <span className="mt-0.5 text-sm">{req.status === 'pending' ? '⏳' : req.status === 'answered' ? '✅' : '🔒'}</span>
+                                <span className="mt-0.5 text-sm">{req.status === 'pending' ? 'â³' : req.status === 'answered' ? 'âœ…' : 'ðŸ”’'}</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-foreground/90 break-words">{req.message}</p>
                                   <p className="text-muted-foreground mt-0.5">
-                                    {req.status === 'pending' ? 'Aguardando cliente' : req.status === 'answered' ? 'Cliente respondeu — veja nos documentos acima' : 'Encerrada'}
-                                    {' • '}{new Date(req.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                                    {req.status === 'pending' ? 'Aguardando cliente' : req.status === 'answered' ? 'Cliente respondeu â€” veja nos documentos acima' : 'Encerrada'}
+                                    {' â€¢ '}{new Date(req.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                                   </p>
                                 </div>
                                 <div className="flex gap-1 shrink-0">
                                   {req.status === 'pending' && (
                                     <button
                                       onClick={() => closeDocReqMut.mutate({ id: req.id })}
-                                      title="Encerrar solicitação"
+                                      title="Encerrar solicitaÃ§Ã£o"
                                       className="p-1 text-muted-foreground hover:text-amber-400 transition-colors"
                                     >
                                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
@@ -7641,14 +7641,14 @@ export default function AdminOrders() {
 
                   {tab === "historico" && (
                     <div className="p-4 space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Histórico de Status</p>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">HistÃ³rico de Status</p>
                       {historyQuery.isLoading && (
                         <div className="flex justify-center py-4">
                           <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-primary" />
                         </div>
                       )}
                       {historyQuery.data && historyQuery.data.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-4">Nenhum histórico registrado</p>
+                        <p className="text-xs text-muted-foreground text-center py-4">Nenhum histÃ³rico registrado</p>
                       )}
                       {historyQuery.data && historyQuery.data.map(h => {
                         const cfg = ACTIVE_STATUS_CONFIG[h.status];
@@ -7685,10 +7685,10 @@ export default function AdminOrders() {
           );
         })()}
 
-        {/* Arquivados não aparecem na busca — acesse a aba Arquivo para consultá-los */}
+        {/* Arquivados nÃ£o aparecem na busca â€” acesse a aba Arquivo para consultÃ¡-los */}
       </div>
 
-      {/* ===== MODAL DE MENSAGENS RÁPIDAS WHATSAPP ===== */}
+      {/* ===== MODAL DE MENSAGENS RÃPIDAS WHATSAPP ===== */}
       {waModalOrder && createPortal(
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
@@ -7706,10 +7706,10 @@ export default function AdminOrders() {
               </button>
             </div>
             <div className="p-5 space-y-4">
-              {/* Seleção de template */}
+              {/* SeleÃ§Ã£o de template */}
               {(waTemplates as any[]).length > 0 && (
                 <div>
-                  <p className="text-xs text-zinc-400 mb-2 font-medium">Escolher mensagem pré-molde:</p>
+                  <p className="text-xs text-zinc-400 mb-2 font-medium">Escolher mensagem prÃ©-molde:</p>
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                     {(waTemplates as any[]).map((t: any) => (
                       <button
@@ -7723,13 +7723,13 @@ export default function AdminOrders() {
                             .replace(/\{status\}/gi, statusLabel2)
                             .replace(/\{pedido\}/gi, String(waModalOrder.orderNumber || waModalOrder.id))
                             .replace(/\{telefone\}/gi, waModalOrder.phone || '')
-                            .replace(/\{servico\}/gi, waModalOrder.serviceName && waModalOrder.serviceName !== 'NULL' ? `${waModalOrder.serviceName}${waModalOrder.serviceOption && waModalOrder.serviceOption !== 'NULL' ? ` — ${waModalOrder.serviceOption}` : ''}` : '')
-                            .replace(/\{cidade\}/gi, waModalOrder.customerCity ? `${waModalOrder.customerCity}${waModalOrder.customerUf ? ` — ${waModalOrder.customerUf}` : ''}` : '')
+                            .replace(/\{servico\}/gi, waModalOrder.serviceName && waModalOrder.serviceName !== 'NULL' ? `${waModalOrder.serviceName}${waModalOrder.serviceOption && waModalOrder.serviceOption !== 'NULL' ? ` â€” ${waModalOrder.serviceOption}` : ''}` : '')
+                            .replace(/\{cidade\}/gi, waModalOrder.customerCity ? `${waModalOrder.customerCity}${waModalOrder.customerUf ? ` â€” ${waModalOrder.customerUf}` : ''}` : '')
                             .replace(/\{previsao\}/gi, waModalOrder.deliveryEstimate ? new Date(waModalOrder.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
                           const mediaLines: string[] = [];
-                          if (t.imageUrl) mediaLines.push((t.imageTitle ? '🖼️ *' + t.imageTitle + '*: ' : '🖼️ ') + t.imageUrl);
-                          if (t.videoUrl) mediaLines.push((t.videoTitle ? '🎥 *' + t.videoTitle + '*: ' : '🎥 ') + t.videoUrl);
-                          if (t.mediaFileUrl) mediaLines.push((t.mediaType === 'video' ? '🎥 ' : '🖼️ ') + t.mediaFileUrl);
+                          if (t.imageUrl) mediaLines.push((t.imageTitle ? 'ðŸ–¼ï¸ *' + t.imageTitle + '*: ' : 'ðŸ–¼ï¸ ') + t.imageUrl);
+                          if (t.videoUrl) mediaLines.push((t.videoTitle ? 'ðŸŽ¥ *' + t.videoTitle + '*: ' : 'ðŸŽ¥ ') + t.videoUrl);
+                          if (t.mediaFileUrl) mediaLines.push((t.mediaType === 'video' ? 'ðŸŽ¥ ' : 'ðŸ–¼ï¸ ') + t.mediaFileUrl);
                           setWaModalMsg(mediaLines.length > 0 ? baseMsg + '\n\n' + mediaLines.join('\n') : baseMsg);
                         }}
                         className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-all ${
@@ -7740,14 +7740,14 @@ export default function AdminOrders() {
                       >
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{t.title}</span>
-                          {t.isDefault === 1 && <span className="text-[10px] bg-yellow-500/20 text-yellow-300 px-1.5 py-0.5 rounded-full">Padrão</span>}
+                          {t.isDefault === 1 && <span className="text-[10px] bg-yellow-500/20 text-yellow-300 px-1.5 py-0.5 rounded-full">PadrÃ£o</span>}
                           {t.statusKey && <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full">{t.statusKey}</span>}
                         </div>
                         {(t.imageUrl || t.videoUrl || t.mediaFileUrl) && (
                           <div className="flex flex-col gap-0.5 mt-1">
-                            {t.imageUrl && <span className="text-[10px] text-zinc-400">🖼️ {t.imageTitle || 'imagem'}</span>}
-                            {t.videoUrl && <span className="text-[10px] text-zinc-400">🎥 {t.videoTitle || 'vídeo'}</span>}
-                            {t.mediaFileUrl && <span className="text-[10px] text-zinc-400">{t.mediaType === 'video' ? '🎥' : '🖼️'} arquivo</span>}
+                            {t.imageUrl && <span className="text-[10px] text-zinc-400">ðŸ–¼ï¸ {t.imageTitle || 'imagem'}</span>}
+                            {t.videoUrl && <span className="text-[10px] text-zinc-400">ðŸŽ¥ {t.videoTitle || 'vÃ­deo'}</span>}
+                            {t.mediaFileUrl && <span className="text-[10px] text-zinc-400">{t.mediaType === 'video' ? 'ðŸŽ¥' : 'ðŸ–¼ï¸'} arquivo</span>}
                           </div>
                         )}
                       </button>
@@ -7763,15 +7763,15 @@ export default function AdminOrders() {
                           : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-500'
                       }`}
                     >
-                      <span className="font-medium">Mensagem padrão do sistema</span>
+                      <span className="font-medium">Mensagem padrÃ£o do sistema</span>
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Texto editável */}
+              {/* Texto editÃ¡vel */}
               <div>
-                <p className="text-xs text-zinc-400 mb-2 font-medium">Texto da mensagem (editável):</p>
+                <p className="text-xs text-zinc-400 mb-2 font-medium">Texto da mensagem (editÃ¡vel):</p>
                 <textarea
                   value={waModalMsg}
                   onChange={e => setWaModalMsg(e.target.value)}
@@ -7779,19 +7779,19 @@ export default function AdminOrders() {
                   className="w-full bg-zinc-800 border border-zinc-600 rounded-xl px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-green-500/60"
                 />
               </div>
-              {/* Pré-visualização da mensagem */}
+              {/* PrÃ©-visualizaÃ§Ã£o da mensagem */}
               <div className="bg-[#0d1f16] border border-green-900/40 rounded-xl p-4">
                 <p className="text-[10px] text-green-500/70 mb-2 font-medium uppercase tracking-wide flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
-                  Pré-visualização — como o cliente vai receber
+                  PrÃ©-visualizaÃ§Ã£o â€” como o cliente vai receber
                 </p>
                 <div className="bg-[#1a2e1e] rounded-xl rounded-tl-none px-4 py-3 text-sm text-white/90 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto font-sans shadow-inner">
                   {waModalMsg || <span className="text-zinc-500 italic">Nenhuma mensagem digitada</span>}
                 </div>
-                <p className="text-[10px] text-zinc-600 mt-2">O cliente receberá exatamente este texto no WhatsApp.</p>
+                <p className="text-[10px] text-zinc-600 mt-2">O cliente receberÃ¡ exatamente este texto no WhatsApp.</p>
               </div>
 
-              {/* Mídia do template selecionado */}
+              {/* MÃ­dia do template selecionado */}
               {waModalSelectedId !== null && (() => {
                 const t = (waTemplates as any[]).find((t: any) => t.id === waModalSelectedId);
                 if (!t) return null;
@@ -7799,18 +7799,18 @@ export default function AdminOrders() {
                 if (!mediaUrl) return null;
                 return (
                   <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-3">
-                    <p className="text-xs text-zinc-400 mb-2">Mídia anexada:</p>
+                    <p className="text-xs text-zinc-400 mb-2">MÃ­dia anexada:</p>
                     {(t.mediaType === 'video' || t.videoUrl) ? (
                       <video src={mediaUrl} controls className="w-full rounded-lg max-h-40" />
                     ) : (
-                      <img src={mediaUrl} alt="mídia" className="w-full rounded-lg max-h-40 object-contain" />
+                      <img src={mediaUrl} alt="mÃ­dia" className="w-full rounded-lg max-h-40 object-contain" />
                     )}
                     <p className="text-[10px] text-zinc-500 mt-1 truncate">{mediaUrl}</p>
                   </div>
                 );
               })()}
 
-              {/* Botões de ação */}
+              {/* BotÃµes de aÃ§Ã£o */}
               <div className="flex gap-3 pt-2">
                 <a
                   href={`https://wa.me/${waModalOrder.waPhone}?text=${encodeURIComponent(waModalMsg)}`}

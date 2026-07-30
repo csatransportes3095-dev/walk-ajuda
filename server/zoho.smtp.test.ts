@@ -14,16 +14,16 @@ describe("Zoho SMTP Configuration", () => {
       port: 465,
       secure: true,
       auth: {
-        user: "walkajuda@walkajuda.com",
+        user: "h2@h2colombiano.com",
         pass: process.env.ZOHO_EMAIL_PASSWORD || "",
       },
     });
     expect(transporter).toBeDefined();
   });
 
-  it("should use walkajuda@walkajuda.com as sender (not gmail)", () => {
-    const from = '"Walk Ajuda" <walkajuda@walkajuda.com>';
-    expect(from).toContain("walkajuda@walkajuda.com");
+  it("should use h2@h2colombiano.com as sender (not gmail)", () => {
+    const from = '"H2 COLOMBIANO" <h2@h2colombiano.com>';
+    expect(from).toContain("h2@h2colombiano.com");
     expect(from).not.toContain("gmail");
     expect(from).not.toContain("noreply@manus");
   });

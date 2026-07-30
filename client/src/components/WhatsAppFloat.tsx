@@ -1,8 +1,8 @@
 import { trpc } from "@/lib/trpc";
 
 /**
- * Botão flutuante do WhatsApp fixo no canto inferior direito.
- * Usa o número configurado nas settings (whatsapp_number) e abre uma
+ * BotÃ£o flutuante do WhatsApp fixo no canto inferior direito.
+ * Usa o nÃºmero configurado nas settings (whatsapp_number) e abre uma
  * conversa direta com uma mensagem inicial de ajuda.
  */
 export default function WhatsAppFloat() {
@@ -13,7 +13,7 @@ export default function WhatsAppFloat() {
   if (!number) return null;
 
   const message = encodeURIComponent(
-    "Olá! Vim pelo site da Walk Ajuda e preciso de ajuda."
+    "OlÃ¡! Vim pelo site da H2 COLOMBIANO e preciso de ajuda."
   );
   const href = `https://wa.me/${number}?text=${message}`;
 
@@ -25,12 +25,12 @@ export default function WhatsAppFloat() {
       aria-label="Falar no WhatsApp"
       className="whatsapp-float group fixed bottom-28 right-3 sm:bottom-6 sm:right-6 z-[60] flex items-center gap-2"
     >
-      {/* Tooltip / rótulo */}
+      {/* Tooltip / rÃ³tulo */}
       <span className="hidden sm:block max-w-0 overflow-hidden whitespace-nowrap rounded-full bg-[#1f2937] px-0 py-2 text-sm font-medium text-white opacity-0 shadow-lg transition-all duration-300 ease-out group-hover:max-w-[180px] group-hover:px-4 group-hover:opacity-100">
         Precisa de ajuda?
       </span>
 
-      {/* Botão circular */}
+      {/* BotÃ£o circular */}
       <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] shadow-lg shadow-black/30 transition-transform duration-150 ease-out group-active:scale-95">
         {/* Pulso */}
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#25D366] opacity-40" />

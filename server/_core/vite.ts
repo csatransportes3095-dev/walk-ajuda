@@ -12,12 +12,12 @@ async function getOgMeta(): Promise<{ title: string; description: string; imageU
   try {
     const settings = await getSettings(['og_title', 'og_description', 'og_image_url']);
     return {
-      title: settings['og_title'] ?? 'WALK AJUDA',
-      description: settings['og_description'] ?? 'WALK AJUDA',
+      title: settings['og_title'] ?? 'H2 COLOMBIANO',
+      description: settings['og_description'] ?? 'H2 COLOMBIANO',
       imageUrl: settings['og_image_url'] ?? '/og-image.png',
     };
   } catch {
-    return { title: 'WALK AJUDA', description: 'WALK AJUDA', imageUrl: '/og-image.png' };
+    return { title: 'H2 COLOMBIANO', description: 'H2 COLOMBIANO', imageUrl: '/og-image.png' };
   }
 }
 

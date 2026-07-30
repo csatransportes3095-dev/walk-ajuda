@@ -38,7 +38,7 @@ export async function broadcastEmailHandler(req: Request, res: Response) {
       return res.json({ ok: true, skipped: "cancelled" });
     }
 
-    // Buscar próximo item pendente
+    // Buscar prÃ³ximo item pendente
     const item = await getNextPendingQueueItem(broadcast.id);
     if (!item) {
       // Fila vazia: finalizar
@@ -57,10 +57,10 @@ export async function broadcastEmailHandler(req: Request, res: Response) {
     // Enviar e-mail para este item
     const typeLabel: Record<string, string> = {
       text: "Mensagem",
-      promo: "🎉 Promoção",
-      link: "🔗 Link",
-      banner: "🖼️ Banner",
-      group_invite: "👥 Convite para Grupo",
+      promo: "ðŸŽ‰ PromoÃ§Ã£o",
+      link: "ðŸ”— Link",
+      banner: "ðŸ–¼ï¸ Banner",
+      group_invite: "ðŸ‘¥ Convite para Grupo",
     };
     const label = typeLabel[broadcast.messageType] || "Mensagem";
 
@@ -75,7 +75,7 @@ export async function broadcastEmailHandler(req: Request, res: Response) {
     let imageHtml = "";
     if (broadcast.imageUrl) {
       const imgSrc = broadcast.imageUrl.startsWith("/manus-storage/")
-        ? `https://walkajuda.com${broadcast.imageUrl}`
+        ? `https://h2colombiano.com${broadcast.imageUrl}`
         : broadcast.imageUrl;
       imageHtml = `<div style="margin-top:20px;text-align:center"><img src="${imgSrc}" alt="Imagem" style="max-width:100%;border-radius:10px;border:1px solid #333" /></div>`;
     }
@@ -91,15 +91,15 @@ export async function broadcastEmailHandler(req: Request, res: Response) {
           ${imageHtml}
         </div>
         <div style="background:#1a1a2e;padding:16px;text-align:center">
-          <p style="color:#6b7280;font-size:12px;margin:0">Walk Ajuda — walkajuda.com</p>
+          <p style="color:#6b7280;font-size:12px;margin:0">H2 COLOMBIANO â€” h2colombiano.com</p>
         </div>
       </div>`;
 
-    const subject = broadcast.title || "Mensagem da Walk Ajuda";
+    const subject = broadcast.title || "Mensagem da H2 COLOMBIANO";
 
     try {
       await sendMail({
-        from: '"Walk Ajuda" <h2@h2colombiano.com>',
+        from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
         to: item.recipientEmail,
         subject,
         html,

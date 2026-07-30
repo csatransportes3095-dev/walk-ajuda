@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { CheckCircle2, AlertCircle, ChevronRight, Zap, RefreshCw } from "lucide-react";
 
-// ── Máscaras e validações ──────────────────────────────────────────────────
+// â”€â”€ MÃ¡scaras e validaÃ§Ãµes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function maskCpf(value: string) {
   const d = value.replace(/\D/g, "").slice(0, 11);
   if (d.length <= 3) return d;
@@ -38,7 +38,7 @@ function validateEmail(e: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
 
-// ── Componente de campo dinâmico ───────────────────────────────────────────
+// â”€â”€ Componente de campo dinÃ¢mico â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface Question {
   id: number;
   fieldKey: string;
@@ -177,7 +177,7 @@ function DynamicField({ q, value, onChange, error }: FieldProps) {
     );
   }
 
-  // Tipo informativo: bloco de texto somente leitura (aviso/instrução)
+  // Tipo informativo: bloco de texto somente leitura (aviso/instruÃ§Ã£o)
   if (q.fieldType === "informativo" || q.fieldType === "aviso") {
     return (
       <div className="relative overflow-hidden rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-cyan-500/10 via-purple-500/5 to-transparent shadow-lg shadow-cyan-500/5">
@@ -211,7 +211,7 @@ function DynamicField({ q, value, onChange, error }: FieldProps) {
   );
 }
 
-// ── Página principal ───────────────────────────────────────────────────────
+// â”€â”€ PÃ¡gina principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function PreCadastro() {
   const { data: questions, isLoading, error: loadError } = trpc.preCadastroQuestions.listActive.useQuery();
   const [values, setValues] = useState<Record<string, string>>({});
@@ -232,7 +232,7 @@ export default function PreCadastro() {
       const params = new URLSearchParams();
       if (cpfClean.length === 11) params.set("cpf", cpfClean);
       else if (phoneClean.length >= 10) params.set("phone", phoneClean);
-      // Redirecionar automaticamente para a página de status
+      // Redirecionar automaticamente para a pÃ¡gina de status
       window.location.href = `/consultar-cadastro?${params.toString()}`;
     } else {
       setDuplicateRedirect(null);
@@ -252,28 +252,28 @@ export default function PreCadastro() {
     if (errors[key]) setErrors((prev) => { const e = { ...prev }; delete e[key]; return e; });
   };
 
-  // ── Visibilidade condicional ──
-  // Uma pergunta é visível se:
-  //   1. Não tem pergunta pai (parentQuestionId === null) → sempre visível
-  //   2. Tem pergunta pai E a pergunta pai está visível E o valor selecionado na pai === triggerOption
+  // â”€â”€ Visibilidade condicional â”€â”€
+  // Uma pergunta Ã© visÃ­vel se:
+  //   1. NÃ£o tem pergunta pai (parentQuestionId === null) â†’ sempre visÃ­vel
+  //   2. Tem pergunta pai E a pergunta pai estÃ¡ visÃ­vel E o valor selecionado na pai === triggerOption
   function isQuestionVisible(q: Question, allQuestions: Question[]): boolean {
     if (!q.parentQuestionId) return true;
     const parent = allQuestions.find(p => p.id === q.parentQuestionId);
     if (!parent) return false;
-    // A pergunta pai também precisa estar visível (suporte a 2 níveis)
+    // A pergunta pai tambÃ©m precisa estar visÃ­vel (suporte a 2 nÃ­veis)
     if (!isQuestionVisible(parent, allQuestions)) return false;
-    // O valor selecionado é opt.value, mas triggerOption pode ser opt.label
-    // Comparar contra ambos (value e label) da opção selecionada na pai
+    // O valor selecionado Ã© opt.value, mas triggerOption pode ser opt.label
+    // Comparar contra ambos (value e label) da opÃ§Ã£o selecionada na pai
     const selectedValue = (values[parent.fieldKey] ?? "").trim().toLowerCase();
     const trigger = (q.triggerOption ?? "").trim().toLowerCase();
     if (!trigger) return false;
-    // Comparação direta
+    // ComparaÃ§Ã£o direta
     if (selectedValue === trigger) return true;
-    // Comparar: se o valor selecionado é opt.value, verificar se o label da opção selecionada === trigger
+    // Comparar: se o valor selecionado Ã© opt.value, verificar se o label da opÃ§Ã£o selecionada === trigger
     if (parent.options?.length) {
       const selectedOpt = parent.options.find(o => o.value.toLowerCase() === selectedValue);
       if (selectedOpt && selectedOpt.label.trim().toLowerCase() === trigger) return true;
-      // Também verificar se trigger é o value e o selecionado é o label
+      // TambÃ©m verificar se trigger Ã© o value e o selecionado Ã© o label
       const triggerOpt = parent.options.find(o => o.label.trim().toLowerCase() === trigger || o.value.toLowerCase() === trigger);
       if (triggerOpt && (selectedValue === triggerOpt.value.toLowerCase() || selectedValue === triggerOpt.label.trim().toLowerCase())) return true;
     }
@@ -284,25 +284,25 @@ export default function PreCadastro() {
     if (!questions) return false;
     const errs: Record<string, string> = {};
     for (const q of questions) {
-      // Ignorar perguntas que não estão visíveis
+      // Ignorar perguntas que nÃ£o estÃ£o visÃ­veis
       if (!isQuestionVisible(q, questions)) continue;
-      // Ignorar campos informativos (não são preenchíveis)
+      // Ignorar campos informativos (nÃ£o sÃ£o preenchÃ­veis)
       if (q.fieldType === "informativo" || q.fieldType === "aviso") continue;
       const val = (values[q.fieldKey] ?? "").trim();
       if (q.required && !val) {
-        errs[q.fieldKey] = "Campo obrigatório";
+        errs[q.fieldKey] = "Campo obrigatÃ³rio";
         continue;
       }
       if (!val) continue;
       if (q.fieldType === "cpf") {
         if (val.replace(/\D/g, "").length !== 11) { errs[q.fieldKey] = "CPF incompleto"; continue; }
-        if (!validateCpf(val)) { errs[q.fieldKey] = "CPF inválido"; continue; }
+        if (!validateCpf(val)) { errs[q.fieldKey] = "CPF invÃ¡lido"; continue; }
       }
       if (q.fieldType === "email" && !validateEmail(val)) {
-        errs[q.fieldKey] = "E-mail inválido"; continue;
+        errs[q.fieldKey] = "E-mail invÃ¡lido"; continue;
       }
       if (q.fieldType === "number" && (isNaN(parseInt(val)) || parseInt(val) < 0)) {
-        errs[q.fieldKey] = "Informe um número válido"; continue;
+        errs[q.fieldKey] = "Informe um nÃºmero vÃ¡lido"; continue;
       }
     }
     setErrors(errs);
@@ -314,7 +314,7 @@ export default function PreCadastro() {
     if (!validate()) return;
     if (!questions) return;
 
-    // Montar array de respostas dinâmicas com todas as perguntas visíveis (exceto informativos)
+    // Montar array de respostas dinÃ¢micas com todas as perguntas visÃ­veis (exceto informativos)
     const answers = questions
       .filter(q => isQuestionVisible(q, questions) && q.fieldType !== "informativo" && q.fieldType !== "aviso")
       .map(q => ({
@@ -329,7 +329,7 @@ export default function PreCadastro() {
     });
   }
 
-  // ── Tela de sucesso ──
+  // â”€â”€ Tela de sucesso â”€â”€
   if (submitted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0a1a] via-[#0d1a2e] to-[#0a0a1a] p-4">
@@ -338,11 +338,11 @@ export default function PreCadastro() {
             <CheckCircle2 className="w-10 h-10 text-emerald-400" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white mb-2">Pré-cadastro enviado!</h2>
-            <p className="text-emerald-300 text-base leading-relaxed">Em breve nossa equipe entrará em contato.</p>
+            <h2 className="text-2xl font-bold text-white mb-2">PrÃ©-cadastro enviado!</h2>
+            <p className="text-emerald-300 text-base leading-relaxed">Em breve nossa equipe entrarÃ¡ em contato.</p>
           </div>
           <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-4 py-1.5 rounded-full text-sm font-medium">
-            ✓ Recebido com sucesso
+            âœ“ Recebido com sucesso
           </span>
           <div className="mt-2 p-4 bg-white/5 border border-white/10 rounded-xl text-sm text-gray-400 leading-relaxed">
             Quer saber quando seu cadastro foi analisado?{" "}
@@ -355,25 +355,25 @@ export default function PreCadastro() {
     );
   }
 
-  // ── Loading ──
+  // â”€â”€ Loading â”€â”€
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0a1a] via-[#0d1a2e] to-[#0a0a1a]">
         <div className="flex flex-col items-center gap-4 text-gray-400">
           <RefreshCw className="w-8 h-8 animate-spin text-purple-400" />
-          <p className="text-sm">Carregando formulário...</p>
+          <p className="text-sm">Carregando formulÃ¡rio...</p>
         </div>
       </div>
     );
   }
 
-  // ── Erro ao carregar ──
+  // â”€â”€ Erro ao carregar â”€â”€
   if (loadError || !questions) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0a1a] via-[#0d1a2e] to-[#0a0a1a] p-4">
         <div className="text-center text-red-400">
           <AlertCircle className="w-10 h-10 mx-auto mb-3" />
-          <p className="text-sm">Erro ao carregar o formulário. Tente novamente.</p>
+          <p className="text-sm">Erro ao carregar o formulÃ¡rio. Tente novamente.</p>
         </div>
       </div>
     );
@@ -388,23 +388,23 @@ export default function PreCadastro() {
             <Zap className="w-6 h-6 text-white" />
           </div>
           <div className="text-left">
-            <h1 className="text-2xl font-black text-white tracking-wide">WALK AJUDA</h1>
+            <h1 className="text-2xl font-black text-white tracking-wide">H2 COLOMBIANO</h1>
             <p className="text-purple-400 text-xs font-medium">Atendimento para motoristas</p>
           </div>
         </div>
         <div className="inline-flex items-center gap-2 bg-purple-500/10 border border-purple-500/20 rounded-full px-4 py-1.5 mb-3">
           <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-          <span className="text-purple-300 text-sm font-medium">Pré-Cadastro do Cliente</span>
+          <span className="text-purple-300 text-sm font-medium">PrÃ©-Cadastro do Cliente</span>
         </div>
         <p className="text-gray-400 text-sm leading-relaxed">
-          Antes de iniciar o procedimento, preencha todas as informações abaixo.<br />
+          Antes de iniciar o procedimento, preencha todas as informaÃ§Ãµes abaixo.<br />
           <span className="text-purple-400 font-medium">
-            {questions.some(q => q.required) ? "Campos obrigatórios marcados com *" : "Preencha os campos abaixo."}
+            {questions.some(q => q.required) ? "Campos obrigatÃ³rios marcados com *" : "Preencha os campos abaixo."}
           </span>
         </p>
       </div>
 
-      {/* ===== BOTÃO CONSULTAR PRÉ-CADASTRO ===== */}
+      {/* ===== BOTÃƒO CONSULTAR PRÃ‰-CADASTRO ===== */}
       <div className="max-w-lg mx-auto mb-4">
         <a
           href="/consultar-cadastro"
@@ -429,8 +429,8 @@ export default function PreCadastro() {
             </span>
           </span>
           <div className="relative flex-1 min-w-0">
-            <p className="text-white font-black text-base leading-tight">Já se cadastrou?</p>
-            <p className="text-purple-300 text-sm font-medium mt-0.5">Consulte o status do seu pré-cadastro</p>
+            <p className="text-white font-black text-base leading-tight">JÃ¡ se cadastrou?</p>
+            <p className="text-purple-300 text-sm font-medium mt-0.5">Consulte o status do seu prÃ©-cadastro</p>
           </div>
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="relative flex-shrink-0 group-hover:translate-x-1 transition-transform">
             <polyline points="9 18 15 12 9 6"/>
@@ -444,18 +444,18 @@ export default function PreCadastro() {
           <div className="relative overflow-hidden rounded-2xl border border-amber-500/50 bg-amber-500/10 p-4 shadow-lg">
             <div className="absolute inset-0 bg-amber-500/5 animate-pulse rounded-2xl" />
             <div className="relative flex items-start gap-3">
-              <span className="flex-shrink-0 text-2xl">⚠️</span>
+              <span className="flex-shrink-0 text-2xl">âš ï¸</span>
               <div className="flex-1">
-                <p className="text-amber-300 font-bold text-sm">Cadastro já encontrado!</p>
+                <p className="text-amber-300 font-bold text-sm">Cadastro jÃ¡ encontrado!</p>
                 <p className="text-amber-200/80 text-xs mt-0.5 leading-relaxed">
-                  Este CPF ou WhatsApp já foi cadastrado anteriormente.
+                  Este CPF ou WhatsApp jÃ¡ foi cadastrado anteriormente.
                 </p>
                 <a
                   href={duplicateRedirect}
                   className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all active:scale-95"
                   style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}
                 >
-                  Ver status do meu cadastro →
+                  Ver status do meu cadastro â†’
                 </a>
               </div>
             </div>
@@ -463,7 +463,7 @@ export default function PreCadastro() {
         </div>
       )}
 
-      {/* Formulário dinâmico */}
+      {/* FormulÃ¡rio dinÃ¢mico */}
       <form onSubmit={handleSubmit} className="max-w-lg mx-auto space-y-4">
         {questions.filter(q => !q.parentQuestionId && isQuestionVisible(q, questions)).map((q) => {
           // Buscar sub-perguntas (filhas diretas) desta pergunta
@@ -507,7 +507,7 @@ export default function PreCadastro() {
                         <AlertCircle className="w-3 h-3 flex-shrink-0" /> {errors[sq.fieldKey]}
                       </p>
                     )}
-                    {/* Sub-sub-perguntas (3o nível) */}
+                    {/* Sub-sub-perguntas (3o nÃ­vel) */}
                     {subSubQuestions.map((ssq) => (
                       <div key={ssq.id} className="mt-3 pt-3 border-t border-white/5 ml-3">
                         <label className="block text-gray-300 text-sm font-medium mb-3">
@@ -552,14 +552,14 @@ export default function PreCadastro() {
             </>
           ) : (
             <>
-              Enviar Pré-Cadastro
+              Enviar PrÃ©-Cadastro
               <ChevronRight className="w-5 h-5" />
             </>
           )}
         </button>
 
         <p className="text-center text-gray-600 text-xs pb-6">
-          Seus dados estão protegidos e serão usados apenas para contato.
+          Seus dados estÃ£o protegidos e serÃ£o usados apenas para contato.
         </p>
       </form>
 

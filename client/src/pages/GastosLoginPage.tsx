@@ -7,14 +7,14 @@ import {
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 
-// Componente: botão de solicitar cadastro via WhatsApp
+// Componente: botÃ£o de solicitar cadastro via WhatsApp
 function WhatsAppRequestButton({ phone }: { phone: string }) {
   const { data: settings } = trpc.settings.getAll.useQuery();
   const rawNumber = settings?.whatsapp_number || '5511978307371';
   const adminNumber = rawNumber.replace(/\D/g, '');
   const clientPhone = phone.replace(/\D/g, '');
   const message = encodeURIComponent(
-    `Olá! Gostaria de solicitar meu cadastro no Gestor de Gastos Walk Ajuda.\nMeu número de telefone é: ${clientPhone || phone}`
+    `OlÃ¡! Gostaria de solicitar meu cadastro no Gestor de Gastos H2 COLOMBIANO.\nMeu nÃºmero de telefone Ã©: ${clientPhone || phone}`
   );
   const href = `https://wa.me/${adminNumber}?text=${message}`;
   return (
@@ -37,10 +37,10 @@ interface GastosLoginPageProps {
 type Step =
   | 'phone'             // Etapa 1: digitar telefone
   | 'create_password'   // Etapa 2: criar senha (cliente sem senha - APENAS primeiro acesso)
-  | 'enter_password'    // Etapa 2b: digitar senha (cliente já tem senha)
+  | 'enter_password'    // Etapa 2b: digitar senha (cliente jÃ¡ tem senha)
   | 'pending_approval'  // Aguardando admin definir validade
   | 'expired'           // Senha expirada - aguardar admin renovar
-  | 'expired_no_renew'  // Senha venceu e admin não renovou (sem senha ativa)
+  | 'expired_no_renew'  // Senha venceu e admin nÃ£o renovou (sem senha ativa)
   | 'not_found'         // Telefone sem cadastro
   | 'blocked';          // Bloqueado
 
@@ -50,7 +50,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState(''); // telefone
   const [cpfInput, setCpfInput] = useState(''); // CPF (campo separado)
-  // Qual campo está ativo: 'phone' | 'cpf' | null
+  // Qual campo estÃ¡ ativo: 'phone' | 'cpf' | null
   const activeField = phone.replace(/\D/g, '').length > 0 ? 'phone' : cpfInput.replace(/\D/g, '').length > 0 ? 'cpf' : null;
   const [clientName, setClientName] = useState('');
   const [password, setPassword] = useState('');
@@ -68,10 +68,10 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
   const passwordModeQuery = trpc.spreadsheet.getPasswordMode.useQuery();
   const isAutoMode = passwordModeQuery.data?.mode === 'auto';
 
-  // Normaliza telefone: remove espaços, traços, parênteses e código do país (55)
+  // Normaliza telefone: remove espaÃ§os, traÃ§os, parÃªnteses e cÃ³digo do paÃ­s (55)
   const normalizePhone = (raw: string): string => {
-    let d = raw.replace(/\D/g, ''); // só dígitos
-    // Remove código do país: 55 no início se resultar em 12-13 dígitos
+    let d = raw.replace(/\D/g, ''); // sÃ³ dÃ­gitos
+    // Remove cÃ³digo do paÃ­s: 55 no inÃ­cio se resultar em 12-13 dÃ­gitos
     if ((d.length === 12 || d.length === 13) && d.startsWith('55')) {
       d = d.slice(2);
     }
@@ -102,11 +102,11 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
     setError('');
     const cleanPhone = phone.replace(/\D/g, '');
     const cleanCpf = cpfInput.replace(/\D/g, '');
-    // Prioridade: CPF se preenchido (11 dígitos), senão telefone
+    // Prioridade: CPF se preenchido (11 dÃ­gitos), senÃ£o telefone
     const useCpf = cleanCpf.length === 11;
     const cleanId = useCpf ? cleanCpf : cleanPhone;
     if (cleanId.length < 10) {
-      setError('Informe o telefone (10-11 dígitos) ou o CPF (11 dígitos)');
+      setError('Informe o telefone (10-11 dÃ­gitos) ou o CPF (11 dÃ­gitos)');
       return;
     }
     setIsLoading(true);
@@ -152,20 +152,20 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
       return;
     }
     if (password !== confirmPassword) {
-      setError('As senhas não coincidem');
+      setError('As senhas nÃ£o coincidem');
       return;
     }
     setIsLoading(true);
     try {
       const cleanPhone = phone.replace(/\D/g, '');
       if (isAutoMode) {
-        // Modo AUTO: cria senha com 30 dias, sem precisar de aprovação do ADM
+        // Modo AUTO: cria senha com 30 dias, sem precisar de aprovaÃ§Ã£o do ADM
         const result = await clientCreatePasswordAutoMutation.mutateAsync({
           phone: cleanPhone,
           password,
           confirmPassword,
         });
-        // Fazer login automático após criar a senha
+        // Fazer login automÃ¡tico apÃ³s criar a senha
         const loginResult = await loginMutation.mutateAsync({ phone: cleanPhone, password });
         if (loginResult.success) {
           localStorage.setItem('gastos_token', loginResult.token);
@@ -187,8 +187,8 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
       const msg = err?.message || '';
       if (msg === 'PASSWORD_ALREADY_SET') {
         setStep('expired_no_renew');
-      } else if (msg === 'Já existe uma senha ativa para este cadastro') {
-        setError('Você já possui uma senha ativa. Tente fazer login normalmente.');
+      } else if (msg === 'JÃ¡ existe uma senha ativa para este cadastro') {
+        setError('VocÃª jÃ¡ possui uma senha ativa. Tente fazer login normalmente.');
         setStep('enter_password');
       } else {
         setError(msg || 'Erro ao criar senha');
@@ -255,7 +255,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               )}
             </div>
             <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-primary/70 bg-clip-text text-transparent mb-2">
-              GASTOS WALK AJUDA
+              GASTOS H2 COLOMBIANO
             </h1>
             <p className="text-sm text-muted-foreground">Controle seus ganhos e gastos</p>
           </div>
@@ -285,7 +285,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                   className="h-11 bg-input border-border text-foreground placeholder:text-muted-foreground/70 focus-visible:border-ring"
                 />
               </div>
-              {/* Campo CPF: só aparece se telefone estiver vazio */}
+              {/* Campo CPF: sÃ³ aparece se telefone estiver vazio */}
               {activeField !== 'phone' && (
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
@@ -322,12 +322,12 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
             <form onSubmit={handleCreatePassword} className="space-y-4">
               <div className={`p-3 rounded-lg mb-2 ${isAutoMode ? 'bg-green-500/10 border border-green-500/30' : 'bg-primary/10 border border-primary/30'}`}>
                 <p className={`text-sm font-medium ${isAutoMode ? 'text-green-300' : 'text-primary'}`}>
-                  Olá{clientName ? `, ${clientName}` : ''}! Crie sua senha de acesso.
+                  OlÃ¡{clientName ? `, ${clientName}` : ''}! Crie sua senha de acesso.
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {isAutoMode
-                    ? '✅ Acesso imediato! Você terá 30 dias de acesso após criar a senha.'
-                    : 'Após criar, aguarde o administrador liberar seu acesso.'}
+                    ? 'âœ… Acesso imediato! VocÃª terÃ¡ 30 dias de acesso apÃ³s criar a senha.'
+                    : 'ApÃ³s criar, aguarde o administrador liberar seu acesso.'}
                 </p>
               </div>
               {error && (
@@ -344,7 +344,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                 <div className="relative">
                   <Input
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="MÃ­nimo 6 caracteres"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
@@ -390,10 +390,10 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               >
                 {isLoading
                   ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{isAutoMode ? 'Criando e entrando...' : 'Salvando...'}</>
-                  : isAutoMode ? '✅ Criar Senha e Entrar' : 'Criar Minha Senha'}
+                  : isAutoMode ? 'âœ… Criar Senha e Entrar' : 'Criar Minha Senha'}
               </Button>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center mt-1">
-                ← Voltar
+                â† Voltar
               </button>
             </form>
           )}
@@ -445,12 +445,12 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                 {isLoading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Entrando...</> : 'Entrar'}
               </Button>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center mt-1">
-                ← Voltar
+                â† Voltar
               </button>
             </form>
           )}
 
-          {/* AGUARDANDO APROVAÇÃO */}
+          {/* AGUARDANDO APROVAÃ‡ÃƒO */}
           {step === 'pending_approval' && (
             <div className="space-y-4 text-center">
               <div className="w-16 h-16 bg-amber-500/15 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto">
@@ -464,7 +464,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               )}
               <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                 <p className="text-amber-300 font-semibold text-base mb-1">
-                  Aguardando liberação
+                  Aguardando liberaÃ§Ã£o
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Sua senha foi registrada. O administrador precisa definir a validade do seu acesso.
@@ -474,7 +474,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                 </p>
               </div>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center mt-2">
-                ← Voltar ao início
+                â† Voltar ao inÃ­cio
               </button>
             </div>
           )}
@@ -488,19 +488,19 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
                 <p className="text-red-300 font-semibold text-base mb-1">Acesso expirado</p>
                 <p className="text-sm text-muted-foreground">
-                  Seu período de acesso encerrou. Aguarde o administrador renovar seu acesso.
+                  Seu perÃ­odo de acesso encerrou. Aguarde o administrador renovar seu acesso.
                 </p>
                 <p className="text-xs text-muted-foreground mt-2 text-amber-400/80">
-                  ⚠️ Não é possível criar uma nova senha. Somente o administrador pode renovar.
+                  âš ï¸ NÃ£o Ã© possÃ­vel criar uma nova senha. Somente o administrador pode renovar.
                 </p>
               </div>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                ← Voltar
+                â† Voltar
               </button>
             </div>
           )}
 
-          {/* VENCIDO SEM RENOVAÇÃO - senha venceu e não tem ativa */}
+          {/* VENCIDO SEM RENOVAÃ‡ÃƒO - senha venceu e nÃ£o tem ativa */}
           {step === 'expired_no_renew' && (
             <div className="space-y-4 text-center">
               <div className="w-16 h-16 bg-orange-500/15 border border-orange-500/30 rounded-full flex items-center justify-center mx-auto">
@@ -515,27 +515,27 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                   Para voltar a ter acesso, entre em contato com o administrador para que ele renove seu plano.
                 </p>
                 <p className="text-xs text-amber-400/80 mt-2 font-medium">
-                  🔒 A senha não pode ser alterada. Apenas o administrador pode renovar o acesso.
+                  ðŸ”’ A senha nÃ£o pode ser alterada. Apenas o administrador pode renovar o acesso.
                 </p>
               </div>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                ← Voltar
+                â† Voltar
               </button>
             </div>
           )}
 
-          {/* NÃO ENCONTRADO */}
+          {/* NÃƒO ENCONTRADO */}
           {step === 'not_found' && (
             <div className="space-y-4 text-center">
               <div className="p-4 bg-slate-500/10 border border-slate-500/30 rounded-xl">
-                <p className="text-slate-300 font-semibold text-base mb-1">Telefone não cadastrado</p>
+                <p className="text-slate-300 font-semibold text-base mb-1">Telefone nÃ£o cadastrado</p>
                 <p className="text-sm text-muted-foreground">
-                  Este número não possui cadastro no sistema. Solicite seu cadastro ao administrador pelo WhatsApp.
+                  Este nÃºmero nÃ£o possui cadastro no sistema. Solicite seu cadastro ao administrador pelo WhatsApp.
                 </p>
               </div>
               <WhatsAppRequestButton phone={phone} />
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                ← Tentar outro número
+                â† Tentar outro nÃºmero
               </button>
             </div>
           )}
@@ -546,11 +546,11 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
                 <p className="text-red-300 font-semibold text-base mb-1">Acesso bloqueado</p>
                 <p className="text-sm text-muted-foreground">
-                  Este número está bloqueado. Entre em contato com o administrador.
+                  Este nÃºmero estÃ¡ bloqueado. Entre em contato com o administrador.
                 </p>
               </div>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                ← Voltar
+                â† Voltar
               </button>
             </div>
           )}

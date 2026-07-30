@@ -10,48 +10,48 @@ import { HomeButtonsManager } from "@/components/HomeButtonsManager";
 
 // Lista de fontes com estilos bem distintos
 const FONT_OPTIONS = [
-  // ⭐ Destaques recomendados
-  { value: "Montserrat Bold", label: "🔹 Montserrat Bold", desc: "Elegante, forte e impactante" },
-  { value: "Poppins Bold", label: "🔹 Poppins Bold", desc: "Arredondada, moderna e marcante" },
+  // â­ Destaques recomendados
+  { value: "Montserrat Bold", label: "ðŸ”¹ Montserrat Bold", desc: "Elegante, forte e impactante" },
+  { value: "Poppins Bold", label: "ðŸ”¹ Poppins Bold", desc: "Arredondada, moderna e marcante" },
   // Sans-serif modernas
-  { value: "Inter", label: "Inter", desc: "Moderna e legível" },
-  { value: "Poppins", label: "Poppins", desc: "Arredondada e amigável" },
-  { value: "Roboto", label: "Roboto", desc: "Clássica do Google" },
+  { value: "Inter", label: "Inter", desc: "Moderna e legÃ­vel" },
+  { value: "Poppins", label: "Poppins", desc: "Arredondada e amigÃ¡vel" },
+  { value: "Roboto", label: "Roboto", desc: "ClÃ¡ssica do Google" },
   { value: "Montserrat", label: "Montserrat", desc: "Elegante e forte" },
   { value: "Nunito", label: "Nunito", desc: "Suave e moderna" },
   { value: "Lato", label: "Lato", desc: "Equilibrada e profissional" },
   { value: "Barlow", label: "Barlow", desc: "Compacta e direta" },
-  { value: "Exo 2", label: "Exo 2", desc: "Tecnológica e futurista" },
+  { value: "Exo 2", label: "Exo 2", desc: "TecnolÃ³gica e futurista" },
   { value: "Raleway", label: "Raleway", desc: "Sofisticada e fina" },
   { value: "Ubuntu", label: "Ubuntu", desc: "Humanista e clara" },
   { value: "Mulish", label: "Mulish", desc: "Minimalista e clean" },
-  { value: "DM Sans", label: "DM Sans", desc: "Geométrica e neutra" },
-  { value: "Outfit", label: "Outfit", desc: "Contemporânea e versátil" },
-  { value: "Manrope", label: "Manrope", desc: "Moderna e geométrica" },
+  { value: "DM Sans", label: "DM Sans", desc: "GeomÃ©trica e neutra" },
+  { value: "Outfit", label: "Outfit", desc: "ContemporÃ¢nea e versÃ¡til" },
+  { value: "Manrope", label: "Manrope", desc: "Moderna e geomÃ©trica" },
   // Display / impacto
   { value: "Oswald", label: "Oswald", desc: "Condensada e impactante" },
-  { value: "Bebas Neue", label: "Bebas Neue", desc: "Display em maiúsculas" },
+  { value: "Bebas Neue", label: "Bebas Neue", desc: "Display em maiÃºsculas" },
   { value: "Anton", label: "Anton", desc: "Forte e chamativa" },
   { value: "Black Han Sans", label: "Black Han Sans", desc: "Ultra negrito" },
   { value: "Righteous", label: "Righteous", desc: "Retro e estilizada" },
   { value: "Russo One", label: "Russo One", desc: "Grossa e marcante" },
   { value: "Teko", label: "Teko", desc: "Condensada e esportiva" },
   { value: "Fjalla One", label: "Fjalla One", desc: "Impactante e direta" },
-  // Serif clássicas
-  { value: "Playfair Display", label: "Playfair Display", desc: "Elegante e clássica" },
-  { value: "Merriweather", label: "Merriweather", desc: "Legível e sofisticada" },
-  { value: "Lora", label: "Lora", desc: "Literária e refinada" },
+  // Serif clÃ¡ssicas
+  { value: "Playfair Display", label: "Playfair Display", desc: "Elegante e clÃ¡ssica" },
+  { value: "Merriweather", label: "Merriweather", desc: "LegÃ­vel e sofisticada" },
+  { value: "Lora", label: "Lora", desc: "LiterÃ¡ria e refinada" },
   { value: "Libre Baskerville", label: "Libre Baskerville", desc: "Tradicional e forte" },
   // Cursivas / manuscritas
   { value: "Dancing Script", label: "Dancing Script", desc: "Cursiva e elegante" },
-  { value: "Pacifico", label: "Pacifico", desc: "Manuscrita e descontraída" },
-  { value: "Caveat", label: "Caveat", desc: "Escrita à mão" },
+  { value: "Pacifico", label: "Pacifico", desc: "Manuscrita e descontraÃ­da" },
+  { value: "Caveat", label: "Caveat", desc: "Escrita Ã  mÃ£o" },
   { value: "Satisfy", label: "Satisfy", desc: "Cursiva fluida" },
-  // Tecnológicas / especiais
-  { value: "Orbitron", label: "Orbitron", desc: "Futurista e tecnológica" },
+  // TecnolÃ³gicas / especiais
+  { value: "Orbitron", label: "Orbitron", desc: "Futurista e tecnolÃ³gica" },
   { value: "Audiowide", label: "Audiowide", desc: "Sci-fi e digital" },
   { value: "Rajdhani", label: "Rajdhani", desc: "Moderna e angular" },
-  { value: "Chakra Petch", label: "Chakra Petch", desc: "Técnica e geométrica" },
+  { value: "Chakra Petch", label: "Chakra Petch", desc: "TÃ©cnica e geomÃ©trica" },
   { value: "Oxanium", label: "Oxanium", desc: "Digital e futurista" },
 ];
 
@@ -60,7 +60,7 @@ export default function AdminSettings() {
   const utils = trpc.useUtils();
   const updateMut = trpc.settings.update.useMutation({
     onSuccess: () => {
-      toast.success("Configurações salvas!");
+      toast.success("ConfiguraÃ§Ãµes salvas!");
       utils.settings.getAll.invalidate();
     },
     onError: () => toast.error("Erro ao salvar"),
@@ -105,8 +105,8 @@ export default function AdminSettings() {
   const { data: photoModeData, refetch: refetchPhotoMode } = trpc.appSettings.getPhotoMode.useQuery();
   const [photoMode, setPhotoMode] = useState<'camera' | 'gallery' | 'both' | 'disabled'>('both');
   const setPhotoModeMut = trpc.appSettings.setPhotoMode.useMutation({
-    onSuccess: () => { toast.success('Configuração de foto salva!'); refetchPhotoMode(); },
-    onError: () => toast.error('Erro ao salvar configuração de foto'),
+    onSuccess: () => { toast.success('ConfiguraÃ§Ã£o de foto salva!'); refetchPhotoMode(); },
+    onError: () => toast.error('Erro ao salvar configuraÃ§Ã£o de foto'),
   });
   const [loginImageFile, setLoginImageFile] = useState<File | null>(null);
   const [loginImagePreview, setLoginImagePreview] = useState<string | null>(null);
@@ -179,7 +179,7 @@ export default function AdminSettings() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) { toast.error("Envie apenas imagens"); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error("Imagem muito grande. Máximo 5MB."); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Imagem muito grande. MÃ¡ximo 5MB."); return; }
     setLoginImageFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => setLoginImagePreview(ev.target?.result as string);
@@ -216,7 +216,7 @@ export default function AdminSettings() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) { toast.error("Envie apenas imagens"); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error("Imagem muito grande. Máximo 5MB."); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Imagem muito grande. MÃ¡ximo 5MB."); return; }
     const preview = URL.createObjectURL(file);
     setGastosLogoPreview(preview);
     setUploadingGastosLogo(true);
@@ -249,14 +249,14 @@ export default function AdminSettings() {
   if (isLoading) return <div className="min-h-screen bg-[#0a0a1a] flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full" /></div>;
 
   const tabs = [
-    { id: "page" as const, label: "Página Inicial", icon: Layout },
+    { id: "page" as const, label: "PÃ¡gina Inicial", icon: Layout },
     { id: "login" as const, label: "Tela de Login", icon: LogIn },
     { id: "pix" as const, label: "PIX", icon: CreditCard },
     { id: "contact" as const, label: "Contato", icon: MessageSquare },
     { id: "features" as const, label: "Destaques", icon: Star },
-    { id: "advanced" as const, label: "Avançado", icon: Clock },
+    { id: "advanced" as const, label: "AvanÃ§ado", icon: Clock },
     { id: "photo" as const, label: "Foto de Perfil", icon: Camera },
-    { id: "security" as const, label: "Segurança", icon: ShieldCheck },
+    { id: "security" as const, label: "SeguranÃ§a", icon: ShieldCheck },
     { id: "og" as const, label: "Compartilhamento", icon: Share2 },
     { id: "trackingForm" as const, label: "Form. Acompanhamento", icon: MessageSquare },
     { id: "whatsappOrder" as const, label: "WhatsApp Pedidos", icon: Smartphone },
@@ -265,7 +265,7 @@ export default function AdminSettings() {
 
   return (
     <div className="min-h-screen bg-[#0a0a1a] text-white">
-      <AdminHeader title="Configurações do Site" icon={<Globe className="w-5 h-5" />} rightContent={
+      <AdminHeader title="ConfiguraÃ§Ãµes do Site" icon={<Globe className="w-5 h-5" />} rightContent={
         <Button onClick={saveAll} disabled={updateMut.isPending} className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1.5 h-auto">
           <Save className="w-3.5 h-3.5 mr-1" /> {updateMut.isPending ? "Salvando..." : "Salvar Tudo"}
         </Button>
@@ -293,40 +293,40 @@ export default function AdminSettings() {
             <Section title="Nome do Site">
               <Field label="Nome" k="site_name" form={form} onChange={updateField} />
             </Section>
-            <Section title="Seção Hero (Topo)">
-              <Field label="Título Principal (HTML permitido)" k="hero_title" form={form} onChange={updateField} />
-              <Field label="Subtítulo" k="hero_subtitle" form={form} onChange={updateField} textarea />
-              <Field label="Texto do Botão" k="hero_button_text" form={form} onChange={updateField} />
+            <Section title="SeÃ§Ã£o Hero (Topo)">
+              <Field label="TÃ­tulo Principal (HTML permitido)" k="hero_title" form={form} onChange={updateField} />
+              <Field label="SubtÃ­tulo" k="hero_subtitle" form={form} onChange={updateField} textarea />
+              <Field label="Texto do BotÃ£o" k="hero_button_text" form={form} onChange={updateField} />
             </Section>
-            <Section title="Vídeo de Fundo">
-              <Field label="URL do Vídeo" k="video_url" form={form} onChange={updateField} />
+            <Section title="VÃ­deo de Fundo">
+              <Field label="URL do VÃ­deo" k="video_url" form={form} onChange={updateField} />
               {form.video_url && (
                 <div className="mt-3">
-                  <p className="text-xs text-gray-400 mb-2">Preview do vídeo:</p>
+                  <p className="text-xs text-gray-400 mb-2">Preview do vÃ­deo:</p>
                   <video key={form.video_url} autoPlay muted loop playsInline className="w-full max-h-48 rounded-lg object-contain bg-black">
                     <source src={form.video_url} type="video/mp4" />
-                    <p className="text-red-400 text-xs p-2">Não foi possível carregar o vídeo. Verifique a URL.</p>
+                    <p className="text-red-400 text-xs p-2">NÃ£o foi possÃ­vel carregar o vÃ­deo. Verifique a URL.</p>
                   </video>
                 </div>
               )}
             </Section>
-            <Section title="Seção de Serviços">
-              <Field label="Título da Seção" k="services_title" form={form} onChange={updateField} />
-              <Field label="Subtítulo da Seção" k="services_subtitle" form={form} onChange={updateField} />
+            <Section title="SeÃ§Ã£o de ServiÃ§os">
+              <Field label="TÃ­tulo da SeÃ§Ã£o" k="services_title" form={form} onChange={updateField} />
+              <Field label="SubtÃ­tulo da SeÃ§Ã£o" k="services_subtitle" form={form} onChange={updateField} />
             </Section>
-            <Section title="Rodapé">
-              <Field label="Texto do Rodapé" k="footer_text" form={form} onChange={updateField} textarea />
+            <Section title="RodapÃ©">
+              <Field label="Texto do RodapÃ©" k="footer_text" form={form} onChange={updateField} textarea />
             </Section>
-            <Section title="Botões da Página Inicial">
-              <p className="text-xs text-gray-500 mb-4">Edite os dois botões principais que aparecem na tela inicial do cliente.</p>
-              {/* Botão 1 */}
+            <Section title="BotÃµes da PÃ¡gina Inicial">
+              <p className="text-xs text-gray-500 mb-4">Edite os dois botÃµes principais que aparecem na tela inicial do cliente.</p>
+              {/* BotÃ£o 1 */}
               <div className="bg-[#0d0d2b] border border-purple-500/20 rounded-xl p-4 mb-4">
-                <p className="text-xs font-bold text-purple-300 mb-3">🔵 Botão 1 (ex: FAZER PEDIDO)</p>
+                <p className="text-xs font-bold text-purple-300 mb-3">ðŸ”µ BotÃ£o 1 (ex: FAZER PEDIDO)</p>
                 <div className="space-y-3">
                   <Field label="Texto Principal" k="home_btn1_text" form={form} onChange={updateField} placeholder="FAZER PEDIDO" />
                   <Field label="Subtexto (Enter para quebrar linha)" k="home_btn1_subtitle" form={form} onChange={updateField} placeholder="Abrir conta Uber, 99 ou InDrive" textarea />
                   <div>
-                    <label className="text-xs text-gray-400 block mb-1">🔗 Link de Destino (URL ou rota)</label>
+                    <label className="text-xs text-gray-400 block mb-1">ðŸ”— Link de Destino (URL ou rota)</label>
                     <input
                       type="text"
                       value={form.home_btn1_url || ""}
@@ -334,11 +334,11 @@ export default function AdminSettings() {
                       placeholder="Ex: / ou https://site.com ou /acompanhar"
                       style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}
                     />
-                    <p className="text-[10px] text-gray-500 mt-1">Deixe vazio para manter o comportamento padrão (abre formulário de cadastro)</p>
+                    <p className="text-[10px] text-gray-500 mt-1">Deixe vazio para manter o comportamento padrÃ£o (abre formulÃ¡rio de cadastro)</p>
                   </div>
                   <div className="grid grid-cols-1 gap-3">
                     <div>
-                      <label className="text-xs text-gray-400 block mb-1">Cor do Botão (fundo)</label>
+                      <label className="text-xs text-gray-400 block mb-1">Cor do BotÃ£o (fundo)</label>
                       <div className="flex items-center gap-3">
                         <input type="color" value={form.home_btn1_color || "#7c3aed"} onChange={e => updateField("home_btn1_color", e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer border-0 bg-transparent" />
                         <input type="text" value={form.home_btn1_color || "#7c3aed"} onChange={e => updateField("home_btn1_color", e.target.value)} placeholder="#7c3aed" style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }} />
@@ -362,28 +362,28 @@ export default function AdminSettings() {
                   <div>
                     <label className="text-xs text-gray-400 block mb-1">Fonte do Texto</label>
                     <select value={form.home_btn1_font || ""} onChange={e => updateField("home_btn1_font", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                      <option value="">Padrão do site</option>
-                      {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} — {f.desc}</option>)}
+                      <option value="">PadrÃ£o do site</option>
+                      {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} â€” {f.desc}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="text-xs text-gray-400 block mb-1">Efeito Hover</label>
                     <select value={form.home_btn1_hover || "scale"} onChange={e => updateField("home_btn1_hover", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                      <option value="scale">🔍 Zoom (aumenta levemente)</option>
-                      <option value="lift">⬆️ Elevar (sobe com sombra)</option>
-                      <option value="glow">✨ Brilho (glow colorido)</option>
-                      <option value="shake">📳 Vibrar (tremida rápida)</option>
-                      <option value="pulse">💓 Pulsar (bate como coração)</option>
-                      <option value="bounce">🏀 Quicar (sobe e desce)</option>
-                      <option value="rotate">🔄 Girar levemente</option>
-                      <option value="darken">🌑 Escurecer (cor mais escura)</option>
-                      <option value="none">⛔ Sem efeito</option>
+                      <option value="scale">ðŸ” Zoom (aumenta levemente)</option>
+                      <option value="lift">â¬†ï¸ Elevar (sobe com sombra)</option>
+                      <option value="glow">âœ¨ Brilho (glow colorido)</option>
+                      <option value="shake">ðŸ“³ Vibrar (tremida rÃ¡pida)</option>
+                      <option value="pulse">ðŸ’“ Pulsar (bate como coraÃ§Ã£o)</option>
+                      <option value="bounce">ðŸ€ Quicar (sobe e desce)</option>
+                      <option value="rotate">ðŸ”„ Girar levemente</option>
+                      <option value="darken">ðŸŒ‘ Escurecer (cor mais escura)</option>
+                      <option value="none">â›” Sem efeito</option>
                     </select>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-2">Preview:</p>
                     <div className="flex items-center gap-4 rounded-2xl px-5 py-4" style={{ background: form.home_btn1_color || "#7c3aed", fontFamily: form.home_btn1_font ? `'${form.home_btn1_font}', sans-serif` : undefined }}>
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">📋</span></div>
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">ðŸ“‹</span></div>
                       <div className="flex-1">
                         <p className="font-black text-lg tracking-wide" style={{ color: form.home_btn1_text_color || "#ffffff" }}>{form.home_btn1_text || "FAZER PEDIDO"}</p>
                         <p className="text-sm" style={{ color: form.home_btn1_sub_color || "rgba(255,255,255,0.7)" }}>{form.home_btn1_subtitle || "Abrir conta Uber, 99 ou InDrive"}</p>
@@ -392,14 +392,14 @@ export default function AdminSettings() {
                   </div>
                 </div>
               </div>
-              {/* Botão 2 */}
+              {/* BotÃ£o 2 */}
               <div className="bg-[#0d0d2b] border border-purple-500/20 rounded-xl p-4">
-                <p className="text-xs font-bold text-purple-300 mb-3">🟢 Botão 2 (ex: ACOMPANHAR)</p>
+                <p className="text-xs font-bold text-purple-300 mb-3">ðŸŸ¢ BotÃ£o 2 (ex: ACOMPANHAR)</p>
                 <div className="space-y-3">
                   <Field label="Texto Principal" k="home_btn2_text" form={form} onChange={updateField} placeholder="ACOMPANHAR" />
                   <Field label="Subtexto (Enter para quebrar linha)" k="home_btn2_subtitle" form={form} onChange={updateField} placeholder="Ver o status do seu pedido" textarea />
                   <div>
-                    <label className="text-xs text-gray-400 block mb-1">🔗 Link de Destino (URL ou rota)</label>
+                    <label className="text-xs text-gray-400 block mb-1">ðŸ”— Link de Destino (URL ou rota)</label>
                     <input
                       type="text"
                       value={form.home_btn2_url || ""}
@@ -407,11 +407,11 @@ export default function AdminSettings() {
                       placeholder="Ex: /acompanhar ou https://site.com"
                       style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}
                     />
-                    <p className="text-[10px] text-gray-500 mt-1">Deixe vazio para manter o comportamento padrão (abre tela de acompanhar pedido)</p>
+                    <p className="text-[10px] text-gray-500 mt-1">Deixe vazio para manter o comportamento padrÃ£o (abre tela de acompanhar pedido)</p>
                   </div>
                   <div className="grid grid-cols-1 gap-3">
                     <div>
-                      <label className="text-xs text-gray-400 block mb-1">Cor do Botão (fundo)</label>
+                      <label className="text-xs text-gray-400 block mb-1">Cor do BotÃ£o (fundo)</label>
                       <div className="flex items-center gap-3">
                         <input type="color" value={form.home_btn2_color || "#059669"} onChange={e => updateField("home_btn2_color", e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer border-0 bg-transparent" />
                         <input type="text" value={form.home_btn2_color || "#059669"} onChange={e => updateField("home_btn2_color", e.target.value)} placeholder="#059669" style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }} />
@@ -435,28 +435,28 @@ export default function AdminSettings() {
                   <div>
                     <label className="text-xs text-gray-400 block mb-1">Fonte do Texto</label>
                     <select value={form.home_btn2_font || ""} onChange={e => updateField("home_btn2_font", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                      <option value="">Padrão do site</option>
-                      {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} — {f.desc}</option>)}
+                      <option value="">PadrÃ£o do site</option>
+                      {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} â€” {f.desc}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="text-xs text-gray-400 block mb-1">Efeito Hover</label>
                     <select value={form.home_btn2_hover || "scale"} onChange={e => updateField("home_btn2_hover", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                      <option value="scale">🔍 Zoom (aumenta levemente)</option>
-                      <option value="lift">⬆️ Elevar (sobe com sombra)</option>
-                      <option value="glow">✨ Brilho (glow colorido)</option>
-                      <option value="shake">📳 Vibrar (tremida rápida)</option>
-                      <option value="pulse">💓 Pulsar (bate como coração)</option>
-                      <option value="bounce">🏀 Quicar (sobe e desce)</option>
-                      <option value="rotate">🔄 Girar levemente</option>
-                      <option value="darken">🌑 Escurecer (cor mais escura)</option>
-                      <option value="none">⛔ Sem efeito</option>
+                      <option value="scale">ðŸ” Zoom (aumenta levemente)</option>
+                      <option value="lift">â¬†ï¸ Elevar (sobe com sombra)</option>
+                      <option value="glow">âœ¨ Brilho (glow colorido)</option>
+                      <option value="shake">ðŸ“³ Vibrar (tremida rÃ¡pida)</option>
+                      <option value="pulse">ðŸ’“ Pulsar (bate como coraÃ§Ã£o)</option>
+                      <option value="bounce">ðŸ€ Quicar (sobe e desce)</option>
+                      <option value="rotate">ðŸ”„ Girar levemente</option>
+                      <option value="darken">ðŸŒ‘ Escurecer (cor mais escura)</option>
+                      <option value="none">â›” Sem efeito</option>
                     </select>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-2">Preview:</p>
                     <div className="flex items-center gap-4 rounded-2xl px-5 py-4" style={{ background: form.home_btn2_color || "#059669", fontFamily: form.home_btn2_font ? `'${form.home_btn2_font}', sans-serif` : undefined }}>
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">🔍</span></div>
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">ðŸ”</span></div>
                       <div className="flex-1">
                         <p className="font-black text-lg tracking-wide" style={{ color: form.home_btn2_text_color || "#ffffff" }}>{form.home_btn2_text || "ACOMPANHAR"}</p>
                         <p className="text-sm" style={{ color: form.home_btn2_sub_color || "rgba(255,255,255,0.7)" }}>{form.home_btn2_subtitle || "Ver o status do seu pedido"}</p>
@@ -467,16 +467,16 @@ export default function AdminSettings() {
               </div>
             </Section>
 
-            <Section title="📌 Botões Rápidos — Hub Central de Acesso">
+            <Section title="ðŸ“Œ BotÃµes RÃ¡pidos â€” Hub Central de Acesso">
               <HomeButtonsManager />
             </Section>
 
             {/*
-            BLOCO ANTIGO DE BOTÕES FIXOS - REMOVIDO
-            {/* Botão 3 */}
+            BLOCO ANTIGO DE BOTÃ•ES FIXOS - REMOVIDO
+            {/* BotÃ£o 3 */}
             <div className="bg-[#0d0d2b] border border-amber-500/20 rounded-xl p-4 space-y-3 mb-4" style={{display: 'none'}}>
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-amber-300">🏆 Botão 3 (ex: SORTEIO)</p>
+                  <p className="text-xs font-bold text-amber-300">ðŸ† BotÃ£o 3 (ex: SORTEIO)</p>
                   <div
                     onClick={() => updateField("home_btn3_enabled", form.home_btn3_enabled === "1" ? "0" : "1")}
                     className={`w-10 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${form.home_btn3_enabled === "1" ? "bg-amber-500" : "bg-gray-600"}`}
@@ -489,33 +489,33 @@ export default function AdminSettings() {
                 <Field label="Destino (ex: /sorteio ou https://...)" k="home_btn3_url" form={form} onChange={updateField} placeholder="/sorteio" />
                 {form.home_btn3_url && form.home_btn3_url.includes('wa.me') && (
                   <div>
-                    <label className="text-xs text-green-400 font-bold block mb-1">💬 Mensagem WhatsApp (texto pré-preenchido)</label>
+                    <label className="text-xs text-green-400 font-bold block mb-1">ðŸ’¬ Mensagem WhatsApp (texto prÃ©-preenchido)</label>
                     <textarea
                       value={form.home_btn3_wa_msg || ''}
                       onChange={e => updateField('home_btn3_wa_msg', e.target.value)}
-                      placeholder="Ex: Olá! Vim pelo botão SORTEIO do site..."
+                      placeholder="Ex: OlÃ¡! Vim pelo botÃ£o SORTEIO do site..."
                       rows={3}
                       style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(34,197,94,0.4)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none', resize: 'vertical' }}
                     />
-                    <p className="text-[10px] text-gray-500 mt-1">Este texto será enviado automaticamente quando o cliente clicar no botão.</p>
+                    <p className="text-[10px] text-gray-500 mt-1">Este texto serÃ¡ enviado automaticamente quando o cliente clicar no botÃ£o.</p>
                   </div>
                 )}
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Ícone</label>
+                  <label className="text-xs text-gray-400 block mb-1">Ãcone</label>
                   <select value={form.home_btn3_icon || "trophy"} onChange={e => updateField("home_btn3_icon", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                    <option value="trophy">🏆 Troféu</option>
-                    <option value="gift">🎁 Presente</option>
-                    <option value="star">⭐ Estrela</option>
-                    <option value="ticket">🎫 Ingresso</option>
-                    <option value="bell">🔔 Sino</option>
-                    <option value="sparkles">✨ Brilho</option>
-                    <option value="search">🔍 Lupa</option>
-                    <option value="clipboard">📋 Prancheta</option>
+                    <option value="trophy">ðŸ† TrofÃ©u</option>
+                    <option value="gift">ðŸŽ Presente</option>
+                    <option value="star">â­ Estrela</option>
+                    <option value="ticket">ðŸŽ« Ingresso</option>
+                    <option value="bell">ðŸ”” Sino</option>
+                    <option value="sparkles">âœ¨ Brilho</option>
+                    <option value="search">ðŸ” Lupa</option>
+                    <option value="clipboard">ðŸ“‹ Prancheta</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
                   <div>
-                    <label className="text-xs text-gray-400 block mb-1">Cor do Botão (fundo)</label>
+                    <label className="text-xs text-gray-400 block mb-1">Cor do BotÃ£o (fundo)</label>
                     <div className="flex items-center gap-3">
                       <input type="color" value={form.home_btn3_color || "#b45309"} onChange={e => updateField("home_btn3_color", e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer border-0 bg-transparent" />
                       <input type="text" value={form.home_btn3_color || "#b45309"} onChange={e => updateField("home_btn3_color", e.target.value)} placeholder="#b45309" style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }} />
@@ -539,26 +539,26 @@ export default function AdminSettings() {
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Fonte do Texto</label>
                   <select value={form.home_btn3_font || ""} onChange={e => updateField("home_btn3_font", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                    <option value="">Padrão do site</option>
-                    {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} — {f.desc}</option>)}
+                    <option value="">PadrÃ£o do site</option>
+                    {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} â€” {f.desc}</option>)}
                   </select>
                 </div>
                 <div>
                 <label className="text-xs text-gray-400 block mb-1">Efeito Hover</label>
                 <select value={form.home_btn3_hover || "scale"} onChange={e => updateField("home_btn3_hover", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                  <option value="scale">🔍 Zoom (aumenta levemente)</option>
-                  <option value="lift">⬆️ Elevar (sobe com sombra)</option>
-                  <option value="glow">✨ Brilho (glow colorido)</option>
-                  <option value="shake">📳 Vibrar (tremida rápida)</option>
-                  <option value="pulse">💓 Pulsar (bate como coração)</option>
-                  <option value="bounce">🏀 Quicar (sobe e desce)</option>
-                  <option value="rotate">🔄 Girar levemente</option>
-                  <option value="darken">🌑 Escurecer (cor mais escura)</option>
-                  <option value="none">⛔ Sem efeito</option>
+                  <option value="scale">ðŸ” Zoom (aumenta levemente)</option>
+                  <option value="lift">â¬†ï¸ Elevar (sobe com sombra)</option>
+                  <option value="glow">âœ¨ Brilho (glow colorido)</option>
+                  <option value="shake">ðŸ“³ Vibrar (tremida rÃ¡pida)</option>
+                  <option value="pulse">ðŸ’“ Pulsar (bate como coraÃ§Ã£o)</option>
+                  <option value="bounce">ðŸ€ Quicar (sobe e desce)</option>
+                  <option value="rotate">ðŸ”„ Girar levemente</option>
+                  <option value="darken">ðŸŒ‘ Escurecer (cor mais escura)</option>
+                  <option value="none">â›” Sem efeito</option>
                 </select>
                 </div>
                 <div className={`flex items-center gap-4 rounded-2xl px-5 py-4 ${form.home_btn3_enabled !== "1" ? "opacity-40" : ""}`} style={{ background: form.home_btn3_color || "#b45309", fontFamily: form.home_btn3_font ? `'${form.home_btn3_font}', sans-serif` : undefined }}>
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">🏆</span></div>
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">ðŸ†</span></div>
                   <div className="flex-1">
                     <p className="font-black text-lg tracking-wide" style={{ color: form.home_btn3_text_color || "#ffffff" }}>{form.home_btn3_text || "SORTEIO"}</p>
                     <p className="text-sm" style={{ color: form.home_btn3_sub_color || "rgba(255,255,255,0.8)" }}>{form.home_btn3_subtitle || "Participe do sorteio exclusivo"}</p>
@@ -567,10 +567,10 @@ export default function AdminSettings() {
                 </div>
               </div>
 
-              {/* Botão 4 */}
+              {/* BotÃ£o 4 */}
               <div className="bg-[#0d0d2b] border border-cyan-500/20 rounded-xl p-4 space-y-3 mb-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-cyan-300">🔔 Botão 4 (ex: NOVIDADES)</p>
+                  <p className="text-xs font-bold text-cyan-300">ðŸ”” BotÃ£o 4 (ex: NOVIDADES)</p>
                   <div
                     onClick={() => updateField("home_btn4_enabled", form.home_btn4_enabled === "1" ? "0" : "1")}
                     className={`w-10 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${form.home_btn4_enabled === "1" ? "bg-cyan-500" : "bg-gray-600"}`}
@@ -579,37 +579,37 @@ export default function AdminSettings() {
                   </div>
                 </div>
                 <Field label="Texto Principal" k="home_btn4_text" form={form} onChange={updateField} placeholder="NOVIDADES" />
-                <Field label="Subtexto (Enter para quebrar linha)" k="home_btn4_subtitle" form={form} onChange={updateField} placeholder="Veja nossas promoções" textarea />
+                <Field label="Subtexto (Enter para quebrar linha)" k="home_btn4_subtitle" form={form} onChange={updateField} placeholder="Veja nossas promoÃ§Ãµes" textarea />
                 <Field label="Destino (ex: /sorteio ou https://...)" k="home_btn4_url" form={form} onChange={updateField} placeholder="/sorteio" />
                 {form.home_btn4_url && form.home_btn4_url.includes('wa.me') && (
                   <div>
-                    <label className="text-xs text-green-400 font-bold block mb-1">💬 Mensagem WhatsApp (texto pré-preenchido)</label>
+                    <label className="text-xs text-green-400 font-bold block mb-1">ðŸ’¬ Mensagem WhatsApp (texto prÃ©-preenchido)</label>
                     <textarea
                       value={form.home_btn4_wa_msg || ''}
                       onChange={e => updateField('home_btn4_wa_msg', e.target.value)}
-                      placeholder="Ex: Olá! Vim pelo botão NOVIDADES do site..."
+                      placeholder="Ex: OlÃ¡! Vim pelo botÃ£o NOVIDADES do site..."
                       rows={3}
                       style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(34,197,94,0.4)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none', resize: 'vertical' }}
                     />
-                    <p className="text-[10px] text-gray-500 mt-1">Este texto será enviado automaticamente quando o cliente clicar no botão.</p>
+                    <p className="text-[10px] text-gray-500 mt-1">Este texto serÃ¡ enviado automaticamente quando o cliente clicar no botÃ£o.</p>
                   </div>
                 )}
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Ícone</label>
+                  <label className="text-xs text-gray-400 block mb-1">Ãcone</label>
                   <select value={form.home_btn4_icon || "bell"} onChange={e => updateField("home_btn4_icon", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                    <option value="trophy">🏆 Troféu</option>
-                    <option value="gift">🎁 Presente</option>
-                    <option value="star">⭐ Estrela</option>
-                    <option value="ticket">🎫 Ingresso</option>
-                    <option value="bell">🔔 Sino</option>
-                    <option value="sparkles">✨ Brilho</option>
-                    <option value="search">🔍 Lupa</option>
-                    <option value="clipboard">📋 Prancheta</option>
+                    <option value="trophy">ðŸ† TrofÃ©u</option>
+                    <option value="gift">ðŸŽ Presente</option>
+                    <option value="star">â­ Estrela</option>
+                    <option value="ticket">ðŸŽ« Ingresso</option>
+                    <option value="bell">ðŸ”” Sino</option>
+                    <option value="sparkles">âœ¨ Brilho</option>
+                    <option value="search">ðŸ” Lupa</option>
+                    <option value="clipboard">ðŸ“‹ Prancheta</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
                   <div>
-                    <label className="text-xs text-gray-400 block mb-1">Cor do Botão (fundo)</label>
+                    <label className="text-xs text-gray-400 block mb-1">Cor do BotÃ£o (fundo)</label>
                     <div className="flex items-center gap-3">
                       <input type="color" value={form.home_btn4_color || "#0e7490"} onChange={e => updateField("home_btn4_color", e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer border-0 bg-transparent" />
                       <input type="text" value={form.home_btn4_color || "#0e7490"} onChange={e => updateField("home_btn4_color", e.target.value)} placeholder="#0e7490" style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }} />
@@ -633,38 +633,38 @@ export default function AdminSettings() {
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Fonte do Texto</label>
                   <select value={form.home_btn4_font || ""} onChange={e => updateField("home_btn4_font", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                    <option value="">Padrão do site</option>
-                    {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} — {f.desc}</option>)}
+                    <option value="">PadrÃ£o do site</option>
+                    {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} â€” {f.desc}</option>)}
                   </select>
                 </div>
                 <div>
                 <label className="text-xs text-gray-400 block mb-1">Efeito Hover</label>
                 <select value={form.home_btn4_hover || "scale"} onChange={e => updateField("home_btn4_hover", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                  <option value="scale">🔍 Zoom (aumenta levemente)</option>
-                  <option value="lift">⬆️ Elevar (sobe com sombra)</option>
-                  <option value="glow">✨ Brilho (glow colorido)</option>
-                  <option value="shake">📳 Vibrar (tremida rápida)</option>
-                  <option value="pulse">💓 Pulsar (bate como coração)</option>
-                  <option value="bounce">🏀 Quicar (sobe e desce)</option>
-                  <option value="rotate">🔄 Girar levemente</option>
-                  <option value="darken">🌑 Escurecer (cor mais escura)</option>
-                  <option value="none">⛔ Sem efeito</option>
+                  <option value="scale">ðŸ” Zoom (aumenta levemente)</option>
+                  <option value="lift">â¬†ï¸ Elevar (sobe com sombra)</option>
+                  <option value="glow">âœ¨ Brilho (glow colorido)</option>
+                  <option value="shake">ðŸ“³ Vibrar (tremida rÃ¡pida)</option>
+                  <option value="pulse">ðŸ’“ Pulsar (bate como coraÃ§Ã£o)</option>
+                  <option value="bounce">ðŸ€ Quicar (sobe e desce)</option>
+                  <option value="rotate">ðŸ”„ Girar levemente</option>
+                  <option value="darken">ðŸŒ‘ Escurecer (cor mais escura)</option>
+                  <option value="none">â›” Sem efeito</option>
                 </select>
                 </div>
                 <div className={`flex items-center gap-4 rounded-2xl px-5 py-4 ${form.home_btn4_enabled !== "1" ? "opacity-40" : ""}`} style={{ background: form.home_btn4_color || "#0e7490", fontFamily: form.home_btn4_font ? `'${form.home_btn4_font}', sans-serif` : undefined }}>
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">🔔</span></div>
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">ðŸ””</span></div>
                   <div className="flex-1">
                     <p className="font-black text-lg tracking-wide" style={{ color: form.home_btn4_text_color || "#ffffff" }}>{form.home_btn4_text || "NOVIDADES"}</p>
-                    <p className="text-sm" style={{ color: form.home_btn4_sub_color || "rgba(255,255,255,0.8)" }}>{form.home_btn4_subtitle || "Veja nossas promoções"}</p>
+                    <p className="text-sm" style={{ color: form.home_btn4_sub_color || "rgba(255,255,255,0.8)" }}>{form.home_btn4_subtitle || "Veja nossas promoÃ§Ãµes"}</p>
                   </div>
                   {form.home_btn4_enabled !== "1" && <span className="text-white/60 text-xs font-bold">DESATIVADO</span>}
                 </div>
               </div>
 
-              {/* Botão 5 */}
+              {/* BotÃ£o 5 */}
               <div className="bg-[#0d0d2b] border border-violet-500/20 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-violet-300">🎁 Botão 5 (ex: PROMOÇÃO)</p>
+                  <p className="text-xs font-bold text-violet-300">ðŸŽ BotÃ£o 5 (ex: PROMOÃ‡ÃƒO)</p>
                   <div
                     onClick={() => updateField("home_btn5_enabled", form.home_btn5_enabled === "1" ? "0" : "1")}
                     className={`w-10 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${form.home_btn5_enabled === "1" ? "bg-violet-500" : "bg-gray-600"}`}
@@ -672,38 +672,38 @@ export default function AdminSettings() {
                     <div className={`w-4 h-4 bg-white rounded-full mt-0.5 transition-transform ${form.home_btn5_enabled === "1" ? "translate-x-5" : "translate-x-0.5"}`} />
                   </div>
                 </div>
-                <Field label="Texto Principal" k="home_btn5_text" form={form} onChange={updateField} placeholder="PROMOÇÃO" />
-                <Field label="Subtexto (Enter para quebrar linha)" k="home_btn5_subtitle" form={form} onChange={updateField} placeholder="Ofertas especiais para você" textarea />
+                <Field label="Texto Principal" k="home_btn5_text" form={form} onChange={updateField} placeholder="PROMOÃ‡ÃƒO" />
+                <Field label="Subtexto (Enter para quebrar linha)" k="home_btn5_subtitle" form={form} onChange={updateField} placeholder="Ofertas especiais para vocÃª" textarea />
                 <Field label="Destino (ex: /sorteio ou https://...)" k="home_btn5_url" form={form} onChange={updateField} placeholder="/sorteio" />
                 {form.home_btn5_url && form.home_btn5_url.includes('wa.me') && (
                   <div>
-                    <label className="text-xs text-green-400 font-bold block mb-1">💬 Mensagem WhatsApp (texto pré-preenchido)</label>
+                    <label className="text-xs text-green-400 font-bold block mb-1">ðŸ’¬ Mensagem WhatsApp (texto prÃ©-preenchido)</label>
                     <textarea
                       value={form.home_btn5_wa_msg || ''}
                       onChange={e => updateField('home_btn5_wa_msg', e.target.value)}
-                      placeholder="Ex: Olá! Vim pelo botão PROMOÇÃO do site..."
+                      placeholder="Ex: OlÃ¡! Vim pelo botÃ£o PROMOÃ‡ÃƒO do site..."
                       rows={3}
                       style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(34,197,94,0.4)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none', resize: 'vertical' }}
                     />
-                    <p className="text-[10px] text-gray-500 mt-1">Este texto será enviado automaticamente quando o cliente clicar no botão.</p>
+                    <p className="text-[10px] text-gray-500 mt-1">Este texto serÃ¡ enviado automaticamente quando o cliente clicar no botÃ£o.</p>
                   </div>
                 )}
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Ícone</label>
+                  <label className="text-xs text-gray-400 block mb-1">Ãcone</label>
                   <select value={form.home_btn5_icon || "gift"} onChange={e => updateField("home_btn5_icon", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                    <option value="trophy">🏆 Troféu</option>
-                    <option value="gift">🎁 Presente</option>
-                    <option value="star">⭐ Estrela</option>
-                    <option value="ticket">🎫 Ingresso</option>
-                    <option value="bell">🔔 Sino</option>
-                    <option value="sparkles">✨ Brilho</option>
-                    <option value="search">🔍 Lupa</option>
-                    <option value="clipboard">📋 Prancheta</option>
+                    <option value="trophy">ðŸ† TrofÃ©u</option>
+                    <option value="gift">ðŸŽ Presente</option>
+                    <option value="star">â­ Estrela</option>
+                    <option value="ticket">ðŸŽ« Ingresso</option>
+                    <option value="bell">ðŸ”” Sino</option>
+                    <option value="sparkles">âœ¨ Brilho</option>
+                    <option value="search">ðŸ” Lupa</option>
+                    <option value="clipboard">ðŸ“‹ Prancheta</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
                   <div>
-                    <label className="text-xs text-gray-400 block mb-1">Cor do Botão (fundo)</label>
+                    <label className="text-xs text-gray-400 block mb-1">Cor do BotÃ£o (fundo)</label>
                     <div className="flex items-center gap-3">
                       <input type="color" value={form.home_btn5_color || "#7c3aed"} onChange={e => updateField("home_btn5_color", e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer border-0 bg-transparent" />
                       <input type="text" value={form.home_btn5_color || "#7c3aed"} onChange={e => updateField("home_btn5_color", e.target.value)} placeholder="#7c3aed" style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }} />
@@ -727,43 +727,43 @@ export default function AdminSettings() {
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Fonte do Texto</label>
                   <select value={form.home_btn5_font || ""} onChange={e => updateField("home_btn5_font", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                    <option value="">Padrão do site</option>
-                    {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} — {f.desc}</option>)}
+                    <option value="">PadrÃ£o do site</option>
+                    {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label} â€” {f.desc}</option>)}
                   </select>
                 </div>
                 <div>
                 <label className="text-xs text-gray-400 block mb-1">Efeito Hover</label>
                 <select value={form.home_btn5_hover || "scale"} onChange={e => updateField("home_btn5_hover", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                  <option value="scale">🔍 Zoom (aumenta levemente)</option>
-                  <option value="lift">⬆️ Elevar (sobe com sombra)</option>
-                  <option value="glow">✨ Brilho (glow colorido)</option>
-                  <option value="shake">📳 Vibrar (tremida rápida)</option>
-                  <option value="pulse">💓 Pulsar (bate como coração)</option>
-                  <option value="bounce">🏀 Quicar (sobe e desce)</option>
-                  <option value="rotate">🔄 Girar levemente</option>
-                  <option value="darken">🌑 Escurecer (cor mais escura)</option>
-                  <option value="none">⛔ Sem efeito</option>
+                  <option value="scale">ðŸ” Zoom (aumenta levemente)</option>
+                  <option value="lift">â¬†ï¸ Elevar (sobe com sombra)</option>
+                  <option value="glow">âœ¨ Brilho (glow colorido)</option>
+                  <option value="shake">ðŸ“³ Vibrar (tremida rÃ¡pida)</option>
+                  <option value="pulse">ðŸ’“ Pulsar (bate como coraÃ§Ã£o)</option>
+                  <option value="bounce">ðŸ€ Quicar (sobe e desce)</option>
+                  <option value="rotate">ðŸ”„ Girar levemente</option>
+                  <option value="darken">ðŸŒ‘ Escurecer (cor mais escura)</option>
+                  <option value="none">â›” Sem efeito</option>
                 </select>
                 </div>
                 <div className={`flex items-center gap-4 rounded-2xl px-5 py-4 ${form.home_btn5_enabled !== "1" ? "opacity-40" : ""}`} style={{ background: form.home_btn5_color || "#7c3aed", fontFamily: form.home_btn5_font ? `'${form.home_btn5_font}', sans-serif` : undefined }}>
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">🎁</span></div>
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">ðŸŽ</span></div>
                   <div className="flex-1">
-                    <p className="font-black text-lg tracking-wide" style={{ color: form.home_btn5_text_color || "#ffffff" }}>{form.home_btn5_text || "PROMOÇÃO"}</p>
-                    <p className="text-sm" style={{ color: form.home_btn5_sub_color || "rgba(255,255,255,0.8)" }}>{form.home_btn5_subtitle || "Ofertas especiais para você"}</p>
+                    <p className="font-black text-lg tracking-wide" style={{ color: form.home_btn5_text_color || "#ffffff" }}>{form.home_btn5_text || "PROMOÃ‡ÃƒO"}</p>
+                    <p className="text-sm" style={{ color: form.home_btn5_sub_color || "rgba(255,255,255,0.8)" }}>{form.home_btn5_subtitle || "Ofertas especiais para vocÃª"}</p>
                   </div>
                   {form.home_btn5_enabled !== "1" && <span className="text-white/60 text-xs font-bold">DESATIVADO</span>}
                 </div>
               </div>
             */
 
-            <Section title="Rodapé da Página Inicial">
-              <Field label="Texto do Rodapé" k="home_footer_text" form={form} onChange={updateField} placeholder="Motoristas de Uber, 99 e InDrive" />
+            <Section title="RodapÃ© da PÃ¡gina Inicial">
+              <Field label="Texto do RodapÃ©" k="home_footer_text" form={form} onChange={updateField} placeholder="Motoristas de Uber, 99 e InDrive" />
             </Section>
 
-            <Section title="Bloco Serviços Extras">
-              <p className="text-xs text-gray-500 mb-4">Personalize o botão/bloco de Serviços Extras que aparece na página inicial.</p>
-              <Field label="Título" k="extras_title" form={form} onChange={updateField} placeholder="🔍 Serviços Extras" />
-              <Field label="Descrição" k="extras_desc" form={form} onChange={updateField} placeholder="Consultas e serviços adicionais" />
+            <Section title="Bloco ServiÃ§os Extras">
+              <p className="text-xs text-gray-500 mb-4">Personalize o botÃ£o/bloco de ServiÃ§os Extras que aparece na pÃ¡gina inicial.</p>
+              <Field label="TÃ­tulo" k="extras_title" form={form} onChange={updateField} placeholder="ðŸ” ServiÃ§os Extras" />
+              <Field label="DescriÃ§Ã£o" k="extras_desc" form={form} onChange={updateField} placeholder="Consultas e serviÃ§os adicionais" />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Cor do Fundo (borda/gradiente)</label>
@@ -795,7 +795,7 @@ export default function AdminSettings() {
                   <img src={loginImagePreview || form.login_image_url} alt="Login" className="w-24 h-24 object-cover rounded-xl shadow-lg" />
                 )}
                 {form.login_show_title !== "0" && (
-                  <p className="text-white font-bold text-xl text-center">{form.login_title || "WALK AJUDA"}</p>
+                  <p className="text-white font-bold text-xl text-center">{form.login_title || "H2 COLOMBIANO"}</p>
                 )}
                 {form.login_show_subtitle !== "0" && (
                   <p className="text-white/60 text-sm text-center">{form.login_subtitle || "Acesso Restrito"}</p>
@@ -810,12 +810,12 @@ export default function AdminSettings() {
 
             {/* Textos */}
             <Section title="Textos da Tela de Login">
-              <ToggleField label="Exibir Título" k="login_show_title" form={form} onToggle={toggleField} />
-              <Field label="Título Principal" k="login_title" form={form} onChange={updateField} placeholder="WALK AJUDA" />
-              <ToggleField label="Exibir Subtítulo" k="login_show_subtitle" form={form} onToggle={toggleField} />
-              <Field label="Subtítulo" k="login_subtitle" form={form} onChange={updateField} placeholder="Acesso Restrito" />
-              <ToggleField label="Exibir Rodapé" k="login_show_footer" form={form} onToggle={toggleField} />
-              <Field label="Texto do Rodapé" k="login_footer" form={form} onChange={updateField} placeholder="Solicite sua senha de acesso via WhatsApp" />
+              <ToggleField label="Exibir TÃ­tulo" k="login_show_title" form={form} onToggle={toggleField} />
+              <Field label="TÃ­tulo Principal" k="login_title" form={form} onChange={updateField} placeholder="H2 COLOMBIANO" />
+              <ToggleField label="Exibir SubtÃ­tulo" k="login_show_subtitle" form={form} onToggle={toggleField} />
+              <Field label="SubtÃ­tulo" k="login_subtitle" form={form} onChange={updateField} placeholder="Acesso Restrito" />
+              <ToggleField label="Exibir RodapÃ©" k="login_show_footer" form={form} onToggle={toggleField} />
+              <Field label="Texto do RodapÃ©" k="login_footer" form={form} onChange={updateField} placeholder="Solicite sua senha de acesso via WhatsApp" />
             </Section>
 
             {/* Imagem */}
@@ -849,18 +849,18 @@ export default function AdminSettings() {
                     <Upload className="w-8 h-8 text-purple-400" />
                   )}
                   <p className="text-white/80 text-sm font-semibold">{uploadingLoginImage ? "Enviando..." : "Clique para enviar imagem"}</p>
-                  <p className="text-white/40 text-xs">JPG, PNG — Máx 5MB</p>
+                  <p className="text-white/40 text-xs">JPG, PNG â€” MÃ¡x 5MB</p>
                 </button>
                 )}
                 <input ref={loginImageInputRef} type="file" accept="image/*" className="hidden" onChange={handleLoginImageSelect} />
                 {uploadingLoginImage && <p className="text-purple-400 text-xs mt-2 text-center">Enviando imagem...</p>}
               </div>
-              <p className="text-xs text-gray-500 mt-2">A imagem aparece acima do título na tela de login. Ideal: quadrada, 200×200px ou maior.</p>
+              <p className="text-xs text-gray-500 mt-2">A imagem aparece acima do tÃ­tulo na tela de login. Ideal: quadrada, 200Ã—200px ou maior.</p>
             </Section>
 
-            {/* Logo da Página Gastos */}
-            <Section title="Logo da Página Gastos">
-              <p className="text-xs text-gray-400 mb-3">Substitui o ícone de gráfico na tela de login do Gestor de Gastos. Se não definido, o ícone padrão é exibido.</p>
+            {/* Logo da PÃ¡gina Gastos */}
+            <Section title="Logo da PÃ¡gina Gastos">
+              <p className="text-xs text-gray-400 mb-3">Substitui o Ã­cone de grÃ¡fico na tela de login do Gestor de Gastos. Se nÃ£o definido, o Ã­cone padrÃ£o Ã© exibido.</p>
               <div className="mt-3">
                 {gastosLogoPreview || form.gastos_logo_url ? (
                   <div className="flex items-start gap-4">
@@ -889,7 +889,7 @@ export default function AdminSettings() {
                       <Upload className="w-8 h-8 text-purple-400" />
                     )}
                     <p className="text-white/80 text-sm font-semibold">{uploadingGastosLogo ? "Enviando..." : "Clique para enviar logo"}</p>
-                    <p className="text-white/40 text-xs">JPG, PNG, SVG — Máx 5MB</p>
+                    <p className="text-white/40 text-xs">JPG, PNG, SVG â€” MÃ¡x 5MB</p>
                   </button>
                 )}
                 <input ref={gastosLogoInputRef} type="file" accept="image/*" className="hidden" onChange={handleGastosLogoSelect} />
@@ -909,13 +909,13 @@ export default function AdminSettings() {
               </Button>
             </div>
 
-            {/* Formulário de nova conta */}
+            {/* FormulÃ¡rio de nova conta */}
             {showNewPixForm && (
               <div className="bg-[#111128] border border-purple-500/40 rounded-xl p-4 space-y-3">
                 <h3 className="text-sm font-semibold text-purple-300">Nova Conta PIX</h3>
                 <div className="grid grid-cols-1 gap-3">
                   <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Nome/Identificação (ex: PicPay, Nubank)</label>
+                    <label className="text-xs text-gray-400 mb-1 block">Nome/IdentificaÃ§Ã£o (ex: PicPay, Nubank)</label>
                     <input value={newPix.label} onChange={e => setNewPix(p => ({ ...p, label: e.target.value }))} className="w-full bg-[#1a1a35] border border-white/10 rounded-lg px-3 py-2 text-sm text-white" placeholder="Ex: Conta Principal" />
                   </div>
                   <div>
@@ -926,7 +926,7 @@ export default function AdminSettings() {
                     <div>
                       <label className="text-xs text-gray-400 mb-1 block">Tipo da Chave</label>
                       <select value={newPix.pixType} onChange={e => setNewPix(p => ({ ...p, pixType: e.target.value }))} className="w-full bg-[#1a1a35] border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                        <option>TELEFONE</option><option>CPF</option><option>EMAIL</option><option>ALEATÓRIA</option><option>CNPJ</option>
+                        <option>TELEFONE</option><option>CPF</option><option>EMAIL</option><option>ALEATÃ“RIA</option><option>CNPJ</option>
                       </select>
                     </div>
                     <div>
@@ -953,7 +953,7 @@ export default function AdminSettings() {
             {/* Lista de contas */}
             {(pixAccounts as PixAccount[]).length === 0 && (
               <div className="bg-[#111128] border border-white/10 rounded-xl p-6 text-center text-gray-400 text-sm">
-                Nenhuma conta PIX cadastrada. Clique em "Adicionar Conta PIX" para começar.
+                Nenhuma conta PIX cadastrada. Clique em "Adicionar Conta PIX" para comeÃ§ar.
               </div>
             )}
             {(pixAccounts as PixAccount[]).map((acc: PixAccount) => (
@@ -982,22 +982,22 @@ export default function AdminSettings() {
                   </div>
                 </div>
 
-                {/* Modo visualização */}
+                {/* Modo visualizaÃ§Ã£o */}
                 {editingPixId !== acc.id && (
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div><span className="text-gray-500">Chave:</span> <span className="text-white font-mono">{acc.pixKey}</span></div>
                     <div><span className="text-gray-500">Tipo:</span> <span className="text-white">{acc.pixType}</span></div>
                     <div><span className="text-gray-500">Titular:</span> <span className="text-white">{acc.pixName}</span></div>
-                    <div><span className="text-gray-500">Banco:</span> <span className="text-white">{acc.pixBank || '—'}</span></div>
+                    <div><span className="text-gray-500">Banco:</span> <span className="text-white">{acc.pixBank || 'â€”'}</span></div>
                   </div>
                 )}
 
-                {/* Modo edição */}
+                {/* Modo ediÃ§Ã£o */}
                 {editingPixId === acc.id && (
                   <div className="space-y-3 pt-1">
                     <div className="grid grid-cols-1 gap-3">
                       <div>
-                        <label className="text-xs text-gray-400 mb-1 block">Nome/Identificação</label>
+                        <label className="text-xs text-gray-400 mb-1 block">Nome/IdentificaÃ§Ã£o</label>
                         <input value={editPix.label} onChange={e => setEditPix(p => ({ ...p, label: e.target.value }))} className="w-full bg-[#1a1a35] border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
                       </div>
                       <div>
@@ -1008,7 +1008,7 @@ export default function AdminSettings() {
                         <div>
                           <label className="text-xs text-gray-400 mb-1 block">Tipo</label>
                           <select value={editPix.pixType} onChange={e => setEditPix(p => ({ ...p, pixType: e.target.value }))} className="w-full bg-[#1a1a35] border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
-                            <option>TELEFONE</option><option>CPF</option><option>EMAIL</option><option>ALEATÓRIA</option><option>CNPJ</option>
+                            <option>TELEFONE</option><option>CPF</option><option>EMAIL</option><option>ALEATÃ“RIA</option><option>CNPJ</option>
                           </select>
                         </div>
                         <div>
@@ -1040,8 +1040,8 @@ export default function AdminSettings() {
         {activeTab === "contact" && (
           <div className="space-y-6">
             <Section title="WhatsApp">
-              <Field label="Número (com DDI, ex: 5511999999999)" k="whatsapp_number" form={form} onChange={updateField} />
-              <Field label="Exibição (ex: (11) 99999-9999)" k="whatsapp_display" form={form} onChange={updateField} />
+              <Field label="NÃºmero (com DDI, ex: 5511999999999)" k="whatsapp_number" form={form} onChange={updateField} />
+              <Field label="ExibiÃ§Ã£o (ex: (11) 99999-9999)" k="whatsapp_display" form={form} onChange={updateField} />
             </Section>
             <Section title="Email">
               <Field label="Email de Destino dos Pedidos" k="email_to" form={form} onChange={updateField} />
@@ -1053,16 +1053,16 @@ export default function AdminSettings() {
         {activeTab === "features" && (
           <div className="space-y-6">
             <Section title="Destaque 1">
-              <Field label="Título" k="feature1_title" form={form} onChange={updateField} />
-              <Field label="Descrição" k="feature1_desc" form={form} onChange={updateField} />
+              <Field label="TÃ­tulo" k="feature1_title" form={form} onChange={updateField} />
+              <Field label="DescriÃ§Ã£o" k="feature1_desc" form={form} onChange={updateField} />
             </Section>
             <Section title="Destaque 2">
-              <Field label="Título" k="feature2_title" form={form} onChange={updateField} />
-              <Field label="Descrição" k="feature2_desc" form={form} onChange={updateField} />
+              <Field label="TÃ­tulo" k="feature2_title" form={form} onChange={updateField} />
+              <Field label="DescriÃ§Ã£o" k="feature2_desc" form={form} onChange={updateField} />
             </Section>
             <Section title="Destaque 3">
-              <Field label="Título" k="feature3_title" form={form} onChange={updateField} />
-              <Field label="Descrição" k="feature3_desc" form={form} onChange={updateField} />
+              <Field label="TÃ­tulo" k="feature3_title" form={form} onChange={updateField} />
+              <Field label="DescriÃ§Ã£o" k="feature3_desc" form={form} onChange={updateField} />
             </Section>
           </div>
         )}
@@ -1071,8 +1071,8 @@ export default function AdminSettings() {
         {activeTab === "advanced" && (
           <div className="space-y-6">
             <Section title="Tempo de Senha VIP">
-              <Field label="Duração em minutos (padrão: 20)" k="vip_duration_minutes" form={form} onChange={updateField} placeholder="20" />
-              <p className="text-xs text-gray-500 mt-1">Tempo que cada senha VIP fica ativa após ser criada.</p>
+              <Field label="DuraÃ§Ã£o em minutos (padrÃ£o: 20)" k="vip_duration_minutes" form={form} onChange={updateField} placeholder="20" />
+              <p className="text-xs text-gray-500 mt-1">Tempo que cada senha VIP fica ativa apÃ³s ser criada.</p>
             </Section>
             <Section title="Imagem de Exemplo">
               <Field label="URL da foto de exemplo para upload" k="example_photo_url" form={form} onChange={updateField} />
@@ -1085,14 +1085,14 @@ export default function AdminSettings() {
           <div className="space-y-6">
             <div className="bg-[#111128] border border-purple-500/20 rounded-xl p-5">
               <h3 className="text-sm font-bold text-purple-400 mb-1">Modo de Captura de Foto</h3>
-              <p className="text-xs text-gray-400 mb-5">Controle como o cliente pode enviar a foto de rosto obrigatória durante o cadastro.</p>
+              <p className="text-xs text-gray-400 mb-5">Controle como o cliente pode enviar a foto de rosto obrigatÃ³ria durante o cadastro.</p>
 
               <div className="grid grid-cols-1 gap-3">
                 {([
-                  { value: 'both', label: 'Câmera + Galeria', desc: 'Cliente pode escolher entre tirar foto ou selecionar da galeria (padrão)', icon: '📷🖼️' },
-                  { value: 'camera', label: 'Somente Câmera', desc: 'Obriga o cliente a tirar a foto na hora — evita fotos de terceiros', icon: '📷' },
-                  { value: 'gallery', label: 'Somente Galeria', desc: 'Cliente seleciona uma foto já existente no celular', icon: '🖼️' },
-                  { value: 'disabled', label: 'Desativado', desc: 'O campo de foto não aparece para o cliente durante o cadastro', icon: '🚫' },
+                  { value: 'both', label: 'CÃ¢mera + Galeria', desc: 'Cliente pode escolher entre tirar foto ou selecionar da galeria (padrÃ£o)', icon: 'ðŸ“·ðŸ–¼ï¸' },
+                  { value: 'camera', label: 'Somente CÃ¢mera', desc: 'Obriga o cliente a tirar a foto na hora â€” evita fotos de terceiros', icon: 'ðŸ“·' },
+                  { value: 'gallery', label: 'Somente Galeria', desc: 'Cliente seleciona uma foto jÃ¡ existente no celular', icon: 'ðŸ–¼ï¸' },
+                  { value: 'disabled', label: 'Desativado', desc: 'O campo de foto nÃ£o aparece para o cliente durante o cadastro', icon: 'ðŸš«' },
                 ] as const).map(opt => (
                   <button
                     key={opt.value}
@@ -1124,13 +1124,13 @@ export default function AdminSettings() {
                 disabled={setPhotoModeMut.isPending}
                 className="mt-5 w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl transition-all"
               >
-                {setPhotoModeMut.isPending ? 'Salvando...' : 'Salvar Configuração de Foto'}
+                {setPhotoModeMut.isPending ? 'Salvando...' : 'Salvar ConfiguraÃ§Ã£o de Foto'}
               </button>
             </div>
 
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
-              <p className="text-yellow-300 text-sm font-semibold mb-1">⚠️ Aviso sobre foto de rosto</p>
-              <p className="text-yellow-200/70 text-xs">Independente do modo escolhido, o cliente sempre verá a mensagem: <strong>"A foto deve ser obrigatoriamente de rosto. Fotos de documentos, paisagens ou outros não serão aceitas."</strong></p>
+              <p className="text-yellow-300 text-sm font-semibold mb-1">âš ï¸ Aviso sobre foto de rosto</p>
+              <p className="text-yellow-200/70 text-xs">Independente do modo escolhido, o cliente sempre verÃ¡ a mensagem: <strong>"A foto deve ser obrigatoriamente de rosto. Fotos de documentos, paisagens ou outros nÃ£o serÃ£o aceitas."</strong></p>
             </div>
           </div>
         )}
@@ -1139,12 +1139,12 @@ export default function AdminSettings() {
         {activeTab === "security" && (
           <div className="space-y-6">
             <div className="bg-[#111128] border border-purple-500/20 rounded-xl p-5">
-              <h3 className="text-sm font-bold text-purple-400 mb-1">🛡️ Proteção contra DevTools</h3>
-              <p className="text-xs text-gray-400 mb-5">Quando ativada, clientes que abrirem o inspetor de elementos (F12) ou modo desenvolvedor serão bloqueados e você receberá uma notificação.</p>
+              <h3 className="text-sm font-bold text-purple-400 mb-1">ðŸ›¡ï¸ ProteÃ§Ã£o contra DevTools</h3>
+              <p className="text-xs text-gray-400 mb-5">Quando ativada, clientes que abrirem o inspetor de elementos (F12) ou modo desenvolvedor serÃ£o bloqueados e vocÃª receberÃ¡ uma notificaÃ§Ã£o.</p>
               <div className="grid grid-cols-1 gap-3">
                 {([
-                  { value: '1', label: 'Proteção ATIVADA', desc: 'Clientes são bloqueados ao abrir DevTools. Você recebe alerta.', icon: '🔒' },
-                  { value: '0', label: 'Proteção DESATIVADA', desc: 'DevTools liberado para todos os clientes. Use para gravar tela ou testar.', icon: '🔓' },
+                  { value: '1', label: 'ProteÃ§Ã£o ATIVADA', desc: 'Clientes sÃ£o bloqueados ao abrir DevTools. VocÃª recebe alerta.', icon: 'ðŸ”’' },
+                  { value: '0', label: 'ProteÃ§Ã£o DESATIVADA', desc: 'DevTools liberado para todos os clientes. Use para gravar tela ou testar.', icon: 'ðŸ”“' },
                 ] as const).map(opt => {
                   const current = form['devtools_protection'] !== '0' ? '1' : '0';
                   return (
@@ -1184,12 +1184,12 @@ export default function AdminSettings() {
                 disabled={updateMut.isPending}
                 className="mt-5 w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl transition-all"
               >
-                {updateMut.isPending ? 'Salvando...' : 'Salvar Configuração de Segurança'}
+                {updateMut.isPending ? 'Salvando...' : 'Salvar ConfiguraÃ§Ã£o de SeguranÃ§a'}
               </button>
             </div>
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
-              <p className="text-blue-300 text-sm font-semibold mb-1">ℹ️ Modo ADM na página Acompanhar</p>
-              <p className="text-blue-200/70 text-xs">Acesse <strong>/acompanhar?adm=3095</strong> para ativar o modo ADM — libera DevTools e acesso sem PIN independente desta configuração.</p>
+              <p className="text-blue-300 text-sm font-semibold mb-1">â„¹ï¸ Modo ADM na pÃ¡gina Acompanhar</p>
+              <p className="text-blue-200/70 text-xs">Acesse <strong>/acompanhar?adm=3095</strong> para ativar o modo ADM â€” libera DevTools e acesso sem PIN independente desta configuraÃ§Ã£o.</p>
             </div>
           </div>
         )}
@@ -1199,7 +1199,7 @@ export default function AdminSettings() {
           <OgSettingsTab />
         )}
 
-        {/* === ABA: FORMULÁRIO DE ACOMPANHAMENTO === */}
+        {/* === ABA: FORMULÃRIO DE ACOMPANHAMENTO === */}
         {activeTab === 'trackingForm' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -1212,23 +1212,23 @@ export default function AdminSettings() {
               </button>
             </div>
 
-            {/* Formulário de nova pergunta */}
+            {/* FormulÃ¡rio de nova pergunta */}
             {showNewTQ && (
               <div className="bg-[#111128] border border-purple-500/30 rounded-xl p-5 space-y-4">
                 <h3 className="text-sm font-bold text-purple-400">Nova Pergunta</h3>
                 <div>
                   <label className="text-xs text-gray-400 mb-1 block">Texto da Pergunta</label>
-                  <input value={newTQText} onChange={e => setNewTQText(e.target.value)} placeholder="Ex: Você tem CNH válida?" className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
+                  <input value={newTQText} onChange={e => setNewTQText(e.target.value)} placeholder="Ex: VocÃª tem CNH vÃ¡lida?" className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs text-gray-400">Opções de Resposta</label>
-                    <button onClick={() => setNewTQOptions(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar opção</button>
+                    <label className="text-xs text-gray-400">OpÃ§Ãµes de Resposta</label>
+                    <button onClick={() => setNewTQOptions(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar opÃ§Ã£o</button>
                   </div>
                   <div className="space-y-2">
                     {newTQOptions.map((opt, i) => (
                       <div key={i} className="flex items-center gap-2">
-                        <input value={opt.label} onChange={e => setNewTQOptions(prev => prev.map((o, j) => j === i ? { ...o, label: e.target.value } : o))} placeholder={`Opção ${i + 1}`} className="flex-1 bg-[#0a0a1a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
+                        <input value={opt.label} onChange={e => setNewTQOptions(prev => prev.map((o, j) => j === i ? { ...o, label: e.target.value } : o))} placeholder={`OpÃ§Ã£o ${i + 1}`} className="flex-1 bg-[#0a0a1a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500" />
                         <div className="flex gap-1">
                           {TQ_COLORS.map(c => (
                             <button key={c} onClick={() => setNewTQOptions(prev => prev.map((o, j) => j === i ? { ...o, color: c } : o))} className={`w-5 h-5 rounded-full border-2 transition-all ${opt.color === c ? 'border-white scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />
@@ -1257,7 +1257,7 @@ export default function AdminSettings() {
               <div className="bg-[#111128] border border-white/10 rounded-xl p-8 text-center">
                 <MessageSquare className="w-10 h-10 text-gray-600 mx-auto mb-3" />
                 <p className="text-gray-400 text-sm">Nenhuma pergunta criada ainda.</p>
-                <p className="text-gray-500 text-xs mt-1">Clique em "Nova Pergunta" para começar.</p>
+                <p className="text-gray-500 text-xs mt-1">Clique em "Nova Pergunta" para comeÃ§ar.</p>
               </div>
             )}
             {trackingQs.map((q) => {
@@ -1280,7 +1280,7 @@ export default function AdminSettings() {
                             <button onClick={() => setEditTQOptions(prev => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-300 p-1"><X className="w-3.5 h-3.5" /></button>
                           </div>
                         ))}
-                        <button onClick={() => setEditTQOptions(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar opção</button>
+                        <button onClick={() => setEditTQOptions(prev => [...prev, { label: '', color: '#6b7280' }])} className="text-xs text-purple-400 hover:text-purple-300">+ Adicionar opÃ§Ã£o</button>
                       </div>
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id={`editTQShowOnce-${q.id}`} checked={editTQShowOnce} onChange={e => setEditTQShowOnce(e.target.checked)} className="w-4 h-4 accent-purple-500" />
@@ -1303,7 +1303,7 @@ export default function AdminSettings() {
                               <span key={i} className="px-3 py-1 rounded-full text-xs font-bold text-white" style={{ backgroundColor: opt.color || '#6b7280' }}>{opt.label}</span>
                             ))}
                           </div>
-                          <p className="text-xs text-gray-500 mt-2">{q.showOnce ? 'Aparece uma vez por pedido' : 'Aparece sempre'} · {q.isActive ? 'Ativa' : 'Inativa'}</p>
+                          <p className="text-xs text-gray-500 mt-2">{q.showOnce ? 'Aparece uma vez por pedido' : 'Aparece sempre'} Â· {q.isActive ? 'Ativa' : 'Inativa'}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <button onClick={() => toggleTQMut.mutate({ id: q.id, isActive: !q.isActive })} className={`px-2 py-1 rounded text-xs font-medium transition-colors ${q.isActive ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' : 'bg-gray-600/20 text-gray-400 hover:bg-gray-600/30'}`}>
@@ -1333,7 +1333,7 @@ export default function AdminSettings() {
         {activeTab !== 'photo' && activeTab !== 'security' && activeTab !== 'og' && activeTab !== 'trackingForm' && activeTab !== 'whatsappOrder' && activeTab !== 'whatsappLogin' && (
         <div className="mt-8 flex justify-end">
           <Button onClick={saveAll} disabled={updateMut.isPending} className="bg-green-600 hover:bg-green-700 text-white px-8">
-            <Save className="w-4 h-4 mr-2" /> {updateMut.isPending ? "Salvando..." : "Salvar Todas as Configurações"}
+            <Save className="w-4 h-4 mr-2" /> {updateMut.isPending ? "Salvando..." : "Salvar Todas as ConfiguraÃ§Ãµes"}
           </Button>
         </div>
         )}
@@ -1411,12 +1411,12 @@ function OgSettingsTab() {
   const utils = trpc.useUtils();
   const { data: ogData, isLoading } = trpc.ogSettings.get.useQuery();
   const updateMut = trpc.ogSettings.update.useMutation({
-    onSuccess: () => { toast.success("Configurações salvas!"); utils.ogSettings.get.invalidate(); },
+    onSuccess: () => { toast.success("ConfiguraÃ§Ãµes salvas!"); utils.ogSettings.get.invalidate(); },
     onError: () => toast.error("Erro ao salvar"),
   });
   const uploadImageMut = trpc.ogSettings.uploadImage.useMutation({
     onSuccess: (data) => {
-      toast.success("✅ Imagem salva com sucesso! A miniatura do WhatsApp foi atualizada.");
+      toast.success("âœ… Imagem salva com sucesso! A miniatura do WhatsApp foi atualizada.");
       setPreview(data.url);
       setUploadSuccess(true);
       setTimeout(() => setUploadSuccess(false), 4000);
@@ -1449,7 +1449,7 @@ function OgSettingsTab() {
     // Reset input so same file can be selected again
     e.target.value = "";
     if (!file.type.startsWith("image/")) { toast.error("Envie apenas imagens"); return; }
-    if (file.size > 10 * 1024 * 1024) { toast.error("Imagem muito grande. Máximo 10MB."); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Imagem muito grande. MÃ¡ximo 10MB."); return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       setCropMime(file.type);
@@ -1482,7 +1482,7 @@ function OgSettingsTab() {
       {/* Preview WhatsApp */}
       <div className="bg-[#111128] border border-purple-500/20 rounded-xl p-5">
         <h3 className="text-sm font-bold text-purple-400 mb-4 flex items-center gap-2">
-          <Share2 className="w-4 h-4" /> Preview — Como aparece no WhatsApp
+          <Share2 className="w-4 h-4" /> Preview â€” Como aparece no WhatsApp
         </h3>
         <div className="bg-[#1a1a2e] border border-white/10 rounded-xl overflow-hidden max-w-sm">
           {/* Imagem */}
@@ -1503,15 +1503,15 @@ function OgSettingsTab() {
             )}
             {uploadSuccess && (
               <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1.5 bg-emerald-500/90 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-lg">
-                <span>✅</span> Imagem atualizada com sucesso!
+                <span>âœ…</span> Imagem atualizada com sucesso!
               </div>
             )}
           </div>
           {/* Texto */}
           <div className="p-3 border-t border-white/10">
-            <p className="text-xs text-white/40 uppercase tracking-wider mb-1">walkajuda.com</p>
-            <p className="text-sm font-bold text-white line-clamp-2">{title || "WALK AJUDA"}</p>
-            <p className="text-xs text-white/60 mt-1 line-clamp-2">{description || "Descrição do site..."}</p>
+            <p className="text-xs text-white/40 uppercase tracking-wider mb-1">h2colombiano.com</p>
+            <p className="text-sm font-bold text-white line-clamp-2">{title || "H2 COLOMBIANO"}</p>
+            <p className="text-xs text-white/60 mt-1 line-clamp-2">{description || "DescriÃ§Ã£o do site..."}</p>
           </div>
         </div>
       </div>
@@ -1521,7 +1521,7 @@ function OgSettingsTab() {
         <h3 className="text-sm font-bold text-purple-400 mb-4 flex items-center gap-2">
           <ImageIcon className="w-4 h-4" /> Imagem da Miniatura
         </h3>
-        <p className="text-xs text-white/50 mb-3">Recomendado: 1200×630px (proporção 1.91:1). Máximo 10MB. A ferramenta de recorte abre automaticamente após selecionar a imagem.</p>
+        <p className="text-xs text-white/50 mb-3">Recomendado: 1200Ã—630px (proporÃ§Ã£o 1.91:1). MÃ¡ximo 10MB. A ferramenta de recorte abre automaticamente apÃ³s selecionar a imagem.</p>
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
         <div className="flex gap-3 flex-wrap">
           <Button
@@ -1566,13 +1566,13 @@ function OgSettingsTab() {
         </div>
       </div>
 
-      {/* Título e descrição */}
+      {/* TÃ­tulo e descriÃ§Ã£o */}
       <div className="bg-[#111128] border border-purple-500/20 rounded-xl p-5 space-y-4">
         <h3 className="text-sm font-bold text-purple-400 mb-2 flex items-center gap-2">
-          <Globe className="w-4 h-4" /> Título e Descrição
+          <Globe className="w-4 h-4" /> TÃ­tulo e DescriÃ§Ã£o
         </h3>
         <div>
-          <label className="text-xs text-gray-400 block mb-1">Título (aparece em negrito no WhatsApp)</label>
+          <label className="text-xs text-gray-400 block mb-1">TÃ­tulo (aparece em negrito no WhatsApp)</label>
           <input
             type="text"
             value={title}
@@ -1583,7 +1583,7 @@ function OgSettingsTab() {
           <p className="text-xs text-white/30 mt-1">{title.length}/200 caracteres</p>
         </div>
         <div>
-          <label className="text-xs text-gray-400 block mb-1">Descrição (aparece abaixo do título)</label>
+          <label className="text-xs text-gray-400 block mb-1">DescriÃ§Ã£o (aparece abaixo do tÃ­tulo)</label>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
@@ -1599,85 +1599,85 @@ function OgSettingsTab() {
           className="w-full bg-green-600 hover:bg-green-700 text-white gap-2"
         >
           <Save className="w-4 h-4" />
-          {updateMut.isPending ? "Salvando..." : "Salvar Título e Descrição"}
+          {updateMut.isPending ? "Salvando..." : "Salvar TÃ­tulo e DescriÃ§Ã£o"}
         </Button>
       </div>
 
       {/* Info */}
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-        <p className="text-xs text-blue-200/80 font-semibold mb-1">⚠️ Importante</p>
-        <p className="text-xs text-blue-200/60">O WhatsApp faz cache das miniaturas. Após alterar, pode levar algumas horas para atualizar em conversas existentes. Links novos mostram a imagem imediatamente.</p>
+        <p className="text-xs text-blue-200/80 font-semibold mb-1">âš ï¸ Importante</p>
+        <p className="text-xs text-blue-200/60">O WhatsApp faz cache das miniaturas. ApÃ³s alterar, pode levar algumas horas para atualizar em conversas existentes. Links novos mostram a imagem imediatamente.</p>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// EDITOR DE TEMPLATE — MENSAGEM WHATSAPP DE PEDIDOS
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// EDITOR DE TEMPLATE â€” MENSAGEM WHATSAPP DE PEDIDOS
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const DEFAULT_WA_ORDER_TEMPLATE = `*Walk Ajuda* — Atualização de Pedido
+const DEFAULT_WA_ORDER_TEMPLATE = `*H2 COLOMBIANO* â€” AtualizaÃ§Ã£o de Pedido
 
-Olá, *{nome}*! 👋
+OlÃ¡, *{nome}*! ðŸ‘‹
 
-*Status:* ✅ {status}
+*Status:* âœ… {status}
 
 {descricao_status}
 
 *Detalhes do pedido:*
-• Cadastro: *{cadastro}*
-• Pedido: *{pedido}*
-• Serviço: {servico}
-• Cidade: {cidade}
+â€¢ Cadastro: *{cadastro}*
+â€¢ Pedido: *{pedido}*
+â€¢ ServiÃ§o: {servico}
+â€¢ Cidade: {cidade}
 
 Acompanhe seu pedido em:
-https://walkajuda.com/acompanhar
+https://h2colombiano.com/acompanhar
 
-🔐 *Senha de acesso:* {senha}
-⚠️ _Não compartilhe esta senha com ninguém para evitar bloqueios de acesso._`;
+ðŸ” *Senha de acesso:* {senha}
+âš ï¸ _NÃ£o compartilhe esta senha com ninguÃ©m para evitar bloqueios de acesso._`;
 
-// Variáveis disponíveis com descrição completa
+// VariÃ¡veis disponÃ­veis com descriÃ§Ã£o completa
 const WA_ORDER_VARS = [
   {
-    group: "👤 Cliente",
+    group: "ðŸ‘¤ Cliente",
     color: "#22c55e",
     vars: [
       { label: "{nome}", value: "{nome}", desc: "Nome completo do cliente (ex: FERNANDO AGOSTINHO)" },
-      { label: "{cadastro}", value: "{cadastro}", desc: "Número do cadastro com asterisco (ex: *317)" },
-      { label: "{pedido}", value: "{pedido}", desc: "Número do pedido com # (ex: #4000000)" },
-      { label: "{cidade}", value: "{cidade}", desc: "Cidade e estado do cliente (ex: SÃO PAULO — SP)" },
-      { label: "{senha}", value: "{senha}", desc: "Senha de acesso (4 últimos dígitos do telefone)" },
+      { label: "{cadastro}", value: "{cadastro}", desc: "NÃºmero do cadastro com asterisco (ex: *317)" },
+      { label: "{pedido}", value: "{pedido}", desc: "NÃºmero do pedido com # (ex: #4000000)" },
+      { label: "{cidade}", value: "{cidade}", desc: "Cidade e estado do cliente (ex: SÃƒO PAULO â€” SP)" },
+      { label: "{senha}", value: "{senha}", desc: "Senha de acesso (4 Ãºltimos dÃ­gitos do telefone)" },
     ],
   },
   {
-    group: "📋 Pedido",
+    group: "ðŸ“‹ Pedido",
     color: "#a855f7",
     vars: [
       { label: "{status}", value: "{status}", desc: "Nome do status atual (ex: AGENDAMENTO P/ FOTO PENDENTE)" },
-      { label: "{descricao_status}", value: "{descricao_status}", desc: "Texto completo da descrição do status configurada no painel" },
-      { label: "{servico}", value: "{servico}", desc: "Serviço e opção escolhida (ex: UBER APP — NOME ALEATORIO)" },
-      { label: "{previsao}", value: "{previsao}", desc: "Data de previsão de entrega (se definida)" },
+      { label: "{descricao_status}", value: "{descricao_status}", desc: "Texto completo da descriÃ§Ã£o do status configurada no painel" },
+      { label: "{servico}", value: "{servico}", desc: "ServiÃ§o e opÃ§Ã£o escolhida (ex: UBER APP â€” NOME ALEATORIO)" },
+      { label: "{previsao}", value: "{previsao}", desc: "Data de previsÃ£o de entrega (se definida)" },
     ],
   },
   {
-    group: "📅 Data",
+    group: "ðŸ“… Data",
     color: "#f59e0b",
     vars: [
-      { label: "{DIA}", value: "{DIA}", desc: "Dia atual com 2 dígitos (ex: 16)" },
-      { label: "{MES}", value: "{MES}", desc: "Mês atual com 2 dígitos (ex: 07)" },
-      { label: "{ANO}", value: "{ANO}", desc: "Ano atual com 4 dígitos (ex: 2026)" },
+      { label: "{DIA}", value: "{DIA}", desc: "Dia atual com 2 dÃ­gitos (ex: 16)" },
+      { label: "{MES}", value: "{MES}", desc: "MÃªs atual com 2 dÃ­gitos (ex: 07)" },
+      { label: "{ANO}", value: "{ANO}", desc: "Ano atual com 4 dÃ­gitos (ex: 2026)" },
     ],
   },
   {
-    group: "💬 Observação",
+    group: "ðŸ’¬ ObservaÃ§Ã£o",
     color: "#3b82f6",
     vars: [
-      { label: "{observacao}", value: "{observacao}", desc: "Observação manual digitada pelo admin antes de enviar (campo abaixo do status)" },
+      { label: "{observacao}", value: "{observacao}", desc: "ObservaÃ§Ã£o manual digitada pelo admin antes de enviar (campo abaixo do status)" },
     ],
   },
 ];
 
-// SmartTextarea local (mesmo padrão do AdminSchedule)
+// SmartTextarea local (mesmo padrÃ£o do AdminSchedule)
 function WaSmartTextarea({
   value, onChange, rows = 10, placeholder,
 }: {
@@ -1703,7 +1703,7 @@ function WaSmartTextarea({
         className="w-full bg-[#0d0d1f] border border-white/10 focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/15 rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition-all resize-none leading-relaxed font-mono"
       />
       <div className="flex justify-between mt-1">
-        <span className="text-[10px] text-white/20">Clique em uma variável abaixo para inserir no cursor</span>
+        <span className="text-[10px] text-white/20">Clique em uma variÃ¡vel abaixo para inserir no cursor</span>
         <span className="text-[10px] text-white/20">{value.length} caracteres</span>
       </div>
     </div>
@@ -1715,11 +1715,11 @@ function WaPreview({ template }: { template: string }) {
   const preview = template
     .replace(/\{nome\}/gi, "FERNANDO AGOSTINHO")
     .replace(/\{status\}/gi, "AGENDAMENTO P/ FOTO PENDENTE")
-    .replace(/\{descricao_status\}/gi, "📸 AGENDAMENTO DISPONÍVEL\n\n✅ A foto será realizada ao vivo no horário agendado.\n\n✅ Aparelho de trabalho preparado\n✅ Hard Reset concluído")
+    .replace(/\{descricao_status\}/gi, "ðŸ“¸ AGENDAMENTO DISPONÃVEL\n\nâœ… A foto serÃ¡ realizada ao vivo no horÃ¡rio agendado.\n\nâœ… Aparelho de trabalho preparado\nâœ… Hard Reset concluÃ­do")
     .replace(/\{cadastro\}/gi, "*317")
     .replace(/\{pedido\}/gi, "#4000000")
-    .replace(/\{servico\}/gi, "UBER APP — NOME ALEATORIO")
-    .replace(/\{cidade\}/gi, "SÃO PAULO — SP")
+    .replace(/\{servico\}/gi, "UBER APP â€” NOME ALEATORIO")
+    .replace(/\{cidade\}/gi, "SÃƒO PAULO â€” SP")
     .replace(/\{senha\}/gi, "2954")
     .replace(/\{previsao\}/gi, "20/07/2026")
     .replace(/\{observacao\}/gi, "")
@@ -1732,13 +1732,13 @@ function WaPreview({ template }: { template: string }) {
       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/10">
         <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-xs font-bold">W</div>
         <div>
-          <p className="text-xs font-bold text-white">Walk Ajuda</p>
+          <p className="text-xs font-bold text-white">H2 COLOMBIANO</p>
           <p className="text-[10px] text-green-400">online</p>
         </div>
       </div>
       <div className="bg-[#1f2c34] rounded-xl rounded-tl-none px-4 py-3 max-w-xs ml-2 shadow-md">
         <pre className="text-xs text-white/90 whitespace-pre-wrap font-sans leading-relaxed">{preview || "(mensagem vazia)"}</pre>
-        <p className="text-[10px] text-white/30 text-right mt-2">agora ✓✓</p>
+        <p className="text-[10px] text-white/30 text-right mt-2">agora âœ“âœ“</p>
       </div>
     </div>
   );
@@ -1748,20 +1748,20 @@ function WhatsappOrderTemplateTab() {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.settings.getWhatsappOrderTemplate.useQuery();
   const saveMut = trpc.settings.saveWhatsappOrderTemplate.useMutation({
-    onSuccess: () => { toast.success("✅ Template salvo com sucesso!"); utils.settings.getWhatsappOrderTemplate.invalidate(); },
+    onSuccess: () => { toast.success("âœ… Template salvo com sucesso!"); utils.settings.getWhatsappOrderTemplate.invalidate(); },
     onError: () => toast.error("Erro ao salvar template"),
   });
 
   const [template, setTemplate] = useState(DEFAULT_WA_ORDER_TEMPLATE);
   const [showPreview, setShowPreview] = useState(true);
-  const [expandedGroup, setExpandedGroup] = useState<string | null>("👤 Cliente");
+  const [expandedGroup, setExpandedGroup] = useState<string | null>("ðŸ‘¤ Cliente");
 
   useEffect(() => {
     if (data?.template) setTemplate(data.template);
   }, [data?.template]);
 
   const handleReset = () => {
-    if (confirm("Restaurar a mensagem padrão? Isso apagará suas alterações.")) {
+    if (confirm("Restaurar a mensagem padrÃ£o? Isso apagarÃ¡ suas alteraÃ§Ãµes.")) {
       setTemplate(DEFAULT_WA_ORDER_TEMPLATE);
     }
   };
@@ -1775,15 +1775,15 @@ function WhatsappOrderTemplateTab() {
   return (
     <div className="space-y-6">
 
-      {/* Cabeçalho explicativo */}
+      {/* CabeÃ§alho explicativo */}
       <div className="bg-green-500/10 border border-green-500/25 rounded-xl p-5">
         <div className="flex items-start gap-3">
           <Smartphone className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
           <div>
-            <h2 className="text-sm font-bold text-green-300 mb-1">Editor de Mensagem WhatsApp — Atualização de Pedido</h2>
+            <h2 className="text-sm font-bold text-green-300 mb-1">Editor de Mensagem WhatsApp â€” AtualizaÃ§Ã£o de Pedido</h2>
             <p className="text-xs text-green-200/60 leading-relaxed">
-              Esta é a mensagem enviada quando você clica em <strong className="text-green-300">"Notificar via WhatsApp"</strong> na aba de Pedidos.
-              Use as <strong className="text-green-300">variáveis</strong> abaixo para personalizar o texto — elas são substituídas automaticamente pelos dados reais do cliente no momento do envio.
+              Esta Ã© a mensagem enviada quando vocÃª clica em <strong className="text-green-300">"Notificar via WhatsApp"</strong> na aba de Pedidos.
+              Use as <strong className="text-green-300">variÃ¡veis</strong> abaixo para personalizar o texto â€” elas sÃ£o substituÃ­das automaticamente pelos dados reais do cliente no momento do envio.
             </p>
           </div>
         </div>
@@ -1792,7 +1792,7 @@ function WhatsappOrderTemplateTab() {
       {/* Layout: Editor + Preview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        {/* COLUNA ESQUERDA — Editor */}
+        {/* COLUNA ESQUERDA â€” Editor */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -1802,7 +1802,7 @@ function WhatsappOrderTemplateTab() {
               onClick={handleReset}
               className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors"
             >
-              <RotateCcw className="w-3.5 h-3.5" /> Restaurar padrão
+              <RotateCcw className="w-3.5 h-3.5" /> Restaurar padrÃ£o
             </button>
           </div>
           <WaSmartTextarea
@@ -1813,7 +1813,7 @@ function WhatsappOrderTemplateTab() {
           />
         </div>
 
-        {/* COLUNA DIREITA — Preview */}
+        {/* COLUNA DIREITA â€” Preview */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -1830,13 +1830,13 @@ function WhatsappOrderTemplateTab() {
         </div>
       </div>
 
-      {/* SEÇÃO DE VARIÁVEIS */}
+      {/* SEÃ‡ÃƒO DE VARIÃVEIS */}
       <div className="bg-[#111128] border border-white/10 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-white/10">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Info className="w-4 h-4 text-blue-400" /> Variáveis Disponíveis
+            <Info className="w-4 h-4 text-blue-400" /> VariÃ¡veis DisponÃ­veis
           </h3>
-          <p className="text-xs text-white/40 mt-1">Clique em qualquer variável para inserir no final da mensagem, ou posicione o cursor no texto e clique.</p>
+          <p className="text-xs text-white/40 mt-1">Clique em qualquer variÃ¡vel para inserir no final da mensagem, ou posicione o cursor no texto e clique.</p>
         </div>
 
         {WA_ORDER_VARS.map(group => (
@@ -1846,7 +1846,7 @@ function WhatsappOrderTemplateTab() {
               className="w-full flex items-center justify-between px-5 py-3 hover:bg-white/5 transition-colors"
             >
               <span className="text-xs font-bold" style={{ color: group.color }}>{group.group}</span>
-              <span className="text-white/30 text-xs">{expandedGroup === group.group ? "▲" : "▼"}</span>
+              <span className="text-white/30 text-xs">{expandedGroup === group.group ? "â–²" : "â–¼"}</span>
             </button>
 
             {expandedGroup === group.group && (
@@ -1873,29 +1873,29 @@ function WhatsappOrderTemplateTab() {
         ))}
       </div>
 
-      {/* DICAS DE FORMATAÇÃO */}
+      {/* DICAS DE FORMATAÃ‡ÃƒO */}
       <div className="bg-yellow-500/8 border border-yellow-500/20 rounded-xl p-5">
         <h4 className="text-xs font-bold text-yellow-300 mb-3 flex items-center gap-2">
-          <Info className="w-4 h-4" /> Dicas de Formatação WhatsApp
+          <Info className="w-4 h-4" /> Dicas de FormataÃ§Ã£o WhatsApp
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
-            { fmt: "*texto*", result: "Negrito", example: "*Walk Ajuda*" },
-            { fmt: "_texto_", result: "Itálico", example: "_Não compartilhe_" },
+            { fmt: "*texto*", result: "Negrito", example: "*H2 COLOMBIANO*" },
+            { fmt: "_texto_", result: "ItÃ¡lico", example: "_NÃ£o compartilhe_" },
             { fmt: "~texto~", result: "Tachado", example: "~cancelado~" },
-            { fmt: "```texto```", result: "Código/Monospace", example: "```#4000000```" },
-            { fmt: "Linha em branco", result: "Parágrafo separado", example: "(pressione Enter 2x)" },
-            { fmt: "• item", result: "Lista com ponto", example: "• Cadastro: *317" },
+            { fmt: "```texto```", result: "CÃ³digo/Monospace", example: "```#4000000```" },
+            { fmt: "Linha em branco", result: "ParÃ¡grafo separado", example: "(pressione Enter 2x)" },
+            { fmt: "â€¢ item", result: "Lista com ponto", example: "â€¢ Cadastro: *317" },
           ].map(d => (
             <div key={d.fmt} className="flex items-start gap-2 text-xs">
               <code className="bg-white/10 px-1.5 py-0.5 rounded text-yellow-200 font-mono shrink-0">{d.fmt}</code>
-              <span className="text-white/50">→ <strong className="text-white/70">{d.result}</strong> — ex: <span className="text-white/40 italic">{d.example}</span></span>
+              <span className="text-white/50">â†’ <strong className="text-white/70">{d.result}</strong> â€” ex: <span className="text-white/40 italic">{d.example}</span></span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* BOTÃO SALVAR */}
+      {/* BOTÃƒO SALVAR */}
       <button
         onClick={() => saveMut.mutate({ template })}
         disabled={saveMut.isPending}
@@ -1909,51 +1909,51 @@ function WhatsappOrderTemplateTab() {
 }
 
 // ============================================================
-// TEMPLATE PADRÃO — MENSAGEM WHATSAPP DE DADOS DE LOGIN
+// TEMPLATE PADRÃƒO â€” MENSAGEM WHATSAPP DE DADOS DE LOGIN
 // ============================================================
-const DEFAULT_WA_LOGIN_TEMPLATE = `🔐 Seus dados de acesso estão prontos!
+const DEFAULT_WA_LOGIN_TEMPLATE = `ðŸ” Seus dados de acesso estÃ£o prontos!
 
-Olá, {nome}!
+OlÃ¡, {nome}!
 
-Seu pedido já foi liberado.
+Seu pedido jÃ¡ foi liberado.
 
-⚠️ IMPORTANTE: Os dados de acesso não são enviados por mensagem. Eles devem ser resgatados exclusivamente através do site abaixo:
+âš ï¸ IMPORTANTE: Os dados de acesso nÃ£o sÃ£o enviados por mensagem. Eles devem ser resgatados exclusivamente atravÃ©s do site abaixo:
 
-🌐 https://walkajuda.com/acompanhar
+ðŸŒ https://h2colombiano.com/acompanhar
 
-🔐 *Senha de acesso:* {senha}
-⚠️ _Não compartilhe esta senha com ninguém para evitar bloqueios de acesso._
+ðŸ” *Senha de acesso:* {senha}
+âš ï¸ _NÃ£o compartilhe esta senha com ninguÃ©m para evitar bloqueios de acesso._
 
 Para resgatar seus dados:
 
-✅ Acesse o site
-✅ Informe seu telefone e a senha de 4 dígitos
-✅ Os dados de acesso serão exibidos na página do seu pedido
+âœ… Acesse o site
+âœ… Informe seu telefone e a senha de 4 dÃ­gitos
+âœ… Os dados de acesso serÃ£o exibidos na pÃ¡gina do seu pedido
 
-❌ Não tente acessar diretamente pelo aplicativo
-❌ Os dados não são fornecidos por WhatsApp
+âŒ NÃ£o tente acessar diretamente pelo aplicativo
+âŒ Os dados nÃ£o sÃ£o fornecidos por WhatsApp
 
-🔒 Por segurança, o resgate dos dados é realizado somente pela área do cliente.
+ðŸ”’ Por seguranÃ§a, o resgate dos dados Ã© realizado somente pela Ã¡rea do cliente.
 
-Equipe Walk Ajuda`;
+Equipe H2 COLOMBIANO`;
 
 const WA_LOGIN_VARS = [
   {
-    group: "👤 Cliente",
+    group: "ðŸ‘¤ Cliente",
     color: "#22c55e",
     vars: [
       { label: "{nome}", value: "{nome}", desc: "Nome completo do cliente (ex: DIEGO DO NASCIMENTO)" },
-      { label: "{senha}", value: "{senha}", desc: "Senha de acesso de 4 dígitos do cliente" },
+      { label: "{senha}", value: "{senha}", desc: "Senha de acesso de 4 dÃ­gitos do cliente" },
       { label: "{telefone}", value: "{telefone}", desc: "Telefone do cliente" },
     ],
   },
   {
-    group: "📅 Data",
+    group: "ðŸ“… Data",
     color: "#f59e0b",
     vars: [
-      { label: "{DIA}", value: "{DIA}", desc: "Dia atual com 2 dígitos (ex: 16)" },
-      { label: "{MES}", value: "{MES}", desc: "Mês atual com 2 dígitos (ex: 07)" },
-      { label: "{ANO}", value: "{ANO}", desc: "Ano atual com 4 dígitos (ex: 2026)" },
+      { label: "{DIA}", value: "{DIA}", desc: "Dia atual com 2 dÃ­gitos (ex: 16)" },
+      { label: "{MES}", value: "{MES}", desc: "MÃªs atual com 2 dÃ­gitos (ex: 07)" },
+      { label: "{ANO}", value: "{ANO}", desc: "Ano atual com 4 dÃ­gitos (ex: 2026)" },
     ],
   },
 ];
@@ -1962,19 +1962,19 @@ function WhatsappLoginTemplateTab() {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.settings.getWhatsappLoginTemplate.useQuery();
   const saveMut = trpc.settings.saveWhatsappLoginTemplate.useMutation({
-    onSuccess: () => { toast.success("✅ Template de login salvo com sucesso!"); utils.settings.getWhatsappLoginTemplate.invalidate(); },
+    onSuccess: () => { toast.success("âœ… Template de login salvo com sucesso!"); utils.settings.getWhatsappLoginTemplate.invalidate(); },
     onError: () => toast.error("Erro ao salvar template"),
   });
   const [template, setTemplate] = useState(DEFAULT_WA_LOGIN_TEMPLATE);
   const [showPreview, setShowPreview] = useState(true);
-  const [expandedGroup, setExpandedGroup] = useState<string | null>("👤 Cliente");
+  const [expandedGroup, setExpandedGroup] = useState<string | null>("ðŸ‘¤ Cliente");
 
   useEffect(() => {
     if (data?.template) setTemplate(data.template);
   }, [data?.template]);
 
   const handleReset = () => {
-    if (confirm("Restaurar a mensagem padrão? Isso apagará suas alterações.")) {
+    if (confirm("Restaurar a mensagem padrÃ£o? Isso apagarÃ¡ suas alteraÃ§Ãµes.")) {
       setTemplate(DEFAULT_WA_LOGIN_TEMPLATE);
     }
   };
@@ -1992,15 +1992,15 @@ function WhatsappLoginTemplateTab() {
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
+      {/* CabeÃ§alho */}
       <div className="bg-green-500/10 border border-green-500/25 rounded-xl p-5">
         <div className="flex items-start gap-3">
           <Smartphone className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
           <div>
-            <h2 className="text-sm font-bold text-green-300 mb-1">Editor de Mensagem WhatsApp — Dados de Login</h2>
+            <h2 className="text-sm font-bold text-green-300 mb-1">Editor de Mensagem WhatsApp â€” Dados de Login</h2>
             <p className="text-xs text-green-200/60 leading-relaxed">
-              Esta é a mensagem enviada quando você clica em <strong className="text-green-300">"WhatsApp"</strong> na seção de <strong className="text-green-300">Dados de Login</strong> de um pedido.
-              Use as variáveis abaixo para personalizar o texto — elas são substituídas automaticamente pelos dados reais do cliente.
+              Esta Ã© a mensagem enviada quando vocÃª clica em <strong className="text-green-300">"WhatsApp"</strong> na seÃ§Ã£o de <strong className="text-green-300">Dados de Login</strong> de um pedido.
+              Use as variÃ¡veis abaixo para personalizar o texto â€” elas sÃ£o substituÃ­das automaticamente pelos dados reais do cliente.
             </p>
           </div>
         </div>
@@ -2008,7 +2008,7 @@ function WhatsappLoginTemplateTab() {
 
       {/* Layout: Editor + Preview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* COLUNA ESQUERDA — Editor */}
+        {/* COLUNA ESQUERDA â€” Editor */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -2018,7 +2018,7 @@ function WhatsappLoginTemplateTab() {
               onClick={handleReset}
               className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors"
             >
-              <RotateCcw className="w-3.5 h-3.5" /> Restaurar padrão
+              <RotateCcw className="w-3.5 h-3.5" /> Restaurar padrÃ£o
             </button>
           </div>
           <WaSmartTextarea
@@ -2029,7 +2029,7 @@ function WhatsappLoginTemplateTab() {
           />
         </div>
 
-        {/* COLUNA DIREITA — Preview */}
+        {/* COLUNA DIREITA â€” Preview */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -2046,20 +2046,20 @@ function WhatsappLoginTemplateTab() {
             <div className="bg-[#0b141a] rounded-2xl p-4 border border-white/10 max-h-[480px] overflow-y-auto">
               <div className="bg-[#202c33] rounded-xl rounded-tl-none px-4 py-3 max-w-xs shadow-md">
                 <pre className="text-[13px] text-[#e9edef] whitespace-pre-wrap font-sans leading-relaxed">{previewText}</pre>
-                <p className="text-[10px] text-[#8696a0] text-right mt-1">{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} ✓✓</p>
+                <p className="text-[10px] text-[#8696a0] text-right mt-1">{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} âœ“âœ“</p>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* SEÇÃO DE VARIÁVEIS */}
+      {/* SEÃ‡ÃƒO DE VARIÃVEIS */}
       <div className="bg-[#111128] border border-white/10 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-white/10">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Info className="w-4 h-4 text-blue-400" /> Variáveis Disponíveis
+            <Info className="w-4 h-4 text-blue-400" /> VariÃ¡veis DisponÃ­veis
           </h3>
-          <p className="text-xs text-white/40 mt-1">Clique em qualquer variável para inserir no final da mensagem.</p>
+          <p className="text-xs text-white/40 mt-1">Clique em qualquer variÃ¡vel para inserir no final da mensagem.</p>
         </div>
         {WA_LOGIN_VARS.map(group => (
           <div key={group.group} className="border-b border-white/5 last:border-0">
@@ -2068,7 +2068,7 @@ function WhatsappLoginTemplateTab() {
               className="w-full flex items-center justify-between px-5 py-3 hover:bg-white/5 transition-colors"
             >
               <span className="text-xs font-bold" style={{ color: group.color }}>{group.group}</span>
-              <span className="text-white/30 text-xs">{expandedGroup === group.group ? "▲" : "▼"}</span>
+              <span className="text-white/30 text-xs">{expandedGroup === group.group ? "â–²" : "â–¼"}</span>
             </button>
             {expandedGroup === group.group && (
               <div className="px-5 pb-4 space-y-2">
@@ -2088,7 +2088,7 @@ function WhatsappLoginTemplateTab() {
         ))}
       </div>
 
-      {/* BOTÃO SALVAR */}
+      {/* BOTÃƒO SALVAR */}
       <button
         onClick={() => saveMut.mutate({ template })}
         disabled={saveMut.isPending}

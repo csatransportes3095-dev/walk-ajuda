@@ -26,7 +26,7 @@ export default function AdminCustomerPasswordPage() {
   const [showSetPwd, setShowSetPwd] = useState(false);
   const [isSetting, setIsSetting] = useState(false);
 
-  // ─── queries / mutations ──────────────────────────────────────────────────
+  // â”€â”€â”€ queries / mutations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const modeQuery = trpc.customerPassword.getMode.useQuery();
   const setModeMutation = trpc.customerPassword.setMode.useMutation({
@@ -34,8 +34,8 @@ export default function AdminCustomerPasswordPage() {
       modeQuery.refetch();
       pendingQuery.refetch();
       toast.success(data.mode === 'auto'
-        ? '✅ Modo AUTOMÁTICO ativado: cliente cria a própria senha (30 dias).'
-        : '✅ Modo MANUAL ativado: ADM precisa liberar cada senha.');
+        ? 'âœ… Modo AUTOMÃTICO ativado: cliente cria a prÃ³pria senha (30 dias).'
+        : 'âœ… Modo MANUAL ativado: ADM precisa liberar cada senha.');
     },
     onError: (e) => toast.error(e.message || 'Erro ao alterar modo'),
   });
@@ -49,7 +49,7 @@ export default function AdminCustomerPasswordPage() {
 
   const resetMutation = trpc.customerPassword.adminReset.useMutation({
     onSuccess: () => {
-      toast.success('Senha resetada! O cliente poderá criar uma nova senha.');
+      toast.success('Senha resetada! O cliente poderÃ¡ criar uma nova senha.');
       statusQuery.refetch();
     },
     onError: (e) => toast.error(e.message || 'Erro ao resetar senha'),
@@ -73,7 +73,7 @@ export default function AdminCustomerPasswordPage() {
   const currentMode = modeQuery.data?.mode ?? 'manual';
   const pendingList = pendingQuery.data ?? [];
 
-  // ─── handlers ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleToggleMode = () => {
     const newMode = currentMode === 'manual' ? 'auto' : 'manual';
@@ -83,7 +83,7 @@ export default function AdminCustomerPasswordPage() {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = searchPhone.replace(/\D/g, '');
-    if (clean.length < 10) { toast.error('Informe um telefone válido (com DDD).'); return; }
+    if (clean.length < 10) { toast.error('Informe um telefone vÃ¡lido (com DDD).'); return; }
     setIsSearching(true);
     setSearchedPhone(clean);
     setIsSearching(false);
@@ -91,36 +91,36 @@ export default function AdminCustomerPasswordPage() {
 
   const buildReleaseWaMsg = (nome: string, telefone: string) => {
     const msg = [
-      `🔐 *Acesso Liberado — Walk Ajuda*`,
+      `ðŸ” *Acesso Liberado â€” H2 COLOMBIANO*`,
       ``,
-      `Olá, *${nome}*! Tudo certo por aqui. ✅`,
+      `OlÃ¡, *${nome}*! Tudo certo por aqui. âœ…`,
       ``,
-      `Sua senha de acesso ao sistema foi liberada com sucesso e já está ativa.`,
+      `Sua senha de acesso ao sistema foi liberada com sucesso e jÃ¡ estÃ¡ ativa.`,
       ``,
-      `━━━━━━━━━━━━━━━━━━━`,
-      `🌐 *Acesse agora:* https://walkajuda.com/acompanhar`,
-      `━━━━━━━━━━━━━━━━━━━`,
+      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”`,
+      `ðŸŒ *Acesse agora:* https://h2colombiano.com/acompanhar`,
+      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”`,
       ``,
-      `📱 *Como acessar:*`,
-      `1️⃣ Abra o link acima`,
-      `2️⃣ Informe seu telefone`,
-      `3️⃣ Digite sua senha`,
-      `4️⃣ Seus dados estarão disponíveis`,
+      `ðŸ“± *Como acessar:*`,
+      `1ï¸âƒ£ Abra o link acima`,
+      `2ï¸âƒ£ Informe seu telefone`,
+      `3ï¸âƒ£ Digite sua senha`,
+      `4ï¸âƒ£ Seus dados estarÃ£o disponÃ­veis`,
       ``,
-      `⚠️ *Importante:*`,
-      `• Não compartilhe sua senha com ninguém`,
-      `• Os dados de acesso *não são enviados por mensagem*`,
-      `• Em caso de dúvidas, entre em contato conosco`,
+      `âš ï¸ *Importante:*`,
+      `â€¢ NÃ£o compartilhe sua senha com ninguÃ©m`,
+      `â€¢ Os dados de acesso *nÃ£o sÃ£o enviados por mensagem*`,
+      `â€¢ Em caso de dÃºvidas, entre em contato conosco`,
       ``,
-      `_Equipe Walk Ajuda_ 🚀`,
+      `_Equipe H2 COLOMBIANO_ ðŸš€`,
     ].join('\n');
     return `https://wa.me/55${telefone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
   };
 
   const handleApprove = async () => {
     if (!pendingModal) return;
-    // PRIMEIRO: abrir WhatsApp de forma síncrona (antes de qualquer await/setState)
-    // Isso é necessário para evitar bloqueio de popup do navegador
+    // PRIMEIRO: abrir WhatsApp de forma sÃ­ncrona (antes de qualquer await/setState)
+    // Isso Ã© necessÃ¡rio para evitar bloqueio de popup do navegador
     const nome = (pendingModal.name || '').split(' ')[0];
     const telefone = pendingModal.phone.replace(/\D/g, '');
     const waUrl = buildReleaseWaMsg(nome, telefone);
@@ -128,7 +128,7 @@ export default function AdminCustomerPasswordPage() {
     setIsApproving(true);
     try {
       await approveMutation.mutateAsync({ passwordId: pendingModal.id, days: pendingDays });
-      toast.success(`✅ Senha de ${pendingModal.name} liberada por ${pendingDays} dias!`);
+      toast.success(`âœ… Senha de ${pendingModal.name} liberada por ${pendingDays} dias!`);
       setPendingModal(null);
     } catch (e: any) {
       // Se falhou, fechar a janela do WA aberta
@@ -159,7 +159,7 @@ export default function AdminCustomerPasswordPage() {
       <span className="flex items-center gap-1 text-slate-400 text-sm"><ShieldX className="w-4 h-4" /> Sem senha cadastrada</span>
     );
     if (statusData.pending) return (
-      <span className="flex items-center gap-1 text-amber-400 text-sm"><ShieldAlert className="w-4 h-4" /> Aguardando liberação do ADM</span>
+      <span className="flex items-center gap-1 text-amber-400 text-sm"><ShieldAlert className="w-4 h-4" /> Aguardando liberaÃ§Ã£o do ADM</span>
     );
     if (!statusData.expiresAt || statusData.expiresAt < Date.now()) return (
       <span className="flex items-center gap-1 text-red-400 text-sm"><ShieldX className="w-4 h-4" /> Senha expirada</span>
@@ -167,7 +167,7 @@ export default function AdminCustomerPasswordPage() {
     const daysLeft = Math.ceil((statusData.expiresAt - Date.now()) / (1000 * 60 * 60 * 24));
     return (
       <span className="flex items-center gap-1 text-green-400 text-sm">
-        <ShieldCheck className="w-4 h-4" /> Ativa — vence em {daysLeft} dia{daysLeft !== 1 ? 's' : ''}
+        <ShieldCheck className="w-4 h-4" /> Ativa â€” vence em {daysLeft} dia{daysLeft !== 1 ? 's' : ''}
         <span className="text-slate-400 ml-1">({new Date(statusData.expiresAt).toLocaleDateString('pt-BR')})</span>
       </span>
     );
@@ -201,11 +201,11 @@ export default function AdminCustomerPasswordPage() {
               : <ToggleLeft className="w-7 h-7 text-amber-400" />}
             <div>
               <p className={`text-sm font-bold ${currentMode === 'auto' ? 'text-green-300' : 'text-amber-300'}`}>
-                Liberação {currentMode === 'auto' ? 'AUTOMÁTICA' : 'MANUAL'}
+                LiberaÃ§Ã£o {currentMode === 'auto' ? 'AUTOMÃTICA' : 'MANUAL'}
               </p>
               <p className="text-xs text-slate-400">
                 {currentMode === 'auto'
-                  ? 'Cliente cria a própria senha (30 dias)'
+                  ? 'Cliente cria a prÃ³pria senha (30 dias)'
                   : 'ADM libera manualmente cada cliente'}
               </p>
             </div>
@@ -219,10 +219,10 @@ export default function AdminCustomerPasswordPage() {
               <Bell className="w-6 h-6 text-amber-400 flex-shrink-0" />
               <div>
                 <h2 className="text-lg font-bold text-amber-300">
-                  {pendingList.length} senha{pendingList.length > 1 ? 's' : ''} aguardando liberação
+                  {pendingList.length} senha{pendingList.length > 1 ? 's' : ''} aguardando liberaÃ§Ã£o
                 </h2>
                 <p className="text-xs text-amber-200/70">
-                  {pendingList.length > 1 ? 'Clientes criaram' : 'Cliente criou'} senha e aguarda você definir a validade
+                  {pendingList.length > 1 ? 'Clientes criaram' : 'Cliente criou'} senha e aguarda vocÃª definir a validade
                 </p>
               </div>
             </div>
@@ -291,7 +291,7 @@ export default function AdminCustomerPasswordPage() {
                   </Button>
                   {statusData?.hasPassword && (
                     <Button
-                      onClick={() => { if (confirm(`Resetar a senha de ${searchedPhone}? O cliente precisará criar uma nova senha.`)) resetMutation.mutate({ phone: searchedPhone }); }}
+                      onClick={() => { if (confirm(`Resetar a senha de ${searchedPhone}? O cliente precisarÃ¡ criar uma nova senha.`)) resetMutation.mutate({ phone: searchedPhone }); }}
                       size="sm"
                       variant="outline"
                       className="border-red-500/50 text-red-400 hover:bg-red-500/10"
@@ -368,7 +368,7 @@ export default function AdminCustomerPasswordPage() {
                   type={showSetPwd ? 'text' : 'password'}
                   value={setPwdValue}
                   onChange={(e) => setSetPwdValue(e.target.value)}
-                  placeholder="Mínimo 4 caracteres"
+                  placeholder="MÃ­nimo 4 caracteres"
                   className="bg-slate-700 border-slate-600 text-white pr-10"
                 />
                 <button type="button" onClick={() => setShowSetPwd(!showSetPwd)}

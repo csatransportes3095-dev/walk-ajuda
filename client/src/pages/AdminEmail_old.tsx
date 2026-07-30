@@ -61,7 +61,7 @@ interface ZohoUser {
 }
 
 function formatDate(ts: number) {
-  if (!ts || ts === -1) return "—";
+  if (!ts || ts === -1) return "â€”";
   return new Date(ts).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
@@ -69,7 +69,7 @@ function formatDate(ts: number) {
   });
 }
 
-// Dados para geração aleatória completa
+// Dados para geraÃ§Ã£o aleatÃ³ria completa
 const FIRST_NAMES = [
   "Ana", "Bruno", "Carlos", "Daniel", "Eduardo", "Fernanda", "Gabriel",
   "Helena", "Igor", "Julia", "Kevin", "Lucas", "Marcos", "Natalia",
@@ -106,7 +106,7 @@ function generateFullAccount(existingEmails: string[]): GeneratedAccount {
   let firstName = "";
   let lastName = "";
 
-  // Tentar gerar username único baseado em nome real
+  // Tentar gerar username Ãºnico baseado em nome real
   for (let attempt = 0; attempt < 50; attempt++) {
     firstName = pick(FIRST_NAMES);
     lastName = pick(LAST_NAMES);
@@ -118,7 +118,7 @@ function generateFullAccount(existingEmails: string[]): GeneratedAccount {
     }
   }
 
-  // Fallback se não encontrou
+  // Fallback se nÃ£o encontrou
   if (!username) {
     username = `user_${Date.now().toString(36).slice(-5)}`;
     firstName = pick(FIRST_NAMES);
@@ -208,7 +208,7 @@ export default function AdminEmail() {
 
   const createMutation = trpc.email.create.useMutation({
     onSuccess: (data) => {
-      const email = data.user?.primaryEmailAddress ?? `${form.username}@walkajuda.com`;
+      const email = data.user?.primaryEmailAddress ?? `${form.username}@h2colombiano.com`;
       const pwd = form.password;
       setShowCreated({ email, password: pwd });
       setShowCreate(false);
@@ -223,7 +223,7 @@ export default function AdminEmail() {
     onSuccess: () => {
       setShowDelete(null);
       utils.email.list.invalidate();
-      toast.success("Conta excluída com sucesso");
+      toast.success("Conta excluÃ­da com sucesso");
     },
     onError: (e) => toast.error("Erro ao excluir conta: " + e.message),
   });
@@ -266,7 +266,7 @@ export default function AdminEmail() {
             <Mail className="w-6 h-6 text-blue-500" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Emails @walkajuda.com</h1>
+            <h1 className="text-2xl font-bold">Emails @h2colombiano.com</h1>
             <p className="text-sm text-muted-foreground">
               {users.length} conta{users.length !== 1 ? "s" : ""} cadastrada{users.length !== 1 ? "s" : ""}
             </p>
@@ -375,7 +375,7 @@ export default function AdminEmail() {
                   />
                 </div>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">Mensagem não encontrada</div>
+                <div className="text-center py-8 text-muted-foreground">Mensagem nÃ£o encontrada</div>
               )}
             </div>
           ) : (
@@ -460,11 +460,11 @@ export default function AdminEmail() {
             <TableRow>
               <TableHead>Email</TableHead>
               <TableHead>Nome</TableHead>
-              <TableHead>Função</TableHead>
+              <TableHead>FunÃ§Ã£o</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Criado em</TableHead>
-              <TableHead>Último acesso</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              <TableHead>Ãšltimo acesso</TableHead>
+              <TableHead className="text-right">AÃ§Ãµes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -494,7 +494,7 @@ export default function AdminEmail() {
                       </button>
                     </div>
                   </TableCell>
-                  <TableCell>{user.displayName || "—"}</TableCell>
+                  <TableCell>{user.displayName || "â€”"}</TableCell>
                   <TableCell>
                     <Badge variant={user.role === "super_admin" ? "default" : "secondary"}>
                       {user.role === "super_admin" ? "Super Admin" : user.role === "admin" ? "Admin" : "Membro"}
@@ -565,7 +565,7 @@ export default function AdminEmail() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1">
-              <Label>Usuário *</Label>
+              <Label>UsuÃ¡rio *</Label>
               <div className="flex items-center gap-1">
                 <Input
                   placeholder="nome.sobrenome"
@@ -579,19 +579,19 @@ export default function AdminEmail() {
                   size="icon"
                   type="button"
                   onClick={handleGenerateUsername}
-                  title="Gerar usuário aleatório único"
+                  title="Gerar usuÃ¡rio aleatÃ³rio Ãºnico"
                   className="shrink-0"
                 >
                   <Shuffle className={`w-4 h-4 ${isGeneratingUsername ? "animate-spin" : ""}`} />
                 </Button>
-                <span className="text-sm text-muted-foreground whitespace-nowrap">@walkajuda.com</span>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">@h2colombiano.com</span>
               </div>
-              <p className="text-xs text-muted-foreground">Clique em 🔀 para gerar um usuário aleatório único</p>
+              <p className="text-xs text-muted-foreground">Clique em ðŸ”€ para gerar um usuÃ¡rio aleatÃ³rio Ãºnico</p>
             </div>
             <div className="space-y-1">
-              <Label>Nome de exibição *</Label>
+              <Label>Nome de exibiÃ§Ã£o *</Label>
               <Input
-                placeholder="Ex: João Silva"
+                placeholder="Ex: JoÃ£o Silva"
                 value={form.displayName}
                 onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
               />
@@ -600,7 +600,7 @@ export default function AdminEmail() {
               <div className="space-y-1">
                 <Label>Primeiro nome</Label>
                 <Input
-                  placeholder="João"
+                  placeholder="JoÃ£o"
                   value={form.firstName}
                   onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
                 />
@@ -640,7 +640,7 @@ export default function AdminEmail() {
                   <Copy className="w-4 h-4" />
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">Mínimo 8 caracteres</p>
+              <p className="text-xs text-muted-foreground">MÃ­nimo 8 caracteres</p>
             </div>
           </div>
           <DialogFooter>
@@ -666,11 +666,11 @@ export default function AdminEmail() {
       <Dialog open={!!showCreated} onOpenChange={() => setShowCreated(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-green-600">✅ Conta Criada!</DialogTitle>
+            <DialogTitle className="text-green-600">âœ… Conta Criada!</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
-              Guarde as credenciais abaixo e compartilhe com o usuário:
+              Guarde as credenciais abaixo e compartilhe com o usuÃ¡rio:
             </p>
             <div className="bg-muted rounded-lg p-3 space-y-2 font-mono text-sm">
               <div className="flex items-center justify-between gap-2">
@@ -767,14 +767,14 @@ export default function AdminEmail() {
         </DialogContent>
       </Dialog>
 
-      {/* AlertDialog: Confirmar exclusão */}
+      {/* AlertDialog: Confirmar exclusÃ£o */}
       <AlertDialog open={!!showDelete} onOpenChange={() => setShowDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir conta de email?</AlertDialogTitle>
             <AlertDialogDescription>
-              A conta <span className="font-mono font-medium">{showDelete?.primaryEmailAddress}</span> será
-              permanentemente excluída. Todos os emails serão perdidos. Esta ação não pode ser desfeita.
+              A conta <span className="font-mono font-medium">{showDelete?.primaryEmailAddress}</span> serÃ¡
+              permanentemente excluÃ­da. Todos os emails serÃ£o perdidos. Esta aÃ§Ã£o nÃ£o pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

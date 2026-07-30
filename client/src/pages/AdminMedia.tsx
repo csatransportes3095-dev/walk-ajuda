@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { Upload, Copy, Video, Image, Trash2, ExternalLink, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// ─── Tipos ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Tipos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface MediaFile {
   id: number;
   name: string;
@@ -30,7 +30,7 @@ type ImageUploadStatus =
 
 type TabType = "video" | "image";
 
-// ─── Constantes ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constantes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB por chunk (via backend)
 const MAX_SIZE = 500 * 1024 * 1024; // 500MB
 const MAX_IMAGE_SIZE = 15 * 1024 * 1024; // 15MB para imagens
@@ -67,11 +67,11 @@ function getPublicUrl(media: Pick<MediaFile, "url" | "videoSlug" | "mimeType">):
   return media.url;
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
+// â”€â”€â”€ Componente principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function AdminMedia() {
   const [activeTab, setActiveTab] = useState<TabType>("video");
 
-  // ─── VIDEO STATE ─────────────────────────────────────────────────────────
+  // â”€â”€â”€ VIDEO STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [status, setStatus] = useState<UploadStatus>({ phase: "idle" });
   const [mediaList, setMediaList] = useState<MediaFile[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -80,7 +80,7 @@ export default function AdminMedia() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ─── IMAGE STATE ─────────────────────────────────────────────────────────
+  // â”€â”€â”€ IMAGE STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [imgStatus, setImgStatus] = useState<ImageUploadStatus>({ phase: "idle" });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imgSlugInput, setImgSlugInput] = useState("");
@@ -92,7 +92,7 @@ export default function AdminMedia() {
     };
   }, []);
 
-  // ─── Carregar lista do banco ──────────────────────────────────────────────
+  // â”€â”€â”€ Carregar lista do banco â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadList = useCallback(async () => {
     setLoadingList(true);
     try {
@@ -110,31 +110,31 @@ export default function AdminMedia() {
 
   useEffect(() => { loadList(); }, [loadList]);
 
-  // ─── VIDEO: Validação ─────────────────────────────────────────────────────
+  // â”€â”€â”€ VIDEO: ValidaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const validateVideoFile = (file: File): string | null => {
     const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
     const isValidType = ALLOWED_VIDEO_TYPES.includes(file.type) || ALLOWED_VIDEO_EXTS.includes(ext);
-    if (!isValidType) return `Formato inválido. Aceitos: MP4, MOV, WEBM, AVI. Recebido: ${file.type || ext}`;
-    if (file.size > MAX_SIZE) return `Arquivo muito grande: ${formatBytes(file.size)}. Máximo: 500MB.`;
-    if (file.size === 0) return "O arquivo está vazio.";
+    if (!isValidType) return `Formato invÃ¡lido. Aceitos: MP4, MOV, WEBM, AVI. Recebido: ${file.type || ext}`;
+    if (file.size > MAX_SIZE) return `Arquivo muito grande: ${formatBytes(file.size)}. MÃ¡ximo: 500MB.`;
+    if (file.size === 0) return "O arquivo estÃ¡ vazio.";
     return null;
   };
 
-  // ─── IMAGE: Validação ─────────────────────────────────────────────────────
+  // â”€â”€â”€ IMAGE: ValidaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const validateImageFile = (file: File): string | null => {
     const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
     const isValidType = ALLOWED_IMAGE_TYPES.includes(file.type) || ALLOWED_IMAGE_EXTS.includes(ext);
-    if (!isValidType) return `Formato inválido. Aceitos: JPG, PNG, GIF, WEBP. Recebido: ${file.type || ext}`;
-    if (file.size > MAX_IMAGE_SIZE) return `Arquivo muito grande: ${formatBytes(file.size)}. Máximo: 15MB.`;
-    if (file.size === 0) return "O arquivo está vazio.";
+    if (!isValidType) return `Formato invÃ¡lido. Aceitos: JPG, PNG, GIF, WEBP. Recebido: ${file.type || ext}`;
+    if (file.size > MAX_IMAGE_SIZE) return `Arquivo muito grande: ${formatBytes(file.size)}. MÃ¡ximo: 15MB.`;
+    if (file.size === 0) return "O arquivo estÃ¡ vazio.";
     return null;
   };
 
-  // ─── VIDEO: Polling ───────────────────────────────────────────────────────
+  // â”€â”€â”€ VIDEO: Polling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const startPolling = (jobId: string, fileName: string, slug: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     const startTime = Date.now();
-    setStatus({ phase: "processing", message: "Vídeo enviado, estamos processando. Pode levar alguns minutos." });
+    setStatus({ phase: "processing", message: "VÃ­deo enviado, estamos processando. Pode levar alguns minutos." });
 
     pollingRef.current = setInterval(async () => {
       if (Date.now() - startTime > MAX_POLL_TIME) {
@@ -154,19 +154,19 @@ export default function AdminMedia() {
           const finalSlug = data.videoSlug || null;
           const friendlyUrl = finalSlug ? `https://h2colombiano.com/video/${finalSlug}` : (videoUrl.startsWith("/") ? `${window.location.origin}${videoUrl}` : videoUrl);
           setStatus({ phase: "completed", url: friendlyUrl, videoUrl: friendlyUrl, name: fileName, slug: finalSlug });
-          toast.success(finalSlug ? `Pronto! URL: https://h2colombiano.com/video/${finalSlug}` : "Upload concluído!");
+          toast.success(finalSlug ? `Pronto! URL: https://h2colombiano.com/video/${finalSlug}` : "Upload concluÃ­do!");
           navigator.clipboard.writeText(friendlyUrl).catch(() => {});
           loadList();
         } else if (data.status === "failed") {
           if (pollingRef.current) clearInterval(pollingRef.current);
           pollingRef.current = null;
-          setStatus({ phase: "failed", message: data.error || "Erro ao processar vídeo." });
+          setStatus({ phase: "failed", message: data.error || "Erro ao processar vÃ­deo." });
         }
       } catch { /* retry */ }
     }, POLL_INTERVAL);
   };
 
-  // ─── VIDEO: Upload ────────────────────────────────────────────────────────
+  // â”€â”€â”€ VIDEO: Upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const uploadVideoFile = async (file: File, slug: string) => {
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     let uploadId: string;
@@ -213,7 +213,7 @@ export default function AdminMedia() {
     }
 
     try {
-      setStatus({ phase: "processing", message: "Montando vídeo e enviando para o servidor... Aguarde." });
+      setStatus({ phase: "processing", message: "Montando vÃ­deo e enviando para o servidor... Aguarde." });
       const finalRes = await fetch("/api/upload/finalize-media", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -224,7 +224,7 @@ export default function AdminMedia() {
       if (result.status === "completed") {
         const friendlyUrl = result.videoUrl || "";
         setStatus({ phase: "completed", url: friendlyUrl, videoUrl: friendlyUrl, name: file.name, slug: result.videoSlug || null });
-        toast.success(result.videoSlug ? `Pronto! URL: https://h2colombiano.com/video/${result.videoSlug}` : "Upload concluído!");
+        toast.success(result.videoSlug ? `Pronto! URL: https://h2colombiano.com/video/${result.videoSlug}` : "Upload concluÃ­do!");
         navigator.clipboard.writeText(friendlyUrl).catch(() => {});
         loadList();
       } else {
@@ -236,7 +236,7 @@ export default function AdminMedia() {
     }
   };
 
-  // ─── IMAGE: Upload ────────────────────────────────────────────────────────
+  // â”€â”€â”€ IMAGE: Upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const uploadImageFile = async (file: File, slug: string) => {
     setImgStatus({ phase: "uploading" });
     try {
@@ -251,9 +251,9 @@ export default function AdminMedia() {
         throw new Error(err.error || `HTTP ${res.status}`);
       }
       const data = await res.json();
-      const friendlyImgUrl = data.slug ? `https://walkajuda.com/foto/${data.slug}` : (data.url.startsWith("/") ? `${window.location.origin}${data.url}` : data.url);
+      const friendlyImgUrl = data.slug ? `https://h2colombiano.com/foto/${data.slug}` : (data.url.startsWith("/") ? `${window.location.origin}${data.url}` : data.url);
       setImgStatus({ phase: "completed", url: friendlyImgUrl, name: file.name, slug: data.slug });
-      toast.success(data.slug ? `Pronto! URL: https://walkajuda.com/foto/${data.slug}` : "Upload concluído!");
+      toast.success(data.slug ? `Pronto! URL: https://h2colombiano.com/foto/${data.slug}` : "Upload concluÃ­do!");
       navigator.clipboard.writeText(friendlyImgUrl).catch(() => {});
       loadList();
     } catch (e: any) {
@@ -262,7 +262,7 @@ export default function AdminMedia() {
     }
   };
 
-  // ─── VIDEO: Handlers ──────────────────────────────────────────────────────
+  // â”€â”€â”€ VIDEO: Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -279,7 +279,7 @@ export default function AdminMedia() {
     await uploadVideoFile(selectedFile, slugInput.trim());
   };
 
-  // ─── IMAGE: Handlers ──────────────────────────────────────────────────────
+  // â”€â”€â”€ IMAGE: Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -307,11 +307,11 @@ export default function AdminMedia() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Remover esta mídia da lista?")) return;
+    if (!confirm("Remover esta mÃ­dia da lista?")) return;
     try {
       await fetch(`/api/upload/media-delete/${id}`, { method: "DELETE", credentials: "include" });
       setMediaList(prev => prev.filter(m => m.id !== id));
-      toast.success("Mídia removida.");
+      toast.success("MÃ­dia removida.");
     } catch { toast.error("Erro ao remover."); }
   };
 
@@ -319,7 +319,7 @@ export default function AdminMedia() {
     const absUrl = url.startsWith("/") ? `${window.location.origin}${url}` : url;
     navigator.clipboard.writeText(absUrl)
       .then(() => toast.success("URL copiada!"))
-      .catch(() => toast.error("Não foi possível copiar."));
+      .catch(() => toast.error("NÃ£o foi possÃ­vel copiar."));
   };
 
   const isUploading = ["uploading", "processing"].includes(status.phase);
@@ -328,7 +328,7 @@ export default function AdminMedia() {
   const videoList = mediaList.filter(m => m.mimeType.startsWith("video/"));
   const imageList = mediaList.filter(m => m.mimeType.startsWith("image/"));
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div className="min-h-screen bg-[#0a0a1a] text-white p-4 md:p-8">
       {/* Header */}
@@ -337,8 +337,8 @@ export default function AdminMedia() {
           <Upload className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">Upload de Mídia</h1>
-          <p className="text-gray-400 text-sm">Gere URLs públicas para vídeos e fotos</p>
+          <h1 className="text-2xl font-bold">Upload de MÃ­dia</h1>
+          <p className="text-gray-400 text-sm">Gere URLs pÃºblicas para vÃ­deos e fotos</p>
         </div>
       </div>
 
@@ -352,7 +352,7 @@ export default function AdminMedia() {
               : "bg-[#111128] text-gray-400 hover:text-white border border-purple-900/30"
           }`}
         >
-          <Video className="w-4 h-4" /> Vídeos
+          <Video className="w-4 h-4" /> VÃ­deos
         </button>
         <button
           onClick={() => setActiveTab("image")}
@@ -366,10 +366,10 @@ export default function AdminMedia() {
         </button>
       </div>
 
-      {/* ═══════════════════════ TAB: VÍDEO ═══════════════════════ */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: VÃDEO â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       {activeTab === "video" && (
         <>
-          {/* Zona de seleção de vídeo */}
+          {/* Zona de seleÃ§Ã£o de vÃ­deo */}
           {!selectedFile && !isUploading && status.phase !== "completed" && (
             <div
               className={`border-2 border-dashed rounded-2xl p-8 mb-6 text-center transition-all cursor-pointer ${
@@ -381,8 +381,8 @@ export default function AdminMedia() {
               {status.phase === "idle" && (
                 <>
                   <div className="w-16 h-16 rounded-2xl bg-purple-700 flex items-center justify-center mx-auto mb-4"><Upload className="w-8 h-8" /></div>
-                  <p className="text-lg font-semibold mb-1">Clique para selecionar um vídeo</p>
-                  <p className="text-gray-400 text-sm">MP4, MOV, WEBM ou AVI — máx. 500MB</p>
+                  <p className="text-lg font-semibold mb-1">Clique para selecionar um vÃ­deo</p>
+                  <p className="text-gray-400 text-sm">MP4, MOV, WEBM ou AVI â€” mÃ¡x. 500MB</p>
                 </>
               )}
               {status.phase === "failed" && (
@@ -395,7 +395,7 @@ export default function AdminMedia() {
             </div>
           )}
 
-          {/* Formulário de slug + botão upload */}
+          {/* FormulÃ¡rio de slug + botÃ£o upload */}
           {selectedFile && !isUploading && status.phase !== "completed" && (
             <div className="bg-[#111128] border border-purple-900/30 rounded-2xl p-5 mb-6 space-y-4">
               <div className="flex items-center gap-3">
@@ -412,7 +412,7 @@ export default function AdminMedia() {
                   <input type="text" value={slugInput} onChange={handleSlugChange} placeholder="nome-do-video" className="flex-1 bg-transparent text-white text-sm outline-none ml-1" />
                 </div>
                 {slugInput && <p className="text-xs text-green-400 mt-1">URL gerada: <span className="text-purple-300">{window.location.origin}/video/{slugInput}</span></p>}
-                {!slugInput && <p className="text-xs text-yellow-600 mt-1">Sem slug — será usada a URL do storage diretamente.</p>}
+                {!slugInput && <p className="text-xs text-yellow-600 mt-1">Sem slug â€” serÃ¡ usada a URL do storage diretamente.</p>}
               </div>
               <div className="flex gap-2">
                 <Button className="bg-purple-600 hover:bg-purple-700 flex-1" onClick={handleStartVideoUpload}><Upload className="w-4 h-4 mr-2" /> Iniciar Upload</Button>
@@ -433,7 +433,7 @@ export default function AdminMedia() {
           {/* Processando */}
           {status.phase === "processing" && (
             <div className="bg-[#111128] border border-purple-900/30 rounded-2xl p-5 mb-6 space-y-3">
-              <div className="flex items-center gap-2"><Loader2 className="w-5 h-5 text-purple-400 animate-spin" /><span className="text-purple-300 font-semibold">Processando vídeo...</span></div>
+              <div className="flex items-center gap-2"><Loader2 className="w-5 h-5 text-purple-400 animate-spin" /><span className="text-purple-300 font-semibold">Processando vÃ­deo...</span></div>
               <p className="text-gray-400 text-sm">{status.message}</p>
               <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden"><div className="h-full bg-purple-500 rounded-full animate-pulse w-full" /></div>
             </div>
@@ -442,9 +442,9 @@ export default function AdminMedia() {
           {/* Completed */}
           {status.phase === "completed" && (
             <div className="bg-[#0d1a0d] border border-green-900/50 rounded-2xl p-5 mb-6 space-y-3">
-              <div className="flex items-center gap-2"><CheckCircle className="w-7 h-7 text-green-400" /><span className="text-green-300 font-bold text-lg">Upload concluído!</span></div>
+              <div className="flex items-center gap-2"><CheckCircle className="w-7 h-7 text-green-400" /><span className="text-green-300 font-bold text-lg">Upload concluÃ­do!</span></div>
               <p className="text-gray-400 text-sm truncate">{status.name}</p>
-              <div className="bg-[#0a0a1a] rounded-xl p-3"><p className="text-xs text-gray-500 mb-1">URL do vídeo:</p><p className="text-purple-300 text-sm break-all font-mono">{status.url}</p></div>
+              <div className="bg-[#0a0a1a] rounded-xl p-3"><p className="text-xs text-gray-500 mb-1">URL do vÃ­deo:</p><p className="text-purple-300 text-sm break-all font-mono">{status.url}</p></div>
               <div className="flex gap-2 flex-wrap">
                 <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => copyUrl(status.videoUrl)}><Copy className="w-4 h-4 mr-1" /> Copiar URL</Button>
                 <Button size="sm" variant="outline" onClick={() => window.open(status.videoUrl.startsWith("/") ? `${window.location.origin}${status.videoUrl}` : status.videoUrl, "_blank")}><ExternalLink className="w-4 h-4 mr-1" /> Abrir</Button>
@@ -465,15 +465,15 @@ export default function AdminMedia() {
             </div>
           )}
 
-          {/* Lista de vídeos */}
+          {/* Lista de vÃ­deos */}
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold tracking-wider text-gray-300">VÍDEOS ENVIADOS</h2>
+              <h2 className="text-lg font-bold tracking-wider text-gray-300">VÃDEOS ENVIADOS</h2>
               <Button size="sm" variant="outline" onClick={loadList} disabled={loadingList}><RefreshCw className={`w-4 h-4 mr-1 ${loadingList ? "animate-spin" : ""}`} /> Atualizar</Button>
             </div>
             {loadingList && <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 text-purple-400 animate-spin" /></div>}
             {!loadingList && videoList.length === 0 && (
-              <div className="text-center py-12 text-gray-500"><Video className="w-12 h-12 mx-auto mb-3 opacity-30" /><p>Nenhum vídeo enviado ainda.</p></div>
+              <div className="text-center py-12 text-gray-500"><Video className="w-12 h-12 mx-auto mb-3 opacity-30" /><p>Nenhum vÃ­deo enviado ainda.</p></div>
             )}
             <div className="space-y-4">
               {videoList.map((media) => {
@@ -486,14 +486,14 @@ export default function AdminMedia() {
                         <div className="w-10 h-10 rounded-xl bg-blue-900/50 flex items-center justify-center flex-shrink-0"><Video className="w-5 h-5 text-blue-400" /></div>
                         <div className="min-w-0">
                           <p className="font-medium text-sm truncate">{media.name}</p>
-                          <p className="text-xs text-gray-500">{formatBytes(media.fileSize)} · {new Date(media.uploadedAt).toLocaleString("pt-BR")}</p>
+                          <p className="text-xs text-gray-500">{formatBytes(media.fileSize)} Â· {new Date(media.uploadedAt).toLocaleString("pt-BR")}</p>
                         </div>
                       </div>
                       <Button size="icon" variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0" onClick={() => handleDelete(media.id)}><Trash2 className="w-4 h-4" /></Button>
                     </div>
                     <video src={media.url} controls preload="metadata" className="w-full rounded-xl mb-3 max-h-48 bg-black" />
                     <div className="bg-[#0d0d20] rounded-xl p-3">
-                      <p className="text-xs text-gray-500 mb-1">{media.videoSlug ? "URL pública do vídeo:" : "URL do storage:"}</p>
+                      <p className="text-xs text-gray-500 mb-1">{media.videoSlug ? "URL pÃºblica do vÃ­deo:" : "URL do storage:"}</p>
                       <p className="text-xs text-purple-300 break-all mb-2 font-mono">{media.videoSlug ? absPublicUrl : media.url}</p>
                       <div className="flex gap-2">
                         <Button size="sm" className="bg-purple-700 hover:bg-purple-600 flex-1" onClick={() => copyUrl(publicUrl)}><Copy className="w-3 h-3 mr-1" /> Copiar</Button>
@@ -508,10 +508,10 @@ export default function AdminMedia() {
         </>
       )}
 
-      {/* ═══════════════════════ TAB: IMAGEM ═══════════════════════ */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: IMAGEM â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       {activeTab === "image" && (
         <>
-          {/* Zona de seleção de imagem */}
+          {/* Zona de seleÃ§Ã£o de imagem */}
           {!selectedImage && imgStatus.phase !== "uploading" && imgStatus.phase !== "completed" && (
             <div
               className={`border-2 border-dashed rounded-2xl p-8 mb-6 text-center transition-all cursor-pointer ${
@@ -524,7 +524,7 @@ export default function AdminMedia() {
                 <>
                   <div className="w-16 h-16 rounded-2xl bg-green-700 flex items-center justify-center mx-auto mb-4"><Image className="w-8 h-8" /></div>
                   <p className="text-lg font-semibold mb-1">Clique para selecionar uma foto</p>
-                  <p className="text-gray-400 text-sm">JPG, PNG, GIF ou WEBP — máx. 15MB</p>
+                  <p className="text-gray-400 text-sm">JPG, PNG, GIF ou WEBP â€” mÃ¡x. 15MB</p>
                 </>
               )}
               {imgStatus.phase === "failed" && (
@@ -537,7 +537,7 @@ export default function AdminMedia() {
             </div>
           )}
 
-          {/* Formulário de slug + botão upload de imagem */}
+          {/* FormulÃ¡rio de slug + botÃ£o upload de imagem */}
           {selectedImage && imgStatus.phase !== "uploading" && imgStatus.phase !== "completed" && (
             <div className="bg-[#111128] border border-green-900/30 rounded-2xl p-5 mb-6 space-y-4">
               <div className="flex items-center gap-3">
@@ -552,13 +552,13 @@ export default function AdminMedia() {
                 <img src={URL.createObjectURL(selectedImage)} alt="Preview" className="max-h-48 object-contain" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-gray-400 block">Nome da URL (slug) — opcional</label>
+                <label className="text-xs text-gray-400 block">Nome da URL (slug) â€” opcional</label>
                 <div className="flex items-center bg-[#0a0a1a] border border-green-900/50 rounded-xl px-3 py-2">
                   <span className="text-gray-500 text-sm whitespace-nowrap">/foto/</span>
                   <input type="text" value={imgSlugInput} onChange={handleImgSlugChange} placeholder="nome-da-foto" className="flex-1 bg-transparent text-white text-sm outline-none ml-1" />
                 </div>
                 {imgSlugInput && <p className="text-xs text-green-400 mt-1">URL gerada: <span className="text-green-300">{window.location.origin}/foto/{imgSlugInput}</span></p>}
-                {!imgSlugInput && <p className="text-xs text-yellow-600 mt-1">Sem slug — será usada a URL do storage diretamente.</p>}
+                {!imgSlugInput && <p className="text-xs text-yellow-600 mt-1">Sem slug â€” serÃ¡ usada a URL do storage diretamente.</p>}
               </div>
               <div className="flex gap-2">
                 <Button className="bg-green-600 hover:bg-green-700 flex-1" onClick={handleStartImageUpload}><Upload className="w-4 h-4 mr-2" /> Enviar Foto</Button>
@@ -578,7 +578,7 @@ export default function AdminMedia() {
           {/* Completed */}
           {imgStatus.phase === "completed" && (
             <div className="bg-[#0d1a0d] border border-green-900/50 rounded-2xl p-5 mb-6 space-y-3">
-              <div className="flex items-center gap-2"><CheckCircle className="w-7 h-7 text-green-400" /><span className="text-green-300 font-bold text-lg">Upload concluído!</span></div>
+              <div className="flex items-center gap-2"><CheckCircle className="w-7 h-7 text-green-400" /><span className="text-green-300 font-bold text-lg">Upload concluÃ­do!</span></div>
               <p className="text-gray-400 text-sm truncate">{imgStatus.name}</p>
               <div className="bg-[#0a0a1a] rounded-xl p-3">
                 <p className="text-xs text-gray-500 mb-1">URL da foto:</p>
@@ -613,14 +613,14 @@ export default function AdminMedia() {
                         <div className="w-10 h-10 rounded-xl bg-green-900/50 flex items-center justify-center flex-shrink-0"><Image className="w-5 h-5 text-green-400" /></div>
                         <div className="min-w-0">
                           <p className="font-medium text-sm truncate">{media.name}</p>
-                          <p className="text-xs text-gray-500">{formatBytes(media.fileSize)} · {new Date(media.uploadedAt).toLocaleString("pt-BR")}</p>
+                          <p className="text-xs text-gray-500">{formatBytes(media.fileSize)} Â· {new Date(media.uploadedAt).toLocaleString("pt-BR")}</p>
                         </div>
                       </div>
                       <Button size="icon" variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0" onClick={() => handleDelete(media.id)}><Trash2 className="w-4 h-4" /></Button>
                     </div>
                     <img src={media.url} alt={media.name} className="w-full rounded-xl mb-3 max-h-48 object-contain bg-black/50" />
                     <div className="bg-[#0d0d20] rounded-xl p-3">
-                      <p className="text-xs text-gray-500 mb-1">{media.videoSlug ? "URL pública da foto:" : "URL do storage:"}</p>
+                      <p className="text-xs text-gray-500 mb-1">{media.videoSlug ? "URL pÃºblica da foto:" : "URL do storage:"}</p>
                       <p className="text-xs text-green-300 break-all mb-2 font-mono">{media.videoSlug ? absPublicUrl : media.url}</p>
                       <div className="flex gap-2">
                         <Button size="sm" className="bg-green-700 hover:bg-green-600 flex-1" onClick={() => copyUrl(publicUrl)}><Copy className="w-3 h-3 mr-1" /> Copiar</Button>

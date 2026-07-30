@@ -23,12 +23,12 @@ CREATE TABLE `scheduleAppointments` (
 CREATE TABLE `scheduleConfig` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`title` varchar(256) NOT NULL DEFAULT 'Agende seu atendimento',
-	`introMessage` text NOT NULL DEFAULT ('Seu pedido precisa ser agendado. Escolha abaixo a melhor data e horário disponível para o seu atendimento.'),
-	`emailSubject` varchar(256) NOT NULL DEFAULT 'Agende seu atendimento - WALK AJUDA',
-	`emailMessage` text NOT NULL DEFAULT ('Olá! Seu pedido precisa ser agendado. Clique no link abaixo para escolher a data e o horário do seu atendimento.'),
-	`whatsappMessage` text NOT NULL DEFAULT ('Olá! Seu pedido na WALK AJUDA precisa ser agendado. Acesse o link para escolher a data e o horário do seu atendimento:'),
-	`confirmationMessage` text NOT NULL DEFAULT ('Seu atendimento foi agendado com sucesso! Guarde a data e o horário escolhidos. O atendimento será feito pelo WhatsApp nesse horário.'),
-	`noShowWarning` text NOT NULL DEFAULT ('ATENÇÃO: O atendimento será feito pelo WhatsApp no horário escolhido. Fique disponível no seu WhatsApp nesse horário. Se você não atender quando for chamado, será necessário reagendar.'),
+	`introMessage` text NOT NULL DEFAULT ('Seu pedido precisa ser agendado. Escolha abaixo a melhor data e horÃ¡rio disponÃ­vel para o seu atendimento.'),
+	`emailSubject` varchar(256) NOT NULL DEFAULT 'Agende seu atendimento - H2 COLOMBIANO',
+	`emailMessage` text NOT NULL DEFAULT ('OlÃ¡! Seu pedido precisa ser agendado. Clique no link abaixo para escolher a data e o horÃ¡rio do seu atendimento.'),
+	`whatsappMessage` text NOT NULL DEFAULT ('OlÃ¡! Seu pedido na H2 COLOMBIANO precisa ser agendado. Acesse o link para escolher a data e o horÃ¡rio do seu atendimento:'),
+	`confirmationMessage` text NOT NULL DEFAULT ('Seu atendimento foi agendado com sucesso! Guarde a data e o horÃ¡rio escolhidos. O atendimento serÃ¡ feito pelo WhatsApp nesse horÃ¡rio.'),
+	`noShowWarning` text NOT NULL DEFAULT ('ATENÃ‡ÃƒO: O atendimento serÃ¡ feito pelo WhatsApp no horÃ¡rio escolhido. Fique disponÃ­vel no seu WhatsApp nesse horÃ¡rio. Se vocÃª nÃ£o atender quando for chamado, serÃ¡ necessÃ¡rio reagendar.'),
 	`accentColor` varchar(32) NOT NULL DEFAULT '#8b5cf6',
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `scheduleConfig_id` PRIMARY KEY(`id`)

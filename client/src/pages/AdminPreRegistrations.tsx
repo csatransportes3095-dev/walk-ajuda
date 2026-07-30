@@ -22,8 +22,8 @@ function buildWhatsAppLink(phone: string | null | undefined, name: string, statu
   if (!clean) return null;
   const num = clean.startsWith("55") ? clean : `55${clean}`;
   const msg = status === "aprovado"
-    ? `Olá ${name}! 🎉 Seu pré-cadastro na *Walk Ajuda* foi *APROVADO*! Entre em contato conosco para dar continuidade ao processo.`
-    : `Olá ${name}. Infelizmente seu pré-cadastro na *Walk Ajuda* não foi aprovado desta vez. Qualquer dúvida, entre em contato.`;
+    ? `OlÃ¡ ${name}! ðŸŽ‰ Seu prÃ©-cadastro na *H2 COLOMBIANO* foi *APROVADO*! Entre em contato conosco para dar continuidade ao processo.`
+    : `OlÃ¡ ${name}. Infelizmente seu prÃ©-cadastro na *H2 COLOMBIANO* nÃ£o foi aprovado desta vez. Qualquer dÃºvida, entre em contato.`;
   return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 }
 
@@ -46,7 +46,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function fmtDate(ts: number | null | undefined) {
-  if (!ts) return "—";
+  if (!ts) return "â€”";
   return new Date(ts).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -77,7 +77,7 @@ export default function AdminPreRegistrations() {
   const [viewModal, setViewModal] = useState<any | null>(null);
   const [editModal, setEditModal] = useState<any | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  // Respostas dinâmicas editadas no modal de edição
+  // Respostas dinÃ¢micas editadas no modal de ediÃ§Ã£o
   const [editDynAnswers, setEditDynAnswers] = useState<Record<number, string>>({});
 
   // Dados
@@ -85,22 +85,22 @@ export default function AdminPreRegistrations() {
     search, status: statusFilter, page, limit,
   });
 
-  // Perguntas dinâmicas do pré-cadastro
+  // Perguntas dinÃ¢micas do prÃ©-cadastro
   const { data: dynQuestions } = trpc.preCadastroQuestions.listAll.useQuery();
 
-  // Respostas dinâmicas do registro sendo visualizado
+  // Respostas dinÃ¢micas do registro sendo visualizado
   const { data: viewAnswers } = trpc.preRegistrations.getAnswers.useQuery(
     { preRegistrationId: viewModal?.id ?? 0 },
     { enabled: !!viewModal?.id }
   );
 
-  // Respostas dinâmicas do registro sendo editado
+  // Respostas dinÃ¢micas do registro sendo editado
   const { data: editAnswersData } = trpc.preRegistrations.getAnswers.useQuery(
     { preRegistrationId: editModal?.id ?? 0 },
     { enabled: !!editModal?.id }
   );
 
-  // Sincronizar respostas dinâmicas ao abrir o modal de edição
+  // Sincronizar respostas dinÃ¢micas ao abrir o modal de ediÃ§Ã£o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (editAnswersData) {
@@ -112,7 +112,7 @@ export default function AdminPreRegistrations() {
     }
   }, [editAnswersData, editModal?.id]);
 
-  // Mutation para salvar resposta dinâmica
+  // Mutation para salvar resposta dinÃ¢mica
   const upsertAnswerMut = trpc.preRegistrations.upsertAnswer.useMutation();
 
   // Mutations
@@ -125,7 +125,7 @@ export default function AdminPreRegistrations() {
     onError: (e) => toast.error(e.message),
   });
   const deleteMutation = trpc.preRegistrations.delete.useMutation({
-    onSuccess: () => { utils.preRegistrations.list.invalidate(); setDeleteId(null); toast.success("Excluído com sucesso!"); },
+    onSuccess: () => { utils.preRegistrations.list.invalidate(); setDeleteId(null); toast.success("ExcluÃ­do com sucesso!"); },
     onError: (e) => toast.error("Erro ao excluir: " + e.message),
   });
 
@@ -134,10 +134,10 @@ export default function AdminPreRegistrations() {
     try {
       const result = await utils.preRegistrations.exportAll.fetch({ status: statusFilter });
       if (!result?.length) { toast.info("Nenhum dado para exportar."); return; }
-      const headers = ["ID","Nome","Email","CPF","Contas Fake","Aparelho","Óculos","Foto","Indicado por","Tel. Indicador","Conta Parente","Nome Uber","Status","Data"];
+      const headers = ["ID","Nome","Email","CPF","Contas Fake","Aparelho","Ã“culos","Foto","Indicado por","Tel. Indicador","Conta Parente","Nome Uber","Status","Data"];
       const rows = result.map((r: any) => [
         r.id, r.fullName, r.email, r.cpf, r.fakAccountsCount ?? r.fakeAccountsCount ?? "",
-        r.deviceType, r.acceptsGlasses ? "Sim" : "Não", r.acceptsScheduledPhoto ? "Sim" : "Não",
+        r.deviceType, r.acceptsGlasses ? "Sim" : "NÃ£o", r.acceptsScheduledPhoto ? "Sim" : "NÃ£o",
         r.referralName ?? "", r.referralPhone ?? "", r.parentAccount ?? "", r.uberNameType ?? "",
         r.status, fmtDate(r.createdAt)
       ]);
@@ -159,7 +159,7 @@ export default function AdminPreRegistrations() {
       <div className="sticky top-0 z-10 bg-[#0d0d20] border-b border-white/10 px-4 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-lg font-bold text-white">📋 Pré-Cadastros</h1>
+            <h1 className="text-lg font-bold text-white">ðŸ“‹ PrÃ©-Cadastros</h1>
             <p className="text-xs text-gray-400">{total} registro{total !== 1 ? "s" : ""} encontrado{total !== 1 ? "s" : ""}</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -212,7 +212,7 @@ export default function AdminPreRegistrations() {
         ) : rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-500">
             <User size={40} className="mb-3 opacity-30" />
-            <p className="text-sm">Nenhum pré-cadastro encontrado</p>
+            <p className="text-sm">Nenhum prÃ©-cadastro encontrado</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -233,7 +233,7 @@ export default function AdminPreRegistrations() {
                   <StatusBadge status={row.status} />
                 </div>
 
-                {/* Linha 2: detalhes rápidos */}
+                {/* Linha 2: detalhes rÃ¡pidos */}
                 <div className="flex flex-wrap gap-2 mb-3">
                   {row.deviceType && (
                     <span className="flex items-center gap-1 text-xs bg-white/5 border border-white/10 rounded-full px-2 py-0.5 text-gray-300">
@@ -246,10 +246,10 @@ export default function AdminPreRegistrations() {
                     </span>
                   )}
                   <span className={`flex items-center gap-1 text-xs rounded-full px-2 py-0.5 border ${row.acceptsGlasses ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}>
-                    <Glasses size={10} /> Óculos: {row.acceptsGlasses ? "✓" : "✗"}
+                    <Glasses size={10} /> Ã“culos: {row.acceptsGlasses ? "âœ“" : "âœ—"}
                   </span>
                   <span className={`flex items-center gap-1 text-xs rounded-full px-2 py-0.5 border ${row.acceptsScheduledPhoto ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}>
-                    <Camera size={10} /> Foto: {row.acceptsScheduledPhoto ? "✓" : "✗"}
+                    <Camera size={10} /> Foto: {row.acceptsScheduledPhoto ? "âœ“" : "âœ—"}
                   </span>
                   {row.uberNameType && (
                     <span className="flex items-center gap-1 text-xs bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-0.5 text-blue-400">
@@ -263,11 +263,11 @@ export default function AdminPreRegistrations() {
                   )}
                 </div>
 
-                {/* Linha 3: data + ações */}
+                {/* Linha 3: data + aÃ§Ãµes */}
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <span className="text-xs text-gray-500">{fmtDate(row.createdAt)}</span>
                   <div className="flex items-center gap-2">
-                    {/* Alterar status rápido */}
+                    {/* Alterar status rÃ¡pido */}
                     <select
                       value={row.status}
                       onChange={e => updateStatus.mutate({ id: row.id, status: e.target.value as any })}
@@ -306,14 +306,14 @@ export default function AdminPreRegistrations() {
           </div>
         )}
 
-        {/* Paginação */}
+        {/* PaginaÃ§Ã£o */}
         {totalPages > 1 && (
           <div className="flex items-center justify-center gap-3 py-4">
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
               className="p-2 rounded-lg bg-white/5 border border-white/10 text-gray-400 disabled:opacity-30 hover:bg-white/10 transition-colors">
               <ChevronLeft size={16} />
             </button>
-            <span className="text-sm text-gray-400">Página {page} de {totalPages}</span>
+            <span className="text-sm text-gray-400">PÃ¡gina {page} de {totalPages}</span>
             <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
               className="p-2 rounded-lg bg-white/5 border border-white/10 text-gray-400 disabled:opacity-30 hover:bg-white/10 transition-colors">
               <ChevronRight size={16} />
@@ -322,21 +322,21 @@ export default function AdminPreRegistrations() {
         )}
       </div>
 
-      {/* ── Modal: Ver Detalhes ── */}
+      {/* â”€â”€ Modal: Ver Detalhes â”€â”€ */}
       {viewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setViewModal(null)}>
           <div className="bg-[#12122a] border border-white/15 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            {/* Cabeçalho: nome grande + número + data */}
+            {/* CabeÃ§alho: nome grande + nÃºmero + data */}
             <div className="px-6 pt-6 pb-4 border-b border-white/10 relative">
-              <button onClick={() => setViewModal(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">×</button>
+              <button onClick={() => setViewModal(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">Ã—</button>
               <h2 className="text-2xl font-black text-white uppercase leading-tight pr-8">{viewModal.fullName}</h2>
-              <p className="text-xs text-gray-400 mt-1">#{viewModal.id} · {fmtDate(viewModal.createdAt)}</p>
+              <p className="text-xs text-gray-400 mt-1">#{viewModal.id} Â· {fmtDate(viewModal.createdAt)}</p>
               <div className="mt-3"><StatusBadge status={viewModal.status} /></div>
             </div>
-            {/* Todas as respostas do formulário — APENAS as criadas pelo admin, na ordem, com subperguntas junto ao pai */}
+            {/* Todas as respostas do formulÃ¡rio â€” APENAS as criadas pelo admin, na ordem, com subperguntas junto ao pai */}
             <div className="px-5 pb-4">
               {viewAnswers && viewAnswers.length > 0 ? (() => {
-                // Usar respostas dinâmicas como única fonte de verdade
+                // Usar respostas dinÃ¢micas como Ãºnica fonte de verdade
                 const allAnswers = viewAnswers.filter((a: any) => a.answer && String(a.answer).trim());
                 const roots = allAnswers.filter((a: any) => !a.parentQuestionId);
                 const subs = allAnswers.filter((a: any) => !!a.parentQuestionId);
@@ -361,7 +361,7 @@ export default function AdminPreRegistrations() {
                                 return (
                                   <div key={child.id}>
                                     <div className="flex items-start gap-2 py-1.5">
-                                      <span className="text-purple-400 text-xs mt-0.5">↳</span>
+                                      <span className="text-purple-400 text-xs mt-0.5">â†³</span>
                                       <div className="flex-1 min-w-0">
                                         <div className="text-xs text-gray-500">{child.label || child.fieldKey}</div>
                                         <div className="text-sm text-gray-200">{child.answer}</div>
@@ -371,7 +371,7 @@ export default function AdminPreRegistrations() {
                                       <div className="ml-4 border-l-2 border-purple-500/20 pl-3">
                                         {grandchildren.map((gc: any) => (
                                           <div key={gc.id} className="flex items-start gap-2 py-1">
-                                            <span className="text-purple-300 text-xs mt-0.5">↳</span>
+                                            <span className="text-purple-300 text-xs mt-0.5">â†³</span>
                                             <div className="flex-1 min-w-0">
                                               <div className="text-xs text-gray-500">{gc.label || gc.fieldKey}</div>
                                               <div className="text-sm text-gray-200">{gc.answer}</div>
@@ -388,7 +388,7 @@ export default function AdminPreRegistrations() {
                         </div>
                       );
                     })}
-                    {/* Sub-perguntas cujo pai não respondeu (edge case) */}
+                    {/* Sub-perguntas cujo pai nÃ£o respondeu (edge case) */}
                     {subs.filter((s: any) => !roots.find((r: any) => r.questionId === s.parentQuestionId)).map((a: any) => (
                       <div key={a.id} className="flex items-start gap-3 py-2.5">
                         <span className="text-purple-400 mt-0.5 flex-shrink-0"><Hash size={14} /></span>
@@ -420,7 +420,7 @@ export default function AdminPreRegistrations() {
               <div className="flex gap-2">
                 <button onClick={() => { setViewModal(null); setEditModal({ ...viewModal }); }}
                   className="flex-1 py-2 rounded-xl bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-sm font-medium hover:bg-yellow-500/30 transition-colors">
-                  ✏️ Editar
+                  âœï¸ Editar
                 </button>
                 <button onClick={() => setViewModal(null)}
                   className="flex-1 py-2 rounded-xl bg-white/5 border border-white/10 text-gray-400 text-sm font-medium hover:bg-white/10 transition-colors">
@@ -432,13 +432,13 @@ export default function AdminPreRegistrations() {
         </div>
       )}
 
-      {/* ── Modal: Editar ── */}
+      {/* â”€â”€ Modal: Editar â”€â”€ */}
       {editModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setEditModal(null)}>
           <div className="bg-[#12122a] border border-white/15 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-[#12122a] border-b border-white/10 px-5 py-4 flex items-center justify-between">
-              <h2 className="font-bold text-white">✏️ Editar Pré-Cadastro #{editModal.id}</h2>
-              <button onClick={() => setEditModal(null)} className="text-gray-500 hover:text-white text-xl leading-none">×</button>
+              <h2 className="font-bold text-white">âœï¸ Editar PrÃ©-Cadastro #{editModal.id}</h2>
+              <button onClick={() => setEditModal(null)} className="text-gray-500 hover:text-white text-xl leading-none">Ã—</button>
             </div>
             <div className="px-5 py-4 space-y-4">
               {/* Linha 1: Nome + WhatsApp */}
@@ -454,7 +454,7 @@ export default function AdminPreRegistrations() {
                     className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500/50" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 mb-1 block">WhatsApp (DDD+número)</label>
+                  <label className="text-xs text-gray-400 mb-1 block">WhatsApp (DDD+nÃºmero)</label>
                   <input value={editModal.phone ?? ""} onChange={e => setEditModal((p: any) => ({ ...p, phone: e.target.value.replace(/\D/g,'').slice(0,11) }))}
                     placeholder="11999999999"
                     className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500/50" />
@@ -472,9 +472,9 @@ export default function AdminPreRegistrations() {
                 </div>
               </div>
 
-              {/* Aparelho e condições */}
+              {/* Aparelho e condiÃ§Ãµes */}
               <div>
-                <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">Aparelho e Condições</p>
+                <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">Aparelho e CondiÃ§Ãµes</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-gray-400 mb-1 block">Aparelho</label>
@@ -488,10 +488,10 @@ export default function AdminPreRegistrations() {
                     <label className="text-xs text-gray-400 mb-1 block">Nome na conta Uber</label>
                     <select value={editModal.uberNameType ?? ""} onChange={e => setEditModal((p: any) => ({ ...p, uberNameType: e.target.value }))}
                       className="w-full px-3 py-2 bg-[#1a1a3a] border border-white/10 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-purple-500/50">
-                      <option value="">Não informado</option>
+                      <option value="">NÃ£o informado</option>
                       <option value="Primeiro Nome">Primeiro Nome</option>
                       <option value="Nome Completo">Nome Completo</option>
-                      <option value="Nome Aleatório">Nome Aleatório</option>
+                      <option value="Nome AleatÃ³rio">Nome AleatÃ³rio</option>
                       <option value="S">S</option>
                     </select>
                   </div>
@@ -500,7 +500,7 @@ export default function AdminPreRegistrations() {
                       <input type="checkbox" checked={!!editModal.acceptsGlasses}
                         onChange={e => setEditModal((p: any) => ({ ...p, acceptsGlasses: e.target.checked }))}
                         className="w-4 h-4 rounded accent-purple-500" />
-                      <span className="text-sm text-gray-300">Aceita óculos</span>
+                      <span className="text-sm text-gray-300">Aceita Ã³culos</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={!!editModal.acceptsScheduledPhoto}
@@ -512,9 +512,9 @@ export default function AdminPreRegistrations() {
                 </div>
               </div>
 
-              {/* Indicação */}
+              {/* IndicaÃ§Ã£o */}
               <div>
-                <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">Indicação</p>
+                <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">IndicaÃ§Ã£o</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-gray-400 mb-1 block">Nome de quem indicou</label>
@@ -534,10 +534,10 @@ export default function AdminPreRegistrations() {
                 </div>
               </div>
 
-              {/* Perguntas dinâmicas do pré-cadastro */}
+              {/* Perguntas dinÃ¢micas do prÃ©-cadastro */}
               {dynQuestions && dynQuestions.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">Perguntas do Formulário</p>
+                  <p className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">Perguntas do FormulÃ¡rio</p>
                   <div className="space-y-2">
                     {dynQuestions.filter((q: any) => !q.parentQuestionId).map((q: any) => (
                       <div key={q.id}>
@@ -567,12 +567,12 @@ export default function AdminPreRegistrations() {
                             className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500/50"
                           />
                         )}
-                        {/* Sub-perguntas visíveis */}
+                        {/* Sub-perguntas visÃ­veis */}
                         {dynQuestions
                           .filter((sq: any) => sq.parentQuestionId === q.id && (!sq.triggerOption || editDynAnswers[q.id] === sq.triggerOption))
                           .map((sq: any) => (
                             <div key={sq.id} className="ml-4 mt-2">
-                              <label className="text-xs text-gray-500 mb-1 block">↳ {sq.label}</label>
+                              <label className="text-xs text-gray-500 mb-1 block">â†³ {sq.label}</label>
                               {sq.fieldType === 'select' || sq.fieldType === 'radio' ? (
                                 <select
                                   value={editDynAnswers[sq.id] ?? ""}
@@ -591,12 +591,12 @@ export default function AdminPreRegistrations() {
                                   className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500/50"
                                 />
                               )}
-                              {/* Sub-sub-perguntas visíveis */}
+                              {/* Sub-sub-perguntas visÃ­veis */}
                               {dynQuestions
                                 .filter((ssq: any) => ssq.parentQuestionId === sq.id && (!ssq.triggerOption || editDynAnswers[sq.id] === ssq.triggerOption))
                                 .map((ssq: any) => (
                                   <div key={ssq.id} className="ml-4 mt-2">
-                                    <label className="text-xs text-gray-500 mb-1 block">↳↳ {ssq.label}</label>
+                                    <label className="text-xs text-gray-500 mb-1 block">â†³â†³ {ssq.label}</label>
                                     <input
                                       value={editDynAnswers[ssq.id] ?? ""}
                                       onChange={e => setEditDynAnswers(prev => ({ ...prev, [ssq.id]: e.target.value }))}
@@ -612,18 +612,18 @@ export default function AdminPreRegistrations() {
                 </div>
               )}
 
-              {/* Motivo da Reprovação */}
+              {/* Motivo da ReprovaÃ§Ã£o */}
               {editModal.status === "reprovado" && (
                 <div>
-                  <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Motivo da Reprovação</p>
+                  <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Motivo da ReprovaÃ§Ã£o</p>
                   <textarea
                     value={editModal.rejectionReason ?? ""}
                     onChange={e => setEditModal((p: any) => ({ ...p, rejectionReason: e.target.value }))}
-                    placeholder="Informe o motivo da reprovação para o cliente..."
+                    placeholder="Informe o motivo da reprovaÃ§Ã£o para o cliente..."
                     rows={3}
                     className="w-full px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500/50 resize-none"
                   />
-                  <p className="text-xs text-red-400/70 mt-1">⚠️ Este motivo será exibido para o cliente na página de consulta de status.</p>
+                  <p className="text-xs text-red-400/70 mt-1">âš ï¸ Este motivo serÃ¡ exibido para o cliente na pÃ¡gina de consulta de status.</p>
                 </div>
               )}
 
@@ -669,7 +669,7 @@ export default function AdminPreRegistrations() {
                     uberNameType: editModal.uberNameType || null,
                     rejectionReason: editModal.rejectionReason || null,
                   });
-                  // Salvar respostas dinâmicas
+                  // Salvar respostas dinÃ¢micas
                   if (dynQuestions) {
                     for (const q of dynQuestions) {
                       const answer = editDynAnswers[q.id];
@@ -687,22 +687,22 @@ export default function AdminPreRegistrations() {
                 }}
                 disabled={updateMutation.isPending}
                 className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold transition-colors disabled:opacity-50">
-                {updateMutation.isPending ? "Salvando..." : "💾 Salvar"}
+                {updateMutation.isPending ? "Salvando..." : "ðŸ’¾ Salvar"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Modal: Confirmar Exclusão ── */}
+      {/* â”€â”€ Modal: Confirmar ExclusÃ£o â”€â”€ */}
       {deleteId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setDeleteId(null)}>
           <div className="bg-[#12122a] border border-red-500/30 rounded-2xl w-full max-w-sm p-6 text-center" onClick={e => e.stopPropagation()}>
             <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
               <Trash2 size={24} className="text-red-400" />
             </div>
-            <h3 className="text-lg font-bold text-white mb-2">Excluir Pré-Cadastro</h3>
-            <p className="text-sm text-gray-400 mb-6">Tem certeza? Esta ação não pode ser desfeita.</p>
+            <h3 className="text-lg font-bold text-white mb-2">Excluir PrÃ©-Cadastro</h3>
+            <p className="text-sm text-gray-400 mb-6">Tem certeza? Esta aÃ§Ã£o nÃ£o pode ser desfeita.</p>
             <div className="flex gap-3">
               <button onClick={() => setDeleteId(null)}
                 className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-gray-400 text-sm font-medium hover:bg-white/10 transition-colors">

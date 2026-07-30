@@ -213,14 +213,14 @@ describe('Email Notifications - updateStatus', () => {
     (nodemailer.default.createTransport as ReturnType<typeof vi.fn>).mockReturnValue({ sendMail: mockSendMail });
     
     (getSetting as ReturnType<typeof vi.fn>).mockImplementation((key: string) => {
-      if (key === 'contact_email') return Promise.resolve('walkajuda@walkajuda.com');
-      if (key === 'site_title') return Promise.resolve('Walk Ajuda');
+      if (key === 'contact_email') return Promise.resolve('h2@h2colombiano.com');
+      if (key === 'site_title') return Promise.resolve('H2 COLOMBIANO');
       return Promise.resolve(null);
     });
     
     (getStatusInfoFromDb as ReturnType<typeof vi.fn>).mockResolvedValue({
       label: 'Processando',
-      description: 'Seu pedido está sendo processado',
+      description: 'Seu pedido estÃ¡ sendo processado',
     });
     
     (updateLastOrderStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
@@ -238,7 +238,7 @@ describe('Email Notifications - updateStatus', () => {
       subOrderIndex: 0,
       customerPhone: '(11) 98765-4321',
       customerEmail: 'customer@example.com',
-      customerName: 'João Silva',
+      customerName: 'JoÃ£o Silva',
       status: 'processando',
       note: 'Iniciando processamento',
       serviceName: 'Conta Uber',
@@ -251,10 +251,10 @@ describe('Email Notifications - updateStatus', () => {
     expect(mockSendMail).toHaveBeenCalledTimes(2);
 
     const adminCall = mockSendMail.mock.calls[0][0];
-    expect(adminCall.to).toBe('walkajuda@walkajuda.com');
+    expect(adminCall.to).toBe('h2@h2colombiano.com');
     expect(adminCall.subject).toContain('[ADMIN]');
     expect(adminCall.subject).toContain('Processando');
-    expect(adminCall.html).toContain('João Silva');
+    expect(adminCall.html).toContain('JoÃ£o Silva');
 
     const customerCall = mockSendMail.mock.calls[1][0];
     expect(customerCall.to).toBe('customer@example.com');
@@ -273,7 +273,7 @@ describe('Email Notifications - updateStatus', () => {
       subOrderIndex: 0,
       customerPhone: '(11) 98765-4321',
       customerEmail: 'customer@example.com',
-      customerName: 'João Silva',
+      customerName: 'JoÃ£o Silva',
       status: 'processando',
       skipEmail: true,
     });
@@ -281,6 +281,6 @@ describe('Email Notifications - updateStatus', () => {
     expect(result.success).toBe(true);
     expect(mockSendMail).toHaveBeenCalledOnce();
     const adminCall = mockSendMail.mock.calls[0][0];
-    expect(adminCall.to).toBe('walkajuda@walkajuda.com');
+    expect(adminCall.to).toBe('h2@h2colombiano.com');
   });
 });

@@ -5,14 +5,14 @@ export default function VideoTutorial() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [devToolsWarning, setDevToolsWarning] = useState(false);
 
-  // Buscar URL assinada do vídeo via tRPC (streaming direto do CloudFront)
+  // Buscar URL assinada do vÃ­deo via tRPC (streaming direto do CloudFront)
   const { data: videoData, isLoading, error } = trpc.video.getTutorialUrl.useQuery(undefined, {
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 8, // 8 minutos (URL expira em ~10min)
     retry: 2,
   });
 
-  // Proteção básica contra DevTools
+  // ProteÃ§Ã£o bÃ¡sica contra DevTools
   useEffect(() => {
     const threshold = 160;
     const checkDevTools = () => {
@@ -48,22 +48,22 @@ export default function VideoTutorial() {
       {devToolsWarning && (
         <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
           <div className="text-center px-8">
-            <div className="text-6xl mb-4">🚫</div>
+            <div className="text-6xl mb-4">ðŸš«</div>
             <h1 className="text-white text-2xl font-bold mb-2">Acesso Bloqueado</h1>
             <p className="text-gray-400 text-sm">Feche as ferramentas de desenvolvedor para continuar.</p>
           </div>
         </div>
       )}
 
-      {/* Título */}
+      {/* TÃ­tulo */}
       <div className="text-center mb-5 w-full max-w-sm">
         <h1 className="text-white text-xl font-bold tracking-wide">
-          🎬 Tutorial de Ativação
+          ðŸŽ¬ Tutorial de AtivaÃ§Ã£o
         </h1>
         <p className="text-gray-400 text-xs mt-1">Assista para aprender como ativar sua conta</p>
       </div>
 
-      {/* Player de Vídeo — formato vertical 9:16 */}
+      {/* Player de VÃ­deo â€” formato vertical 9:16 */}
       <div
         className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-900 border border-gray-700 w-full"
         style={{ maxWidth: 360 }}
@@ -84,8 +84,8 @@ export default function VideoTutorial() {
             style={{ aspectRatio: "9/16" }}
           >
             <div className="text-center px-4">
-              <div className="text-4xl mb-2">⚠️</div>
-              <p className="text-red-400 text-sm">Erro ao carregar vídeo.</p>
+              <div className="text-4xl mb-2">âš ï¸</div>
+              <p className="text-red-400 text-sm">Erro ao carregar vÃ­deo.</p>
               <button
                 onClick={() => window.location.reload()}
                 className="mt-3 px-4 py-2 bg-white text-black text-xs font-bold rounded-lg"
@@ -117,9 +117,9 @@ export default function VideoTutorial() {
         )}
       </div>
 
-      {/* Rodapé */}
+      {/* RodapÃ© */}
       <div className="text-center mt-5">
-        <p className="text-gray-600 text-xs">© Walk Ajuda — Conteúdo exclusivo para clientes</p>
+        <p className="text-gray-600 text-xs">Â© H2 COLOMBIANO â€” ConteÃºdo exclusivo para clientes</p>
       </div>
     </div>
   );

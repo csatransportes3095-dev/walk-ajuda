@@ -7,9 +7,9 @@ export default function AdminProtectedPhoto() {
   const utils = trpc.useUtils();
   const { data: photos, isLoading } = trpc.protectedPhotos.list.useQuery();
 
-  const [title, setTitle] = useState("📸 Foto protegida");
+  const [title, setTitle] = useState("ðŸ“¸ Foto protegida");
   const [message, setMessage] = useState(
-    "Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\n✅ O acesso será registrado automaticamente."
+    "Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\nâœ… O acesso serÃ¡ registrado automaticamente."
   );
   const [preview, setPreview] = useState<string | null>(null);
   const [imageData, setImageData] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export default function AdminProtectedPhoto() {
   const [viewingLogsPhotoId, setViewingLogsPhotoId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const siteLink = typeof window !== "undefined" ? window.location.origin + "/foto" : "https://walkajuda.com/foto";
+  const siteLink = typeof window !== "undefined" ? window.location.origin + "/foto" : "https://h2colombiano.com/foto";
 
   const { data: accessLogs, isLoading: logsLoading } = trpc.protectedPhotos.listAccessLogs.useQuery(
     { photoId: viewingLogsPhotoId ?? undefined },
@@ -31,8 +31,8 @@ export default function AdminProtectedPhoto() {
       utils.protectedPhotos.list.invalidate();
       setPreview(null);
       setImageData(null);
-      setTitle("📸 Foto protegida");
-      setMessage("Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\n✅ O acesso será registrado automaticamente.");
+      setTitle("ðŸ“¸ Foto protegida");
+      setMessage("Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\nâœ… O acesso serÃ¡ registrado automaticamente.");
       toast.success("Foto protegida salva com sucesso!");
       setUploading(false);
     },
@@ -54,14 +54,14 @@ export default function AdminProtectedPhoto() {
   const clearLogsMut = trpc.protectedPhotos.clearAccessLogs.useMutation({
     onSuccess: () => {
       utils.protectedPhotos.listAccessLogs.invalidate();
-      toast.success("Histórico limpo!");
+      toast.success("HistÃ³rico limpo!");
     },
   });
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { toast.error("Arquivo muito grande (máx 10MB)"); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Arquivo muito grande (mÃ¡x 10MB)"); return; }
     setMimeType(file.type || "image/jpeg");
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -74,7 +74,7 @@ export default function AdminProtectedPhoto() {
 
   const handleSave = () => {
     if (!imageData) { toast.error("Selecione uma imagem"); return; }
-    if (!title.trim()) { toast.error("Digite um título"); return; }
+    if (!title.trim()) { toast.error("Digite um tÃ­tulo"); return; }
     if (!message.trim()) { toast.error("Digite uma mensagem"); return; }
     setUploading(true);
     uploadMut.mutate({ title: title.trim(), message: message.trim(), imageData, mimeType });
@@ -119,13 +119,13 @@ export default function AdminProtectedPhoto() {
           <h1 className="text-lg font-bold text-white">Foto Protegida</h1>
         </div>
         <p className="text-sm text-gray-400">
-          A foto protegida aparece na página inicial. Clientes <strong className="text-white">sem número cadastrado</strong> veem a foto bloqueada.
-          Clientes <strong className="text-white">com número cadastrado</strong> veem a foto liberada automaticamente.
+          A foto protegida aparece na pÃ¡gina inicial. Clientes <strong className="text-white">sem nÃºmero cadastrado</strong> veem a foto bloqueada.
+          Clientes <strong className="text-white">com nÃºmero cadastrado</strong> veem a foto liberada automaticamente.
         </p>
 
         {/* Link para compartilhar */}
         <div style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '12px', padding: '16px' }}>
-          <p className="text-xs text-purple-300 font-semibold mb-2">🔗 Link para compartilhar com clientes</p>
+          <p className="text-xs text-purple-300 font-semibold mb-2">ðŸ”— Link para compartilhar com clientes</p>
           <div className="flex items-center gap-2">
             <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '10px 14px', flex: 1, overflow: 'hidden' }}>
               <p className="text-white text-sm truncate">{siteLink}</p>
@@ -138,10 +138,10 @@ export default function AdminProtectedPhoto() {
               {copiedLink ? "Copiado!" : "Copiar"}
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-2">Envie este link para seus clientes. Quem tiver número cadastrado verá a foto automaticamente.</p>
+          <p className="text-xs text-gray-500 mt-2">Envie este link para seus clientes. Quem tiver nÃºmero cadastrado verÃ¡ a foto automaticamente.</p>
         </div>
 
-        {/* Formulário de upload */}
+        {/* FormulÃ¡rio de upload */}
         <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '16px' }} className="space-y-4">
           <p className="text-sm font-semibold text-purple-300">Nova Foto Protegida</p>
           <div
@@ -154,17 +154,17 @@ export default function AdminProtectedPhoto() {
               <div className="space-y-2">
                 <ImageIcon className="w-10 h-10 text-purple-400/50 mx-auto" />
                 <p className="text-sm text-gray-400">Clique para selecionar a imagem</p>
-                <p className="text-xs text-gray-600">JPG, PNG, WEBP — máx 10MB</p>
+                <p className="text-xs text-gray-600">JPG, PNG, WEBP â€” mÃ¡x 10MB</p>
               </div>
             )}
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
           </div>
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Título</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} placeholder="📸 Foto protegida" />
+            <label className="text-xs text-gray-400 block mb-1">TÃ­tulo</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} placeholder="ðŸ“¸ Foto protegida" />
           </div>
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Mensagem para quem não tem acesso</label>
+            <label className="text-xs text-gray-400 block mb-1">Mensagem para quem nÃ£o tem acesso</label>
             <textarea
               value={message}
               onChange={e => setMessage(e.target.value)}
@@ -201,7 +201,7 @@ export default function AdminProtectedPhoto() {
                     <p className="text-sm font-semibold text-white truncate">{photo.title}</p>
                     <p className="text-xs text-gray-400 mt-1 line-clamp-2">{photo.message}</p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-                      {/* Botões de reordenação */}
+                      {/* BotÃµes de reordenaÃ§Ã£o */}
                       <div style={{ display: 'flex', gap: '4px' }}>
                         <button
                           onClick={() => reorderMut.mutate({ id: photo.id, direction: 'up' })}
@@ -247,11 +247,11 @@ export default function AdminProtectedPhoto() {
                 {viewingLogsPhotoId === photo.id && (
                   <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <p className="text-xs font-semibold text-blue-300">👁 Quem visualizou esta foto</p>
+                      <p className="text-xs font-semibold text-blue-300">ðŸ‘ Quem visualizou esta foto</p>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         {accessLogs && accessLogs.length > 0 && (
                           <button
-                            onClick={() => { if (confirm('Limpar todo o histórico de acessos?')) clearLogsMut.mutate({ photoId: photo.id }); }}
+                            onClick={() => { if (confirm('Limpar todo o histÃ³rico de acessos?')) clearLogsMut.mutate({ photoId: photo.id }); }}
                             style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: 'none', background: 'rgba(239,68,68,0.15)', color: '#f87171' }}
                           >
                             <X className="w-3 h-3" />
@@ -275,7 +275,7 @@ export default function AdminProtectedPhoto() {
                         {accessLogs.map((log) => (
                           <div key={log.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: 'rgba(59,130,246,0.07)', borderRadius: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '16px' }}>📱</span>
+                              <span style={{ fontSize: '16px' }}>ðŸ“±</span>
                               <span className="text-sm font-mono text-white">{formatPhone(log.phone)}</span>
                             </div>
                             <span className="text-xs text-gray-400">{formatDate(log.accessedAt)}</span>

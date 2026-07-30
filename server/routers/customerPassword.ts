@@ -1,5 +1,5 @@
-// Router de senha do sistema de cadastro (walkajuda.com/admin/customers)
-// Mesma lógica do Gestor de Gastos (spreadsheet), adaptada para a tabela customers
+// Router de senha do sistema de cadastro (h2colombiano.com/admin/customers)
+// Mesma lÃ³gica do Gestor de Gastos (spreadsheet), adaptada para a tabela customers
 
 import { randomBytes } from "crypto";
 import { TRPCError } from "@trpc/server";
@@ -18,7 +18,7 @@ import bcrypt from "bcryptjs";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function getPasswordMode(): Promise<"auto" | "manual"> {
   const db = (await getDb()) as any;
@@ -73,7 +73,7 @@ async function getCustomerByPhoneOrCpf(input: string) {
     .where(eq(customers.phone, clean))
     .limit(1);
   if (byPhone?.[0]) return { customer: byPhone[0], resolvedPhone: clean };
-  // Tenta por CPF (11 dígitos)
+  // Tenta por CPF (11 dÃ­gitos)
   if (clean.length === 11) {
     const byCpf = await db
       .select()
@@ -93,10 +93,10 @@ async function getCustomerByPhoneOrCpf(input: string) {
   return null;
 }
 
-// ─── router ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ router â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const customerPasswordRouter = router({
-  // ── Modo global (auto / manual) ──────────────────────────────────────────
+  // â”€â”€ Modo global (auto / manual) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   getMode: publicProcedure.query(async () => {
     const mode = await getPasswordMode();
@@ -107,7 +107,7 @@ export const customerPasswordRouter = router({
     .input(z.object({ mode: z.enum(["auto", "manual"]) }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponÃ­vel" });
       const val = input.mode === "auto" ? "false" : "true";
       await db
         .insert(appSettings)
@@ -116,7 +116,7 @@ export const customerPasswordRouter = router({
       return { success: true, mode: input.mode };
     }),
 
-  // ── Verificar status do cliente (para a tela de login) ───────────────────
+  // â”€â”€ Verificar status do cliente (para a tela de login) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   checkStatus: publicProcedure
     .input(z.object({ phone: z.string() }))
@@ -135,7 +135,7 @@ export const customerPasswordRouter = router({
       return { status: "active" as const, name: cust.name, phone: resolvedPhone, hasCpf: !!(cust.cpf) };
     }),
 
-  // ── Verificar status da senha (mutation para uso dinâmico) ─────────────────
+  // â”€â”€ Verificar status da senha (mutation para uso dinÃ¢mico) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   checkStatusMutation: publicProcedure
     .input(z.object({ phone: z.string() }))
@@ -154,46 +154,46 @@ export const customerPasswordRouter = router({
       return { status: "active" as const, name: cust.name, phone: resolvedPhone, hasCpf: !!(cust.cpf) };
     }),
 
-  // ── Salvar CPF do cliente (obrigatório antes de criar senha) ──────────────
+  // â”€â”€ Salvar CPF do cliente (obrigatÃ³rio antes de criar senha) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   saveCpf: publicProcedure
     .input(z.object({ phone: z.string(), cpf: z.string().min(11) }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponÃ­vel" });
       const cleanPhone = input.phone.replace(/\D/g, "");
       const cleanCpf = input.cpf.replace(/\D/g, "");
-      if (cleanCpf.length !== 11) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido" });
+      if (cleanCpf.length !== 11) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF invÃ¡lido" });
       // Formatar CPF como 000.000.000-00
       const formattedCpf = `${cleanCpf.slice(0,3)}.${cleanCpf.slice(3,6)}.${cleanCpf.slice(6,9)}-${cleanCpf.slice(9)}`;
-      // Verificar se CPF já pertence a outro cliente
+      // Verificar se CPF jÃ¡ pertence a outro cliente
       const existing = await db.select().from(customers)
         .where(eq(customers.cpf, formattedCpf)).limit(1);
       if (existing?.[0] && existing[0].phone !== cleanPhone) {
-        throw new TRPCError({ code: "CONFLICT", message: "CPF já cadastrado por outro cliente." });
+        throw new TRPCError({ code: "CONFLICT", message: "CPF jÃ¡ cadastrado por outro cliente." });
       }
       await db.update(customers).set({ cpf: formattedCpf }).where(eq(customers.phone, cleanPhone));
       return { success: true };
     }),
 
-  // ── Cliente cria senha (modo auto) ───────────────────────────────────────
+  // â”€â”€ Cliente cria senha (modo auto) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   clientCreateAuto: publicProcedure
     .input(z.object({ phone: z.string(), password: z.string().min(4) }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponÃ­vel" });
       const cleanPhone = input.phone.replace(/\D/g, "");
 
       const mode = await getPasswordMode();
       if (mode !== "auto") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Modo automático não está ativo." });
+        throw new TRPCError({ code: "FORBIDDEN", message: "Modo automÃ¡tico nÃ£o estÃ¡ ativo." });
       }
 
       // Verificar se cliente existe
       const cust = await getCustomerByCleanPhone(cleanPhone);
       if (!cust) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Cliente nÃ£o encontrado." });
       }
 
       // Verificar bloqueio de cadastro
@@ -209,7 +209,7 @@ export const customerPasswordRouter = router({
 
       const hash = await bcrypt.hash(input.password, 10);
 
-      // Verificar se há vencimento preservado
+      // Verificar se hÃ¡ vencimento preservado
       const preservedRows = await db
         .select()
         .from(customerPasswords)
@@ -244,7 +244,7 @@ export const customerPasswordRouter = router({
         clientCreatedAt: new Date(),
       });
 
-      // Criar sessão
+      // Criar sessÃ£o
       const token = randomBytes(32).toString("hex");
       const sessionExpiry = new Date(Date.now() + SESSION_DURATION_MS);
       await db.insert(customerPasswordSessions).values({
@@ -257,19 +257,19 @@ export const customerPasswordRouter = router({
       return { success: true, token, expiresAt: expiresAt.getTime() };
     }),
 
-  // ── Cliente cria senha (modo manual) ─────────────────────────────────────
+  // â”€â”€ Cliente cria senha (modo manual) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   clientCreateManual: publicProcedure
     .input(z.object({ phone: z.string(), password: z.string().min(4) }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponÃ­vel" });
       const cleanPhone = input.phone.replace(/\D/g, "");
 
       // Verificar se cliente existe
       const cust = await getCustomerByCleanPhone(cleanPhone);
       if (!cust) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Cliente nÃ£o encontrado." });
       }
 
       // Verificar bloqueio de cadastro
@@ -297,13 +297,13 @@ export const customerPasswordRouter = router({
       return { success: true, pending: true };
     }),
 
-  // ── Cliente faz login ─────────────────────────────────────────────────────
+  // â”€â”€ Cliente faz login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   login: publicProcedure
     .input(z.object({ phone: z.string(), password: z.string() }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponÃ­vel" });
       const cleanPhone = input.phone.replace(/\D/g, "");
 
       // Verificar bloqueio de cadastro antes de autenticar
@@ -323,7 +323,7 @@ export const customerPasswordRouter = router({
       const match = await bcrypt.compare(input.password, pwd.password);
       if (!match) return { success: false, error: "wrong_password" as const };
 
-      // Criar sessão
+      // Criar sessÃ£o
       const token = randomBytes(32).toString("hex");
       const sessionExpiry = new Date(Date.now() + SESSION_DURATION_MS);
       await db.insert(customerPasswordSessions).values({
@@ -333,7 +333,7 @@ export const customerPasswordRouter = router({
         lastAccessAt: new Date(),
       });
 
-      // Registrar no histórico de logins
+      // Registrar no histÃ³rico de logins
       try {
         await db.insert(customerLoginHistory).values({
           phone: cleanPhone,
@@ -344,7 +344,7 @@ export const customerPasswordRouter = router({
       return { success: true, token };
     }),
 
-  // ── Verificar sessão ──────────────────────────────────────────────────────
+  // â”€â”€ Verificar sessÃ£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   checkSession: publicProcedure
     .input(z.object({ token: z.string() }))
@@ -359,7 +359,7 @@ export const customerPasswordRouter = router({
       const session = rows?.[0];
       if (!session) return { valid: false };
       if (new Date(session.expiresAt) < new Date()) return { valid: false };
-      // Verificar se o cliente foi bloqueado após criar a sessão
+      // Verificar se o cliente foi bloqueado apÃ³s criar a sessÃ£o
       try {
         const custRows2 = await db.select().from(customers).where(eq(customers.phone, session.phone)).limit(1);
         const custForBlock2 = custRows2?.[0];
@@ -367,7 +367,7 @@ export const customerPasswordRouter = router({
           return { valid: false, blocked: true, blockReason: (custForBlock2 as any).blockReason || 'Acesso bloqueado' };
         }
       } catch {}
-      // Renovar sessão
+      // Renovar sessÃ£o
       try {
         const newExpiry = new Date(Date.now() + SESSION_DURATION_MS);
         const diff = newExpiry.getTime() - new Date(session.expiresAt).getTime();
@@ -381,7 +381,7 @@ export const customerPasswordRouter = router({
       return { valid: true, phone: session.phone };
     }),
 
-  // ── Logout ────────────────────────────────────────────────────────────────
+  // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   logout: publicProcedure
     .input(z.object({ token: z.string() }))
@@ -394,7 +394,7 @@ export const customerPasswordRouter = router({
       return { success: true };
     }),
 
-  // ── ADM: listar pendentes ─────────────────────────────────────────────────
+  // â”€â”€ ADM: listar pendentes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   adminListPending: adminProcedure.query(async () => {
     const db = (await getDb()) as any;
@@ -427,13 +427,13 @@ export const customerPasswordRouter = router({
     }));
   }),
 
-  // ── ADM: liberar senha pendente ───────────────────────────────────────────
+  // â”€â”€ ADM: liberar senha pendente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   adminApprove: adminProcedure
     .input(z.object({ passwordId: z.number(), days: z.number().min(1).max(3650) }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponÃ­vel" });
       // Buscar senha e telefone antes de liberar
       const [row] = await db
         .select({ phone: customerPasswords.phone, password: customerPasswords.password })
@@ -454,13 +454,13 @@ export const customerPasswordRouter = router({
       return { success: true, phone: row?.phone ?? null, password: row?.password ?? null, name: customerName };
     }),
 
-  // ── ADM: resetar senha de um cliente ─────────────────────────────────────
+  // â”€â”€ ADM: resetar senha de um cliente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   adminReset: adminProcedure
     .input(z.object({ phone: z.string() }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponÃ­vel" });
       const cleanPhone = input.phone.replace(/\D/g, "");
 
       // Preservar vencimento da senha ativa
@@ -483,7 +483,7 @@ export const customerPasswordRouter = router({
         .set({ isActive: 0 })
         .where(eq(customerPasswords.phone, cleanPhone));
 
-      // Invalidar sessões
+      // Invalidar sessÃµes
       await db
         .delete(customerPasswordSessions)
         .where(eq(customerPasswordSessions.phone, cleanPhone));
@@ -491,13 +491,13 @@ export const customerPasswordRouter = router({
       return { success: true };
     }),
 
-  // ── ADM: definir senha manualmente ───────────────────────────────────────
+  // â”€â”€ ADM: definir senha manualmente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   adminSetPassword: adminProcedure
     .input(z.object({ phone: z.string(), password: z.string().min(4), days: z.number().min(1).max(3650) }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponÃ­vel" });
       const cleanPhone = input.phone.replace(/\D/g, "");
 
       // Desativar senhas anteriores
@@ -521,7 +521,7 @@ export const customerPasswordRouter = router({
       return { success: true };
     }),
 
-  // ── ADM: ver status de senha de um cliente ────────────────────────────────
+  // â”€â”€ ADM: ver status de senha de um cliente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   adminGetStatus: adminProcedure
     .input(z.object({ phone: z.string() }))
@@ -538,7 +538,7 @@ export const customerPasswordRouter = router({
       };
     }),
 
-  // ── Histórico de logins (admin) ────────────────────────────────────────────────────────────────
+  // â”€â”€ HistÃ³rico de logins (admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   adminGetLoginHistory: adminProcedure
     .input(z.object({ phone: z.string() }))
@@ -554,7 +554,7 @@ export const customerPasswordRouter = router({
         .where(eq(customerLoginHistory.phone, cleanPhone));
       const total = Number(countRows?.[0]?.count ?? 0);
 
-      // 5 últimos logins
+      // 5 Ãºltimos logins
       const recent = await db
         .select({ loginAt: customerLoginHistory.loginAt })
         .from(customerLoginHistory)

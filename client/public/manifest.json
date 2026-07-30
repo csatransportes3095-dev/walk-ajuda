@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "WALK AJUDA",
-  "short_name": "Walk Ajuda",
-  "description": "Atendimento rápido para motoristas de app - Uber, 99 e InDrive",
+  "name": "H2 COLOMBIANO",
+  "short_name": "H2 COLOMBIANO",
+  "description": "Atendimento rÃ¡pido para motoristas de app - Uber, 99 e InDrive",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -14,23 +14,23 @@ const EXTRA_BTN_ICONS: Record<string, React.ReactNode> = {
   sparkles: <Sparkles className="w-8 h-8 text-white" />,
   search: <Search className="w-8 h-8 text-white" />,
   clipboard: <ClipboardList className="w-8 h-8 text-white" />,
-  // novos ícones Hub Central
-  group:    <span className="text-3xl">👥</span>,
-  key:      <span className="text-3xl">🔑</span>,
-  chart:    <span className="text-3xl">📊</span>,
-  video:    <span className="text-3xl">🎥</span>,
-  globe:    <span className="text-3xl">🌐</span>,
-  chat:     <span className="text-3xl">💬</span>,
-  doc:      <span className="text-3xl">📄</span>,
-  phone:    <span className="text-3xl">📱</span>,
-  car:      <span className="text-3xl">🚗</span>,
-  money:    <span className="text-3xl">💰</span>,
-  info:     <span className="text-3xl">ℹ️</span>,
-  alert:    <span className="text-3xl">⚠️</span>,
-  check:    <span className="text-3xl">✅</span>,
-  lock:     <span className="text-3xl">🔒</span>,
-  telegram: <span className="text-3xl">✈️</span>,
-  insta:    <span className="text-3xl">📸</span>,
+  // novos Ã­cones Hub Central
+  group:    <span className="text-3xl">ðŸ‘¥</span>,
+  key:      <span className="text-3xl">ðŸ”‘</span>,
+  chart:    <span className="text-3xl">ðŸ“Š</span>,
+  video:    <span className="text-3xl">ðŸŽ¥</span>,
+  globe:    <span className="text-3xl">ðŸŒ</span>,
+  chat:     <span className="text-3xl">ðŸ’¬</span>,
+  doc:      <span className="text-3xl">ðŸ“„</span>,
+  phone:    <span className="text-3xl">ðŸ“±</span>,
+  car:      <span className="text-3xl">ðŸš—</span>,
+  money:    <span className="text-3xl">ðŸ’°</span>,
+  info:     <span className="text-3xl">â„¹ï¸</span>,
+  alert:    <span className="text-3xl">âš ï¸</span>,
+  check:    <span className="text-3xl">âœ…</span>,
+  lock:     <span className="text-3xl">ðŸ”’</span>,
+  telegram: <span className="text-3xl">âœˆï¸</span>,
+  insta:    <span className="text-3xl">ðŸ“¸</span>,
 };
 
 const WELCOME_CHOICE_KEY = "walk_welcome_choice";
@@ -46,7 +46,7 @@ function getOrCreateOnlineSupportVisitorId() {
   return created;
 }
 
-// Card de instalação estilo Play Store
+// Card de instalaÃ§Ã£o estilo Play Store
 function PWAInstallCard({ onInstall, logoUrl }: { onInstall: () => Promise<void>; logoUrl?: string }) {
   const [installing, setInstalling] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -55,7 +55,7 @@ function PWAInstallCard({ onInstall, logoUrl }: { onInstall: () => Promise<void>
   const handleInstall = async () => {
     setInstalling(true);
     setProgress(0);
-    // Animação de progresso enquanto aguarda o prompt
+    // AnimaÃ§Ã£o de progresso enquanto aguarda o prompt
     const interval = setInterval(() => {
       setProgress(p => {
         if (p >= 85) { clearInterval(interval); return 85; }
@@ -72,22 +72,22 @@ function PWAInstallCard({ onInstall, logoUrl }: { onInstall: () => Promise<void>
 
   return (
     <div className="mt-6 w-full bg-[#1a1f35] border border-[#2a3050] rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Cabeçalho do card */}
+      {/* CabeÃ§alho do card */}
       <div className="flex items-center gap-4 p-4">
         <img
           src="/manus-storage/pwa-icon-192_88c027b0.png"
-          alt="Walk Ajuda"
+          alt="H2 COLOMBIANO"
           className="w-16 h-16 rounded-2xl shadow-lg flex-shrink-0"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
         <div className="flex-1 min-w-0">
-          <p className="text-white font-black text-base leading-tight">WALK AJUDA</p>
-          <p className="text-[#0ea5e9] text-xs font-semibold mt-0.5">walkajuda.com</p>
-          <p className="text-white/60 text-xs mt-1 leading-snug">Atendimento rápido para motoristas de app</p>
+          <p className="text-white font-black text-base leading-tight">H2 COLOMBIANO</p>
+          <p className="text-[#0ea5e9] text-xs font-semibold mt-0.5">h2colombiano.com</p>
+          <p className="text-white/60 text-xs mt-1 leading-snug">Atendimento rÃ¡pido para motoristas de app</p>
         </div>
       </div>
 
-      {/* Barra de progresso (só durante instalação) */}
+      {/* Barra de progresso (sÃ³ durante instalaÃ§Ã£o) */}
       {installing && (
         <div className="px-4 pb-2">
           <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
@@ -97,7 +97,7 @@ function PWAInstallCard({ onInstall, logoUrl }: { onInstall: () => Promise<void>
             />
           </div>
           <p className="text-white/50 text-xs mt-1.5 text-center">
-            {progress < 100 ? 'Preparando instalação...' : 'Concluído!'}
+            {progress < 100 ? 'Preparando instalaÃ§Ã£o...' : 'ConcluÃ­do!'}
           </p>
         </div>
       )}
@@ -105,14 +105,14 @@ function PWAInstallCard({ onInstall, logoUrl }: { onInstall: () => Promise<void>
       {/* Divider */}
       <div className="h-px bg-white/5 mx-4" />
 
-      {/* Botões */}
+      {/* BotÃµes */}
       <div className="flex">
         <button
           onClick={() => { /* dismiss: esconde o card */ setDone(true); }}
           disabled={installing}
           className="flex-1 py-3.5 text-[#0ea5e9] text-sm font-semibold hover:bg-white/5 transition-colors disabled:opacity-40"
         >
-          Agora não
+          Agora nÃ£o
         </button>
         <div className="w-px bg-white/5" />
         <button
@@ -135,14 +135,14 @@ function PWAInstallCard({ onInstall, logoUrl }: { onInstall: () => Promise<void>
   );
 }
 
-// Hook para instalação PWA — só ativa quando o Chrome está pronto (beforeinstallprompt)
+// Hook para instalaÃ§Ã£o PWA â€” sÃ³ ativa quando o Chrome estÃ¡ pronto (beforeinstallprompt)
 function useHomePWA() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    // Já instalado como app standalone
+    // JÃ¡ instalado como app standalone
     if (window.matchMedia("(display-mode: standalone)").matches) { setIsInstalled(true); return; }
     // Captura o evento nativo do Chrome/Android
     const handler = (e: Event) => {
@@ -151,7 +151,7 @@ function useHomePWA() {
       setIsInstallable(true);
     };
     window.addEventListener("beforeinstallprompt", handler);
-    // Se já instalado via appinstalled
+    // Se jÃ¡ instalado via appinstalled
     const installed = () => { setIsInstalled(true); setIsInstallable(false); };
     window.addEventListener("appinstalled", installed);
     return () => {
@@ -176,9 +176,9 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const [location] = useLocation();
   const [onlineSupportOpen, setOnlineSupportOpen] = useState(false);
   const [choiceMade, setChoiceMade] = useState(false);
-  // Marca que o usuário acabou de clicar no card "Cadastro" (fluxo na própria rota "/").
-  // Persiste no contexto de memória da aba via window, sobrevive a navegações internas mas
-  // é limpo ao voltar/recarregar a partir de outra tela.
+  // Marca que o usuÃ¡rio acabou de clicar no card "Cadastro" (fluxo na prÃ³pria rota "/").
+  // Persiste no contexto de memÃ³ria da aba via window, sobrevive a navegaÃ§Ãµes internas mas
+  // Ã© limpo ao voltar/recarregar a partir de outra tela.
   const justClickedCard = useRef(false);
   const [vpnBlocked, setVpnBlocked] = useState(false);
   const [vpnChecking, setVpnChecking] = useState(true);
@@ -193,11 +193,11 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const vpnCheckMutation = trpc.vpn.check.useMutation();
   const { isInstallable: pwaInstallable, isInstalled: pwaInstalled, install: pwaInstall } = useHomePWA();
 
-  const loginTitle = settings?.login_title || "WALK AJUDA";
+  const loginTitle = settings?.login_title || "H2 COLOMBIANO";
   const loginImageUrl = settings?.login_image_url || "";
   const loginShowImage = settings?.login_show_image !== "0";
 
-  // Configurações dinâmicas dos botões
+  // ConfiguraÃ§Ãµes dinÃ¢micas dos botÃµes
   const BTN1_TEXT = settings?.home_btn1_text || "FAZER PEDIDO";
   const BTN1_SUBTITLE = settings?.home_btn1_subtitle || "Abrir conta Uber, 99 ou InDrive";
   const BTN1_COLOR = settings?.home_btn1_color || "#7c3aed";
@@ -205,7 +205,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const BTN1_SUB_COLOR = settings?.home_btn1_sub_color || "rgba(255,255,255,0.7)";
   const BTN1_FONT = settings?.home_btn1_font || "";
 
-  // Helper: resolve variantes Bold (ex: "Montserrat Bold" → fontFamily Montserrat + fontWeight 700)
+  // Helper: resolve variantes Bold (ex: "Montserrat Bold" â†’ fontFamily Montserrat + fontWeight 700)
   const getFontStyle = (font: string): React.CSSProperties => {
     if (!font) return {};
     if (font === "Montserrat Bold") return { fontFamily: "'Montserrat', sans-serif", fontWeight: 700 };
@@ -221,12 +221,12 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const HOME_FOOTER_TEXT = settings?.home_footer_text || "Motoristas de Uber, 99 e InDrive";
   const HOME_FONT = settings?.home_font || "Inter";
 
-  // Botões extras agora vêm da tabela dinâmica (extraButtons)
-  // Efeitos hover por botão
+  // BotÃµes extras agora vÃªm da tabela dinÃ¢mica (extraButtons)
+  // Efeitos hover por botÃ£o
   const BTN1_HOVER = settings?.home_btn1_hover || "scale";
   const BTN2_HOVER = settings?.home_btn2_hover || "scale";
 
-  // Estado de hover por botão (para efeitos que precisam de JS)
+  // Estado de hover por botÃ£o (para efeitos que precisam de JS)
   const [hovered, setHovered] = useState<Record<string, boolean>>({});
 
   // Injetar CSS keyframes para efeitos hover animados
@@ -288,7 +288,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     return map[effect] || 'walk-hover-scale';
   };
 
-  // Helper para inline style de glow (precisa da cor do botão)
+  // Helper para inline style de glow (precisa da cor do botÃ£o)
   const getHoverStyle = (effect: string, color: string, btnKey: string): React.CSSProperties => {
     if (effect === 'glow' && hovered[btnKey]) {
       return { boxShadow: `0 0 20px 6px ${color}99, 0 0 40px 12px ${color}44` };
@@ -299,7 +299,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     return {};
   };
 
-  // Carregar fontes do Google Fonts dinamicamente (global + individuais dos botões)
+  // Carregar fontes do Google Fonts dinamicamente (global + individuais dos botÃµes)
   const loadGoogleFont = (fontName: string) => {
     if (!fontName) return;
     const linkId = `gfont-${fontName.replace(/\s+/g, '-')}`;
@@ -312,12 +312,12 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     }
   };
   useEffect(() => {
-    // Carregar fontes dos botões fixos e dinâmicos
+    // Carregar fontes dos botÃµes fixos e dinÃ¢micos
     const fontsToLoad = [HOME_FONT, BTN1_FONT, BTN2_FONT, ...extraButtons.map(b => b.font)];
     fontsToLoad.forEach(f => f && loadGoogleFont(f));
   }, [HOME_FONT, BTN1_FONT, BTN2_FONT, extraButtons]);
 
-  // Se já está em /acompanhar, /sorteio ou /foto, não mostra a tela de boas-vindas (case-insensitive)
+  // Se jÃ¡ estÃ¡ em /acompanhar, /sorteio ou /foto, nÃ£o mostra a tela de boas-vindas (case-insensitive)
   const lowerLocation = location.toLowerCase();
   const isTrackingPage = lowerLocation === "/acompanhar" || lowerLocation === "/sorteio" || lowerLocation === "/foto";
 
@@ -329,11 +329,11 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
       return;
     }
     // Na rota raiz "/", a tela principal (4 cards) deve SEMPRE aparecer,
-    // exceto quando o usuário acabou de clicar no card de cadastro (fluxo na própria rota).
-    // Assim, ao voltar de qualquer subtela, o cliente sempre vê os 4 cards e pode escolher outra função.
+    // exceto quando o usuÃ¡rio acabou de clicar no card de cadastro (fluxo na prÃ³pria rota).
+    // Assim, ao voltar de qualquer subtela, o cliente sempre vÃª os 4 cards e pode escolher outra funÃ§Ã£o.
     if (location === "/") {
       if (justClickedCard.current) {
-        // Veio do clique no card "Cadastro": mantém o fluxo aberto
+        // Veio do clique no card "Cadastro": mantÃ©m o fluxo aberto
         setChoiceMade(true);
         setVpnChecking(false);
         return;
@@ -342,7 +342,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
       sessionStorage.removeItem(WELCOME_CHOICE_KEY);
       setChoiceMade(false);
     } else {
-      // Para outras rotas (que não são tracking pages), verificar sessionStorage
+      // Para outras rotas (que nÃ£o sÃ£o tracking pages), verificar sessionStorage
       const choice = sessionStorage.getItem(WELCOME_CHOICE_KEY);
       if (choice) {
         setChoiceMade(true);
@@ -350,13 +350,13 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
         return;
       }
     }
-    // Verificar se já checou VPN nessa sessão
+    // Verificar se jÃ¡ checou VPN nessa sessÃ£o
     const vpnChecked = sessionStorage.getItem(VPN_CHECK_KEY);
     if (vpnChecked === "ok") {
       setVpnChecking(false);
       return;
     }
-    // Fazer verificação de VPN com timeout
+    // Fazer verificaÃ§Ã£o de VPN com timeout
     const checkVpn = async () => {
       try {
         const timeoutPromise = new Promise((_, reject) => 
@@ -372,7 +372,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
           sessionStorage.setItem(VPN_CHECK_KEY, "ok");
         }
       } catch (error) {
-        // Em caso de erro ou timeout na verificação, permitir acesso
+        // Em caso de erro ou timeout na verificaÃ§Ã£o, permitir acesso
         console.error('VPN check error:', error);
         sessionStorage.setItem(VPN_CHECK_KEY, "ok");
       } finally {
@@ -453,16 +453,16 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const supportUnreadCount = onlineSupportUnread?.unreadMessages || 0;
   const supportLabelBase = onlineSupportState?.buttonLabel || "ATENDIMENTO ONLINE";
   const supportLabel = supportUnreadCount > 0
-    ? `${supportLabelBase} — ${supportUnreadCount} NOVA${supportUnreadCount > 1 ? "S" : ""} MENSAGEM${supportUnreadCount > 1 ? "S" : ""}`
+    ? `${supportLabelBase} â€” ${supportUnreadCount} NOVA${supportUnreadCount > 1 ? "S" : ""} MENSAGEM${supportUnreadCount > 1 ? "S" : ""}`
     : supportLabelBase;
-  const supportDescription = onlineSupportState?.buttonDescription || "Tire suas dúvidas, receba instruções e fale com nossa equipe.";
+  const supportDescription = onlineSupportState?.buttonDescription || "Tire suas dÃºvidas, receba instruÃ§Ãµes e fale com nossa equipe.";
   const supportColor = onlineSupportState?.buttonColor || "#2563eb";
   const supportVisible =
     !!onlineSupportState?.chatEnabled &&
     !!onlineSupportState?.welcomeButtonEnabled &&
     !!onlineSupportState?.showOnPage;
   const supportSortOrder = Number(onlineSupportState?.buttonSortOrder || 3);
-  const supportStatusText = (onlineSupportState as any)?.customStatusText || (onlineSupportState?.onlineNow ? "online" : "fora do horário");
+  const supportStatusText = (onlineSupportState as any)?.customStatusText || (onlineSupportState?.onlineNow ? "online" : "fora do horÃ¡rio");
 
   const renderSupportButton = () => {
     if (!supportVisible) return null;
@@ -496,19 +496,19 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     );
   };
 
-  // Rota /login é atalho direto — pula a tela de boas-vindas
+  // Rota /login Ã© atalho direto â€” pula a tela de boas-vindas
   if (choiceMade || location === "/login" || location === "/pre-cadastro") {
     return <>{children}</>;
   }
 
-  // Tela de carregamento da verificação VPN
+  // Tela de carregamento da verificaÃ§Ã£o VPN
   if (vpnChecking) {
     return (
       <div className="min-h-screen bg-[#0a0a1a] flex flex-col items-center justify-center relative overflow-hidden px-6">
         <div className="absolute inset-0 bg-gradient-to-br from-purple-900/10 via-transparent to-blue-900/10" />
         <div className="relative z-10 flex flex-col items-center gap-4">
           <div className="w-16 h-16 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-          <p className="text-white/50 text-sm">Verificando conexão...</p>
+          <p className="text-white/50 text-sm">Verificando conexÃ£o...</p>
         </div>
       </div>
     );
@@ -523,20 +523,20 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-orange-700/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
 
         <div className="relative z-10 w-full max-w-sm mx-auto flex flex-col items-center text-center">
-          {/* Ícone de bloqueio */}
+          {/* Ãcone de bloqueio */}
           <div className="w-24 h-24 bg-red-500/20 border-2 border-red-500/40 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-red-900/30">
             <ShieldX className="w-12 h-12 text-red-400" />
           </div>
 
           <h1 className="text-2xl font-black text-white mb-2">VPN Detectada</h1>
           <p className="text-white/60 text-sm mb-2">
-            Detectamos que você está usando uma <strong className="text-orange-400">VPN ou Proxy</strong>.
+            Detectamos que vocÃª estÃ¡ usando uma <strong className="text-orange-400">VPN ou Proxy</strong>.
           </p>
           <p className="text-white/60 text-sm mb-8">
-            Por segurança, o acesso ao site não é permitido com VPN ativa.
+            Por seguranÃ§a, o acesso ao site nÃ£o Ã© permitido com VPN ativa.
           </p>
 
-          {/* Instruções */}
+          {/* InstruÃ§Ãµes */}
           <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 mb-6 text-left space-y-3">
             <p className="text-white/80 text-sm font-bold flex items-center gap-2">
               <WifiOff className="w-4 h-4 text-orange-400 flex-shrink-0" />
@@ -568,7 +568,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
           </button>
 
           <p className="mt-6 text-white/20 text-xs">
-            Se o problema persistir, verifique se não há extensões de VPN ativas no navegador.
+            Se o problema persistir, verifique se nÃ£o hÃ¡ extensÃµes de VPN ativas no navegador.
           </p>
         </div>
       </div>
@@ -597,14 +597,14 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
             </div>
           )}
           <h1 className="text-3xl font-black text-white tracking-wide">{loginTitle}</h1>
-          <p className="text-white/50 text-sm mt-1">O que você deseja fazer?</p>
+          <p className="text-white/50 text-sm mt-1">O que vocÃª deseja fazer?</p>
         </div>
 
-        {/* Botões de escolha */}
+        {/* BotÃµes de escolha */}
         <div className="w-full space-y-3">
           {supportSortOrder <= 1 && renderSupportButton()}
 
-          {/* Botão 1 (FAZER PEDIDO) */}
+          {/* BotÃ£o 1 (FAZER PEDIDO) */}
           <button
             onClick={handleFazerPedido}
             onMouseEnter={() => setHovered(h => ({ ...h, btn1: true }))}
@@ -636,7 +636,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
 
           {supportSortOrder > 1 && supportSortOrder <= 2 && renderSupportButton()}
 
-          {/* Botão 2 (ACOMPANHAR) */}
+          {/* BotÃ£o 2 (ACOMPANHAR) */}
           <button
             onClick={handleAcompanhar}
             onMouseEnter={() => setHovered(h => ({ ...h, btn2: true }))}
@@ -668,7 +668,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
 
           {supportSortOrder > 2 && renderSupportButton()}
 
-          {/* Botões Extras Dinâmicos */}
+          {/* BotÃµes Extras DinÃ¢micos */}
           {extraButtons.filter(btn => (btn as any).vipOnly !== 1).map((btn, idx) => (
             <button
               key={btn.id}
@@ -701,18 +701,18 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
           ))}
         </div>
 
-        {/* Card de instalação PWA — estilo Play Store */}
+        {/* Card de instalaÃ§Ã£o PWA â€” estilo Play Store */}
         {pwaInstallable && !pwaInstalled && (
           <PWAInstallCard onInstall={pwaInstall} logoUrl={loginImageUrl || undefined} />
         )}
         {pwaInstalled && (
           <div className="mt-6 w-full flex items-center justify-center gap-2 text-emerald-400 text-sm font-semibold">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-            Walk Ajuda instalado na tela inicial!
+            H2 COLOMBIANO instalado na tela inicial!
           </div>
         )}
 
-        {/* Rodapé */}
+        {/* RodapÃ© */}
         <p className="mt-8 text-white/30 text-xs text-center">
           {HOME_FOOTER_TEXT}
         </p>

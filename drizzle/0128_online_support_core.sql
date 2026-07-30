@@ -261,7 +261,7 @@ SELECT
   0, 1, 1, 1, 0,
   1, 1, 1, 0,
   '["/","/acompanhar","/ajuda"]', 3, 'ATENDIMENTO ONLINE', 'Tire suas duvidas, receba instrucoes e fale com nossa equipe.', 'message-circle', '#2563eb',
-  'modal', 'Atendimento indisponivel no momento.', 'Ola! Seja bem-vindo a Walk Ajuda. Como podemos ajudar?', 'Nossa equipe esta fora do horario de atendimento, mas o assistente virtual pode ajudar.', 'Nao encontrei uma resposta segura para essa pergunta. Vou encaminhar voce para um atendente.',
+  'modal', 'Atendimento indisponivel no momento.', 'Ola! Seja bem-vindo a H2 COLOMBIANO. Como podemos ajudar?', 'Nossa equipe esta fora do horario de atendimento, mas o assistente virtual pode ajudar.', 'Nao encontrei uma resposta segura para essa pergunta. Vou encaminhar voce para um atendente.',
   'openai', 'gpt-4o-mini', 'profissional', 400, 'Falha temporaria ao consultar a inteligencia artificial.', '["senha","token","chave"]',
   'no_safe_answer', 'Ao iniciar o chat, voce concorda com nossa politica de privacidade.', 'system'
 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportConfig` LIMIT 1);

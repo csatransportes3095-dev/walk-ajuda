@@ -57,14 +57,14 @@ async function getAccessTokenForConfig(config: any): Promise<string> {
   return data.access_token;
 }
 
-// Obter o primeiro servidor ativo (para operações que precisam de um servidor específico)
+// Obter o primeiro servidor ativo (para operaÃ§Ãµes que precisam de um servidor especÃ­fico)
 async function getPrimaryConfig(): Promise<any> {
   const configs = await getAllActiveConfigs();
   if (configs.length > 0) return configs[0];
 
-  // Fallback para variáveis de ambiente
+  // Fallback para variÃ¡veis de ambiente
   if (!ENV.zohoOrgId || !ENV.zohoClientId || !ENV.zohoClientSecret || !ENV.zohoRefreshToken) {
-    throw new Error("Credenciais Zoho não configuradas. Configure via painel Admin.");
+    throw new Error("Credenciais Zoho nÃ£o configuradas. Configure via painel Admin.");
   }
   return {
     id: 0,
@@ -76,7 +76,7 @@ async function getPrimaryConfig(): Promise<any> {
   };
 }
 
-// Fazer request para um servidor específico
+// Fazer request para um servidor especÃ­fico
 async function zohoRequestForConfig<T>(
   config: any,
   method: string,
@@ -104,17 +104,17 @@ async function zohoRequestForConfig<T>(
   if (!res.ok || (json.status && json.status.code >= 400)) {
     const errorCode = (json.data as any)?.errorCode ?? "";
     let message = json.status?.description ?? json.error ?? "unknown";
-    if (errorCode === "EMAILADDRESS_ALREADY_EXISTS") message = "Este email já existe no Zoho Mail";
-    else if (errorCode === "INVALID_PASSWORD") message = "Senha inválida — use pelo menos 8 caracteres com letras e números";
-    else if (errorCode === "ACCOUNT_LIMIT_EXCEEDED") message = "Limite de contas atingido neste servidor (máx. 5 no plano FREE)";
-    else if (errorCode === "INVALID_EMAILADDRESS") message = "Endereço de email inválido";
+    if (errorCode === "EMAILADDRESS_ALREADY_EXISTS") message = "Este email jÃ¡ existe no Zoho Mail";
+    else if (errorCode === "INVALID_PASSWORD") message = "Senha invÃ¡lida â€” use pelo menos 8 caracteres com letras e nÃºmeros";
+    else if (errorCode === "ACCOUNT_LIMIT_EXCEEDED") message = "Limite de contas atingido neste servidor (mÃ¡x. 5 no plano FREE)";
+    else if (errorCode === "INVALID_EMAILADDRESS") message = "EndereÃ§o de email invÃ¡lido";
     throw new Error(message);
   }
 
   return (json.data ?? json) as T;
 }
 
-// Request para o servidor primário (compatibilidade com código existente)
+// Request para o servidor primÃ¡rio (compatibilidade com cÃ³digo existente)
 async function zohoRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
   const config = await getPrimaryConfig();
   return zohoRequestForConfig<T>(config, method, path, body);
@@ -151,7 +151,7 @@ export interface CreateUserInput {
   lastName?: string;
 }
 
-// Listar utilizadores de um servidor específico
+// Listar utilizadores de um servidor especÃ­fico
 export async function listZohoUsersForConfig(config: any, limit = 50): Promise<ZohoUser[]> {
   try {
     const data = await zohoRequestForConfig<ZohoUser[]>(config, "GET", `/accounts?limit=${limit}`);
@@ -170,7 +170,7 @@ export async function listAllZohoUsersGrouped(limit = 50): Promise<{ serverId: n
     configs.map(async (config: any) => ({
       serverId: config.id,
       serverName: config.name,
-      domain: config.domain || 'walkajuda.com',
+      domain: config.domain || 'h2colombiano.com',
       users: await listZohoUsersForConfig(config, limit),
     }))
   );
@@ -183,7 +183,7 @@ export async function listZohoUsers(limit = 50): Promise<ZohoUserWithServer[]> {
   return grouped.flatMap(g => g.users.map(u => ({ ...u, serverId: g.serverId, serverName: g.serverName })));
 }
 
-// Criar utilizador num servidor específico
+// Criar utilizador num servidor especÃ­fico
 export async function createZohoUserInConfig(config: any, input: CreateUserInput): Promise<ZohoUser> {
   return zohoRequestForConfig<ZohoUser>(config, "POST", "/accounts", {
     primaryEmailAddress: input.primaryEmailAddress,
@@ -194,12 +194,12 @@ export async function createZohoUserInConfig(config: any, input: CreateUserInput
   });
 }
 
-// Criar utilizador no servidor com menos contas (distribuição automática)
+// Criar utilizador no servidor com menos contas (distribuiÃ§Ã£o automÃ¡tica)
 export async function createZohoUser(input: CreateUserInput): Promise<ZohoUser> {
   const configs = await getAllActiveConfigs();
   if (configs.length === 0) throw new Error("Nenhum servidor Zoho ativo. Configure via painel Admin.");
 
-  // Tentar criar no primeiro servidor disponível (que não lotou)
+  // Tentar criar no primeiro servidor disponÃ­vel (que nÃ£o lotou)
   let lastError: Error | null = null;
   for (const config of configs) {
     try {
@@ -214,12 +214,12 @@ export async function createZohoUser(input: CreateUserInput): Promise<ZohoUser> 
     } catch (err: any) {
       if (err.message.includes("Limite de contas atingido")) {
         lastError = err;
-        continue; // Tentar próximo servidor
+        continue; // Tentar prÃ³ximo servidor
       }
-      throw err; // Outro erro — propagar
+      throw err; // Outro erro â€” propagar
     }
   }
-  throw lastError ?? new Error("Não foi possível criar a conta em nenhum servidor");
+  throw lastError ?? new Error("NÃ£o foi possÃ­vel criar a conta em nenhum servidor");
 }
 
 export async function deleteZohoUser(emailAddress: string): Promise<void> {
@@ -233,14 +233,14 @@ export async function deleteZohoUser(emailAddress: string): Promise<void> {
       continue;
     }
   }
-  // Fallback para servidor primário
+  // Fallback para servidor primÃ¡rio
   await zohoRequest<unknown>("DELETE", "/accounts", { emailList: [emailAddress] });
 }
 
 export async function resetZohoPassword(emailAddress: string, newPassword: string): Promise<void> {
   const allUsers = await listZohoUsers(200);
   const user = allUsers.find((u) => u.primaryEmailAddress === emailAddress);
-  if (!user) throw new Error("Usuário não encontrado");
+  if (!user) throw new Error("UsuÃ¡rio nÃ£o encontrado");
 
   const configs = await getAllActiveConfigs();
   const config = configs.find((c: any) => c.id === user.serverId) ?? await getPrimaryConfig();
@@ -250,14 +250,14 @@ export async function resetZohoPassword(emailAddress: string, newPassword: strin
 export async function toggleZohoUser(emailAddress: string, enabled: boolean): Promise<void> {
   const allUsers = await listZohoUsers(200);
   const user = allUsers.find((u) => u.primaryEmailAddress === emailAddress);
-  if (!user) throw new Error("Usuário não encontrado");
+  if (!user) throw new Error("UsuÃ¡rio nÃ£o encontrado");
 
   const configs = await getAllActiveConfigs();
   const config = configs.find((c: any) => c.id === user.serverId) ?? await getPrimaryConfig();
   await zohoRequestForConfig<unknown>(config, "PUT", `/accounts/${user.accountId}`, { enabled });
 }
 
-// ─── Funções de leitura de e-mails (inbox) ────────────────────────────────────
+// â”€â”€â”€ FunÃ§Ãµes de leitura de e-mails (inbox) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function getAccessToken(): Promise<string> {
   const config = await getPrimaryConfig();

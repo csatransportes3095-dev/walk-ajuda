@@ -1,7 +1,7 @@
 {
   "name": "WALK ADM",
   "short_name": "Walk ADM",
-  "description": "Painel administrativo Walk Ajuda",
+  "description": "Painel administrativo H2 COLOMBIANO",
   "start_url": "/admin/codes",
   "scope": "/",
   "display": "standalone",
