@@ -34,6 +34,26 @@ function stringifyJson(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
+function normalizeMediaRecord(media: unknown): Record<string, unknown> {
+  if (!media || typeof media !== "object" || Array.isArray(media)) return {};
+
+  const input = media as Record<string, unknown>;
+  const output: Record<string, unknown> = { ...input };
+
+  const imageUrl =
+    (typeof input.imageUrl === "string" && input.imageUrl.trim()) ||
+    (typeof input.url === "string" && input.url.trim()) ||
+    (typeof input.src === "string" && input.src.trim()) ||
+    (typeof input.fileUrl === "string" && input.fileUrl.trim()) ||
+    null;
+
+  if (imageUrl && !output.imageUrl) {
+    output.imageUrl = imageUrl;
+  }
+
+  return output;
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -432,7 +452,7 @@ export async function testAutoReply(question: string) {
       relatedQuestions: parseJson<string[]>(best.row.relatedQuestionsJson, []),
       keywords: parseJson<string[]>(best.row.keywordsJson, []),
       buttons: parseJson<Array<Record<string, unknown>>>(best.row.buttonsJson, []),
-      media: parseJson<Record<string, unknown>>(best.row.mediaJson, {}),
+      media: normalizeMediaRecord(parseJson<Record<string, unknown>>(best.row.mediaJson, {})),
     },
   };
 }
@@ -1246,7 +1266,7 @@ export async function listAutoReplies() {
     ...row,
     relatedQuestions: parseJson<string[]>(row.relatedQuestionsJson, []),
     keywords: parseJson<string[]>(row.keywordsJson, []),
-    media: parseJson<Record<string, unknown>>(row.mediaJson, {}),
+    media: normalizeMediaRecord(parseJson<Record<string, unknown>>(row.mediaJson, {})),
     buttons: parseJson<Array<Record<string, unknown>>>(row.buttonsJson, []),
   }));
 }
@@ -1278,7 +1298,7 @@ export async function saveAutoReply(input: {
     keywordsJson: stringifyJson(input.keywords || []),
     priority: input.priority ?? 10,
     responseText: input.responseText || null,
-    mediaJson: stringifyJson(input.media || {}),
+    mediaJson: stringifyJson(normalizeMediaRecord(input.media || {})),
     buttonsJson: stringifyJson(input.buttons || []),
     nextStep: input.nextStep || null,
     waitTimeMs: input.waitTimeMs ?? 0,

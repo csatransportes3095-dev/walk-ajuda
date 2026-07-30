@@ -44,16 +44,60 @@ function getMessagePayload(payload: unknown): Record<string, any> | null {
   return payload as Record<string, any>;
 }
 
+function toRenderableUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("/") ||
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("blob:")
+  ) {
+    return trimmed;
+  }
+  return null;
+}
+
+function getMediaField(payload: Record<string, any> | null, field: string): string | null {
+  const candidates = [
+    payload?.media?.[field],
+    payload?.media?.url,
+    payload?.media?.src,
+    payload?.media?.fileUrl,
+    payload?.[field],
+    payload?.url,
+    payload?.src,
+    payload?.fileUrl,
+  ];
+
+  for (const candidate of candidates) {
+    const url = toRenderableUrl(candidate);
+    if (url) return url;
+  }
+
+  return null;
+}
+
 function renderMessageContent(message: any, handleAction: (actionType?: string, payload?: Record<string, any>) => void) {
   const payload = getMessagePayload(message.payload);
+  const imageUrl = getMediaField(payload, "imageUrl");
+  const videoUrl = getMediaField(payload, "videoUrl");
+  const audioUrl = getMediaField(payload, "audioUrl");
+  const documentUrl = getMediaField(payload, "documentUrl");
+  const linkUrl = getMediaField(payload, "linkUrl");
   return (
     <div className="space-y-2">
       {message.text && <p className="whitespace-pre-wrap break-words leading-relaxed">{message.text}</p>}
-      {payload?.media?.imageUrl && <img src={payload.media.imageUrl} alt="Mídia" className="max-w-full rounded-lg border border-white/10" />}
-      {payload?.media?.videoUrl && <video controls className="max-w-full rounded-lg border border-white/10"><source src={payload.media.videoUrl} /></video>}
-      {payload?.media?.audioUrl && <audio controls className="w-full"><source src={payload.media.audioUrl} /></audio>}
-      {payload?.media?.documentUrl && (
-        <a href={payload.media.documentUrl} target="_blank" rel="noreferrer" className="inline-flex text-xs px-3 py-2 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-200 hover:bg-blue-600/30">Abrir documento</a>
+      {imageUrl && <img src={imageUrl} alt="Mídia" className="max-w-full rounded-lg border border-white/10" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
+      {videoUrl && <video controls className="max-w-full rounded-lg border border-white/10"><source src={videoUrl} /></video>}
+      {audioUrl && <audio controls className="w-full"><source src={audioUrl} /></audio>}
+      {documentUrl && (
+        <a href={documentUrl} target="_blank" rel="noreferrer" className="inline-flex text-xs px-3 py-2 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-200 hover:bg-blue-600/30">Abrir documento</a>
+      )}
+      {!imageUrl && linkUrl && (
+        <a href={linkUrl} target="_blank" rel="noreferrer" className="inline-flex text-xs px-3 py-2 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-200 hover:bg-blue-600/30">Abrir mídia</a>
       )}
       {Array.isArray(payload?.buttons) && payload.buttons.length > 0 && (
         <div className="flex flex-col gap-2 pt-1">
