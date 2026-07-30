@@ -581,10 +581,9 @@ export async function sendVisitorMessage(input: {
     targetRole: "admin",
   });
 
-  const responses: Array<Record<string, unknown>> = [];
-
+    const responses: Array<Record<string, unknown>> = [];
   const isOpenNow = await isInWorkingHours();
-
+  const menuItems = await listMenuItems(true);
   if (config.chatEnabled !== 1 || config.maintenanceMode === 1) {
     const systemMessage = await createMessage({
       conversationId: conversation.id,
