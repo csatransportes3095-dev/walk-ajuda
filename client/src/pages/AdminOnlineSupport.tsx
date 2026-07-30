@@ -387,6 +387,11 @@ export default function AdminOnlineSupport() {
   const handleSaveEditReply = () => {
     if (!editReplyId) return;
     const item = (autoRepliesQ.data || []).find((r: any) => r.id === editReplyId);
+    const normalizedButtons = (item?.buttons || []).map((button: any) => ({
+      label: String(button?.label || "").trim(),
+      actionType: String(button?.actionType || "send_text"),
+      actionPayload: button?.actionPayload && typeof button.actionPayload === "object" ? button.actionPayload : undefined,
+    })).filter((button: any) => button.label);
     saveReplyMut.mutate({
       id: editReplyId,
       internalName: item?.internalName || "reply",
@@ -394,7 +399,7 @@ export default function AdminOnlineSupport() {
       keywords: editReplyKeywords.split("\n").map(k => k.trim()).filter(Boolean),
       relatedQuestions: item?.relatedQuestions || [],
       responseText: editReplyText.trim(),
-      buttons: item?.buttons || [],
+      buttons: normalizedButtons,
       isActive: true,
     });
     setEditReplyId(null);
