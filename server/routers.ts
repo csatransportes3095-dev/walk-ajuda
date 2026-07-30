@@ -881,8 +881,8 @@ export const appRouter = router({
 
           const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             connectionTimeout: 15000,
             greetingTimeout: 15000,
             socketTimeout: 20000,
@@ -1475,8 +1475,8 @@ export const appRouter = router({
           const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
           const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           const spMime = input.paymentProofMime || 'image/jpeg';
@@ -1718,8 +1718,8 @@ export const appRouter = router({
             if (referrer?.email) {
               const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
               const waLink = `https://wa.me/55${referrerCleanPhone}`;
@@ -1746,8 +1746,8 @@ export const appRouter = router({
             const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
             const transporter = nodemailer.createTransport({
               host: 'smtp.zoho.com',
-              port: 465,
-              secure: true,
+              port: Number(process.env.SMTP_PORT || "587"),
+              secure: false,
               auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
             });
             await transporter.sendMail({
@@ -2064,8 +2064,8 @@ export const appRouter = router({
           const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
           const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporter.sendMail({
@@ -2452,8 +2452,8 @@ export const appRouter = router({
         try {
           const transporterRaffle = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporterRaffle.sendMail({
@@ -2562,8 +2562,8 @@ export const appRouter = router({
         try {
           const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporter.sendMail({
@@ -3181,8 +3181,8 @@ export const appRouter = router({
           try {
             const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
@@ -3213,8 +3213,8 @@ export const appRouter = router({
           try {
             const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
@@ -3330,8 +3330,8 @@ export const appRouter = router({
           try {
             const transporterAdmin2 = nodemailer.createTransport({
               host: 'smtp.zoho.com',
-              port: 465,
-              secure: true,
+              port: Number(process.env.SMTP_PORT || "587"),
+              secure: false,
               connectionTimeout: 15000,
               greetingTimeout: 15000,
               socketTimeout: 20000,
@@ -3366,8 +3366,8 @@ export const appRouter = router({
           try {
             const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             connectionTimeout: 15000,
             greetingTimeout: 15000,
             socketTimeout: 20000,
@@ -3681,8 +3681,8 @@ export const appRouter = router({
           const statusLabel = statusInfo2.label;
           const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             connectionTimeout: 15000,
             greetingTimeout: 15000,
             socketTimeout: 20000,
@@ -4156,8 +4156,8 @@ export const appRouter = router({
                 const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
                 const transporter = nodemailer.createTransport({
                   host: 'smtp.zoho.com',
-                  port: 465,
-                  secure: true,
+                  port: Number(process.env.SMTP_PORT || "587"),
+                  secure: false,
                   auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
                 });
                 await transporter.sendMail({
@@ -4371,8 +4371,8 @@ export const appRouter = router({
           const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
           const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           const waLink = `https://wa.me/55${referrerCleanPhone}`;
@@ -4485,8 +4485,8 @@ export const appRouter = router({
           try {
             const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
@@ -4643,8 +4643,8 @@ export const appRouter = router({
           try {
             const transporter = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
@@ -5439,8 +5439,8 @@ export const appRouter = router({
         try {
           const transporterDoc = nodemailer.createTransport({
             host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporterDoc.sendMail({
@@ -5784,8 +5784,8 @@ export const appRouter = router({
                 if (emailRecipients.length > 0) {
           const transporter = nodemailer.createTransport({
             host: 'smtp.gmail.com',
-            port: 465,
-            secure: true,
+            port: Number(process.env.SMTP_PORT || "587"),
+            secure: false,
             connectionTimeout: 15000,
             greetingTimeout: 15000,
             socketTimeout: 20000,
