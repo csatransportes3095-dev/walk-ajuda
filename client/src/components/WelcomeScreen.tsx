@@ -457,7 +457,10 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     : supportLabelBase;
   const supportDescription = onlineSupportState?.buttonDescription || "Tire suas dúvidas, receba instruções e fale com nossa equipe.";
   const supportColor = onlineSupportState?.buttonColor || "#2563eb";
-  const supportVisible = !!onlineSupportState?.welcomeButtonEnabled && !!onlineSupportState?.showOnPage;
+  const supportVisible =
+    !!onlineSupportState?.chatEnabled &&
+    !!onlineSupportState?.welcomeButtonEnabled &&
+    !!onlineSupportState?.showOnPage;
   const supportSortOrder = Number(onlineSupportState?.buttonSortOrder || 3);
   const supportStatusText = (onlineSupportState as any)?.customStatusText || (onlineSupportState?.onlineNow ? "online" : "fora do horário");
 
