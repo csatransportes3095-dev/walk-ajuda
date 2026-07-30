@@ -175,6 +175,7 @@ export const onlineSupportRouter = router({
         buttonSortOrder: z.number().optional(),
         buttonLabel: z.string().optional(),
         buttonDescription: z.string().optional(),
+        customStatusText: z.string().optional(),
         buttonIcon: z.string().optional(),
         buttonColor: z.string().optional(),
         openMode: z.enum(["modal", "sidebar", "fullscreen"]).optional(),

@@ -147,6 +147,7 @@ export async function getPublicState(pathname: string) {
     buttonIcon: config.buttonIcon,
     buttonColor: config.buttonColor,
     buttonSortOrder: config.buttonSortOrder,
+    customStatusText: config.customStatusText || null,
     openMode: config.openMode,
     disabledMessage: config.disabledMessage,
     welcomeMessage: config.welcomeMessage,

@@ -1688,6 +1688,7 @@ export const onlineSupportConfig = mysqlTable("onlineSupportConfig", {
   buttonSortOrder: int("buttonSortOrder").notNull().default(3),
   buttonLabel: varchar("buttonLabel", { length: 128 }).notNull().default("ATENDIMENTO ONLINE"),
   buttonDescription: varchar("buttonDescription", { length: 255 }).notNull().default("Tire suas duvidas, receba instrucoes e fale com nossa equipe."),
+  customStatusText: varchar("customStatusText", { length: 128 }),
   buttonIcon: varchar("buttonIcon", { length: 64 }).notNull().default("message-circle"),
   buttonColor: varchar("buttonColor", { length: 32 }).notNull().default("#2563eb"),
   openMode: varchar("openMode", { length: 32 }).notNull().default("modal"),

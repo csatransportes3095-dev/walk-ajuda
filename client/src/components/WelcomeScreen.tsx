@@ -459,7 +459,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const supportColor = onlineSupportState?.buttonColor || "#2563eb";
   const supportVisible = !!onlineSupportState?.welcomeButtonEnabled && !!onlineSupportState?.showOnPage;
   const supportSortOrder = Number(onlineSupportState?.buttonSortOrder || 3);
-  const supportStatusText = onlineSupportState?.onlineNow ? "online" : "fora do horário";
+  const supportStatusText = (onlineSupportState as any)?.customStatusText || (onlineSupportState?.onlineNow ? "online" : "fora do horário");
 
   const renderSupportButton = () => {
     if (!supportVisible) return null;

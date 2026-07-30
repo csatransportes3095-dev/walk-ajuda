@@ -366,12 +366,14 @@ export default function AdminOnlineSupport() {
   const [cfgWelcome, setCfgWelcome] = useState("");
   const [cfgColor, setCfgColor] = useState("#2563eb");
   const [cfgEnabled, setCfgEnabled] = useState(true);
+  const [cfgStatusText, setCfgStatusText] = useState("");
   useEffect(() => {
     if (configQ.data) {
       setCfgLabel(configQ.data.buttonLabel || "Atendimento Online");
       setCfgWelcome(configQ.data.welcomeMessage || "");
       setCfgColor(configQ.data.buttonColor || "#2563eb");
       setCfgEnabled(configQ.data.chatEnabled === 1);
+      setCfgStatusText((configQ.data as any).customStatusText || "");
     }
   }, [configQ.data]);
 
@@ -707,6 +709,11 @@ export default function AdminOnlineSupport() {
                 <input value={cfgLabel} onChange={e => setCfgLabel(e.target.value)} className="w-full h-10 rounded-lg bg-black/30 border border-white/15 px-3 text-sm text-white focus:outline-none focus:border-blue-400" />
               </div>
               <div>
+                <label className="text-xs font-bold text-white/60 block mb-1">STATUS DO BOTÃO (texto abaixo do nome)</label>
+                <input value={cfgStatusText} onChange={e => setCfgStatusText(e.target.value)} placeholder="Ex: Resposta automática 24h | Tire suas dúvidas" className="w-full h-10 rounded-lg bg-black/30 border border-white/15 px-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400" />
+                <p className="text-[11px] text-white/35 mt-1">Se vazio, mostra "online" ou "fora do horário" automaticamente</p>
+              </div>
+              <div>
                 <label className="text-xs font-bold text-white/60 block mb-1">MENSAGEM DE BOAS-VINDAS</label>
                 <textarea value={cfgWelcome} onChange={e => setCfgWelcome(e.target.value)} rows={2} className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-400 resize-none" />
               </div>
@@ -730,7 +737,7 @@ export default function AdminOnlineSupport() {
                 </button>
               </div>
               <button
-                onClick={() => configMut.mutate({ buttonLabel: cfgLabel, welcomeMessage: cfgWelcome, buttonColor: cfgColor, chatEnabled: cfgEnabled })}
+                onClick={() => configMut.mutate({ buttonLabel: cfgLabel, welcomeMessage: cfgWelcome, buttonColor: cfgColor, chatEnabled: cfgEnabled, customStatusText: cfgStatusText } as any)}
                 className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors"
               >
                 Salvar Configurações
