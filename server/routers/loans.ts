@@ -146,11 +146,11 @@ async function generateReceiptJpg(pdfBuffer: Buffer): Promise<Buffer> {
 
 async function sendReceiptEmail(to: string, clientName: string, receiptNumber: string, installmentNumber: number, pdfBuffer: Buffer): Promise<void> {
   const transporter = nodemailer.createTransport({
-    host: 'smtp.zoho.com', port: 587, secure: false,
-    auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
+    host: process.env.SMTP_HOST || 'smtp.zoho.com', port: 587, secure: false,
+    auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
   });
   await transporter.sendMail({
-    from: '"Walk Ajuda" <h2@h2colombiano.com>',
+    from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
     to,
     subject: `Recibo de Pagamento — Parcela #${installmentNumber} | ${receiptNumber}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;"><div style="background:#0f172a;padding:24px;border-radius:8px 8px 0 0;"><h2 style="color:#22c55e;margin:0;">Walk Ajuda</h2><p style="color:#94a3b8;margin:4px 0 0;">Recibo de Pagamento</p></div><div style="background:#f8fafc;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0;"><p style="color:#0f172a;">Olá, <strong>${clientName}</strong>!</p><p style="color:#374151;">Segue em anexo o recibo da <strong>Parcela #${installmentNumber}</strong>.</p><p style="color:#374151;">Número do recibo: <strong>${receiptNumber}</strong></p><hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;"><p style="color:#6b7280;font-size:12px;">Guarde este recibo para sua segurança.</p></div></div>`,
@@ -687,12 +687,12 @@ export const loanRouter = router({
     if (clientEmail) {
       try {
         const transporter = nodemailer.createTransport({
-          host: 'smtp.zoho.com', port: 587, secure: false,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
+          host: process.env.SMTP_HOST || 'smtp.zoho.com', port: 587, secure: false,
+          auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
         const amountFmt = parseFloat(loan.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         await transporter.sendMail({
-          from: '"CSA Empréstimos SP" <h2@h2colombiano.com>',
+          from: `\"CSA Empréstimos SP\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
           to: clientEmail,
           subject: `Atualização sobre sua solicitação de empréstimo — CSA Empréstimos SP`,
           html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;">
@@ -2308,11 +2308,11 @@ export const loanRouter = router({
     if (!toEmail) throw new TRPCError({ code: 'BAD_REQUEST', message: 'E-mail do cliente não encontrado. Informe o e-mail manualmente.' });
     const pdfBuffer = Buffer.from(input.pdfBase64, 'base64');
     const transporter = nodemailer.createTransport({
-      host: 'smtp.zoho.com', port: 587, secure: false,
-      auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
+      host: process.env.SMTP_HOST || 'smtp.zoho.com', port: 587, secure: false,
+      auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
     });
     await transporter.sendMail({
-      from: '"CSA Empréstimos SP" <h2@h2colombiano.com>',
+      from: `\"CSA Empréstimos SP\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
       to: toEmail,
       subject: `Extrato do seu Empréstimo — ${input.docId} | CSA Empréstimos SP`,
       html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;"><div style="background:#0f172a;padding:24px;border-radius:8px 8px 0 0;"><h2 style="color:#f59e0b;margin:0;">CSA Empréstimos SP</h2><p style="color:#94a3b8;margin:4px 0 0;">Extrato de Empréstimo</p></div><div style="background:#f8fafc;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0;"><p style="color:#0f172a;">Olá, <strong>${input.clientName}</strong>!</p><p style="color:#374151;">Segue em anexo o extrato completo do seu empréstimo <strong>${input.docId}</strong>.</p><p style="color:#374151;">O documento contém todas as informações do empréstimo, histórico de parcelas e detalhes do seu perfil de crédito.</p><hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;"><p style="color:#6b7280;font-size:12px;">CSA Empréstimos SP — Atendimento ao cliente</p></div></div>`,

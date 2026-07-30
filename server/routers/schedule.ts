@@ -21,15 +21,15 @@ async function sendScheduleEmail(to: string, subject: string, html: string): Pro
   if (!to) return false;
   try {
     const transporter = nodemailer.createTransport({
-      host: 'smtp.zoho.com',
+      host: process.env.SMTP_HOST || 'smtp.zoho.com',
       port: 587,
       secure: false,
-      auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
+      auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
     });
     const siteTitle = (await getSetting("site_title")) || "WALK AJUDA";
     await Promise.race([
       transporter.sendMail({
-        from: '"Walk Ajuda" <h2@h2colombiano.com>',
+        from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
         to,
         subject,
         html,
@@ -279,13 +279,13 @@ export const scheduleRouter = router({
       // Notificar admin por e-mail
       try {
         const transporter = nodemailer.createTransport({
-          host: 'smtp.zoho.com',
+          host: process.env.SMTP_HOST || 'smtp.zoho.com',
           port: 587,
           secure: false,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
         await transporter.sendMail({
-          from: '"Walk Ajuda" <h2@h2colombiano.com>',
+          from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
           to: 'h2@h2colombiano.com',
           subject: 'Agendamento manual confirmado',
           html: `<h2>Agendamento manual confirmado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>Cliente: <strong>${appt.customerName || appt.customerPhone}</strong></p><p>Data: <strong>${input.slotDate}</strong></p><p>Hora: <strong>${input.slotTime}</strong></p>`,
@@ -327,13 +327,13 @@ export const scheduleRouter = router({
         // Notificar admin por e-mail
         try {
           const transporter = nodemailer.createTransport({
-          host: 'smtp.zoho.com',
+          host: process.env.SMTP_HOST || 'smtp.zoho.com',
           port: 587,
           secure: false,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
-            from: '"Walk Ajuda" <h2@h2colombiano.com>',
+            from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: 'h2@h2colombiano.com',
             subject: 'Link de agendamento enviado',
             html: `<h2>Link de agendamento enviado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>E-mail: <strong>${appt.customerEmail}</strong></p>`,
@@ -419,13 +419,13 @@ export const scheduleRouter = router({
       (async () => {
         try {
           const transporter = nodemailer.createTransport({
-          host: 'smtp.zoho.com',
+          host: process.env.SMTP_HOST || 'smtp.zoho.com',
           port: 587,
           secure: false,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
-            from: '"Walk Ajuda" <h2@h2colombiano.com>',
+            from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: 'h2@h2colombiano.com',
             subject: 'Novo agendamento confirmado',
             html: `<h2>Novo agendamento confirmado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>Cliente: <strong>${appt.customerName || appt.customerPhone}</strong></p><p>Data/Hora: <strong>${appt.slotDate} às ${appt.slotTime}</strong></p>`,
@@ -468,13 +468,13 @@ export const scheduleRouter = router({
       (async () => {
         try {
           const transporter = nodemailer.createTransport({
-          host: 'smtp.zoho.com',
+          host: process.env.SMTP_HOST || 'smtp.zoho.com',
           port: 587,
           secure: false,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
-            from: '"Walk Ajuda" <h2@h2colombiano.com>',
+            from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: 'h2@h2colombiano.com',
             subject: 'Cliente solicitou reagendamento',
             html: `<h2>Cliente solicitou reagendamento</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>Cliente: <strong>${appt.customerName || appt.customerPhone}</strong></p><p>Horario liberado: <strong>${prevDate ?? ""} ${prevTime ?? ""}</strong></p>`,
