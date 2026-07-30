@@ -953,7 +953,7 @@ function LoansTab() {
                           </div>
                           {/* Botões de ação como cards na parte inferior da parcela */}
                           {((inst.status === "pendente" || inst.isOverdue) && inst.status !== "pago" && inst.status !== "pago_juros") && (
-                            <div className={`grid gap-2 pt-1 border-t border-border/30 ${loan.interestOnlyEnabled && inst.isOverdue ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                            <div className={`grid gap-2 pt-1 border-t border-border/30 ${loan.interestOnlyEnabled && (inst.isOverdue || isVenceHoje) ? 'grid-cols-2' : 'grid-cols-3'}`}>
                               <button
                                 className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-all text-xs font-semibold active:scale-95"
                                 onClick={() => {
@@ -965,8 +965,8 @@ function LoansTab() {
                                 <CheckCircle className="w-4 h-4" />
                                 Pago Manual
                               </button>
-                              {/* Botão Cobrar Juros - aparece apenas em parcelas vencidas com interestOnly ativado */}
-                              {loan.interestOnlyEnabled && inst.isOverdue ? (
+                              {/* Botão Cobrar Juros - aparece em parcelas vencidas OU no dia do vencimento com interestOnly ativado */}
+                              {loan.interestOnlyEnabled && (inst.isOverdue || isVenceHoje) ? (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
                                   onClick={() => setInterestOnlyInstModal({ inst, loan })}>
