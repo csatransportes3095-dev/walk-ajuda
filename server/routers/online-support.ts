@@ -220,6 +220,7 @@ export const onlineSupportRouter = router({
         "buttonSortOrder",
         "buttonLabel",
         "buttonDescription",
+        "customStatusText",
         "buttonIcon",
         "buttonColor",
         "openMode",
