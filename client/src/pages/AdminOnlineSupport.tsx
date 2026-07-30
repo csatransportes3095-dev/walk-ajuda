@@ -51,6 +51,8 @@ function buildPayload(actionType: string, payloadValue: string): Record<string, 
   if (actionType === "send_text") return { text: payloadValue };
   if (actionType === "open_internal") return { path: payloadValue.startsWith("/") ? payloadValue : "/" + payloadValue };
   if (actionType === "open_external") return { url: payloadValue };
+  if (actionType === "open_video") return { url: payloadValue };
+  if (actionType === "open_whatsapp") return { phone: payloadValue.replace(/\D/g, "") };
   if (actionType === "handoff_human") return {};
   try { return JSON.parse(payloadValue || "{}"); } catch { return {}; }
 }
@@ -70,10 +72,12 @@ function MenuItemEditor({
   onSave: () => void; onCancel?: () => void; saveLabel?: string;
 }) {
   const actionOptions = [
-    { value: "open_internal", label: "📄 Abrir página do site", placeholder: "/pre-cadastro", hint: "Ex: /pre-cadastro, /acompanhar, /video/tutorial" },
-    { value: "open_external", label: "🔗 Abrir link externo", placeholder: "https://...", hint: "Ex: https://wa.me/55119..." },
-    { value: "send_text", label: "💬 Enviar mensagem automática", placeholder: "Escreva a mensagem que será enviada...", hint: "O chat enviará esta mensagem automaticamente" },
-    { value: "handoff_human", label: "👤 Falar com atendente humano", placeholder: "", hint: "Encaminha o cliente para um atendente real" },
+    { value: "open_internal", label: "📄 Abrir página do site", placeholder: "/pre-cadastro", hint: "Ex: /pre-cadastro, /acompanhar, /planilha" },
+    { value: "open_external", label: "🔗 Abrir link externo", placeholder: "https://...", hint: "Ex: https://youtube.com/..." },
+    { value: "open_video", label: "🎥 Abrir vídeo", placeholder: "https://...", hint: "URL do vídeo (YouTube, site, etc.)" },
+    { value: "open_whatsapp", label: "💬 Abrir WhatsApp", placeholder: "5511999999999", hint: "Número com código do país (ex: 5511940239867)" },
+    { value: "send_text", label: "✉️ Enviar mensagem automática", placeholder: "Escreva a mensagem...", hint: "O bot enviará este texto automaticamente" },
+    { value: "handoff_human", label: "👤 Falar com atendente humano", placeholder: "", hint: "Encaminha para atendente disponível das 18h às 23h" },
   ];
   const selected = actionOptions.find(o => o.value === actionType) || actionOptions[0];
   return (
@@ -112,7 +116,11 @@ function MenuItemEditor({
       {actionType !== "handoff_human" && (
         <div>
           <label className="text-xs font-semibold text-white/70 block mb-1">
-            {actionType === "open_internal" ? "Caminho da página" : actionType === "open_external" ? "URL do link" : "Mensagem automática"}
+            {actionType === "open_internal" ? "Caminho da página (ex: /pre-cadastro)" : 
+             actionType === "open_external" ? "URL completa (ex: https://...)" : 
+             actionType === "open_video" ? "URL do vídeo" :
+             actionType === "open_whatsapp" ? "Número WhatsApp (ex: 5511940239867)" :
+             "Mensagem automática"}
           </label>
           {actionType === "send_text" ? (
             <textarea
@@ -423,7 +431,12 @@ export default function AdminOnlineSupport() {
     setEditMenuActionType(item.actionType || "send_text");
     // Extrair valor legível do payload para o editor visual
     const rawPayload = item.actionPayload || {};
-    const payloadStr = String(rawPayload.path || rawPayload.url || rawPayload.text || "");
+    let payloadStr = "";
+    if (item.actionType === "open_internal") payloadStr = String(rawPayload.path || "");
+    else if (item.actionType === "open_external") payloadStr = String(rawPayload.url || "");
+    else if (item.actionType === "open_video") payloadStr = String(rawPayload.url || "");
+    else if (item.actionType === "open_whatsapp") payloadStr = String(rawPayload.phone || "");
+    else if (item.actionType === "send_text") payloadStr = String(rawPayload.text || "");
     setEditMenuActionPayload(payloadStr);
   };
 
@@ -660,12 +673,15 @@ export default function AdminOnlineSupport() {
             {/* Lista de botões existentes */}
             <div className="space-y-3">
               {(menuQ.data || []).map((item: any) => {
+                const getDesc = (key: string) => { try { const p = JSON.parse(item.actionPayloadJson || "{}"); return String(p[key] || ""); } catch { return ""; } };
                 const actionLabels: Record<string, { label: string; color: string; desc: string }> = {
-                  open_internal: { label: "Abre página do site", color: "bg-blue-500/20 text-blue-300 border-blue-500/30", desc: item.actionPayloadJson ? (() => { try { return JSON.parse(item.actionPayloadJson).path || ""; } catch { return ""; } })() : "" },
-                  open_external: { label: "Abre link externo", color: "bg-green-500/20 text-green-300 border-green-500/30", desc: item.actionPayloadJson ? (() => { try { return JSON.parse(item.actionPayloadJson).url || ""; } catch { return ""; } })() : "" },
-                  send_text: { label: "Envia mensagem automática", color: "bg-purple-500/20 text-purple-300 border-purple-500/30", desc: item.actionPayloadJson ? (() => { try { return JSON.parse(item.actionPayloadJson).text || ""; } catch { return ""; } })() : "" },
-                  handoff_human: { label: "Falar com atendente", color: "bg-orange-500/20 text-orange-300 border-orange-500/30", desc: "Encaminha para atendimento humano" },
-                  send_buttons: { label: "Mostra sub-botões", color: "bg-pink-500/20 text-pink-300 border-pink-500/30", desc: "Exibe opções adicionais" },
+                  open_internal: { label: "📄 Página do site", color: "bg-blue-500/20 text-blue-300 border-blue-500/30", desc: getDesc("path") },
+                  open_external: { label: "🔗 Link externo", color: "bg-green-500/20 text-green-300 border-green-500/30", desc: getDesc("url") },
+                  open_video: { label: "🎥 Vídeo", color: "bg-red-500/20 text-red-300 border-red-500/30", desc: getDesc("url") },
+                  open_whatsapp: { label: "💬 WhatsApp", color: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30", desc: getDesc("phone") },
+                  send_text: { label: "✉️ Mensagem automática", color: "bg-purple-500/20 text-purple-300 border-purple-500/30", desc: getDesc("text") },
+                  handoff_human: { label: "👤 Falar com atendente", color: "bg-orange-500/20 text-orange-300 border-orange-500/30", desc: "Disponível das 18h às 23h" },
+                  send_buttons: { label: "Sub-botões", color: "bg-pink-500/20 text-pink-300 border-pink-500/30", desc: "Exibe opções adicionais" },
                 };
                 const info = actionLabels[item.actionType] || { label: item.actionType, color: "bg-white/10 text-white/60 border-white/20", desc: "" };
                 return (

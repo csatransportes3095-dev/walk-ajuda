@@ -134,6 +134,8 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
     if (!actionType) return;
     if (actionType === "open_internal" && actionPayload?.path) { window.location.href = String(actionPayload.path); return; }
     if (actionType === "open_external" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); return; }
+    if (actionType === "open_video" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); return; }
+    if (actionType === "open_whatsapp" && actionPayload?.phone) { const txt = actionPayload.text ? "?text=" + encodeURIComponent(String(actionPayload.text)) : ""; window.open("https://wa.me/" + String(actionPayload.phone) + txt, "_blank"); return; }
     if (actionType === "handoff_human" && conversationId) { sendVisitorMessageMut.mutate({ conversationId, visitorId, text: "Quero falar com um atendente humano." }); return; }
     if (actionType === "send_text" && actionPayload?.text && conversationId) { sendVisitorMessageMut.mutate({ conversationId, visitorId, text: String(actionPayload.text) }); return; }
   };
@@ -193,7 +195,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
         {phase === "identify" && (
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
             <div>
-              <p className="text-base font-bold text-white">{publicStateQ.data?.welcomeMessage || "Olá! Seja bem-vindo ao atendimento."}</p>
+              <p className="text-base font-bold text-white">{(() => { const h = new Date().getHours(); const g = h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite"; return g + "! 👋 " + (publicStateQ.data?.welcomeMessage || "Bem-vindo ao atendimento Walk Ajuda."); })()}</p>
               <p className="text-xs text-white/60 mt-1">Para iniciar, preencha seus dados abaixo.</p>
             </div>
             <div className="space-y-3">
@@ -208,19 +210,6 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
                 {phoneError && <p className="text-xs text-red-400 mt-1">{phoneError}</p>}
               </div>
             </div>
-            {menuItems.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">Como podemos ajudar?</p>
-                <div className="grid grid-cols-1 gap-2">
-                  {menuItems.map((item: any) => (
-                    <button key={item.id} onClick={() => { if (!visitorName.trim() || visitorPhone.replace(/\D/g, "").length < 10) { handleIdentifySubmit(); return; } saveVisitorData(visitorName.trim(), visitorPhone.replace(/\D/g, "")); setPhase("chat"); setTimeout(() => handleMenuAction(item.actionType, item.actionPayload || {}), 500); }} className="text-left p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors">
-                      <p className="font-bold text-sm text-white">{item.title}</p>
-                      {item.description && <p className="text-xs text-white/60 mt-0.5">{item.description}</p>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             <button onClick={handleIdentifySubmit} className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors mt-auto">Iniciar atendimento →</button>
           </div>
         )}
@@ -233,19 +222,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {!conversationId && <p className="text-xs text-white/60 text-center">Iniciando conversa...</p>}
-              {listMessagesQ.data?.length === 0 && menuItems.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-white/90">{publicStateQ.data?.welcomeMessage || "Olá! Como podemos ajudar?"}</p>
-                  <div className="grid grid-cols-1 gap-2">
-                    {menuItems.map((item: any) => (
-                      <button key={item.id} onClick={() => handleMenuAction(item.actionType, item.actionPayload || {})} className="text-left p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors">
-                        <p className="font-bold text-sm text-white">{item.title}</p>
-                        {item.description && <p className="text-xs text-white/60 mt-1">{item.description}</p>}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+
               {(listMessagesQ.data || []).map((msg: any) => {
                 const own = msg.senderType === "visitor";
                 return (
