@@ -1893,3 +1893,19 @@ export const onlineSupportLogs = mysqlTable("onlineSupportLogs", {
 });
 export type OnlineSupportLog = typeof onlineSupportLogs.$inferSelect;
 export type InsertOnlineSupportLog = typeof onlineSupportLogs.$inferInsert;
+
+// Árvore de fluxo de botões do chat (sistema recursivo)
+export const chatFlowNodes = mysqlTable("chatFlowNodes", {
+  id: int("id").autoincrement().primaryKey(),
+  parentId: int("parentId"),
+  label: varchar("label", { length: 256 }).notNull(),
+  botResponse: text("botResponse"),
+  actionType: varchar("actionType", { length: 64 }).notNull().default("show_children"),
+  actionPayloadJson: text("actionPayloadJson"),
+  sortOrder: int("sortOrder").notNull().default(0),
+  isActive: int("isActive").notNull().default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ChatFlowNode = typeof chatFlowNodes.$inferSelect;
+export type InsertChatFlowNode = typeof chatFlowNodes.$inferInsert;

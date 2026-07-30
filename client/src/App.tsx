@@ -75,6 +75,7 @@ import AdminHubCentral from "./pages/AdminHubCentral";
 import AdminConsultas from "./pages/AdminConsultas";
 import AdminWhatsappTemplates from "./pages/AdminWhatsappTemplates";
 import AdminOnlineSupport from "./pages/AdminOnlineSupport";
+import AdminChatFlow from "./pages/AdminChatFlow";
 import AdminReferrals from "./pages/AdminReferrals";
 import AdminPreRegistrations from "./pages/AdminPreRegistrations";
 import AdminPreCadastroQuestions from "./pages/AdminPreCadastroQuestions";
@@ -272,6 +273,9 @@ function Router() {
       </Route>
       <Route path={"/admin/online-support"}>
         <AdminGuard><AdminOnlineSupport /></AdminGuard>
+      </Route>
+      <Route path={"/admin/chat-flow"}>
+        <AdminGuard><AdminChatFlow /></AdminGuard>
       </Route>
       <Route path={"/agendar/:token"} component={SchedulePage} />
       <Route path={"/gastos"} component={GastosPage} />

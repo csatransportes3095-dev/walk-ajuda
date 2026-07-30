@@ -16,6 +16,7 @@ import {
   onlineSupportVisitors,
 } from "../../drizzle/schema";
 import { fuzzyIncludes, normalizeText } from "./normalize";
+import { findFlowNodeByLabel, getNodeChildren } from "../chat-flow/service";
 
 type JsonValue = Record<string, unknown> | Array<unknown>;
 
@@ -656,6 +657,43 @@ export async function sendVisitorMessage(input: {
   )[0];
 
   if (!updatedConversation || updatedConversation.botPaused === 1) {
+    return { conversationId: conversation.id, visitorMessage, responses };
+  }
+
+  // Verificar se o texto corresponde a um nó do fluxo de botões (árvore recursiva)
+  const flowNode = await findFlowNodeByLabel(input.text || "", null);
+  if (flowNode && flowNode.isActive === 1) {
+    const botText = flowNode.botResponse || flowNode.label;
+    const children = await getNodeChildren(flowNode.id);
+    const botPayload: Record<string, unknown> = {};
+    if (children.length > 0) {
+      botPayload.buttons = children.map(c => ({
+        label: c.label,
+        actionType: "flow_node",
+        actionPayload: { nodeId: c.id, nodeActionType: c.actionType, nodeActionPayload: c.actionPayload },
+      }));
+    }
+    // Se a ação do nó é uma ação direta (não show_children), executar
+    if (flowNode.actionType !== "show_children" && children.length === 0) {
+      botPayload.directAction = {
+        actionType: flowNode.actionType,
+        actionPayload: flowNode.actionPayload,
+      };
+    }
+    const flowMsg = await createMessage({
+      conversationId: conversation.id,
+      senderType: "bot",
+      senderName: "Assistente",
+      text: botText,
+      messageType: "rich",
+      payload: botPayload,
+    });
+    await touchConversationForMessage(conversation.id, {
+      previewText: flowMsg.text || "",
+      incrementVisitorUnread: 1,
+      status: "waiting_customer",
+    });
+    responses.push({ type: "flow_node", message: flowMsg });
     return { conversationId: conversation.id, visitorMessage, responses };
   }
 

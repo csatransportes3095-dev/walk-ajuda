@@ -156,6 +156,21 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
 
   const handleMenuAction = (actionType?: string, actionPayload?: Record<string, any>) => {
     if (!actionType) return;
+    // Nó do fluxo de botões (árvore recursiva)
+    if (actionType === "flow_node" && actionPayload?.nodeId && conversationId) {
+      const nodeActionType = String(actionPayload.nodeActionType || "show_children");
+      const nodeActionPayload = (actionPayload.nodeActionPayload || {}) as Record<string, any>;
+      // Ações diretas: executar imediatamente
+      if (nodeActionType === "open_internal" && nodeActionPayload?.path) { window.location.href = String(nodeActionPayload.path); return; }
+      if (nodeActionType === "open_external" && nodeActionPayload?.url) { window.open(String(nodeActionPayload.url), "_blank"); return; }
+      if (nodeActionType === "open_video" && nodeActionPayload?.url) { window.open(String(nodeActionPayload.url), "_blank"); return; }
+      if (nodeActionType === "open_whatsapp" && nodeActionPayload?.phone) { const txt = nodeActionPayload.text ? "?text=" + encodeURIComponent(String(nodeActionPayload.text)) : ""; window.open("https://wa.me/" + String(nodeActionPayload.phone) + txt, "_blank"); return; }
+      if (nodeActionType === "handoff_human") { sendVisitorMessageMut.mutate({ conversationId, visitorId, text: "Quero falar com um atendente humano." }); return; }
+      // show_children ou send_text: enviar label como mensagem para o bot processar
+      const label = String(actionPayload.label || "");
+      if (label) sendVisitorMessageMut.mutate({ conversationId, visitorId, text: label });
+      return;
+    }
     if (actionType === "open_internal" && actionPayload?.path) { window.location.href = String(actionPayload.path); return; }
     if (actionType === "open_external" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); return; }
     if (actionType === "open_video" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); return; }
