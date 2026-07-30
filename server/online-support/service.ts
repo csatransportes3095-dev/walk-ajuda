@@ -604,26 +604,46 @@ export async function sendVisitorMessage(input: {
   }
 
   if (!isOpenNow && config.autoReplyEnabled === 1) {
+    // Mesmo fora do horário, tenta responder com respostas automáticas por palavras-chave
+    const matchOutOfHours = await testAutoReply(input.text);
+    if (matchOutOfHours.matched && matchOutOfHours.reply) {
+      const autoMessage = await createMessage({
+        conversationId: conversation.id,
+        senderType: "bot",
+        senderName: "Assistente",
+        text: String(matchOutOfHours.reply.responseText || ""),
+        messageType: "rich",
+        payload: {
+          media: matchOutOfHours.reply.media,
+          buttons: matchOutOfHours.reply.buttons,
+          score: matchOutOfHours.score,
+          autoReplyId: matchOutOfHours.reply.id,
+          matchedAt: nowIso(),
+        },
+      });
+      await touchConversationForMessage(conversation.id, {
+        previewText: autoMessage.text || "",
+        incrementVisitorUnread: 1,
+        status: "waiting_customer",
+      });
+      responses.push({ type: "auto_reply", message: autoMessage });
+      return { conversationId: conversation.id, visitorMessage, responses };
+    }
+    // Sem resposta automática: mostra mensagem de fora do horário com menu
     const outOfHours = await createMessage({
       conversationId: conversation.id,
       senderType: "bot",
       senderName: "Assistente",
       text:
         config.outOfHoursMessage ||
-        "Nossa equipe esta fora do horario de atendimento, mas o assistente virtual pode ajudar.",
+        "Nosso atendimento está fora do horário, mas posso ajudar com informações automáticas. Selecione uma opção abaixo.",
     });
-
     await touchConversationForMessage(conversation.id, {
       previewText: outOfHours.text || "",
       incrementVisitorUnread: 1,
       status: "waiting_customer",
     });
-
-    responses.push({
-      type: "out_of_hours",
-      message: outOfHours,
-    });
-
+    responses.push({ type: "out_of_hours", message: outOfHours });
     return { conversationId: conversation.id, visitorMessage, responses };
   }
 
