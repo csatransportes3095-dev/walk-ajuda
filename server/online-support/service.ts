@@ -606,7 +606,47 @@ export async function sendVisitorMessage(input: {
   }
 
   if (!isOpenNow && config.autoReplyEnabled === 1) {
-    // Mesmo fora do horário, tenta responder com respostas automáticas por palavras-chave
+    // Mesmo fora do horário: verificar keywords dos botões do menu PRIMEIRO (prioridade máxima)
+    const inputNormOOH = normalizeText(input.text || "");
+    const menuItemOOH = menuItems.find((m: any) => {
+      const keywords: string[] = m.keywords || [];
+      if (keywords.length > 0) {
+        const kwMatch = keywords.some(kw => {
+          const kwNorm = normalizeText(kw);
+          return inputNormOOH === kwNorm || inputNormOOH.includes(kwNorm) || fuzzyIncludes(inputNormOOH, kwNorm);
+        });
+        if (kwMatch) return true;
+      }
+      const title = normalizeText(m.title || "");
+      return inputNormOOH === title || inputNormOOH.includes(title) || title.includes(inputNormOOH);
+    });
+    if (menuItemOOH) {
+      const actionType = (menuItemOOH as any).actionType || "send_message";
+      const actionPayload = (menuItemOOH as any).actionPayload || {};
+      const hasDirectAction = ["open_internal", "open_external", "open_video", "open_whatsapp"].includes(actionType);
+      const botText = menuItemOOH.responseText || (hasDirectAction ? "Clique no botão abaixo:" : "Selecione uma opção:");
+      const botPayload: Record<string, unknown> = {};
+      if (menuItemOOH.subButtons && menuItemOOH.subButtons.length > 0) {
+        botPayload.buttons = menuItemOOH.subButtons.map((b: any) => ({
+          label: b.label, actionType: b.actionType, actionPayload: b.actionPayload || {},
+        }));
+      } else if (hasDirectAction) {
+        botPayload.buttons = [{ label: menuItemOOH.title, actionType, actionPayload }];
+      }
+      if ((menuItemOOH as any).responseImageUrl) {
+        botPayload.media = { imageUrl: (menuItemOOH as any).responseImageUrl };
+      }
+      const menuBotMsgOOH = await createMessage({
+        conversationId: conversation.id, senderType: "bot", senderName: "Assistente",
+        text: botText, messageType: "rich", payload: botPayload,
+      });
+      await touchConversationForMessage(conversation.id, {
+        previewText: menuBotMsgOOH.text || "", incrementVisitorUnread: 1, status: "waiting_customer",
+      });
+      responses.push({ type: "menu_item", message: menuBotMsgOOH });
+      return { conversationId: conversation.id, visitorMessage, responses };
+    }
+    // Depois verifica respostas automáticas por palavras-chave
     const matchOutOfHours = await testAutoReply(input.text);
     if (matchOutOfHours.matched && matchOutOfHours.reply) {
       const autoMessage = await createMessage({
@@ -631,7 +671,7 @@ export async function sendVisitorMessage(input: {
       responses.push({ type: "auto_reply", message: autoMessage });
       return { conversationId: conversation.id, visitorMessage, responses };
     }
-    // Sem resposta automática: mostra mensagem de fora do horário com menu
+    // Sem match: mostra mensagem de fora do horário com menu
     const outOfHours = await createMessage({
       conversationId: conversation.id,
       senderType: "bot",
