@@ -717,19 +717,36 @@ export async function sendVisitorMessage(input: {
     const title = normalizeText(m.title || "");
     return inputNorm === title || inputNorm.includes(title) || title.includes(inputNorm);
   });
-  if (menuItemMatch && (menuItemMatch.responseText || (menuItemMatch.subButtons && menuItemMatch.subButtons.length > 0))) {
-    const botText = menuItemMatch.responseText || "Selecione uma opção:";
+  if (menuItemMatch) {
+    // Se o botão tem actionType de navegação (open_internal, open_external, open_video, open_whatsapp)
+    // e não tem responseText nem sub-botões, enviar mensagem com o botão de ação direta
+    const actionType = (menuItemMatch as any).actionType || "send_message";
+    const actionPayload = (menuItemMatch as any).actionPayload || {};
+    const hasDirectAction = ["open_internal", "open_external", "open_video", "open_whatsapp"].includes(actionType);
+    const hasResponse = menuItemMatch.responseText || (menuItemMatch.subButtons && menuItemMatch.subButtons.length > 0);
+
+    const botText = menuItemMatch.responseText || (hasDirectAction ? `Clique no botão abaixo:` : "Selecione uma opção:");
     const botPayload: Record<string, unknown> = {};
+
     if (menuItemMatch.subButtons && menuItemMatch.subButtons.length > 0) {
       botPayload.buttons = menuItemMatch.subButtons.map((b: any) => ({
         label: b.label,
         actionType: b.actionType,
         actionPayload: b.actionPayload || {},
       }));
+    } else if (hasDirectAction) {
+      // Criar um botão de ação direta com o próprio item
+      botPayload.buttons = [{
+        label: menuItemMatch.title,
+        actionType: actionType,
+        actionPayload: actionPayload,
+      }];
     }
+
     if ((menuItemMatch as any).responseImageUrl) {
       botPayload.media = { imageUrl: (menuItemMatch as any).responseImageUrl };
     }
+
     const menuBotMsg = await createMessage({
       conversationId: conversation.id,
       senderType: "bot",
