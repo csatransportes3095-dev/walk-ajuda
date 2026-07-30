@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 type MessageType = 'text' | 'link' | 'banner' | 'group_invite' | 'promo';
 type TargetType = 'all' | 'withOrders' | 'withoutOrders' | 'byStatus' | 'selected';
 type SendMode = 'email' | 'whatsapp';
+type WaViewMode = 'single' | 'list';
 
 const MESSAGE_TYPES: { value: MessageType; label: string; icon: React.ReactNode; color: string }[] = [
   { value: 'text', label: 'Mensagem', icon: <MessageSquare className="w-4 h-4" />, color: 'bg-blue-500/20 border-blue-500/40 text-blue-300' },
@@ -69,6 +70,8 @@ export default function AdminBroadcast() {
 
   const [waStatusFilter, setWaStatusFilter] = useState<string>('');
   const [showWaPreview, setShowWaPreview] = useState(false);
+  const [waViewMode, setWaViewMode] = useState<WaViewMode>('single');
+  const [waTransitioning, setWaTransitioning] = useState(false);
   const broadcastsQuery = trpc.broadcasts.list.useQuery();
   const customersQuery = trpc.broadcasts.getCustomers.useQuery();
   const statusTypesQuery = trpc.broadcasts.getOrderStatusTypes.useQuery();
@@ -178,22 +181,28 @@ export default function AdminBroadcast() {
 
   const markWaSent = (phone: string) => {
     setWaLinks(prev => {
-      const updated = prev.map(l => l.phone === phone ? { ...l, sent: true } : l);
+      const updated = prev.map(l => l.phone === phone && !l.sent ? { ...l, sent: true } : l);
       localStorage.setItem(WA_LIST_KEY, JSON.stringify(updated));
       return updated;
     });
-    // Remove da lista após 1.5s
-    setTimeout(() => {
-      setWaLinks(prev => {
-        const filtered = prev.filter(l => l.phone !== phone);
-        localStorage.setItem(WA_LIST_KEY, JSON.stringify(filtered));
-        return filtered;
-      });
-    }, 1500);
+  };
+
+  const handleSendCurrentWa = () => {
+    if (waTransitioning) return;
+    const current = waLinks.find(l => !l.sent);
+    if (!current) return;
+
+    setWaTransitioning(true);
+    window.open(current.url, '_blank', 'noopener,noreferrer');
+    markWaSent(current.phone);
+
+    // Mantém o botão travado por um curto período para evitar clique duplo.
+    setTimeout(() => setWaTransitioning(false), 450);
   };
 
   const clearWaList = () => {
     setWaLinks([]);
+    setWaTransitioning(false);
     localStorage.removeItem(WA_LIST_KEY);
   };
 
@@ -258,6 +267,11 @@ export default function AdminBroadcast() {
 
   const broadcasts = broadcastsQuery.data || [];
   const getTypeInfo = (type: string) => MESSAGE_TYPES.find(t => t.value === type) || MESSAGE_TYPES[0];
+  const waPendingCount = waLinks.filter(l => !l.sent).length;
+  const waCompletedCount = waLinks.length - waPendingCount;
+  const waCurrentLink = waLinks.find(l => !l.sent) || null;
+  const waCurrentPosition = waCurrentLink ? waCompletedCount + 1 : waLinks.length;
+  const waProgress = waLinks.length > 0 ? Math.round((waCompletedCount / waLinks.length) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-[#0a0a1a]">
@@ -524,11 +538,26 @@ export default function AdminBroadcast() {
             {/* Lista de envio manual WhatsApp */}
             {waLinks.length > 0 && (
               <div className="space-y-3">
+                <div className="inline-flex bg-black/30 border border-white/10 rounded-xl p-1 gap-1">
+                  <button
+                    onClick={() => setWaViewMode('single')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${waViewMode === 'single' ? 'bg-green-600/40 border border-green-500/60 text-green-200' : 'text-white/50 hover:text-white hover:bg-white/10'}`}
+                  >
+                    Envio um por vez
+                  </button>
+                  <button
+                    onClick={() => setWaViewMode('list')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${waViewMode === 'list' ? 'bg-white/15 border border-white/20 text-white' : 'text-white/50 hover:text-white hover:bg-white/10'}`}
+                  >
+                    Ver lista completa
+                  </button>
+                </div>
+
                 {/* Cabeçalho com contador e botão limpar */}
                 <div className="flex items-center justify-between bg-green-900/20 border border-green-500/30 rounded-xl px-4 py-2.5">
                   <div>
                     <p className="text-sm font-bold text-green-300">📋 Fila de Envio WhatsApp</p>
-                    <p className="text-xs text-white/50">{waLinks.filter(l => !l.sent).length} pendente(s) de {waLinks.length} total</p>
+                    <p className="text-xs text-white/50">{waPendingCount} pendente(s) de {waLinks.length} total</p>
                   </div>
                   <button onClick={clearWaList} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg px-2 py-1 transition-all">
                     <X className="w-3 h-3" /> Limpar lista
@@ -539,49 +568,83 @@ export default function AdminBroadcast() {
                 <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full transition-all duration-500"
-                    style={{ width: `${waLinks.length > 0 ? Math.round(((waLinks.length - waLinks.filter(l => !l.sent).length) / waLinks.length) * 100) : 0}%` }}
+                    style={{ width: `${waProgress}%` }}
                   />
                 </div>
 
-                {/* Lista de clientes */}
-                <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
-                  {waLinks.map((l) => (
-                    <div
-                      key={l.phone}
-                      className={`flex items-center gap-3 rounded-xl p-3 transition-all duration-300 ${
-                        l.sent
-                          ? 'bg-green-900/30 border border-green-500/40 opacity-60'
-                          : 'bg-black/30 border border-white/10'
-                      }`}
-                    >
-                      {/* Número de ordem */}
-                      <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                        {l.sent
-                          ? <CheckCircle className="w-4 h-4 text-green-400" />
-                          : <Phone className="w-3.5 h-3.5 text-white/50" />}
+                {waViewMode === 'single' ? (
+                  <div className="sticky top-24 z-20">
+                    <div className="bg-black/40 border border-green-500/40 rounded-2xl px-4 py-5 sm:px-5 sm:py-6 min-h-[260px] flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <p className="text-xs font-bold tracking-wide text-green-300/90">FILA DE ENVIO WHATSAPP</p>
+                        <p className="text-sm text-white/70">Cliente {waCurrentPosition} de {waLinks.length}</p>
+                        <div className="min-h-[72px] max-h-[72px] overflow-hidden flex items-center">
+                          <p className="text-lg sm:text-xl font-extrabold text-white uppercase leading-tight break-words w-full">
+                            {waCurrentLink?.name || 'Todos os clientes foram processados.'}
+                          </p>
+                        </div>
+                        <p className="text-sm sm:text-base text-white/65 min-h-[24px]">
+                          {waCurrentLink?.phone || 'Sem clientes pendentes na fila.'}
+                        </p>
                       </div>
-                      {/* Nome e telefone */}
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-bold truncate ${l.sent ? 'text-green-300 line-through' : 'text-white'}`}>{l.name}</p>
-                        <p className="text-xs text-white/40">{l.phone}</p>
-                      </div>
-                      {/* Botão enviar */}
-                      {l.sent ? (
-                        <span className="text-xs text-green-400 font-bold shrink-0">✅ Enviado</span>
-                      ) : (
-                        <a
-                          href={l.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => markWaSent(l.phone)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold transition-all shrink-0 active:scale-95"
+
+                      <div className="mt-6 space-y-2">
+                        <p className="text-xs text-white/55 h-4">
+                          {waTransitioning
+                            ? 'Carregando próximo cliente...'
+                            : waCurrentLink
+                              ? ' '
+                              : 'Todos os clientes foram processados.'}
+                        </p>
+                        <button
+                          id="btn-enviar-proximo-whatsapp"
+                          type="button"
+                          onClick={handleSendCurrentWa}
+                          disabled={!waCurrentLink || waTransitioning}
+                          className="w-full h-12 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:bg-green-900/40 disabled:text-white/50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all"
                         >
-                          <Phone className="w-3 h-3" /> Enviar
-                        </a>
-                      )}
+                          <Phone className="w-4 h-4" /> Enviar pelo WhatsApp
+                        </button>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
+                    {waLinks.map((l) => (
+                      <div
+                        key={l.phone}
+                        className={`flex items-center gap-3 rounded-xl p-3 transition-all duration-300 ${
+                          l.sent
+                            ? 'bg-green-900/30 border border-green-500/40 opacity-60'
+                            : 'bg-black/30 border border-white/10'
+                        }`}
+                      >
+                        <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                          {l.sent
+                            ? <CheckCircle className="w-4 h-4 text-green-400" />
+                            : <Phone className="w-3.5 h-3.5 text-white/50" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-bold truncate ${l.sent ? 'text-green-300 line-through' : 'text-white'}`}>{l.name}</p>
+                          <p className="text-xs text-white/40">{l.phone}</p>
+                        </div>
+                        {l.sent ? (
+                          <span className="text-xs text-green-400 font-bold shrink-0">✅ Enviado</span>
+                        ) : (
+                          <a
+                            href={l.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => markWaSent(l.phone)}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold transition-all shrink-0 active:scale-95"
+                          >
+                            <Phone className="w-3 h-3" /> Enviar
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {waLinks.every(l => l.sent) && (
                   <div className="text-center py-3 bg-green-900/20 border border-green-500/30 rounded-xl">
@@ -591,7 +654,7 @@ export default function AdminBroadcast() {
                 )}
 
                 <p className="text-xs text-white/40 text-center">
-                  Clique em "📲 Enviar" para abrir o WhatsApp com a mensagem. O cliente sai da lista automaticamente.
+                  Clique em "Enviar" para abrir o WhatsApp com a mensagem. O cliente é marcado automaticamente como enviado.
                 </p>
               </div>
             )}
