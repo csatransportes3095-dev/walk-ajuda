@@ -3240,7 +3240,7 @@ export const appRouter = router({
         skipEmail: z.boolean().optional().default(false),
       }))
       .mutation(async ({ input }) => {
-        const smtpPass = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
+        const smtpPass = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || process.env.RESEND_API_KEY || '';
         if (input.status === 'recebido') {
           return { success: false, error: 'Status recebido não pode ser definido manualmente' };
         }
@@ -3270,7 +3270,7 @@ export const appRouter = router({
 
         // Enviar email ao admin quando status muda
         const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
-        if (emailTo && emailTo.trim() !== '' && smtpPass) {
+        if (emailTo && emailTo.trim() !== '') {
           try {
             const adminEmailContent = emailStatusAdmin({
               statusLabel,
@@ -3290,14 +3290,12 @@ export const appRouter = router({
           } catch (adminEmailError) {
             console.error('[Email] Erro ao enviar notificação ao admin:', adminEmailError);
           }
-        } else if (!smtpPass) {
-          console.warn('[Email] SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente: notificação por e-mail ignorada em updateStatus.');
         }
 
         // Enviar email ao cliente se tiver email, não for silencioso e não estiver bloqueado
         const customerForBlock2 = await getCustomerByPhone(input.customerPhone);
         const isCustomerBlocked2 = customerForBlock2 && (customerForBlock2 as any).blocked === 1;
-        if (input.customerEmail && !input.skipEmail && !isCustomerBlocked2 && smtpPass) {
+        if (input.customerEmail && !input.skipEmail && !isCustomerBlocked2) {
           try {
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
@@ -3592,10 +3590,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         try {
-          const smtpPass = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
-          if (!smtpPass) {
-            return { success: false, message: 'Configuração de e-mail indisponível (SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente).' };
-          }
+          // smtpPass não é mais necessário - usando Resend API via HTTPS
           // Verificar se cliente está bloqueado
           if (input.customerPhone) {
             const customerForBlockR = await getCustomerByPhone(input.customerPhone);
