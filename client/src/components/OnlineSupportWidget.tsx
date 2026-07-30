@@ -26,6 +26,11 @@ function getOrCreateVisitorId() {
   localStorage.setItem(VISITOR_STORAGE_KEY, visitorId);
   return visitorId;
 }
+function getVisitorIdForPhone(phone: string): string {
+  // Gera um visitorId estável baseado no número de telefone
+  // Assim o mesmo número sempre tem o mesmo visitorId e a mesma conversa
+  return `v_phone_${phone.replace(/\D/g, "")}`;
+}
 
 function getSavedVisitorName() { return localStorage.getItem(VISITOR_NAME_KEY) || ""; }
 function getSavedVisitorPhone() { return localStorage.getItem(VISITOR_PHONE_KEY) || ""; }
@@ -73,7 +78,12 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [statusText, setStatusText] = useState<string>("Conectando...");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const visitorId = useMemo(() => getOrCreateVisitorId(), []);
+  // visitorId baseado no telefone: mesmo número = mesma conversa em qualquer dispositivo
+  const [visitorId, setVisitorId] = useState<string>(() => {
+    const savedPhone = getSavedVisitorPhone();
+    if (savedPhone) return getVisitorIdForPhone(savedPhone);
+    return getOrCreateVisitorId();
+  });
 
   const publicStateQ = trpc.onlineSupport.publicState.useQuery({ pathname: window.location.pathname }, { refetchInterval: 30000 });
   const unreadQ = trpc.onlineSupport.unreadSummary.useQuery({ visitorId }, { refetchInterval: 5000 });
@@ -101,7 +111,17 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
   }, [phase, isOpen, conversationId]);
 
   useEffect(() => {
-    if (isOpen && unreadQ.data?.openConversationId && !conversationId) setConversationId(unreadQ.data.openConversationId);
+    if (!isOpen) return;
+    const status = (unreadQ.data as any)?.conversationStatus;
+    // Se conversa foi finalizada pelo admin, limpar e voltar para identificação
+    if (status === "finalized" || status === "blocked") {
+      if (conversationId) {
+        setConversationId(null);
+        setPhase("identify");
+      }
+      return;
+    }
+    if (unreadQ.data?.openConversationId && !conversationId) setConversationId(unreadQ.data.openConversationId);
   }, [isOpen, unreadQ.data, conversationId]);
 
   useEffect(() => {
@@ -119,6 +139,10 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
     if (hasError) return;
     saveVisitorData(visitorName.trim(), phoneClean);
     setVisitorPhone(phoneClean);
+    // Gerar visitorId baseado no telefone — garante que mesmo número = mesma conversa
+    const newVisitorId = getVisitorIdForPhone(phoneClean);
+    setVisitorId(newVisitorId);
+    setConversationId(null); // Limpar conversa anterior para buscar a do novo número
     setPhase("chat");
   };
 

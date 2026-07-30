@@ -1036,11 +1036,12 @@ export async function getUnreadSummary(visitorId: string) {
     .orderBy(desc(onlineSupportConversations.updatedAt))
     .limit(1);
 
-  if (!row[0]) return { unreadMessages: 0, openConversationId: null };
-
+    if (!row[0]) return { unreadMessages: 0, openConversationId: null, conversationStatus: null };
+  const isFinalized = row[0].status === "finalized" || row[0].status === "blocked";
   return {
     unreadMessages: row[0].unreadForVisitor || 0,
-    openConversationId: row[0].id,
+    openConversationId: isFinalized ? null : row[0].id,
+    conversationStatus: row[0].status,
   };
 }
 
