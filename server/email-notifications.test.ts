@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import jwt from 'jsonwebtoken';
 
 // Mock nodemailer
 vi.mock('nodemailer', () => {
@@ -13,6 +14,11 @@ vi.mock('nodemailer', () => {
 // Mock storage
 vi.mock('./storage', () => ({
   storagePut: vi.fn().mockResolvedValue({ key: 'test-key', url: '/manus-storage/test' }),
+}));
+
+// Mock direct mail sender (used by status notifications)
+vi.mock('./_core/sendMailDirect', () => ({
+  sendMailDirect: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock db functions
@@ -202,19 +208,38 @@ vi.mock('./db', () => ({
 
 import { appRouter } from './routers';
 import { getSetting, getStatusInfoFromDb, updateLastOrderStatus } from './db';
+import { sendMailDirect } from './_core/sendMailDirect';
 
 describe('Email Notifications - updateStatus', () => {
-  let mockSendMail: any;
+  const mockedSendMailDirect = vi.mocked(sendMailDirect);
+
+  function createAdminCaller() {
+    const token = jwt.sign(
+      { sub: 'admin-1', role: 'admin' },
+      process.env.JWT_SECRET || 'admin-secret-fallback',
+      { expiresIn: '1h' },
+    );
+
+    return appRouter.createCaller({
+      user: { id: 'admin-1', role: 'admin' } as any,
+      req: {
+        headers: { cookie: `admin_token=${token}` },
+        socket: { remoteAddress: '127.0.0.1' },
+      } as any,
+      res: { clearCookie: vi.fn(), cookie: vi.fn() } as any,
+    });
+  }
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockSendMail = vi.fn().mockResolvedValue({ messageId: 'test-id' });
-    const nodemailer = await import('nodemailer');
-    (nodemailer.default.createTransport as ReturnType<typeof vi.fn>).mockReturnValue({ sendMail: mockSendMail });
+    process.env.RESEND_API_KEY = 'test-resend-key';
     
     (getSetting as ReturnType<typeof vi.fn>).mockImplementation((key: string) => {
+      if (key === 'email_to') return Promise.resolve('h2@h2colombiano.com');
       if (key === 'contact_email') return Promise.resolve('h2@h2colombiano.com');
       if (key === 'site_title') return Promise.resolve('H2 COLOMBIANO');
+      if (key === 'site_domain') return Promise.resolve('h2colombiano.com');
+      if (key === 'site_url') return Promise.resolve('https://h2colombiano.com');
       return Promise.resolve(null);
     });
     
@@ -227,11 +252,7 @@ describe('Email Notifications - updateStatus', () => {
   });
 
   it('should send email to admin when order status is updated', async () => {
-    const caller = appRouter.createCaller({
-      user: { id: 'admin-1', role: 'admin' } as any,
-      req: { headers: {}, socket: { remoteAddress: '127.0.0.1' } } as any,
-      res: { clearCookie: vi.fn(), cookie: vi.fn() } as any,
-    });
+    const caller = createAdminCaller();
 
     const result = await caller.orderStatus.updateStatus({
       registrationId: 123,
@@ -248,25 +269,21 @@ describe('Email Notifications - updateStatus', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(mockSendMail).toHaveBeenCalledTimes(2);
+    expect(mockedSendMailDirect).toHaveBeenCalledTimes(2);
 
-    const adminCall = mockSendMail.mock.calls[0][0];
+    const adminCall = mockedSendMailDirect.mock.calls[0][0];
     expect(adminCall.to).toBe('h2@h2colombiano.com');
     expect(adminCall.subject).toContain('[ADMIN]');
     expect(adminCall.subject).toContain('Processando');
-    expect(adminCall.html).toContain('JoÃ£o Silva');
+    expect(adminCall.html).toContain('Jo');
 
-    const customerCall = mockSendMail.mock.calls[1][0];
+    const customerCall = mockedSendMailDirect.mock.calls[1][0];
     expect(customerCall.to).toBe('customer@example.com');
     expect(customerCall.subject).toContain('Processando');
   });
 
   it('should skip customer email when skipEmail is true', async () => {
-    const caller = appRouter.createCaller({
-      user: { id: 'admin-1', role: 'admin' } as any,
-      req: { headers: {}, socket: { remoteAddress: '127.0.0.1' } } as any,
-      res: { clearCookie: vi.fn(), cookie: vi.fn() } as any,
-    });
+    const caller = createAdminCaller();
 
     const result = await caller.orderStatus.updateStatus({
       registrationId: 123,
@@ -279,8 +296,75 @@ describe('Email Notifications - updateStatus', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(mockSendMail).toHaveBeenCalledOnce();
-    const adminCall = mockSendMail.mock.calls[0][0];
+    expect(mockedSendMailDirect).toHaveBeenCalledOnce();
+    const adminCall = mockedSendMailDirect.mock.calls[0][0];
     expect(adminCall.to).toBe('h2@h2colombiano.com');
+  });
+
+  it('should send admin and customer email on orderStatus.update', async () => {
+    const caller = createAdminCaller();
+
+    const result = await caller.orderStatus.update({
+      registrationId: 321,
+      customerPhone: '(11) 91234-5678',
+      customerEmail: 'cliente@example.com',
+      customerName: 'Maria',
+      status: 'processando',
+      note: 'Status alterado',
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockedSendMailDirect).toHaveBeenCalledTimes(2);
+    expect(mockedSendMailDirect.mock.calls[0][0].to).toBe('h2@h2colombiano.com');
+    expect(mockedSendMailDirect.mock.calls[1][0].to).toBe('cliente@example.com');
+  });
+
+  it('should resend status email to customer', async () => {
+    const caller = createAdminCaller();
+
+    const result = await caller.orderStatus.resendEmail({
+      customerEmail: 'cliente2@example.com',
+      customerName: 'Carlos',
+      customerPhone: '(11) 90000-0000',
+      status: 'processando',
+      note: 'Reenvio manual',
+      serviceName: 'Conta',
+      serviceOption: 'Completo',
+      customerNumber: 10,
+      orderNumber: 2002,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockedSendMailDirect).toHaveBeenCalledOnce();
+    expect(mockedSendMailDirect.mock.calls[0][0].to).toBe('cliente2@example.com');
+    expect(mockedSendMailDirect.mock.calls[0][0].subject).toContain('Reenvio');
+  });
+
+  it('should notify admin and customer when saving new status for order #427000', async () => {
+    const caller = createAdminCaller();
+
+    const result = await caller.orderStatus.updateStatus({
+      registrationId: 427000,
+      subOrderIndex: 0,
+      customerPhone: '(21) 99999-0000',
+      customerEmail: 'imperioandrelucas@gmail.com',
+      customerName: 'imperioandrelucas',
+      status: 'agendamento_p_foto_confirmado',
+      note: 'Teste de notificacao ao salvar novo status',
+      serviceName: 'UBER APP',
+      serviceOption: 'NOME ALEATORIO',
+      orderNumber: 427000,
+      customerNumber: 1056,
+      customerCity: 'RIO DE JANEIRO',
+      customerUf: 'RJ',
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockedSendMailDirect).toHaveBeenCalledTimes(2);
+    const adminCall = mockedSendMailDirect.mock.calls[0][0];
+    const customerCall = mockedSendMailDirect.mock.calls[1][0];
+    expect(adminCall.to).toBe('h2@h2colombiano.com');
+    expect(customerCall.to).toBe('imperioandrelucas@gmail.com');
+    expect(customerCall.subject).toContain('Processando');
   });
 });

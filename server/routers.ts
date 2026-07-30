@@ -192,6 +192,18 @@ async function getEmailBranding(): Promise<{ siteTitle: string; siteDomain: stri
   };
 }
 
+async function getNotificationEmailTo(): Promise<string> {
+  const [emailToRaw, contactEmailRaw] = await Promise.all([
+    getSetting('email_to'),
+    getSetting('contact_email'),
+  ]);
+  return emailToRaw || contactEmailRaw || 'h2@h2colombiano.com';
+}
+
+function hasMailChannel(): boolean {
+  return !!(process.env.RESEND_API_KEY || process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD);
+}
+
 export const appRouter = router({
   system: systemRouter,
   resellers: resellersRouter,
@@ -3216,15 +3228,13 @@ export const appRouter = router({
         const statusLabel = statusInfo.label;
 
         // Enviar email ao admin quando status muda
-        const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
+        const emailTo = await getNotificationEmailTo();
         if (emailTo && emailTo.trim() !== '') {
           try {
-            const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
+            if (!hasMailChannel()) {
+              console.warn('[Email] Sem canal de envio configurado (RESEND_API_KEY/SMTP_PASS/ZOHO_EMAIL_PASSWORD).');
+              throw new Error('Mail channel not configured');
+            }
             const emailBranding = await getEmailBranding();
             const adminEmailContent = emailStatusAdmin({
               ...emailBranding,
@@ -3235,7 +3245,7 @@ export const appRouter = router({
               option: undefined,
               note: input.note || undefined,
             });
-            await transporter.sendMail({
+            await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: emailTo,
               subject: `[ADMIN] Status Atualizado - ${statusLabel}`,
@@ -3252,12 +3262,10 @@ export const appRouter = router({
         const isCustomerBlocked = customerForBlock && (customerForBlock as any).blocked === 1;
         if (input.customerEmail && !isCustomerBlocked) {
           try {
-            const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
+            if (!hasMailChannel()) {
+              console.warn('[Email] Sem canal de envio configurado (RESEND_API_KEY/SMTP_PASS/ZOHO_EMAIL_PASSWORD).');
+              throw new Error('Mail channel not configured');
+            }
             const emailBranding = await getEmailBranding();
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Ã°Å¸â€œâ€¹ ObservaÃƒÂ§ÃƒÂ£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml = statusInfo.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo.description}</p></div>` : '';
@@ -3274,7 +3282,7 @@ export const appRouter = router({
                 if (pinRow[0]?.pin) phonePin = pinRow[0].pin;
               }
             } catch { /* usa fallback */ }
-            await transporter.sendMail({
+            await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.customerEmail,
               subject: `${statusLabel} Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
@@ -3337,7 +3345,7 @@ export const appRouter = router({
         skipEmail: z.boolean().optional().default(false),
       }))
       .mutation(async ({ input }) => {
-        const smtpPass = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || process.env.RESEND_API_KEY || '';
+        const mailEnabled = hasMailChannel();
         if (input.status === 'recebido') {
           return { success: false, error: 'Status recebido nÃƒÂ£o pode ser definido manualmente' };
         }
@@ -3366,18 +3374,13 @@ export const appRouter = router({
         const statusLabel = statusInfo.label;
 
         // Enviar email ao admin quando status muda
-        const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
+        const emailTo = await getNotificationEmailTo();
         if (emailTo && emailTo.trim() !== '') {
           try {
-            const transporterAdmin2 = nodemailer.createTransport({
-              host: 'smtp.zoho.com',
-              port: 465,
-              secure: true,
-              connectionTimeout: 15000,
-              greetingTimeout: 15000,
-              socketTimeout: 20000,
-              auth: { user: 'h2@h2colombiano.com', pass: smtpPass },
-            });
+            if (!mailEnabled) {
+              console.warn('[Email] Sem canal de envio configurado (RESEND_API_KEY/SMTP_PASS/ZOHO_EMAIL_PASSWORD).');
+              throw new Error('Mail channel not configured');
+            }
             const emailBranding = await getEmailBranding();
             const adminEmailContent = emailStatusAdmin({
               ...emailBranding,
@@ -3388,7 +3391,7 @@ export const appRouter = router({
               option: undefined,
               note: input.note || undefined,
             });
-            await transporterAdmin2.sendMail({
+            await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: emailTo,
               subject: `[ADMIN] Status Atualizado - ${statusLabel} - ${input.customerName || 'Pedido #' + input.orderNumber}`,
@@ -3398,7 +3401,7 @@ export const appRouter = router({
           } catch (adminEmailError) {
             console.error('[Email] Erro ao enviar notificaÃƒÂ§ÃƒÂ£o ao admin:', adminEmailError);
           }
-        } else if (!smtpPass) {
+        } else if (!mailEnabled) {
           console.warn('[Email] SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente: notificaÃƒÂ§ÃƒÂ£o por e-mail ignorada em updateStatus.');
         }
 
@@ -3407,15 +3410,10 @@ export const appRouter = router({
         const isCustomerBlocked2 = customerForBlock2 && (customerForBlock2 as any).blocked === 1;
         if (input.customerEmail && !input.skipEmail && !isCustomerBlocked2) {
           try {
-            const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            connectionTimeout: 15000,
-            greetingTimeout: 15000,
-            socketTimeout: 20000,
-            auth: { user: 'h2@h2colombiano.com', pass: smtpPass },
-          });
+            if (!mailEnabled) {
+              console.warn('[Email] Sem canal de envio configurado (RESEND_API_KEY/SMTP_PASS/ZOHO_EMAIL_PASSWORD).');
+              throw new Error('Mail channel not configured');
+            }
             const emailBranding = await getEmailBranding();
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Ã°Å¸â€œâ€¹ ObservaÃƒÂ§ÃƒÂ£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml = statusInfo.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo.description}</p></div>` : '';
@@ -3485,7 +3483,7 @@ export const appRouter = router({
                 }
               } catch (_) {}
             }
-            await transporter.sendMail({
+            await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.customerEmail,
               subject: `${statusLabel} Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
@@ -3708,8 +3706,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         try {
-          const smtpPass = process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
-          if (!smtpPass) {
+          if (!hasMailChannel()) {
             return { success: false, message: 'ConfiguraÃƒÂ§ÃƒÂ£o de e-mail indisponÃƒÂ­vel (SMTP_PASS/ZOHO_EMAIL_PASSWORD ausente).' };
           }
           // Verificar se cliente estÃƒÂ¡ bloqueado
@@ -3721,15 +3718,6 @@ export const appRouter = router({
           }
           const statusInfo2 = await getStatusInfoFromDb(input.status);
           const statusLabel = statusInfo2.label;
-          const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            connectionTimeout: 15000,
-            greetingTimeout: 15000,
-            socketTimeout: 20000,
-            auth: { user: 'h2@h2colombiano.com', pass: smtpPass },
-          });
           const emailBranding = await getEmailBranding();
           const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Ã°Å¸â€œâ€¹ ObservaÃƒÂ§ÃƒÂ£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
           const descriptionHtml2 = statusInfo2.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo2.description}</p></div>` : '';
@@ -3764,7 +3752,7 @@ export const appRouter = router({
           const cryptoR = await import('crypto');
           const trackingIdR = cryptoR.randomBytes(24).toString('hex');
           const trackingPixelUrlR = `${emailBranding.siteBaseUrl}/api/email-open/${trackingIdR}`;
-          await transporter.sendMail({
+          await sendMailDirect({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: input.customerEmail,
             subject: `[Reenvio] ${statusLabel} Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
@@ -4526,12 +4514,7 @@ export const appRouter = router({
           const statusInfo3 = await getStatusInfoFromDb(input.status);
           const statusLabel = statusInfo3.label;
           try {
-            const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
+            if (!hasMailChannel()) throw new Error('Mail channel not configured');
             const emailBranding = await getEmailBranding();
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Ã°Å¸â€œâ€¹ ObservaÃƒÂ§ÃƒÂ£o:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml3 = statusInfo3.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo3.description}</p></div>` : '';
@@ -4549,7 +4532,7 @@ export const appRouter = router({
               }
             } catch { /* usa fallback */ }
             const pinHtml3 = ''; // Senha de acompanhamento removida
-            await transporter.sendMail({
+            await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.email,
               subject: `${statusLabel} Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
@@ -4684,12 +4667,7 @@ export const appRouter = router({
           const statusInfo = await getStatusInfoFromDb(input.status);
           const statusLabel = statusInfo.label;
           try {
-            const transporter = nodemailer.createTransport({
-            host: 'smtp.zoho.com',
-            port: 465,
-            secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
+            if (!hasMailChannel()) throw new Error('Mail channel not configured');
             const emailBranding = await getEmailBranding();
             const itemsHtml = input.items.map((item, i) =>
               `<tr><td style="padding:6px 8px;color:#ccc;font-size:13px;border-bottom:1px solid #ffffff10;">${i + 1}. ${item.serviceName}${item.serviceOption ? ` Ã¢â‚¬â€ ${item.serviceOption}` : ''}</td></tr>`
@@ -4709,7 +4687,7 @@ export const appRouter = router({
               }
             } catch { /* usa fallback */ }
             const pinHtmlM = ''; // Senha de acompanhamento removida
-            await transporter.sendMail({
+            await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.email,
               subject: `${statusLabel} Ã¢â‚¬â€ ${emailBranding.siteTitle}`,
