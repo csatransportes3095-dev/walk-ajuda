@@ -38,6 +38,7 @@ import { preRegistrationsRouter } from "./routers/preRegistrations";
 import { preCadastroQuestionsRouter } from "./routers/preCadastroQuestions";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
+import { sendMailDirect } from "./_core/sendMailDirect";
 import { emailStatusCliente, emailStatusAdmin, emailNovoPedidoAdmin, emailPedidoRecebidoCliente, emailCadastroFinalizadoAdmin, emailInicioCadastroAdmin, emailIndicacaoSucesso, emailComprovantePix, nl2br } from "./emailTemplates";
 import { parse as parseCookieHeader } from "cookie";
 import jwt from "jsonwebtoken";
@@ -879,20 +880,11 @@ export const appRouter = router({
 
 
 
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            connectionTimeout: 15000,
-            greetingTimeout: 15000,
-            socketTimeout: 20000,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
 
-          const sendEmailWithTimeout = async (mailOptions: Parameters<typeof transporter.sendMail>[0], label: string): Promise<boolean> => {
+          const sendEmailWithTimeout = async (mailOptions: { from?: string; to: string; subject: string; html: string; text?: string; attachments?: any[] }, label: string): Promise<boolean> => {
             try {
               await Promise.race([
-                transporter.sendMail(mailOptions),
+                sendMailDirect(mailOptions),
                 new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timeout: ${label}`)), 20000)),
               ]);
               return true;
@@ -1473,12 +1465,6 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         try {
           const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
           const spMime = input.paymentProofMime || 'image/jpeg';
           const spExt = spMime === 'application/pdf' ? 'pdf' : spMime === 'image/png' ? 'png' : 'jpg';
           let paymentProofUrl = '';
@@ -1488,7 +1474,7 @@ export const appRouter = router({
             const { url } = await storagePut(fileKey, Buffer.from(input.paymentProof, 'base64'), spMime);
             paymentProofUrl = url;
           } catch (uploadError) { console.error('[S3] Erro:', uploadError); }
-          await transporter.sendMail({
+          await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: emailTo,
             subject: `COMPROVANTE PIX - ${input.service} - ${input.clientName}`,
@@ -1716,14 +1702,8 @@ export const appRouter = router({
             const referrer = await getCustomerByPhone(referrerCleanPhone);
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             if (referrer?.email) {
-              const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
               const waLink = `https://wa.me/55${referrerCleanPhone}`;
-              await transporter.sendMail({
+              await sendMailDirect({
                 from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
                 to: referrer.email,
                 subject: `🎉 Sua indicação deu certo! ${safeInput.name} fez um pedido`,
@@ -1744,13 +1724,7 @@ export const appRouter = router({
         void (async () => {
           try {
             const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
-            const transporter = nodemailer.createTransport({
-              host: process.env.SMTP_HOST || 'smtp.zoho.com',
-              port: Number(process.env.SMTP_PORT || "587"),
-              secure: false,
-              auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-            });
-            await transporter.sendMail({
+            await sendMailDirect({
               from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
               to: emailTo,
               subject: `✅ Cadastro finalizado — ${safeInput.name} (${safeInput.phone})`,
@@ -2062,13 +2036,7 @@ export const appRouter = router({
          try {
           const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
           const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
-          await transporter.sendMail({
+          await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: emailTo,
             subject: `📸 Novo cliente iniciou cadastro — ${input.phone}`,
@@ -2450,13 +2418,7 @@ export const appRouter = router({
         const phoneFormatted = input.customerPhone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
         const raffleNotifTitle = `🎫 Novo participante no sorteio!`;
         try {
-          const transporterRaffle = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
-          await transporterRaffle.sendMail({
+          await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: await getSetting('contact_email') || 'h2@h2colombiano.com',
             subject: raffleNotifTitle,
@@ -2560,13 +2522,7 @@ export const appRouter = router({
         const title = '🔐 Solicitação de Desbloqueio Admin';
         const content = `IP ${ip} está bloqueado e solicita desbloqueio.\n\nMensagem: ${input.message || 'Sem mensagem'}\n\nPara desbloquear, acesse o painel e use a opção de desbloqueio.`;
         try {
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
-          await transporter.sendMail({
+          await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: await getSetting('contact_email') || 'h2@h2colombiano.com',
             subject: title,
@@ -3179,12 +3135,6 @@ export const appRouter = router({
         const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
         if (emailTo && emailTo.trim() !== '') {
           try {
-            const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const adminEmailContent = emailStatusAdmin({
               statusLabel,
@@ -3194,7 +3144,7 @@ export const appRouter = router({
               option: undefined,
               note: input.note || undefined,
             });
-            await transporter.sendMail({
+            await sendMailDirect({
               from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
               to: emailTo,
               subject: `[ADMIN] Status Atualizado - ${statusLabel}`,
@@ -3211,12 +3161,6 @@ export const appRouter = router({
         const isCustomerBlocked = customerForBlock && (customerForBlock as any).blocked === 1;
         if (input.customerEmail && !isCustomerBlocked) {
           try {
-            const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml = statusInfo.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo.description}</p></div>` : '';
@@ -3233,7 +3177,7 @@ export const appRouter = router({
                 if (pinRow[0]?.pin) phonePin = pinRow[0].pin;
               }
             } catch { /* usa fallback */ }
-            await transporter.sendMail({
+            await sendMailDirect({
               from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
               to: input.customerEmail,
               subject: `${statusLabel} — ${siteTitle}`,
@@ -3328,15 +3272,6 @@ export const appRouter = router({
         const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
         if (emailTo && emailTo.trim() !== '' && smtpPass) {
           try {
-            const transporterAdmin2 = nodemailer.createTransport({
-              host: process.env.SMTP_HOST || 'smtp.zoho.com',
-              port: Number(process.env.SMTP_PORT || "587"),
-              secure: false,
-              connectionTimeout: 15000,
-              greetingTimeout: 15000,
-              socketTimeout: 20000,
-              auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: smtpPass },
-            });
             const adminEmailContent = emailStatusAdmin({
               statusLabel,
               customerName: input.customerName || undefined,
@@ -3345,7 +3280,7 @@ export const appRouter = router({
               option: undefined,
               note: input.note || undefined,
             });
-            await transporterAdmin2.sendMail({
+            await sendMailDirect({
               from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
               to: emailTo,
               subject: `[ADMIN] Status Atualizado - ${statusLabel} - ${input.customerName || 'Pedido #' + input.orderNumber}`,
@@ -3364,15 +3299,6 @@ export const appRouter = router({
         const isCustomerBlocked2 = customerForBlock2 && (customerForBlock2 as any).blocked === 1;
         if (input.customerEmail && !input.skipEmail && !isCustomerBlocked2 && smtpPass) {
           try {
-            const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            connectionTimeout: 15000,
-            greetingTimeout: 15000,
-            socketTimeout: 20000,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: smtpPass },
-          });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml = statusInfo.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo.description}</p></div>` : '';
@@ -3443,7 +3369,7 @@ export const appRouter = router({
                 }
               } catch (_) {}
             }
-            await transporter.sendMail({
+            await sendMailDirect({
               from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
               to: input.customerEmail,
               subject: `${statusLabel} — ${siteTitle}`,
@@ -3679,15 +3605,6 @@ export const appRouter = router({
           }
           const statusInfo2 = await getStatusInfoFromDb(input.status);
           const statusLabel = statusInfo2.label;
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            connectionTimeout: 15000,
-            greetingTimeout: 15000,
-            socketTimeout: 20000,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: smtpPass },
-          });
           const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
           const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
           const descriptionHtml2 = statusInfo2.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo2.description}</p></div>` : '';
@@ -3722,7 +3639,7 @@ export const appRouter = router({
           const cryptoR = await import('crypto');
           const trackingIdR = cryptoR.randomBytes(24).toString('hex');
           const trackingPixelUrlR = `https://walkajuda.com/api/email-open/${trackingIdR}`;
-          await transporter.sendMail({
+          await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: input.customerEmail,
             subject: `[Reenvio] ${statusLabel} — ${siteTitle}`,
@@ -4154,13 +4071,7 @@ export const appRouter = router({
               // Enviar e-mail se tiver e-mail cadastrado
               if (referrer?.email) {
                 const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
-                const transporter = nodemailer.createTransport({
-                  host: process.env.SMTP_HOST || 'smtp.zoho.com',
-                  port: Number(process.env.SMTP_PORT || "587"),
-                  secure: false,
-                  auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-                });
-                await transporter.sendMail({
+                await sendMailDirect({
                   from: `\"${siteTitle}\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
                   to: referrer.email,
                   subject: `✅ Sua comissão${commText} foi paga! - ${siteTitle}`,
@@ -4369,17 +4280,11 @@ export const appRouter = router({
           const referrer = await getCustomerByPhone(referrerCleanPhone);
           if (!referrer?.email) return { success: false, reason: 'no_email' };
           const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
           const waLink = `https://wa.me/55${referrerCleanPhone}`;
           const commissionHtml = input.commissionValue && input.commissionValue > 0
             ? `<p style="margin:12px 0 8px;font-size:13px;color:#fcd34d;font-weight:bold;">💰 Comissão: R$ ${(input.commissionValue / 100).toFixed(2).replace('.', ',')}</p>`
             : '';
-          await transporter.sendMail({
+          await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: referrer.email,
             subject: `[Reenvio] 🎉 Sua indicação deu certo! ${input.referredName} fez um pedido`,
@@ -4483,12 +4388,6 @@ export const appRouter = router({
           const statusInfo3 = await getStatusInfoFromDb(input.status);
           const statusLabel = statusInfo3.label;
           try {
-            const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml3 = statusInfo3.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo3.description}</p></div>` : '';
@@ -4506,7 +4405,7 @@ export const appRouter = router({
               }
             } catch { /* usa fallback */ }
             const pinHtml3 = ''; // Senha de acompanhamento removida
-            await transporter.sendMail({
+            await sendMailDirect({
               from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
               to: input.email,
               subject: `${statusLabel} — ${siteTitle}`,
@@ -4641,12 +4540,6 @@ export const appRouter = router({
           const statusInfo = await getStatusInfoFromDb(input.status);
           const statusLabel = statusInfo.label;
           try {
-            const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const itemsHtml = input.items.map((item, i) =>
               `<tr><td style="padding:6px 8px;color:#ccc;font-size:13px;border-bottom:1px solid #ffffff10;">${i + 1}. ${item.serviceName}${item.serviceOption ? ` — ${item.serviceOption}` : ''}</td></tr>`
@@ -4666,7 +4559,7 @@ export const appRouter = router({
               }
             } catch { /* usa fallback */ }
             const pinHtmlM = ''; // Senha de acompanhamento removida
-            await transporter.sendMail({
+            await sendMailDirect({
               from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
               to: input.email,
               subject: `${statusLabel} — ${siteTitle}`,
@@ -5437,13 +5330,7 @@ export const appRouter = router({
         // Notificar admin por e-mail
         const docNotifTitle = '📄 Documento respondido pelo cliente';
         try {
-          const transporterDoc = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
-          await transporterDoc.sendMail({
+          await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: await getSetting('contact_email') || 'h2@h2colombiano.com',
             subject: docNotifTitle,
@@ -5782,15 +5669,6 @@ export const appRouter = router({
         let emailsFailed = 0;
 
                 if (emailRecipients.length > 0) {
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.zoho.com',
-            port: Number(process.env.SMTP_PORT || "587"),
-            secure: false,
-            connectionTimeout: 15000,
-            greetingTimeout: 15000,
-            socketTimeout: 20000,
-            auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-          });
           const typeLabel: Record<string, string> = {
             text: 'Mensagem', promo: '\uD83C\uDF89 Promoção', link: '\uD83D\uDD17 Link', banner: '\uD83D\uDDBC\uFE0F Banner', group_invite: '\uD83D\uDC65 Convite para Grupo'
           };
@@ -5861,7 +5739,7 @@ export const appRouter = router({
             await Promise.allSettled(
               batch.map(async (c) => {
                 try {
-                  await transporter.sendMail({
+                  await sendMailDirect({
                     from: `"Walk Ajuda" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
                     to: c.email!,
                     subject,

@@ -7,6 +7,7 @@ import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 import nodemailer from "nodemailer";
+import { sendMailDirect } from "../_core/sendMailDirect";
 import sharp from "sharp";
 import * as fs from "fs";
 import * as path from "path";
@@ -145,11 +146,7 @@ async function generateReceiptJpg(pdfBuffer: Buffer): Promise<Buffer> {
 }
 
 async function sendReceiptEmail(to: string, clientName: string, receiptNumber: string, installmentNumber: number, pdfBuffer: Buffer): Promise<void> {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.zoho.com', port: 587, secure: false,
-    auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-  });
-  await transporter.sendMail({
+  await sendMailDirect({
     from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
     to,
     subject: `Recibo de Pagamento — Parcela #${installmentNumber} | ${receiptNumber}`,
@@ -686,12 +683,8 @@ export const loanRouter = router({
     let sentTo: string | null = null;
     if (clientEmail) {
       try {
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST || 'smtp.zoho.com', port: 587, secure: false,
-          auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-        });
         const amountFmt = parseFloat(loan.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        await transporter.sendMail({
+        await sendMailDirect({
           from: `\"CSA Empréstimos SP\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
           to: clientEmail,
           subject: `Atualização sobre sua solicitação de empréstimo — CSA Empréstimos SP`,
@@ -2307,11 +2300,7 @@ export const loanRouter = router({
     }
     if (!toEmail) throw new TRPCError({ code: 'BAD_REQUEST', message: 'E-mail do cliente não encontrado. Informe o e-mail manualmente.' });
     const pdfBuffer = Buffer.from(input.pdfBase64, 'base64');
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.zoho.com', port: 587, secure: false,
-      auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-    });
-    await transporter.sendMail({
+    await sendMailDirect({
       from: `\"CSA Empréstimos SP\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
       to: toEmail,
       subject: `Extrato do seu Empréstimo — ${input.docId} | CSA Empréstimos SP`,

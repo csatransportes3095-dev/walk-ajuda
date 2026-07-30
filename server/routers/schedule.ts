@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+import { sendMailDirect } from "../_core/sendMailDirect";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -20,15 +21,9 @@ function makeToken(): string {
 async function sendScheduleEmail(to: string, subject: string, html: string): Promise<boolean> {
   if (!to) return false;
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.zoho.com',
-      port: 587,
-      secure: false,
-      auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-    });
     const siteTitle = (await getSetting("site_title")) || "WALK AJUDA";
     await Promise.race([
-      transporter.sendMail({
+      sendMailDirect({
         from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
         to,
         subject,
@@ -278,13 +273,7 @@ export const scheduleRouter = router({
       if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento não encontrado" });
       // Notificar admin por e-mail
       try {
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST || 'smtp.zoho.com',
-          port: 587,
-          secure: false,
-          auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-        });
-        await transporter.sendMail({
+        await sendMailDirect({
           from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
           to: 'h2@h2colombiano.com',
           subject: 'Agendamento manual confirmado',
@@ -326,13 +315,7 @@ export const scheduleRouter = router({
         await markAppointmentEmailSent(appt.id);
         // Notificar admin por e-mail
         try {
-          const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST || 'smtp.zoho.com',
-          port: 587,
-          secure: false,
-          auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-        });
-          await transporter.sendMail({
+          await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: 'h2@h2colombiano.com',
             subject: 'Link de agendamento enviado',
@@ -418,13 +401,7 @@ export const scheduleRouter = router({
       // Notificar admin por e-mail
       (async () => {
         try {
-          const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST || 'smtp.zoho.com',
-          port: 587,
-          secure: false,
-          auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-        });
-          await transporter.sendMail({
+          await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: 'h2@h2colombiano.com',
             subject: 'Novo agendamento confirmado',
@@ -467,13 +444,7 @@ export const scheduleRouter = router({
       // Notificar admin por e-mail
       (async () => {
         try {
-          const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST || 'smtp.zoho.com',
-          port: 587,
-          secure: false,
-          auth: { user: process.env.SMTP_USER || 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-        });
-          await transporter.sendMail({
+          await sendMailDirect({
             from: `\"Walk Ajuda\" <${process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com'}>`,
             to: 'h2@h2colombiano.com',
             subject: 'Cliente solicitou reagendamento',
