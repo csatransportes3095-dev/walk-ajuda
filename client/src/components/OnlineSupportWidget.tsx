@@ -80,6 +80,35 @@ function getMediaField(payload: Record<string, any> | null, field: string): stri
   return null;
 }
 
+function MediaImage({ src }: { src: string }) {
+  const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setReady(false);
+    setFailed(false);
+
+    const image = new window.Image();
+    image.onload = () => {
+      if (active) setReady(true);
+    };
+    image.onerror = () => {
+      if (active) setFailed(true);
+    };
+    image.src = src;
+
+    return () => {
+      active = false;
+    };
+  }, [src]);
+
+  if (failed) return null;
+  if (!ready) return null;
+
+  return <img src={src} alt="" aria-hidden className="max-w-full rounded-lg border border-white/10" />;
+}
+
 function renderMessageContent(message: any, handleAction: (actionType?: string, payload?: Record<string, any>) => void) {
   const payload = getMessagePayload(message.payload);
   const imageUrl = getMediaField(payload, "imageUrl");
@@ -90,7 +119,7 @@ function renderMessageContent(message: any, handleAction: (actionType?: string, 
   return (
     <div className="space-y-2">
       {message.text && <p className="whitespace-pre-wrap break-words leading-relaxed">{message.text}</p>}
-      {imageUrl && <img src={imageUrl} alt="Mídia" className="max-w-full rounded-lg border border-white/10" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
+      {imageUrl && <MediaImage src={imageUrl} />}
       {videoUrl && <video controls className="max-w-full rounded-lg border border-white/10"><source src={videoUrl} /></video>}
       {audioUrl && <audio controls className="w-full"><source src={audioUrl} /></audio>}
       {documentUrl && (
