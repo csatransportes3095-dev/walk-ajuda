@@ -53,7 +53,7 @@ function renderMessageContent(message: any, handleAction: (actionType?: string, 
       {Array.isArray(payload?.buttons) && payload.buttons.length > 0 && (
         <div className="flex flex-col gap-2 pt-1">
           {payload.buttons.map((btn: any, idx: number) => (
-            <button key={`${btn.label || "btn"}-${idx}`} onClick={() => handleAction(btn.actionType, btn.actionPayload || {})} className="text-left text-xs font-bold px-3 py-2 rounded-lg bg-indigo-600/25 border border-indigo-500/40 text-indigo-100 hover:bg-indigo-600/35">{btn.label || "Abrir"}</button>
+            <button key={`${btn.label || "btn"}-${idx}`} onClick={() => handleAction(btn.actionType, { ...(btn.actionPayload || {}), label: btn.label })} className="text-left text-xs font-bold px-3 py-2 rounded-lg bg-indigo-600/25 border border-indigo-500/40 text-indigo-100 hover:bg-indigo-600/35">{btn.label || "Abrir"}</button>
           ))}
         </div>
       )}
@@ -63,11 +63,9 @@ function renderMessageContent(message: any, handleAction: (actionType?: string, 
 
 export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openMode = "modal" }: OnlineSupportWidgetProps) {
   const isMobile = useIsMobile();
-  const [phase, setPhase] = useState<"identify" | "chat">(
-    getSavedVisitorName() && getSavedVisitorPhone() ? "chat" : "identify"
-  );
-  const [visitorName, setVisitorName] = useState(getSavedVisitorName());
-  const [visitorPhone, setVisitorPhone] = useState(getSavedVisitorPhone());
+  const [phase, setPhase] = useState<"identify" | "chat">("identify");
+  const [visitorName, setVisitorName] = useState("");
+  const [visitorPhone, setVisitorPhone] = useState("");
   const [nameError, setNameError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [message, setMessage] = useState("");
