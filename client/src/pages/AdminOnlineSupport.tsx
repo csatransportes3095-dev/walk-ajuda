@@ -401,6 +401,7 @@ export default function AdminOnlineSupport() {
   const [cfgColor, setCfgColor] = useState("#2563eb");
   const [cfgEnabled, setCfgEnabled] = useState(true);
   const [cfgStatusText, setCfgStatusText] = useState("");
+  const [cfgSortOrder, setCfgSortOrder] = useState(3);
   useEffect(() => {
     if (configQ.data) {
       setCfgLabel(configQ.data.buttonLabel || "Atendimento Online");
@@ -408,6 +409,7 @@ export default function AdminOnlineSupport() {
       setCfgColor(configQ.data.buttonColor || "#2563eb");
       setCfgEnabled(configQ.data.chatEnabled === 1);
       setCfgStatusText((configQ.data as any).customStatusText || "");
+      setCfgSortOrder(Number(configQ.data.buttonSortOrder) || 3);
     }
   }, [configQ.data]);
 
@@ -754,6 +756,16 @@ export default function AdminOnlineSupport() {
                 <textarea value={cfgWelcome} onChange={e => setCfgWelcome(e.target.value)} rows={2} className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-400 resize-none" />
               </div>
               <div>
+                <label className="text-xs font-bold text-white/60 block mb-1">POSIÇÃO NA TELA INICIAL (ordem)</label>
+                <select value={cfgSortOrder} onChange={e => setCfgSortOrder(Number(e.target.value))} className="w-full h-10 rounded-lg bg-black/30 border border-white/15 px-3 text-sm text-white focus:outline-none focus:border-blue-400">
+                  <option value={1} className="bg-gray-900">1º lugar (primeiro botão)</option>
+                  <option value={2} className="bg-gray-900">2º lugar (entre FAZER PEDIDO e ACOMPANHAR)</option>
+                  <option value={3} className="bg-gray-900">3º lugar (depois de ACOMPANHAR)</option>
+                  <option value={99} className="bg-gray-900">No final da lista</option>
+                </select>
+                <p className="text-[11px] text-white/35 mt-1">Define onde o botão azul aparece na tela inicial</p>
+              </div>
+              <div>
                 <label className="text-xs font-bold text-white/60 block mb-1">COR DO BOTÃO</label>
                 <div className="flex items-center gap-3">
                   <input type="color" value={cfgColor} onChange={e => setCfgColor(e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer border-0 bg-transparent" />
@@ -773,7 +785,7 @@ export default function AdminOnlineSupport() {
                 </button>
               </div>
               <button
-                onClick={() => configMut.mutate({ buttonLabel: cfgLabel, welcomeMessage: cfgWelcome, buttonColor: cfgColor, chatEnabled: cfgEnabled, customStatusText: cfgStatusText } as any)}
+                onClick={() => configMut.mutate({ buttonLabel: cfgLabel, welcomeMessage: cfgWelcome, buttonColor: cfgColor, chatEnabled: cfgEnabled, customStatusText: cfgStatusText, buttonSortOrder: cfgSortOrder } as any)}
                 className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors"
               >
                 Salvar Configurações
