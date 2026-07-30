@@ -817,6 +817,8 @@ export default function AdminOrders() {
   const ACTIVE_STATUS_ORDER: string[] = dynamicStatuses.length > 0
     ? dynamicStatuses.filter(s => s.isActive === 1).sort((a, b) => a.sortOrder - b.sortOrder).map(s => s.key)
     : STATUS_ORDER;
+  const INITIAL_STATUS_KEY = ACTIVE_STATUS_ORDER[0] || 'recebido';
+  const isManualSelectableStatus = (s: string) => s !== 'cancelado' && s !== 'recebido' && s !== INITIAL_STATUS_KEY;
 
   // autoMarkUrgent automático REMOVIDO — urgência agora é somente manual pelo admin
 
@@ -3739,7 +3741,7 @@ export default function AdminOrders() {
                                       <div className="space-y-3">
                                         <p className="text-xs font-medium text-muted-foreground">Atualizar status do pedido</p>
                                         <div className="grid grid-cols-2 gap-2">
-                                          {ACTIVE_STATUS_ORDER.filter(s => s !== 'cancelado' && s !== 'recebido').map(s => {
+                                          {ACTIVE_STATUS_ORDER.filter(isManualSelectableStatus).map(s => {
                                             const cfg = ACTIVE_STATUS_CONFIG[s];
                                             if (!cfg) return null;
                                             const isSel = (archivedSelectedStatus[String(ar.registrationId)] || rawStatus) === s;
@@ -4195,7 +4197,7 @@ export default function AdminOrders() {
                                                   <div className="space-y-3">
                                                     <p className="text-xs font-medium text-muted-foreground">Atualizar status do pedido</p>
                                                     <div className="grid grid-cols-2 gap-2">
-                                                      {ACTIVE_STATUS_ORDER.filter(s => s !== 'cancelado' && s !== 'recebido').map(s => {
+                                                      {ACTIVE_STATUS_ORDER.filter(isManualSelectableStatus).map(s => {
                                                         const cfg = ACTIVE_STATUS_CONFIG[s];
                                                         if (!cfg) return null;
                                                         const isSel = (rgCnhSelectedStatus[String(ar.registrationId)] || rawStatus) === s;
@@ -5623,7 +5625,7 @@ export default function AdminOrders() {
                     <div className="p-4 space-y-3">
                       <p className="text-xs font-medium text-muted-foreground">Atualizar status do pedido</p>
                       <div className="grid grid-cols-2 gap-2">
-                        {ACTIVE_STATUS_ORDER.filter(s => s !== "cancelado" && s !== "recebido").map(s => {
+                        {ACTIVE_STATUS_ORDER.filter(isManualSelectableStatus).map(s => {
                           const cfg = ACTIVE_STATUS_CONFIG[s];
                           if (!cfg) return null;
                           const isSel = (selectedStatus[getOrderKey(order)] || latestStatus) === s;

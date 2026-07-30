@@ -993,8 +993,8 @@ export async function addOrderStatus(data: { registrationId: number; customerPho
   return row;
 }
 
-// Substitui o último status de um sub-pedido (não 'recebido') pelo novo status/nota
-// Identifica o último registro do sub-pedido pelo registrationId + subOrderIndex
+// Registra uma nova mudança de status no sub-pedido, preservando todo o histórico.
+// Se o status informado for igual ao status atual do sub-pedido, atualiza apenas a nota.
 export async function updateLastOrderStatus(data: {
   registrationId: number;
   subOrderIndex: number;
@@ -1037,35 +1037,40 @@ export async function updateLastOrderStatus(data: {
   const subHistory = subOrders[data.subOrderIndex];
   if (!subHistory || subHistory.length === 0) return { success: false, error: 'Sub-pedido não encontrado' };
 
-  // Pegar o último registro do sub-pedido que NÃO seja 'recebido'
-  const nonRecebido = [...subHistory].filter(h => h.status !== 'recebido');
+  // Sub-histórico já está em ordem ASC; o último item é o status atual do sub-pedido.
+  const latestEntry = subHistory[subHistory.length - 1];
+  if (!latestEntry) return { success: false, error: 'Sub-pedido sem histórico' };
 
-  if (nonRecebido.length === 0) {
-    // Pedido novo: só tem 'recebido'. Inserir novo registro com o status desejado.
-    const recebidoEntry = subHistory.find(h => h.status === 'recebido');
-    if (!recebidoEntry) return { success: false, error: 'Registro recebido não encontrado' };
-    await db.insert(orderStatusHistory).values({
-      registrationId: data.registrationId,
-      customerPhone: recebidoEntry.customerPhone,
-      status: data.status,
-      note: data.note ?? null,
-      serviceName: recebidoEntry.serviceName ?? null,
-      serviceOption: recebidoEntry.serviceOption ?? null,
-      orderNumber: recebidoEntry.orderNumber ?? null,
-    });
+  // Impedir voltar manualmente para o status inicial (isso é marcador de início de sub-pedido).
+  // Exceção: se já está nesse status, apenas atualiza nota.
+  if ((data.status === initialStatus || data.status === 'recebido') && latestEntry.status !== data.status) {
+    return { success: false, error: 'Status inicial do pedido não pode ser definido manualmente após o início.' };
+  }
+
+  // Se não houve troca de status, atualizar apenas a nota do último evento.
+  if (latestEntry.status === data.status) {
+    await db.execute(sql`
+      UPDATE orderStatusHistory
+      SET note = ${data.note ?? null}
+      WHERE id = ${latestEntry.id}
+    `);
     return { success: true };
   }
 
-  // O último status editável (mais recente no sub-pedido)
-  const lastEntry = nonRecebido.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).pop()!;
+  // Herdar metadados existentes do sub-pedido para o novo evento de status.
+  const sourceForService = [...subHistory].reverse().find(h => h.serviceName || h.serviceOption) || latestEntry;
+  const sourceForOrderNumber = [...subHistory].reverse().find(h => h.orderNumber != null) || latestEntry;
 
-    // Atualizar o status, a nota e a data desse registro
-  // createdAt é atualizado para NOW() para que a faixa "Entregue em" mostre a data correta
-  await db.execute(sql`
-    UPDATE orderStatusHistory
-    SET status = ${data.status}, note = ${data.note ?? null}, createdAt = NOW()
-    WHERE id = ${lastEntry.id}
-  `);
+  // Mudou status: inserir NOVO registro para manter horário de cada transição.
+  await db.insert(orderStatusHistory).values({
+    registrationId: data.registrationId,
+    customerPhone: latestEntry.customerPhone,
+    status: data.status,
+    note: data.note ?? null,
+    serviceName: sourceForService.serviceName ?? null,
+    serviceOption: sourceForService.serviceOption ?? null,
+    orderNumber: sourceForOrderNumber.orderNumber ?? null,
+  });
   return { success: true };
 }
 
