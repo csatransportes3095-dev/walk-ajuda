@@ -24,7 +24,7 @@ async function sendScheduleEmail(to: string, subject: string, html: string): Pro
       host: 'smtp.zoho.com',
       port: 465,
       secure: true,
-      auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+      auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
     });
     const siteTitle = (await getSetting("site_title")) || "WALK AJUDA";
     await Promise.race([
@@ -282,7 +282,7 @@ export const scheduleRouter = router({
           host: 'smtp.zoho.com',
           port: 465,
           secure: true,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
         await transporter.sendMail({
           from: '"Walk Ajuda" <h2@h2colombiano.com>',
@@ -330,7 +330,7 @@ export const scheduleRouter = router({
           host: 'smtp.zoho.com',
           port: 465,
           secure: true,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
             from: '"Walk Ajuda" <h2@h2colombiano.com>',
@@ -422,7 +422,7 @@ export const scheduleRouter = router({
           host: 'smtp.zoho.com',
           port: 465,
           secure: true,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
             from: '"Walk Ajuda" <h2@h2colombiano.com>',
@@ -471,7 +471,7 @@ export const scheduleRouter = router({
           host: 'smtp.zoho.com',
           port: 465,
           secure: true,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
           await transporter.sendMail({
             from: '"Walk Ajuda" <h2@h2colombiano.com>',

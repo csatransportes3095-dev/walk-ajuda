@@ -147,7 +147,7 @@ async function generateReceiptJpg(pdfBuffer: Buffer): Promise<Buffer> {
 async function sendReceiptEmail(to: string, clientName: string, receiptNumber: string, installmentNumber: number, pdfBuffer: Buffer): Promise<void> {
   const transporter = nodemailer.createTransport({
     host: 'smtp.zoho.com', port: 465, secure: true,
-    auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+    auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
   });
   await transporter.sendMail({
     from: '"Walk Ajuda" <h2@h2colombiano.com>',
@@ -688,7 +688,7 @@ export const loanRouter = router({
       try {
         const transporter = nodemailer.createTransport({
           host: 'smtp.zoho.com', port: 465, secure: true,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
         });
         const amountFmt = parseFloat(loan.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         await transporter.sendMail({
@@ -2309,7 +2309,7 @@ export const loanRouter = router({
     const pdfBuffer = Buffer.from(input.pdfBase64, 'base64');
     const transporter = nodemailer.createTransport({
       host: 'smtp.zoho.com', port: 465, secure: true,
-      auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+      auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
     });
     await transporter.sendMail({
       from: '"CSA Empréstimos SP" <h2@h2colombiano.com>',

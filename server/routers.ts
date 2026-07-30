@@ -886,7 +886,7 @@ export const appRouter = router({
             connectionTimeout: 15000,
             greetingTimeout: 15000,
             socketTimeout: 20000,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
 
           const sendEmailWithTimeout = async (mailOptions: Parameters<typeof transporter.sendMail>[0], label: string): Promise<boolean> => {
@@ -1477,7 +1477,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           const spMime = input.paymentProofMime || 'image/jpeg';
           const spExt = spMime === 'application/pdf' ? 'pdf' : spMime === 'image/png' ? 'png' : 'jpg';
@@ -1720,7 +1720,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
               const waLink = `https://wa.me/55${referrerCleanPhone}`;
               await transporter.sendMail({
@@ -1748,7 +1748,7 @@ export const appRouter = router({
               host: 'smtp.zoho.com',
               port: 465,
               secure: true,
-              auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+              auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
             });
             await transporter.sendMail({
               from: '"Walk Ajuda" <h2@h2colombiano.com>',
@@ -2066,7 +2066,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporter.sendMail({
             from: '"Walk Ajuda" <h2@h2colombiano.com>',
@@ -2454,7 +2454,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporterRaffle.sendMail({
             from: '"Walk Ajuda" <h2@h2colombiano.com>',
@@ -2564,7 +2564,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporter.sendMail({
             from: '"Walk Ajuda" <h2@h2colombiano.com>',
@@ -3183,7 +3183,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const adminEmailContent = emailStatusAdmin({
@@ -3215,7 +3215,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
@@ -4158,7 +4158,7 @@ export const appRouter = router({
                   host: 'smtp.zoho.com',
                   port: 465,
                   secure: true,
-                  auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+                  auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
                 });
                 await transporter.sendMail({
                   from: `"${siteTitle}" <h2@h2colombiano.com>`,
@@ -4373,7 +4373,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           const waLink = `https://wa.me/55${referrerCleanPhone}`;
           const commissionHtml = input.commissionValue && input.commissionValue > 0
@@ -4487,7 +4487,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
@@ -4645,7 +4645,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
             const siteTitle = await getSetting('site_title') || 'Walk Ajuda';
             const itemsHtml = input.items.map((item, i) =>
@@ -5441,7 +5441,7 @@ export const appRouter = router({
             host: 'smtp.zoho.com',
             port: 465,
             secure: true,
-            auth: { user: 'h2@h2colombiano.com', pass: process.env.ZOHO_EMAIL_PASSWORD || '' },
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
           await transporterDoc.sendMail({
             from: '"Walk Ajuda" <h2@h2colombiano.com>',
