@@ -51,8 +51,8 @@ function BotaoEditor({
   responseText?: string; setResponseText?: (v: string) => void;
   responseImageUrl?: string; setResponseImageUrl?: (v: string) => void;
   keywords?: string[]; setKeywords?: (v: string[]) => void;
-  subButtons?: Array<{label: string; actionType: string; value: string}>;
-  setSubButtons?: (v: Array<{label: string; actionType: string; value: string}>) => void;
+  subButtons?: Array<{label: string; actionType: string; value: string; responseText?: string; children?: string}>;
+  setSubButtons?: (v: Array<{label: string; actionType: string; value: string; responseText?: string; children?: string}>) => void;
   onSave: () => void; onCancel?: () => void;
   saveLabel?: string;
 }) {
@@ -177,35 +177,65 @@ function BotaoEditor({
             >+ Adicionar</button>
           </div>
           {subs.map((sub, i) => (
-            <div key={i} className="flex gap-2 mb-2 items-start">
-              <div className="flex-1 space-y-1.5">
-                <input
-                  value={sub.label}
-                  onChange={e => { const n = [...subs]; n[i] = {...n[i], label: e.target.value}; setSubs(n); }}
-                  placeholder="Nome do sub-botão"
-                  className="w-full h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400"
+            <div key={i} className="mb-3 p-3 bg-black/20 rounded-xl border border-white/10 space-y-2">
+              <div className="flex gap-2 items-start">
+                <div className="flex-1 space-y-1.5">
+                  <input
+                    value={sub.label}
+                    onChange={e => { const n = [...subs]; n[i] = {...n[i], label: e.target.value}; setSubs(n); }}
+                    placeholder="Nome do sub-botão"
+                    className="w-full h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400"
+                  />
+                  <div className="flex gap-1.5">
+                    <select
+                      value={sub.actionType}
+                      onChange={e => { const n = [...subs]; n[i] = {...n[i], actionType: e.target.value, value: ""}; setSubs(n); }}
+                      className="flex-1 h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white focus:outline-none focus:border-blue-400"
+                    >
+                      {[...ACTION_TYPES, { value: "show_children", label: "🔀 Mostrar sub-botões", field: null, placeholder: "", hint: "" }].map(a => <option key={a.value} value={a.value} className="bg-gray-900">{a.label}</option>)}
+                    </select>
+                    {getActionInfo(sub.actionType).field && (
+                      <input
+                        value={sub.value}
+                        onChange={e => { const n = [...subs]; n[i] = {...n[i], value: e.target.value}; setSubs(n); }}
+                        placeholder={getActionInfo(sub.actionType).placeholder}
+                        className="flex-1 h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400"
+                      />
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => setSubs(subs.filter((_, j) => j !== i))} className="p-1.5 mt-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors flex-shrink-0">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              {/* Resposta do bot para este sub-botão */}
+              <div>
+                <label className="text-[10px] font-bold text-white/40 block mb-1">RESPOSTA DO BOT (quando cliente clica neste)</label>
+                <textarea
+                  value={sub.responseText || ""}
+                  onChange={e => { const n = [...subs]; n[i] = {...n[i], responseText: e.target.value}; setSubs(n); }}
+                  placeholder="Texto que o bot responde ao clicar neste botão..."
+                  rows={2}
+                  className="w-full rounded-lg bg-black/30 border border-white/15 px-2 py-1.5 text-xs text-white placeholder:text-white/20 focus:outline-none focus:border-blue-400 resize-none"
                 />
-                <div className="flex gap-1.5">
-                  <select
-                    value={sub.actionType}
-                    onChange={e => { const n = [...subs]; n[i] = {...n[i], actionType: e.target.value, value: ""}; setSubs(n); }}
-                    className="flex-1 h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white focus:outline-none focus:border-blue-400"
-                  >
-                    {ACTION_TYPES.map(a => <option key={a.value} value={a.value} className="bg-gray-900">{a.label}</option>)}
-                  </select>
-                  {getActionInfo(sub.actionType).field && (
-                    <input
-                      value={sub.value}
-                      onChange={e => { const n = [...subs]; n[i] = {...n[i], value: e.target.value}; setSubs(n); }}
-                      placeholder={getActionInfo(sub.actionType).placeholder}
-                      className="flex-1 h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400"
-                    />
+              </div>
+              {/* Sub-sub-botões por vírgula */}
+              {sub.actionType === "show_children" && (
+                <div>
+                  <label className="text-[10px] font-bold text-white/40 block mb-1">SUB-BOTÕES (separe por vírgula)</label>
+                  <input
+                    value={sub.children || ""}
+                    onChange={e => { const n = [...subs]; n[i] = {...n[i], children: e.target.value}; setSubs(n); }}
+                    placeholder="Ex: Branco, Preto, Prata, Vermelho"
+                    className="w-full h-8 rounded-lg bg-black/30 border border-white/15 px-2 text-xs text-white placeholder:text-white/20 focus:outline-none focus:border-blue-400"
+                  />
+                  {sub.children && (
+                    <p className="text-[10px] text-blue-400/60 mt-1">
+                      Botões: {sub.children.split(",").map(s => s.trim()).filter(Boolean).map(s => `[${s}]`).join(" ")}
+                    </p>
                   )}
                 </div>
-              </div>
-              <button onClick={() => setSubs(subs.filter((_, j) => j !== i))} className="p-1.5 mt-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+              )}
             </div>
           ))}
         </div>

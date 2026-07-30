@@ -517,6 +517,13 @@ async function getAiAnswer(question: string, config: Awaited<ReturnType<typeof g
   }
 }
 
+function buildSubPayload(actionType: string, value: string): Record<string, unknown> {
+  if (actionType === "open_internal") return { path: value.startsWith("/") ? value : "/" + value };
+  if (actionType === "open_whatsapp") return { phone: value.replace(/\D/g, "") };
+  if (actionType === "open_external" || actionType === "open_video") return { url: value };
+  return { text: value };
+}
+
 export async function sendVisitorMessage(input: {
   visitorId: string;
   conversationId?: number;
@@ -645,6 +652,39 @@ export async function sendVisitorMessage(input: {
       responses.push({ type: "menu_item", message: menuBotMsgOOH });
       return { conversationId: conversation.id, visitorMessage, responses };
     }
+    // Verificar se é um sub-botão de algum item do menu
+    const subButtonMatchOOH = (() => {
+      for (const item of menuItems) {
+        const subs: any[] = (item as any).subButtons || [];
+        for (const sub of subs) {
+          const subLabel = normalizeText(sub.label || "");
+          if (!subLabel) continue;
+          if (inputNormOOH === subLabel || inputNormOOH.includes(subLabel) || subLabel.includes(inputNormOOH)) {
+            return sub;
+          }
+        }
+      }
+      return null;
+    })();
+    if (subButtonMatchOOH) {
+      const subActionType = subButtonMatchOOH.actionType || "send_text";
+      const subResponseText = subButtonMatchOOH.responseText || null;
+      const subChildren = subButtonMatchOOH.children || null;
+      const botPayload: Record<string, unknown> = {};
+      let botText = subResponseText || "Selecione uma opção:";
+      if (subActionType === "show_children" && subChildren) {
+        const childLabels = subChildren.split(",").map((s: string) => s.trim()).filter(Boolean);
+        botPayload.buttons = childLabels.map((label: string) => ({ label, actionType: "send_text", actionPayload: { text: label } }));
+      } else if (["open_internal", "open_external", "open_video", "open_whatsapp"].includes(subActionType)) {
+        botPayload.buttons = [{ label: subButtonMatchOOH.label, actionType: subActionType, actionPayload: buildSubPayload(subActionType, subButtonMatchOOH.value || "") }];
+        if (!subResponseText) botText = "Clique no botão abaixo:";
+      }
+      const subBotMsgOOH = await createMessage({ conversationId: conversation.id, senderType: "bot", senderName: "Assistente", text: botText, messageType: "rich", payload: botPayload });
+      await touchConversationForMessage(conversation.id, { previewText: subBotMsgOOH.text || "", incrementVisitorUnread: 1, status: "waiting_customer" });
+      responses.push({ type: "sub_button", message: subBotMsgOOH });
+      return { conversationId: conversation.id, visitorMessage, responses };
+    }
+
     // Depois verifica respostas automáticas por palavras-chave
     const matchOutOfHours = await testAutoReply(input.text);
     if (matchOutOfHours.matched && matchOutOfHours.reply) {
@@ -757,12 +797,9 @@ export async function sendVisitorMessage(input: {
     return inputNorm === title || inputNorm.includes(title) || title.includes(inputNorm);
   });
   if (menuItemMatch) {
-    // Se o botão tem actionType de navegação (open_internal, open_external, open_video, open_whatsapp)
-    // e não tem responseText nem sub-botões, enviar mensagem com o botão de ação direta
     const actionType = (menuItemMatch as any).actionType || "send_message";
     const actionPayload = (menuItemMatch as any).actionPayload || {};
     const hasDirectAction = ["open_internal", "open_external", "open_video", "open_whatsapp"].includes(actionType);
-    const hasResponse = menuItemMatch.responseText || (menuItemMatch.subButtons && menuItemMatch.subButtons.length > 0);
 
     const botText = menuItemMatch.responseText || (hasDirectAction ? `Clique no botão abaixo:` : "Selecione uma opção:");
     const botPayload: Record<string, unknown> = {};
@@ -772,9 +809,10 @@ export async function sendVisitorMessage(input: {
         label: b.label,
         actionType: b.actionType,
         actionPayload: b.actionPayload || {},
+        responseText: b.responseText || null,
+        children: b.children || null,
       }));
     } else if (hasDirectAction) {
-      // Criar um botão de ação direta com o próprio item
       botPayload.buttons = [{
         label: menuItemMatch.title,
         actionType: actionType,
@@ -800,6 +838,62 @@ export async function sendVisitorMessage(input: {
       status: "waiting_customer",
     });
     responses.push({ type: "menu_item", message: menuBotMsg });
+    return { conversationId: conversation.id, visitorMessage, responses };
+  }
+
+  // Verificar se o texto corresponde a um sub-botão de algum item do menu (show_children ou responseText)
+  const subButtonMatch = (() => {
+    for (const item of menuItems) {
+      const subs: any[] = (item as any).subButtons || [];
+      for (const sub of subs) {
+        const subLabel = normalizeText(sub.label || "");
+        if (!subLabel) continue;
+        if (inputNorm === subLabel || inputNorm.includes(subLabel) || subLabel.includes(inputNorm)) {
+          return sub;
+        }
+      }
+    }
+    return null;
+  })();
+
+  if (subButtonMatch) {
+    const subActionType = subButtonMatch.actionType || "send_text";
+    const subResponseText = subButtonMatch.responseText || null;
+    const subChildren = subButtonMatch.children || null;
+    const botPayload: Record<string, unknown> = {};
+    let botText = subResponseText || "Selecione uma opção:";
+
+    if (subActionType === "show_children" && subChildren) {
+      // Gerar botões a partir da lista separada por vírgula
+      const childLabels = subChildren.split(",").map((s: string) => s.trim()).filter(Boolean);
+      botPayload.buttons = childLabels.map((label: string) => ({
+        label,
+        actionType: "send_text",
+        actionPayload: { text: label },
+      }));
+    } else if (["open_internal", "open_external", "open_video", "open_whatsapp"].includes(subActionType)) {
+      botPayload.buttons = [{
+        label: subButtonMatch.label,
+        actionType: subActionType,
+        actionPayload: buildSubPayload(subActionType, subButtonMatch.value || ""),
+      }];
+      if (!subResponseText) botText = "Clique no botão abaixo:";
+    }
+
+    const subBotMsg = await createMessage({
+      conversationId: conversation.id,
+      senderType: "bot",
+      senderName: "Assistente",
+      text: botText,
+      messageType: "rich",
+      payload: botPayload,
+    });
+    await touchConversationForMessage(conversation.id, {
+      previewText: subBotMsg.text || "",
+      incrementVisitorUnread: 1,
+      status: "waiting_customer",
+    });
+    responses.push({ type: "sub_button", message: subBotMsg });
     return { conversationId: conversation.id, visitorMessage, responses };
   }
 
