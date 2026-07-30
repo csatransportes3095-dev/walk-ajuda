@@ -326,6 +326,7 @@ export const onlineSupportRouter = router({
         actionType: z.string().min(1),
         actionPayload: z.record(z.string(), z.unknown()).optional(),
         responseText: z.string().optional(),
+        responseImageUrl: z.string().optional(),
         subButtons: z.array(z.object({
           label: z.string(),
           actionType: z.string(),

@@ -48,12 +48,14 @@ const TYPE_COLORS: Record<string, string> = {
 function NodeForm({
   label, setLabel,
   botResponse, setBotResponse,
+  botImageUrl, setBotImageUrl,
   actionType, setActionType,
   actionValue, setActionValue,
   onSave, onCancel, saveLabel = "Salvar",
 }: {
   label: string; setLabel: (v: string) => void;
   botResponse: string; setBotResponse: (v: string) => void;
+  botImageUrl?: string; setBotImageUrl?: (v: string) => void;
   actionType: string; setActionType: (v: string) => void;
   actionValue: string; setActionValue: (v: string) => void;
   onSave: () => void; onCancel: () => void; saveLabel?: string;
@@ -81,6 +83,20 @@ function NodeForm({
           className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400 resize-none"
         />
       </div>
+      {setBotImageUrl && (
+        <div>
+          <label className="text-xs font-bold text-white/60 block mb-1">FOTO / IMAGEM NA RESPOSTA (opcional)</label>
+          <input
+            value={botImageUrl || ""}
+            onChange={e => setBotImageUrl(e.target.value)}
+            placeholder="https://... (URL da imagem)"
+            className="w-full h-10 rounded-lg bg-black/30 border border-white/15 px-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400"
+          />
+          {botImageUrl && (
+            <img src={botImageUrl} alt="Preview" className="mt-2 max-h-32 rounded-lg border border-white/10 object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
+          )}
+        </div>
+      )}
       <div>
         <label className="text-xs font-bold text-white/60 block mb-1">AÇÃO DESTE BOTÃO</label>
         <select

@@ -680,6 +680,9 @@ export async function sendVisitorMessage(input: {
         actionPayload: flowNode.actionPayload,
       };
     }
+    if (flowNode.botImageUrl) {
+      botPayload.media = { imageUrl: flowNode.botImageUrl };
+    }
     const flowMsg = await createMessage({
       conversationId: conversation.id,
       senderType: "bot",
@@ -712,6 +715,9 @@ export async function sendVisitorMessage(input: {
         actionType: b.actionType,
         actionPayload: b.actionPayload || {},
       }));
+    }
+    if ((menuItemMatch as any).responseImageUrl) {
+      botPayload.media = { imageUrl: (menuItemMatch as any).responseImageUrl };
     }
     const menuBotMsg = await createMessage({
       conversationId: conversation.id,
@@ -1017,6 +1023,7 @@ export async function saveMenuItem(input: {
         actionType: input.actionType,
         actionPayloadJson: stringifyJson(input.actionPayload || {}),
         responseText: input.responseText || null,
+        responseImageUrl: (input as any).responseImageUrl || null,
         subButtonsJson: input.subButtons && input.subButtons.length > 0 ? stringifyJson(input.subButtons) : null,
         sortOrder: input.sortOrder ?? 0,
         isActive: input.isActive ? 1 : 0,

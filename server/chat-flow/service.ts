@@ -57,6 +57,7 @@ export async function saveFlowNode(input: {
     parentId: input.parentId ?? null,
     label: input.label,
     botResponse: input.botResponse || null,
+    botImageUrl: (input as any).botImageUrl || null,
     actionType: input.actionType,
     actionPayloadJson: stringify(input.actionPayload || {}),
     sortOrder: input.sortOrder ?? 0,

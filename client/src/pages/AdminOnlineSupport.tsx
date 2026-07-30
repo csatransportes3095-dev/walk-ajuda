@@ -39,6 +39,7 @@ function BotaoEditor({
   actionType, setActionType,
   value, setValue,
   responseText, setResponseText,
+  responseImageUrl, setResponseImageUrl,
   subButtons, setSubButtons,
   onSave, onCancel,
   saveLabel = "Salvar",
@@ -47,6 +48,7 @@ function BotaoEditor({
   actionType: string; setActionType: (v: string) => void;
   value: string; setValue: (v: string) => void;
   responseText?: string; setResponseText?: (v: string) => void;
+  responseImageUrl?: string; setResponseImageUrl?: (v: string) => void;
   subButtons?: Array<{label: string; actionType: string; value: string}>;
   setSubButtons?: (v: Array<{label: string; actionType: string; value: string}>) => void;
   onSave: () => void; onCancel?: () => void;
@@ -108,16 +110,32 @@ function BotaoEditor({
 
       {/* Resposta do bot quando o cliente clica neste botão */}
       {setResponseText && (
-        <div className="border-t border-white/10 pt-3">
-          <label className="text-xs font-bold text-white/60 block mb-1">RESPOSTA DO BOT (opcional)</label>
-          <p className="text-[11px] text-white/35 mb-2">Texto que o bot envia quando o cliente clica neste botão</p>
-          <textarea
-            value={responseText || ""}
-            onChange={e => setResponseText(e.target.value)}
-            placeholder="Ex: Olá! Para fazer seu pedido, siga os passos abaixo..."
-            rows={3}
-            className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400 resize-none"
-          />
+        <div className="border-t border-white/10 pt-3 space-y-3">
+          <div>
+            <label className="text-xs font-bold text-white/60 block mb-1">RESPOSTA DO BOT (opcional)</label>
+            <p className="text-[11px] text-white/35 mb-2">Texto que o bot envia quando o cliente clica neste botão</p>
+            <textarea
+              value={responseText || ""}
+              onChange={e => setResponseText(e.target.value)}
+              placeholder="Ex: Olá! Para fazer seu pedido, siga os passos abaixo..."
+              rows={3}
+              className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400 resize-none"
+            />
+          </div>
+          {setResponseImageUrl && (
+            <div>
+              <label className="text-xs font-bold text-white/60 block mb-1">FOTO / IMAGEM NA RESPOSTA (opcional)</label>
+              <input
+                value={responseImageUrl || ""}
+                onChange={e => setResponseImageUrl(e.target.value)}
+                placeholder="https://... (URL da imagem)"
+                className="w-full h-10 rounded-lg bg-black/30 border border-white/15 px-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400"
+              />
+              {responseImageUrl && (
+                <img src={responseImageUrl} alt="Preview" className="mt-2 max-h-32 rounded-lg border border-white/10 object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -220,9 +238,11 @@ export default function AdminOnlineSupport() {
   const [editActionType, setEditActionType] = useState("open_internal");
   const [editValue, setEditValue] = useState("");
   const [editResponseText, setEditResponseText] = useState("");
+  const [editResponseImageUrl, setEditResponseImageUrl] = useState("");
   const [editSubButtons, setEditSubButtons] = useState<Array<{label: string; actionType: string; value: string}>>([]);
 
   const [newResponseText, setNewResponseText] = useState("");
+  const [newResponseImageUrl, setNewResponseImageUrl] = useState("");
   const [newSubButtons, setNewSubButtons] = useState<Array<{label: string; actionType: string; value: string}>>([]);
 
   const handleSaveNew = () => {
@@ -233,6 +253,7 @@ export default function AdminOnlineSupport() {
       actionType: newActionType,
       actionPayload: buildPayload(newActionType, newValue),
       responseText: newResponseText.trim() || undefined,
+      responseImageUrl: newResponseImageUrl.trim() || undefined,
       subButtons: newSubButtons.filter(b => b.label.trim()).map(b => ({
         label: b.label.trim(),
         actionType: b.actionType,
@@ -241,7 +262,7 @@ export default function AdminOnlineSupport() {
       isActive: true,
       sortOrder: 99,
     });
-    setNewTitle(""); setNewActionType("open_internal"); setNewValue(""); setNewResponseText(""); setNewSubButtons([]); setShowNewForm(false);
+    setNewTitle(""); setNewActionType("open_internal"); setNewValue(""); setNewResponseText(""); setNewResponseImageUrl(""); setNewSubButtons([]); setShowNewForm(false);
   };
 
   const handleSaveEdit = () => {
@@ -253,6 +274,7 @@ export default function AdminOnlineSupport() {
       actionType: editActionType,
       actionPayload: buildPayload(editActionType, editValue),
       responseText: editResponseText.trim() || undefined,
+      responseImageUrl: editResponseImageUrl.trim() || undefined,
       subButtons: editSubButtons.filter(b => b.label.trim()).map(b => ({
         label: b.label.trim(),
         actionType: b.actionType,
@@ -270,6 +292,7 @@ export default function AdminOnlineSupport() {
     setEditActionType(item.actionType || "open_internal");
     setEditValue(extractValue(item.actionType, item.actionPayload));
     setEditResponseText(item.responseText || "");
+    setEditResponseImageUrl(item.responseImageUrl || "");
     setEditSubButtons((item.subButtons || []).map((b: any) => ({
       label: b.label || "",
       actionType: b.actionType || "open_internal",
@@ -405,9 +428,10 @@ export default function AdminOnlineSupport() {
                 actionType={newActionType} setActionType={setNewActionType}
                 value={newValue} setValue={setNewValue}
                 responseText={newResponseText} setResponseText={setNewResponseText}
+                responseImageUrl={newResponseImageUrl} setResponseImageUrl={setNewResponseImageUrl}
                 subButtons={newSubButtons} setSubButtons={setNewSubButtons}
                 onSave={handleSaveNew}
-                onCancel={() => { setShowNewForm(false); setNewTitle(""); setNewValue(""); setNewResponseText(""); setNewSubButtons([]); }}
+                onCancel={() => { setShowNewForm(false); setNewTitle(""); setNewValue(""); setNewResponseText(""); setNewResponseImageUrl(""); setNewSubButtons([]); }}
                 saveLabel="Criar Botão"
               />
             )}
@@ -434,6 +458,7 @@ export default function AdminOnlineSupport() {
                         actionType={editActionType} setActionType={setEditActionType}
                         value={editValue} setValue={setEditValue}
                         responseText={editResponseText} setResponseText={setEditResponseText}
+                        responseImageUrl={editResponseImageUrl} setResponseImageUrl={setEditResponseImageUrl}
                         subButtons={editSubButtons} setSubButtons={setEditSubButtons}
                         onSave={handleSaveEdit}
                         onCancel={() => setEditId(null)}
