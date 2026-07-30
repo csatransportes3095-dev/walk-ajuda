@@ -17,6 +17,7 @@ export interface MailOptions {
 
 export async function sendMailDirect(options: MailOptions): Promise<void> {
   const from = options.from || SMTP_FROM;
+  console.log(`[sendMailDirect] to=${options.to} subject="${options.subject}" resend=${!!RESEND_API_KEY}`);
 
   if (RESEND_API_KEY) {
     const body: Record<string, unknown> = {
@@ -44,8 +45,10 @@ export async function sendMailDirect(options: MailOptions): Promise<void> {
     });
     if (!res.ok) {
       const err = await res.text();
+      console.error(`[sendMailDirect] Resend error ${res.status}: ${err}`);
       throw new Error(`Resend API error ${res.status}: ${err}`);
     }
+    console.log(`[sendMailDirect] Resend OK to=${options.to}`);
     return;
   }
 
