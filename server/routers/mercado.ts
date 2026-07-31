@@ -108,6 +108,93 @@ export const mercadoRouter = router({
         await exec(`DELETE FROM cc_mercado_produtos WHERE id = ${input.id} AND userId = ${ctx.userId}`);
         return { ok: true };
       }),
+
+    // Pré-cadastrar lista padrão de produtos essenciais
+    seed: ccP.mutation(async ({ ctx }) => {
+      const PADRAO = [
+        { nome: "Arroz", categoria: "\u{1F33E} Gr\u00e3os", unidade: "kg" },
+        { nome: "Feij\u00e3o", categoria: "\u{1F33E} Gr\u00e3os", unidade: "kg" },
+        { nome: "Macarr\u00e3o", categoria: "\u{1F33E} Gr\u00e3os", unidade: "pct" },
+        { nome: "Farinha de trigo", categoria: "\u{1F33E} Gr\u00e3os", unidade: "kg" },
+        { nome: "Fub\u00e1", categoria: "\u{1F33E} Gr\u00e3os", unidade: "kg" },
+        { nome: "Aveia", categoria: "\u{1F33E} Gr\u00e3os", unidade: "pct" },
+        { nome: "Sal", categoria: "\u{1F35D} Mercearia", unidade: "kg" },
+        { nome: "A\u00e7\u00facar", categoria: "\u{1F35D} Mercearia", unidade: "kg" },
+        { nome: "\u00d3leo", categoria: "\u{1F35D} Mercearia", unidade: "L" },
+        { nome: "Azeite", categoria: "\u{1F35D} Mercearia", unidade: "L" },
+        { nome: "Vinagre", categoria: "\u{1F35D} Mercearia", unidade: "L" },
+        { nome: "Alho", categoria: "\u{1F35D} Mercearia", unidade: "un" },
+        { nome: "Cebola", categoria: "\u{1F34E} Hortifruti", unidade: "kg" },
+        { nome: "Pimenta", categoria: "\u{1F35D} Mercearia", unidade: "un" },
+        { nome: "Or\u00e9gano", categoria: "\u{1F35D} Mercearia", unidade: "un" },
+        { nome: "Caf\u00e9", categoria: "\u{1F35D} Mercearia", unidade: "pct" },
+        { nome: "Ch\u00e1", categoria: "\u{1F35D} Mercearia", unidade: "cx" },
+        { nome: "P\u00e3o", categoria: "\u{1F956} Padaria", unidade: "un" },
+        { nome: "Margarina", categoria: "\u{1F956} Padaria", unidade: "un" },
+        { nome: "Manteiga", categoria: "\u{1F95B} Latic\u00ednios", unidade: "un" },
+        { nome: "Leite", categoria: "\u{1F95B} Latic\u00ednios", unidade: "L" },
+        { nome: "Queijo", categoria: "\u{1F95B} Latic\u00ednios", unidade: "kg" },
+        { nome: "Presunto", categoria: "\u{1F366} Frios", unidade: "kg" },
+        { nome: "Iogurte", categoria: "\u{1F95B} Latic\u00ednios", unidade: "un" },
+        { nome: "Requeij\u00e3o", categoria: "\u{1F95B} Latic\u00ednios", unidade: "un" },
+        { nome: "Creme de leite", categoria: "\u{1F95B} Latic\u00ednios", unidade: "cx" },
+        { nome: "Molho de tomate", categoria: "\u{1F35D} Mercearia", unidade: "un" },
+        { nome: "Carne bovina", categoria: "\u{1F969} A\u00e7ougue", unidade: "kg" },
+        { nome: "Frango", categoria: "\u{1F969} A\u00e7ougue", unidade: "kg" },
+        { nome: "Carne mo\u00edda", categoria: "\u{1F969} A\u00e7ougue", unidade: "kg" },
+        { nome: "Ovos", categoria: "\u{1F969} A\u00e7ougue", unidade: "dz" },
+        { nome: "Peixe", categoria: "\u{1F41F} Peixaria", unidade: "kg" },
+        { nome: "Lingu\u00ed\u00e7a", categoria: "\u{1F969} A\u00e7ougue", unidade: "kg" },
+        { nome: "Banana", categoria: "\u{1F34E} Hortifruti", unidade: "kg" },
+        { nome: "Ma\u00e7\u00e3", categoria: "\u{1F34E} Hortifruti", unidade: "kg" },
+        { nome: "Laranja", categoria: "\u{1F34E} Hortifruti", unidade: "kg" },
+        { nome: "Lim\u00e3o", categoria: "\u{1F34E} Hortifruti", unidade: "kg" },
+        { nome: "Mam\u00e3o", categoria: "\u{1F34E} Hortifruti", unidade: "un" },
+        { nome: "Melancia", categoria: "\u{1F34E} Hortifruti", unidade: "un" },
+        { nome: "Batata", categoria: "\u{1F34E} Hortifruti", unidade: "kg" },
+        { nome: "Tomate", categoria: "\u{1F34E} Hortifruti", unidade: "kg" },
+        { nome: "Cenoura", categoria: "\u{1F34E} Hortifruti", unidade: "kg" },
+        { nome: "Alface", categoria: "\u{1F34E} Hortifruti", unidade: "un" },
+        { nome: "Couve", categoria: "\u{1F34E} Hortifruti", unidade: "un" },
+        { nome: "Repolho", categoria: "\u{1F34E} Hortifruti", unidade: "un" },
+        { nome: "Pepino", categoria: "\u{1F34E} Hortifruti", unidade: "un" },
+        { nome: "Detergente", categoria: "\u{1F9F4} Limpeza", unidade: "un" },
+        { nome: "Sab\u00e3o em p\u00f3", categoria: "\u{1F9F4} Limpeza", unidade: "kg" },
+        { nome: "Amaciante", categoria: "\u{1F9F4} Limpeza", unidade: "L" },
+        { nome: "Desinfetante", categoria: "\u{1F9F4} Limpeza", unidade: "L" },
+        { nome: "\u00c1gua sanit\u00e1ria", categoria: "\u{1F9F4} Limpeza", unidade: "L" },
+        { nome: "Esponja", categoria: "\u{1F9F4} Limpeza", unidade: "un" },
+        { nome: "Saco de lixo", categoria: "\u{1F9F4} Limpeza", unidade: "pct" },
+        { nome: "Papel toalha", categoria: "\u{1F9F4} Limpeza", unidade: "pct" },
+        { nome: "Papel higi\u00eanico", categoria: "\u{1F9FB} Higiene", unidade: "pct" },
+        { nome: "Sabonete", categoria: "\u{1F9FB} Higiene", unidade: "un" },
+        { nome: "Shampoo", categoria: "\u{1F9FB} Higiene", unidade: "un" },
+        { nome: "Condicionador", categoria: "\u{1F9FB} Higiene", unidade: "un" },
+        { nome: "Creme dental", categoria: "\u{1F9FB} Higiene", unidade: "un" },
+        { nome: "Escova de dente", categoria: "\u{1F9FB} Higiene", unidade: "un" },
+        { nome: "Desodorante", categoria: "\u{1F9FB} Higiene", unidade: "un" },
+        { nome: "Biscoito", categoria: "\u{1F36C} Doces", unidade: "pct" },
+        { nome: "Suco", categoria: "\u{1F964} Bebidas", unidade: "L" },
+        { nome: "Refrigerante", categoria: "\u{1F964} Bebidas", unidade: "L" },
+        { nome: "Milho", categoria: "\u{1F35D} Mercearia", unidade: "un" },
+        { nome: "Ervilha", categoria: "\u{1F35D} Mercearia", unidade: "un" },
+        { nome: "Atum", categoria: "\u{1F41F} Peixaria", unidade: "un" },
+        { nome: "Chocolate", categoria: "\u{1F36C} Doces", unidade: "un" },
+        { nome: "Achocolatado", categoria: "\u{1F36C} Doces", unidade: "pct" },
+        { nome: "Leite condensado", categoria: "\u{1F95B} Latic\u00ednios", unidade: "un" },
+        { nome: "Bolacha", categoria: "\u{1F36C} Doces", unidade: "pct" },
+        { nome: "Salgadinho", categoria: "\u{1F36C} Doces", unidade: "pct" },
+      ];
+      let criados = 0;
+      for (const p of PADRAO) {
+        const existing = await exec(`SELECT id FROM cc_mercado_produtos WHERE userId = ${ctx.userId} AND nome = '${esc(p.nome)}' LIMIT 1`);
+        if (existing.length === 0) {
+          await exec(`INSERT INTO cc_mercado_produtos (userId, nome, categoria, unidade, favorito, vezesComprado) VALUES (${ctx.userId}, '${esc(p.nome)}', '${esc(p.categoria)}', '${esc(p.unidade)}', 0, 0)`);
+          criados++;
+        }
+      }
+      return { criados };
+    }),
   }),
 
   // ── Lista atual ───────────────────────────────────────────────────────────
