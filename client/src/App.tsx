@@ -313,6 +313,7 @@ function AppContent() {
   const isAgendarRoute = location.startsWith("/agendar");
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location === "/gastos";
+  const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/");
   const isPreCadastroRoute = location === "/pre-cadastro";
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
 
@@ -347,6 +348,11 @@ function AppContent() {
 
   // Rota /gastos é pública — sem senha
   if (isGastosRoute) {
+    return <Router />;
+  }
+
+  // Rota /cartoes é pública — sistema de cartões com login próprio
+  if (isCartoesRoute) {
     return <Router />;
   }
 
