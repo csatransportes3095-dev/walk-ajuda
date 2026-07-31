@@ -297,5 +297,11 @@ export const mercadoRouter = router({
     list: ccP.query(async ({ ctx }) => {
       return exec(`SELECT * FROM cc_mercado_historico WHERE userId = ${ctx.userId} ORDER BY finalizadoEm DESC LIMIT 50`);
     }),
+    delete: ccP
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await exec(`DELETE FROM cc_mercado_historico WHERE id = ${input.id} AND userId = ${ctx.userId}`);
+        return { ok: true };
+      }),
   }),
 });

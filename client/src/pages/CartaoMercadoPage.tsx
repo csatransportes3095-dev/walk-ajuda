@@ -400,8 +400,9 @@ function AbaLista({ cartoes }: { cartoes: any[] }) {
 
 // ─── Aba Histórico ────────────────────────────────────────────────────────────
 function AbaHistorico({ cartoes }: { cartoes: any[] }) {
-  const { data: historico = [] } = trpc.mercado.historico.list.useQuery(undefined, { refetchOnWindowFocus: false });
+  const { data: historico = [], refetch } = trpc.mercado.historico.list.useQuery(undefined, { refetchOnWindowFocus: false });
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const deleteMut = trpc.mercado.historico.delete.useMutation({ onSuccess: () => { refetch(); toast.success('Excluído!'); } });
 
   if (historico.length === 0) {
     return (
@@ -429,7 +430,12 @@ function AbaHistorico({ cartoes }: { cartoes: any[] }) {
                 </div>
                 {cartao && <div style={{ fontSize: 11, color: "#a78bfa", marginTop: 2 }}>💳 {cartao.nome}</div>}
               </div>
-              <div style={{ fontSize: 18, fontWeight: 800 }}>{fmt(parseFloat(h.totalCaixa || h.totalPrateleira || "0"))}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ fontSize: 18, fontWeight: 800 }}>{fmt(parseFloat(h.totalCaixa || h.totalPrateleira || "0"))}</div>
+                <button onClick={() => { if (confirm("Excluir este histórico?")) deleteMut.mutate({ id: h.id }); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                  <Trash2 size={16} color="rgba(239,68,68,0.6)" />
+                </button>
+              </div>
             </div>
             <button onClick={() => setExpandedId(isExpanded ? null : h.id)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4, padding: 0 }}>
               {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {itens.length} itens
