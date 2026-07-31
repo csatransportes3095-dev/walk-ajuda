@@ -4652,7 +4652,7 @@ export default function AdminOrders() {
                     </>
                   ) : (
                     <>
-                      <span className="text-xs text-muted-foreground mr-1">Ordenar:</span>
+                      <span className="text-xs text-zinc-500 font-medium mr-1">Ordenar por</span>
                       {(["number", "name", "date"] as const).map(k => (
                         <button
                           key={k}
@@ -4666,7 +4666,7 @@ export default function AdminOrders() {
                               : "bg-card border-border text-muted-foreground hover:border-amber-500/40"
                           }`}
                         >
-                          {k === "number" ? "*Número" : k === "name" ? "A–Z Nome" : "Data"}
+                          {k === "number" ? "Número" : k === "name" ? "Nome (A–Z)" : "Data"}
                           {todosSortKey === k && (
                             todosSortDir === "asc"
                               ? <ArrowUp className="w-3 h-3" />
@@ -4674,13 +4674,13 @@ export default function AdminOrders() {
                           )}
                         </button>
                       ))}
-                      {/* Filtros rápidos — cards gamer */}
-                      <div className="flex gap-2 ml-2">
+                      {/* Filtros rápidos — design profissional */}
+                      <div className="flex gap-1.5 ml-3">
                         {([
-                          { id: "all",         label: "TODOS",            icon: "📋", glow: "#f59e0b", active_bg: "linear-gradient(135deg,#78350f,#92400e)", active_border: "#f59e0b", active_text: "#fde68a" },
-                          { id: "sem_status",  label: "SEM AGENDAMENTO",   icon: "📅", glow: "#ef4444", active_bg: "linear-gradient(135deg,#7f1d1d,#991b1b)", active_border: "#ef4444", active_text: "#fca5a5" },
-                          { id: "agendamento", label: "AGUARD. AGENDAMENTO",icon: "⏳", glow: "#eab308", active_bg: "linear-gradient(135deg,#713f12,#854d0e)", active_border: "#eab308", active_text: "#fef08a" },
-                          { id: "novo",        label: "NOVOS",            icon: "🆕", glow: "#22c55e", active_bg: "linear-gradient(135deg,#14532d,#166534)", active_border: "#22c55e", active_text: "#86efac" },
+                          { id: "all",         label: "Todos",            sub: "pedidos",           glow: "#f59e0b", active_bg: "linear-gradient(135deg,#78350f,#92400e)", active_border: "#f59e0b", active_text: "#fde68a" },
+                          { id: "sem_status",  label: "Sem Agendamento",  sub: "não agendados",      glow: "#ef4444", active_bg: "linear-gradient(135deg,#7f1d1d,#991b1b)", active_border: "#ef4444", active_text: "#fca5a5" },
+                          { id: "agendamento", label: "Agendamento",      sub: "aguardando cliente", glow: "#eab308", active_bg: "linear-gradient(135deg,#713f12,#854d0e)", active_border: "#eab308", active_text: "#fef08a" },
+                          { id: "novo",        label: "Novos",            sub: "não visualizados",  glow: "#22c55e", active_bg: "linear-gradient(135deg,#14532d,#166534)", active_border: "#22c55e", active_text: "#86efac" },
                         ] as const).map(f => {
                           const cnt = group.orders.filter((o: any) => {
                             if (f.id === "sem_status") return (o as any).scheduleStatus !== "confirmed";
@@ -4697,17 +4697,17 @@ export default function AdminOrders() {
                                 background: f.active_bg,
                                 borderColor: f.active_border,
                                 color: f.active_text,
-                                boxShadow: `0 0 10px ${f.glow}55, 0 0 20px ${f.glow}22`,
+                                boxShadow: `0 0 8px ${f.glow}44`,
                               } : {}}
-                              className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl text-[10px] font-black tracking-wider border transition-all ${
+                              className={`flex flex-col items-start justify-center px-3 py-2 rounded-xl border transition-all min-w-[90px] ${
                                 active
                                   ? "border-opacity-100"
-                                  : "bg-zinc-900/80 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                                  : "bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
                               }`}
                             >
-                              <span className="text-base leading-none">{f.icon}</span>
-                              <span className="leading-none mt-0.5">{f.label}</span>
-                              <span className={`text-[11px] font-black leading-none mt-0.5 ${active ? "" : "text-zinc-300"}`}>{cnt}</span>
+                              <span className="text-[11px] font-bold leading-tight tracking-tight">{f.label}</span>
+                              <span className="text-[9px] opacity-60 leading-tight mt-0.5">{f.sub}</span>
+                              <span className={`text-[15px] font-black leading-none mt-1 ${active ? "" : "text-zinc-200"}`}>{cnt}</span>
                             </button>
                           );
                         })}
