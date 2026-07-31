@@ -259,6 +259,10 @@ export default function AdminCodes() {
             <span className="text-xl block mb-1">💳</span>
             <span className="text-xs font-bold text-white">Empréstimos</span>
           </a>
+          <a href="/admin/cartoes-users" className="bg-purple-600/20 border border-purple-500/30 rounded-xl p-3 text-center hover:bg-purple-600/30 transition-all">
+            <span className="text-xl block mb-1">🃏</span>
+            <span className="text-xs font-bold text-white">Cartões</span>
+          </a>
           <a href="/admin/broadcast" className="bg-blue-600/20 border border-blue-500/30 rounded-xl p-3 text-center hover:bg-blue-600/30 transition-all">
             <Send className="w-5 h-5 text-blue-400 mx-auto mb-1" />
             <span className="text-xs font-bold text-white">Envio em Massa</span>
