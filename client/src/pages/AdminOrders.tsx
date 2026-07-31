@@ -5821,11 +5821,8 @@ export default function AdminOrders() {
                                   .replace(/\{servico\}/gi, order.serviceName && order.serviceName !== 'NULL' ? `${order.serviceName}${order.serviceOption && order.serviceOption !== 'NULL' ? ` — ${order.serviceOption}` : ''}` : '')
                                   .replace(/\{cidade\}/gi, order.customerCity ? `${order.customerCity}${order.customerUf ? ` — ${order.customerUf}` : ''}` : '')
                                   .replace(/\{previsao\}/gi, order.deliveryEstimate ? new Date(order.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
-                                const mediaLines2: string[] = [];
-                                if ((defaultTemplate as any).imageUrl) mediaLines2.push(((defaultTemplate as any).imageTitle ? '🖼️ *' + (defaultTemplate as any).imageTitle + '*: ' : '🖼️ ') + (defaultTemplate as any).imageUrl);
-                                if ((defaultTemplate as any).videoUrl) mediaLines2.push(((defaultTemplate as any).videoTitle ? '🎥 *' + (defaultTemplate as any).videoTitle + '*: ' : '🎥 ') + (defaultTemplate as any).videoUrl);
-                                if ((defaultTemplate as any).mediaFileUrl) mediaLines2.push(((defaultTemplate as any).mediaType === 'video' ? '🎥 ' : '🖼️ ') + (defaultTemplate as any).mediaFileUrl);
-                                setWaModalMsg(mediaLines2.length > 0 ? baseMsg2 + '\n\n' + mediaLines2.join('\n') : baseMsg2);
+                                // Não adicionar link de mídia no texto — o WhatsApp gera preview automático pelo link da página
+                                setWaModalMsg(baseMsg2);
                               } else {
                                 setWaModalMsg(msg);
                               }
@@ -7726,11 +7723,8 @@ export default function AdminOrders() {
                             .replace(/\{servico\}/gi, waModalOrder.serviceName && waModalOrder.serviceName !== 'NULL' ? `${waModalOrder.serviceName}${waModalOrder.serviceOption && waModalOrder.serviceOption !== 'NULL' ? ` — ${waModalOrder.serviceOption}` : ''}` : '')
                             .replace(/\{cidade\}/gi, waModalOrder.customerCity ? `${waModalOrder.customerCity}${waModalOrder.customerUf ? ` — ${waModalOrder.customerUf}` : ''}` : '')
                             .replace(/\{previsao\}/gi, waModalOrder.deliveryEstimate ? new Date(waModalOrder.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
-                          const mediaLines: string[] = [];
-                          if (t.imageUrl) mediaLines.push((t.imageTitle ? '🖼️ *' + t.imageTitle + '*: ' : '🖼️ ') + t.imageUrl);
-                          if (t.videoUrl) mediaLines.push((t.videoTitle ? '🎥 *' + t.videoTitle + '*: ' : '🎥 ') + t.videoUrl);
-                          if (t.mediaFileUrl) mediaLines.push((t.mediaType === 'video' ? '🎥 ' : '🖼️ ') + t.mediaFileUrl);
-                          setWaModalMsg(mediaLines.length > 0 ? baseMsg + '\n\n' + mediaLines.join('\n') : baseMsg);
+                          // Não adicionar link de mídia no texto — o WhatsApp gera preview automático pelo link da página
+                          setWaModalMsg(baseMsg);
                         }}
                         className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-all ${
                           waModalSelectedId === t.id

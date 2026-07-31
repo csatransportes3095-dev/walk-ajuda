@@ -220,7 +220,7 @@ export default function AdminWhatsappTemplates() {
               >
                 <option value="">— Sem vínculo (geral) —</option>
                 {statusTypesData.map((s: any) => (
-                  <option key={s.key} value={s.key}>{s.label} ({s.key})</option>
+                  <option key={s.key} value={s.key}>{s.label}</option>
                 ))}
               </select>
             </div>
