@@ -4,6 +4,7 @@ import CartaoAuthPage from "./CartaoAuthPage";
 import CartaoDashboardPage from "./CartaoDashboardPage";
 import CartaoDetailPage from "./CartaoDetailPage";
 import CartaoDespesasPage from "./CartaoDespesasPage";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
 function CartaoRoutes() {
   const [location] = useLocation();
@@ -44,5 +45,10 @@ function CartaoRoutes() {
 }
 
 export default function CartaoPage() {
-  return <CartaoRoutes />;
+  return (
+    <>
+      <CartaoRoutes />
+      <PWAInstallPrompt />
+    </>
+  );
 }
