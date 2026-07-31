@@ -5631,7 +5631,7 @@ export default function AdminOrders() {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        {t === "status" ? "�x9 Status" : t === "cliente" ? "�x� Cliente" : t === "historico" ? "�x"� Histórico" : t === "documentos" ? "�x� Docs" : "�x� Notas"}
+                        {t === "status" ? "Status" : t === "cliente" ? "Cliente" : t === "historico" ? "Historico" : t === "documentos" ? "Docs" : "Notas"}
                       </button>
                     ))}
                   </div>
