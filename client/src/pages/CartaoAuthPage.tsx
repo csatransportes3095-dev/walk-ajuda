@@ -15,7 +15,7 @@ export default function AuthPage() {
   const loginMutation = trpc.cartoes.auth.login.useMutation({
     onSuccess: () => {
       toast.success("Bem-vindo!");
-      setTimeout(() => utils.auth.me.refetch(), 200);
+      utils.cartoes.auth.me.invalidate();
     },
     onError: (e) => toast.error(e.message),
   });
@@ -23,7 +23,7 @@ export default function AuthPage() {
   const registerMutation = trpc.cartoes.auth.register.useMutation({
     onSuccess: () => {
       toast.success("Conta criada!");
-      setTimeout(() => utils.auth.me.refetch(), 200);
+      utils.cartoes.auth.me.invalidate();
     },
     onError: (e) => toast.error(e.message),
   });

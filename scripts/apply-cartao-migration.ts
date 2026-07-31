@@ -144,9 +144,29 @@ async function run() {
     const userCount = Number(rows[0]?.cnt || 0);
 
     if (userCount > 0) {
-      console.log(`[cc-migrate] Dados já existem (${userCount} usuários). Pulando importação.`);
-      await connection.query(`SET FOREIGN_KEY_CHECKS = 1`);
-      return;
+      // Verificar se as cores dos cartões estão corretas (bug: colunas trocadas na primeira migração)
+      const [cartaoCheck] = await connection.query(`SELECT corCartao FROM cc_cartoes LIMIT 1`) as any[];
+      const primeiraCorCartao = cartaoCheck[0]?.corCartao;
+      const coresValidas = ['purple','blue','red','green','orange','pink','teal','indigo','violet'];
+      const corEhNumerica = primeiraCorCartao && !coresValidas.includes(primeiraCorCartao);
+      
+      if (corEhNumerica) {
+        console.log(`[cc-migrate] Detectado bug de colunas trocadas (corCartao='${primeiraCorCartao}'). Corrigindo dados...`);
+        // Limpar dados corrompidos e reimportar
+        await connection.query(`DELETE FROM cc_pagamentos_despesas`);
+        await connection.query(`DELETE FROM cc_despesas`);
+        await connection.query(`DELETE FROM cc_pagamentos`);
+        await connection.query(`DELETE FROM cc_gastos`);
+        await connection.query(`DELETE FROM cc_parcelamentos`);
+        await connection.query(`DELETE FROM cc_cartoes`);
+        await connection.query(`DELETE FROM cc_categorias`);
+        await connection.query(`DELETE FROM cc_app_users`);
+        console.log(`[cc-migrate] Dados corrompidos removidos. Reimportando...`);
+      } else {
+        console.log(`[cc-migrate] Dados já existem (${userCount} usuários) e estão corretos. Pulando importação.`);
+        await connection.query(`SET FOREIGN_KEY_CHECKS = 1`);
+        return;
+      }
     }
 
     // ── Importar dados do dump ─────────────────────────────────────────────

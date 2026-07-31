@@ -146,6 +146,18 @@ export const cartoesRouter = router({
 
   // ── Cartões ────────────────────────────────────────────────────────────────
   cartoes: router({
+    get: ccProtected
+      .input(z.object({ id: z.number().int() }))
+      .query(async ({ input, ctx }) => {
+        const userId = (ctx as any).ccUserId as number;
+        const rows = await ccExec(`SELECT * FROM cc_cartoes WHERE id = ${input.id} AND userId = ${userId} LIMIT 1`);
+        const c = rows[0];
+        const gastos = await ccExec(`SELECT valor, paga FROM cc_gastos WHERE cartaoId = ${c.id} AND paga = 0`);
+        const totalGasto = gastos.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0);
+        const limiteDisponivel = parseFloat(c.limiteTotal) - totalGasto;
+        return { ...c, limiteTotal: parseFloat(c.limiteTotal), faturaAtual: totalGasto, limiteDisponivel };
+      }),
+
     list: ccProtected.query(async ({ ctx }) => {
       const userId = (ctx as any).ccUserId as number;
       const lista = await ccExec(`SELECT * FROM cc_cartoes WHERE userId = ${userId}`);
@@ -345,6 +357,16 @@ export const cartoesRouter = router({
         return { success: true };
       }),
 
+    cancelar: ccProtected
+      .input(z.object({ id: z.number().int(), cartaoId: z.number().int() }))
+      .mutation(async ({ input, ctx }) => {
+        const userId = (ctx as any).ccUserId as number;
+        const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
+        await ccExec(`DELETE FROM cc_pagamentos WHERE id = ${input.id} AND cartaoId = ${input.cartaoId}`);
+        return { success: true };
+      }),
+
     delete: ccProtected
       .input(z.object({ id: z.number().int(), cartaoId: z.number().int() }))
       .mutation(async ({ input, ctx }) => {
@@ -426,6 +448,34 @@ export const cartoesRouter = router({
         if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
         await ccExec(`DELETE FROM cc_gastos WHERE parcelamentoId = ${input.id} AND cartaoId = ${input.cartaoId}`);
         await ccExec(`DELETE FROM cc_parcelamentos WHERE id = ${input.id} AND cartaoId = ${input.cartaoId}`);
+        return { success: true };
+      }),
+
+    editar: ccProtected
+      .input(z.object({
+        id: z.number().int(),
+        cartaoId: z.number().int(),
+        descricao: z.string().min(1).max(200).optional(),
+        responsavel: z.string().max(100).optional().nullable(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const userId = (ctx as any).ccUserId as number;
+        const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
+        const sets: string[] = [];
+        if (input.descricao !== undefined) sets.push(`descricao = '${input.descricao.replace(/'/g, "''")}'`);
+        if (input.responsavel !== undefined) sets.push(`responsavel = ${input.responsavel ? `'${input.responsavel.replace(/'/g, "''")}'` : "NULL"}`);
+        if (sets.length > 0) {
+          await ccExec(`UPDATE cc_parcelamentos SET ${sets.join(", ")} WHERE id = ${input.id} AND cartaoId = ${input.cartaoId}`);
+          // Atualizar descrição das parcelas também
+          if (input.descricao !== undefined) {
+            const parcelas = await ccExec(`SELECT id, numeroParcela, totalParcelas FROM cc_gastos WHERE parcelamentoId = ${input.id} AND cartaoId = ${input.cartaoId}`);
+            for (const p of parcelas) {
+              const novaDesc = `${input.descricao} (${p.numeroParcela}/${p.totalParcelas})`;
+              await ccExec(`UPDATE cc_gastos SET descricao = '${novaDesc.replace(/'/g, "''")}' WHERE id = ${p.id}`);
+            }
+          }
+        }
         return { success: true };
       }),
 

@@ -46,7 +46,7 @@ export default function DashboardPage() {
   const { data: user } = trpc.cartoes.auth.me.useQuery(undefined, { retry: false });
   const { data: cartoes = [], isLoading } = trpc.cartoes.cartoes.list.useQuery(undefined, { refetchOnWindowFocus: true });
   const logoutMutation = trpc.cartoes.auth.logout.useMutation({
-    onSuccess: () => utils.auth.me.invalidate(),
+    onSuccess: () => utils.cartoes.auth.me.invalidate(),
   });
 
   const nome = ((user as any)?.name || "Usuário").split(" ")[0];
