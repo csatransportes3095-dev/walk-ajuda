@@ -13,6 +13,7 @@
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "db:migrate:prod": "drizzle-kit migrate",
     "db:migrate:online-support": "tsx scripts/apply-online-support-migration.ts",
+    "db:migrate:cartoes": "tsx scripts/apply-cartao-migration.ts",
     "db:restore:financeiro": "tsx scripts/restore-financeiro-backup.ts"
   },
   "dependencies": {
