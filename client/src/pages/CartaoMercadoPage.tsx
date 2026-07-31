@@ -1,17 +1,16 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Search, Plus, Star, ShoppingCart, Trash2, Edit3, CheckCircle, X, History, ShoppingBag, Package, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Plus, Minus, Star, ShoppingCart, Trash2, Edit3, CheckCircle, X, History, ShoppingBag, Package, ChevronDown, ChevronUp } from "lucide-react";
 
 const BG = "linear-gradient(180deg, #0a0a0f 0%, #0d0a1a 100%)";
 const S: Record<string, any> = {
   page: { minHeight: "100dvh", background: BG, fontFamily: "'DM Sans','Inter',sans-serif", paddingBottom: 100, color: "#fff" },
   header: { background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", padding: "16px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" },
-  // Select com fundo escuro explícito para evitar fundo branco do sistema
   select: { width: "100%", background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 14, padding: "12px 14px", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box" as const, appearance: "none" as any, WebkitAppearance: "none" as any },
-  input: { width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, padding: "12px 14px", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box" as const },
+  input: { background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "8px 10px", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box" as const, width: "100%" },
   btn: (bg: string) => ({ background: bg, border: "none", borderRadius: 14, padding: "12px 18px", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }),
-  card: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "14px 16px", marginBottom: 10 },
+  card: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "12px 14px", marginBottom: 8 },
   label: { fontSize: 11, color: "rgba(255,255,255,0.5)", textTransform: "uppercase" as const, letterSpacing: 1, marginBottom: 6, display: "block" },
 };
 
@@ -21,101 +20,18 @@ const CATEGORIAS = [
   "🌾 Grãos","🍬 Doces","🧊 Congelados","📦 Outros"
 ];
 
-// Lista padrão de produtos essenciais
-const PRODUTOS_PADRAO = [
-  // Grãos
-  { nome: "Arroz", categoria: "🌾 Grãos", unidade: "kg" },
-  { nome: "Feijão", categoria: "🌾 Grãos", unidade: "kg" },
-  { nome: "Macarrão", categoria: "🌾 Grãos", unidade: "pct" },
-  { nome: "Farinha de trigo", categoria: "🌾 Grãos", unidade: "kg" },
-  { nome: "Fubá", categoria: "🌾 Grãos", unidade: "kg" },
-  { nome: "Aveia", categoria: "🌾 Grãos", unidade: "pct" },
-  // Mercearia (temperos)
-  { nome: "Sal", categoria: "🍝 Mercearia", unidade: "kg" },
-  { nome: "Açúcar", categoria: "🍝 Mercearia", unidade: "kg" },
-  { nome: "Óleo", categoria: "🍝 Mercearia", unidade: "L" },
-  { nome: "Azeite", categoria: "🍝 Mercearia", unidade: "L" },
-  { nome: "Vinagre", categoria: "🍝 Mercearia", unidade: "L" },
-  { nome: "Alho", categoria: "🍝 Mercearia", unidade: "un" },
-  { nome: "Cebola", categoria: "🍎 Hortifruti", unidade: "kg" },
-  { nome: "Pimenta", categoria: "🍝 Mercearia", unidade: "un" },
-  { nome: "Orégano", categoria: "🍝 Mercearia", unidade: "un" },
-  { nome: "Café", categoria: "🍝 Mercearia", unidade: "pct" },
-  { nome: "Chá", categoria: "🍝 Mercearia", unidade: "cx" },
-  // Padaria / Café da manhã
-  { nome: "Pão", categoria: "🥖 Padaria", unidade: "un" },
-  { nome: "Margarina", categoria: "🥖 Padaria", unidade: "un" },
-  { nome: "Manteiga", categoria: "🥛 Laticínios", unidade: "un" },
-  // Laticínios
-  { nome: "Leite", categoria: "🥛 Laticínios", unidade: "L" },
-  { nome: "Queijo", categoria: "🥛 Laticínios", unidade: "kg" },
-  { nome: "Presunto", categoria: "🍦 Frios", unidade: "kg" },
-  { nome: "Iogurte", categoria: "🥛 Laticínios", unidade: "un" },
-  { nome: "Requeijão", categoria: "🥛 Laticínios", unidade: "un" },
-  { nome: "Creme de leite", categoria: "🥛 Laticínios", unidade: "cx" },
-  { nome: "Molho de tomate", categoria: "🍝 Mercearia", unidade: "un" },
-  // Açougue
-  { nome: "Carne bovina", categoria: "🥩 Açougue", unidade: "kg" },
-  { nome: "Frango", categoria: "🥩 Açougue", unidade: "kg" },
-  { nome: "Carne moída", categoria: "🥩 Açougue", unidade: "kg" },
-  { nome: "Ovos", categoria: "🥩 Açougue", unidade: "dz" },
-  { nome: "Peixe", categoria: "🐟 Peixaria", unidade: "kg" },
-  { nome: "Linguiça", categoria: "🥩 Açougue", unidade: "kg" },
-  // Hortifruti
-  { nome: "Banana", categoria: "🍎 Hortifruti", unidade: "kg" },
-  { nome: "Maçã", categoria: "🍎 Hortifruti", unidade: "kg" },
-  { nome: "Laranja", categoria: "🍎 Hortifruti", unidade: "kg" },
-  { nome: "Limão", categoria: "🍎 Hortifruti", unidade: "kg" },
-  { nome: "Mamão", categoria: "🍎 Hortifruti", unidade: "un" },
-  { nome: "Melancia", categoria: "🍎 Hortifruti", unidade: "un" },
-  { nome: "Batata", categoria: "🍎 Hortifruti", unidade: "kg" },
-  { nome: "Tomate", categoria: "🍎 Hortifruti", unidade: "kg" },
-  { nome: "Cenoura", categoria: "🍎 Hortifruti", unidade: "kg" },
-  { nome: "Alface", categoria: "🍎 Hortifruti", unidade: "un" },
-  { nome: "Couve", categoria: "🍎 Hortifruti", unidade: "un" },
-  { nome: "Repolho", categoria: "🍎 Hortifruti", unidade: "un" },
-  { nome: "Pepino", categoria: "🍎 Hortifruti", unidade: "un" },
-  // Limpeza
-  { nome: "Detergente", categoria: "🧴 Limpeza", unidade: "un" },
-  { nome: "Sabão em pó", categoria: "🧴 Limpeza", unidade: "kg" },
-  { nome: "Amaciante", categoria: "🧴 Limpeza", unidade: "L" },
-  { nome: "Desinfetante", categoria: "🧴 Limpeza", unidade: "L" },
-  { nome: "Água sanitária", categoria: "🧴 Limpeza", unidade: "L" },
-  { nome: "Esponja", categoria: "🧴 Limpeza", unidade: "un" },
-  { nome: "Saco de lixo", categoria: "🧴 Limpeza", unidade: "pct" },
-  { nome: "Papel toalha", categoria: "🧴 Limpeza", unidade: "pct" },
-  // Higiene
-  { nome: "Papel higiênico", categoria: "🧻 Higiene", unidade: "pct" },
-  { nome: "Sabonete", categoria: "🧻 Higiene", unidade: "un" },
-  { nome: "Shampoo", categoria: "🧻 Higiene", unidade: "un" },
-  { nome: "Condicionador", categoria: "🧻 Higiene", unidade: "un" },
-  { nome: "Creme dental", categoria: "🧻 Higiene", unidade: "un" },
-  { nome: "Escova de dente", categoria: "🧻 Higiene", unidade: "un" },
-  { nome: "Desodorante", categoria: "🧻 Higiene", unidade: "un" },
-  // Outros
-  { nome: "Biscoito", categoria: "🍬 Doces", unidade: "pct" },
-  { nome: "Suco", categoria: "🥤 Bebidas", unidade: "L" },
-  { nome: "Refrigerante", categoria: "🥤 Bebidas", unidade: "L" },
-  { nome: "Milho", categoria: "🍝 Mercearia", unidade: "un" },
-  { nome: "Ervilha", categoria: "🍝 Mercearia", unidade: "un" },
-  { nome: "Atum", categoria: "🐟 Peixaria", unidade: "un" },
-  { nome: "Chocolate", categoria: "🍬 Doces", unidade: "un" },
-  { nome: "Achocolatado", categoria: "🍬 Doces", unidade: "pct" },
-  { nome: "Leite condensado", categoria: "🥛 Laticínios", unidade: "un" },
-  { nome: "Bolacha", categoria: "🍬 Doces", unidade: "pct" },
-  { nome: "Salgadinho", categoria: "🍬 Doces", unidade: "pct" },
-];
-
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-// ─── Aba Produtos ─────────────────────────────────────────────────────────────
-function AbaProdutos({ onAddToList }: { onAddToList: (p: any) => void }) {
+// ─── Aba Produtos — fluxo inline simplificado ─────────────────────────────────
+function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor: number | null) => void }) {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [editingProduto, setEditingProduto] = useState<any | null>(null);
   const [nome, setNome] = useState("");
   const [cat, setCat] = useState("");
   const [unid, setUnid] = useState("un");
+  // Estado inline por produto: { [id]: { qtd, valor, open } }
+  const [inline, setInline] = useState<Record<number, { qtd: string; valor: string; open: boolean }>>({});
 
   const { data: produtos = [], refetch } = trpc.mercado.produtos.list.useQuery({ search: search || undefined }, { refetchOnWindowFocus: false });
   const createMut = trpc.mercado.produtos.create.useMutation({ onSuccess: () => { refetch(); setShowAdd(false); setNome(""); setCat(""); setUnid("un"); toast.success("Produto criado!"); } });
@@ -123,26 +39,42 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any) => void }) {
   const deleteMut = trpc.mercado.produtos.delete.useMutation({ onSuccess: () => { refetch(); toast.success("Removido!"); } });
   const seedMut = trpc.mercado.produtos.seed.useMutation({ onSuccess: (r: any) => { refetch(); toast.success(`${r.criados} produtos adicionados!`); } });
 
-  const favoritos = produtos.filter((p: any) => p.favorito);
-  const maisComprados = produtos.filter((p: any) => p.vezesComprado > 0).sort((a: any, b: any) => b.vezesComprado - a.vezesComprado).slice(0, 5);
-
   const openEdit = (p: any) => { setEditingProduto(p); setNome(p.nome); setCat(p.categoria || ""); setUnid(p.unidade || "un"); };
+
+  const toggleInline = (id: number) => {
+    setInline(prev => ({
+      ...prev,
+      [id]: prev[id]?.open
+        ? { ...prev[id], open: false }
+        : { qtd: "1", valor: "", open: true }
+    }));
+  };
+
+  const confirmAdd = (p: any) => {
+    const state = inline[p.id];
+    const qtd = parseFloat(state?.qtd || "1") || 1;
+    const valor = state?.valor ? parseFloat(state.valor) : null;
+    onAddToList(p, qtd, valor);
+    setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], open: false } }));
+  };
+
+  const maisComprados = produtos.filter((p: any) => p.vezesComprado > 0).sort((a: any, b: any) => b.vezesComprado - a.vezesComprado).slice(0, 6);
 
   return (
     <div style={{ padding: "12px 16px" }}>
       {/* Pesquisa */}
       <div style={{ position: "relative", marginBottom: 12 }}>
-        <Search size={16} color="rgba(255,255,255,0.4)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Pesquisar produto..." style={{ ...S.input, paddingLeft: 36 }} />
+        <Search size={15} color="rgba(255,255,255,0.4)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Pesquisar produto..." style={{ ...S.input, paddingLeft: 36, borderRadius: 14, padding: "11px 14px 11px 36px" }} />
       </div>
 
       {/* Mais comprados */}
       {!search && maisComprados.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>🔥 Mais Comprados</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>🔥 Mais comprados</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {maisComprados.map((p: any) => (
-              <button key={p.id} onClick={() => onAddToList(p)} style={{ background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 20, padding: "6px 12px", color: "#a78bfa", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              <button key={p.id} onClick={() => toggleInline(p.id)} style={{ background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 20, padding: "5px 12px", color: "#a78bfa", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 {p.nome}
               </button>
             ))}
@@ -150,21 +82,100 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any) => void }) {
         </div>
       )}
 
-      {/* Favoritos */}
-      {!search && favoritos.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>⭐ Favoritos</div>
-          {favoritos.map((p: any) => <ProdutoCard key={p.id} p={p} onAdd={() => onAddToList(p)} onFav={() => updateMut.mutate({ id: p.id, favorito: !p.favorito })} onDelete={() => { if (confirm(`Excluir "${p.nome}"?`)) deleteMut.mutate({ id: p.id }); }} onEdit={() => openEdit(p)} />)}
-        </div>
-      )}
-
-      {/* Lista geral */}
+      {/* Lista de produtos */}
       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
         {search ? `${produtos.length} resultado(s)` : "Todos os Produtos"}
       </div>
-      {produtos.filter((p: any) => !p.favorito || search).map((p: any) => (
-        <ProdutoCard key={p.id} p={p} onAdd={() => onAddToList(p)} onFav={() => updateMut.mutate({ id: p.id, favorito: !p.favorito })} onDelete={() => { if (confirm(`Excluir "${p.nome}"?`)) deleteMut.mutate({ id: p.id }); }} onEdit={() => openEdit(p)} />
-      ))}
+
+      {produtos.map((p: any) => {
+        const state = inline[p.id];
+        const isOpen = state?.open;
+        return (
+          <div key={p.id} style={{ ...S.card }}>
+            {/* Linha principal */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nome}</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>{p.categoria} · {p.unidade}</div>
+              </div>
+              {/* Ações rápidas */}
+              <button onClick={() => updateMut.mutate({ id: p.id, favorito: !p.favorito })} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
+                <Star size={14} color={p.favorito ? "#fbbf24" : "rgba(255,255,255,0.25)"} fill={p.favorito ? "#fbbf24" : "none"} />
+              </button>
+              <button onClick={() => openEdit(p)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
+                <Edit3 size={13} color="rgba(255,255,255,0.3)" />
+              </button>
+              <button onClick={() => { if (confirm(`Excluir "${p.nome}"?`)) deleteMut.mutate({ id: p.id }); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
+                <Trash2 size={13} color="rgba(239,68,68,0.5)" />
+              </button>
+              {/* Botão + Lista */}
+              <button onClick={() => toggleInline(p.id)} style={{
+                background: isOpen ? "rgba(239,68,68,0.2)" : "rgba(124,58,237,0.3)",
+                border: `1px solid ${isOpen ? "rgba(239,68,68,0.4)" : "rgba(124,58,237,0.4)"}`,
+                borderRadius: 10, padding: "6px 10px", color: isOpen ? "#f87171" : "#a78bfa",
+                fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, flexShrink: 0
+              }}>
+                {isOpen ? <X size={13} /> : <Plus size={13} />}
+                {isOpen ? "Fechar" : "Lista"}
+              </button>
+            </div>
+
+            {/* Inline — quantidade + valor + confirmar */}
+            {isOpen && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                  {/* Quantidade */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>QTDE ({p.unidade})</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <button onClick={() => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], qtd: String(Math.max(1, parseFloat(prev[p.id]?.qtd || "1") - 1)) } }))}
+                        style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Minus size={14} />
+                      </button>
+                      <input
+                        type="number"
+                        value={state?.qtd ?? "1"}
+                        onChange={e => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], qtd: e.target.value } }))}
+                        style={{ ...S.input, textAlign: "center", padding: "6px 4px", borderRadius: 8, fontSize: 15, fontWeight: 700 }}
+                      />
+                      <button onClick={() => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], qtd: String(parseFloat(prev[p.id]?.qtd || "1") + 1) } }))}
+                        style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  {/* Valor unitário */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>VALOR (R$)</div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={state?.valor ?? ""}
+                      onChange={e => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], valor: e.target.value } }))}
+                      placeholder="0,00"
+                      style={{ ...S.input, padding: "8px 10px", borderRadius: 8 }}
+                    />
+                  </div>
+                  {/* Total calculado */}
+                  {state?.valor && parseFloat(state.valor) > 0 && (
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>TOTAL</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: "#10b981" }}>
+                        {fmt(parseFloat(state.qtd || "1") * parseFloat(state.valor))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {/* Botão confirmar */}
+                <button onClick={() => confirmAdd(p)} style={{ ...S.btn("linear-gradient(135deg,#7c3aed,#3b82f6)"), width: "100%", justifyContent: "center", marginTop: 10, padding: "10px" }}>
+                  <ShoppingCart size={16} /> Adicionar à Lista
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
       {produtos.length === 0 && (
         <div style={{ textAlign: "center", padding: "32px 0", color: "rgba(255,255,255,0.3)" }}>
           <Package size={40} style={{ margin: "0 auto 12px", display: "block" }} />
@@ -177,10 +188,9 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any) => void }) {
         </div>
       )}
 
-      {/* Botões de ação */}
-      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
         <button onClick={() => setShowAdd(true)} style={{ ...S.btn("linear-gradient(135deg,#7c3aed,#3b82f6)"), flex: 1, justifyContent: "center" }}>
-          <Plus size={18} /> Novo Produto
+          <Plus size={16} /> Novo Produto
         </button>
         {produtos.length === 0 && (
           <button onClick={() => seedMut.mutate()} disabled={seedMut.isPending} style={{ ...S.btn("linear-gradient(135deg,#10b981,#059669)"), flex: 1, justifyContent: "center" }}>
@@ -189,7 +199,7 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any) => void }) {
         )}
       </div>
 
-      {/* Sheet novo produto / editar produto */}
+      {/* Sheet novo/editar produto */}
       {(showAdd || editingProduto) && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
           <div style={{ background: "#0f0f1a", borderRadius: "24px 24px 0 0", padding: 24, width: "100%", border: "1px solid rgba(255,255,255,0.08)", maxHeight: "90dvh", overflowY: "auto" }}>
@@ -198,7 +208,7 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any) => void }) {
               <button onClick={() => { setShowAdd(false); setEditingProduto(null); setNome(""); setCat(""); setUnid("un"); }} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer" }}><X size={20} /></button>
             </div>
             <label style={S.label}>NOME</label>
-            <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Arroz Integral" style={{ ...S.input, marginBottom: 12 }} />
+            <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Arroz Integral" style={{ ...S.input, borderRadius: 14, padding: "12px 14px", marginBottom: 12 }} />
             <label style={S.label}>CATEGORIA</label>
             <div style={{ position: "relative", marginBottom: 12 }}>
               <select value={cat} onChange={e => setCat(e.target.value)} style={S.select}>
@@ -217,11 +227,8 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any) => void }) {
             <button
               onClick={() => {
                 if (!nome.trim()) return;
-                if (editingProduto) {
-                  updateMut.mutate({ id: editingProduto.id, nome: nome.trim(), categoria: cat || undefined, unidade: unid });
-                } else {
-                  createMut.mutate({ nome: nome.trim(), categoria: cat || undefined, unidade: unid });
-                }
+                if (editingProduto) updateMut.mutate({ id: editingProduto.id, nome: nome.trim(), categoria: cat || undefined, unidade: unid });
+                else createMut.mutate({ nome: nome.trim(), categoria: cat || undefined, unidade: unid });
               }}
               disabled={createMut.isPending || updateMut.isPending}
               style={{ ...S.btn("linear-gradient(135deg,#7c3aed,#3b82f6)"), width: "100%", justifyContent: "center" }}>
@@ -234,45 +241,18 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any) => void }) {
   );
 }
 
-function ProdutoCard({ p, onAdd, onFav, onDelete, onEdit }: { p: any; onAdd: () => void; onFav: () => void; onDelete: () => void; onEdit: () => void }) {
-  return (
-    <div style={{ ...S.card, display: "flex", alignItems: "center", gap: 10 }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 600, fontSize: 14 }}>{p.nome}</div>
-        {p.categoria && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>{p.categoria} · {p.unidade}</div>}
-        {p.precoUltimo && <div style={{ fontSize: 12, color: "#10b981", marginTop: 2 }}>Último: {fmt(parseFloat(p.precoUltimo))}</div>}
-      </div>
-      <button onClick={onFav} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-        <Star size={15} color={p.favorito ? "#fbbf24" : "rgba(255,255,255,0.3)"} fill={p.favorito ? "#fbbf24" : "none"} />
-      </button>
-      <button onClick={onEdit} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-        <Edit3 size={14} color="rgba(255,255,255,0.4)" />
-      </button>
-      <button onClick={onDelete} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-        <Trash2 size={14} color="rgba(239,68,68,0.6)" />
-      </button>
-      <button onClick={onAdd} style={{ background: "rgba(124,58,237,0.3)", border: "1px solid rgba(124,58,237,0.4)", borderRadius: 10, padding: "7px 11px", color: "#a78bfa", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-        <Plus size={13} /> Lista
-      </button>
-    </div>
-  );
-}
-
 // ─── Aba Minha Lista ──────────────────────────────────────────────────────────
 function AbaLista({ cartoes }: { cartoes: any[] }) {
   const [showFinalizar, setShowFinalizar] = useState(false);
   const [mercado, setMercado] = useState("");
   const [cartaoId, setCartaoId] = useState<number | undefined>();
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editData, setEditData] = useState<any>({});
 
   const { data: lista = [], refetch } = trpc.mercado.lista.get.useQuery(undefined, { refetchOnWindowFocus: false });
-  const updateMut = trpc.mercado.lista.update.useMutation({ onSuccess: () => { refetch(); setEditingId(null); } });
+  const updateMut = trpc.mercado.lista.update.useMutation({ onSuccess: () => refetch() });
   const removeMut = trpc.mercado.lista.remove.useMutation({ onSuccess: () => refetch() });
   const finalizarMut = trpc.mercado.lista.finalizar.useMutation({
     onSuccess: (data: any) => {
-      refetch();
-      setShowFinalizar(false);
+      refetch(); setShowFinalizar(false);
       toast.success(`Compra finalizada! Total: ${fmt(data.totalCaixa)}`);
       if (data.diferenca > 0.01) toast.error(`⚠️ Diferença de ${fmt(data.diferenca)} encontrada!`);
     }
@@ -288,113 +268,86 @@ function AbaLista({ cartoes }: { cartoes: any[] }) {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [lista]);
 
-  const totalPrateleira = lista.reduce((s: number, i: any) => s + (parseFloat(i.precoPrateleira || "0") * parseFloat(i.quantidade || "1")), 0);
-  const totalCaixa = lista.reduce((s: number, i: any) => s + (parseFloat(i.precoCaixa || i.precoPrateleira || "0") * parseFloat(i.quantidade || "1")), 0);
-  const diferenca = totalCaixa - totalPrateleira;
-  const qtdProdutos = lista.length;
+  const totalGeral = lista.reduce((s: number, i: any) => {
+    const preco = parseFloat(i.precoCaixa || i.precoPrateleira || "0");
+    const qtd = parseFloat(i.quantidade || "1");
+    return s + preco * qtd;
+  }, 0);
 
   if (lista.length === 0) {
     return (
       <div style={{ textAlign: "center", padding: "48px 24px", color: "rgba(255,255,255,0.3)" }}>
         <ShoppingCart size={48} style={{ margin: "0 auto 16px", display: "block" }} />
         <div style={{ fontSize: 18, fontWeight: 700, color: "rgba(255,255,255,0.6)", marginBottom: 8 }}>Lista vazia</div>
-        <div>Vá em "Produtos" e adicione itens à lista</div>
+        <div>Vá em "Produtos" e adicione itens</div>
       </div>
     );
   }
 
   return (
     <div style={{ padding: "12px 16px" }}>
-      {/* Totais */}
-      <div style={{ background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 16, padding: "14px 16px", marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{qtdProdutos} produto(s)</span>
-          {diferenca > 0.01 && <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 700 }}>⚠ Diferença: {fmt(diferenca)}</span>}
+      {/* Total geral */}
+      <div style={{ background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 16, padding: "12px 16px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1 }}>Total da lista</div>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>{fmt(totalGeral)}</div>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <div>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1 }}>Estimado</div>
-            <div style={{ fontSize: 20, fontWeight: 800 }}>{fmt(totalPrateleira)}</div>
-          </div>
-          {totalCaixa !== totalPrateleira && (
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1 }}>Cobrado</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: diferenca > 0 ? "#ef4444" : "#10b981" }}>{fmt(totalCaixa)}</div>
-            </div>
-          )}
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{lista.length} produto(s)</div>
         </div>
       </div>
 
-      {grupos.map(([cat, itens]) => (
-        <div key={cat} style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.8 }}>{cat}</div>
-          {itens.map((item: any) => (
-            <div key={item.id} style={S.card}>
-              {editingId === item.id ? (
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 10 }}>{item.nomeProduto}</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                    <div>
-                      <label style={S.label}>QTDE</label>
-                      <input type="number" value={editData.quantidade ?? item.quantidade} onChange={e => setEditData({ ...editData, quantidade: parseFloat(e.target.value) })} style={{ ...S.input, padding: "8px 10px" }} />
-                    </div>
-                    <div>
-                      <label style={S.label}>UNIDADE</label>
-                      <div style={{ position: "relative" }}>
-                        <select value={editData.unidade ?? item.unidade} onChange={e => setEditData({ ...editData, unidade: e.target.value })} style={{ ...S.select, padding: "8px 10px" }}>
-                          {["un","kg","g","L","mL","cx","pct","dz","m"].map(u => <option key={u} value={u} style={{ background: "#1a1a2e", color: "#fff" }}>{u}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label style={S.label}>PREÇO PRATELEIRA</label>
-                      <input type="number" step="0.01" value={editData.precoPrateleira ?? item.precoPrateleira ?? ""} onChange={e => setEditData({ ...editData, precoPrateleira: parseFloat(e.target.value) })} style={{ ...S.input, padding: "8px 10px" }} placeholder="R$ 0,00" />
-                    </div>
-                    <div>
-                      <label style={S.label}>PREÇO CAIXA</label>
-                      <input type="number" step="0.01" value={editData.precoCaixa ?? item.precoCaixa ?? ""} onChange={e => setEditData({ ...editData, precoCaixa: parseFloat(e.target.value) })} style={{ ...S.input, padding: "8px 10px" }} placeholder="R$ 0,00" />
-                    </div>
-                  </div>
-                  <input value={editData.observacoes ?? item.observacoes ?? ""} onChange={e => setEditData({ ...editData, observacoes: e.target.value })} placeholder="Observações..." style={{ ...S.input, marginBottom: 10 }} />
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => { updateMut.mutate({ id: item.id, ...editData }); }} style={{ ...S.btn("linear-gradient(135deg,#7c3aed,#3b82f6)"), flex: 1, justifyContent: "center" }}>Salvar</button>
-                    <button onClick={() => { setEditingId(null); setEditData({}); }} style={{ ...S.btn("rgba(255,255,255,0.1)"), flex: 1, justifyContent: "center" }}>Cancelar</button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{item.nomeProduto}</div>
-                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>
-                      {parseFloat(item.quantidade || "1")} {item.unidade}
-                      {item.precoPrateleira && ` · Prat: ${fmt(parseFloat(item.precoPrateleira))}`}
-                    </div>
-                    {item.precoCaixa && (
-                      <div style={{ fontSize: 12, marginTop: 2 }}>
-                        Caixa: <span style={{ color: parseFloat(item.precoCaixa) > parseFloat(item.precoPrateleira || "0") ? "#ef4444" : "#10b981", fontWeight: 700 }}>{fmt(parseFloat(item.precoCaixa))}</span>
-                        {parseFloat(item.precoCaixa) > parseFloat(item.precoPrateleira || "0") ? <span style={{ color: "#ef4444", fontSize: 11 }}> 🔴</span> : <span style={{ color: "#10b981", fontSize: 11 }}> 🟢</span>}
-                      </div>
-                    )}
-                    {item.observacoes && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>{item.observacoes}</div>}
-                  </div>
-                  <div style={{ fontSize: 15, fontWeight: 800, minWidth: 70, textAlign: "right" }}>
-                    {fmt(parseFloat(item.precoCaixa || item.precoPrateleira || "0") * parseFloat(item.quantidade || "1"))}
-                  </div>
-                  <button onClick={() => { setEditingId(item.id); setEditData({}); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-                    <Edit3 size={14} color="rgba(255,255,255,0.4)" />
-                  </button>
-                  <button onClick={() => removeMut.mutate({ id: item.id })} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-                    <Trash2 size={14} color="rgba(239,68,68,0.5)" />
-                  </button>
-                </div>
-              )}
+      {grupos.map(([cat, itens]) => {
+        const totalCat = itens.reduce((s: number, i: any) => s + parseFloat(i.precoCaixa || i.precoPrateleira || "0") * parseFloat(i.quantidade || "1"), 0);
+        return (
+          <div key={cat} style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>{cat}</div>
+              {totalCat > 0 && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{fmt(totalCat)}</div>}
             </div>
-          ))}
-        </div>
-      ))}
+            {itens.map((item: any) => {
+              const preco = parseFloat(item.precoCaixa || item.precoPrateleira || "0");
+              const qtd = parseFloat(item.quantidade || "1");
+              const total = preco * qtd;
+              return (
+                <div key={item.id} style={{ ...S.card }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{item.nomeProduto}</div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 4, alignItems: "center" }}>
+                        {/* Qtde inline */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <button onClick={() => updateMut.mutate({ id: item.id, quantidade: Math.max(1, qtd - 1) })}
+                            style={{ width: 24, height: 24, borderRadius: 6, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Minus size={11} />
+                          </button>
+                          <span style={{ fontSize: 13, fontWeight: 700, minWidth: 20, textAlign: "center" }}>{qtd % 1 === 0 ? qtd : qtd.toFixed(1)}</span>
+                          <button onClick={() => updateMut.mutate({ id: item.id, quantidade: qtd + 1 })}
+                            style={{ width: 24, height: 24, borderRadius: 6, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Plus size={11} />
+                          </button>
+                        </div>
+                        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>{item.unidade}</span>
+                        {preco > 0 && <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>× {fmt(preco)}</span>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      {total > 0 && <div style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>{fmt(total)}</div>}
+                      {!preco && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>sem valor</div>}
+                    </div>
+                    <button onClick={() => removeMut.mutate({ id: item.id })} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
+                      <Trash2 size={14} color="rgba(239,68,68,0.5)" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
 
       <button onClick={() => setShowFinalizar(true)} style={{ ...S.btn("linear-gradient(135deg,#10b981,#059669)"), width: "100%", justifyContent: "center", marginTop: 8 }}>
-        <CheckCircle size={18} /> Finalizar Compra
+        <CheckCircle size={18} /> Finalizar Compra — {fmt(totalGeral)}
       </button>
 
       {showFinalizar && (
@@ -405,11 +358,11 @@ function AbaLista({ cartoes }: { cartoes: any[] }) {
               <button onClick={() => setShowFinalizar(false)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer" }}><X size={20} /></button>
             </div>
             <div style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 12, padding: "12px 14px", marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{qtdProdutos} produtos</div>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>{fmt(totalPrateleira)}</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{lista.length} produtos</div>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>{fmt(totalGeral)}</div>
             </div>
             <label style={S.label}>MERCADO (opcional)</label>
-            <input value={mercado} onChange={e => setMercado(e.target.value)} placeholder="Ex: Carrefour, Extra..." style={{ ...S.input, marginBottom: 12 }} />
+            <input value={mercado} onChange={e => setMercado(e.target.value)} placeholder="Ex: Carrefour, Extra..." style={{ ...S.input, borderRadius: 14, padding: "12px 14px", marginBottom: 12 }} />
             <label style={S.label}>CARTÃO UTILIZADO (opcional)</label>
             <div style={{ position: "relative", marginBottom: 20 }}>
               <select value={cartaoId ?? ""} onChange={e => setCartaoId(e.target.value ? Number(e.target.value) : undefined)} style={S.select}>
@@ -449,7 +402,6 @@ function AbaHistorico({ cartoes }: { cartoes: any[] }) {
         const itens = (() => { try { return JSON.parse(h.itens || "[]"); } catch { return []; } })();
         const cartao = cartoes.find((c: any) => c.id === h.cartaoId);
         const isExpanded = expandedId === h.id;
-        const dif = parseFloat(h.diferenca || "0");
         return (
           <div key={h.id} style={S.card}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
@@ -460,14 +412,7 @@ function AbaHistorico({ cartoes }: { cartoes: any[] }) {
                 </div>
                 {cartao && <div style={{ fontSize: 11, color: "#a78bfa", marginTop: 2 }}>💳 {cartao.nome}</div>}
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 18, fontWeight: 800 }}>{fmt(parseFloat(h.totalCaixa || h.totalPrateleira || "0"))}</div>
-                {Math.abs(dif) > 0.01 && (
-                  <div style={{ fontSize: 11, color: dif > 0 ? "#ef4444" : "#10b981" }}>
-                    {dif > 0 ? `🔴 +${fmt(dif)}` : `🟢 ${fmt(dif)}`}
-                  </div>
-                )}
-              </div>
+              <div style={{ fontSize: 18, fontWeight: 800 }}>{fmt(parseFloat(h.totalCaixa || h.totalPrateleira || "0"))}</div>
             </div>
             <button onClick={() => setExpandedId(isExpanded ? null : h.id)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4, padding: 0 }}>
               {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {itens.length} itens
@@ -480,9 +425,8 @@ function AbaHistorico({ cartoes }: { cartoes: any[] }) {
                       <div style={{ fontSize: 13 }}>{item.nomeProduto}</div>
                       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{parseFloat(item.quantidade || "1")} {item.unidade}</div>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      {item.precoPrateleira && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>Prat: {fmt(parseFloat(item.precoPrateleira))}</div>}
-                      {item.precoCaixa && <div style={{ fontSize: 12, fontWeight: 700, color: parseFloat(item.precoCaixa) > parseFloat(item.precoPrateleira || "0") ? "#ef4444" : "#10b981" }}>Cx: {fmt(parseFloat(item.precoCaixa))}</div>}
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>
+                      {fmt(parseFloat(item.precoCaixa || item.precoPrateleira || "0") * parseFloat(item.quantidade || "1"))}
                     </div>
                   </div>
                 ))}
@@ -505,20 +449,21 @@ export default function CartaoMercadoPage() {
     onSuccess: (data: any) => {
       utils.mercado.lista.get.invalidate();
       if (data.duplicate) toast.info("Produto já está na lista!");
-      else { toast.success("Adicionado à lista! 🛒"); setAba("lista"); }
+      else { toast.success("Adicionado! 🛒"); setAba("lista"); }
     }
   });
 
   const { data: listaData } = trpc.mercado.lista.get.useQuery(undefined, { refetchOnWindowFocus: false });
   const qtdLista = listaData?.length || 0;
 
-  const handleAddToList = (p: any) => {
+  const handleAddToList = (p: any, qtd: number, valor: number | null) => {
     addToListMut.mutate({
       produtoId: p.id,
       nomeProduto: p.nome,
       categoria: p.categoria || undefined,
       unidade: p.unidade || "un",
-      precoPrateleira: p.precoUltimo ? parseFloat(p.precoUltimo) : undefined,
+      quantidade: qtd,
+      precoPrateleira: valor ?? (p.precoUltimo ? parseFloat(p.precoUltimo) : undefined),
     });
   };
 
