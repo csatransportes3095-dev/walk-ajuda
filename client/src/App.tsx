@@ -285,7 +285,8 @@ function Router() {
       <Route path={"/agendar/:token"} component={SchedulePage} />
       <Route path={"/gastos"} component={GastosPage} />
       <Route path={"/cartoes"} component={CartaoPage} />
-      <Route path={"/cartoes/:rest*"} component={CartaoPage} />
+      <Route path={"/cartoes/cartao/:id"} component={CartaoPage} />
+      <Route path={"/cartoes/despesas"} component={CartaoPage} />
       <Route path={"/gerador-chassi"} component={GeradorChassiPublico} />
       <Route path={"/ajuda"} component={Ajuda} />
       <Route path={"/video/tutorial"} component={VideoTutorial} />
