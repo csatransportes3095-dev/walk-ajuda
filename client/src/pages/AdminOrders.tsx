@@ -658,6 +658,7 @@ export default function AdminOrders() {
   const [deliveredPhoneFilter, setDeliveredPhoneFilter] = useState("");
   const [todosSortKey, setTodosSortKey] = useState<FolderSortKey>("date");
   const [todosSortDir, setTodosSortDir] = useState<FolderSortDir>("desc");
+  const [todosQuickFilter, setTodosQuickFilter] = useState<"all" | "sem_status" | "agendamento" | "novo">("all");
   // Estado para expandir cards individuais de ARQUIVO e RG/CNH
   const [expandedArchivedId, setExpandedArchivedId] = useState<string | null>(null);
   const [expandedRgCnhId, setExpandedRgCnhId] = useState<string | null>(null);
@@ -4673,7 +4674,33 @@ export default function AdminOrders() {
                           )}
                         </button>
                       ))}
-                      <span className="ml-auto text-xs text-muted-foreground/60">{group.orders.length} pedido{group.orders.length !== 1 ? "s" : ""}</span>
+                      {/* Filtros rápidos */}
+                      <div className="flex gap-1 ml-2">
+                        {([
+                          { id: "all", label: "Todos" },
+                          { id: "sem_status", label: "Sem Agend." },
+                          { id: "agendamento", label: "Ag. Agend." },
+                          { id: "novo", label: "Novo" },
+                        ] as const).map(f => (
+                          <button
+                            key={f.id}
+                            onClick={() => setTodosQuickFilter(f.id)}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
+                              todosQuickFilter === f.id
+                                ? "bg-violet-500/30 border-violet-500/60 text-violet-300"
+                                : "bg-card border-border text-muted-foreground hover:border-violet-500/40"
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                      <span className="ml-auto text-xs text-muted-foreground/60">{group.orders.filter(o => {
+                        if (todosQuickFilter === "sem_status") return !o.latestStatus;
+                        if (todosQuickFilter === "agendamento") { const key = o.latestStatus || ""; const label = (ACTIVE_STATUS_CONFIG[key]?.label || key).toLowerCase(); return label.includes("agend") || key.includes("agend"); }
+                        if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
+                        return true;
+                      }).length} pedido(s)</span>
                     </>
                   )}
                 </div>
@@ -4898,7 +4925,18 @@ export default function AdminOrders() {
                   })()}
                   {/* ===== MODO NORMAL ===== */}
                   {(!isAllTab || !isEmergencySearch) && (isAllTab
-                    ? [{ name: "", orders: sortFolderOrders(group.orders, todosSortKey, todosSortDir) }]
+                    ? [{ name: "", orders: sortFolderOrders(
+                        group.orders.filter(o => {
+                          if (todosQuickFilter === "sem_status") return !o.latestStatus;
+                          if (todosQuickFilter === "agendamento") {
+                            const key = o.latestStatus || "";
+                            const label = (ACTIVE_STATUS_CONFIG[key]?.label || key).toLowerCase();
+                            return label.includes("agend") || key.includes("agend");
+                          }
+                          if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
+                          return true;
+                        }),
+                        todosSortKey, todosSortDir) }]
                     : group.isDelivered
                       ? [{ name: "", orders: sortDeliveredOrders(group.orders, deliveredSortKey, deliveredSortDir) }]
                       : buildOptionGroups(group.orders)
