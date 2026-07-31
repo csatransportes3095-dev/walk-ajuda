@@ -186,7 +186,7 @@ export async function setupVite(app: Express, server: Server) {
       const origin = `${req.protocol}://${req.get('host')}`;
       template = injectOgMeta(template, og, origin);
       const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).end(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
@@ -221,7 +221,13 @@ export async function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      }
+    }
+  }));
 
   // fall through to index.html with dynamic OG meta tags
   app.use("*", async (req, res) => {
@@ -230,7 +236,7 @@ export async function serveStatic(app: Express) {
       const og = await getOgMeta();
       const origin = `${req.protocol}://${req.get('host')}`;
       html = injectOgMeta(html, og, origin);
-      res.set("Content-Type", "text/html").send(html);
+      res.set("Content-Type", "text/html; charset=utf-8").send(html);
     } catch {
       res.sendFile(path.resolve(distPath, "index.html"));
     }

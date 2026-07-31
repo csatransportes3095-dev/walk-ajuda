@@ -171,7 +171,9 @@ function manusRuntimeDevOnly(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), manusRuntimeDevOnly(), vitePluginManusDebugCollector()];
+// jsxLocPlugin apenas em desenvolvimento — em produção pode causar double-encoding de strings UTF-8
+const isDev = process.env.NODE_ENV !== 'production';
+const plugins = [react(), tailwindcss(), ...(isDev ? [jsxLocPlugin()] : []), manusRuntimeDevOnly(), vitePluginManusDebugCollector()];
 
 export default defineConfig({
   plugins,

@@ -70,10 +70,16 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
-      // Configurar charset utf8mb4 para suportar emojis e timezone UTC para timestamps consistentes
-      await _db.execute(sql`SET NAMES utf8mb4`);
-      await _db.execute(sql`SET time_zone = '+00:00'`);
+      // Usar connection object para garantir charset utf8mb4 em todas as conexões do pool
+      // Isso corrige o problema de encoding que causava símbolos estranhos (UTF-8 lido como Latin-1)
+      _db = drizzle({
+        connection: {
+          uri: process.env.DATABASE_URL!,
+          charset: 'utf8mb4',
+          timezone: '+00:00',
+        },
+      });
+      console.log('[Database] Pool criado com charset utf8mb4');
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
