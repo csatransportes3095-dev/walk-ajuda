@@ -23,10 +23,10 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} onClick={onClose} />
-      <div style={{ position: "relative", background: "#fff", borderRadius: "24px 24px 0 0", padding: "24px 20px 40px", display: "flex", flexDirection: "column", gap: 16, maxHeight: "90vh", overflowY: "auto" }}>
+      <div style={{ position: "relative", background: "#0f0f1a", borderRadius: "24px 24px 0 0", border: "1px solid rgba(255,255,255,0.08)", borderBottom: "none", padding: "24px 20px 40px", display: "flex", flexDirection: "column", gap: 16, maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-          <span style={{ fontSize: 18, fontWeight: 700, color: "#1C1B1F", fontFamily: "'Roboto',sans-serif" }}>{title}</span>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "#F4EFF4", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+          <span style={{ fontSize: 18, fontWeight: 700, color: "#fff", fontFamily: "'Inter', 'Roboto',sans-serif" }}>{title}</span>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "rgba(255,255,255,0.08)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
         </div>
         {children}
       </div>
@@ -37,14 +37,14 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "#79747E", letterSpacing: 0.6, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", letterSpacing: 0.6, marginBottom: 6 }}>{label}</div>
       {children}
     </div>
   );
 }
 
 function iStyle(): React.CSSProperties {
-  return { width: "100%", height: 48, borderRadius: 12, border: "2px solid #E7E0EC", background: "#fff", padding: "0 14px", fontSize: 15, color: "#1C1B1F", fontFamily: "'Roboto',sans-serif", outline: "none", boxSizing: "border-box" };
+  return { width: "100%", height: 48, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.06)", padding: "0 14px", fontSize: 15, color: "#fff", fontFamily: "'Inter', 'Roboto',sans-serif", outline: "none", boxSizing: "border-box" };
 }
 
 // ─── Formulário de Despesa ───────────────────────────────────────────────────
@@ -101,7 +101,7 @@ function DespesaForm({
           <span style={{ color: catSel ? "#1C1B1F" : "#9E9E9E", fontSize: 14 }}>
             {catSel ? `${catSel.icone} ${catSel.nome}` : "Selecionar categoria..."}
           </span>
-          <span style={{ fontSize: 12, color: "#79747E" }}>{showCats ? "▲" : "▼"}</span>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{showCats ? "▲" : "▼"}</span>
         </button>
         {showCats && (
           <div style={{ marginTop: 6, background: "#F4EFF4", borderRadius: 12, padding: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
@@ -178,7 +178,7 @@ export default function DespesasPage() {
   const pendentes = despesas.filter((d: any) => !d.pagamento).length;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F4EFF4", fontFamily: "'Roboto',sans-serif", paddingBottom: 80 }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #0a0a0f 0%, #0d0a1a 100%)", fontFamily: "'Inter', 'Roboto',sans-serif", paddingBottom: 80 }}>
       {/* Header */}
       <div style={{ background: `linear-gradient(135deg, ${accent} 0%, #9C27B0 100%)`, padding: "48px 20px 28px", color: "#fff" }}>
         <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1.5, opacity: 0.8, marginBottom: 4 }}>CONTROLE FINANCEIRO</div>
@@ -214,12 +214,12 @@ export default function DespesasPage() {
 
       {/* Barra de progresso */}
       {despesas.length > 0 && (
-        <div style={{ background: "#fff", padding: "14px 20px", borderBottom: "1px solid #F4EFF4" }}>
+        <div style={{ background: "#fff", padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: 13, color: "#49454F" }}>{pagas} de {despesas.length} pagas</span>
+            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{pagas} de {despesas.length} pagas</span>
             <span style={{ fontSize: 13, fontWeight: 700, color: accent }}>{despesas.length > 0 ? Math.round((pagas / despesas.length) * 100) : 0}%</span>
           </div>
-          <div style={{ height: 8, background: "#E7E0EC", borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 4, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${despesas.length > 0 ? (pagas / despesas.length) * 100 : 0}%`, background: `linear-gradient(90deg, ${accent}, #9C27B0)`, borderRadius: 4, transition: "width 400ms" }} />
           </div>
         </div>
@@ -228,17 +228,17 @@ export default function DespesasPage() {
       {/* Lista */}
       <div style={{ padding: "16px 16px 0" }}>
         {isLoading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#79747E" }}>Carregando...</div>
+          <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>Carregando...</div>
         ) : despesas.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px 24px", background: "#fff", borderRadius: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+          <div style={{ textAlign: "center", padding: "40px 24px", background: "rgba(255,255,255,0.05)", borderRadius: 20, border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
             <Tag size={40} color="#CAC4D0" style={{ marginBottom: 12 }} />
-            <div style={{ fontSize: 16, fontWeight: 600, color: "#49454F", marginBottom: 6 }}>Nenhuma despesa cadastrada</div>
-            <div style={{ fontSize: 13, color: "#79747E" }}>Toque em + para adicionar água, luz, internet...</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.6)", marginBottom: 6 }}>Nenhuma despesa cadastrada</div>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>Toque em + para adicionar água, luz, internet...</div>
           </div>
         ) : (
           <>
             {/* Pendentes primeiro */}
-            {pendentes > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#79747E", letterSpacing: 1, marginBottom: 8 }}>PENDENTES ({pendentes})</div>}
+            {pendentes > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.4)", letterSpacing: 1, marginBottom: 8 }}>PENDENTES ({pendentes})</div>}
             {despesas.filter((d: any) => !d.pagamento).map((d: any) => (
               <DespesaCard key={d.id} d={d} cats={cats} accent={accent} mes={mes} ano={ano}
                 onPagar={() => { setPagarDespesa(d); setValorPagar(d.valor ? String(Number(d.valor).toFixed(2)).replace(".", ",") : ""); }}
@@ -249,7 +249,7 @@ export default function DespesasPage() {
             ))}
 
             {/* Pagas */}
-            {pagas > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#79747E", letterSpacing: 1, margin: "16px 0 8px" }}>PAGAS ({pagas})</div>}
+            {pagas > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.4)", letterSpacing: 1, margin: "16px 0 8px" }}>PAGAS ({pagas})</div>}
             {despesas.filter((d: any) => d.pagamento).map((d: any) => (
               <DespesaCard key={d.id} d={d} cats={cats} accent={accent} mes={mes} ano={ano}
                 onPagar={() => {}}
@@ -318,7 +318,7 @@ function DespesaCard({ d, cats, accent, mes, ano, onPagar, onEditar, onExcluir, 
   const valorExibido = pago && d.pagamento?.valorPago ? Number(d.pagamento.valorPago) : (d.valor ? Number(d.valor) : null);
 
   return (
-    <div style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderLeft: pago ? `4px solid #4CAF50` : (venceHoje || venceEmBreve) ? `4px solid #FF9800` : `4px solid #E7E0EC`, opacity: pago ? 0.85 : 1 }}>
+    <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.07)", padding: "14px 16px", marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", borderLeft: pago ? `4px solid #4CAF50` : (venceHoje || venceEmBreve) ? `4px solid #FF9800` : `4px solid #E7E0EC`, opacity: pago ? 0.85 : 1 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         {/* Ícone status */}
         <div style={{ width: 44, height: 44, borderRadius: 22, background: pago ? "#E8F5E9" : `${accent}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -328,12 +328,12 @@ function DespesaCard({ d, cats, accent, mes, ano, onPagar, onEditar, onExcluir, 
         {/* Info */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: "#1C1B1F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.nome}</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.nome}</span>
             {(venceHoje || venceEmBreve) && !pago && <AlertTriangle size={14} color="#FF9800" />}
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
-            {cat && <span style={{ fontSize: 11, color: "#49454F", background: "#F4EFF4", borderRadius: 20, padding: "1px 8px", fontWeight: 600 }}>{cat.icone} {cat.nome}</span>}
+            {cat && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", background: "#F4EFF4", borderRadius: 20, padding: "1px 8px", fontWeight: 600 }}>{cat.icone} {cat.nome}</span>}
             {d.diaVencimento && (
               <span style={{ fontSize: 11, color: pago ? "#4CAF50" : (venceHoje ? "#E65100" : venceEmBreve ? "#FF9800" : "#79747E"), background: pago ? "#E8F5E9" : (venceHoje ? "#FFF3E0" : venceEmBreve ? "#FFF8E1" : "#F4EFF4"), borderRadius: 20, padding: "1px 8px", fontWeight: 600 }}>
                 {pago ? `✓ Pago dia ${new Date(d.pagamento.dataPagamento).getDate()}` : venceHoje ? "⚠️ Vence hoje!" : venceEmBreve ? `⚠️ Vence em ${diasVenc}d` : `Vence dia ${d.diaVencimento}`}
@@ -355,7 +355,7 @@ function DespesaCard({ d, cats, accent, mes, ano, onPagar, onEditar, onExcluir, 
               </button>
             ) : (
               <button onClick={onDesmarcar}
-                style={{ height: 30, padding: "0 10px", borderRadius: 15, border: `1px solid #E7E0EC`, background: "#fff", color: "#79747E", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
+                style={{ height: 30, padding: "0 10px", borderRadius: 15, border: `1px solid #E7E0EC`, background: "#fff", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
                 <RotateCcw size={11} /> Desfazer
               </button>
             )}
@@ -364,7 +364,7 @@ function DespesaCard({ d, cats, accent, mes, ano, onPagar, onEditar, onExcluir, 
               <Pencil size={13} color={accent} />
             </button>
             <button onClick={onExcluir}
-              style={{ width: 30, height: 30, borderRadius: 15, border: "1px solid #FFCDD2", background: "#FFEBEE", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              style={{ width: 30, height: 30, borderRadius: 15, border: "1px solid #FFCDD2", background: "rgba(239,68,68,0.1)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Trash2 size={13} color="#C62828" />
             </button>
           </div>

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Eye, EyeOff, Phone, Lock, CreditCard, ArrowRight, TrendingDown, Shield } from "lucide-react";
 
 export default function AuthPage() {
   const [tab, setTab] = useState<"login" | "register">("login");
@@ -54,240 +53,122 @@ export default function AuthPage() {
   return (
     <div style={{
       minHeight: "100dvh",
+      background: "linear-gradient(135deg, #0a0a0f 0%, #0d0a1a 40%, #0a0f1a 100%)",
       display: "flex",
       flexDirection: "column",
-      background: "#6750A4",
-      fontFamily: "'Roboto', sans-serif",
-      overflowX: "hidden",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "24px 20px",
+      fontFamily: "'Inter', 'Roboto', sans-serif",
+      position: "relative",
+      overflow: "hidden",
     }}>
-      {/* TOP SECTION — Hero */}
+      {/* Orbs de fundo */}
+      <div style={{ position: "absolute", top: "-20%", left: "-10%", width: 300, height: 300, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", bottom: "-10%", right: "-10%", width: 350, height: 350, borderRadius: "50%", background: "radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", top: "40%", right: "5%", width: 200, height: 200, borderRadius: "50%", background: "radial-gradient(circle, rgba(236,72,153,0.08) 0%, transparent 70%)", pointerEvents: "none" }} />
+
+      {/* Card principal */}
       <div style={{
-        flex: "0 0 auto",
-        padding: "48px 24px 32px",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        textAlign: "center",
+        width: "100%",
+        maxWidth: 400,
+        background: "rgba(255,255,255,0.04)",
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 28,
+        padding: "36px 28px",
+        boxShadow: "0 32px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)",
+        position: "relative",
+        zIndex: 1,
       }}>
-        {/* App Icon */}
-        <div style={{
-          width: 72,
-          height: 72,
-          borderRadius: 22,
-          background: "rgba(255,255,255,0.2)",
-          backdropFilter: "blur(12px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 16,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-        }}>
-          <CreditCard size={36} color="#fff" />
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{
+            width: 72, height: 72,
+            borderRadius: 22,
+            background: "linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            margin: "0 auto 16px",
+            boxShadow: "0 8px 32px rgba(124,58,237,0.4)",
+            fontSize: 32,
+          }}>💳</div>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: "#fff", margin: "0 0 6px", letterSpacing: -0.5 }}>
+            Meus Cartões
+          </h1>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", margin: 0 }}>
+            Controle total dos seus gastos
+          </p>
         </div>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: "#fff", margin: "0 0 8px", letterSpacing: -0.5 }}>
-          Meus Cartões
-        </h1>
-        <p style={{ fontSize: 15, color: "rgba(255,255,255,0.7)", margin: 0 }}>
-          Controle total dos seus gastos
-        </p>
-      </div>
 
-      {/* MIDDLE SECTION — Feature pills */}
-      <div style={{
-        flex: "0 0 auto",
-        padding: "0 24px 24px",
-        display: "flex",
-        gap: 10,
-        justifyContent: "center",
-        flexWrap: "wrap",
-      }}>
-        {[
-          { icon: <TrendingDown size={14} />, label: "Controle de gastos" },
-          { icon: <Shield size={14} />, label: "Alertas de vencimento" },
-          { icon: <CreditCard size={14} />, label: "Múltiplos cartões" },
-        ].map((item, i) => (
-          <div key={i} style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            background: "rgba(255,255,255,0.15)",
-            borderRadius: 50,
-            padding: "6px 14px",
-            color: "#fff",
-            fontSize: 12,
-            fontWeight: 500,
-          }}>
-            {item.icon}
-            {item.label}
-          </div>
-        ))}
-      </div>
-
-      {/* BOTTOM SECTION — Form Card */}
-      <div style={{
-        flex: "1 1 auto",
-        background: "#FFFBFE",
-        borderRadius: "28px 28px 0 0",
-        padding: "28px 24px",
-        paddingBottom: "calc(env(safe-area-inset-bottom, 16px) + 24px)",
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 420,
-      }}>
-        {/* Tab Switcher */}
+        {/* Tab switcher */}
         <div style={{
           display: "flex",
-          background: "#F4EFF4",
-          borderRadius: 50,
+          background: "rgba(255,255,255,0.06)",
+          borderRadius: 14,
           padding: 4,
-          marginBottom: 24,
+          marginBottom: 28,
+          border: "1px solid rgba(255,255,255,0.06)",
         }}>
           {(["login", "register"] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              style={{
-                flex: 1,
-                height: 40,
-                borderRadius: 50,
-                border: "none",
-                background: tab === t ? "#6750A4" : "transparent",
-                color: tab === t ? "#fff" : "#79747E",
-                fontSize: 14,
-                fontWeight: tab === t ? 600 : 500,
-                cursor: "pointer",
-                transition: "all 200ms",
-                fontFamily: "'Roboto', sans-serif",
-              }}
-            >
+            <button key={t} onClick={() => setTab(t)} style={{
+              flex: 1, height: 38, borderRadius: 10, border: "none",
+              background: tab === t ? "linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%)" : "transparent",
+              color: tab === t ? "#fff" : "rgba(255,255,255,0.4)",
+              fontSize: 13, fontWeight: tab === t ? 700 : 500,
+              cursor: "pointer", transition: "all 200ms",
+              fontFamily: "inherit",
+              boxShadow: tab === t ? "0 4px 16px rgba(124,58,237,0.35)" : "none",
+            }}>
               {t === "login" ? "Entrar" : "Criar Conta"}
             </button>
           ))}
         </div>
 
-        {/* Fields */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
+        {/* Campos */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {tab === "register" && (
-            <div style={{ position: "relative" }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#6750A4", display: "block", marginBottom: 6, letterSpacing: 0.4 }}>
-                SEU NOME
-              </label>
-              <input
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Como quer ser chamado"
-                autoComplete="name"
-                style={inputStyle}
-                onFocus={e => (e.target.style.borderColor = "#6750A4")}
-                onBlur={e => (e.target.style.borderColor = "#E7E0EC")}
-              />
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>Nome</label>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Como quer ser chamado" autoComplete="name" style={inputStyle} />
             </div>
           )}
-
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#6750A4", display: "block", marginBottom: 6, letterSpacing: 0.4 }}>
-              TELEFONE
-            </label>
-            <div style={{ position: "relative" }}>
-              <Phone size={18} color="#79747E" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)" }} />
-              <input
-                value={phone}
-                onChange={e => setPhone(formatPhone(e.target.value))}
-                placeholder="(11) 99999-9999"
-                inputMode="tel"
-                autoComplete="tel"
-                style={{ ...inputStyle, paddingLeft: 44 }}
-                onFocus={e => (e.target.style.borderColor = "#6750A4")}
-                onBlur={e => (e.target.style.borderColor = "#E7E0EC")}
-              />
-            </div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>Telefone</label>
+            <input value={phone} onChange={e => setPhone(formatPhone(e.target.value))} placeholder="(11) 99999-9999" inputMode="tel" autoComplete="tel" style={inputStyle} />
           </div>
-
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#6750A4", display: "block", marginBottom: 6, letterSpacing: 0.4 }}>
-              SENHA
-            </label>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>Senha</label>
             <div style={{ position: "relative" }}>
-              <Lock size={18} color="#79747E" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)" }} />
-              <input
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                type={showPass ? "text" : "password"}
-                placeholder="Mínimo 6 caracteres"
-                autoComplete={tab === "login" ? "current-password" : "new-password"}
-                style={{ ...inputStyle, paddingLeft: 44, paddingRight: 48 }}
-                onFocus={e => (e.target.style.borderColor = "#6750A4")}
-                onBlur={e => (e.target.style.borderColor = "#E7E0EC")}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPass(v => !v)}
-                style={{
-                  position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
-                  background: "none", border: "none", cursor: "pointer", padding: 4, color: "#79747E",
-                }}
-              >
-                {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+              <input value={password} onChange={e => setPassword(e.target.value)} type={showPass ? "text" : "password"} placeholder="Mínimo 6 caracteres" autoComplete={tab === "login" ? "current-password" : "new-password"} style={{ ...inputStyle, paddingRight: 48 }} />
+              <button type="button" onClick={() => setShowPass(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.4)", fontSize: 16, padding: 4 }}>
+                {showPass ? "🙈" : "👁"}
               </button>
             </div>
           </div>
-
           {tab === "register" && (
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#6750A4", display: "block", marginBottom: 6, letterSpacing: 0.4 }}>
-                CONFIRMAR SENHA
-              </label>
-              <div style={{ position: "relative" }}>
-                <Lock size={18} color="#79747E" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)" }} />
-                <input
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  type={showPass ? "text" : "password"}
-                  placeholder="Repita a senha"
-                  autoComplete="new-password"
-                  style={{ ...inputStyle, paddingLeft: 44 }}
-                  onFocus={e => (e.target.style.borderColor = "#6750A4")}
-                  onBlur={e => (e.target.style.borderColor = "#E7E0EC")}
-                />
-              </div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 8, letterSpacing: 1, textTransform: "uppercase" }}>Confirmar Senha</label>
+              <input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type={showPass ? "text" : "password"} placeholder="Repita a senha" autoComplete="new-password" style={inputStyle} />
             </div>
           )}
         </div>
 
-        {/* Submit Button */}
-        <button
-          onClick={handleSubmit}
-          disabled={isPending}
-          style={{
-            width: "100%",
-            height: 52,
-            borderRadius: 50,
-            border: "none",
-            background: isPending ? "#CAC4D0" : "#6750A4",
-            color: "#fff",
-            fontSize: 16,
-            fontWeight: 600,
-            cursor: isPending ? "not-allowed" : "pointer",
-            fontFamily: "'Roboto', sans-serif",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            marginTop: 20,
-            boxShadow: isPending ? "none" : "0 4px 16px rgba(103,80,164,0.35)",
-            transition: "all 200ms",
-          }}
-        >
-          {isPending ? "Aguarde..." : (
-            <>
-              {tab === "login" ? "Entrar" : "Criar Conta"}
-              <ArrowRight size={18} />
-            </>
-          )}
+        {/* Botão */}
+        <button onClick={handleSubmit} disabled={isPending} style={{
+          width: "100%", height: 52, borderRadius: 14, border: "none",
+          background: isPending ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%)",
+          color: isPending ? "rgba(255,255,255,0.4)" : "#fff",
+          fontSize: 15, fontWeight: 700, cursor: isPending ? "not-allowed" : "pointer",
+          fontFamily: "inherit", marginTop: 24,
+          boxShadow: isPending ? "none" : "0 8px 24px rgba(124,58,237,0.4)",
+          transition: "all 200ms", letterSpacing: 0.3,
+        }}>
+          {isPending ? "Aguarde..." : tab === "login" ? "Entrar →" : "Criar Conta →"}
         </button>
 
-        <p style={{ textAlign: "center", fontSize: 12, color: "#79747E", marginTop: 16 }}>
-          Cada número de telefone é uma conta independente
+        <p style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.25)", marginTop: 20, marginBottom: 0 }}>
+          Cada telefone é uma conta independente
         </p>
       </div>
     </div>
@@ -296,15 +177,15 @@ export default function AuthPage() {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  height: 52,
+  height: 50,
   padding: "0 16px",
   borderRadius: 12,
-  border: "2px solid #E7E0EC",
-  background: "#F4EFF4",
-  fontSize: 16,
-  color: "#1C1B1F",
+  border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(255,255,255,0.06)",
+  fontSize: 15,
+  color: "#fff",
   outline: "none",
-  fontFamily: "'Roboto', sans-serif",
+  fontFamily: "inherit",
   boxSizing: "border-box",
   transition: "border-color 200ms",
 };

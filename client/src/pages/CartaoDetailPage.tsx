@@ -65,23 +65,23 @@ function ParcelamentoCard({
   const responsavel = (primeiraP as any).responsavel;
 
   return (
-    <div style={{ background: "#fff", borderRadius: 16, marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+    <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden" }}>
       {/* Cabeçalho clicável */}
       <div onClick={() => setExpandido(e => !e)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px", cursor: "pointer" }}>
         <div style={{ width: 44, height: 44, borderRadius: 22, background: `${accent}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <Repeat size={20} color={accent} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#1C1B1F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nomeProduto}</div>
-          <div style={{ fontSize: 12, color: "#79747E", marginTop: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nomeProduto}</div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>
             {pagas}/{totalParcelas} parcelas pagas · {fmt(valorParcela)}/mês
           </div>
           {responsavel && (
-            <span style={{ fontSize: 11, color: "#fff", background: accent, borderRadius: 20, padding: "1px 8px", fontWeight: 600, opacity: 0.85, display: "inline-block", marginTop: 3 }}>👤 {responsavel}</span>
+            <span style={{ fontSize: 11, color: "#fff", background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, borderRadius: 20, padding: "1px 8px", fontWeight: 600, opacity: 0.85, display: "inline-block", marginTop: 3 }}>👤 {responsavel}</span>
           )}
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "#1C1B1F" }}>{fmt(valorTotal)}</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{fmt(valorTotal)}</span>
           <span style={{ fontSize: 11, fontWeight: 700, color: accent, background: `${accent}15`, borderRadius: 20, padding: "2px 8px" }}>{pagas}/{totalParcelas}x</span>
           <ChevronDown size={16} color="#79747E" style={{ transform: expandido ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 200ms" }} />
         </div>
@@ -89,8 +89,8 @@ function ParcelamentoCard({
 
       {/* Barra de progresso */}
       <div style={{ padding: "0 14px 10px" }}>
-        <div style={{ height: 4, borderRadius: 2, background: "#F4EFF4", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${Math.round((pagas / totalParcelas) * 100)}%`, borderRadius: 2, background: accent, transition: "width 600ms ease" }} />
+        <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${Math.round((pagas / totalParcelas) * 100)}%`, borderRadius: 2, background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, transition: "width 600ms ease" }} />
         </div>
       </div>
 
@@ -109,13 +109,13 @@ function ParcelamentoCard({
         <button
           onClick={e => { e.stopPropagation(); if (confirm(`Cancelar as parcelas não pagas de "${nomeProduto}"?\nAs parcelas já pagas serão mantidas.`)) cancelarParcelamentoMutation.mutate({ id: pid, cartaoId: id }); }}
           disabled={cancelarParcelamentoMutation.isPending}
-          style={{ display: "flex", alignItems: "center", gap: 4, height: 28, padding: "0 12px", borderRadius: 50, border: "1px solid #FFE0B2", background: "#FFF3E0", color: "#E65100", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
+          style={{ display: "flex", alignItems: "center", gap: 4, height: 28, padding: "0 12px", borderRadius: 50, border: "1px solid #FFE0B2", background: "#FFF3E0", color: "#f97316", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
           <X size={11} /> Cancelar futuras
         </button>
         <button
           onClick={e => { e.stopPropagation(); if (confirm(`Excluir TODA a compra "${nomeProduto}"?\nRemove TODAS as parcelas, inclusive as já pagas.\n\nEsta ação não pode ser desfeita.`)) excluirParcelamentoTudoMutation.mutate({ id: pid, cartaoId: id }); }}
           disabled={excluirParcelamentoTudoMutation.isPending}
-          style={{ display: "flex", alignItems: "center", gap: 4, height: 28, padding: "0 12px", borderRadius: 50, border: "1px solid #FFCDD2", background: "#FFEBEE", color: "#C62828", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
+          style={{ display: "flex", alignItems: "center", gap: 4, height: 28, padding: "0 12px", borderRadius: 50, border: "1px solid #FFCDD2", background: "rgba(239,68,68,0.15)", color: "#ef4444", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
           <Trash2 size={11} /> Excluir tudo
         </button>
       </div>
@@ -151,7 +151,7 @@ function ParcelamentoCard({
 
       {/* Lista de parcelas expandida */}
       {expandido && (
-        <div style={{ borderTop: "1px solid #F4EFF4" }}>
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
           {parcelas.map((g: any) => {
             const isPaga = g.paga === 1;
             return (
@@ -177,14 +177,14 @@ function ParcelamentoCard({
                     <button
                       onClick={() => { if (confirm(`Cancelar pagamento da parcela ${g.numeroParcela}/${totalParcelas}?`)) cancelarPagamentoParcelaMutation.mutate({ id: g.id, cartaoId: id }); }}
                       disabled={cancelarPagamentoParcelaMutation.isPending}
-                      style={{ display: "flex", alignItems: "center", gap: 3, height: 22, padding: "0 8px", borderRadius: 50, border: "1px solid #FFCDD2", background: "transparent", color: "#C62828", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
+                      style={{ display: "flex", alignItems: "center", gap: 3, height: 22, padding: "0 8px", borderRadius: 50, border: "1px solid #FFCDD2", background: "transparent", color: "#ef4444", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
                       <X size={9} /> Desfazer
                     </button>
                   ) : (
                     <button
                       onClick={() => { if (confirm(`Marcar parcela ${g.numeroParcela}/${totalParcelas} como paga?`)) marcarParcelaPagaMutation.mutate({ id: g.id, cartaoId: id }); }}
                       disabled={marcarParcelaPagaMutation.isPending}
-                      style={{ display: "flex", alignItems: "center", gap: 3, height: 22, padding: "0 8px", borderRadius: 50, border: "none", background: accent, color: "#fff", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
+                      style={{ display: "flex", alignItems: "center", gap: 3, height: 22, padding: "0 8px", borderRadius: 50, border: "none", background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "#fff", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
                       <CheckCircle size={9} /> Pagar
                     </button>
                   )}
@@ -271,10 +271,10 @@ export default function CartaoDetailPage() {
 
   if (cartaoLoading) {
     return (
-      <div style={{ minHeight: "100dvh", background: "#F4EFF4", fontFamily: "'Roboto',sans-serif" }}>
-        <div style={{ height: 240, background: "#E7E0EC", animation: "pulse 1.5s infinite" }} />
+      <div style={{ minHeight: "100dvh", background: "rgba(255,255,255,0.06)", fontFamily: "'Roboto',sans-serif" }}>
+        <div style={{ height: 240, background: "rgba(255,255,255,0.06)", animation: "pulse 1.5s infinite" }} />
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-          {[1,2,3].map(i => <div key={i} style={{ height: 64, borderRadius: 16, background: "#E7E0EC", animation: "pulse 1.5s infinite" }} />)}
+          {[1,2,3].map(i => <div key={i} style={{ height: 64, borderRadius: 16, background: "rgba(255,255,255,0.06)", animation: "pulse 1.5s infinite" }} />)}
         </div>
         <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
       </div>
@@ -283,10 +283,10 @@ export default function CartaoDetailPage() {
 
   if (!cartao) {
     return (
-      <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F4EFF4", fontFamily: "'Roboto',sans-serif" }}>
+      <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.06)", fontFamily: "'Roboto',sans-serif" }}>
         <div style={{ textAlign: "center" }}>
           <CreditCard size={48} color="#CAC4D0" style={{ marginBottom: 16 }} />
-          <div style={{ fontSize: 18, fontWeight: 600, color: "#1C1B1F", marginBottom: 8 }}>Cartão não encontrado</div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: "#fff", marginBottom: 8 }}>Cartão não encontrado</div>
           <button onClick={() => navigate("/cartoes")} style={{ height: 44, padding: "0 24px", borderRadius: 50, border: "none", background: "#6750A4", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>Voltar</button>
         </div>
       </div>
@@ -387,7 +387,7 @@ export default function CartaoDetailPage() {
   const totalItensGastos = parcelamentoIds.length + gastosAvulsos.length;
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#F4EFF4", fontFamily: "'Roboto',sans-serif", paddingBottom: 100 }}>
+    <div style={{ minHeight: "100dvh", background: "linear-gradient(180deg, #0a0a0f 0%, #0d0a1a 100%)", fontFamily: "'Inter', 'Roboto',sans-serif", paddingBottom: 100 }}>
 
       {/* ── Header ── */}
       <div style={{ background: grad, paddingTop: "env(safe-area-inset-top,0px)", position: "relative", overflow: "hidden" }}>
@@ -461,20 +461,20 @@ export default function CartaoDetailPage() {
 
       {/* ── Banner: Fatura Fechada Aguardando Pagamento ── */}
       {isFaturaFechada && faturaFechadaValor > 0 && (
-        <div style={{ margin: "12px 16px 0", background: "#FFF3E0", borderRadius: 16, padding: "14px 16px", border: "2px solid #FF9800", display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ margin: "12px 16px 0", background: "rgba(245,158,11,0.1)", borderRadius: 16, padding: "14px 16px", border: "1px solid rgba(245,158,11,0.3)", display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 36, height: 36, borderRadius: 18, background: "#FF9800", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <AlertTriangle size={18} color="#fff" />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#E65100" }}>Fatura Fechada — Aguardando Pagamento</div>
-              <div style={{ fontSize: 11, color: "#BF360C" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#f97316" }}>Fatura Fechada — Aguardando Pagamento</div>
+              <div style={{ fontSize: 11, color: "rgba(249,115,22,0.7)" }}>
                 Vencimento: {faturaFechadaVenc ? faturaFechadaVenc.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—"}
               </div>
             </div>
             <div style={{ marginLeft: "auto", textAlign: "right" }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: "#E65100" }}>{fmt(faturaFechadaValor)}</div>
-              <div style={{ fontSize: 10, color: "#BF360C" }}>a pagar</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#f97316" }}>{fmt(faturaFechadaValor)}</div>
+              <div style={{ fontSize: 10, color: "rgba(249,115,22,0.7)" }}>a pagar</div>
             </div>
           </div>
           <div style={{ fontSize: 11, color: "#795548", background: "rgba(255,152,0,0.1)", borderRadius: 8, padding: "6px 10px" }}>
@@ -486,7 +486,7 @@ export default function CartaoDetailPage() {
       {/* ── Botão Paguei ── */}
       <div style={{ padding: "12px 16px 0" }}>
         <button onClick={() => setShowPagar(true)}
-          style={{ width: "100%", height: 52, borderRadius: 50, border: "none", background: isFaturaFechada ? "#E65100" : accent, color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: `0 4px 16px ${isFaturaFechada ? "#E6510055" : accent + "55"}` }}>
+          style={{ width: "100%", height: 52, borderRadius: 14, border: "none", background: isFaturaFechada ? "#E65100" : `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: `0 4px 16px ${isFaturaFechada ? "#E6510055" : accent + "55"}` }}>
           <CheckCircle size={20} />
           {isFaturaFechada ? `Pagar Fatura — ${fmt(faturaFechadaValor)}` : "Paguei a Fatura"}
         </button>
@@ -505,7 +505,7 @@ export default function CartaoDetailPage() {
 
       {/* ── Tabs ── */}
       <div style={{ padding: "16px 16px 0" }}>
-        <div style={{ display: "flex", background: "#fff", borderRadius: 50, padding: 4, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", gap: 2 }}>
+        <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 50, padding: 4, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", gap: 2 }}>
           {(["gastos", "pagamentos", "parcelamentos"] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               style={{ flex: 1, height: 38, borderRadius: 50, border: "none", background: tab === t ? accent : "transparent", color: tab === t ? "#fff" : "#79747E", fontSize: 12, fontWeight: tab === t ? 600 : 500, cursor: "pointer", fontFamily: "'Roboto',sans-serif", transition: "all 200ms", whiteSpace: "nowrap" }}>
@@ -519,10 +519,10 @@ export default function CartaoDetailPage() {
       {tab === "gastos" && (
         <div style={{ padding: "12px 16px 0" }}>
           {gastos.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 24px", background: "#fff", borderRadius: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ textAlign: "center", padding: "40px 24px", background: "rgba(255,255,255,0.05)", borderRadius: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
               <ShoppingBag size={40} color="#CAC4D0" style={{ marginBottom: 12 }} />
-              <div style={{ fontSize: 16, fontWeight: 600, color: "#49454F", marginBottom: 6 }}>Nenhum gasto ainda</div>
-              <div style={{ fontSize: 13, color: "#79747E" }}>Toque em "+" para adicionar um gasto</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.6)", marginBottom: 6 }}>Nenhum gasto ainda</div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>Toque em "+" para adicionar um gasto</div>
             </div>
           ) : (
             <>
@@ -550,34 +550,34 @@ export default function CartaoDetailPage() {
 
               {/* Gastos avulsos (sem parcelamento) */}
               {gastosAvulsos.map((g: any) => (
-                <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", borderRadius: 16, padding: "14px", marginBottom: 8, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+                <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: "14px", marginBottom: 8, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
                   <div style={{ width: 44, height: 44, borderRadius: 22, background: `${accent}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <ShoppingBag size={20} color={accent} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "#1C1B1F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.descricao}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.descricao}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
                       <Calendar size={11} color="#79747E" />
-                      <span style={{ fontSize: 12, color: "#79747E" }}>{new Date(g.data).toLocaleDateString("pt-BR")}</span>
+                      <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{new Date(g.data).toLocaleDateString("pt-BR")}</span>
                     </div>
                     {g.responsavel && (
-                      <span style={{ fontSize: 11, color: "#fff", background: accent, borderRadius: 20, padding: "1px 8px", fontWeight: 600, opacity: 0.85, display: "inline-block", marginTop: 3 }}>👤 {g.responsavel}</span>
+                      <span style={{ fontSize: 11, color: "#fff", background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, borderRadius: 20, padding: "1px 8px", fontWeight: 600, opacity: 0.85, display: "inline-block", marginTop: 3 }}>👤 {g.responsavel}</span>
                     )}
                     {g.categoriaId && (() => {
                       const cat = categoriasList.find((c: any) => c.id === g.categoriaId);
                       if (!cat) return null;
-                      return <span style={{ fontSize: 11, color: "#49454F", background: "#F4EFF4", borderRadius: 20, padding: "1px 8px", fontWeight: 600, display: "inline-block", marginTop: 3 }}>{cat.icone} {cat.nome}</span>;
+                      return <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: "1px 8px", fontWeight: 600, display: "inline-block", marginTop: 3 }}>{cat.icone} {cat.nome}</span>;
                     })()}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
-                    <span style={{ fontSize: 16, fontWeight: 700, color: "#C62828" }}>{fmt(Number(g.valor))}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: "#ef4444" }}>{fmt(Number(g.valor))}</span>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={() => setEditarGastoData({ id: g.id, descricao: g.descricao, valor: String(Number(g.valor)), data: new Date(g.data).toISOString().split("T")[0], responsavel: g.responsavel ?? "" })}
                         style={{ width: 32, height: 32, borderRadius: 16, background: `${accent}18`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <Pencil size={14} color={accent} />
                       </button>
                       <button onClick={() => { if (confirm("Excluir este gasto?")) deleteGastoMutation.mutate({ id: g.id, cartaoId: id }); }}
-                        style={{ width: 32, height: 32, borderRadius: 16, background: "#FFEBEE", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        style={{ width: 32, height: 32, borderRadius: 16, background: "rgba(239,68,68,0.15)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <Trash2 size={15} color="#C62828" />
                       </button>
                     </div>
@@ -593,33 +593,33 @@ export default function CartaoDetailPage() {
       {tab === "pagamentos" && (
         <div style={{ padding: "12px 16px 0" }}>
           {pagamentosOrdenados.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 24px", background: "#fff", borderRadius: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ textAlign: "center", padding: "40px 24px", background: "rgba(255,255,255,0.05)", borderRadius: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
               <CheckCircle size={40} color="#CAC4D0" style={{ marginBottom: 12 }} />
-              <div style={{ fontSize: 16, fontWeight: 600, color: "#49454F", marginBottom: 6 }}>Nenhum pagamento ainda</div>
-              <div style={{ fontSize: 13, color: "#79747E" }}>Use "Paguei a Fatura" para registrar</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.6)", marginBottom: 6 }}>Nenhum pagamento ainda</div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>Use "Paguei a Fatura" para registrar</div>
             </div>
           ) : (
             pagamentosOrdenados.map((p: any) => (
-              <div key={p.id} style={{ background: "#fff", borderRadius: 16, padding: "14px", marginBottom: 8, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+              <div key={p.id} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: "14px", marginBottom: 8, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 22, background: "#E8F5E9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 22, background: "rgba(16,185,129,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <CheckCircle size={20} color="#2E7D32" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "#1C1B1F" }}>Pagamento realizado</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>Pagamento realizado</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
                       <Calendar size={11} color="#79747E" />
-                      <span style={{ fontSize: 12, color: "#79747E" }}>{new Date(p.dataPagamento).toLocaleDateString("pt-BR")}</span>
+                      <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{new Date(p.dataPagamento).toLocaleDateString("pt-BR")}</span>
                     </div>
-                    {p.observacao && <div style={{ fontSize: 12, color: "#79747E", marginTop: 2, fontStyle: "italic" }}>{p.observacao}</div>}
+                    {p.observacao && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2, fontStyle: "italic" }}>{p.observacao}</div>}
                   </div>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: "#2E7D32", flexShrink: 0 }}>{fmt(Number(p.valorPago))}</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: "#10b981", flexShrink: 0 }}>{fmt(Number(p.valorPago))}</span>
                 </div>
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #F4EFF4", display: "flex", justifyContent: "flex-end" }}>
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "flex-end" }}>
                   <button
                     onClick={() => { if (confirm(`Cancelar pagamento de ${fmt(Number(p.valorPago))}? O valor voltará para a fatura.`)) cancelarPagamentoMutation.mutate({ id: p.id, cartaoId: id }); }}
                     disabled={cancelarPagamentoMutation.isPending}
-                    style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 50, border: "1px solid #FFCDD2", background: "transparent", color: "#C62828", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 50, border: "1px solid #FFCDD2", background: "transparent", color: "#ef4444", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
                     <X size={13} />
                     Cancelar pagamento
                   </button>
@@ -634,10 +634,10 @@ export default function CartaoDetailPage() {
       {tab === "parcelamentos" && (
         <div style={{ padding: "12px 16px 0" }}>
           {parcelamentos.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 24px", background: "#fff", borderRadius: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ textAlign: "center", padding: "40px 24px", background: "rgba(255,255,255,0.05)", borderRadius: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
               <Repeat size={40} color="#CAC4D0" style={{ marginBottom: 12 }} />
-              <div style={{ fontSize: 16, fontWeight: 600, color: "#49454F", marginBottom: 6 }}>Nenhum parcelamento</div>
-              <div style={{ fontSize: 13, color: "#79747E" }}>Toque em "+" e ative "Parcelado" para criar</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.6)", marginBottom: 6 }}>Nenhum parcelamento</div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>Toque em "+" e ative "Parcelado" para criar</div>
             </div>
           ) : (
             (parcelamentos as any[]).map((p: any) => {
@@ -646,7 +646,7 @@ export default function CartaoDetailPage() {
               const progresso = Math.round((parcelasPagas / totalParcelas) * 100);
               const ativo = p.parcelasRestantes > 0;
               return (
-                <div key={p.id} style={{ background: "#fff", borderRadius: 16, padding: "16px", marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+                <div key={p.id} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: "16px", marginBottom: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -654,12 +654,12 @@ export default function CartaoDetailPage() {
                           <Repeat size={18} color={ativo ? accent : "#79747E"} />
                         </div>
                         <div>
-                          <div style={{ fontSize: 15, fontWeight: 600, color: "#1C1B1F", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 180 }}>{p.descricao}</div>
-                          <div style={{ fontSize: 12, color: "#79747E" }}>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 180 }}>{p.descricao}</div>
+                          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
                             {fmt(p.valorParcela)}/mês · {totalParcelas}x de {fmt(p.valorTotal / totalParcelas)}
                           </div>
                           {p.responsavel && (
-                            <span style={{ fontSize: 11, color: "#fff", background: accent, borderRadius: 20, padding: "1px 8px", fontWeight: 600, opacity: 0.85, display: "inline-block", marginTop: 3 }}>
+                            <span style={{ fontSize: 11, color: "#fff", background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, borderRadius: 20, padding: "1px 8px", fontWeight: 600, opacity: 0.85, display: "inline-block", marginTop: 3 }}>
                               👤 {p.responsavel}
                             </span>
                           )}
@@ -667,7 +667,7 @@ export default function CartaoDetailPage() {
                       </div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: "#1C1B1F" }}>{fmt(p.valorTotal)}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>{fmt(p.valorTotal)}</span>
                       <span style={{ fontSize: 11, fontWeight: 700, color: ativo ? accent : "#79747E", background: ativo ? `${accent}15` : "#F4EFF4", borderRadius: 20, padding: "2px 8px" }}>
                         {parcelasPagas}/{totalParcelas}x
                       </span>
@@ -676,10 +676,10 @@ export default function CartaoDetailPage() {
 
                   <div style={{ marginBottom: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontSize: 11, color: "#79747E" }}>{parcelasPagas} parcela{parcelasPagas !== 1 ? "s" : ""} paga{parcelasPagas !== 1 ? "s" : ""}</span>
-                      <span style={{ fontSize: 11, color: "#79747E" }}>{p.parcelasRestantes} restante{p.parcelasRestantes !== 1 ? "s" : ""}</span>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{parcelasPagas} parcela{parcelasPagas !== 1 ? "s" : ""} paga{parcelasPagas !== 1 ? "s" : ""}</span>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{p.parcelasRestantes} restante{p.parcelasRestantes !== 1 ? "s" : ""}</span>
                     </div>
-                    <div style={{ height: 6, borderRadius: 3, background: "#F4EFF4", overflow: "hidden" }}>
+                    <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
                       <div style={{ height: "100%", width: `${progresso}%`, borderRadius: 3, background: ativo ? accent : "#CAC4D0", transition: "width 600ms ease" }} />
                     </div>
                   </div>
@@ -687,12 +687,12 @@ export default function CartaoDetailPage() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                       <Calendar size={11} color="#79747E" />
-                      <span style={{ fontSize: 12, color: "#79747E" }}>Início: {new Date(p.dataInicio).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}</span>
+                      <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Início: {new Date(p.dataInicio).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}</span>
                     </div>
                     {ativo && (
                       <button
                         onClick={() => { if (confirm(`Cancelar parcelamento "${p.descricao}"? As parcelas futuras serão removidas.`)) cancelarParcelamentoMutation.mutate({ id: p.id, cartaoId: id }); }}
-                        style={{ height: 30, padding: "0 12px", borderRadius: 50, border: `1px solid #FFCDD2`, background: "#FFEBEE", color: "#C62828", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
+                        style={{ height: 30, padding: "0 12px", borderRadius: 50, border: `1px solid #FFCDD2`, background: "rgba(239,68,68,0.15)", color: "#ef4444", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", gap: 4 }}>
                         <X size={12} />
                         Cancelar
                       </button>
@@ -708,8 +708,8 @@ export default function CartaoDetailPage() {
       {/* ── Resumo por Responsável ── */}
       {resumoResponsaveis.length > 0 && (
         <div style={{ padding: "12px 16px 0" }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#49454F", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>Gastos por Responsável</div>
+          <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>Gastos por Responsável</div>
             {resumoResponsaveis.map(([nome, dados]) => (
               <div key={nome} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 8, marginBottom: 8, borderBottom: "1px solid #F4EFF4" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -717,8 +717,8 @@ export default function CartaoDetailPage() {
                     👤
                   </div>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "#1C1B1F" }}>{nome}</div>
-                    <div style={{ fontSize: 11, color: "#79747E" }}>{dados.qtd} compra{dados.qtd !== 1 ? "s" : ""}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{nome}</div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{dados.qtd} compra{dados.qtd !== 1 ? "s" : ""}</div>
                   </div>
                 </div>
                 <span style={{ fontSize: 15, fontWeight: 700, color: accent }}>{fmt(dados.total)}</span>
@@ -730,7 +730,7 @@ export default function CartaoDetailPage() {
 
       {/* ── FAB ── */}
       <button onClick={() => setShowGasto(true)}
-        style={{ position: "fixed", bottom: "calc(24px + env(safe-area-inset-bottom,0px))", right: 16, width: 56, height: 56, borderRadius: 16, background: accent, color: "#fff", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${accent}66`, zIndex: 40 }}>
+        style={{ position: "fixed", bottom: "calc(24px + env(safe-area-inset-bottom,0px))", right: 16, width: 56, height: 56, borderRadius: 16, background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "#fff", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 20px ${accent}66`, zIndex: 40 }}>
         <Plus size={26} />
       </button>
 
@@ -819,7 +819,7 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
       {!parcelado && (
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "#79747E", letterSpacing: 0.6 }}>CATEGORIA (opcional)</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", letterSpacing: 0.6 }}>CATEGORIA (opcional)</div>
             <button type="button" onClick={() => setShowGerenciarCat(v => !v)}
               style={{ fontSize: 11, color: accent, fontWeight: 600, background: "none", border: "none", cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
               {showGerenciarCat ? "Fechar" : "✏️ Gerenciar"}
@@ -840,7 +840,7 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
                 <ChevronDown size={16} color="#79747E" style={{ transform: showCatPicker ? "rotate(180deg)" : "none", transition: "transform 150ms", flexShrink: 0 }} />
               </button>
               {showCatPicker && (
-                <div style={{ marginTop: 6, background: "#F4EFF4", borderRadius: 12, padding: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <div style={{ marginTop: 6, background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                   <button type="button" onClick={() => { setCategoriaId(null); setShowCatPicker(false); }}
                     style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: `2px solid ${!categoriaId ? accent : "#E7E0EC"}`, background: !categoriaId ? `${accent}10` : "#fff", color: !categoriaId ? accent : "#49454F", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>
                     🚫 Sem categoria
@@ -858,27 +858,27 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
 
           {/* Gerenciar categorias */}
           {showGerenciarCat && (
-            <div style={{ background: "#F4EFF4", borderRadius: 14, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 14, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
               {cats.map(cat => (
                 <div key={cat.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {editCatId === cat.id ? (
                     <>
                       <input value={editCatNome} onChange={e => setEditCatNome(e.target.value)}
-                        style={{ flex: 1, height: 36, borderRadius: 8, border: `2px solid ${accent}`, background: "#fff", padding: "0 10px", fontSize: 13, color: "#1C1B1F", fontFamily: "'Roboto',sans-serif", outline: "none" }} />
+                        style={{ flex: 1, height: 36, borderRadius: 8, border: `2px solid ${accent}`, background: "rgba(255,255,255,0.05)", padding: "0 10px", fontSize: 13, color: "#fff", fontFamily: "'Roboto',sans-serif", outline: "none" }} />
                       <button type="button" onClick={() => updateCat.mutate({ id: cat.id, nome: editCatNome })}
-                        style={{ height: 36, padding: "0 12px", borderRadius: 8, border: "none", background: accent, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>OK</button>
+                        style={{ height: 36, padding: "0 12px", borderRadius: 8, border: "none", background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>OK</button>
                       <button type="button" onClick={() => setEditCatId(null)}
-                        style={{ height: 36, padding: "0 10px", borderRadius: 8, border: "2px solid #E7E0EC", background: "#fff", color: "#79747E", fontSize: 12, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>X</button>
+                        style={{ height: 36, padding: "0 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer", fontFamily: "'Roboto',sans-serif" }}>X</button>
                     </>
                   ) : (
                     <>
-                      <span style={{ flex: 1, fontSize: 13, color: "#1C1B1F", fontWeight: 600 }}>{cat.icone} {cat.nome}</span>
+                      <span style={{ flex: 1, fontSize: 13, color: "#fff", fontWeight: 600 }}>{cat.icone} {cat.nome}</span>
                       <button type="button" onClick={() => { setEditCatId(cat.id); setEditCatNome(cat.nome); }}
                         style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${accent}40`, background: `${accent}10`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <Pencil size={13} color={accent} />
                       </button>
                       <button type="button" onClick={() => { if (confirm(`Excluir categoria "${cat.nome}"?`)) deleteCat.mutate({ id: cat.id }); }}
-                        style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #FFCDD2", background: "#FFEBEE", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #FFCDD2", background: "rgba(239,68,68,0.15)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <Trash2 size={13} color="#C62828" />
                       </button>
                     </>
@@ -888,7 +888,7 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
               {/* Nova categoria */}
               <div style={{ display: "flex", gap: 8, marginTop: 4, paddingTop: 8, borderTop: "1px solid #E7E0EC" }}>
                 <input value={novaCatNome} onChange={e => setNovaCatNome(e.target.value)} placeholder="Nova categoria..."
-                  style={{ flex: 1, height: 36, borderRadius: 8, border: "2px solid #E7E0EC", background: "#fff", padding: "0 10px", fontSize: 13, color: "#1C1B1F", fontFamily: "'Roboto',sans-serif", outline: "none" }} />
+                  style={{ flex: 1, height: 36, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", padding: "0 10px", fontSize: 13, color: "#fff", fontFamily: "'Roboto',sans-serif", outline: "none" }} />
                 <button type="button" disabled={!novaCatNome.trim()} onClick={() => { createCat.mutate({ nome: novaCatNome.trim(), icone: "🏷️", cor: "gray" }); setNovaCatNome(""); }}
                   style={{ height: 36, padding: "0 14px", borderRadius: 8, border: "none", background: novaCatNome.trim() ? accent : "#CAC4D0", color: "#fff", fontSize: 13, fontWeight: 700, cursor: novaCatNome.trim() ? "pointer" : "not-allowed", fontFamily: "'Roboto',sans-serif" }}>+</button>
               </div>
@@ -903,13 +903,13 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
           <Repeat size={20} color={parcelado ? accent : "#79747E"} />
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: parcelado ? accent : "#49454F" }}>Compra Parcelada</div>
-            <div style={{ fontSize: 12, color: "#79747E" }}>Dividir em várias parcelas mensais</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Dividir em várias parcelas mensais</div>
           </div>
         </div>
         <button
           onClick={() => setParcelado(p => !p)}
           style={{ width: 44, height: 24, borderRadius: 12, border: "none", background: parcelado ? accent : "#CAC4D0", cursor: "pointer", position: "relative", transition: "background 200ms", flexShrink: 0 }}>
-          <div style={{ position: "absolute", top: 2, left: parcelado ? 22 : 2, width: 20, height: 20, borderRadius: 10, background: "#fff", transition: "left 200ms", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+          <div style={{ position: "absolute", top: 2, left: parcelado ? 22 : 2, width: 20, height: 20, borderRadius: 10, background: "rgba(255,255,255,0.05)", transition: "left 200ms", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
         </button>
       </div>
 
@@ -930,7 +930,7 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
           </Field>
           {valorParcela !== null && valorParcela > 0 && (
             <div style={{ background: `${accent}10`, borderRadius: 12, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: "#49454F" }}>Valor por parcela</span>
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>Valor por parcela</span>
               <span style={{ fontSize: 16, fontWeight: 700, color: accent }}>{fmt(valorParcela)}</span>
             </div>
           )}
@@ -960,7 +960,7 @@ function PagarSheet({ accent, cartaoId, faturaAtual, onClose, onSuccess }: { acc
   return (
     <Sheet title="Registrar Pagamento" onClose={onClose}>
       <div style={{ background: `${accent}10`, borderRadius: 14, padding: "12px 16px", marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 13, color: "#49454F" }}>Fatura atual</span>
+        <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>Fatura atual</span>
         <span style={{ fontSize: 18, fontWeight: 700, color: accent }}>{fmt(faturaAtual)}</span>
       </div>
       <Field label="VALOR PAGO (R$)">
@@ -1054,8 +1054,8 @@ function EditarDataSheet({ accent, nomeProduto, parcelamentoId, cartaoId, editar
   return (
     <Sheet title="Editar Data da Compra" onClose={onClose}>
       <div style={{ background: `${accent}10`, borderRadius: 14, padding: "12px 16px", marginBottom: 4 }}>
-        <div style={{ fontSize: 13, color: "#49454F", fontWeight: 500 }}>{nomeProduto}</div>
-        <div style={{ fontSize: 12, color: "#79747E", marginTop: 2 }}>A 1ª parcela e todas as seguintes serão recalculadas automaticamente a partir da nova data de compra, respeitando o dia de vencimento do cartão.</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>{nomeProduto}</div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>A 1ª parcela e todas as seguintes serão recalculadas automaticamente a partir da nova data de compra, respeitando o dia de vencimento do cartão.</div>
       </div>
       <Field label="NOVA DATA DA COMPRA">
         <input
@@ -1124,7 +1124,7 @@ function EditarCompraSheet({ accent, parcelamentoId, cartaoId, nomeProdutoInicia
       </div>
       {valorParcela > 0 && (
         <div style={{ background: `${accent}10`, borderRadius: 12, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 13, color: "#49454F" }}>Valor por parcela</span>
+          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>Valor por parcela</span>
           <span style={{ fontSize: 16, fontWeight: 700, color: accent }}>{fmt(valorParcela)}</span>
         </div>
       )}
@@ -1149,10 +1149,10 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "flex-end" }}>
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} onClick={onClose} />
-      <div style={{ position: "relative", width: "100%", background: "#fff", borderRadius: "24px 24px 0 0", padding: "0 0 calc(24px + env(safe-area-inset-bottom,0px))", maxHeight: "90dvh", overflowY: "auto" }}>
+      <div style={{ position: "relative", width: "100%", background: "rgba(255,255,255,0.05)", borderRadius: "24px 24px 0 0", padding: "0 0 calc(24px + env(safe-area-inset-bottom,0px))", maxHeight: "90dvh", overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 20px 16px" }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#1C1B1F" }}>{title}</div>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "#F4EFF4", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>{title}</div>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "rgba(255,255,255,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <X size={16} color="#49454F" />
           </button>
         </div>
@@ -1196,7 +1196,7 @@ function EditarGastoSheet({ accent, data, onClose, onSuccess }: {
       <Field label="RESPONSÁVEL (opcional)">
         <input value={responsavel} onChange={e => setResponsavel(e.target.value)} placeholder="Ex: João" style={iStyle(accent)} onFocus={e => (e.target.style.borderColor = accent)} onBlur={e => (e.target.style.borderColor = "#E7E0EC")} />
       </Field>
-      <button onClick={submit} style={{ width: "100%", height: 50, borderRadius: 50, border: "none", background: accent, color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif", marginTop: 4 }}>
+      <button onClick={submit} style={{ width: "100%", height: 50, borderRadius: 50, border: "none", background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif", marginTop: 4 }}>
         Salvar Alterações
       </button>
     </Sheet>
@@ -1206,14 +1206,14 @@ function EditarGastoSheet({ accent, data, onClose, onSuccess }: {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "#79747E", letterSpacing: 0.6, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.4)", letterSpacing: 0.6, marginBottom: 6 }}>{label}</div>
       {children}
     </div>
   );
 }
 
 function iStyle(accent: string): React.CSSProperties {
-  return { width: "100%", height: 48, borderRadius: 12, border: "2px solid #E7E0EC", background: "#fff", padding: "0 14px", fontSize: 15, color: "#1C1B1F", fontFamily: "'Roboto',sans-serif", outline: "none", boxSizing: "border-box", transition: "border-color 150ms" };
+  return { width: "100%", height: 48, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", padding: "0 14px", fontSize: 15, color: "#fff", fontFamily: "'Roboto',sans-serif", outline: "none", boxSizing: "border-box", transition: "border-color 150ms" };
 }
 
 // ── Fatura Mês Seguinte Card ──────────────────────────────────────────────────
@@ -1282,7 +1282,7 @@ function FaturaMesSeguinteCard({
   const fmtData = (d: Date) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
   return (
-    <div style={{ margin: "12px 16px 0", borderRadius: 16, background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+    <div style={{ margin: "12px 16px 0", borderRadius: 16, background: "rgba(255,255,255,0.05)", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
       {/* Header clicável */}
       <button
         onClick={() => setExpanded(e => !e)}
@@ -1293,8 +1293,8 @@ function FaturaMesSeguinteCard({
             <Calendar size={18} color={accent} />
           </div>
           <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#1C1B1F" }}>Fatura Mês Seguinte</div>
-            <div style={{ fontSize: 11, color: "#79747E", marginTop: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Fatura Mês Seguinte</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>
               {fmtData(inicioCicloProx)} → {fmtData(proxProxVenc)} · {gastosProxCiclo.length} parcela(s)
             </div>
           </div>
@@ -1307,19 +1307,19 @@ function FaturaMesSeguinteCard({
 
       {/* Lista expandida */}
       {expanded && (
-        <div style={{ borderTop: "1px solid #F4EFF4", padding: "8px 0 4px" }}>
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "8px 0 4px" }}>
           {gastosProxCiclo.length === 0 ? (
-            <div style={{ padding: "12px 16px", fontSize: 13, color: "#79747E", textAlign: "center" }}>
+            <div style={{ padding: "12px 16px", fontSize: 13, color: "rgba(255,255,255,0.4)", textAlign: "center" }}>
               Nenhuma parcela encontrada para o próximo ciclo.
             </div>
           ) : (
             gastosProxCiclo.map((g: any, i: number) => (
               <div key={g.id ?? i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: i < gastosProxCiclo.length - 1 ? "1px solid #F4EFF4" : "none" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1C1B1F", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {g.descricao}
                   </div>
-                  <div style={{ fontSize: 11, color: "#79747E", marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>
                     {g.numeroParcela && g.totalParcelas ? `${g.numeroParcela}/${g.totalParcelas} · ` : ""}
                     Vence {new Date(g.data).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                     {g.responsavel ? ` · ${g.responsavel}` : ""}
@@ -1333,7 +1333,7 @@ function FaturaMesSeguinteCard({
           )}
           {/* Totalizador */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", background: `${accent}11`, margin: "4px 8px 8px", borderRadius: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#49454F" }}>Total Mês Seguinte</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.6)" }}>Total Mês Seguinte</span>
             <span style={{ fontSize: 16, fontWeight: 700, color: accent }}>{fmt(mesSeguinte)}</span>
           </div>
         </div>
