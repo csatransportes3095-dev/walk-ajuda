@@ -7,6 +7,9 @@ import CartaoDespesasPage from "./CartaoDespesasPage";
 
 function CartaoRoutes() {
   const [location] = useLocation();
+  // wouter retorna path relativo quando montado via Route /cartoes/:rest*
+  // Usar window.location.pathname para obter o path absoluto real
+  const fullPath = typeof window !== 'undefined' ? window.location.pathname : location;
   const { data: user, isLoading } = trpc.cartoes.auth.me.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
@@ -27,12 +30,12 @@ function CartaoRoutes() {
     return <CartaoAuthPage />;
   }
 
-  // Roteamento manual — evita conflito com o Switch do App.tsx
-  if (location === "/cartoes/despesas") {
+  // Roteamento manual usando path absoluto
+  if (fullPath === "/cartoes/despesas") {
     return <CartaoDespesasPage />;
   }
 
-  const cartaoMatch = location.match(/^\/cartoes\/cartao\/(\d+)$/);
+  const cartaoMatch = fullPath.match(/^\/cartoes\/cartao\/(\d+)$/);
   if (cartaoMatch) {
     return <CartaoDetailPage />;
   }

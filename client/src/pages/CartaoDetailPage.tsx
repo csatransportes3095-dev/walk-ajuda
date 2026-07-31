@@ -199,8 +199,10 @@ function ParcelamentoCard({
 }
 
 export default function CartaoDetailPage() {
-  const [location, navigate] = useLocation();
-  const idMatch = location.match(/\/cartoes\/cartao\/(\d+)/);
+  const [, navigate] = useLocation();
+  // Usar window.location.pathname para obter o path absoluto (wouter retorna relativo)
+  const fullPath = typeof window !== 'undefined' ? window.location.pathname : '';
+  const idMatch = fullPath.match(/\/cartoes\/cartao\/(\d+)/);
   const id = parseInt(idMatch?.[1] || "0");
   const utils = trpc.useUtils();
 
