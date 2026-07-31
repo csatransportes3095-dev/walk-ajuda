@@ -276,22 +276,24 @@ export const scheduleRouter = router({
     .input(z.object({ id: z.number(), slotDate: z.string(), slotTime: z.string() }))
     .mutation(async ({ input }) => {
       const appt = await manualConfirmAppointment(input.id, input.slotDate, input.slotTime);
-      if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento nÃƒÂ£o encontrado" });
-      // Notificar admin por e-mail
-      try {
-        const transporter = nodemailer.createTransport({
-          host: 'smtp.zoho.com',
-          port: 465,
-          secure: true,
-          auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-        });
-        await transporter.sendMail({
-          from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
-          to: 'h2@h2colombiano.com',
-          subject: 'Agendamento manual confirmado',
-          html: `<h2>Agendamento manual confirmado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>Cliente: <strong>${appt.customerName || appt.customerPhone}</strong></p><p>Data: <strong>${input.slotDate}</strong></p><p>Hora: <strong>${input.slotTime}</strong></p>`,
-        });
-      } catch (e) { console.warn('[ScheduleEmail] Erro ao enviar e-mail:', e); }
+      if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento não encontrado" });
+      // Notificar admin por e-mail de forma assíncrona (não bloqueia a resposta)
+      setImmediate(() => {
+        try {
+          const transporter = nodemailer.createTransport({
+            host: 'smtp.zoho.com',
+            port: 465,
+            secure: true,
+            auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
+          });
+          transporter.sendMail({
+            from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
+            to: 'h2@h2colombiano.com',
+            subject: 'Agendamento manual confirmado',
+            html: `<h2>Agendamento manual confirmado</h2><p>Pedido: <strong>#${appt.registrationId}</strong></p><p>Cliente: <strong>${appt.customerName || appt.customerPhone}</strong></p><p>Data: <strong>${input.slotDate}</strong></p><p>Hora: <strong>${input.slotTime}</strong></p>`,
+          }).catch((e: any) => console.warn('[ScheduleEmail] Erro ao enviar e-mail:', e));
+        } catch (e) { console.warn('[ScheduleEmail] Erro ao criar transporter:', e); }
+      });
       return { success: true };
     }),
 
