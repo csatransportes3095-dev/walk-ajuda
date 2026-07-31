@@ -4,6 +4,8 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Plus, LogOut, AlertTriangle, ChevronRight, TrendingUp, CheckCircle, Repeat, Wallet } from "lucide-react";
 
+import { BandeiraLogoPequena } from "@/components/BandeiraLogo";
+
 const GRADIENTS: Record<string, string> = {
   purple: "linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)",
   blue:   "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)",
@@ -186,6 +188,8 @@ export default function DashboardPage() {
                 <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.1)" }} />
                 <div style={{ position: "absolute", bottom: -20, left: 20, width: 80, height: 80, borderRadius: 40, background: "rgba(255,255,255,0.06)" }} />
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 60%)", borderRadius: 24 }} />
+                {/* Logo da bandeira como marca d'água */}
+                {(c as any).bandeira && <BandeiraLogoPequena bandeira={(c as any).bandeira} opacity={0.2} />}
 
                 <div style={{ position: "relative" }}>
                   {/* Cabeçalho do cartão */}

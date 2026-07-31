@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Edit3, CheckCircle, ShoppingBag, Calendar, TrendingUp, AlertTriangle, CreditCard, Repeat, X, ChevronDown, Pencil, ChevronRight } from "lucide-react";
+import { BandeiraLogo } from "@/components/BandeiraLogo";
 
 const GRADIENTS: Record<string, string> = {
   purple: "linear-gradient(135deg, #6750A4 0%, #9C27B0 100%)",
@@ -394,6 +395,8 @@ export default function CartaoDetailPage() {
       <div style={{ background: grad, paddingTop: "env(safe-area-inset-top,0px)", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: -32, right: -32, width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.1)" }} />
         <div style={{ position: "absolute", bottom: -20, left: 40, width: 80, height: 80, borderRadius: 40, background: "rgba(255,255,255,0.07)" }} />
+        {/* Logo da bandeira como marca d'agua no header */}
+        {(cartao as any).bandeira && <BandeiraLogo bandeira={(cartao as any).bandeira} opacity={0.15} style={{ width: 110, height: 60, bottom: 16, right: 20 }} />}
 
         <div style={{ height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px", position: "relative" }}>
           <button onClick={() => navigate("/cartoes")} style={{ width: 40, height: 40, borderRadius: 20, background: "rgba(255,255,255,0.2)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -999,9 +1002,19 @@ function EditCartaoSheet({ cartao, accent, onClose, onSuccess }: { cartao: any; 
   const [vencimentoDia, setVencimentoDia] = useState(String(cartao.vencimentoDia));
   const [fechamentoDia, setFechamentoDia] = useState(String(cartao.fechamentoDia ?? ""));
   const [corCartao, setCorCartao] = useState(cartao.corCartao);
+  const [banco, setBanco] = useState((cartao as any).banco ?? "");
+  const [bandeira, setBandeira] = useState((cartao as any).bandeira ?? "");
   const mut = trpc.cartoes.cartoes.update.useMutation({ onSuccess, onError: e => toast.error(e.message) });
 
   const CORES = ["purple","blue","red","green","orange","pink","teal","indigo"];
+  const BANDEIRAS = [
+    { value: "visa", label: "Visa" },
+    { value: "mastercard", label: "Mastercard" },
+    { value: "elo", label: "Elo" },
+    { value: "amex", label: "American Express" },
+    { value: "hipercard", label: "Hipercard" },
+    { value: "outro", label: "Outra" },
+  ];
 
   const submit = () => {
     if (!nome.trim()) return toast.error("Nome obrigatório");
@@ -1011,8 +1024,10 @@ function EditCartaoSheet({ cartao, accent, onClose, onSuccess }: { cartao: any; 
     if (!dia || dia < 1 || dia > 31) return toast.error("Dia de vencimento inválido (1–31)");
     const fech = fechamentoDia ? parseInt(fechamentoDia) : null;
     if (fech !== null && (fech < 1 || fech > 31)) return toast.error("Dia de fechamento inválido (1–31)");
-    mut.mutate({ id: cartao.id, nome: nome.trim(), limiteTotal: lim, vencimentoDia: dia, fechamentoDia: fech, corCartao });
+    mut.mutate({ id: cartao.id, nome: nome.trim(), limiteTotal: lim, vencimentoDia: dia, fechamentoDia: fech, corCartao, banco: banco.trim() || undefined, bandeira: bandeira || undefined } as any);
   };
+
+  const selStyle: React.CSSProperties = { ...iStyle(accent), appearance: "none" as any, WebkitAppearance: "none" as any };
 
   return (
     <Sheet title="Editar Cartão" onClose={onClose}>
@@ -1029,6 +1044,19 @@ function EditCartaoSheet({ cartao, accent, onClose, onSuccess }: { cartao: any; 
       </div>
       <Field label="FECHA DIA (opcional)">
         <input value={fechamentoDia} onChange={e => setFechamentoDia(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="Ex: 25 (compras após este dia vão para próx. fatura)" style={iStyle(accent)} onFocus={e => (e.target.style.borderColor = accent)} onBlur={e => (e.target.style.borderColor = "#E7E0EC")} />
+      </Field>
+      <Field label="BANCO (opcional)">
+        <input value={banco} onChange={e => setBanco(e.target.value)} placeholder="Ex: Nubank, Itaú, Bradesco..." style={iStyle(accent)} onFocus={e => (e.target.style.borderColor = accent)} onBlur={e => (e.target.style.borderColor = "#E7E0EC")} />
+      </Field>
+      <Field label="BANDEIRA">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {BANDEIRAS.map(b => (
+            <button key={b.value} onClick={() => setBandeira(b.value)}
+              style={{ padding: "6px 14px", borderRadius: 20, border: `2px solid ${bandeira === b.value ? accent : "rgba(255,255,255,0.15)"}`, background: bandeira === b.value ? accent + "33" : "rgba(255,255,255,0.05)", color: bandeira === b.value ? "#fff" : "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: bandeira === b.value ? 700 : 400, cursor: "pointer", transition: "all 150ms" }}>
+              {b.label}
+            </button>
+          ))}
+        </div>
       </Field>
       <Field label="COR DO CARTÃO">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
