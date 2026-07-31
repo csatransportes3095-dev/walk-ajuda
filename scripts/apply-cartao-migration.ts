@@ -137,6 +137,56 @@ async function run() {
       ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
     `);
 
+    // ── Tabelas do módulo Mercado ─────────────────────────────────────────────
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS cc_mercado_produtos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        userId INT NOT NULL,
+        nome VARCHAR(150) NOT NULL,
+        categoria VARCHAR(80),
+        unidade VARCHAR(30) DEFAULT 'un',
+        precoUltimo DECIMAL(10,2),
+        favorito INT DEFAULT 0 NOT NULL,
+        vezesComprado INT DEFAULT 0 NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+        FOREIGN KEY (userId) REFERENCES cc_app_users(id) ON DELETE CASCADE
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS cc_mercado_lista (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        userId INT NOT NULL,
+        produtoId INT,
+        nomeProduto VARCHAR(150) NOT NULL,
+        categoria VARCHAR(80),
+        quantidade DECIMAL(8,3) DEFAULT 1,
+        unidade VARCHAR(30) DEFAULT 'un',
+        precoPrateleira DECIMAL(10,2),
+        precoCaixa DECIMAL(10,2),
+        observacoes VARCHAR(300),
+        adicionadoEm TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        FOREIGN KEY (userId) REFERENCES cc_app_users(id) ON DELETE CASCADE,
+        FOREIGN KEY (produtoId) REFERENCES cc_mercado_produtos(id) ON DELETE SET NULL
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS cc_mercado_historico (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        userId INT NOT NULL,
+        mercado VARCHAR(150),
+        cartaoId INT,
+        totalPrateleira DECIMAL(10,2),
+        totalCaixa DECIMAL(10,2),
+        diferenca DECIMAL(10,2),
+        itens TEXT,
+        finalizadoEm TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        FOREIGN KEY (userId) REFERENCES cc_app_users(id) ON DELETE CASCADE
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+
     console.log("[cc-migrate] Tabelas criadas/verificadas.");
 
     // ── Adicionar colunas banco e bandeira se não existirem ─────────────────

@@ -2022,3 +2022,43 @@ export const ccPagamentosDespesas = mysqlTable("cc_pagamentos_despesas", {
 });
 export type CcPagamentoDespesa = typeof ccPagamentosDespesas.$inferSelect;
 export type InsertCcPagamentoDespesa = typeof ccPagamentosDespesas.$inferInsert;
+
+// ── Módulo Lista de Compras do Mercado ──────────────────────────────────────
+export const ccMercadoProdutos = mysqlTable("cc_mercado_produtos", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => ccAppUsers.id, { onDelete: "cascade" }),
+  nome: varchar("nome", { length: 150 }).notNull(),
+  categoria: varchar("categoria", { length: 80 }),
+  unidade: varchar("unidade", { length: 30 }).default("un"),
+  precoUltimo: decimal("precoUltimo", { precision: 10, scale: 2 }),
+  favorito: int("favorito").default(0).notNull(),
+  vezesComprado: int("vezesComprado").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const ccMercadoLista = mysqlTable("cc_mercado_lista", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => ccAppUsers.id, { onDelete: "cascade" }),
+  produtoId: int("produtoId").references(() => ccMercadoProdutos.id, { onDelete: "set null" }),
+  nomeProduto: varchar("nomeProduto", { length: 150 }).notNull(),
+  categoria: varchar("categoria", { length: 80 }),
+  quantidade: decimal("quantidade", { precision: 8, scale: 3 }).default("1"),
+  unidade: varchar("unidade", { length: 30 }).default("un"),
+  precoPrateleira: decimal("precoPrateleira", { precision: 10, scale: 2 }),
+  precoCaixa: decimal("precoCaixa", { precision: 10, scale: 2 }),
+  observacoes: varchar("observacoes", { length: 300 }),
+  adicionadoEm: timestamp("adicionadoEm").defaultNow().notNull(),
+});
+
+export const ccMercadoHistorico = mysqlTable("cc_mercado_historico", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => ccAppUsers.id, { onDelete: "cascade" }),
+  mercado: varchar("mercado", { length: 150 }),
+  cartaoId: int("cartaoId").references(() => ccCartoes.id, { onDelete: "set null" }),
+  totalPrateleira: decimal("totalPrateleira", { precision: 10, scale: 2 }),
+  totalCaixa: decimal("totalCaixa", { precision: 10, scale: 2 }),
+  diferenca: decimal("diferenca", { precision: 10, scale: 2 }),
+  itens: text("itens"),
+  finalizadoEm: timestamp("finalizadoEm").defaultNow().notNull(),
+});

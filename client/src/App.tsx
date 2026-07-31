@@ -87,6 +87,7 @@ import SchedulePage from "./pages/SchedulePage";
 import { SpreadsheetPage } from "./pages/SpreadsheetPage";
 import { GastosPage } from "./pages/GastosPage";
 import CartaoPage from "./pages/CartaoPage";
+import CartaoMercadoPage from "./pages/CartaoMercadoPage";
 import CartaoHistoricoPage from "./pages/CartaoHistoricoPage";
 import Ajuda from "./pages/Ajuda";
 import GeradorChassiPublico from "./pages/GeradorChassiPublico";
@@ -289,6 +290,7 @@ function Router() {
       <Route path={"/cartoes/cartao/:id"} component={CartaoPage} />
       <Route path={"/cartoes/despesas"} component={CartaoPage} />
       <Route path={"/cartoes/historico/:id"} component={CartaoHistoricoPage} />
+      <Route path={"/cartoes/mercado"} component={CartaoMercadoPage} />
       <Route path={"/gerador-chassi"} component={GeradorChassiPublico} />
       <Route path={"/ajuda"} component={Ajuda} />
       <Route path={"/video/tutorial"} component={VideoTutorial} />

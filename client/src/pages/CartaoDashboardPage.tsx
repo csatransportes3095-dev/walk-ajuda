@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Plus, LogOut, AlertTriangle, ChevronRight, TrendingUp, CheckCircle, Repeat, Wallet } from "lucide-react";
+import { Plus, LogOut, AlertTriangle, ChevronRight, TrendingUp, CheckCircle, Repeat, Wallet, ShoppingCart } from "lucide-react";
 
 import { BandeiraLogoPequena } from "@/components/BandeiraLogo";
 
@@ -188,8 +188,7 @@ export default function DashboardPage() {
                 <div style={{ position: "absolute", top: -40, right: -40, width: 140, height: 140, borderRadius: 70, background: "rgba(255,255,255,0.12)" }} />
                 <div style={{ position: "absolute", bottom: -30, left: -10, width: 100, height: 100, borderRadius: 50, background: "rgba(255,255,255,0.07)" }} />
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.02) 50%, transparent 100%)", borderRadius: 24 }} />
-                {/* Logo da bandeira — sólido e nítido */}
-                {(c as any).bandeira && <BandeiraLogoPequena bandeira={(c as any).bandeira} />}
+
 
                 <div style={{ position: "relative" }}>
                   {/* Cabeçalho do cartão */}
@@ -231,7 +230,7 @@ export default function DashboardPage() {
                     ))}
                   </div>
 
-                  {/* Barra de progresso */}
+                  {/* Barra de progresso + bandeira */}
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                       <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{pct.toFixed(0)}% do limite usado</span>
@@ -240,6 +239,12 @@ export default function DashboardPage() {
                     <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.15)", overflow: "hidden" }}>
                       <div style={{ height: "100%", width: `${Math.min(pct, 100)}%`, borderRadius: 3, background: pct >= 90 ? "#ef4444" : pct >= 70 ? "#f59e0b" : "rgba(255,255,255,0.8)", transition: "width 600ms ease" }} />
                     </div>
+                    {/* Logo da bandeira abaixo da barra */}
+                    {(c as any).bandeira && (
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                        <BandeiraLogoPequena bandeira={(c as any).bandeira} style={{ position: "static", display: "inline-flex" }} />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -270,6 +275,18 @@ export default function DashboardPage() {
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>Despesas</div>
               <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Controle fixo</div>
+            </div>
+          </div>
+          <div onClick={() => navigate("/cartoes/mercado")}
+            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}
+            onTouchStart={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+            onTouchEnd={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}>
+            <div style={{ width: 36, height: 36, borderRadius: 12, background: "rgba(245,158,11,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <ShoppingCart size={18} color="#fbbf24" />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>Mercado</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Lista de compras</div>
             </div>
           </div>
           <button onClick={() => setShowAdd(true)}
