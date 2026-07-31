@@ -237,8 +237,19 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
             if (grupo.length === 0) return null;
             return (
               <div key={cat} style={{ marginBottom: 4 }}>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6, marginTop: 12, paddingLeft: 2 }}>
-                  {cat} <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 10 }}>({grupo.length})</span>
+                <div style={{
+                  background: "linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(59,130,246,0.15) 100%)",
+                  border: "1px solid rgba(124,58,237,0.35)",
+                  borderRadius: 12,
+                  padding: "8px 14px",
+                  marginBottom: 8,
+                  marginTop: 14,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}>
+                  <span style={{ fontWeight: 800, fontSize: 13, letterSpacing: 0.5, color: "#e2d9f3" }}>{cat}</span>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: "2px 8px" }}>{grupo.length}</span>
                 </div>
                 {grupo.map((p: any) => <ProdutoCard key={p.id} {...cardProps(p)} />)}
               </div>
@@ -250,8 +261,19 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
             if (semCat.length === 0) return null;
             return (
               <div style={{ marginBottom: 4 }}>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6, marginTop: 12, paddingLeft: 2 }}>
-                  📦 Outros ({semCat.length})
+                <div style={{
+                  background: "linear-gradient(135deg, rgba(100,100,120,0.25) 0%, rgba(80,80,100,0.15) 100%)",
+                  border: "1px solid rgba(150,150,180,0.25)",
+                  borderRadius: 12,
+                  padding: "8px 14px",
+                  marginBottom: 8,
+                  marginTop: 14,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}>
+                  <span style={{ fontWeight: 800, fontSize: 13, letterSpacing: 0.5, color: "#e2d9f3" }}>📦 Outros</span>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: "2px 8px" }}>{semCat.length}</span>
                 </div>
                 {semCat.map((p: any) => <ProdutoCard key={p.id} {...cardProps(p)} />)}
               </div>
