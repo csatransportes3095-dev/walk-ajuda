@@ -254,43 +254,35 @@ export default function DashboardPage() {
       </div>
 
       {/* Bottom Nav */}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "rgba(10,10,15,0.95)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.06)", paddingBottom: "env(safe-area-inset-bottom, 0px)", zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" }}>
-          <div style={{ flex: 1, background: "linear-gradient(135deg, #7c3aed, #3b82f6)", borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 4px 20px rgba(124,58,237,0.4)" }}>
-            <div style={{ width: 36, height: 36, borderRadius: 12, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <span style={{ fontSize: 18 }}>💳</span>
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Cartões</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)" }}>{cartoes.length} cadastrado{cartoes.length !== 1 ? "s" : ""}</div>
-            </div>
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "rgba(10,10,15,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.06)", paddingBottom: "env(safe-area-inset-bottom, 0px)", zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px" }}>
+          {/* Cartões */}
+          <div style={{ flex: 1, background: "linear-gradient(135deg, #7c3aed, #3b82f6)", borderRadius: 14, padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, boxShadow: "0 4px 16px rgba(124,58,237,0.4)", minWidth: 0 }}>
+            <span style={{ fontSize: 20 }}>💳</span>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#fff", textAlign: "center" }}>Cartões</div>
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.6)", textAlign: "center" }}>{cartoes.length} cadastr.</div>
           </div>
+          {/* Despesas */}
           <div onClick={() => navigate("/cartoes/despesas")}
-            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}
-            onTouchStart={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", WebkitTapHighlightColor: "transparent", minWidth: 0 }}
+            onTouchStart={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
             onTouchEnd={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}>
-            <div style={{ width: 36, height: 36, borderRadius: 12, background: "rgba(16,185,129,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <span style={{ fontSize: 18 }}>📊</span>
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>Despesas</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Controle fixo</div>
-            </div>
+            <span style={{ fontSize: 20 }}>📊</span>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.8)", textAlign: "center" }}>Despesas</div>
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", textAlign: "center" }}>Controle fixo</div>
           </div>
+          {/* Mercado */}
           <div onClick={() => navigate("/cartoes/mercado")}
-            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}
-            onTouchStart={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", WebkitTapHighlightColor: "transparent", minWidth: 0 }}
+            onTouchStart={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
             onTouchEnd={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}>
-            <div style={{ width: 36, height: 36, borderRadius: 12, background: "rgba(245,158,11,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <ShoppingCart size={18} color="#fbbf24" />
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>Mercado</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Lista de compras</div>
-            </div>
+            <ShoppingCart size={20} color="#fbbf24" />
+            <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.8)", textAlign: "center" }}>Mercado</div>
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", textAlign: "center" }}>Lista</div>
           </div>
+          {/* Botão + */}
           <button onClick={() => setShowAdd(true)}
-            style={{ width: 52, height: 52, borderRadius: 16, background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(124,58,237,0.5)", flexShrink: 0 }}>
+            style={{ width: 48, height: 68, borderRadius: 14, background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(124,58,237,0.5)", flexShrink: 0 }}>
             <Plus size={22} color="#fff" />
           </button>
         </div>
