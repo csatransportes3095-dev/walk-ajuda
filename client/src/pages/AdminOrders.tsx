@@ -6943,9 +6943,9 @@ export default function AdminOrders() {
                                     return [];
                                   };
 
-                                  // Helper: encontrar pergunta correspondente no produto
+                                          <p className="text-xs font-semibold text-purple-300">Progresso visivel ao cliente</p>
                                   const findMatchedQ = (questionText: string) => {
-                                    const itemQTrimmed = (questionText || '').trim().toLowerCase();
+                                            onClick={() => onSave(localKeys)}
                                     return productQs.find((q: any) => {
                                       const qText = (q.question || q.text || q.label || '').trim().toLowerCase();
                                       return qText === itemQTrimmed;
