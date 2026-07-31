@@ -207,13 +207,13 @@ function ProgressConfigPanel({
     });
   };
   const moveDown = (idx: number) => {
-    setLocalKeys(prev => {
-      if (idx >= prev.length - 1) return prev;
-      const arr = [...prev];
-      [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
-      return arr;
-    });
-  };
+            <button
+              onClick={() => onSave(localKeys)}
+              disabled={isSaving}
+              className="text-[10px] px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold disabled:opacity-50 transition-colors"
+            >
+              {isSaving ? 'Salvando...' : 'Salvar'}
+            </button>
 
   return (
     <div className="border border-purple-500/30 bg-purple-500/5 rounded-xl p-3 space-y-2">
