@@ -63,7 +63,7 @@ export default function VideoTutorial() {
         <p className="text-gray-400 text-xs mt-1">Assista para aprender como ativar sua conta</p>
       </div>
 
-      {/* Player de Vídeo � formato vertical 9:16 */}
+      {/* Player de Vídeo - formato vertical 9:16 */}
       <div
         className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-900 border border-gray-700 w-full"
         style={{ maxWidth: 360 }}
@@ -84,7 +84,7 @@ export default function VideoTutorial() {
             style={{ aspectRatio: "9/16" }}
           >
             <div className="text-center px-4">
-              <div className="text-4xl mb-2">�a�️</div>
+              <div className="text-4xl mb-2">⚠️</div>
               <p className="text-red-400 text-sm">Erro ao carregar vídeo.</p>
               <button
                 onClick={() => window.location.reload()}
@@ -119,7 +119,7 @@ export default function VideoTutorial() {
 
       {/* Rodapé */}
       <div className="text-center mt-5">
-        <p className="text-gray-600 text-xs">© H2 COLOMBIANO � Conteúdo exclusivo para clientes</p>
+        <p className="text-gray-600 text-xs">© H2 COLOMBIANO - Conteúdo exclusivo para clientes</p>
       </div>
     </div>
   );
