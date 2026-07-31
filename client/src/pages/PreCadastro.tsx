@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { CheckCircle2, AlertCircle, ChevronRight, Zap, RefreshCw } from "lucide-react";
 
-// â”€â”€ Máscaras e validações â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Máscaras e validações ──────────────────────────────────────────────────
 function maskCpf(value: string) {
   const d = value.replace(/\D/g, "").slice(0, 11);
   if (d.length <= 3) return d;
@@ -38,7 +38,7 @@ function validateEmail(e: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
 
-// â”€â”€ Componente de campo dinâmico â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Componente de campo dinâmico ───────────────────────────────────────────
 interface Question {
   id: number;
   fieldKey: string;
@@ -211,7 +211,7 @@ function DynamicField({ q, value, onChange, error }: FieldProps) {
   );
 }
 
-// â”€â”€ Página principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Página principal ───────────────────────────────────────────────────────
 export default function PreCadastro() {
   const { data: questions, isLoading, error: loadError } = trpc.preCadastroQuestions.listActive.useQuery();
   const [values, setValues] = useState<Record<string, string>>({});
@@ -252,9 +252,9 @@ export default function PreCadastro() {
     if (errors[key]) setErrors((prev) => { const e = { ...prev }; delete e[key]; return e; });
   };
 
-  // â”€â”€ Visibilidade condicional â”€â”€
+  // ── Visibilidade condicional ──
   // Uma pergunta é visível se:
-  //   1. Não tem pergunta pai (parentQuestionId === null) â†’ sempre visível
+  //   1. Não tem pergunta pai (parentQuestionId === null) → sempre visível
   //   2. Tem pergunta pai E a pergunta pai está visível E o valor selecionado na pai === triggerOption
   function isQuestionVisible(q: Question, allQuestions: Question[]): boolean {
     if (!q.parentQuestionId) return true;
@@ -329,7 +329,7 @@ export default function PreCadastro() {
     });
   }
 
-  // â”€â”€ Tela de sucesso â”€â”€
+  // ── Tela de sucesso ──
   if (submitted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0a1a] via-[#0d1a2e] to-[#0a0a1a] p-4">
@@ -342,7 +342,7 @@ export default function PreCadastro() {
             <p className="text-emerald-300 text-base leading-relaxed">Em breve nossa equipe entrará em contato.</p>
           </div>
           <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-4 py-1.5 rounded-full text-sm font-medium">
-            âœ“ Recebido com sucesso
+            ✓ Recebido com sucesso
           </span>
           <div className="mt-2 p-4 bg-white/5 border border-white/10 rounded-xl text-sm text-gray-400 leading-relaxed">
             Quer saber quando seu cadastro foi analisado?{" "}
@@ -355,7 +355,7 @@ export default function PreCadastro() {
     );
   }
 
-  // â”€â”€ Loading â”€â”€
+  // ── Loading ──
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0a1a] via-[#0d1a2e] to-[#0a0a1a]">
@@ -367,7 +367,7 @@ export default function PreCadastro() {
     );
   }
 
-  // â”€â”€ Erro ao carregar â”€â”€
+  // ── Erro ao carregar ──
   if (loadError || !questions) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0a1a] via-[#0d1a2e] to-[#0a0a1a] p-4">
@@ -388,7 +388,7 @@ export default function PreCadastro() {
             <Zap className="w-6 h-6 text-white" />
           </div>
           <div className="text-left">
-            <h1 className="text-2xl font-black text-white tracking-wide">H2 COLOMBIANO</h1>
+            <h1 className="text-2xl font-black text-white tracking-wide">WALK AJUDA</h1>
             <p className="text-purple-400 text-xs font-medium">Atendimento para motoristas</p>
           </div>
         </div>
@@ -404,7 +404,7 @@ export default function PreCadastro() {
         </p>
       </div>
 
-      {/* ===== BOTÃƒO CONSULTAR PRÃ‰-CADASTRO ===== */}
+      {/* ===== BOTÃO CONSULTAR PRÉ-CADASTRO ===== */}
       <div className="max-w-lg mx-auto mb-4">
         <a
           href="/consultar-cadastro"
@@ -444,7 +444,7 @@ export default function PreCadastro() {
           <div className="relative overflow-hidden rounded-2xl border border-amber-500/50 bg-amber-500/10 p-4 shadow-lg">
             <div className="absolute inset-0 bg-amber-500/5 animate-pulse rounded-2xl" />
             <div className="relative flex items-start gap-3">
-              <span className="flex-shrink-0 text-2xl">âš ï¸</span>
+              <span className="flex-shrink-0 text-2xl">⚠️</span>
               <div className="flex-1">
                 <p className="text-amber-300 font-bold text-sm">Cadastro já encontrado!</p>
                 <p className="text-amber-200/80 text-xs mt-0.5 leading-relaxed">
@@ -455,7 +455,7 @@ export default function PreCadastro() {
                   className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all active:scale-95"
                   style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}
                 >
-                  Ver status do meu cadastro â†’
+                  Ver status do meu cadastro →
                 </a>
               </div>
             </div>

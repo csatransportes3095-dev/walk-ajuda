@@ -40,7 +40,7 @@ function saveVisitorData(name: string, phone: string) {
 }
 
 function getMessagePayload(msg: any): Record<string, any> | null {
-  // Tentar payload j� deserializado primeiro
+  // Tentar payload já deserializado primeiro
   if (msg.payload && typeof msg.payload === "object") return msg.payload as Record<string, any>;
   // Fallback: tentar deserializar payloadJson (string raw do banco)
   if (msg.payloadJson && typeof msg.payloadJson === "string") {
@@ -217,7 +217,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
     if (hasError) return;
     saveVisitorData(visitorName.trim(), phoneClean);
     setVisitorPhone(phoneClean);
-    // Gerar visitorId baseado no telefone � garante que mesmo número = mesma conversa
+    // Gerar visitorId baseado no telefone — garante que mesmo número = mesma conversa
     const newVisitorId = getVisitorIdForPhone(phoneClean);
     setVisitorId(newVisitorId);
     setConversationId(null); // Limpar conversa anterior para buscar a do novo número
@@ -317,7 +317,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
               <MessageCircle className="w-4 h-4 flex-shrink-0" />
               <div className="min-w-0">
                 <p className="font-black text-sm tracking-wide truncate">{publicStateQ.data?.buttonLabel || "ATENDIMENTO ONLINE"}</p>
-                <p className="text-[11px] text-blue-100/90 truncate">{statusText} ⬢ {unreadQ.data?.unreadMessages || 0} não lidas</p>
+                <p className="text-[11px] text-blue-100/90 truncate">{statusText} • {unreadQ.data?.unreadMessages || 0} não lidas</p>
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -334,7 +334,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
         {phase === "identify" && (
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
             <div>
-              <p className="text-base font-bold text-white">{(() => { const h = new Date().getHours(); const g = h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite"; return g + "! �x9 " + (publicStateQ.data?.welcomeMessage || "Bem-vindo ao atendimento H2 COLOMBIANO."); })()}</p>
+              <p className="text-base font-bold text-white">{(() => { const h = new Date().getHours(); const g = h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite"; return g + "! 👋 " + (publicStateQ.data?.welcomeMessage || "Bem-vindo ao atendimento Walk Ajuda."); })()}</p>
               <p className="text-xs text-white/60 mt-1">Para iniciar, preencha seus dados abaixo.</p>
             </div>
             <div className="space-y-3">
@@ -349,7 +349,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
                 {phoneError && <p className="text-xs text-red-400 mt-1">{phoneError}</p>}
               </div>
             </div>
-            <button onClick={handleIdentifySubmit} className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors mt-auto">Iniciar atendimento � </button>
+            <button onClick={handleIdentifySubmit} className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors mt-auto">Iniciar atendimento →</button>
           </div>
         )}
 
@@ -357,7 +357,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
         {phase === "chat" && (
           <>
             <div className="px-4 py-2 bg-white/[0.02] border-b border-white/5 flex-shrink-0">
-              <p className="text-xs text-white/50">Atendendo: <span className="text-white/80 font-semibold">{visitorName}</span>{visitorPhone && <span className="ml-2 text-white/40">⬢ {visitorPhone}</span>}</p>
+              <p className="text-xs text-white/50">Atendendo: <span className="text-white/80 font-semibold">{visitorName}</span>{visitorPhone && <span className="ml-2 text-white/40">• {visitorPhone}</span>}</p>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {!conversationId && <p className="text-xs text-white/60 text-center">Iniciando conversa...</p>}

@@ -70,16 +70,17 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      // Usar connection object para garantir charset utf8mb4 em todas as conexões do pool
-      // Isso corrige o problema de encoding que causava símbolos estranhos (UTF-8 lido como Latin-1)
-      _db = drizzle({
-        connection: {
-          uri: process.env.DATABASE_URL!,
-          charset: 'utf8mb4',
-          timezone: '+00:00',
-        },
-      });
-      console.log('[Database] Pool criado com charset utf8mb4');
+      // Adicionar charset=utf8mb4 na URL para garantir encoding correto
+      let dbUrl = process.env.DATABASE_URL!;
+      try {
+        const u = new URL(dbUrl);
+        if (!u.searchParams.has('charset')) {
+          u.searchParams.set('charset', 'utf8mb4');
+          dbUrl = u.toString();
+        }
+      } catch { /* URL inválida, usar como está */ }
+      _db = drizzle(dbUrl);
+      console.log('[Database] Pool criado com charset utf8mb4 na URL');
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;

@@ -14,7 +14,7 @@ function WhatsAppRequestButton({ phone }: { phone: string }) {
   const adminNumber = rawNumber.replace(/\D/g, '');
   const clientPhone = phone.replace(/\D/g, '');
   const message = encodeURIComponent(
-    `Olá! Gostaria de solicitar meu cadastro no Gestor de Gastos H2 COLOMBIANO.\nMeu número de telefone é: ${clientPhone || phone}`
+    `Olá! Gostaria de solicitar meu cadastro no Gestor de Gastos Walk Ajuda.\nMeu número de telefone é: ${clientPhone || phone}`
   );
   const href = `https://wa.me/${adminNumber}?text=${message}`;
   return (
@@ -255,7 +255,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               )}
             </div>
             <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-primary/70 bg-clip-text text-transparent mb-2">
-              GASTOS H2 COLOMBIANO
+              GASTOS WALK AJUDA
             </h1>
             <p className="text-sm text-muted-foreground">Controle seus ganhos e gastos</p>
           </div>
@@ -326,7 +326,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {isAutoMode
-                    ? '�S& Acesso imediato! Você terá 30 dias de acesso após criar a senha.'
+                    ? '✅ Acesso imediato! Você terá 30 dias de acesso após criar a senha.'
                     : 'Após criar, aguarde o administrador liberar seu acesso.'}
                 </p>
               </div>
@@ -390,10 +390,10 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               >
                 {isLoading
                   ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{isAutoMode ? 'Criando e entrando...' : 'Salvando...'}</>
-                  : isAutoMode ? '�S& Criar Senha e Entrar' : 'Criar Minha Senha'}
+                  : isAutoMode ? '✅ Criar Senha e Entrar' : 'Criar Minha Senha'}
               </Button>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center mt-1">
-                � � Voltar
+                ← Voltar
               </button>
             </form>
           )}
@@ -445,12 +445,12 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                 {isLoading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Entrando...</> : 'Entrar'}
               </Button>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center mt-1">
-                � � Voltar
+                ← Voltar
               </button>
             </form>
           )}
 
-          {/* AGUARDANDO APROVA�!ÒO */}
+          {/* AGUARDANDO APROVAÇÃO */}
           {step === 'pending_approval' && (
             <div className="space-y-4 text-center">
               <div className="w-16 h-16 bg-amber-500/15 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto">
@@ -474,7 +474,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                 </p>
               </div>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center mt-2">
-                � � Voltar ao início
+                ← Voltar ao início
               </button>
             </div>
           )}
@@ -491,16 +491,16 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                   Seu período de acesso encerrou. Aguarde o administrador renovar seu acesso.
                 </p>
                 <p className="text-xs text-muted-foreground mt-2 text-amber-400/80">
-                  �a�️ Não é possível criar uma nova senha. Somente o administrador pode renovar.
+                  ⚠️ Não é possível criar uma nova senha. Somente o administrador pode renovar.
                 </p>
               </div>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                � � Voltar
+                ← Voltar
               </button>
             </div>
           )}
 
-          {/* VENCIDO SEM RENOVA�!ÒO - senha venceu e não tem ativa */}
+          {/* VENCIDO SEM RENOVAÇÃO - senha venceu e não tem ativa */}
           {step === 'expired_no_renew' && (
             <div className="space-y-4 text-center">
               <div className="w-16 h-16 bg-orange-500/15 border border-orange-500/30 rounded-full flex items-center justify-center mx-auto">
@@ -515,16 +515,16 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                   Para voltar a ter acesso, entre em contato com o administrador para que ele renove seu plano.
                 </p>
                 <p className="text-xs text-amber-400/80 mt-2 font-medium">
-                  �x A senha não pode ser alterada. Apenas o administrador pode renovar o acesso.
+                  🔒 A senha não pode ser alterada. Apenas o administrador pode renovar o acesso.
                 </p>
               </div>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                � � Voltar
+                ← Voltar
               </button>
             </div>
           )}
 
-          {/* NÒO ENCONTRADO */}
+          {/* NÃO ENCONTRADO */}
           {step === 'not_found' && (
             <div className="space-y-4 text-center">
               <div className="p-4 bg-slate-500/10 border border-slate-500/30 rounded-xl">
@@ -535,7 +535,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               </div>
               <WhatsAppRequestButton phone={phone} />
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                � � Tentar outro número
+                ← Tentar outro número
               </button>
             </div>
           )}
@@ -550,7 +550,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                 </p>
               </div>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                � � Voltar
+                ← Voltar
               </button>
             </div>
           )}

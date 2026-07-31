@@ -48,7 +48,7 @@ export default function VideoTutorial() {
       {devToolsWarning && (
         <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
           <div className="text-center px-8">
-            <div className="text-6xl mb-4">⚠️</div>
+            <div className="text-6xl mb-4">🚫</div>
             <h1 className="text-white text-2xl font-bold mb-2">Acesso Bloqueado</h1>
             <p className="text-gray-400 text-sm">Feche as ferramentas de desenvolvedor para continuar.</p>
           </div>
@@ -58,12 +58,12 @@ export default function VideoTutorial() {
       {/* Título */}
       <div className="text-center mb-5 w-full max-w-sm">
         <h1 className="text-white text-xl font-bold tracking-wide">
-          Tutorial de Ativacao
+          🎬 Tutorial de Ativação
         </h1>
         <p className="text-gray-400 text-xs mt-1">Assista para aprender como ativar sua conta</p>
       </div>
 
-      {/* Player de Vídeo - formato vertical 9:16 */}
+      {/* Player de Vídeo — formato vertical 9:16 */}
       <div
         className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-900 border border-gray-700 w-full"
         style={{ maxWidth: 360 }}
@@ -119,7 +119,7 @@ export default function VideoTutorial() {
 
       {/* Rodapé */}
       <div className="text-center mt-5">
-        <p className="text-gray-600 text-xs">© H2 COLOMBIANO - Conteúdo exclusivo para clientes</p>
+        <p className="text-gray-600 text-xs">© Walk Ajuda — Conteúdo exclusivo para clientes</p>
       </div>
     </div>
   );

@@ -173,7 +173,7 @@ export default function AdminFeatureCards() {
                 <label className="text-white/70 text-sm font-bold mb-1 block">Título *</label>
                 <input
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold"
-                  placeholder="Ex: GASTOS H2 COLOMBIANO"
+                  placeholder="Ex: GASTOS WALK AJUDA"
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 />
@@ -247,7 +247,7 @@ export default function AdminFeatureCards() {
                     {form.logoUrl ? (
                       <img src={form.logoUrl} alt="logo" className="w-12 h-12 rounded-xl object-cover" />
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">�x9</div>
+                      <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">📋</div>
                     )}
                     <div className="flex-1">
                       <p className="font-black text-sm" style={{ color: form.titleColor }}>{form.title || "TÍTULO DO CARD"}</p>
@@ -286,7 +286,7 @@ export default function AdminFeatureCards() {
         {/* Lista de cards */}
         {sorted.length === 0 ? (
           <div className="text-center py-16 text-white/30">
-            <p className="text-4xl mb-3">�x9</p>
+            <p className="text-4xl mb-3">📋</p>
             <p className="font-bold">Nenhum card criado ainda</p>
             <p className="text-sm mt-1">Clique em "Novo Card" para começar</p>
           </div>
@@ -298,7 +298,7 @@ export default function AdminFeatureCards() {
                 {card.logoUrl ? (
                   <img src={card.logoUrl} alt="logo" className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
                 ) : (
-                  <div className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center text-xl" style={{ backgroundColor: card.bgColor }}>�x9</div>
+                  <div className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center text-xl" style={{ backgroundColor: card.bgColor }}>📋</div>
                 )}
 
                 {/* Info */}

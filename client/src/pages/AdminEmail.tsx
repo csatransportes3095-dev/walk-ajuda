@@ -114,7 +114,7 @@ export default function AdminEmail() {
       .map(g => g.domain)
       .filter((d, i, arr) => arr.indexOf(d) === i);
     // Sempre garantir os dois domínios conhecidos
-    const known = ['h2colombiano.com', 'h2colombiano.com'];
+    const known = ['walkajuda.com', 'h2colombiano.com'];
     const all = [...new Set([...fromGroups, ...known])];
     return all;
   })();
@@ -125,7 +125,7 @@ export default function AdminEmail() {
     // Fallback por nome do servidor
     const name = (selectedServer?.serverName || '').toLowerCase();
     if (name.includes('walk2') || name === 'walk2') return 'h2colombiano.com';
-    return 'h2colombiano.com';
+    return 'walkajuda.com';
   })();
   const selectedDomain = manualDomain || serverDomain;
 
@@ -163,7 +163,7 @@ export default function AdminEmail() {
 
   const createMutation = trpc.email.create.useMutation({
     onSuccess: (data) => {
-      const email = (data as any).user?.primaryEmailAddress ?? `${form.username}@h2colombiano.com`;
+      const email = (data as any).user?.primaryEmailAddress ?? `${form.username}@walkajuda.com`;
       setShowCreated({ email, password: form.password, serverName: selectedServer?.serverName ?? 'auto' });
       setModalStep(null);
       setSelectedServer(null);
@@ -205,7 +205,7 @@ export default function AdminEmail() {
               <Mail className="w-6 h-6 text-blue-500" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Emails @h2colombiano.com</h1>
+              <h1 className="text-2xl font-bold">Emails @walkajuda.com</h1>
               <p className="text-sm text-muted-foreground">
                 {totalCount} conta{totalCount !== 1 ? "s" : ""} em {(groups as ServerGroup[]).length} servidor{(groups as ServerGroup[]).length !== 1 ? "es" : ""}
               </p>
@@ -253,9 +253,9 @@ export default function AdminEmail() {
                       <Badge className={`text-xs ${colors.badge}`}>{group.users.length}/5 contas</Badge>
                     </div>
                     {isLotado ? (
-                      <Badge className="bg-red-500/20 text-red-400 text-xs">�x� Lotado</Badge>
+                      <Badge className="bg-red-500/20 text-red-400 text-xs">🔴 Lotado</Badge>
                     ) : (
-                      <Badge className="bg-green-500/20 text-green-400 text-xs">�xx� Disponível</Badge>
+                      <Badge className="bg-green-500/20 text-green-400 text-xs">🟢 Disponível</Badge>
                     )}
                   </div>
 
@@ -263,7 +263,7 @@ export default function AdminEmail() {
                     {principalEmails.length > 0 && (
                       <div>
                         <div className="px-4 py-2 bg-gray-900/50">
-                          <span className="text-xs font-medium text-gray-400">�x� Email Principal</span>
+                          <span className="text-xs font-medium text-gray-400">📧 Email Principal</span>
                         </div>
                         <Table>
                           <TableBody>
@@ -277,7 +277,7 @@ export default function AdminEmail() {
                                     </button>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-muted-foreground">{user.displayName || "�"}</TableCell>
+                                <TableCell className="text-muted-foreground">{user.displayName || "—"}</TableCell>
                                 <TableCell>
                                   <div className="flex items-center justify-end">
                                     <Button variant="ghost" size="icon" onClick={() => setShowDelete(user)}>
@@ -294,7 +294,7 @@ export default function AdminEmail() {
                     {membroEmails.length > 0 && (
                       <div>
                         <div className="px-4 py-2 bg-gray-900/50">
-                          <span className="text-xs font-medium text-gray-400">�x� Email Membros</span>
+                          <span className="text-xs font-medium text-gray-400">👥 Email Membros</span>
                         </div>
                         <Table>
                           <TableBody>
@@ -308,7 +308,7 @@ export default function AdminEmail() {
                                     </button>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-muted-foreground">{user.displayName || "�"}</TableCell>
+                                <TableCell className="text-muted-foreground">{user.displayName || "—"}</TableCell>
                                 <TableCell>
                                   <div className="flex items-center justify-end">
                                     <Button variant="ghost" size="icon" onClick={() => setShowDelete(user)}>
@@ -427,8 +427,8 @@ export default function AdminEmail() {
                 <select value={form.type}
                   onChange={(e) => setForm(f => ({ ...f, type: e.target.value as 'principal' | 'membro' }))}
                   className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
-                  <option value="principal">�x� Email Principal</option>
-                  <option value="membro">�x� Email Membros</option>
+                  <option value="principal">📧 Email Principal</option>
+                  <option value="membro">👥 Email Membros</option>
                 </select>
               </div>
               <div className="space-y-1">
@@ -454,7 +454,7 @@ export default function AdminEmail() {
                     <span className="text-sm font-semibold text-blue-400 whitespace-nowrap">@{selectedDomain}</span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">Clique em �x� para gerar um usuário aleatório único</p>
+                <p className="text-xs text-muted-foreground">Clique em 🔀 para gerar um usuário aleatório único</p>
               </div>
               <div className="space-y-1">
                 <Label>Nome de exibição *</Label>
@@ -521,7 +521,7 @@ export default function AdminEmail() {
               {showCreated?.serverName && (
                 <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2 text-center">
                   <p className="text-sm text-green-400 font-semibold">
-                    �S& CONTA CRIADA NO SERVIDOR {showCreated.serverName.toUpperCase()}
+                    ✅ CONTA CRIADA NO SERVIDOR {showCreated.serverName.toUpperCase()}
                   </p>
                 </div>
               )}

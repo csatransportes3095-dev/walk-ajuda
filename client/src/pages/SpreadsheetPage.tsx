@@ -98,7 +98,7 @@ function getTodayLocalDate() {
   return `${year}-${month}-${day}`;
 }
 
-// â”€â”€â”€ MODAL DE EDIÃ‡ÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── MODAL DE EDIÇÃO ───────────────────────────────────────────────────────────
 interface EditField {
   label: string;
   key: string;
@@ -206,7 +206,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
   const [selectedMonth, setSelectedMonth] = useState(getTodayLocal());
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // â”€â”€â”€ ESTADO DOS MODAIS DE EDIÃ‡ÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── ESTADO DOS MODAIS DE EDIÇÃO ─────────────────────────────────────────────
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editExpenseValues, setEditExpenseValues] = useState<Record<string, string>>({});
 
@@ -216,7 +216,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
   const [editingOperational, setEditingOperational] = useState<Operational | null>(null);
   const [editOperationalValues, setEditOperationalValues] = useState<Record<string, string>>({});
 
-  // â”€â”€â”€ ESTADOS PARA NOTIFICAÃ‡Ã•ES MOTIVACIONAIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── ESTADOS PARA NOTIFICAÇÕES MOTIVACIONAIS ────────────────────────────────
   const [shownMilestones, setShownMilestones] = useState<Set<string>>(new Set());
   const [activeMilestone, setActiveMilestone] = useState<{ pct: number; label: string } | null>(null);
   const milestoneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -236,7 +236,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day)).toLocaleDateString('pt-BR');
   };
 
-  // â”€â”€â”€ CONFETE E MARCOS MOTIVACIONAIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── CONFETE E MARCOS MOTIVACIONAIS ────────────────────────────────────────
   const fireConfetti = useCallback((type: 'milestone' | 'goal') => {
     if (type === 'goal') {
       // Confete duplo para meta concluída
@@ -268,7 +268,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
   // Mutation para registrar acesso via sessão
   const recordAccessMutation = trpc.spreadsheet.recordAccess.useMutation();
 
-  // â”€â”€â”€ PROPAGANDA OBRIGATÃ“RIA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── PROPAGANDA OBRIGATÓRIA ───────────────────────────────────────────────────
   const [adVisible, setAdVisible] = useState(false);
   const [adProgress, setAdProgress] = useState(0);
   const [adCanClose, setAdCanClose] = useState(false);
@@ -400,7 +400,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     onSuccess: () => { refetchOperational(); setEditingOperational(null); },
   });
 
-  // â”€â”€â”€ APAGAR TODOS OS DADOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── APAGAR TODOS OS DADOS ────────────────────────────────────────────────────
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   // Controle de datas abertas/fechadas no histórico (hoje fica sempre aberto)
@@ -443,7 +443,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     await deleteAllDataMutation.mutateAsync({ token });
   };
 
-  // â”€â”€â”€ ABRIR MODAL DE EDIÃ‡ÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── ABRIR MODAL DE EDIÇÃO ────────────────────────────────────────────────────
 
   const handleEditExpense = (exp: Expense) => {
     setEditingExpense(exp);
@@ -547,7 +547,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     });
   };
 
-  // â”€â”€â”€ ADICIONAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── ADICIONAR ────────────────────────────────────────────────────────────────
 
   const handleAddEarning = async () => {
     if (!newEarning.date) return;
@@ -781,14 +781,14 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
   const uniqueDates = useMemo(() => Array.from(new Set([...earnings.map(e => e.date), ...expenses.map(e => e.date)])).sort(), [earnings, expenses]);
 
-  // â”€â”€â”€ CAMPOS DO MODAL DE EDIÃ‡ÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── CAMPOS DO MODAL DE EDIÇÃO ────────────────────────────────────────────────
 
   // Gastos: mostra TODOS os campos (todos são relevantes para edição)
   const expenseEditFields: EditField[] = [
     { label: 'Combustível', key: 'fuel' },
     { label: 'Aluguel do Carro', key: 'carRental' },
     { label: 'Manutenção', key: 'maintenance' },
-    { label: 'Troca de Ã“leo', key: 'oilChange' },
+    { label: 'Troca de Óleo', key: 'oilChange' },
     { label: 'Lavagem', key: 'washing' },
     { label: 'Seguro', key: 'insurance' },
     { label: 'Internet/Telefone', key: 'internetPhone' },
@@ -878,12 +878,12 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#070a16] via-[#0a0f22] to-[#070a16] text-foreground p-4 pb-40 sm:p-6 sm:pb-8">
-      {/* MODAL DE CONFIRMAÃ‡ÃƒO: APAGAR TODOS OS DADOS */}
+      {/* MODAL DE CONFIRMAÇÃO: APAGAR TODOS OS DADOS */}
       {showDeleteAllModal && (
         <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-2xl p-6 flex flex-col gap-5" style={{ backgroundColor: '#0F172A', border: '2px solid rgba(249,115,22,0.4)', boxShadow: '0 0 40px rgba(249,115,22,0.15)' }}>
             <div className="text-center">
-              <div className="text-4xl mb-3">ðŸ—‘ï¸</div>
+              <div className="text-4xl mb-3">🗑️</div>
               <h2 className="text-xl font-black text-white mb-1">Apagar Todos os Dados?</h2>
               <p className="text-slate-400 text-sm leading-relaxed">
                 Isso vai apagar <strong className="text-orange-400">todos os seus ganhos, gastos, registros operacionais e metas</strong> lançados na planilha.
@@ -904,13 +904,13 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 className="flex-1 py-3 rounded-xl font-black text-sm text-white transition-all active:scale-95 disabled:opacity-60"
                 style={{ background: isDeletingAll ? 'rgba(239,68,68,0.4)' : 'linear-gradient(135deg, #ef4444, #dc2626)', boxShadow: isDeletingAll ? 'none' : '0 0 20px rgba(239,68,68,0.3)' }}
               >
-                {isDeletingAll ? 'Apagando...' : 'âš ï¸ Apagar Tudo'}
+                {isDeletingAll ? 'Apagando...' : '⚠️ Apagar Tudo'}
               </button>
             </div>
           </div>
         </div>
       )}
-      {/* MODAL DE PROPAGANDA OBRIGATÃ“RIA */}
+      {/* MODAL DE PROPAGANDA OBRIGATÓRIA */}
       {adVisible && adCampaign && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md p-2 sm:p-4">
           <div
@@ -968,7 +968,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 </div>
               ) : (
                 <div className="w-full h-40 flex items-center justify-center bg-gradient-to-br from-blue-900/40 to-cyan-900/30">
-                  <span className="text-4xl">ðŸ“¢</span>
+                  <span className="text-4xl">📢</span>
                 </div>
               )}
               {/* Título e descrição */}
@@ -1029,7 +1029,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                     cursor: adCanClose ? 'pointer' : 'not-allowed',
                   }}
                 >
-                  {adCanClose ? 'Fechar propaganda âœ•' : `Aguarde ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s para fechar`}
+                  {adCanClose ? 'Fechar propaganda ✕' : `Aguarde ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s para fechar`}
                 </button>
               </div>
             </div>
@@ -1080,20 +1080,20 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#25d366' }} />
                   <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#25d366' }} />
                 </span>
-                ðŸ’¬ Chat
+                💬 Chat
               </button>
             )}
             <button
               onClick={() => setShowDeleteAllModal(true)}
               className="px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-500/40 text-orange-400 hover:bg-orange-500/10 hover:text-orange-300 transition-all active:scale-95"
             >
-              ðŸ—‘ï¸ Apagar Tudo
+              🗑️ Apagar Tudo
             </button>
             <Button onClick={onLogout} variant="outline" size="sm" className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300">Sair</Button>
           </div>
         </div>
 
-        {/* Serviços Extras / Consultas â€” TOPO */}
+        {/* Serviços Extras / Consultas — TOPO */}
         {phoneFromToken && (
           <div className="mb-6">
             <ServicosExtras
@@ -1104,7 +1104,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </div>
         )}
 
-        {/* Card Plano H2 COLOMBIANO */}
+        {/* Card Plano Walk Ajuda */}
         {planInfo?.expiresAt && (() => {
           const expDate = new Date(planInfo.expiresAt);
           const now = new Date();
@@ -1126,7 +1126,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <div className="flex-1">
                 <p className={`text-xs font-semibold uppercase tracking-wide ${
                   isExpired ? 'text-red-400' : isExpiringSoon ? 'text-amber-400' : 'text-primary'
-                }`}>Plano H2 COLOMBIANO</p>
+                }`}>Plano Walk Ajuda</p>
                 <p className="text-white text-sm font-medium">
                   {isExpired
                     ? 'Plano expirado'
@@ -1152,7 +1152,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 className="rounded-xl px-4 py-3 border border-white/10 flex items-start gap-3"
                 style={{ backgroundColor: b.bgColor, color: b.textColor }}
               >
-                <span className="text-base flex-shrink-0 mt-0.5">ðŸ“¢</span>
+                <span className="text-base flex-shrink-0 mt-0.5">📢</span>
                 <div className="min-w-0">
                   {b.title && <p className="text-sm font-bold leading-tight mb-0.5">{b.title}</p>}
                   <p className="text-xs leading-relaxed whitespace-pre-wrap opacity-90">{b.content}</p>
@@ -1177,10 +1177,10 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <span className="relative inline-flex rounded-full h-3 w-3" style={{ background: '#25d366' }} />
             </span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold" style={{ color: '#25d366' }}>ðŸ”´ AO VIVO â€” Novo recurso!</p>
+              <p className="text-sm font-bold" style={{ color: '#25d366' }}>🔴 AO VIVO — Novo recurso!</p>
               <p className="text-xs text-white/70">Agora você pode conversar com outros usuários em tempo real. Toque para abrir.</p>
             </div>
-            <span className="text-white/50 text-lg">ðŸ’¬</span>
+            <span className="text-white/50 text-lg">💬</span>
           </div>
         )}
 
@@ -1282,7 +1282,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               <span>Gráficos</span>
             </TabsTrigger>
-            {/* EMPRÃ‰STIMOS */}
+            {/* EMPRÉSTIMOS */}
             <TabsTrigger value="emprestimos" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-amber-600/40 bg-[#1a1200] text-[#fbbf24] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#2a1e00] hover:border-amber-500/60 data-[state=active]:bg-amber-500 data-[state=active]:text-black data-[state=active]:border-amber-400 data-[state=active]:shadow-[0_4px_20px_rgba(245,158,11,0.7)] animate-[neon-pulse_2s_ease-in-out_infinite] data-[state=active]:animate-none active:scale-95">
               <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
               <span>Empréstimos</span>
@@ -1302,13 +1302,13 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <Button onClick={handleAddExpense} className="h-11 px-5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-[0_0_16px_-4px_var(--primary)] whitespace-nowrap">Adicionar Gasto</Button>
             </div>
 
-            {/* Lista unificada: categoria | input | valor lançado â€” mesma linha */}
+            {/* Lista unificada: categoria | input | valor lançado — mesma linha */}
             <div className="space-y-2">
               {[
                 { label: 'Combustível', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 22V8l9-6 9 6v14H3z"/><path d="M10 22v-6h4v6"/><path d="M18 8h2a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-2"/></svg>, key: 'fuel', val: newExpense.fuel, set: (v: string) => setNewExpense({ ...newExpense, fuel: v }) },
                 { label: 'Aluguel', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>, key: 'carRental', val: newExpense.carRental, set: (v: string) => setNewExpense({ ...newExpense, carRental: v }) },
                 { label: 'Manutenção', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>, key: 'maintenance', val: newExpense.maintenance, set: (v: string) => setNewExpense({ ...newExpense, maintenance: v }) },
-                { label: 'Troca de Ã“leo', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v6l3 3-3 3v6"/><path d="M6 12H2"/><path d="M22 12h-4"/></svg>, key: 'oilChange', val: newExpense.oilChange, set: (v: string) => setNewExpense({ ...newExpense, oilChange: v }) },
+                { label: 'Troca de Óleo', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v6l3 3-3 3v6"/><path d="M6 12H2"/><path d="M22 12h-4"/></svg>, key: 'oilChange', val: newExpense.oilChange, set: (v: string) => setNewExpense({ ...newExpense, oilChange: v }) },
                 { label: 'Lavagem', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, key: 'washing', val: newExpense.washing, set: (v: string) => setNewExpense({ ...newExpense, washing: v }) },
                 { label: 'Seguro', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, key: 'insurance', val: newExpense.insurance, set: (v: string) => setNewExpense({ ...newExpense, insurance: v }) },
                 { label: 'Internet/Tel.', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>, key: 'internetPhone', val: newExpense.internetPhone, set: (v: string) => setNewExpense({ ...newExpense, internetPhone: v }) },
@@ -1350,7 +1350,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                     { key: 'fuel', label: 'Combustível' },
                     { key: 'carRental', label: 'Aluguel' },
                     { key: 'maintenance', label: 'Manutenção' },
-                    { key: 'oilChange', label: 'Troca de Ã“leo' },
+                    { key: 'oilChange', label: 'Troca de Óleo' },
                     { key: 'washing', label: 'Lavagem' },
                     { key: 'insurance', label: 'Seguro' },
                     { key: 'internetPhone', label: 'Internet/Tel.' },
@@ -1364,7 +1364,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                   ];
                   return (
 <div key={date} className="rounded-xl overflow-hidden shadow-md" style={{ background: 'linear-gradient(135deg, #0d0d1a 0%, #070710 100%)', border: '1.5px solid rgba(99,102,241,0.25)' }}>
-                      {/* Cabeçalho da data â€” clicavel para datas anteriores */}
+                      {/* Cabeçalho da data — clicavel para datas anteriores */}
                       <button
                         type="button"
                         onClick={() => !isToday && toggleExpenseDate(date)}
@@ -1373,15 +1373,15 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                       >
                         <div className="flex items-center gap-2">
                           {!isToday && (
-                            <span className="text-xs" style={{ color: DATE_COLORS[idx % DATE_COLORS.length] }}>{isOpen ? 'â–¼' : 'â–º'}</span>
+                            <span className="text-xs" style={{ color: DATE_COLORS[idx % DATE_COLORS.length] }}>{isOpen ? '▼' : '►'}</span>
                           )}
                           <span className="font-bold text-sm" style={{ color: DATE_COLORS[idx % DATE_COLORS.length] }}>
-                            {formatDateLocal(date)}{isToday ? ' â€” Hoje' : ''}
+                            {formatDateLocal(date)}{isToday ? ' — Hoje' : ''}
                           </span>
                         </div>
                         <span className="font-bold text-sm text-red-400">Total: R$ {totalDate.toFixed(2)}</span>
                       </button>
-                      {/* Detalhamento agrupado por categoria â€” só visível quando aberto */}
+                      {/* Detalhamento agrupado por categoria — só visível quando aberto */}
                       {isOpen && (() => {
                         // Montar grupos: catKey -> { label, items: [{exp, value}] }
                         const catGroupsMap: Record<string, { label: string; items: { exp: Expense; value: number }[] }> = {};
@@ -1413,7 +1413,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                                   >
                                     <div className="flex items-center gap-1.5">
                                       {count > 1 && (
-                                        <span className="text-[10px] text-muted-foreground">{isCatOpen ? 'â–¼' : 'â–º'}</span>
+                                        <span className="text-[10px] text-muted-foreground">{isCatOpen ? '▼' : '►'}</span>
                                       )}
                                       <span className="text-xs font-semibold text-foreground">{group.label}</span>
                                       {count > 1 && (
@@ -1471,7 +1471,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <Button onClick={handleAddEarning} className="h-11 px-5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-[0_0_16px_-4px_var(--primary)] whitespace-nowrap">Adicionar Ganho</Button>
             </div>
 
-            {/* Lista unificada: categoria | input | valor lançado â€” mesma linha */}
+            {/* Lista unificada: categoria | input | valor lançado — mesma linha */}
             <div className="space-y-2">
               {[
                 { label: 'Uber', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3"/><rect x="9" y="11" width="14" height="10" rx="1"/><circle cx="12" cy="21" r="1"/><circle cx="20" cy="21" r="1"/></svg>, key: 'uber', val: newEarning.uber, set: (v: string) => setNewEarning({ ...newEarning, uber: v }) },
@@ -1527,15 +1527,15 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                       >
                         <div className="flex items-center gap-2">
                           {!isToday && (
-                            <span className="text-xs" style={{ color: DATE_COLORS[idx % DATE_COLORS.length] }}>{isOpen ? 'â–¼' : 'â–º'}</span>
+                            <span className="text-xs" style={{ color: DATE_COLORS[idx % DATE_COLORS.length] }}>{isOpen ? '▼' : '►'}</span>
                           )}
                           <span className="font-bold text-sm" style={{ color: DATE_COLORS[idx % DATE_COLORS.length] }}>
-                            {formatDateLocal(date)}{isToday ? ' â€” Hoje' : ''}
+                            {formatDateLocal(date)}{isToday ? ' — Hoje' : ''}
                           </span>
                         </div>
                         <span className="font-bold text-sm text-emerald-400">Total: R$ {totalDate.toFixed(2)}</span>
                       </button>
-                      {/* Detalhamento agrupado por categoria â€” só visível quando aberto */}
+                      {/* Detalhamento agrupado por categoria — só visível quando aberto */}
                       {isOpen && (() => {
                         const earnGroupsMap: Record<string, { label: string; items: { earn: Earning; value: number }[] }> = {};
                         for (const earn of earnsForDate) {
@@ -1564,7 +1564,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                                   >
                                     <div className="flex items-center gap-1.5">
                                       {count > 1 && (
-                                        <span className="text-[10px] text-muted-foreground">{isCatOpen ? 'â–¼' : 'â–º'}</span>
+                                        <span className="text-[10px] text-muted-foreground">{isCatOpen ? '▼' : '►'}</span>
                                       )}
                                       <span className="text-xs font-semibold text-foreground">{group.label}</span>
                                       {count > 1 && (
@@ -1638,7 +1638,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               {/* Hora Inicial */}
               <div className="flex flex-col gap-1">
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  <span>â°</span> Hora de Início
+                  <span>⏰</span> Hora de Início
                 </label>
                 <Input
                   type="time"
@@ -1651,7 +1651,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               {/* Hora Final */}
               <div className="flex flex-col gap-1">
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  <span>â°</span> Hora Final
+                  <span>⏰</span> Hora Final
                 </label>
                 <Input
                   type="time"
@@ -1673,7 +1673,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               const minutos = totalMin % 60;
               return (
                 <div className="flex items-center gap-3 bg-primary/10 border border-primary/30 rounded-xl px-4 py-3">
-                  <span className="text-xl">ðŸ“Š</span>
+                  <span className="text-xl">📊</span>
                   <div>
                     <p className="text-xs text-primary/70 font-semibold uppercase tracking-wide">Tempo Trabalhado</p>
                     <p className="text-lg font-extrabold text-primary">{horas}h {minutos.toString().padStart(2,'0')}min</p>
@@ -1685,7 +1685,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
             {/* Aviso explicativo */}
             <div className="flex items-start gap-2 bg-card/60 border border-border/50 rounded-xl px-4 py-3">
-              <span className="text-base mt-0.5">ðŸš—</span>
+              <span className="text-base mt-0.5">🚗</span>
               <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
                 Informe o horário de início e término da sua jornada. O sistema calculará automaticamente o <strong className="text-muted-foreground">tempo total trabalhado</strong>, permitindo acompanhar ganho por hora e produtividade da jornada.
               </p>
@@ -1753,7 +1753,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           <TabsContent value="metas" className="space-y-5">
             {/* Formulário de metas */}
             <Card className="bg-card/80 backdrop-blur border border-border/50 rounded-2xl p-5">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">ðŸŽ¯ Definir Metas</h3>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">🎯 Definir Metas</h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs text-muted-foreground/70 font-medium">Meta Diária</label>
@@ -1799,11 +1799,11 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 return '0 0 12px #ef4444';
               };
               const getMilestoneMsg = (pct: number) => {
-                if (pct >= 100) return { icon: 'ðŸ†', msg: 'Meta concluída com sucesso!' };
-                if (pct >= 90) return { icon: 'âš¡', msg: 'Ãšltimo esforço! Restam apenas 10%.' };
-                if (pct >= 75) return { icon: 'ðŸš€', msg: 'Falta pouco! Você já concluiu 75%.' };
-                if (pct >= 50) return { icon: 'ðŸ”¥', msg: 'Parabéns! Você chegou à metade da meta.' };
-                if (pct >= 25) return { icon: 'ðŸŽ‰', msg: 'Você já concluiu 25% da sua meta.' };
+                if (pct >= 100) return { icon: '🏆', msg: 'Meta concluída com sucesso!' };
+                if (pct >= 90) return { icon: '⚡', msg: 'Último esforço! Restam apenas 10%.' };
+                if (pct >= 75) return { icon: '🚀', msg: 'Falta pouco! Você já concluiu 75%.' };
+                if (pct >= 50) return { icon: '🔥', msg: 'Parabéns! Você chegou à metade da meta.' };
+                if (pct >= 25) return { icon: '🎉', msg: 'Você já concluiu 25% da sua meta.' };
                 return null;
               };
 
@@ -1818,18 +1818,18 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               const dailyAvgEarned = monthlyCurrent / daysElapsed;
               const daysToGoal = dailyAvgEarned > 0 && monthlyCurrent < monthlyGoalVal ? Math.ceil((monthlyGoalVal - monthlyCurrent) / dailyAvgEarned) : 0;
 
-              // â”€â”€â”€ RANKING DOS 3 MELHORES DIAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              // ─── RANKING DOS 3 MELHORES DIAS ───────────────────────────────
               const topDays = [...chartData]
                 .filter(d => d.earnings > 0)
                 .sort((a, b) => b.earnings - a.earnings)
                 .slice(0, 3);
               const rankMedals = [
-                { icon: 'ðŸ¥‡', label: '1º', color: '#FFD700', glow: '0 0 14px #FFD700' },
-                { icon: 'ðŸ¥ˆ', label: '2º', color: '#C0C0C0', glow: '0 0 14px #C0C0C0' },
-                { icon: 'ðŸ¥‰', label: '3º', color: '#CD7F32', glow: '0 0 14px #CD7F32' },
+                { icon: '🥇', label: '1º', color: '#FFD700', glow: '0 0 14px #FFD700' },
+                { icon: '🥈', label: '2º', color: '#C0C0C0', glow: '0 0 14px #C0C0C0' },
+                { icon: '🥉', label: '3º', color: '#CD7F32', glow: '0 0 14px #CD7F32' },
               ];
 
-              // â”€â”€â”€ DISPARAR MARCOS MOTIVACIONAIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              // ─── DISPARAR MARCOS MOTIVACIONAIS ────────────────────────────────
               const MILESTONES = [25, 50, 75, 90, 100];
               const milestoneLabels: Record<number, string> = {
                 25: '25% da meta atingido!',
@@ -1869,15 +1869,15 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
                     <div className="grid grid-cols-3 gap-2 text-center">
                       <div className="bg-white/5 rounded-xl p-2">
-                        <p className="text-[10px] text-muted-foreground/60 uppercase">ðŸŽ¯ Meta</p>
+                        <p className="text-[10px] text-muted-foreground/60 uppercase">🎯 Meta</p>
                         <p className="text-sm font-bold text-white">{fmtBR(goal)}</p>
                       </div>
                       <div className="bg-white/5 rounded-xl p-2">
-                        <p className="text-[10px] text-muted-foreground/60 uppercase">ðŸ’° Atual</p>
+                        <p className="text-[10px] text-muted-foreground/60 uppercase">💰 Atual</p>
                         <p className="text-sm font-bold" style={{ color }}>{fmtBR(current)}</p>
                       </div>
                       <div className="bg-white/5 rounded-xl p-2">
-                        <p className="text-[10px] text-muted-foreground/60 uppercase">ðŸš€ Falta</p>
+                        <p className="text-[10px] text-muted-foreground/60 uppercase">🚀 Falta</p>
                         <p className="text-sm font-bold text-orange-400">{fmtBR(remaining)}</p>
                       </div>
                     </div>
@@ -1894,7 +1894,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
               return (
                 <div className="space-y-4">
-                  {/* â”€â”€â”€ NOTIFICAÃ‡ÃƒO MOTIVACIONAL FLUTUANTE â”€â”€â”€ */}
+                  {/* ─── NOTIFICAÇÃO MOTIVACIONAL FLUTUANTE ─── */}
                   {activeMilestone && (
                     <div
                       className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border animate-bounce"
@@ -1904,23 +1904,23 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                         boxShadow: activeMilestone.pct >= 100 ? '0 0 32px #00FF88' : '0 0 24px #7c3aed',
                       }}
                     >
-                      <span className="text-2xl">{activeMilestone.pct >= 100 ? 'ðŸ†' : activeMilestone.pct >= 90 ? 'âš¡' : activeMilestone.pct >= 75 ? 'ðŸš€' : activeMilestone.pct >= 50 ? 'ðŸ”¥' : 'ðŸŽ‰'}</span>
+                      <span className="text-2xl">{activeMilestone.pct >= 100 ? '🏆' : activeMilestone.pct >= 90 ? '⚡' : activeMilestone.pct >= 75 ? '🚀' : activeMilestone.pct >= 50 ? '🔥' : '🎉'}</span>
                       <div>
                         <p className="text-xs font-bold text-white/80 uppercase tracking-widest">{activeMilestone.pct >= 100 ? 'META CONCLUÍDA!' : 'Marco atingido'}</p>
                         <p className="text-sm font-extrabold text-white">{activeMilestone.label}</p>
                       </div>
-                      <button onClick={() => setActiveMilestone(null)} className="ml-2 text-white/60 hover:text-white text-lg leading-none">Ã—</button>
+                      <button onClick={() => setActiveMilestone(null)} className="ml-2 text-white/60 hover:text-white text-lg leading-none">×</button>
                     </div>
                   )}
 
-                  {dailyGoalVal > 0 && <GoalCard label="Meta Diária" goal={dailyGoalVal} current={dailyCurrent} pct={dailyPct} icon="â˜€ï¸" />}
-                  {weeklyGoalVal > 0 && <GoalCard label="Meta Semanal" goal={weeklyGoalVal} current={weeklyCurrent} pct={weeklyPct} icon="ðŸ“…" />}
-                  {monthlyGoalVal > 0 && <GoalCard label="Meta Mensal" goal={monthlyGoalVal} current={monthlyCurrent} pct={monthlyPct} icon="ðŸ—“ï¸" />}
+                  {dailyGoalVal > 0 && <GoalCard label="Meta Diária" goal={dailyGoalVal} current={dailyCurrent} pct={dailyPct} icon="☀️" />}
+                  {weeklyGoalVal > 0 && <GoalCard label="Meta Semanal" goal={weeklyGoalVal} current={weeklyCurrent} pct={weeklyPct} icon="📅" />}
+                  {monthlyGoalVal > 0 && <GoalCard label="Meta Mensal" goal={monthlyGoalVal} current={monthlyCurrent} pct={monthlyPct} icon="🗓️" />}
 
                   {/* Resumo rápido + alerta diário */}
                   {monthlyGoalVal > 0 && (
                     <Card className="bg-card/80 backdrop-blur border border-primary/20 rounded-2xl p-5 space-y-3">
-                      <h4 className="text-sm font-bold text-primary uppercase tracking-wide">ðŸ“Š Resumo da Meta Mensal</h4>
+                      <h4 className="text-sm font-bold text-primary uppercase tracking-wide">📊 Resumo da Meta Mensal</h4>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-white/5 rounded-xl p-3">
                           <p className="text-[10px] text-muted-foreground/60 uppercase mb-1">Meta</p>
@@ -1942,10 +1942,10 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                       {/* Alerta diário */}
                       <div className="bg-primary/10 border border-primary/30 rounded-xl px-4 py-3 space-y-1">
                         {monthlyCurrent >= monthlyGoalVal ? (
-                          <p className="text-sm font-semibold text-emerald-400">ðŸ† Você já atingiu sua meta mensal! Parabéns!</p>
+                          <p className="text-sm font-semibold text-emerald-400">🏆 Você já atingiu sua meta mensal! Parabéns!</p>
                         ) : dailyAvgNeeded > 0 ? (
                           <>
-                            <p className="text-xs text-muted-foreground/70">ðŸ“ˆ Média necessária por dia para atingir a meta:</p>
+                            <p className="text-xs text-muted-foreground/70">📈 Média necessária por dia para atingir a meta:</p>
                             <p className="text-lg font-extrabold text-primary">{fmtBR(dailyAvgNeeded)} / dia</p>
                             {daysToGoal > 0 && dailyAvgEarned > 0 && (
                               <p className="text-[11px] text-muted-foreground/60">No ritmo atual ({fmtBR(dailyAvgEarned)}/dia), você atingirá a meta em ~{daysToGoal} dias.</p>
@@ -1957,7 +1957,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                     </Card>
                   )}
 
-                  {/* â”€â”€â”€ RANKING DOS 3 MELHORES DIAS â”€â”€â”€ */}
+                  {/* ─── RANKING DOS 3 MELHORES DIAS ─── */}
                   {topDays.length > 0 && (
                     <Card className="bg-card/80 backdrop-blur border border-yellow-500/30 rounded-2xl p-5 space-y-3">
                       <div className="flex items-center gap-2 mb-1">
@@ -2062,7 +2062,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
         </Tabs>
       </div>
 
-      {/* â”€â”€â”€ MODAIS DE EDIÃ‡ÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ─── MODAIS DE EDIÇÃO ──────────────────────────────────────────────────── */}
 
       {editingExpense && (
         <EditModal

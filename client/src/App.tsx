@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 // ============================================================
-// MODO MANUTENCAO: mude para false para reabrir o site
+// 🔧 MODO MANUTENÇÃO — mude para false para reabrir o site
 // ============================================================
 const MAINTENANCE_MODE = false;
 function MaintenancePage() {
@@ -11,11 +11,11 @@ function MaintenancePage() {
       <div className="mb-6">
         <img
           src="/icons/icon-192x192.png"
-          alt="H2 COLOMBIANO"
+          alt="Walk Ajuda"
           className="w-24 h-24 mx-auto rounded-2xl mb-4"
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
-        <h1 className="text-3xl font-bold text-yellow-400 mb-2">H2 COLOMBIANO</h1>
+        <h1 className="text-3xl font-bold text-yellow-400 mb-2">WALK AJUDA</h1>
       </div>
       <div className="bg-gray-900 border border-yellow-500/30 rounded-2xl p-8 max-w-sm w-full">
         <div className="text-5xl mb-4">🔧</div>
@@ -26,7 +26,7 @@ function MaintenancePage() {
         </p>
 
       </div>
-      <p className="text-gray-600 text-xs mt-6">h2colombiano.com</p>
+      <p className="text-gray-600 text-xs mt-6">walkajuda.com</p>
     </div>
   );
 }
@@ -105,7 +105,7 @@ import { useAdminIdleLogout } from "./hooks/useAdminIdleLogout";
 import { useAntiPrint } from "./hooks/useAntiPrint";
 import DevtoolsGuard from "./components/DevtoolsGuard";
 
-// Guard para rotas admin � redireciona para /admin/login se não autenticado
+// Guard para rotas admin — redireciona para /admin/login se não autenticado
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { isAdmin, isLoading } = useAdminAuth();
   // Logout automático após 30 minutos de inatividade
@@ -337,17 +337,17 @@ function AppContent() {
     );
   }
 
-  // �x� MODO MANUTEN�!ÒO � bloqueia todas as rotas públicas
+  // 🔧 MODO MANUTENÇÃO — bloqueia todas as rotas públicas
   if (MAINTENANCE_MODE) {
     return <MaintenancePage />;
   }
 
-  // Rota /gastos é pública � sem senha
+  // Rota /gastos é pública — sem senha
   if (isGastosRoute) {
     return <Router />;
   }
 
-  // Rota /login é atalho direto para o PasswordGate � mostra a tela bonita com logo, telefone/CPF e CONTINUAR
+  // Rota /login é atalho direto para o PasswordGate — mostra a tela bonita com logo, telefone/CPF e CONTINUAR
   if (isLoginRoute) {
     return (
       <>
@@ -359,7 +359,7 @@ function AppContent() {
     );
   }
 
-  // Rota /acompanhar é pública � sem senha, mas com tela de boas-vindas
+  // Rota /acompanhar é pública — sem senha, mas com tela de boas-vindas
   if (isTrackingRoute) {
     return (
       <>
@@ -375,32 +375,32 @@ function AppContent() {
     return <Router />;
   }
 
-  // Rota /ajuda é pública � página de FAQ para compartilhar pelo WhatsApp
+  // Rota /ajuda é pública — página de FAQ para compartilhar pelo WhatsApp
   if (isAjudaRoute) {
     return <Router />;
   }
-  // Rota /pre-cadastro é pública � formulário de pré-cadastro sem senha
+  // Rota /pre-cadastro é pública — formulário de pré-cadastro sem senha
   if (isPreCadastroRoute) {
     return <Router />;
   }
-  // Rota /consultar-cadastro é pública � consulta de status por CPF
+  // Rota /consultar-cadastro é pública — consulta de status por CPF
   if (isConsultarCadastroRoute) {
     return <Router />;
   }
 
-  // Rota /video é pública � vídeos tutoriais para clientes
+  // Rota /video é pública — vídeos tutoriais para clientes
   if (isVideoRoute) {
     return <Router />;
   }
 
-  // Rota /agendar/:token é pública � cliente agenda atendimento pelo link individual
+  // Rota /agendar/:token é pública — cliente agenda atendimento pelo link individual
   if (isAgendarRoute) {
     return <Router />;
   }
 
-  // Rota /sorteio é pública � não passa pelo PasswordGate do site
+  // Rota /sorteio é pública — não passa pelo PasswordGate do site
   // O próprio Raffle.tsx controla o acesso (livre ou com senha própria do sorteio)
-  // Rota /gerador-chassi é pública � qualquer pessoa pode usar sem senha
+  // Rota /gerador-chassi é pública — qualquer pessoa pode usar sem senha
   if (isGeradorChassiRoute) {
     return (
       <>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { Zap, ClipboardList, Search, ShieldX, WifiOff, RefreshCw, Trophy, Star, Gift, Ticket, Bell, Sparkles, MessageCircle, Users, KeyRound, BarChart3, Video, Globe, FileText, Phone, Car, DollarSign, Info, AlertTriangle, CheckCircle2, Lock, Send, Instagram } from "lucide-react";
+import { Zap, ClipboardList, Search, ShieldX, WifiOff, RefreshCw, Trophy, Star, Gift, Ticket, Bell, Sparkles, MessageCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { OnlineSupportWidget } from "@/components/OnlineSupportWidget";
 
@@ -15,22 +15,22 @@ const EXTRA_BTN_ICONS: Record<string, React.ReactNode> = {
   search: <Search className="w-8 h-8 text-white" />,
   clipboard: <ClipboardList className="w-8 h-8 text-white" />,
   // novos ícones Hub Central
-  group: <Users className="w-8 h-8 text-white" />,
-  key: <KeyRound className="w-8 h-8 text-white" />,
-  chart: <BarChart3 className="w-8 h-8 text-white" />,
-  video: <Video className="w-8 h-8 text-white" />,
-  globe: <Globe className="w-8 h-8 text-white" />,
-  chat: <MessageCircle className="w-8 h-8 text-white" />,
-  doc: <FileText className="w-8 h-8 text-white" />,
-  phone: <Phone className="w-8 h-8 text-white" />,
-  car: <Car className="w-8 h-8 text-white" />,
-  money: <DollarSign className="w-8 h-8 text-white" />,
-  info: <Info className="w-8 h-8 text-white" />,
-  alert: <AlertTriangle className="w-8 h-8 text-white" />,
-  check: <CheckCircle2 className="w-8 h-8 text-white" />,
-  lock: <Lock className="w-8 h-8 text-white" />,
-  telegram: <Send className="w-8 h-8 text-white" />,
-  insta: <Instagram className="w-8 h-8 text-white" />,
+  group:    <span className="text-3xl">👥</span>,
+  key:      <span className="text-3xl">🔑</span>,
+  chart:    <span className="text-3xl">📊</span>,
+  video:    <span className="text-3xl">🎥</span>,
+  globe:    <span className="text-3xl">🌐</span>,
+  chat:     <span className="text-3xl">💬</span>,
+  doc:      <span className="text-3xl">📄</span>,
+  phone:    <span className="text-3xl">📱</span>,
+  car:      <span className="text-3xl">🚗</span>,
+  money:    <span className="text-3xl">💰</span>,
+  info:     <span className="text-3xl">ℹ️</span>,
+  alert:    <span className="text-3xl">⚠️</span>,
+  check:    <span className="text-3xl">✅</span>,
+  lock:     <span className="text-3xl">🔒</span>,
+  telegram: <span className="text-3xl">✈️</span>,
+  insta:    <span className="text-3xl">📸</span>,
 };
 
 const WELCOME_CHOICE_KEY = "walk_welcome_choice";
@@ -76,13 +76,13 @@ function PWAInstallCard({ onInstall, logoUrl }: { onInstall: () => Promise<void>
       <div className="flex items-center gap-4 p-4">
         <img
           src="/manus-storage/pwa-icon-192_88c027b0.png"
-          alt="H2 COLOMBIANO"
+          alt="Walk Ajuda"
           className="w-16 h-16 rounded-2xl shadow-lg flex-shrink-0"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
         <div className="flex-1 min-w-0">
-          <p className="text-white font-black text-base leading-tight">H2 COLOMBIANO</p>
-          <p className="text-[#0ea5e9] text-xs font-semibold mt-0.5">h2colombiano.com</p>
+          <p className="text-white font-black text-base leading-tight">WALK AJUDA</p>
+          <p className="text-[#0ea5e9] text-xs font-semibold mt-0.5">walkajuda.com</p>
           <p className="text-white/60 text-xs mt-1 leading-snug">Atendimento rápido para motoristas de app</p>
         </div>
       </div>
@@ -135,7 +135,7 @@ function PWAInstallCard({ onInstall, logoUrl }: { onInstall: () => Promise<void>
   );
 }
 
-// Hook para instalação PWA - só ativa quando o Chrome está pronto (beforeinstallprompt)
+// Hook para instalação PWA — só ativa quando o Chrome está pronto (beforeinstallprompt)
 function useHomePWA() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
@@ -193,7 +193,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const vpnCheckMutation = trpc.vpn.check.useMutation();
   const { isInstallable: pwaInstallable, isInstalled: pwaInstalled, install: pwaInstall } = useHomePWA();
 
-  const loginTitle = settings?.login_title || "H2 COLOMBIANO";
+  const loginTitle = settings?.login_title || "WALK AJUDA";
   const loginImageUrl = settings?.login_image_url || "";
   const loginShowImage = settings?.login_show_image !== "0";
 
@@ -205,7 +205,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const BTN1_SUB_COLOR = settings?.home_btn1_sub_color || "rgba(255,255,255,0.7)";
   const BTN1_FONT = settings?.home_btn1_font || "";
 
-  // Helper: resolve variantes Bold (ex: "Montserrat Bold" -> fontFamily Montserrat + fontWeight 700)
+  // Helper: resolve variantes Bold (ex: "Montserrat Bold" → fontFamily Montserrat + fontWeight 700)
   const getFontStyle = (font: string): React.CSSProperties => {
     if (!font) return {};
     if (font === "Montserrat Bold") return { fontFamily: "'Montserrat', sans-serif", fontWeight: 700 };
@@ -453,7 +453,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const supportUnreadCount = onlineSupportUnread?.unreadMessages || 0;
   const supportLabelBase = onlineSupportState?.buttonLabel || "ATENDIMENTO ONLINE";
   const supportLabel = supportUnreadCount > 0
-    ? `${supportLabelBase} - ${supportUnreadCount} NOVA${supportUnreadCount > 1 ? "S" : ""} MENSAGEM${supportUnreadCount > 1 ? "S" : ""}`
+    ? `${supportLabelBase} — ${supportUnreadCount} NOVA${supportUnreadCount > 1 ? "S" : ""} MENSAGEM${supportUnreadCount > 1 ? "S" : ""}`
     : supportLabelBase;
   const supportDescription = onlineSupportState?.buttonDescription || "Tire suas dúvidas, receba instruções e fale com nossa equipe.";
   const supportColor = onlineSupportState?.buttonColor || "#2563eb";
@@ -496,7 +496,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     );
   };
 
-  // Rota /login é atalho direto - pula a tela de boas-vindas
+  // Rota /login é atalho direto — pula a tela de boas-vindas
   if (choiceMade || location === "/login" || location === "/pre-cadastro") {
     return <>{children}</>;
   }
@@ -701,14 +701,14 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
           ))}
         </div>
 
-        {/* Card de instalação PWA - estilo Play Store */}
+        {/* Card de instalação PWA — estilo Play Store */}
         {pwaInstallable && !pwaInstalled && (
           <PWAInstallCard onInstall={pwaInstall} logoUrl={loginImageUrl || undefined} />
         )}
         {pwaInstalled && (
           <div className="mt-6 w-full flex items-center justify-center gap-2 text-emerald-400 text-sm font-semibold">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-            H2 COLOMBIANO instalado na tela inicial!
+            Walk Ajuda instalado na tela inicial!
           </div>
         )}
 

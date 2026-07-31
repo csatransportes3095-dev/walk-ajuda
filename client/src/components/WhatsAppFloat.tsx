@@ -13,7 +13,7 @@ export default function WhatsAppFloat() {
   if (!number) return null;
 
   const message = encodeURIComponent(
-    "Olá! Vim pelo site da H2 COLOMBIANO e preciso de ajuda."
+    "Olá! Vim pelo site da Walk Ajuda e preciso de ajuda."
   );
   const href = `https://wa.me/${number}?text=${message}`;
 

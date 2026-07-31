@@ -17,7 +17,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // â”€â”€ Presença â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Presença ──────────────────────────────────────────────────────────────
   const setOnlineMut = trpc.chat.setOnline.useMutation();
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
     };
   }, [phone]);
 
-  // â”€â”€ Dados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Dados ─────────────────────────────────────────────────────────────────
   const { data: users = [] } = trpc.chatUsers.listAllUsers.useQuery(
     undefined,
     { refetchInterval: 30000 }
@@ -73,7 +73,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
     onSuccess: (chat: any) => {
       if (chat) {
         setActiveChatId(chat.id);
-        setActiveChatName('Grupo Geral H2 COLOMBIANO');
+        setActiveChatName('Grupo Geral Walk Ajuda');
         setActiveChatPhoto(null);
         setActiveView('chat');
         onChatSelect(chat.id);
@@ -129,7 +129,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
 
   const otherUsers = (users as any[]).filter((u: any) => u.phone !== phone);
 
-  // â”€â”€ Estilos compartilhados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Estilos compartilhados ────────────────────────────────────────────────
   const panelStyle: React.CSSProperties = {
     background: '#111827',
     border: '1.5px solid rgba(37,211,102,0.25)',
@@ -141,7 +141,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
     borderBottom: '1px solid rgba(37,211,102,0.2)',
   };
 
-  // â”€â”€ Lista de contatos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Lista de contatos ─────────────────────────────────────────────────────
   const ContactList = () => (
     <>
       {/* Header */}
@@ -172,7 +172,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
         >
           <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0"
             style={{ background: 'rgba(37,211,102,0.15)', border: '1px solid rgba(37,211,102,0.3)' }}>
-            ðŸ‘¥
+            👥
           </div>
           <div className="text-left flex-1">
             <p className="font-bold text-white text-sm">Grupo Geral</p>
@@ -182,7 +182,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
         </button>
       </div>
 
-      {/* Recentes â€” apenas conversas com mensagens */}
+      {/* Recentes — apenas conversas com mensagens */}
       {(() => {
         const chatsWithMessages = (chats as any[]).filter((chat: any) => !!(lastMessages as any)[chat.id]);
         if (chatsWithMessages.length === 0) return null;
@@ -259,7 +259,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-semibold text-white text-sm truncate">{user.name}</p>
                   <p className="text-xs font-medium" style={{ color: isOnline ? '#25d366' : '#6b7280' }}>
-                    {isOnline ? 'â— online' : 'â—‹ offline'}
+                    {isOnline ? '● online' : '○ offline'}
                   </p>
                 </div>
               </button>
@@ -270,7 +270,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
     </>
   );
 
-  // â”€â”€ Conversa aberta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Conversa aberta ───────────────────────────────────────────────────────
   const ChatView = () => (
     <>
       {/* Header */}
@@ -379,7 +379,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
 
   return (
     <>
-      {/* â”€â”€ Botão flutuante â”€â”€ */}
+      {/* ── Botão flutuante ── */}
       <button
         id="chat-floating-btn"
         onClick={() => setIsOpen(!isOpen)}
@@ -394,7 +394,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
         <MessageCircle className="w-7 h-7 text-white drop-shadow" />
       </button>
 
-      {/* â”€â”€ Painel: desktop (canto direito, 380px) / mobile (quase tela cheia) â”€â”€ */}
+      {/* ── Painel: desktop (canto direito, 380px) / mobile (quase tela cheia) ── */}
       {isOpen && (
         <div
           className="fixed z-50 flex flex-col rounded-2xl overflow-hidden"

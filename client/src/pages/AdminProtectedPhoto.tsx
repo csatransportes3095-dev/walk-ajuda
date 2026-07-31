@@ -7,9 +7,9 @@ export default function AdminProtectedPhoto() {
   const utils = trpc.useUtils();
   const { data: photos, isLoading } = trpc.protectedPhotos.list.useQuery();
 
-  const [title, setTitle] = useState("�x� Foto protegida");
+  const [title, setTitle] = useState("📸 Foto protegida");
   const [message, setMessage] = useState(
-    "Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\n�S& O acesso será registrado automaticamente."
+    "Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\n✅ O acesso será registrado automaticamente."
   );
   const [preview, setPreview] = useState<string | null>(null);
   const [imageData, setImageData] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export default function AdminProtectedPhoto() {
   const [viewingLogsPhotoId, setViewingLogsPhotoId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const siteLink = typeof window !== "undefined" ? window.location.origin + "/foto" : "https://h2colombiano.com/foto";
+  const siteLink = typeof window !== "undefined" ? window.location.origin + "/foto" : "https://walkajuda.com/foto";
 
   const { data: accessLogs, isLoading: logsLoading } = trpc.protectedPhotos.listAccessLogs.useQuery(
     { photoId: viewingLogsPhotoId ?? undefined },
@@ -31,8 +31,8 @@ export default function AdminProtectedPhoto() {
       utils.protectedPhotos.list.invalidate();
       setPreview(null);
       setImageData(null);
-      setTitle("�x� Foto protegida");
-      setMessage("Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\n�S& O acesso será registrado automaticamente.");
+      setTitle("📸 Foto protegida");
+      setMessage("Para visualizar a foto, finalize seu cadastro e confirme seus dados.\n\n✅ O acesso será registrado automaticamente.");
       toast.success("Foto protegida salva com sucesso!");
       setUploading(false);
     },
@@ -125,7 +125,7 @@ export default function AdminProtectedPhoto() {
 
         {/* Link para compartilhar */}
         <div style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '12px', padding: '16px' }}>
-          <p className="text-xs text-purple-300 font-semibold mb-2">�x Link para compartilhar com clientes</p>
+          <p className="text-xs text-purple-300 font-semibold mb-2">🔗 Link para compartilhar com clientes</p>
           <div className="flex items-center gap-2">
             <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '10px 14px', flex: 1, overflow: 'hidden' }}>
               <p className="text-white text-sm truncate">{siteLink}</p>
@@ -154,14 +154,14 @@ export default function AdminProtectedPhoto() {
               <div className="space-y-2">
                 <ImageIcon className="w-10 h-10 text-purple-400/50 mx-auto" />
                 <p className="text-sm text-gray-400">Clique para selecionar a imagem</p>
-                <p className="text-xs text-gray-600">JPG, PNG, WEBP � máx 10MB</p>
+                <p className="text-xs text-gray-600">JPG, PNG, WEBP — máx 10MB</p>
               </div>
             )}
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
           </div>
           <div>
             <label className="text-xs text-gray-400 block mb-1">Título</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} placeholder="�x� Foto protegida" />
+            <input value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} placeholder="📸 Foto protegida" />
           </div>
           <div>
             <label className="text-xs text-gray-400 block mb-1">Mensagem para quem não tem acesso</label>
@@ -247,7 +247,7 @@ export default function AdminProtectedPhoto() {
                 {viewingLogsPhotoId === photo.id && (
                   <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <p className="text-xs font-semibold text-blue-300">�x� Quem visualizou esta foto</p>
+                      <p className="text-xs font-semibold text-blue-300">👁 Quem visualizou esta foto</p>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         {accessLogs && accessLogs.length > 0 && (
                           <button
@@ -275,7 +275,7 @@ export default function AdminProtectedPhoto() {
                         {accessLogs.map((log) => (
                           <div key={log.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: 'rgba(59,130,246,0.07)', borderRadius: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '16px' }}>�x�</span>
+                              <span style={{ fontSize: '16px' }}>📱</span>
                               <span className="text-sm font-mono text-white">{formatPhone(log.phone)}</span>
                             </div>
                             <span className="text-xs text-gray-400">{formatDate(log.accessedAt)}</span>

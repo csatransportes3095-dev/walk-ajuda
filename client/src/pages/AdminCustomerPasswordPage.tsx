@@ -26,7 +26,7 @@ export default function AdminCustomerPasswordPage() {
   const [showSetPwd, setShowSetPwd] = useState(false);
   const [isSetting, setIsSetting] = useState(false);
 
-  // â”€â”€â”€ queries / mutations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── queries / mutations ──────────────────────────────────────────────────
 
   const modeQuery = trpc.customerPassword.getMode.useQuery();
   const setModeMutation = trpc.customerPassword.setMode.useMutation({
@@ -34,8 +34,8 @@ export default function AdminCustomerPasswordPage() {
       modeQuery.refetch();
       pendingQuery.refetch();
       toast.success(data.mode === 'auto'
-        ? 'âœ… Modo AUTOMÁTICO ativado: cliente cria a própria senha (30 dias).'
-        : 'âœ… Modo MANUAL ativado: ADM precisa liberar cada senha.');
+        ? '✅ Modo AUTOMÁTICO ativado: cliente cria a própria senha (30 dias).'
+        : '✅ Modo MANUAL ativado: ADM precisa liberar cada senha.');
     },
     onError: (e) => toast.error(e.message || 'Erro ao alterar modo'),
   });
@@ -73,7 +73,7 @@ export default function AdminCustomerPasswordPage() {
   const currentMode = modeQuery.data?.mode ?? 'manual';
   const pendingList = pendingQuery.data ?? [];
 
-  // â”€â”€â”€ handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── handlers ─────────────────────────────────────────────────────────────
 
   const handleToggleMode = () => {
     const newMode = currentMode === 'manual' ? 'auto' : 'manual';
@@ -91,28 +91,28 @@ export default function AdminCustomerPasswordPage() {
 
   const buildReleaseWaMsg = (nome: string, telefone: string) => {
     const msg = [
-      `ðŸ” *Acesso Liberado â€” H2 COLOMBIANO*`,
+      `🔐 *Acesso Liberado — Walk Ajuda*`,
       ``,
-      `Olá, *${nome}*! Tudo certo por aqui. âœ…`,
+      `Olá, *${nome}*! Tudo certo por aqui. ✅`,
       ``,
       `Sua senha de acesso ao sistema foi liberada com sucesso e já está ativa.`,
       ``,
-      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”`,
-      `ðŸŒ *Acesse agora:* https://h2colombiano.com/acompanhar`,
-      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”`,
+      `━━━━━━━━━━━━━━━━━━━`,
+      `🌐 *Acesse agora:* https://walkajuda.com/acompanhar`,
+      `━━━━━━━━━━━━━━━━━━━`,
       ``,
-      `ðŸ“± *Como acessar:*`,
-      `1ï¸âƒ£ Abra o link acima`,
-      `2ï¸âƒ£ Informe seu telefone`,
-      `3ï¸âƒ£ Digite sua senha`,
-      `4ï¸âƒ£ Seus dados estarão disponíveis`,
+      `📱 *Como acessar:*`,
+      `1️⃣ Abra o link acima`,
+      `2️⃣ Informe seu telefone`,
+      `3️⃣ Digite sua senha`,
+      `4️⃣ Seus dados estarão disponíveis`,
       ``,
-      `âš ï¸ *Importante:*`,
-      `â€¢ Não compartilhe sua senha com ninguém`,
-      `â€¢ Os dados de acesso *não são enviados por mensagem*`,
-      `â€¢ Em caso de dúvidas, entre em contato conosco`,
+      `⚠️ *Importante:*`,
+      `• Não compartilhe sua senha com ninguém`,
+      `• Os dados de acesso *não são enviados por mensagem*`,
+      `• Em caso de dúvidas, entre em contato conosco`,
       ``,
-      `_Equipe H2 COLOMBIANO_ ðŸš€`,
+      `_Equipe Walk Ajuda_ 🚀`,
     ].join('\n');
     return `https://wa.me/55${telefone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
   };
@@ -128,7 +128,7 @@ export default function AdminCustomerPasswordPage() {
     setIsApproving(true);
     try {
       await approveMutation.mutateAsync({ passwordId: pendingModal.id, days: pendingDays });
-      toast.success(`âœ… Senha de ${pendingModal.name} liberada por ${pendingDays} dias!`);
+      toast.success(`✅ Senha de ${pendingModal.name} liberada por ${pendingDays} dias!`);
       setPendingModal(null);
     } catch (e: any) {
       // Se falhou, fechar a janela do WA aberta
@@ -167,7 +167,7 @@ export default function AdminCustomerPasswordPage() {
     const daysLeft = Math.ceil((statusData.expiresAt - Date.now()) / (1000 * 60 * 60 * 24));
     return (
       <span className="flex items-center gap-1 text-green-400 text-sm">
-        <ShieldCheck className="w-4 h-4" /> Ativa â€” vence em {daysLeft} dia{daysLeft !== 1 ? 's' : ''}
+        <ShieldCheck className="w-4 h-4" /> Ativa — vence em {daysLeft} dia{daysLeft !== 1 ? 's' : ''}
         <span className="text-slate-400 ml-1">({new Date(statusData.expiresAt).toLocaleDateString('pt-BR')})</span>
       </span>
     );

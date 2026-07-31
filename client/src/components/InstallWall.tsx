@@ -3,8 +3,8 @@ import { useState, useEffect } from "react";
 import { Smartphone, Share, Chrome, AlertCircle, Download, ExternalLink } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
-const APP_NAME = "H2 COLOMBIANO";
-const APP_SHORT_NAME = "H2 COLOMBIANO";
+const APP_NAME = "Walk Ajuda";
+const APP_SHORT_NAME = "Walk Ajuda";
 const FALLBACK_LOGO = "/icon-192.png";
 
 interface InstallStep {
@@ -39,8 +39,8 @@ function getInstructions(
         steps: [
           { icon: <Chrome className="w-5 h-5 text-orange-400" />, text: "Copie o link desta página" },
           { icon: <Share className="w-5 h-5 text-blue-400" />, text: "Abra o Safari e cole o link" },
-          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no ícone Compartilhar na barra inferior' },
-          { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: '"Adicionar à Tela de Início" -> "Adicionar"' },
+          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no ícone Compartilhar (□↑) na barra inferior' },
+          { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: `"Adicionar à Tela de Início" → "Adicionar"` },
         ],
       };
 
@@ -62,7 +62,7 @@ function getInstructions(
         subtitle: "Siga os passos para adicionar à tela inicial:",
         accentColor: "#5b6af0",
         steps: [
-          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no ícone Compartilhar na barra inferior do Safari' },
+          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no ícone Compartilhar (□↑) na barra inferior do Safari' },
           { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: 'Role para baixo e toque em "Adicionar à Tela de Início"' },
           { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: 'Toque em "Adicionar" no canto superior direito' },
           { icon: <ExternalLink className="w-5 h-5 text-indigo-400" />, text: `Abra o app pelo ícone "${APP_SHORT_NAME}" na tela inicial` },
@@ -77,8 +77,8 @@ function getInstructions(
         warning: "⚠️ Use o Safari para instalar este app no iPhone/iPad.",
         steps: [
           { icon: <Share className="w-5 h-5 text-blue-400" />, text: "Abra este link no Safari" },
-          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no ícone Compartilhar' },
-          { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: '"Adicionar à Tela de Início" -> "Adicionar"' },
+          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no ícone Compartilhar (□↑)' },
+          { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: '"Adicionar à Tela de Início" → "Adicionar"' },
         ],
       };
 
@@ -102,14 +102,14 @@ function getInstructions(
         subtitle: "Siga os passos para instalar:",
         accentColor: "#5b6af0",
         steps: [
-          { icon: <Download className="w-5 h-5 text-indigo-400" />, text: 'Toque nos 3 pontinhos no canto superior direito do Chrome' },
+          { icon: <Download className="w-5 h-5 text-indigo-400" />, text: 'Toque nos 3 pontinhos ⋮ no canto superior direito do Chrome' },
           { icon: <Smartphone className="w-5 h-5 text-blue-400" />, text: 'Toque em "Adicionar à tela inicial" ou "Instalar app"' },
           { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: 'Confirme e abra pelo ícone na tela inicial' },
         ],
-        actionLabel: "Como instalar - ver passo a passo",
+        actionLabel: "Como instalar — ver passo a passo",
         onAction: () => {
           // Open Chrome menu instructions in a visual way
-          alert('Para instalar:\n\n1. Toque nos 3 pontinhos no Chrome\n2. Toque em "Adicionar à tela inicial"\n3. Confirme a instalação\n4. Abra pelo ícone na tela inicial');
+          alert('Para instalar:\n\n1. Toque nos 3 pontinhos ⋮ no Chrome\n2. Toque em "Adicionar à tela inicial"\n3. Confirme a instalação\n4. Abra pelo ícone na tela inicial');
         },
       };
 
@@ -295,7 +295,7 @@ export default function InstallWall() {
               }}
             >
               <Smartphone className="w-4 h-4" />
-              Já instalei - Ver como abrir
+              Já instalei — Ver como abrir
             </button>
           )}
 

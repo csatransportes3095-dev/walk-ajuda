@@ -78,7 +78,7 @@ export default function AdminLogin() {
     requestUnlockMutation.mutate({ message: unlockMessage || undefined });
   };
 
-  // â”€â”€â”€ Tela de IP Bloqueado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Tela de IP Bloqueado ────────────────────────────────────────────────────
   if (screen === "blocked") {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
@@ -155,14 +155,14 @@ export default function AdminLogin() {
             onClick={() => setScreen("login")}
             className="w-full text-center text-xs text-white/30 hover:text-white/60 transition-colors py-2"
           >
-            â† Voltar ao login
+            ← Voltar ao login
           </button>
         </div>
       </div>
     );
   }
 
-  // â”€â”€â”€ Tela de Login Normal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Tela de Login Normal ────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
@@ -172,7 +172,7 @@ export default function AdminLogin() {
             <Shield className="w-8 h-8 text-yellow-400" />
           </div>
           <h1 className="text-2xl font-bold text-white">Painel Admin</h1>
-          <p className="text-white/50 text-sm mt-1">H2 COLOMBIANO</p>
+          <p className="text-white/50 text-sm mt-1">WALK AJUDA</p>
         </div>
 
         {/* Aviso de tentativas restantes */}
@@ -215,7 +215,7 @@ export default function AdminLogin() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                placeholder="••••••••"
                 autoComplete="new-password"
                 name="admin-pwd"
                 className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-yellow-500/50 focus:bg-white/8 transition-all"

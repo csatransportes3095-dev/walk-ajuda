@@ -41,7 +41,7 @@ type Product = {
   options: ProductOption[];
 };
 
-// -- Componente PromoCard com cronômetro decrescente ------------------------
+// ── Componente PromoCard com cronômetro decrescente ────────────────────────
 function useCountdown(endsAt: number | null | undefined) {
   const [remaining, setRemaining] = useState<number>(() =>
     endsAt ? Math.max(0, endsAt - Date.now()) : -1
@@ -177,7 +177,7 @@ function PromoCard({
             boxShadow: urgent ? '0 4px 14px rgba(239,68,68,0.4)' : '0 4px 14px rgba(249,115,22,0.4)',
           }}
         >
-          APROVEITAR OFERTA ->
+          APROVEITAR OFERTA →
         </div>
       </div>
     </button>
@@ -298,7 +298,7 @@ export default function Home() {
     clientCity: string;
   } | null>(null);
 
-  // ===== PROPAGANDA OBRIGATRIA =====
+  // ===== PROPAGANDA OBRIGATÓRIA =====
   const [adVisible, setAdVisible] = useState(false);
   const [adProgress, setAdProgress] = useState(0);
   const [adCanClose, setAdCanClose] = useState(false);
@@ -424,7 +424,7 @@ export default function Home() {
       if (step !== 'home') return;
       const prod = products.find((p: Product) => p.id === saved.productId);
       if (!prod) { localStorage.removeItem(PROGRESS_KEY); return; }
-      setSavedProgressLabel(prod.name + (saved.optionId ? ` - ${prod.options.find((o: ProductOption) => o.id === saved.optionId)?.label || ''}` : ''));
+      setSavedProgressLabel(prod.name + (saved.optionId ? ` — ${prod.options.find((o: ProductOption) => o.id === saved.optionId)?.label || ''}` : ''));
       setShowResumeModal(true);
     } catch {}
   }, [products]);
@@ -586,7 +586,7 @@ export default function Home() {
             }
           }
         } catch {
-          // Silencioso - não bloquear o fluxo se a busca falhar
+          // Silencioso — não bloquear o fluxo se a busca falhar
         }
       }
 
@@ -619,7 +619,7 @@ export default function Home() {
 
   const handleAddToCartClick = (product: Product) => {
     if (product.options.filter(o => o.isActive === 1).length > 0) {
-      // Precisa escolher opção - abre o seletor de opção mas no modo carrinho
+      // Precisa escolher opção — abre o seletor de opção mas no modo carrinho
       setCartPendingProduct(product);
     } else {
       addToCart(product, null);
@@ -805,7 +805,7 @@ export default function Home() {
   const SERVICES_TITLE = settings?.services_title || "";
   const SERVICES_SUBTITLE = settings?.services_subtitle || "";
   const FOOTER_TEXT = settings?.footer_text || "";
-  const SITE_NAME = settings?.site_name || "H2 COLOMBIANO";
+  const SITE_NAME = settings?.site_name || "WALK AJUDA";
   const VIDEO_URL = settings?.video_url || "";
   const [videoError, setVideoError] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
@@ -952,7 +952,7 @@ export default function Home() {
       })();
       return;
     }
-    // Imagem: comprimir para reduzir tamanho e converter HEIC/HEIF -> JPEG (resolve falha de upload em celular)
+    // Imagem: comprimir para reduzir tamanho e converter HEIC/HEIF → JPEG (resolve falha de upload em celular)
     void (async () => {
       try {
         const compressed = await compressImageFile(file);
@@ -1069,7 +1069,7 @@ export default function Home() {
 
   // Upload de arquivo via JSON base64 (robusto em produção/celular).
   // O arquivo (já comprimido para JPEG no caso de imagens) é lido como base64
-  // e enviado dentro de um JSON. SEM multipart/form-data - isso elimina as
+  // e enviado dentro de um JSON. SEM multipart/form-data — isso elimina as
   // falhas de upload no celular causadas pelo parsing de multipart no proxy.
   const uploadFileToServer = async (file: File, label: string, phone: string): Promise<{ url: string; fileKey: string; mimeType: string } | null> => {
     const MAX_RETRIES = 3;
@@ -1217,10 +1217,10 @@ export default function Home() {
 
       const phone = clientPhone.trim();
 
-      // -- NOVO FLUXO: Upload multipart direto (sem base64) ----------------------
+      // ── NOVO FLUXO: Upload multipart direto (sem base64) ──────────────────────
       // Cada arquivo é enviado individualmente antes de finalizar o pedido.
       // Isso evita payloads gigantes que travam em celulares com 4G instável.
-      // -------------------------------------------------------------------------
+      // ─────────────────────────────────────────────────────────────────────────
 
       // Documentos dinâmicos
       const dynamicDocsArray: { label: string; url?: string; fileKey?: string; data?: string; mime?: string }[] = [];
@@ -1230,10 +1230,10 @@ export default function Home() {
         let uploadedCount = 0;
         for (const doc of dynamicDocs) {
           if (restoredFileUrls.dynamicDocs[doc.id]) {
-            // Já foi enviado ao S3 (upload imediato ou restaurado) - reutilizar URL
+            // Já foi enviado ao S3 (upload imediato ou restaurado) — reutilizar URL
             dynamicDocsArray.push({ label: doc.label, url: restoredFileUrls.dynamicDocs[doc.id] });
           } else if (docFiles[doc.id]) {
-            // Tem File local sem URL salva - fazer upload
+            // Tem File local sem URL salva — fazer upload
             uploadedCount++;
             setSubmitProgress(`Enviando ${doc.label} (${uploadedCount}/${totalDocs})...`);
             const fileToSend = await prepareForUpload(docFiles[doc.id]);
@@ -1247,7 +1247,7 @@ export default function Home() {
         }
       }
 
-      // Documentos legados (foto, CRLV, alvará, condutaxi) - sempre URL, nunca base64
+      // Documentos legados (foto, CRLV, alvará, condutaxi) — sempre URL, nunca base64
       setSubmitProgress('Enviando documentos...');
       if (!hasDynamicDocs) {
         if (restoredFileUrls.profilePhoto) {
@@ -1280,10 +1280,10 @@ export default function Home() {
         }
       }
 
-      // Comprovante PIX - sempre envia como URL (nunca base64), evita problemas no Android
+      // Comprovante PIX — sempre envia como URL (nunca base64), evita problemas no Android
       let paymentProofUploadedUrl: string | undefined;
       if (restoredFileUrls.paymentProof) {
-        // Comprovante já salvo no servidor (upload imediato ou restaurado) - reutilizar URL
+        // Comprovante já salvo no servidor (upload imediato ou restaurado) — reutilizar URL
         paymentProofUploadedUrl = restoredFileUrls.paymentProof;
       } else if (paymentProof) {
         setSubmitProgress('Enviando comprovante PIX...');
@@ -1295,7 +1295,7 @@ export default function Home() {
         }
       }
 
-      // Normalizar MIME type do comprovante (HEIC/HEIF -> image/jpeg para compatibilidade)
+      // Normalizar MIME type do comprovante (HEIC/HEIF → image/jpeg para compatibilidade)
       const getProofMime = (f: File | null) => {
         if (!f) return undefined;
         if (f.type && f.type !== 'application/octet-stream' && f.type !== '') return f.type;
@@ -1314,7 +1314,7 @@ export default function Home() {
         if (!q.triggerOption) return !!parentAnswer;
         return parentAnswer === q.triggerOption;
       };
-      // Construir answersArray com ordenação hierárquica (pai -> sub -> sub-sub) e depth
+      // Construir answersArray com ordenação hierárquica (pai → sub → sub-sub) e depth
       const allQs = selectedOption?.questions || [];
       const orderedAnswers: { question: string; answer: string; depth: number; optionsMeta?: string }[] = [];
       const addWithDepth = (q: ProductQuestion, depth: number) => {
@@ -1360,7 +1360,7 @@ export default function Home() {
         for (let i = 0; i < cartItems.length; i++) {
           const item = cartItems[i];
           setSubmitProgress(`Enviando pedido ${i + 1} de ${cartItems.length}: ${item.product.name}...`);
-          // Calcular preço individual do item (sem desconto - o desconto é do carrinho todo)
+          // Calcular preço individual do item (sem desconto — o desconto é do carrinho todo)
           const itemRawPrice = item.option?.price || undefined;
           try {
             await submitMutation.mutateAsync({
@@ -1495,7 +1495,7 @@ export default function Home() {
               customerPhone: phone,
               optionId: selectedOption.id,
             });
-          } catch (e) { /* silencioso - não bloqueia o fluxo */ }
+          } catch (e) { /* silencioso — não bloqueia o fluxo */ }
         }
         // Salvar dados do pedido para mensagem WhatsApp
         const singlePrice = (() => {
@@ -1536,7 +1536,7 @@ export default function Home() {
       if (msg.includes('Timeout') || msg.includes('timeout') || msg.includes('network') || msg.includes('Network')) {
         toast.error('Conexão lenta. Verifique sua internet e tente novamente.', { duration: 6000 });
       } else if (msg === 'UPLOAD_FAILED') {
-        // Upload de algum arquivo falhou - orientar reenvio (pode ser arquivo muito grande ou conexão instável)
+        // Upload de algum arquivo falhou — orientar reenvio (pode ser arquivo muito grande ou conexão instável)
         toast.error('Não foi possível enviar um dos arquivos. Tente uma foto menor/mais leve ou reenvie em uma conexão mais estável.', { duration: 9000 });
       } else if (msg.includes('ler arquivo') || msg.includes('Leitura') || msg.includes('cancelada')) {
         // Limpar o comprovante para forçar nova seleção
@@ -1828,7 +1828,7 @@ export default function Home() {
         
         {profilePhoto ? (
           <div className="mt-2 text-green-400 text-sm font-semibold flex items-center gap-2">
-            ✅ {profilePhoto.name}
+            ✓ {profilePhoto.name}
           </div>
         ) : restoredFileUrls.profilePhoto ? (
           <div className="mt-2 text-green-400 text-sm font-semibold flex items-center gap-2">
@@ -1880,7 +1880,7 @@ export default function Home() {
       />
       <button onClick={() => document.getElementById(inputId)?.click()}
         className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${(carDocument || restoredFileUrls.carDocument) ? 'bg-green-700 border-green-600 text-green-200' : 'bg-red-700 border-red-800 hover:bg-red-800 text-green-400'}`}>
-        📄 {carDocument ? carDocument.name : restoredFileUrls.carDocument ? '✅ Já enviado' : "Selecionar Documento"}
+        📎 {carDocument ? carDocument.name : restoredFileUrls.carDocument ? '✅ Já enviado' : "Selecionar Documento"}
       </button>
     </div>
   );
@@ -1913,7 +1913,7 @@ export default function Home() {
           />
           <button onClick={() => document.getElementById("alvara-upload")?.click()}
             className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${(alvaraFile || restoredFileUrls.alvara) ? 'bg-green-700 border-green-600 text-green-200' : 'bg-red-700 border-red-800 hover:bg-red-800 text-green-400'}`}>
-            📄 {alvaraFile ? alvaraFile.name : restoredFileUrls.alvara ? '✅ Já enviado' : "Selecionar Alvará"}
+            📎 {alvaraFile ? alvaraFile.name : restoredFileUrls.alvara ? '✅ Já enviado' : "Selecionar Alvará"}
           </button>
         </div>
       );
@@ -1943,7 +1943,7 @@ export default function Home() {
           />
           <button onClick={() => document.getElementById("condutaxi-upload")?.click()}
             className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${(condutaxiFile || restoredFileUrls.condutaxi) ? 'bg-green-700 border-green-600 text-green-200' : 'bg-red-700 border-red-800 hover:bg-red-800 text-green-400'}`}>
-            📄 {condutaxiFile ? condutaxiFile.name : restoredFileUrls.condutaxi ? '✅ Já enviado' : "Selecionar Condutaxi"}
+            📎 {condutaxiFile ? condutaxiFile.name : restoredFileUrls.condutaxi ? '✅ Já enviado' : "Selecionar Condutaxi"}
           </button>
         </div>
       );
@@ -2101,7 +2101,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
 
-      {/* ========== MODAL DE PROPAGANDA OBRIGATRIA ========== */}
+      {/* ========== MODAL DE PROPAGANDA OBRIGATÓRIA ========== */}
       {adVisible && adCampaign && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md p-2 sm:p-4">
           <div
@@ -2142,7 +2142,7 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="w-full h-40 flex items-center justify-center bg-gradient-to-br from-blue-900/40 to-cyan-900/30">
-                  <span className="text-4xl">📷</span>
+                  <span className="text-4xl">📢</span>
                 </div>
               )}
               {(adCampaign.title || adCampaign.description) && (
@@ -2165,7 +2165,7 @@ export default function Home() {
                   </a>
                 )}
                 <button onClick={() => adCanClose && setAdVisible(false)} disabled={!adCanClose} className="mt-3 w-full py-2.5 rounded-lg text-sm font-semibold transition-all" style={{ background: adCanClose ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)', color: adCanClose ? '#fff' : '#555', border: adCanClose ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(255,255,255,0.05)', cursor: adCanClose ? 'pointer' : 'not-allowed' }}>
-                  {adCanClose ? 'Fechar propaganda S"' : `Aguarde ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s para fechar`}
+                  {adCanClose ? 'Fechar propaganda ✕' : `Aguarde ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s para fechar`}
                 </button>
               </div>
             </div>
@@ -2191,13 +2191,13 @@ export default function Home() {
                 onClick={restoreProgress}
                 className="w-full px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold rounded-xl transition-all duration-200 text-sm"
               >
-                ️ Continuar de onde parei
+                ▶️ Continuar de onde parei
               </button>
               <button
                 onClick={handleStartFresh}
                 className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white/80 font-semibold rounded-xl transition-all duration-200 text-sm"
               >
-                🆕 Começar do início
+                🔄 Começar do início
               </button>
             </div>
           </div>
@@ -2237,7 +2237,7 @@ export default function Home() {
                     onClick={() => setFaqOpenIndex(faqOpenIndex === idx ? null : idx)}
                   >
                     <span className="font-semibold text-sm" style={{ color: faqData.config.accentColor }}>
-                       {item.question}
+                      ❓ {item.question}
                     </span>
                     <ChevronDown
                       size={16}
@@ -2297,7 +2297,7 @@ export default function Home() {
                   className="w-full px-4 py-3 rounded-xl font-black text-sm flex flex-col items-center justify-center gap-1 animate-pulse hover:animate-none hover:scale-105 active:scale-95 transition-all duration-200 border-2 border-white/30"
                 >
                   <span className="font-black text-sm text-center leading-snug w-full">{faqData.config.buttonLabel}</span>
-                  <span className="text-base animate-bounce">👇 Clique aqui</span>
+                  <span className="text-base animate-bounce">👉 Clique aqui</span>
                 </button>
               </div>
             )}
@@ -2506,7 +2506,7 @@ export default function Home() {
                         {/* Instrução do documento */}
                         {(doc as any).instruction && (doc as any).instruction.trim() !== '' && (
                           <div className="mb-2 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-500/40">
-                            <p className="text-amber-200 text-xs leading-relaxed whitespace-pre-line">xR {(doc as any).instruction}</p>
+                            <p className="text-amber-200 text-xs leading-relaxed whitespace-pre-line">📌 {(doc as any).instruction}</p>
                           </div>
                         )}
                         
@@ -2583,7 +2583,7 @@ export default function Home() {
                         ) : (
                           <button onClick={() => document.getElementById(`doc-upload-${doc.id}-gallery`)?.click()}
                             className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${hasFile ? 'bg-green-700 border-green-600 text-green-200' : 'bg-red-600 border-red-700 text-green-400 hover:bg-red-700'}`}>
-                            📄 {hasFile ? (docFiles[doc.id]?.name || '✅ Já enviado') : `Selecionar ${doc.label}`}
+                            📎 {hasFile ? (docFiles[doc.id]?.name || '✅ Já enviado') : `Selecionar ${doc.label}`}
                           </button>
                         )}
                       </div>
@@ -2644,7 +2644,7 @@ export default function Home() {
                 />
                 <button onClick={() => document.getElementById("pdf-doc-upload")?.click()}
                   className={`w-full px-4 py-2 border font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm ${(carDocument || restoredFileUrls.carDocument) ? 'bg-green-700 border-green-600 text-green-200' : 'bg-black border-white/20 hover:bg-white/10 text-white'}`}>
-                  📄 {carDocument ? carDocument.name : restoredFileUrls.carDocument ? '✅ Já enviado' : "Selecionar PDF"}
+                  📎 {carDocument ? carDocument.name : restoredFileUrls.carDocument ? '✅ Já enviado' : "Selecionar PDF"}
                 </button>
               </div>
               {selectedProduct?.showYearField === 1 && (
@@ -2828,7 +2828,7 @@ export default function Home() {
                 </div>
               );
             }
-            // Fallback: opções simples (string separada por vírgula) - também vira radio buttons
+            // Fallback: opções simples (string separada por vírgula) — também vira radio buttons
             const simpleOpts = q.options!.split(',').map(o => o.trim()).filter(Boolean);
             return (
               <div className="flex flex-col gap-3 w-full">
@@ -2953,7 +2953,7 @@ export default function Home() {
                   className="flex-1 px-4 py-3 font-semibold rounded-xl transition-all duration-200 active:scale-95"
                   style={{ backgroundColor: '#1E293B', color: '#94A3B8', border: '1px solid rgba(255,255,255,0.08)' }}
                 >
-                    Voltar
+                  ← Voltar
                 </button>
               )}
               {safeIndex === 0 && (
@@ -2975,7 +2975,7 @@ export default function Home() {
                 className="flex-1 px-4 py-3 font-bold rounded-xl transition-all duration-200 active:scale-95"
                 style={{ backgroundColor: '#2563EB', color: '#FFFFFF', boxShadow: '0 0 16px rgba(37,99,235,0.5)', border: '1px solid rgba(37,99,235,0.6)' }}
               >
-                {isLastQuestion ? 'PRÓXIMO' : 'Continuar ->'}
+                {isLastQuestion ? 'PRÓXIMO' : 'Continuar →'}
                             </button>
             </div>
             </div>{/* fim rodapé */}
@@ -2983,7 +2983,7 @@ export default function Home() {
             {blockedByQuestion && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-6">
                 <div className="bg-gray-950 border-2 border-red-600 rounded-2xl p-8 max-w-sm w-full text-center space-y-5 shadow-2xl">
-                  <div className="text-6xl">xa</div>
+                  <div className="text-6xl">🚫</div>
                   <p className="text-red-400 font-bold text-xl">Atendimento Encerrado</p>
                   <p className="text-white/90 text-base leading-relaxed">Não podemos continuar com o atendimento ou venda.</p>
                   <p className="text-white/50 text-xs">Sua sessão foi encerrada.</p>
@@ -3078,7 +3078,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* BOTÒO CONTINUAR PARA PAGAMENTO */}
+              {/* BOTÃO CONTINUAR PARA PAGAMENTO */}
               <button onClick={async () => {
                 if (!clientName.trim()) { alert('Preencha seu nome completo'); return; }
                 const rawPhone = clientPhone.replace(/\D/g, '');
@@ -3182,8 +3182,8 @@ export default function Home() {
                         <div className="flex justify-between items-center mt-1">
                           <span className="text-green-300 text-xs">
                             {hasResellerDiscount && !couponDiscount && `🏷️ Desconto revendedor aplicado`}
-                            {couponDiscount && !hasResellerDiscount && `🎉 Cupom aplicado`}
-                            {couponDiscount && hasResellerDiscount && `🏷️ Revendedor + 🎉 Cupom`}
+                            {couponDiscount && !hasResellerDiscount && `🎫 Cupom aplicado`}
+                            {couponDiscount && hasResellerDiscount && `🏷️ Revendedor + 🎫 Cupom`}
                           </span>
                           <span className="text-green-300 text-xs font-bold">
                             Economia: R$ {(parseFloat(cartTotalFormatted.replace('R$ ', '').replace('.', '').replace(',', '.')) - parseFloat((cartTotalWithDiscount || cartTotalFormatted).replace('R$ ', '').replace('.', '').replace(',', '.'))).toFixed(2).replace('.', ',')}
@@ -3221,8 +3221,8 @@ export default function Home() {
                         <div className="flex justify-between items-center mt-1">
                           <span className="text-green-300 text-xs">
                             {hasResellerDiscount && !couponDiscount && `🏷️ Desconto revendedor: -R$ ${getResellerDiscountAmount().toFixed(2).replace('.', ',')}`}
-                            {couponDiscount && !hasResellerDiscount && `🎉 Cupom aplicado`}
-                            {couponDiscount && hasResellerDiscount && `🏷️ Revendedor + 🎉 Cupom`}
+                            {couponDiscount && !hasResellerDiscount && `🎫 Cupom aplicado`}
+                            {couponDiscount && hasResellerDiscount && `🏷️ Revendedor + 🎫 Cupom`}
                           </span>
                           <span className="text-green-300 text-xs font-bold">
                             Economia: R$ {(parseFloat(originalValue.replace('R$ ', '').replace('.', '').replace(',', '.')) - parseFloat(finalValue.replace('R$ ', '').replace('.', '').replace(',', '.'))).toFixed(2).replace('.', ',')}
@@ -3254,7 +3254,7 @@ export default function Home() {
                 {resellerInfo?.isReseller && (
                   <div className="border-t border-blue-500/20 pt-3">
                     <Label className="text-blue-400 mb-2 block flex items-center gap-1 text-xs">
-                      👥 Para quem é este pedido? (opcional)
+                      👤 Para quem é este pedido? (opcional)
                     </Label>
                     <Input
                       type="text"
@@ -3290,13 +3290,13 @@ export default function Home() {
                     })()}
                     {hasActivePromotion() && resellerInfo?.isReseller && (
                       <div className="mt-2 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2">
-                        <span className="text-xs text-amber-300">⚠️ Promoção ativa - desconto de revendedor não acumula</span>
+                        <span className="text-xs text-amber-300">⚠️ Promoção ativa — desconto de revendedor não acumula</span>
                       </div>
                     )}
                   </div>
                 )}
               </div>}
-              {/* BOTÒO AVANÇAR PARA PAGAMENTO - só aparece no resumo */}
+              {/* BOTÃO AVANÇAR PARA PAGAMENTO - só aparece no resumo */}
               {cadastroSubStep === 'resumo' && (
                 <>
                 <button onClick={() => setCadastroSubStep('pagamento')}
@@ -3368,15 +3368,15 @@ export default function Home() {
                       <img src={paymentProofPreview} alt="Comprovante" className="w-full max-h-40 object-contain rounded-xl border border-yellow-500/40" />
                     )}
                     <button onClick={() => { setPaymentProof(null); setPaymentProofPreview(null); setRestoredFileUrls(prev => ({ ...prev, paymentProof: undefined })); }} type="button"
-                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-500">S"</button>
-                    <p className="text-green-400 text-xs mt-2 font-black text-center">✅ Comprovante anexado com sucesso!</p>
+                      className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-500">✕</button>
+                    <p className="text-green-400 text-xs mt-2 font-black text-center">✓ Comprovante anexado com sucesso!</p>
                   </div>
                 ) : (
                   <label className="cursor-pointer block">
                     <div className="rounded-xl p-5 flex flex-col items-center gap-2 hover:bg-yellow-500/10 transition-all">
                       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#eab308" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                       <p className="text-white font-black text-base text-center tracking-wide">CLIQUE PARA ENVIAR COMPROVANTE</p>
-                      <p className="text-white/50 text-xs text-center">Imagens ou PDF ⬢ a imagem é otimizada automaticamente</p>
+                      <p className="text-white/50 text-xs text-center">Imagens ou PDF • a imagem é otimizada automaticamente</p>
                     </div>
                     <input type="file" accept="image/*,application/pdf,.heic,.heif" className="hidden" onChange={handlePaymentProofSelect} />
                   </label>
@@ -3396,7 +3396,7 @@ export default function Home() {
                   <p className="text-white/40 text-xs text-center">Por favor, aguarde. Isso pode levar alguns segundos...</p>
                 </div>
               )}
-              {/* Botão FINALIZAR - pulsa neon verde somente quando comprovante carregado */}
+              {/* Botão FINALIZAR — pulsa neon verde somente quando comprovante carregado */}
               <button data-tour="finalizar" onClick={handleFinalSubmit} disabled={(!paymentProof && !restoredFileUrls.paymentProof) || isSubmitting}
                 className={`w-full px-4 py-4 font-black rounded-xl transition-all duration-300 text-lg flex items-center justify-center gap-3 tracking-wider ${
                   isSubmitting ? 'bg-gray-700 text-gray-400 cursor-not-allowed' :
@@ -3421,7 +3421,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* ========== TELA DE CONFIRMA!ÒO PÓS-ENVIO ========== */}
+      {/* ========== TELA DE CONFIRMAÇÃO PÓS-ENVIO ========== */}
       {step === "success" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md overflow-y-auto py-4">
           <div className="bg-black/90 backdrop-blur-md border-2 border-green-500/60 rounded-2xl p-6 md:p-8 max-w-md mx-4 shadow-2xl text-center">
@@ -3480,11 +3480,11 @@ export default function Home() {
                 <div className="absolute -bottom-6 -left-6 w-24 h-24 rounded-full blur-xl pointer-events-none" style={{ background: 'rgba(99,102,241,0.4)' }} />
                 {/* Faixa superior chamativa */}
                 <div className="w-full py-2 text-center font-black text-xs uppercase tracking-widest" style={{ background: 'rgba(0,0,0,0.3)', color: '#fde68a', letterSpacing: '0.2em' }}>
-                  a ATENÇÃO - PASSO IMPORTANTE a
+                  ⚡ ATENÇÃO — PASSO IMPORTANTE ⚡
                 </div>
                 <div className="relative p-6">
                   <div className="flex items-center gap-2 justify-center mb-3">
-                    <span className="text-4xl" style={{ animation: 'bounce 1.5s infinite' }}>🎉</span>
+                    <span className="text-4xl" style={{ animation: 'bounce 1.5s infinite' }}>🎁</span>
                     <p className="font-black text-xl uppercase tracking-wider" style={{ color: '#fde68a', textShadow: '0 0 10px rgba(253,230,138,0.6)' }}>ALGUÉM TE INDICOU?</p>
                   </div>
                   <div className="rounded-xl p-4 mb-5 text-center" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(253,230,138,0.3)' }}>
@@ -3530,7 +3530,7 @@ export default function Home() {
             {postOrderReferralStep === 'form' && (
               <div className="bg-yellow-500/10 border-2 border-yellow-500/40 rounded-xl p-5 mb-5 space-y-4">
                 <div className="text-center">
-                  <p className="text-yellow-300 font-black text-sm uppercase tracking-wide mb-1">🎉 Quem te indicou?</p>
+                  <p className="text-yellow-300 font-black text-sm uppercase tracking-wide mb-1">🎁 Quem te indicou?</p>
                   <p className="text-white/60 text-xs">Digite o telefone de quem te indicou (com DDD)</p>
                 </div>
                 <div>
@@ -3599,7 +3599,7 @@ export default function Home() {
             {postOrderReferralStep === 'done' && referrerPhone && postOrderReferralPhone && (
               <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/50 rounded-2xl p-4 mb-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-3xl">x}0</span>
+                  <span className="text-3xl">🎉</span>
                   <div>
                     <p className="text-green-300 font-black text-sm uppercase tracking-wide">Indicação registrada!</p>
                     <p className="text-white/70 text-xs mt-0.5">Obrigado! Quem te indicou será bonificado. ❤️</p>
@@ -3608,7 +3608,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Aviso e botão WhatsApp - só aparecem após responder a pergunta de indicação */}
+            {/* Aviso e botão WhatsApp — só aparecem após responder a pergunta de indicação */}
             {postOrderReferralStep === 'done' && (
             <>
             {/* Aviso OBRIGATÓRIO */}
@@ -3838,7 +3838,7 @@ export default function Home() {
                 })()}
 
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-4">
-                  <p className="text-blue-300 text-xs text-center">✨ Você preencherá seus dados <strong>uma única vez</strong> e criaremos um pedido para cada produto selecionado.</p>
+                  <p className="text-blue-300 text-xs text-center">📋 Você preencherá seus dados <strong>uma única vez</strong> e criaremos um pedido para cada produto selecionado.</p>
                 </div>
 
                 <button onClick={startCartCheckout}
@@ -3919,7 +3919,7 @@ export default function Home() {
       <section className="relative overflow-hidden py-4 md:py-20">
         <div className="container">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
-            {/* Vídeo mobile - só exibe se houver URL e não houver erro */}
+            {/* Vídeo mobile — só exibe se houver URL e não houver erro */}
             {VIDEO_URL && !videoError && (
               <div className={`relative md:hidden order-first -mx-4 px-4 mb-4 transition-all duration-300 ${videoLoaded ? 'opacity-100' : 'h-0 overflow-hidden opacity-0'}`}>
                 <video key={VIDEO_URL} autoPlay muted loop playsInline preload="auto" className="relative rounded-xl shadow-lg w-full max-h-48 object-cover" onError={() => setVideoError(true)} onLoadedData={() => setVideoLoaded(true)} ref={(el) => { if (el) { el.muted = true; el.play().catch(() => {}); } }}>
@@ -3958,7 +3958,7 @@ export default function Home() {
               )}
             </div>
 
-            {/* Vídeo desktop - só exibe se houver URL e não houver erro */}
+            {/* Vídeo desktop — só exibe se houver URL e não houver erro */}
             {VIDEO_URL && !videoError && (
               <div className="relative hidden md:block">
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-3xl blur-3xl"></div>
@@ -3973,7 +3973,7 @@ export default function Home() {
 
 
 
-      {/* Serviços Extras / Consultas - TOPO */}
+      {/* Serviços Extras / Consultas — TOPO */}
       {clientPhoneFromSession && (
         <section className="px-4 pt-4 pb-2">
           <div className="container max-w-2xl">
@@ -4006,7 +4006,7 @@ export default function Home() {
               {/* Header da seção */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl">🔧</span>
+                  <span className="text-2xl">🔥</span>
                   <h3 className="text-xl font-black text-white tracking-wide">PROMOÇÕES ATIVAS</h3>
                   <span className="bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full animate-bounce">
                     {allPromoOptions.length} oferta{allPromoOptions.length > 1 ? 's' : ''}
@@ -4171,7 +4171,7 @@ export default function Home() {
                     {card.logoUrl ? (
                       <img src={card.logoUrl} alt={card.title} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
                     ) : (
-                      <div className="w-14 h-14 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0 text-2xl">✨</div>
+                      <div className="w-14 h-14 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0 text-2xl">📋</div>
                     )}
                     <div className="flex-1 min-w-0">
                       <h3 className="text-base font-black leading-tight" style={{ color: card.titleColor }}>{card.title}</h3>
@@ -4194,7 +4194,7 @@ export default function Home() {
             </div>
           )}
           
-          {/* Banners Informativos - no mesmo grid dos cards, mesma largura de coluna */}
+          {/* Banners Informativos — no mesmo grid dos cards, mesma largura de coluna */}
           {activeBanners.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
               {activeBanners.map(b => (
@@ -4203,7 +4203,7 @@ export default function Home() {
                   className="rounded-xl px-4 py-3 border border-white/10 flex items-start gap-3"
                   style={{ backgroundColor: b.bgColor, color: b.textColor }}
                 >
-                  <span className="text-base flex-shrink-0 mt-0.5">📷</span>
+                  <span className="text-base flex-shrink-0 mt-0.5">📢</span>
                   <div className="min-w-0">
                     {b.title && <p className="text-sm font-bold leading-tight mb-0.5">{b.title}</p>}
                     <p className="text-xs leading-relaxed whitespace-pre-wrap opacity-90">{b.content}</p>
@@ -4223,7 +4223,7 @@ export default function Home() {
               {/* Header */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-purple-500/20">
                 <div className="w-9 h-9 rounded-xl bg-purple-600/30 flex items-center justify-center flex-shrink-0">
-                  <span className="text-lg">x</span>
+                  <span className="text-lg">🔒</span>
                 </div>
                 <div>
                   <p className="text-white font-bold text-sm">{activeProtectedPhoto.title}</p>
@@ -4244,7 +4244,7 @@ export default function Home() {
                       style={{ maxHeight: '70vh' }}
                       onClick={() => setProtectedPhotoExpanded(true)}
                     />
-                    <p className="text-center text-xs text-green-400/80 py-2">✅ Acesso liberado - clique na imagem para ampliar</p>
+                    <p className="text-center text-xs text-green-400/80 py-2">✅ Acesso liberado — clique na imagem para ampliar</p>
                   </div>
                 ) : (
                   // ACESSO BLOQUEADO
@@ -4257,10 +4257,10 @@ export default function Home() {
                     />
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
                       <div className="bg-black/80 backdrop-blur-sm border border-purple-500/40 rounded-2xl p-6 max-w-sm w-full space-y-4">
-                        <div className="text-4xl">x</div>
+                        <div className="text-4xl">🔒</div>
                         <p className="text-white font-bold text-base whitespace-pre-wrap">{activeProtectedPhoto.message}</p>
                         {protectedPhotoAccess === false && (
-                          <p className="text-red-400 text-sm font-semibold">R Número não encontrado. Faça seu cadastro primeiro.</p>
+                          <p className="text-red-400 text-sm font-semibold">❌ Número não encontrado. Faça seu cadastro primeiro.</p>
                         )}
                         {/* Input de telefone para verificar acesso */}
                         <div className="space-y-2">
@@ -4292,7 +4292,7 @@ export default function Home() {
                             className="w-full py-2.5 rounded-xl font-bold text-sm transition-all"
                             style={{ background: checkingPhotoAccess || protectedPhotoPhone.length < 10 ? 'rgba(139,92,246,0.3)' : 'rgba(139,92,246,0.8)', color: '#fff', cursor: checkingPhotoAccess || protectedPhotoPhone.length < 10 ? 'not-allowed' : 'pointer' }}
                           >
-                            {checkingPhotoAccess ? 'Verificando...' : 'x Verificar Acesso'}
+                            {checkingPhotoAccess ? 'Verificando...' : '🔓 Verificar Acesso'}
                           </button>
                         </div>
                       </div>
@@ -4320,7 +4320,7 @@ export default function Home() {
           <button
             onClick={() => setProtectedPhotoExpanded(false)}
             className="absolute top-4 right-4 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white font-bold text-xl"
-          >S"</button>
+          >✕</button>
         </div>
       )}
 
@@ -4332,15 +4332,15 @@ export default function Home() {
               <div className="relative overflow-hidden bg-gradient-to-r from-yellow-500/20 via-yellow-600/30 to-yellow-500/20 border-2 border-yellow-500/60 rounded-2xl p-5 md:p-6 animate-pulse-slow">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,215,0,0.1),transparent_70%)]" />
                 <div className="relative flex items-center justify-center gap-3 flex-wrap">
-                  <span className="text-3xl">x}0</span>
+                  <span className="text-3xl">🎉</span>
                   <div className="text-center">
                     <p className="text-yellow-400 font-black text-lg md:text-xl uppercase tracking-wide">Participe do Sorteio!</p>
                     <p className="text-white/80 text-sm md:text-base mt-1">Escolha seu número da sorte de 1 a 100 e concorra ao prêmio!</p>
                   </div>
-                  <span className="text-3xl">🎉</span>
+                  <span className="text-3xl">🎁</span>
                 </div>
                 <div className="text-center mt-3 flex items-center justify-center gap-3 flex-wrap">
-                  <span className="inline-block bg-yellow-500 text-black font-bold text-sm px-4 py-1.5 rounded-full">CLIQUE AQUI PARA PARTICIPAR  </span>
+                  <span className="inline-block bg-yellow-500 text-black font-bold text-sm px-4 py-1.5 rounded-full">CLIQUE AQUI PARA PARTICIPAR ↓</span>
                   {raffleResult && (
                     <button
                       onClick={(e) => {
@@ -4350,7 +4350,7 @@ export default function Home() {
                       }}
                       className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/30 text-white font-bold text-sm px-4 py-1.5 rounded-full transition-colors"
                     >
-                      x  Ver resultado
+                      🏆 Ver resultado
                     </button>
                   )}
                 </div>
@@ -4449,7 +4449,7 @@ export default function Home() {
                       </div>
                       <button onClick={handleRaffleSubmit} disabled={raffleSubmitting}
                         className="w-full py-3 rounded-lg font-bold text-black bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 transition-all duration-300 disabled:opacity-50">
-                        {raffleSubmitting ? 'Confirmando...' : 'CONFIRMAR NaMERO'}
+                        {raffleSubmitting ? 'Confirmando...' : 'CONFIRMAR NÚMERO'}
                       </button>
                     </div>
                   </div>
@@ -4465,7 +4465,7 @@ export default function Home() {
         <section id="raffle-result" className="py-16 md:py-24 bg-gradient-to-b from-yellow-900/10 to-black/20">
           <div className="container max-w-2xl text-center">
             <div className="bg-black/40 backdrop-blur-md border border-yellow-500/40 rounded-2xl p-8">
-              <div className="text-5xl mb-4">x </div>
+              <div className="text-5xl mb-4">🏆</div>
               <h2 className="text-3xl font-bold text-yellow-400 mb-2">Resultado do Sorteio</h2>
               <p className="text-white/70 mb-6">{raffleResult.title}</p>
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-6">

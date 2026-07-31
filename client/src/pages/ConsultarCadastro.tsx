@@ -131,7 +131,7 @@ export default function ConsultarCadastro() {
               <Zap className="w-6 h-6 text-white" />
             </div>
             <div className="text-left">
-              <h1 className="text-2xl font-black text-white tracking-wide">H2 COLOMBIANO</h1>
+              <h1 className="text-2xl font-black text-white tracking-wide">WALK AJUDA</h1>
               <p className="text-purple-400 text-xs font-medium">Atendimento para motoristas</p>
             </div>
           </div>

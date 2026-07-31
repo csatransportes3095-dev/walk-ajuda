@@ -33,7 +33,7 @@ export default function Ajuda() {
           className="mt-4 inline-block px-4 py-1.5 rounded-full text-xs font-bold"
           style={{ backgroundColor: accentColor + "33", color: accentColor, border: `1px solid ${accentColor}55` }}
         >
-          H2 COLOMBIANO � h2colombiano.com
+          WALK AJUDA — walkajuda.com
         </div>
       </div>
 
@@ -64,7 +64,7 @@ export default function Ajuda() {
                   onClick={() => setOpenIndex(openIndex === idx ? null : idx)}
                 >
                   <span className="flex items-center gap-2 font-semibold text-sm text-white">
-                    <span style={{ color: accentColor }}>�</span>
+                    <span style={{ color: accentColor }}>❓</span>
                     {item.question}
                   </span>
                   <ChevronDown

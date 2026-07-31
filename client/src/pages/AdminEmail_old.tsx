@@ -61,7 +61,7 @@ interface ZohoUser {
 }
 
 function formatDate(ts: number) {
-  if (!ts || ts === -1) return "�";
+  if (!ts || ts === -1) return "—";
   return new Date(ts).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
@@ -208,7 +208,7 @@ export default function AdminEmail() {
 
   const createMutation = trpc.email.create.useMutation({
     onSuccess: (data) => {
-      const email = data.user?.primaryEmailAddress ?? `${form.username}@h2colombiano.com`;
+      const email = data.user?.primaryEmailAddress ?? `${form.username}@walkajuda.com`;
       const pwd = form.password;
       setShowCreated({ email, password: pwd });
       setShowCreate(false);
@@ -266,7 +266,7 @@ export default function AdminEmail() {
             <Mail className="w-6 h-6 text-blue-500" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Emails @h2colombiano.com</h1>
+            <h1 className="text-2xl font-bold">Emails @walkajuda.com</h1>
             <p className="text-sm text-muted-foreground">
               {users.length} conta{users.length !== 1 ? "s" : ""} cadastrada{users.length !== 1 ? "s" : ""}
             </p>
@@ -463,7 +463,7 @@ export default function AdminEmail() {
               <TableHead>Função</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Criado em</TableHead>
-              <TableHead>�altimo acesso</TableHead>
+              <TableHead>Último acesso</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -494,7 +494,7 @@ export default function AdminEmail() {
                       </button>
                     </div>
                   </TableCell>
-                  <TableCell>{user.displayName || "�"}</TableCell>
+                  <TableCell>{user.displayName || "—"}</TableCell>
                   <TableCell>
                     <Badge variant={user.role === "super_admin" ? "default" : "secondary"}>
                       {user.role === "super_admin" ? "Super Admin" : user.role === "admin" ? "Admin" : "Membro"}
@@ -584,9 +584,9 @@ export default function AdminEmail() {
                 >
                   <Shuffle className={`w-4 h-4 ${isGeneratingUsername ? "animate-spin" : ""}`} />
                 </Button>
-                <span className="text-sm text-muted-foreground whitespace-nowrap">@h2colombiano.com</span>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">@walkajuda.com</span>
               </div>
-              <p className="text-xs text-muted-foreground">Clique em �x� para gerar um usuário aleatório único</p>
+              <p className="text-xs text-muted-foreground">Clique em 🔀 para gerar um usuário aleatório único</p>
             </div>
             <div className="space-y-1">
               <Label>Nome de exibição *</Label>
@@ -666,7 +666,7 @@ export default function AdminEmail() {
       <Dialog open={!!showCreated} onOpenChange={() => setShowCreated(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-green-600">�S& Conta Criada!</DialogTitle>
+            <DialogTitle className="text-green-600">✅ Conta Criada!</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
