@@ -85,6 +85,7 @@ import ClientReferralTree from "./pages/ClientReferralTree";
 import SchedulePage from "./pages/SchedulePage";
 import { SpreadsheetPage } from "./pages/SpreadsheetPage";
 import { GastosPage } from "./pages/GastosPage";
+import CartaoPage from "./pages/CartaoPage";
 import Ajuda from "./pages/Ajuda";
 import GeradorChassiPublico from "./pages/GeradorChassiPublico";
 import ProtectedPhotoPage from "./pages/ProtectedPhotoPage";
@@ -279,6 +280,8 @@ function Router() {
       </Route>
       <Route path={"/agendar/:token"} component={SchedulePage} />
       <Route path={"/gastos"} component={GastosPage} />
+      <Route path={"/cartoes"} component={CartaoPage} />
+      <Route path={"/cartoes/:rest*"} component={CartaoPage} />
       <Route path={"/gerador-chassi"} component={GeradorChassiPublico} />
       <Route path={"/ajuda"} component={Ajuda} />
       <Route path={"/video/tutorial"} component={VideoTutorial} />

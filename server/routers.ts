@@ -36,6 +36,7 @@ import { consultasRouter } from "./routers/consultas";
 import { whatsappTemplatesRouter } from "./routers/whatsappTemplates";
 import { preRegistrationsRouter } from "./routers/preRegistrations";
 import { preCadastroQuestionsRouter } from "./routers/preCadastroQuestions";
+import { cartoesRouter } from "./routers/cartoes";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "./_core/sendMailDirect";
@@ -7702,6 +7703,7 @@ export const appRouter = router({
   chatFlow: chatFlowRouter,
   consultas: router(consultasRouter),
   whatsappTemplates: router(whatsappTemplatesRouter),
+  cartoes: cartoesRouter,
 
   // === ZOHO OAUTH CONFIG ===
   zohoConfig: router({

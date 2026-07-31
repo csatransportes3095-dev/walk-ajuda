@@ -1913,3 +1913,110 @@ export const chatFlowNodes = mysqlTable("chatFlowNodes", {
 });
 export type ChatFlowNode = typeof chatFlowNodes.$inferSelect;
 export type InsertChatFlowNode = typeof chatFlowNodes.$inferInsert;
+
+// ─── Sistema de Cartões de Crédito (cc_*) ────────────────────────────────────
+export const ccAppUsers = mysqlTable("cc_app_users", {
+  id: int("id").autoincrement().primaryKey(),
+  phone: varchar("phone", { length: 20 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  name: varchar("name", { length: 100 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CcAppUser = typeof ccAppUsers.$inferSelect;
+export type InsertCcAppUser = typeof ccAppUsers.$inferInsert;
+
+export const ccCartoes = mysqlTable("cc_cartoes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => ccAppUsers.id, { onDelete: "cascade" }),
+  nome: varchar("nome", { length: 100 }).notNull(),
+  vencimentoDia: int("vencimentoDia").notNull(),
+  fechamentoDia: int("fechamentoDia"),
+  limiteTotal: decimal("limiteTotal", { precision: 10, scale: 2 }).notNull(),
+  corCartao: varchar("corCartao", { length: 20 }).default("blue").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CcCartao = typeof ccCartoes.$inferSelect;
+export type InsertCcCartao = typeof ccCartoes.$inferInsert;
+
+export const ccParcelamentos = mysqlTable("cc_parcelamentos", {
+  id: int("id").autoincrement().primaryKey(),
+  cartaoId: int("cartaoId").notNull().references(() => ccCartoes.id, { onDelete: "cascade" }),
+  descricao: varchar("descricao", { length: 200 }).notNull(),
+  valorTotal: decimal("valorTotal", { precision: 10, scale: 2 }).notNull(),
+  valorParcela: decimal("valorParcela", { precision: 10, scale: 2 }).notNull(),
+  numParcelas: int("numParcelas").notNull(),
+  dataInicio: timestamp("dataInicio").defaultNow().notNull(),
+  responsavel: varchar("responsavel", { length: 100 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CcParcelamento = typeof ccParcelamentos.$inferSelect;
+export type InsertCcParcelamento = typeof ccParcelamentos.$inferInsert;
+
+export const ccCategorias = mysqlTable("cc_categorias", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => ccAppUsers.id, { onDelete: "cascade" }),
+  nome: varchar("nome", { length: 100 }).notNull(),
+  icone: varchar("icone", { length: 10 }).default("tag").notNull(),
+  cor: varchar("cor", { length: 30 }).default("gray").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CcCategoria = typeof ccCategorias.$inferSelect;
+export type InsertCcCategoria = typeof ccCategorias.$inferInsert;
+
+export const ccGastos = mysqlTable("cc_gastos", {
+  id: int("id").autoincrement().primaryKey(),
+  cartaoId: int("cartaoId").notNull().references(() => ccCartoes.id, { onDelete: "cascade" }),
+  descricao: varchar("descricao", { length: 200 }).notNull(),
+  valor: decimal("valor", { precision: 10, scale: 2 }).notNull(),
+  data: timestamp("data").defaultNow().notNull(),
+  parcelamentoId: int("parcelamentoId").references(() => ccParcelamentos.id, { onDelete: "cascade" }),
+  numeroParcela: int("numeroParcela"),
+  totalParcelas: int("totalParcelas"),
+  dataOriginal: timestamp("dataOriginal"),
+  paga: int("paga").default(0).notNull(),
+  responsavel: varchar("responsavel", { length: 100 }),
+  categoriaId: int("categoriaId").references(() => ccCategorias.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CcGasto = typeof ccGastos.$inferSelect;
+export type InsertCcGasto = typeof ccGastos.$inferInsert;
+
+export const ccPagamentos = mysqlTable("cc_pagamentos", {
+  id: int("id").autoincrement().primaryKey(),
+  cartaoId: int("cartaoId").notNull().references(() => ccCartoes.id, { onDelete: "cascade" }),
+  valorPago: decimal("valorPago", { precision: 10, scale: 2 }).notNull(),
+  dataPagamento: timestamp("dataPagamento").defaultNow().notNull(),
+  observacao: varchar("observacao", { length: 200 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CcPagamento = typeof ccPagamentos.$inferSelect;
+export type InsertCcPagamento = typeof ccPagamentos.$inferInsert;
+
+export const ccDespesas = mysqlTable("cc_despesas", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => ccAppUsers.id, { onDelete: "cascade" }),
+  nome: varchar("nome", { length: 100 }).notNull(),
+  categoriaId: int("categoriaId").references(() => ccCategorias.id, { onDelete: "set null" }),
+  valor: decimal("valor", { precision: 10, scale: 2 }),
+  diaVencimento: int("diaVencimento"),
+  ativa: int("ativa").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CcDespesa = typeof ccDespesas.$inferSelect;
+export type InsertCcDespesa = typeof ccDespesas.$inferInsert;
+
+export const ccPagamentosDespesas = mysqlTable("cc_pagamentos_despesas", {
+  id: int("id").autoincrement().primaryKey(),
+  despesaId: int("despesaId").notNull().references(() => ccDespesas.id, { onDelete: "cascade" }),
+  userId: int("userId").notNull().references(() => ccAppUsers.id, { onDelete: "cascade" }),
+  mes: int("mes").notNull(),
+  ano: int("ano").notNull(),
+  valorPago: decimal("valorPago", { precision: 10, scale: 2 }),
+  dataPagamento: timestamp("dataPagamento"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CcPagamentoDespesa = typeof ccPagamentosDespesas.$inferSelect;
+export type InsertCcPagamentoDespesa = typeof ccPagamentosDespesas.$inferInsert;
