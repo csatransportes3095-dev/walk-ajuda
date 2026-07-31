@@ -692,7 +692,6 @@ export function LoansTab({ token }: LoansTabProps) {
             className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-violet-700 text-white font-bold px-8 py-3 rounded-2xl shadow-xl shadow-violet-500/30 transition-all active:scale-95 text-base">
             <Zap className="w-5 h-5" /> Solicitar Empréstimo
           </button>
-          {lateFeeConfig?.enabled && <LateFeePanel config={lateFeeConfig} />}
         </div>
       ) : (
         <div className="space-y-4">
