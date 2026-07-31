@@ -4674,30 +4674,43 @@ export default function AdminOrders() {
                           )}
                         </button>
                       ))}
-                      {/* Filtros rápidos */}
-                      <div className="flex gap-1 ml-2">
+                      {/* Filtros rápidos — cards médios */}
+                      <div className="flex gap-1.5 ml-2">
                         {([
-                          { id: "all", label: "Todos" },
-                          { id: "sem_status", label: "Sem Agend." },
-                          { id: "agendamento", label: "Ag. Agend." },
-                          { id: "novo", label: "Novo" },
-                        ] as const).map(f => (
-                          <button
-                            key={f.id}
-                            onClick={() => setTodosQuickFilter(f.id)}
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
-                              todosQuickFilter === f.id
-                                ? "bg-violet-500/30 border-violet-500/60 text-violet-300"
-                                : "bg-card border-border text-muted-foreground hover:border-violet-500/40"
-                            }`}
-                          >
-                            {f.label}
-                          </button>
-                        ))}
+                          { id: "all", label: "Todos", icon: "📋", color: "amber" },
+                          { id: "sem_status", label: "Sem Agend.", icon: "📅", color: "red" },
+                          { id: "agendamento", label: "Ag. Agend.", icon: "⏳", color: "yellow" },
+                          { id: "novo", label: "Novo", icon: "🆕", color: "green" },
+                        ] as const).map(f => {
+                          const cnt = group.orders.filter((o: any) => {
+                            if (f.id === "sem_status") return !(o as any).scheduleStatus;
+                            if (f.id === "agendamento") return (o as any).scheduleStatus === "pending";
+                            if (f.id === "novo") return !viewedOrders.has(getOrderKey(o));
+                            return true;
+                          }).length;
+                          const active = todosQuickFilter === f.id;
+                          const colors: Record<string, string> = {
+                            amber: active ? "bg-amber-500/25 border-amber-500/60 text-amber-300" : "bg-card border-border text-muted-foreground hover:border-amber-500/40",
+                            red: active ? "bg-red-500/25 border-red-500/60 text-red-300" : "bg-card border-border text-muted-foreground hover:border-red-500/40",
+                            yellow: active ? "bg-yellow-500/25 border-yellow-500/60 text-yellow-300" : "bg-card border-border text-muted-foreground hover:border-yellow-500/40",
+                            green: active ? "bg-green-500/25 border-green-500/60 text-green-300" : "bg-card border-border text-muted-foreground hover:border-green-500/40",
+                          };
+                          return (
+                            <button
+                              key={f.id}
+                              onClick={() => setTodosQuickFilter(f.id)}
+                              className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${colors[f.color]}`}
+                            >
+                              <span>{f.icon}</span>
+                              <span>{f.label}</span>
+                              <span className="text-[10px] opacity-70">{cnt}</span>
+                            </button>
+                          );
+                        })}
                       </div>
-                      <span className="ml-auto text-xs text-muted-foreground/60">{group.orders.filter(o => {
-                        if (todosQuickFilter === "sem_status") return !o.latestStatus;
-                        if (todosQuickFilter === "agendamento") { const key = o.latestStatus || ""; const label = (ACTIVE_STATUS_CONFIG[key]?.label || key).toLowerCase(); return label.includes("agend") || key.includes("agend"); }
+                      <span className="ml-auto text-xs text-muted-foreground/60">{group.orders.filter((o: any) => {
+                        if (todosQuickFilter === "sem_status") return !(o as any).scheduleStatus;
+                        if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
                         if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
                         return true;
                       }).length} pedido(s)</span>
@@ -4926,13 +4939,9 @@ export default function AdminOrders() {
                   {/* ===== MODO NORMAL ===== */}
                   {(!isAllTab || !isEmergencySearch) && (isAllTab
                     ? [{ name: "", orders: sortFolderOrders(
-                        group.orders.filter(o => {
-                          if (todosQuickFilter === "sem_status") return !o.latestStatus;
-                          if (todosQuickFilter === "agendamento") {
-                            const key = o.latestStatus || "";
-                            const label = (ACTIVE_STATUS_CONFIG[key]?.label || key).toLowerCase();
-                            return label.includes("agend") || key.includes("agend");
-                          }
+                        group.orders.filter((o: any) => {
+                          if (todosQuickFilter === "sem_status") return !o.scheduleStatus;
+                          if (todosQuickFilter === "agendamento") return o.scheduleStatus === "pending";
                           if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
                           return true;
                         }),

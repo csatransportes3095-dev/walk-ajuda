@@ -3042,6 +3042,20 @@ export const appRouter = router({
         for (const r of aqRows) answeredAssignmentIds.add(Number(r.orderId));
       } catch (e) { /* ignora erro */ }
 
+      // Buscar scheduleStatus de cada pedido (pending = aguardando, confirmed = confirmado, null = sem agendamento)
+      const scheduleStatusMap = new Map<string, string>();
+      try {
+        const schedResult = await db.execute(
+          sql.raw(`SELECT registrationId, subOrderIndex, status FROM scheduleAppointments WHERE registrationId IN (${idsList}) AND status != 'cancelled' ORDER BY createdAt DESC`)
+        );
+        const schedRows = (schedResult as any)[0] as any[];
+        // Pegar o status mais recente por (registrationId, subOrderIndex)
+        for (const sr of (schedRows || [])) {
+          const key = `${sr.registrationId}_${sr.subOrderIndex}`;
+          if (!scheduleStatusMap.has(key)) scheduleStatusMap.set(key, sr.status);
+        }
+      } catch (e) { /* ignora erro */ }
+
       // Adicionar flag hasNewDocResponse, hasNewTrackingAnswer e pasta personalizada em cada pedido
       const finalOrdersWithFlag = finalOrders.map((o: any) => {
         const folderInfo = folderByKey.get(`${o.id}_${o.subOrderIndex}`) ?? null;
@@ -3051,6 +3065,7 @@ export const appRouter = router({
           hasNewTrackingAnswer: answeredAssignmentIds.has(Number(o.id)),
           folderName: folderInfo?.folderName ?? null,
           folderIcon: folderInfo?.folderIcon ?? null,
+          scheduleStatus: scheduleStatusMap.get(`${o.id}_${o.subOrderIndex}`) ?? null,
         };
       });
 
