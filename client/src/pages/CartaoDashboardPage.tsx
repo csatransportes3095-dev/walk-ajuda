@@ -7,14 +7,14 @@ import { Plus, LogOut, AlertTriangle, ChevronRight, TrendingUp, CheckCircle, Rep
 import { BandeiraLogoPequena } from "@/components/BandeiraLogo";
 
 const GRADIENTS: Record<string, string> = {
-  purple: "linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)",
-  blue:   "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)",
-  red:    "linear-gradient(135deg, #dc2626 0%, #f43f5e 100%)",
-  green:  "linear-gradient(135deg, #15803d 0%, #10b981 100%)",
-  orange: "linear-gradient(135deg, #c2410c 0%, #f97316 100%)",
-  pink:   "linear-gradient(135deg, #be185d 0%, #ec4899 100%)",
-  teal:   "linear-gradient(135deg, #0f766e 0%, #06b6d4 100%)",
-  indigo: "linear-gradient(135deg, #3730a3 0%, #6366f1 100%)",
+  purple: "linear-gradient(135deg, #5b21b6 0%, #7c3aed 45%, #a855f7 100%)",
+  blue:   "linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 45%, #3b82f6 100%)",
+  red:    "linear-gradient(135deg, #991b1b 0%, #dc2626 45%, #f43f5e 100%)",
+  green:  "linear-gradient(135deg, #064e3b 0%, #15803d 45%, #10b981 100%)",
+  orange: "linear-gradient(135deg, #7c2d12 0%, #c2410c 45%, #f97316 100%)",
+  pink:   "linear-gradient(135deg, #831843 0%, #be185d 45%, #ec4899 100%)",
+  teal:   "linear-gradient(135deg, #134e4a 0%, #0f766e 45%, #06b6d4 100%)",
+  indigo: "linear-gradient(135deg, #1e1b4b 0%, #3730a3 45%, #6366f1 100%)",
 };
 
 const SHADOWS: Record<string, string> = {
@@ -185,11 +185,11 @@ export default function DashboardPage() {
                 onTouchEnd={e => (e.currentTarget.style.transform = "scale(1)")}>
 
                 {/* Decoração glassmorphism */}
-                <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.1)" }} />
-                <div style={{ position: "absolute", bottom: -20, left: 20, width: 80, height: 80, borderRadius: 40, background: "rgba(255,255,255,0.06)" }} />
-                <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 60%)", borderRadius: 24 }} />
-                {/* Logo da bandeira como marca d'água */}
-                {(c as any).bandeira && <BandeiraLogoPequena bandeira={(c as any).bandeira} opacity={0.2} />}
+                <div style={{ position: "absolute", top: -40, right: -40, width: 140, height: 140, borderRadius: 70, background: "rgba(255,255,255,0.12)" }} />
+                <div style={{ position: "absolute", bottom: -30, left: -10, width: 100, height: 100, borderRadius: 50, background: "rgba(255,255,255,0.07)" }} />
+                <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.02) 50%, transparent 100%)", borderRadius: 24 }} />
+                {/* Logo da bandeira — sólido e nítido */}
+                {(c as any).bandeira && <BandeiraLogoPequena bandeira={(c as any).bandeira} />}
 
                 <div style={{ position: "relative" }}>
                   {/* Cabeçalho do cartão */}
@@ -212,11 +212,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Chip simulado */}
-                  <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center" }}>
-                    <div style={{ width: 32, height: 24, borderRadius: 5, background: "linear-gradient(135deg, rgba(255,215,0,0.8), rgba(255,165,0,0.6))", border: "1px solid rgba(255,215,0,0.4)" }} />
-                    <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", letterSpacing: 2 }}>•••• •••• •••• ••••</div>
-                  </div>
+
 
                   {/* 4 métricas */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
