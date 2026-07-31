@@ -61,8 +61,8 @@ export default function DashboardPage() {
   });
 
   const nome = ((user as any)?.name || "Usuário").split(" ")[0];
-  const alertas = cartoes.filter(c => Number((c as any).faturaDoMes ?? (c as any).valorApagarCicloAtual ?? c.faturaAtual ?? 0) > 0 && diasParaVencer(c.vencimentoDia) <= 3);
-  const totalFatura = cartoes.reduce((s, c) => s + Number((c as any).faturaDoMes ?? c.faturaAtual ?? 0), 0);
+  const alertas = cartoes.filter(c => Number((c as any).faturaAtual ?? (c as any).faturaDoMes ?? 0) > 0 && diasParaVencer(c.vencimentoDia) <= 3);
+  const totalFatura = cartoes.reduce((s, c) => s + Number((c as any).faturaAtual ?? (c as any).faturaDoMes ?? 0), 0);
 
   return (
     <div style={{
@@ -136,7 +136,7 @@ export default function DashboardPage() {
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#ef4444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</div>
                   <div style={{ fontSize: 12, color: "rgba(239,68,68,0.7)" }}>{dias <= 0 ? "Fatura vencida!" : dias === 1 ? "Vence amanhã!" : `Vence em ${dias} dias`}</div>
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: "#ef4444", flexShrink: 0 }}>{fmt(Number((c as any).faturaDoMes ?? c.faturaAtual))}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#ef4444", flexShrink: 0 }}>{fmt(Number((c as any).faturaAtual ?? (c as any).faturaDoMes ?? 0))}</div>
               </div>
             );
           })}
@@ -169,11 +169,11 @@ export default function DashboardPage() {
           cartoes.map((c) => {
             const grad = GRADIENTS[c.corCartao] || GRADIENTS.purple;
             const shadow = SHADOWS[c.corCartao] || SHADOWS.purple;
-            const faturaDoMes = Number((c as any).faturaDoMes ?? (c as any).valorApagarCicloAtual ?? c.faturaAtual ?? 0);
-            const mesSeguinte = Number((c as any).parcelasMesSeguinte ?? 0);
+            const faturaDoMes = Number((c as any).faturaAtual ?? (c as any).faturaDoMes ?? (c as any).valorApagarCicloAtual ?? 0);
+            const mesSeguinte = Number((c as any).proximaFatura ?? (c as any).parcelasMesSeguinte ?? 0);
             const limite = Number(c.limiteTotal ?? 0);
-            const disponivel = Number(c.limiteDisponivel ?? 0);
-            const pct = Number(c.percentualUsado ?? 0);
+            const disponivel = Number((c as any).limiteDisponivel ?? 0);
+            const pct = Number((c as any).pctLimite ?? (c as any).percentualUsado ?? 0);
             const dias = diasParaVencer(c.vencimentoDia);
 
             return (

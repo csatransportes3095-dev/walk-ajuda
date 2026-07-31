@@ -297,12 +297,13 @@ export default function CartaoDetailPage() {
   const accent = ACCENT[cartao.corCartao] || "#6750A4";
   const totalAVista = Number((cartao as any).totalAVista ?? 0);
   const totalParcelado = Number((cartao as any).totalParcelado ?? 0);
-  const faturaDoMes = Number((cartao as any).faturaDoMes ?? (cartao as any).valorApagarCicloAtual ?? cartao.faturaAtual ?? 0);
-  const mesSeguinte = Number((cartao as any).parcelasMesSeguinte ?? 0);
+  // Usar faturaAtual (competência atual) ou fallback para campos antigos
+  const faturaDoMes = Number((cartao as any).faturaAtual ?? (cartao as any).faturaDoMes ?? (cartao as any).valorApagarCicloAtual ?? 0);
+  const mesSeguinte = Number((cartao as any).proximaFatura ?? (cartao as any).parcelasMesSeguinte ?? 0);
   const limite = Number(cartao.limiteTotal ?? 0);
-  const disponivel = Number(cartao.limiteDisponivel ?? 0);
-  const fatura = faturaDoMes; // usado no alerta de vencimento
-  const pct = Number(cartao.percentualUsado ?? 0);
+  const disponivel = Number((cartao as any).limiteDisponivel ?? 0);
+  const fatura = faturaDoMes;
+  const pct = Number((cartao as any).pctLimite ?? (cartao as any).percentualUsado ?? 0);
   const dias = diasParaVencer(cartao.vencimentoDia);
 
   // Fatura fechada: quando hoje > fechamentoDia, a fatura está fechada aguardando pagamento

@@ -79,6 +79,81 @@ async function ccExec(query: string, params: any[] = []) {
   return (result[0] as any[]) || [];
 }
 
+// ─── Função central de cálculo financeiro do cartão ─────────────────────────────
+// Segue as 18 regras financeiras:
+// - Fatura atual = apenas parcelas/gastos da competência atual (baseada no fechamento)
+// - Limite utilizado = todas as parcelas pendentes (não pagas, não canceladas)
+// - Próxima fatura = parcelas da próxima competência
+async function calcCartao(c: any) {
+  const cartaoId = c.id;
+  const hoje = new Date();
+  const diaHoje = hoje.getDate();
+  const fechDia = c.fechamentoDia ? Number(c.fechamentoDia) : null;
+  const limiteTotal = parseFloat(c.limiteTotal);
+
+  // ── Determinar competência atual e próxima ────────────────────────────────
+  // A competência é determinada pelo dia de fechamento:
+  // Se hoje <= fechamento: competência = mês atual
+  // Se hoje > fechamento: competência = próximo mês
+  let compMes: number, compAno: number;
+  if (fechDia && diaHoje > fechDia) {
+    // Após o fechamento: competência é o próximo mês
+    const prox = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
+    compMes = prox.getMonth() + 1;
+    compAno = prox.getFullYear();
+  } else {
+    compMes = hoje.getMonth() + 1;
+    compAno = hoje.getFullYear();
+  }
+  const compStr = `${compAno}-${String(compMes).padStart(2, '0')}`;
+
+  // Próxima competência
+  const proxDate = new Date(compAno, compMes, 1); // compMes já é 0-indexed aqui não, usar compMes-1+1
+  const proxMes = proxDate.getMonth() + 1;
+  const proxAno = proxDate.getFullYear();
+  const proxStr = `${proxAno}-${String(proxMes).padStart(2, '0')}`;
+
+  // ── REGRA 3: Fatura Atual = parcelas pendentes da competência atual + gastos à vista da competência atual ──
+  // Para parcelas: a data do gasto define a competência (DATE_FORMAT)
+  // Para gastos à vista: idem
+  const gastosAtual = await ccExec(
+    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND (cancelada IS NULL OR cancelada = 0) AND DATE_FORMAT(data, '%Y-%m') = '${compStr}'`
+  );
+  const faturaAtual = Math.round(gastosAtual.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
+
+  // ── REGRA 4: Próxima Fatura = parcelas da próxima competência ──
+  const gastosProx = await ccExec(
+    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND (cancelada IS NULL OR cancelada = 0) AND DATE_FORMAT(data, '%Y-%m') = '${proxStr}'`
+  );
+  const proximaFatura = Math.round(gastosProx.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
+
+  // ── REGRA 6: Limite Utilizado = todas as parcelas pendentes (não pagas, não canceladas) ──
+  const todosPendentes = await ccExec(
+    `SELECT valor, numeroParcela FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND (cancelada IS NULL OR cancelada = 0)`
+  );
+  const limiteUsado = Math.round(todosPendentes.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
+  const limiteDisponivel = Math.round((limiteTotal - limiteUsado) * 100) / 100;
+  const pctLimite = limiteTotal > 0 ? Math.round((limiteUsado / limiteTotal) * 10000) / 100 : 0;
+
+  // Totais para o dashboard
+  const totalAVista = Math.round(todosPendentes.filter((g: any) => !g.numeroParcela).reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
+  const totalParcelado = Math.round(todosPendentes.filter((g: any) => g.numeroParcela).reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
+  const numParcelasAtivas = todosPendentes.filter((g: any) => g.numeroParcela).length;
+
+  return {
+    faturaAtual,
+    proximaFatura,
+    limiteUsado,
+    limiteDisponivel,
+    pctLimite,
+    totalAVista,
+    totalParcelado,
+    numParcelasAtivas,
+    competenciaAtual: compStr,
+    proximaCompetencia: proxStr,
+  };
+}
+
 export const cartoesRouter = router({
   // ── Auth ───────────────────────────────────────────────────────────────────
   auth: router({
@@ -151,33 +226,18 @@ export const cartoesRouter = router({
       .query(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
         const rows = await ccExec(`SELECT * FROM cc_cartoes WHERE id = ${input.id} AND userId = ${userId} LIMIT 1`);
-        const c = rows[0];
-        const gastos = await ccExec(`SELECT valor, paga FROM cc_gastos WHERE cartaoId = ${c.id} AND paga = 0`);
-        const totalGasto = gastos.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0);
-        const limiteDisponivel = parseFloat(c.limiteTotal) - totalGasto;
-        return { ...c, limiteTotal: parseFloat(c.limiteTotal), faturaAtual: totalGasto, limiteDisponivel };
+        if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND' });
+        const c = rows[0] as any;
+        const calc = await calcCartao(c);
+        return { ...c, limiteTotal: parseFloat(c.limiteTotal), ...calc };
       }),
 
     list: ccProtected.query(async ({ ctx }) => {
       const userId = (ctx as any).ccUserId as number;
       const lista = await ccExec(`SELECT * FROM cc_cartoes WHERE userId = ${userId}`);
-      // Para cada cartão, calcular fatura do mês atual
-      const hoje = new Date();
-      const mes = hoje.getMonth() + 1;
-      const ano = hoje.getFullYear();
       return Promise.all(lista.map(async (c: any) => {
-        // Gastos não pagos do ciclo atual
-        const gastos = await ccExec(`SELECT valor, paga, data, numeroParcela, totalParcelas FROM cc_gastos WHERE cartaoId = ${c.id} AND paga = 0`);
-        const totalGasto = gastos.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0);
-        const totalParcelas = gastos.filter((g: any) => g.numeroParcela).reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0);
-        const limiteDisponivel = parseFloat(c.limiteTotal) - totalGasto;
-        return {
-          ...c,
-          limiteTotal: parseFloat(c.limiteTotal),
-          faturaAtual: totalGasto,
-          valorEmParcelas: totalParcelas,
-          limiteDisponivel,
-        };
+        const calc = await calcCartao(c);
+        return { ...c, limiteTotal: parseFloat(c.limiteTotal), ...calc };
       }));
     }),
 
@@ -263,13 +323,9 @@ export const cartoesRouter = router({
         const cartao = await ccExec(`SELECT * FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
         if (!cartao.length) throw new TRPCError({ code: 'NOT_FOUND' });
         const c = cartao[0] as any;
+        const calc = await calcCartao(c);
         const hoje = new Date();
         const diaHoje = hoje.getDate();
-        const limiteTotal = parseFloat(c.limiteTotal);
-        const gastos = await ccExec(`SELECT valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0`);
-        const limiteUsado = gastos.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0);
-        const limiteDisponivel = limiteTotal - limiteUsado;
-        const pct = limiteTotal > 0 ? (limiteUsado / limiteTotal) * 100 : 0;
         const fechDia = c.fechamentoDia ? Number(c.fechamentoDia) : null;
         const vencDia = Number(c.vencimentoDia);
         const calcDias = (dia: number) => {
@@ -279,17 +335,15 @@ export const cartoesRouter = router({
         };
         const diasParaFechar = fechDia ? calcDias(fechDia) : null;
         const diasParaVencer = calcDias(vencDia);
-        const parcelasAtivas = await ccExec(`SELECT COUNT(*) as cnt FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 AND numeroParcela IS NOT NULL`);
-        const numParcelas = Number(parcelasAtivas[0]?.cnt || 0);
         const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
         const msgs: string[] = [];
         if (fechDia && diasParaFechar !== null && diasParaFechar <= 3) msgs.push(`⚠️ Fatura fecha em ${diasParaFechar === 0 ? 'hoje' : diasParaFechar + (diasParaFechar === 1 ? ' dia' : ' dias')}`);
-        if (diasParaVencer <= 5 && limiteUsado > 0) msgs.push(`🔔 Fatura vence em ${diasParaVencer === 0 ? 'hoje' : diasParaVencer + (diasParaVencer === 1 ? ' dia' : ' dias')}`);
-        if (pct >= 80) msgs.push(`🚨 Você utilizou ${pct.toFixed(0)}% do limite`);
-        else if (pct >= 50) msgs.push(`⚡ Você utilizou ${pct.toFixed(0)}% do limite`);
-        if (numParcelas > 0) msgs.push(`📦 Possui ${numParcelas} parcela${numParcelas !== 1 ? 's' : ''} ativa${numParcelas !== 1 ? 's' : ''}`);
-        if (limiteUsado > 0) msgs.push(`💡 Após pagar esta fatura seu limite ficará em ${fmt(limiteTotal)}`);
-        return { limiteTotal, limiteUsado, limiteDisponivel, pct, diasParaFechar, diasParaVencer, numParcelas, msgs };
+        if (diasParaVencer <= 5 && calc.faturaAtual > 0) msgs.push(`🔔 Fatura vence em ${diasParaVencer === 0 ? 'hoje' : diasParaVencer + (diasParaVencer === 1 ? ' dia' : ' dias')}`);
+        if (calc.pctLimite >= 80) msgs.push(`🚨 Você utilizou ${calc.pctLimite.toFixed(0)}% do limite`);
+        else if (calc.pctLimite >= 50) msgs.push(`⚡ Você utilizou ${calc.pctLimite.toFixed(0)}% do limite`);
+        if (calc.numParcelasAtivas > 0) msgs.push(`📦 Possui ${calc.numParcelasAtivas} parcela${calc.numParcelasAtivas !== 1 ? 's' : ''} ativa${calc.numParcelasAtivas !== 1 ? 's' : ''}`);
+        if (calc.limiteUsado > 0) msgs.push(`💡 Após pagar esta fatura seu limite ficará em ${fmt(parseFloat(c.limiteTotal))}`);
+        return { ...calc, diasParaFechar, diasParaVencer, msgs };
       }),
 
     delete: ccProtected
