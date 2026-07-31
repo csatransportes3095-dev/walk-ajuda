@@ -220,7 +220,7 @@ function ProgressConfigPanel({
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-purple-300">�x` Progresso visível ao cliente</p>
         <button
-          onClick={() => onSave(localKeys)}
+                        {t === "status" ? "Status" : t === "cliente" ? "Cliente" : t === "historico" ? "Historico" : t === "documentos" ? "Docs" : "Notas"}
           disabled={isSaving}
           className="text-[10px] px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold disabled:opacity-50 transition-colors"
         >

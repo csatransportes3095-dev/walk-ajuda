@@ -2102,7 +2102,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </svg>
                 </div>
                 <h3 className="text-white font-bold text-xl mb-1">Alguém te indicou?</h3>
-                <p className="text-white/60 text-sm">Deseja informar quem te indicou? Quem indicou pode ganhar pela indicação! �x}�</p>
+                <p className="text-white/60 text-sm">Deseja informar quem te indicou? Quem indicou pode ganhar pela indicação! 🎉</p>
               </div>
 
               <div className="flex gap-3">
@@ -2111,7 +2111,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   onClick={() => setShowReferralForm(true)}
                   className="flex-1 py-4 bg-yellow-500/20 hover:bg-yellow-500/30 border-2 border-yellow-500/50 text-yellow-300 font-bold text-lg rounded-xl transition-all"
                 >
-                  �S& SIM
+                  SIM
                 </button>
                 <button
                   type="button"

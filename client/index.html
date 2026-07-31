@@ -8,7 +8,7 @@
     <title>H2 COLOMBIANO</title>
     <meta name="description" content="H2 COLOMBIANO" />
 
-    <!-- Cache Control - BÃ¡sico -->
+    <!-- Cache Control - Basico -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
@@ -20,14 +20,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="H2 COLOMBIANO" />
-    <!-- Ãcone para iOS (Add to Home Screen) -->
+    <!-- Icone para iOS (Add to Home Screen) -->
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
 
     <link rel="icon" href="/favicon.ico" />
     <link rel="manifest" href="/manifest.json" />
-    <!-- Montserrat e Poppins Bold para opÃ§Ãµes de fonte dos botÃµes -->
+    <!-- Montserrat e Poppins Bold para opcoes de fonte dos botoes -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&family=Poppins:wght@400;700;900&display=swap" rel="stylesheet" />
@@ -37,7 +37,7 @@
     <script type="module" src="/src/main.tsx"></script>
 
     <script>
-      // Limpar IndexedDB de versÃµes antigas (nÃ£o cancela mais o SW)
+      // Limpar IndexedDB de versoes antigas (nao cancela mais o SW)
       if (window.indexedDB) {
         ['walk-contas', 'h2colombiano'].forEach((dbName) => {
           try { indexedDB.deleteDatabase(dbName); } catch (e) {}
