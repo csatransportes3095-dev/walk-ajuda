@@ -74,6 +74,7 @@ import AdminFeatureCards from "./pages/AdminFeatureCards";
 import AdminHubCentral from "./pages/AdminHubCentral";
 import AdminConsultas from "./pages/AdminConsultas";
 import AdminWhatsappTemplates from "./pages/AdminWhatsappTemplates";
+import AdminCartoesUsers from "./pages/AdminCartoesUsers";
 import AdminOnlineSupport from "./pages/AdminOnlineSupport";
 import AdminChatFlow from "./pages/AdminChatFlow";
 import AdminReferrals from "./pages/AdminReferrals";
@@ -271,6 +272,9 @@ function Router() {
       </Route>
       <Route path={"/admin/whatsapp-templates"}>
         <AdminGuard><AdminWhatsappTemplates /></AdminGuard>
+      </Route>
+      <Route path={"/admin/cartoes-users"}>
+        <AdminGuard><AdminCartoesUsers /></AdminGuard>
       </Route>
       <Route path={"/admin/online-support"}>
         <AdminGuard><AdminOnlineSupport /></AdminGuard>

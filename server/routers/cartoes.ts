@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, publicProcedure } from "../_core/trpc";
+import { router, publicProcedure, adminProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 import { sql } from "drizzle-orm";
 import * as jose from "jose";
@@ -585,6 +585,97 @@ export const cartoesRouter = router({
         const userId = (ctx as any).ccUserId as number;
         await ccExec(`DELETE FROM cc_pagamentos_despesas WHERE despesaId = ${input.despesaId} AND userId = ${userId} AND mes = ${input.mes} AND ano = ${input.ano}`);
         return { success: true };
+      }),
+  }),
+
+  // ── Admin ───────────────────────────────────────────────────────────────────────
+  admin: router({
+    // Listar todos os usuários do sistema de cartões
+    listUsers: adminProcedure.query(async () => {
+      const users = await ccExec(`
+        SELECT u.id, u.phone, u.name, u.createdAt, u.updatedAt,
+          (SELECT COUNT(*) FROM cc_cartoes WHERE userId = u.id) as numCartoes,
+          (SELECT COUNT(*) FROM cc_gastos g JOIN cc_cartoes c ON g.cartaoId = c.id WHERE c.userId = u.id AND g.paga = 0) as gastosAbertos
+        FROM cc_app_users u ORDER BY u.createdAt DESC
+      `);
+      return users.map((u: any) => ({
+        ...u,
+        numCartoes: Number(u.numCartoes),
+        gastosAbertos: Number(u.gastosAbertos),
+      }));
+    }),
+
+    // Resetar senha de um usuário
+    resetPassword: adminProcedure
+      .input(z.object({
+        userId: z.number().int(),
+        newPassword: z.string().min(6),
+      }))
+      .mutation(async ({ input }) => {
+        const hash = await bcrypt.hash(input.newPassword, 10);
+        await ccExec(`UPDATE cc_app_users SET passwordHash = '${hash}' WHERE id = ${input.userId}`);
+        return { success: true };
+      }),
+
+    // Criar usuário manualmente
+    createUser: adminProcedure
+      .input(z.object({
+        phone: z.string().min(10).max(11),
+        name: z.string().min(2).max(100),
+        password: z.string().min(6),
+      }))
+      .mutation(async ({ input }) => {
+        const existing = await ccExec(`SELECT id FROM cc_app_users WHERE phone = '${input.phone}' LIMIT 1`);
+        if (existing.length > 0) throw new TRPCError({ code: 'CONFLICT', message: 'Telefone já cadastrado' });
+        const hash = await bcrypt.hash(input.password, 10);
+        await ccExec(`INSERT INTO cc_app_users (phone, passwordHash, name) VALUES ('${input.phone}', '${hash}', '${input.name.replace(/'/g, "''")}')`);
+        return { success: true };
+      }),
+
+    // Excluir usuário (e todos os dados)
+    deleteUser: adminProcedure
+      .input(z.object({ userId: z.number().int() }))
+      .mutation(async ({ input }) => {
+        await ccExec(`DELETE FROM cc_app_users WHERE id = ${input.userId}`);
+        return { success: true };
+      }),
+
+    // Atualizar nome do usuário
+    updateUser: adminProcedure
+      .input(z.object({
+        userId: z.number().int(),
+        name: z.string().min(2).max(100),
+        phone: z.string().min(10).max(11),
+      }))
+      .mutation(async ({ input }) => {
+        await ccExec(`UPDATE cc_app_users SET name = '${input.name.replace(/'/g, "''")}', phone = '${input.phone}' WHERE id = ${input.userId}`);
+        return { success: true };
+      }),
+
+    // Resumo de um usuário (cartões + gastos)
+    getUserDetail: adminProcedure
+      .input(z.object({ userId: z.number().int() }))
+      .query(async ({ input }) => {
+        const user = await ccExec(`SELECT id, phone, name, createdAt FROM cc_app_users WHERE id = ${input.userId} LIMIT 1`);
+        if (!user.length) throw new TRPCError({ code: 'NOT_FOUND' });
+        const cartoes = await ccExec(`
+          SELECT c.id, c.nome, c.limiteTotal, c.vencimentoDia, c.corCartao,
+            COALESCE(SUM(CASE WHEN g.paga = 0 THEN g.valor ELSE 0 END), 0) as faturaAberta,
+            COUNT(CASE WHEN g.paga = 0 THEN 1 END) as numGastosAbertos
+          FROM cc_cartoes c
+          LEFT JOIN cc_gastos g ON g.cartaoId = c.id
+          WHERE c.userId = ${input.userId}
+          GROUP BY c.id
+        `);
+        return {
+          user: user[0],
+          cartoes: cartoes.map((c: any) => ({
+            ...c,
+            limiteTotal: parseFloat(c.limiteTotal),
+            faturaAberta: parseFloat(c.faturaAberta),
+            numGastosAbertos: Number(c.numGastosAbertos),
+          })),
+        };
       }),
   }),
 });
