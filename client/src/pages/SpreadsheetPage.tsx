@@ -1287,6 +1287,15 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
               <span>Empréstimos</span>
             </TabsTrigger>
+            {/* CARTÕES — atalho externo */}
+            <button
+              onClick={() => window.location.href = '/cartoes'}
+              className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-purple-600/40 bg-[#0d0a1a] text-[#a78bfa] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#1a1030] hover:border-purple-500/60 active:scale-95 animate-[neon-pulse_2s_ease-in-out_infinite]"
+              style={{ cursor: 'pointer' }}
+            >
+              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              <span>Cartões</span>
+            </button>
           </TabsList>
 
           {/* Aba Gastos */}
