@@ -117,19 +117,19 @@ async function calcCartao(c: any) {
   // Para parcelas: a data do gasto define a competência (DATE_FORMAT)
   // Para gastos à vista: idem
   const gastosAtual = await ccExec(
-    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND (cancelada IS NULL OR cancelada = 0) AND DATE_FORMAT(data, '%Y-%m') = '${compStr}'`
+    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') = '${compStr}'`
   );
   const faturaAtual = Math.round(gastosAtual.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
 
   // ── REGRA 4: Próxima Fatura = parcelas da próxima competência ──
   const gastosProx = await ccExec(
-    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND (cancelada IS NULL OR cancelada = 0) AND DATE_FORMAT(data, '%Y-%m') = '${proxStr}'`
+    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') = '${proxStr}'`
   );
   const proximaFatura = Math.round(gastosProx.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
 
   // ── REGRA 6: Limite Utilizado = todas as parcelas pendentes (não pagas, não canceladas) ──
   const todosPendentes = await ccExec(
-    `SELECT valor, numeroParcela FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND (cancelada IS NULL OR cancelada = 0)`
+    `SELECT valor, numeroParcela FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0`
   );
   const limiteUsado = Math.round(todosPendentes.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
   const limiteDisponivel = Math.round((limiteTotal - limiteUsado) * 100) / 100;
