@@ -411,7 +411,12 @@ export default function CartaoDetailPage() {
 
         <div style={{ padding: "4px 20px 24px", position: "relative" }}>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Cartão de Crédito</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: "#fff", marginBottom: 12 }}>{cartao.nome}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: "#fff", marginBottom: 4 }}>{cartao.nome}</div>
+          {((cartao as any).banco || (cartao as any).bandeira) && (
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 10 }}>
+              {(cartao as any).banco}{(cartao as any).banco && (cartao as any).bandeira ? ' · ' : ''}{(cartao as any).bandeira ? (cartao as any).bandeira.charAt(0).toUpperCase() + (cartao as any).bandeira.slice(1) : ''}
+            </div>
+          )}
 
           {fatura > 0 && dias <= 3 && dias >= 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, background: dias <= 0 ? "rgba(244,67,54,0.9)" : "rgba(255,152,0,0.9)", borderRadius: 12, padding: "8px 12px", marginBottom: 14 }}>
@@ -492,6 +497,13 @@ export default function CartaoDetailPage() {
         </button>
       </div>
 
+      {/* ── Botão Histórico ── */}
+      <div style={{ padding: "8px 16px 0" }}>
+        <button onClick={() => navigate(`/cartoes/historico/${id}`)}
+          style={{ width: "100%", height: 44, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.7)", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          📋 Ver Histórico de Faturas
+        </button>
+      </div>
       {/* ── Fatura Mês Seguinte ── */}
       {mesSeguinte > 0 && (
         <FaturaMesSeguinteCard

@@ -188,11 +188,15 @@ export const cartoesRouter = router({
         fechamentoDia: z.number().int().min(1).max(31).optional().nullable(),
         limiteTotal: z.number().positive(),
         corCartao: z.string().default("blue"),
+        banco: z.string().max(60).optional().nullable(),
+        bandeira: z.string().max(20).optional().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
         const fechamento = input.fechamentoDia ?? "NULL";
-        await ccExec(`INSERT INTO cc_cartoes (userId, nome, vencimentoDia, fechamentoDia, limiteTotal, corCartao) VALUES (${userId}, '${input.nome.replace(/'/g, "''")}', ${input.vencimentoDia}, ${fechamento}, ${input.limiteTotal}, '${input.corCartao}')`);
+        const banco = input.banco ? `'${input.banco.replace(/'/g, "''")}'` : "NULL";
+        const bandeira = input.bandeira ? `'${input.bandeira.replace(/'/g, "''")}'` : "NULL";
+        await ccExec(`INSERT INTO cc_cartoes (userId, nome, vencimentoDia, fechamentoDia, limiteTotal, corCartao, banco, bandeira) VALUES (${userId}, '${input.nome.replace(/'/g, "''")}', ${input.vencimentoDia}, ${fechamento}, ${input.limiteTotal}, '${input.corCartao}', ${banco}, ${bandeira})`);
         return { success: true };
       }),
 
@@ -204,18 +208,88 @@ export const cartoesRouter = router({
         fechamentoDia: z.number().int().min(1).max(31).optional().nullable(),
         limiteTotal: z.number().positive().optional(),
         corCartao: z.string().optional(),
+        banco: z.string().max(60).optional().nullable(),
+        bandeira: z.string().max(20).optional().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
         const sets: string[] = [];
-        if (input.nome !== undefined) sets.push(`nome = '${input.nome.replace(/'/g, "''")}'`);
+        if (input.nome !== undefined) sets.push(`nome = '${input.nome.replace(/'/g, "''")}' `);
         if (input.vencimentoDia !== undefined) sets.push(`vencimentoDia = ${input.vencimentoDia}`);
         if (input.fechamentoDia !== undefined) sets.push(`fechamentoDia = ${input.fechamentoDia ?? "NULL"}`);
         if (input.limiteTotal !== undefined) sets.push(`limiteTotal = ${input.limiteTotal}`);
         if (input.corCartao !== undefined) sets.push(`corCartao = '${input.corCartao}'`);
+        if (input.banco !== undefined) sets.push(`banco = ${input.banco ? `'${input.banco.replace(/'/g, "''")}'` : "NULL"}`);
+        if (input.bandeira !== undefined) sets.push(`bandeira = ${input.bandeira ? `'${input.bandeira.replace(/'/g, "''")}'` : "NULL"}`);
         if (sets.length === 0) return { success: true };
         await ccExec(`UPDATE cc_cartoes SET ${sets.join(", ")} WHERE id = ${input.id} AND userId = ${userId}`);
         return { success: true };
+      }),
+
+    // Histórico de faturas por mês
+    historico: ccProtected
+      .input(z.object({ cartaoId: z.number().int(), meses: z.number().int().min(1).max(24).default(6) }))
+      .query(async ({ input, ctx }) => {
+        const userId = (ctx as any).ccUserId as number;
+        const cartao = await ccExec(`SELECT * FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        if (!cartao.length) throw new TRPCError({ code: 'NOT_FOUND' });
+        const hoje = new Date();
+        const resultado: any[] = [];
+        for (let i = 0; i < input.meses; i++) {
+          const refDate = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+          const mes = refDate.getMonth() + 1;
+          const ano = refDate.getFullYear();
+          const mesStr = `${ano}-${String(mes).padStart(2, '0')}`;
+          const gastosMes = await ccExec(`SELECT g.id, g.descricao, g.valor, g.data, g.paga, g.numeroParcela, g.totalParcelas, p.descricao as parcelDescricao FROM cc_gastos g LEFT JOIN cc_parcelamentos p ON g.parcelamentoId = p.id WHERE g.cartaoId = ${input.cartaoId} AND DATE_FORMAT(g.data, '%Y-%m') = '${mesStr}'`);
+          const totalMes = gastosMes.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0);
+          const pagsMes = await ccExec(`SELECT * FROM cc_pagamentos WHERE cartaoId = ${input.cartaoId} AND DATE_FORMAT(dataPagamento, '%Y-%m') = '${mesStr}'`);
+          const totalPago = pagsMes.reduce((s: number, p: any) => s + parseFloat(p.valorPago || 0), 0);
+          const isAtual = mes === hoje.getMonth() + 1 && ano === hoje.getFullYear();
+          const status = isAtual ? 'aberta' : (totalPago >= totalMes && totalMes > 0) ? 'paga' : (totalMes > 0 ? 'pendente' : 'vazia');
+          resultado.push({
+            mesStr, mes, ano, total: totalMes, totalPago, status,
+            gastos: gastosMes.map((g: any) => ({ ...g, valor: parseFloat(g.valor) })),
+            pagamentos: pagsMes.map((p: any) => ({ ...p, valorPago: parseFloat(p.valorPago) })),
+          });
+        }
+        return resultado;
+      }),
+
+    // Indicadores inteligentes
+    indicadores: ccProtected
+      .input(z.object({ cartaoId: z.number().int() }))
+      .query(async ({ input, ctx }) => {
+        const userId = (ctx as any).ccUserId as number;
+        const cartao = await ccExec(`SELECT * FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        if (!cartao.length) throw new TRPCError({ code: 'NOT_FOUND' });
+        const c = cartao[0] as any;
+        const hoje = new Date();
+        const diaHoje = hoje.getDate();
+        const limiteTotal = parseFloat(c.limiteTotal);
+        const gastos = await ccExec(`SELECT valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0`);
+        const limiteUsado = gastos.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0);
+        const limiteDisponivel = limiteTotal - limiteUsado;
+        const pct = limiteTotal > 0 ? (limiteUsado / limiteTotal) * 100 : 0;
+        const fechDia = c.fechamentoDia ? Number(c.fechamentoDia) : null;
+        const vencDia = Number(c.vencimentoDia);
+        const calcDias = (dia: number) => {
+          let d = new Date(hoje.getFullYear(), hoje.getMonth(), dia);
+          if (d.getDate() < diaHoje) d = new Date(hoje.getFullYear(), hoje.getMonth() + 1, dia);
+          return Math.ceil((d.getTime() - hoje.getTime()) / 86400000);
+        };
+        const diasParaFechar = fechDia ? calcDias(fechDia) : null;
+        const diasParaVencer = calcDias(vencDia);
+        const parcelasAtivas = await ccExec(`SELECT COUNT(*) as cnt FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 AND numeroParcela IS NOT NULL`);
+        const numParcelas = Number(parcelasAtivas[0]?.cnt || 0);
+        const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+        const msgs: string[] = [];
+        if (fechDia && diasParaFechar !== null && diasParaFechar <= 3) msgs.push(`⚠️ Fatura fecha em ${diasParaFechar === 0 ? 'hoje' : diasParaFechar + (diasParaFechar === 1 ? ' dia' : ' dias')}`);
+        if (diasParaVencer <= 5 && limiteUsado > 0) msgs.push(`🔔 Fatura vence em ${diasParaVencer === 0 ? 'hoje' : diasParaVencer + (diasParaVencer === 1 ? ' dia' : ' dias')}`);
+        if (pct >= 80) msgs.push(`🚨 Você utilizou ${pct.toFixed(0)}% do limite`);
+        else if (pct >= 50) msgs.push(`⚡ Você utilizou ${pct.toFixed(0)}% do limite`);
+        if (numParcelas > 0) msgs.push(`📦 Possui ${numParcelas} parcela${numParcelas !== 1 ? 's' : ''} ativa${numParcelas !== 1 ? 's' : ''}`);
+        if (limiteUsado > 0) msgs.push(`💡 Após pagar esta fatura seu limite ficará em ${fmt(limiteTotal)}`);
+        return { limiteTotal, limiteUsado, limiteDisponivel, pct, diasParaFechar, diasParaVencer, numParcelas, msgs };
       }),
 
     delete: ccProtected

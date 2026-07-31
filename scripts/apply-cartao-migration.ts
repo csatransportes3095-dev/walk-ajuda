@@ -139,6 +139,21 @@ async function run() {
 
     console.log("[cc-migrate] Tabelas criadas/verificadas.");
 
+    // ── Adicionar colunas banco e bandeira se não existirem ─────────────────
+    try {
+      await connection.query(`ALTER TABLE cc_cartoes ADD COLUMN IF NOT EXISTS banco VARCHAR(60)`);
+      await connection.query(`ALTER TABLE cc_cartoes ADD COLUMN IF NOT EXISTS bandeira VARCHAR(20)`);
+      console.log('[cc-migrate] Colunas banco/bandeira verificadas.');
+    } catch (e: any) {
+      // MySQL < 8.0 não suporta IF NOT EXISTS no ALTER TABLE
+      try {
+        await connection.query(`ALTER TABLE cc_cartoes ADD COLUMN banco VARCHAR(60)`);
+      } catch {}
+      try {
+        await connection.query(`ALTER TABLE cc_cartoes ADD COLUMN bandeira VARCHAR(20)`);
+      } catch {}
+    }
+
     // ── Verificar se já há dados ───────────────────────────────────────────
     const [rows] = await connection.query(`SELECT COUNT(*) as cnt FROM cc_app_users`) as any[];
     const userCount = Number(rows[0]?.cnt || 0);

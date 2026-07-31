@@ -87,6 +87,7 @@ import SchedulePage from "./pages/SchedulePage";
 import { SpreadsheetPage } from "./pages/SpreadsheetPage";
 import { GastosPage } from "./pages/GastosPage";
 import CartaoPage from "./pages/CartaoPage";
+import CartaoHistoricoPage from "./pages/CartaoHistoricoPage";
 import Ajuda from "./pages/Ajuda";
 import GeradorChassiPublico from "./pages/GeradorChassiPublico";
 import ProtectedPhotoPage from "./pages/ProtectedPhotoPage";
@@ -287,6 +288,7 @@ function Router() {
       <Route path={"/cartoes"} component={CartaoPage} />
       <Route path={"/cartoes/cartao/:id"} component={CartaoPage} />
       <Route path={"/cartoes/despesas"} component={CartaoPage} />
+      <Route path={"/cartoes/historico/:id"} component={CartaoHistoricoPage} />
       <Route path={"/gerador-chassi"} component={GeradorChassiPublico} />
       <Route path={"/ajuda"} component={Ajuda} />
       <Route path={"/video/tutorial"} component={VideoTutorial} />
@@ -318,7 +320,7 @@ function AppContent() {
   const isAgendarRoute = location.startsWith("/agendar");
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location === "/gastos";
-  const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/");
+  const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
 

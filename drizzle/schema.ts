@@ -1934,6 +1934,8 @@ export const ccCartoes = mysqlTable("cc_cartoes", {
   fechamentoDia: int("fechamentoDia"),
   limiteTotal: decimal("limiteTotal", { precision: 10, scale: 2 }).notNull(),
   corCartao: varchar("corCartao", { length: 20 }).default("blue").notNull(),
+  banco: varchar("banco", { length: 60 }),
+  bandeira: varchar("bandeira", { length: 20 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

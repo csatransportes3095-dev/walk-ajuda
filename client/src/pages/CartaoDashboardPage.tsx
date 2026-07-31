@@ -193,6 +193,11 @@ export default function DashboardPage() {
                     <div>
                       <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 }}>Cartão de Crédito</div>
                       <div style={{ fontSize: 22, fontWeight: 800, color: "#fff", letterSpacing: -0.5 }}>{c.nome}</div>
+                    {((c as any).banco || (c as any).bandeira) && (
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
+                        {(c as any).banco}{(c as any).banco && (c as any).bandeira ? ' · ' : ''}{(c as any).bandeira ? (c as any).bandeira.charAt(0).toUpperCase() + (c as any).bandeira.slice(1) : ''}
+                      </div>
+                    )}
                     </div>
                     <div style={{
                       padding: "6px 12px", borderRadius: 50, fontSize: 11, fontWeight: 700,
@@ -284,6 +289,8 @@ function CartaoBottomSheet({ onClose, onSuccess }: { onClose: () => void; onSucc
   const [dia, setDia] = useState("");
   const [limite, setLimite] = useState("");
   const [cor, setCor] = useState("purple");
+  const [banco, setBanco] = useState("");
+  const [bandeira, setBandeira] = useState("");
   const createMutation = trpc.cartoes.cartoes.create.useMutation({ onSuccess, onError: e => toast.error(e.message) });
 
   const submit = () => {
@@ -292,7 +299,7 @@ function CartaoBottomSheet({ onClose, onSuccess }: { onClose: () => void; onSucc
     if (!d || d < 1 || d > 31) return toast.error("Dia de vencimento inválido (1-31)");
     const l = parseFloat(limite.replace(",", "."));
     if (!l || l <= 0) return toast.error("Limite inválido");
-    createMutation.mutate({ nome: nome.trim(), vencimentoDia: d, limiteTotal: l, corCartao: cor });
+    createMutation.mutate({ nome: nome.trim(), vencimentoDia: d, limiteTotal: l, corCartao: cor, banco: banco || null, bandeira: bandeira || null });
   };
 
   return (
@@ -316,6 +323,21 @@ function CartaoBottomSheet({ onClose, onSuccess }: { onClose: () => void; onSucc
             </DField>
             <DField label="LIMITE (R$)">
               <input value={limite} onChange={e => setLimite(e.target.value.replace(/[^\d,.]/g, ""))} placeholder="Ex: 5000" inputMode="decimal" style={dInput} />
+            </DField>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <DField label="BANCO">
+              <input value={banco} onChange={e => setBanco(e.target.value)} placeholder="Ex: Nubank, Itaú" style={dInput} />
+            </DField>
+            <DField label="BANDEIRA">
+              <select value={bandeira} onChange={e => setBandeira(e.target.value)} style={{ ...dInput, appearance: "none" as any }}>
+                <option value="">Selecionar</option>
+                <option value="visa">Visa</option>
+                <option value="mastercard">Mastercard</option>
+                <option value="elo">Elo</option>
+                <option value="amex">Amex</option>
+                <option value="hipercard">Hipercard</option>
+              </select>
             </DField>
           </div>
           <DField label="COR DO CARTÃO">
