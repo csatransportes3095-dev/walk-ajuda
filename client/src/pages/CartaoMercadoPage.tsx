@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Search, Plus, Minus, Star, ShoppingCart, Trash2, Edit3, CheckCircle, X, History, ShoppingBag, Package, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Plus, Minus, Star, ShoppingCart, Trash2, Edit3, CheckCircle, X, History, ShoppingBag, Package, ChevronDown, ChevronUp, LayoutList, AlignJustify } from "lucide-react";
 
 const BG = "linear-gradient(180deg, #0a0a0f 0%, #0d0a1a 100%)";
 const S: Record<string, any> = {
@@ -22,18 +22,19 @@ const CATEGORIAS = [
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-// ─── Aba Produtos — fluxo inline simplificado ─────────────────────────────────
-function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor: number | null) => void }) {
-  const [search, setSearch] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
-  const [editingProduto, setEditingProduto] = useState<any | null>(null);
-  const [nome, setNome] = useState("");
-  const [cat, setCat] = useState("");
-  const [unid, setUnid] = useState("un");
-  // Estado inline por produto: { [id]: { qtd, valorCents, open } }
-  const [inline, setInline] = useState<Record<number, { qtd: string; valorCents: number; open: boolean }>>({})
+// ─── Card de produto reutilizável ─────────────────────────────────────────────
+function ProdutoCard({ p, inline, setInline, onFav, onEdit, onDelete, onConfirm }: {
+  p: any;
+  inline: Record<number, { qtd: string; valorCents: number; open: boolean }>;
+  setInline: React.Dispatch<React.SetStateAction<Record<number, { qtd: string; valorCents: number; open: boolean }>>>;
+  onFav: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onConfirm: () => void;
+}) {
+  const state = inline[p.id];
+  const isOpen = state?.open;
 
-  // Formata centavos para exibição: 400 → "4,00", 100000 → "1.000,00"
   const fmtCents = (cents: number): string => {
     if (!cents) return "0,00";
     const s = String(cents).padStart(3, "0");
@@ -41,12 +42,105 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
     return (intPart || "0") + "," + s.slice(-2);
   };
 
-  // Ao digitar: só aceita dígitos, empurra da direita (igual caixa de mercado)
-  const handleValorInput = (id: number, raw: string) => {
+  const handleValorInput = (raw: string) => {
     const digits = raw.replace(/\D/g, "");
     const cents = parseInt(digits || "0", 10);
-    setInline(prev => ({ ...prev, [id]: { ...prev[id], valorCents: cents } }));
-  };;
+    setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], valorCents: cents } }));
+  };
+
+  const toggleOpen = () => {
+    setInline(prev => ({
+      ...prev,
+      [p.id]: prev[p.id]?.open
+        ? { ...prev[p.id], open: false }
+        : { qtd: "1", valorCents: 0, open: true }
+    }));
+  };
+
+  return (
+    <div style={S.card}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nome}</div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>{p.categoria} · {p.unidade}</div>
+        </div>
+        <button onClick={onFav} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
+          <Star size={14} color={p.favorito ? "#fbbf24" : "rgba(255,255,255,0.25)"} fill={p.favorito ? "#fbbf24" : "none"} />
+        </button>
+        <button onClick={onEdit} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
+          <Edit3 size={13} color="rgba(255,255,255,0.3)" />
+        </button>
+        <button onClick={onDelete} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
+          <Trash2 size={13} color="rgba(239,68,68,0.5)" />
+        </button>
+        <button onClick={toggleOpen} style={{
+          background: isOpen ? "rgba(239,68,68,0.2)" : "rgba(124,58,237,0.3)",
+          border: `1px solid ${isOpen ? "rgba(239,68,68,0.4)" : "rgba(124,58,237,0.4)"}`,
+          borderRadius: 10, padding: "6px 10px", color: isOpen ? "#f87171" : "#a78bfa",
+          fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, flexShrink: 0
+        }}>
+          {isOpen ? <X size={13} /> : <Plus size={13} />}
+          {isOpen ? "Fechar" : "Lista"}
+        </button>
+      </div>
+
+      {isOpen && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>QTDE ({p.unidade})</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <button onClick={() => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], qtd: String(Math.max(1, parseFloat(prev[p.id]?.qtd || "1") - 1)) } }))}
+                  style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Minus size={14} />
+                </button>
+                <input type="number" value={state?.qtd ?? "1"}
+                  onChange={e => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], qtd: e.target.value } }))}
+                  style={{ ...S.input, textAlign: "center", padding: "6px 4px", borderRadius: 8, fontSize: 15, fontWeight: 700 }} />
+                <button onClick={() => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], qtd: String(parseFloat(prev[p.id]?.qtd || "1") + 1) } }))}
+                  style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>VALOR (R$)</div>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "rgba(255,255,255,0.5)", pointerEvents: "none" }}>R$</span>
+                <input type="tel" inputMode="numeric"
+                  value={fmtCents(state?.valorCents ?? 0)}
+                  onChange={e => handleValorInput(e.target.value)}
+                  style={{ ...S.input, padding: "8px 10px 8px 30px", borderRadius: 8, fontWeight: 700, fontSize: 15 }} />
+              </div>
+            </div>
+            {(state?.valorCents ?? 0) > 0 && (
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>TOTAL</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#10b981" }}>
+                  {fmt(parseFloat(state?.qtd || "1") * ((state?.valorCents ?? 0) / 100))}
+                </div>
+              </div>
+            )}
+          </div>
+          <button onClick={onConfirm} style={{ ...S.btn("linear-gradient(135deg,#7c3aed,#3b82f6)"), width: "100%", justifyContent: "center", marginTop: 10, padding: "10px" }}>
+            <ShoppingCart size={16} /> Adicionar à Lista
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Aba Produtos ─────────────────────────────────────────────────────────────
+function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor: number | null) => void }) {
+  const [search, setSearch] = useState("");
+  const [modo, setModo] = useState<"todos" | "categoria">("categoria");
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingProduto, setEditingProduto] = useState<any | null>(null);
+  const [nome, setNome] = useState("");
+  const [cat, setCat] = useState("");
+  const [unid, setUnid] = useState("un");
+  const [inline, setInline] = useState<Record<number, { qtd: string; valorCents: number; open: boolean }>>({});
 
   const { data: produtos = [], refetch } = trpc.mercado.produtos.list.useQuery({ search: search || undefined }, { refetchOnWindowFocus: false });
   const createMut = trpc.mercado.produtos.create.useMutation({ onSuccess: () => { refetch(); setShowAdd(false); setNome(""); setCat(""); setUnid("un"); toast.success("Produto criado!"); } });
@@ -55,15 +149,6 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
   const seedMut = trpc.mercado.produtos.seed.useMutation({ onSuccess: (r: any) => { refetch(); toast.success(`${r.criados} produtos adicionados!`); } });
 
   const openEdit = (p: any) => { setEditingProduto(p); setNome(p.nome); setCat(p.categoria || ""); setUnid(p.unidade || "un"); };
-
-  const toggleInline = (id: number) => {
-    setInline(prev => ({
-      ...prev,
-      [id]: prev[id]?.open
-        ? { ...prev[id], open: false }
-        : { qtd: "1", valorCents: 0, open: true }
-    }));
-  };
 
   const confirmAdd = (p: any) => {
     const state = inline[p.id];
@@ -75,13 +160,43 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
 
   const maisComprados = produtos.filter((p: any) => p.vezesComprado > 0).sort((a: any, b: any) => b.vezesComprado - a.vezesComprado).slice(0, 6);
 
+  const cardProps = (p: any) => ({
+    p, inline, setInline,
+    onFav: () => updateMut.mutate({ id: p.id, favorito: !p.favorito }),
+    onEdit: () => openEdit(p),
+    onDelete: () => { if (confirm(`Excluir "${p.nome}"?`)) deleteMut.mutate({ id: p.id }); },
+    onConfirm: () => confirmAdd(p),
+  });
+
   return (
     <div style={{ padding: "12px 16px" }}>
       {/* Pesquisa */}
-      <div style={{ position: "relative", marginBottom: 12 }}>
+      <div style={{ position: "relative", marginBottom: 10 }}>
         <Search size={15} color="rgba(255,255,255,0.4)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Pesquisar produto..." style={{ ...S.input, paddingLeft: 36, borderRadius: 14, padding: "11px 14px 11px 36px" }} />
       </div>
+
+      {/* Toggle modo de visualização */}
+      {!search && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <button onClick={() => setModo("categoria")} style={{
+            flex: 1, padding: "7px 8px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+            background: modo === "categoria" ? "linear-gradient(135deg,#7c3aed,#3b82f6)" : "rgba(255,255,255,0.07)",
+            color: modo === "categoria" ? "#fff" : "rgba(255,255,255,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+          }}>
+            <LayoutList size={13} /> Por Categoria
+          </button>
+          <button onClick={() => setModo("todos")} style={{
+            flex: 1, padding: "7px 8px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+            background: modo === "todos" ? "linear-gradient(135deg,#7c3aed,#3b82f6)" : "rgba(255,255,255,0.07)",
+            color: modo === "todos" ? "#fff" : "rgba(255,255,255,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+          }}>
+            <AlignJustify size={13} /> Todos
+          </button>
+        </div>
+      )}
 
       {/* Mais comprados */}
       {!search && maisComprados.length > 0 && (
@@ -89,7 +204,8 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>🔥 Mais comprados</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {maisComprados.map((p: any) => (
-              <button key={p.id} onClick={() => toggleInline(p.id)} style={{ background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 20, padding: "5px 12px", color: "#a78bfa", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              <button key={p.id} onClick={() => setInline(prev => ({ ...prev, [p.id]: prev[p.id]?.open ? { ...prev[p.id], open: false } : { qtd: "1", valorCents: 0, open: true } }))}
+                style={{ background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 20, padding: "5px 12px", color: "#a78bfa", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                 {p.nome}
               </button>
             ))}
@@ -97,101 +213,52 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
         </div>
       )}
 
-      {/* Lista de produtos */}
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
-        {search ? `${produtos.length} resultado(s)` : "Todos os Produtos"}
-      </div>
+      {/* Modo busca — lista simples */}
+      {search && (
+        <>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>{produtos.length} resultado(s)</div>
+          {produtos.map((p: any) => <ProdutoCard key={p.id} {...cardProps(p)} />)}
+        </>
+      )}
 
-      {produtos.map((p: any) => {
-        const state = inline[p.id];
-        const isOpen = state?.open;
-        return (
-          <div key={p.id} style={{ ...S.card }}>
-            {/* Linha principal */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nome}</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>{p.categoria} · {p.unidade}</div>
-              </div>
-              {/* Ações rápidas */}
-              <button onClick={() => updateMut.mutate({ id: p.id, favorito: !p.favorito })} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
-                <Star size={14} color={p.favorito ? "#fbbf24" : "rgba(255,255,255,0.25)"} fill={p.favorito ? "#fbbf24" : "none"} />
-              </button>
-              <button onClick={() => openEdit(p)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
-                <Edit3 size={13} color="rgba(255,255,255,0.3)" />
-              </button>
-              <button onClick={() => { if (confirm(`Excluir "${p.nome}"?`)) deleteMut.mutate({ id: p.id }); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
-                <Trash2 size={13} color="rgba(239,68,68,0.5)" />
-              </button>
-              {/* Botão + Lista */}
-              <button onClick={() => toggleInline(p.id)} style={{
-                background: isOpen ? "rgba(239,68,68,0.2)" : "rgba(124,58,237,0.3)",
-                border: `1px solid ${isOpen ? "rgba(239,68,68,0.4)" : "rgba(124,58,237,0.4)"}`,
-                borderRadius: 10, padding: "6px 10px", color: isOpen ? "#f87171" : "#a78bfa",
-                fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, flexShrink: 0
-              }}>
-                {isOpen ? <X size={13} /> : <Plus size={13} />}
-                {isOpen ? "Fechar" : "Lista"}
-              </button>
-            </div>
+      {/* Modo TODOS */}
+      {!search && modo === "todos" && (
+        <>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Todos os Produtos ({produtos.length})</div>
+          {produtos.map((p: any) => <ProdutoCard key={p.id} {...cardProps(p)} />)}
+        </>
+      )}
 
-            {/* Inline — quantidade + valor + confirmar */}
-            {isOpen && (
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                  {/* Quantidade */}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>QTDE ({p.unidade})</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <button onClick={() => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], qtd: String(Math.max(1, parseFloat(prev[p.id]?.qtd || "1") - 1)) } }))}
-                        style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <Minus size={14} />
-                      </button>
-                      <input
-                        type="number"
-                        value={state?.qtd ?? "1"}
-                        onChange={e => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], qtd: e.target.value } }))}
-                        style={{ ...S.input, textAlign: "center", padding: "6px 4px", borderRadius: 8, fontSize: 15, fontWeight: 700 }}
-                      />
-                      <button onClick={() => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], qtd: String(parseFloat(prev[p.id]?.qtd || "1") + 1) } }))}
-                        style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  {/* Valor unitário com máscara monetária */}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>VALOR (R$)</div>
-                    <div style={{ position: "relative" }}>
-                      <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "rgba(255,255,255,0.5)", pointerEvents: "none" }}>R$</span>
-                      <input
-                        type="tel"
-                        inputMode="numeric"
-                        value={fmtCents(state?.valorCents ?? 0)}
-                        onChange={e => handleValorInput(p.id, e.target.value)}
-                        style={{ ...S.input, padding: "8px 10px 8px 30px", borderRadius: 8, fontWeight: 700, fontSize: 15 }}
-                      />
-                    </div>
-                  </div>
-                  {/* Total calculado */}
-                  {(state?.valorCents ?? 0) > 0 && (
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>TOTAL</div>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: "#10b981" }}>
-                        {fmt(parseFloat(state?.qtd || "1") * ((state?.valorCents ?? 0) / 100))}
-                      </div>
-                    </div>
-                  )}
+      {/* Modo POR CATEGORIA */}
+      {!search && modo === "categoria" && (
+        <>
+          {CATEGORIAS.map(cat => {
+            const grupo = produtos.filter((p: any) => p.categoria === cat);
+            if (grupo.length === 0) return null;
+            return (
+              <div key={cat} style={{ marginBottom: 4 }}>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6, marginTop: 12, paddingLeft: 2 }}>
+                  {cat} <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 10 }}>({grupo.length})</span>
                 </div>
-                {/* Botão confirmar */}
-                <button onClick={() => confirmAdd(p)} style={{ ...S.btn("linear-gradient(135deg,#7c3aed,#3b82f6)"), width: "100%", justifyContent: "center", marginTop: 10, padding: "10px" }}>
-                  <ShoppingCart size={16} /> Adicionar à Lista
-                </button>
+                {grupo.map((p: any) => <ProdutoCard key={p.id} {...cardProps(p)} />)}
               </div>
-            )}
-          </div>
-        );
-      })}
+            );
+          })}
+          {/* Produtos sem categoria reconhecida */}
+          {(() => {
+            const semCat = produtos.filter((p: any) => !p.categoria || !CATEGORIAS.includes(p.categoria));
+            if (semCat.length === 0) return null;
+            return (
+              <div style={{ marginBottom: 4 }}>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6, marginTop: 12, paddingLeft: 2 }}>
+                  📦 Outros ({semCat.length})
+                </div>
+                {semCat.map((p: any) => <ProdutoCard key={p.id} {...cardProps(p)} />)}
+              </div>
+            );
+          })()}
+        </>
+      )}
 
       {produtos.length === 0 && (
         <div style={{ textAlign: "center", padding: "32px 0", color: "rgba(255,255,255,0.3)" }}>
@@ -216,7 +283,6 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
         )}
       </div>
 
-      {/* Sheet novo/editar produto */}
       {(showAdd || editingProduto) && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
           <div style={{ background: "#0f0f1a", borderRadius: "24px 24px 0 0", padding: 24, width: "100%", border: "1px solid rgba(255,255,255,0.08)", maxHeight: "90dvh", overflowY: "auto" }}>
@@ -303,15 +369,12 @@ function AbaLista({ cartoes }: { cartoes: any[] }) {
 
   return (
     <div style={{ padding: "12px 16px" }}>
-      {/* Total geral */}
       <div style={{ background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 16, padding: "12px 16px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1 }}>Total da lista</div>
           <div style={{ fontSize: 24, fontWeight: 800 }}>{fmt(totalGeral)}</div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{lista.length} produto(s)</div>
-        </div>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{lista.length} produto(s)</div>
       </div>
 
       {grupos.map(([cat, itens]) => {
@@ -327,29 +390,26 @@ function AbaLista({ cartoes }: { cartoes: any[] }) {
               const qtd = parseFloat(item.quantidade || "1");
               const total = preco * qtd;
               return (
-                <div key={item.id} style={{ ...S.card }}>
+                <div key={item.id} style={S.card}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{item.nomeProduto}</div>
                       <div style={{ display: "flex", gap: 8, marginTop: 4, alignItems: "center" }}>
-                        {/* Qtde inline */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <button onClick={() => updateMut.mutate({ id: item.id, quantidade: Math.max(1, qtd - 1) })}
-                            style={{ width: 24, height: 24, borderRadius: 6, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <Minus size={11} />
-                          </button>
-                          <span style={{ fontSize: 13, fontWeight: 700, minWidth: 20, textAlign: "center" }}>{qtd % 1 === 0 ? qtd : qtd.toFixed(1)}</span>
-                          <button onClick={() => updateMut.mutate({ id: item.id, quantidade: qtd + 1 })}
-                            style={{ width: 24, height: 24, borderRadius: 6, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <Plus size={11} />
-                          </button>
-                        </div>
+                        <button onClick={() => updateMut.mutate({ id: item.id, quantidade: Math.max(1, qtd - 1) })}
+                          style={{ width: 24, height: 24, borderRadius: 6, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Minus size={11} />
+                        </button>
+                        <span style={{ fontSize: 13, fontWeight: 700, minWidth: 20, textAlign: "center" }}>{qtd % 1 === 0 ? qtd : qtd.toFixed(1)}</span>
+                        <button onClick={() => updateMut.mutate({ id: item.id, quantidade: qtd + 1 })}
+                          style={{ width: 24, height: 24, borderRadius: 6, background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Plus size={11} />
+                        </button>
                         <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>{item.unidade}</span>
                         {preco > 0 && <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>× {fmt(preco)}</span>}
                       </div>
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      {total > 0 && <div style={{ fontSize: 15, fontWeight: 800, color: "#fff" }}>{fmt(total)}</div>}
+                      {total > 0 && <div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(total)}</div>}
                       {!preco && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>sem valor</div>}
                     </div>
                     <button onClick={() => removeMut.mutate({ id: item.id })} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
@@ -364,7 +424,7 @@ function AbaLista({ cartoes }: { cartoes: any[] }) {
       })}
 
       <button onClick={() => setShowFinalizar(true)} style={{ ...S.btn("linear-gradient(135deg,#10b981,#059669)"), width: "100%", justifyContent: "center", marginTop: 8 }}>
-        <CheckCircle size={18} /> Finalizar Compra — {fmt(totalGeral)}
+        <CheckCircle size={18} /> Finalizar — {fmt(totalGeral)}
       </button>
 
       {showFinalizar && (
@@ -388,7 +448,8 @@ function AbaLista({ cartoes }: { cartoes: any[] }) {
               </select>
               <ChevronDown size={14} color="rgba(255,255,255,0.4)" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
             </div>
-            <button onClick={() => finalizarMut.mutate({ mercado: mercado || undefined, cartaoId })} disabled={finalizarMut.isPending} style={{ ...S.btn("linear-gradient(135deg,#10b981,#059669)"), width: "100%", justifyContent: "center" }}>
+            <button onClick={() => finalizarMut.mutate({ mercado: mercado || undefined, cartaoId })} disabled={finalizarMut.isPending}
+              style={{ ...S.btn("linear-gradient(135deg,#10b981,#059669)"), width: "100%", justifyContent: "center" }}>
               {finalizarMut.isPending ? "Finalizando..." : "✅ Confirmar e Finalizar"}
             </button>
           </div>
@@ -402,7 +463,7 @@ function AbaLista({ cartoes }: { cartoes: any[] }) {
 function AbaHistorico({ cartoes }: { cartoes: any[] }) {
   const { data: historico = [], refetch } = trpc.mercado.historico.list.useQuery(undefined, { refetchOnWindowFocus: false });
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const deleteMut = trpc.mercado.historico.delete.useMutation({ onSuccess: () => { refetch(); toast.success('Excluído!'); } });
+  const deleteMut = trpc.mercado.historico.delete.useMutation({ onSuccess: () => { refetch(); toast.success("Excluído!"); } });
 
   if (historico.length === 0) {
     return (
