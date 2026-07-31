@@ -1161,7 +1161,7 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "flex-end" }}>
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} onClick={onClose} />
-      <div style={{ position: "relative", width: "100%", background: "rgba(255,255,255,0.05)", borderRadius: "24px 24px 0 0", padding: "0 0 calc(24px + env(safe-area-inset-bottom,0px))", maxHeight: "90dvh", overflowY: "auto" }}>
+      <div style={{ position: "relative", width: "100%", background: "#0f0f1a", borderRadius: "24px 24px 0 0", padding: "0 0 calc(24px + env(safe-area-inset-bottom,0px))", maxHeight: "90dvh", overflowY: "auto", border: "1px solid rgba(255,255,255,0.08)", borderBottom: "none" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 20px 16px" }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>{title}</div>
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "rgba(255,255,255,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
