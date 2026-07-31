@@ -296,6 +296,7 @@ export default function DashboardPage() {
 function CartaoBottomSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [nome, setNome] = useState("");
   const [dia, setDia] = useState("");
+  const [fechamento, setFechamento] = useState("");
   const [limite, setLimite] = useState("");
   const [cor, setCor] = useState("purple");
   const [banco, setBanco] = useState("");
@@ -308,7 +309,9 @@ function CartaoBottomSheet({ onClose, onSuccess }: { onClose: () => void; onSucc
     if (!d || d < 1 || d > 31) return toast.error("Dia de vencimento inválido (1-31)");
     const l = parseFloat(limite.replace(",", "."));
     if (!l || l <= 0) return toast.error("Limite inválido");
-    createMutation.mutate({ nome: nome.trim(), vencimentoDia: d, limiteTotal: l, corCartao: cor, banco: banco || null, bandeira: bandeira || null });
+    const f = fechamento ? parseInt(fechamento) : undefined;
+    if (f && (f < 1 || f > 31)) return toast.error("Dia de fechamento inválido (1-31)");
+    createMutation.mutate({ nome: nome.trim(), vencimentoDia: d, fechamentoDia: f ?? null, limiteTotal: l, corCartao: cor, banco: banco || null, bandeira: bandeira || null });
   };
 
   return (
@@ -326,9 +329,12 @@ function CartaoBottomSheet({ onClose, onSuccess }: { onClose: () => void; onSucc
           <DField label="NOME DO CARTÃO">
             <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Nubank, Bradesco Gold" style={dInput} />
           </DField>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
             <DField label="DIA VENCIMENTO">
               <input value={dia} onChange={e => setDia(e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="Ex: 15" inputMode="numeric" style={dInput} />
+            </DField>
+            <DField label="DIA FECHAMENTO">
+              <input value={fechamento} onChange={e => setFechamento(e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="Ex: 10" inputMode="numeric" style={dInput} />
             </DField>
             <DField label="LIMITE (R$)">
               <input value={limite} onChange={e => setLimite(e.target.value.replace(/[^\d,.]/g, ""))} placeholder="Ex: 5000" inputMode="decimal" style={dInput} />
