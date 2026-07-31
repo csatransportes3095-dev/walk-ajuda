@@ -199,9 +199,9 @@ function ParcelamentoCard({
 }
 
 export default function CartaoDetailPage() {
-  const params = useParams<{ id: string }>();
-  const [, navigate] = useLocation();
-  const id = parseInt(params.id || "0");
+  const [location, navigate] = useLocation();
+  const idMatch = location.match(/\/cartoes\/cartao\/(\d+)/);
+  const id = parseInt(idMatch?.[1] || "0");
   const utils = trpc.useUtils();
 
   const [showGasto, setShowGasto] = useState(false);
