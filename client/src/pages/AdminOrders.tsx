@@ -4674,42 +4674,46 @@ export default function AdminOrders() {
                           )}
                         </button>
                       ))}
-                      {/* Filtros rápidos — cards médios */}
-                      <div className="flex gap-1.5 ml-2">
+                      {/* Filtros rápidos — cards gamer */}
+                      <div className="flex gap-2 ml-2">
                         {([
-                          { id: "all", label: "Todos", icon: "📋", color: "amber" },
-                          { id: "sem_status", label: "Sem Agend.", icon: "📅", color: "red" },
-                          { id: "agendamento", label: "Ag. Agend.", icon: "⏳", color: "yellow" },
-                          { id: "novo", label: "Novo", icon: "🆕", color: "green" },
+                          { id: "all",         label: "TODOS",            icon: "📋", glow: "#f59e0b", active_bg: "linear-gradient(135deg,#78350f,#92400e)", active_border: "#f59e0b", active_text: "#fde68a" },
+                          { id: "sem_status",  label: "SEM AGENDAMENTO",   icon: "📅", glow: "#ef4444", active_bg: "linear-gradient(135deg,#7f1d1d,#991b1b)", active_border: "#ef4444", active_text: "#fca5a5" },
+                          { id: "agendamento", label: "AGUARD. AGENDAMENTO",icon: "⏳", glow: "#eab308", active_bg: "linear-gradient(135deg,#713f12,#854d0e)", active_border: "#eab308", active_text: "#fef08a" },
+                          { id: "novo",        label: "NOVOS",            icon: "🆕", glow: "#22c55e", active_bg: "linear-gradient(135deg,#14532d,#166534)", active_border: "#22c55e", active_text: "#86efac" },
                         ] as const).map(f => {
                           const cnt = group.orders.filter((o: any) => {
-                            if (f.id === "sem_status") return !(o as any).scheduleStatus;
+                            if (f.id === "sem_status") return (o as any).scheduleStatus !== "confirmed";
                             if (f.id === "agendamento") return (o as any).scheduleStatus === "pending";
                             if (f.id === "novo") return !viewedOrders.has(getOrderKey(o));
                             return true;
                           }).length;
                           const active = todosQuickFilter === f.id;
-                          const colors: Record<string, string> = {
-                            amber: active ? "bg-amber-500/25 border-amber-500/60 text-amber-300" : "bg-card border-border text-muted-foreground hover:border-amber-500/40",
-                            red: active ? "bg-red-500/25 border-red-500/60 text-red-300" : "bg-card border-border text-muted-foreground hover:border-red-500/40",
-                            yellow: active ? "bg-yellow-500/25 border-yellow-500/60 text-yellow-300" : "bg-card border-border text-muted-foreground hover:border-yellow-500/40",
-                            green: active ? "bg-green-500/25 border-green-500/60 text-green-300" : "bg-card border-border text-muted-foreground hover:border-green-500/40",
-                          };
                           return (
                             <button
                               key={f.id}
                               onClick={() => setTodosQuickFilter(f.id)}
-                              className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${colors[f.color]}`}
+                              style={active ? {
+                                background: f.active_bg,
+                                borderColor: f.active_border,
+                                color: f.active_text,
+                                boxShadow: `0 0 10px ${f.glow}55, 0 0 20px ${f.glow}22`,
+                              } : {}}
+                              className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl text-[10px] font-black tracking-wider border transition-all ${
+                                active
+                                  ? "border-opacity-100"
+                                  : "bg-zinc-900/80 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                              }`}
                             >
-                              <span>{f.icon}</span>
-                              <span>{f.label}</span>
-                              <span className="text-[10px] opacity-70">{cnt}</span>
+                              <span className="text-base leading-none">{f.icon}</span>
+                              <span className="leading-none mt-0.5">{f.label}</span>
+                              <span className={`text-[11px] font-black leading-none mt-0.5 ${active ? "" : "text-zinc-300"}`}>{cnt}</span>
                             </button>
                           );
                         })}
                       </div>
                       <span className="ml-auto text-xs text-muted-foreground/60">{group.orders.filter((o: any) => {
-                        if (todosQuickFilter === "sem_status") return !(o as any).scheduleStatus;
+                        if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus !== "confirmed";
                         if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
                         if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
                         return true;
@@ -4940,8 +4944,8 @@ export default function AdminOrders() {
                   {(!isAllTab || !isEmergencySearch) && (isAllTab
                     ? [{ name: "", orders: sortFolderOrders(
                         group.orders.filter((o: any) => {
-                          if (todosQuickFilter === "sem_status") return !o.scheduleStatus;
-                          if (todosQuickFilter === "agendamento") return o.scheduleStatus === "pending";
+                          if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus !== "confirmed";
+                          if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
                           if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
                           return true;
                         }),
