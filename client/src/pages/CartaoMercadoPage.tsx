@@ -30,8 +30,23 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
   const [nome, setNome] = useState("");
   const [cat, setCat] = useState("");
   const [unid, setUnid] = useState("un");
-  // Estado inline por produto: { [id]: { qtd, valor, open } }
-  const [inline, setInline] = useState<Record<number, { qtd: string; valor: string; open: boolean }>>({});
+  // Estado inline por produto: { [id]: { qtd, valorCents, open } }
+  const [inline, setInline] = useState<Record<number, { qtd: string; valorCents: number; open: boolean }>>({})
+
+  // Formata centavos para exibição: 400 → "4,00", 100000 → "1.000,00"
+  const fmtCents = (cents: number): string => {
+    if (!cents) return "0,00";
+    const s = String(cents).padStart(3, "0");
+    const intPart = s.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return (intPart || "0") + "," + s.slice(-2);
+  };
+
+  // Ao digitar: só aceita dígitos, empurra da direita (igual caixa de mercado)
+  const handleValorInput = (id: number, raw: string) => {
+    const digits = raw.replace(/\D/g, "");
+    const cents = parseInt(digits || "0", 10);
+    setInline(prev => ({ ...prev, [id]: { ...prev[id], valorCents: cents } }));
+  };;
 
   const { data: produtos = [], refetch } = trpc.mercado.produtos.list.useQuery({ search: search || undefined }, { refetchOnWindowFocus: false });
   const createMut = trpc.mercado.produtos.create.useMutation({ onSuccess: () => { refetch(); setShowAdd(false); setNome(""); setCat(""); setUnid("un"); toast.success("Produto criado!"); } });
@@ -46,14 +61,14 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
       ...prev,
       [id]: prev[id]?.open
         ? { ...prev[id], open: false }
-        : { qtd: "1", valor: "", open: true }
+        : { qtd: "1", valorCents: 0, open: true }
     }));
   };
 
   const confirmAdd = (p: any) => {
     const state = inline[p.id];
     const qtd = parseFloat(state?.qtd || "1") || 1;
-    const valor = state?.valor ? parseFloat(state.valor) : null;
+    const valor = state?.valorCents ? state.valorCents / 100 : null;
     onAddToList(p, qtd, valor);
     setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], open: false } }));
   };
@@ -144,24 +159,26 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
                       </button>
                     </div>
                   </div>
-                  {/* Valor unitário */}
+                  {/* Valor unitário com máscara monetária */}
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>VALOR (R$)</div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={state?.valor ?? ""}
-                      onChange={e => setInline(prev => ({ ...prev, [p.id]: { ...prev[p.id], valor: e.target.value } }))}
-                      placeholder="0,00"
-                      style={{ ...S.input, padding: "8px 10px", borderRadius: 8 }}
-                    />
+                    <div style={{ position: "relative" }}>
+                      <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "rgba(255,255,255,0.5)", pointerEvents: "none" }}>R$</span>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        value={fmtCents(state?.valorCents ?? 0)}
+                        onChange={e => handleValorInput(p.id, e.target.value)}
+                        style={{ ...S.input, padding: "8px 10px 8px 30px", borderRadius: 8, fontWeight: 700, fontSize: 15 }}
+                      />
+                    </div>
                   </div>
                   {/* Total calculado */}
-                  {state?.valor && parseFloat(state.valor) > 0 && (
+                  {(state?.valorCents ?? 0) > 0 && (
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
                       <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>TOTAL</div>
                       <div style={{ fontSize: 15, fontWeight: 800, color: "#10b981" }}>
-                        {fmt(parseFloat(state.qtd || "1") * parseFloat(state.valor))}
+                        {fmt(parseFloat(state?.qtd || "1") * ((state?.valorCents ?? 0) / 100))}
                       </div>
                     </div>
                   )}
