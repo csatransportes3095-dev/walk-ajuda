@@ -15,7 +15,7 @@ export default function AdminReferrals() {
   const createReportMutation = trpc.referrals.createReport.useMutation();
   const deleteIndicatedMutation = trpc.referrals.deleteIndicated.useMutation();
 
-  // Ler parâmetro phone da URL ao carregar
+  // Ler par�metro phone da URL ao carregar
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const phoneParam = params.get('phone');
@@ -27,11 +27,11 @@ export default function AdminReferrals() {
   }, []);
 
   // Queries
-  // Se há um phone selecionado (via URL ou busca), mostrar apenas dados desse cliente
-  // Caso contrário, mostrar todos os stats
+  // Se h� um phone selecionado (via URL ou busca), mostrar apenas dados desse cliente
+  // Caso contr�rio, mostrar todos os stats
   const { data: allStats, isLoading: statsLoading } = trpc.referrals.listAll.useQuery(
     undefined,
-    { enabled: !selectedPhone } // Só carrega se NÃO há cliente selecionado
+    { enabled: !selectedPhone } // S� carrega se N�O h� cliente selecionado
   );
   const { data: selectedStats } = trpc.referrals.getStats.useQuery(
     { phone: selectedPhone || "" },
@@ -70,11 +70,11 @@ export default function AdminReferrals() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-4xl font-bold text-white mb-2">Rastreamento de Indicações</h1>
+              <h1 className="text-4xl font-bold text-white mb-2">Rastreamento de Indica��es</h1>
               <p className="text-gray-400">
                 {selectedPhone 
                   ? `Visualizando dados do cliente: ${selectedPhone}`
-                  : "Visualize o histórico de indicações, cadeia de referência e clientes indicados"
+                  : "Visualize o hist�rico de indica��es, cadeia de refer�ncia e clientes indicados"
                 }
               </p>
             </div>
@@ -106,7 +106,7 @@ export default function AdminReferrals() {
           </Button>
         </div>
 
-        {/* Stats Overview - Mostrar APENAS se não há cliente selecionado */}
+        {/* Stats Overview - Mostrar APENAS se n�o h� cliente selecionado */}
         {!selectedPhone && allStats && allStats.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <Card className="bg-gray-900 border-gray-700 p-6">
@@ -121,7 +121,7 @@ export default function AdminReferrals() {
             <Card className="bg-gray-900 border-gray-700 p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm">Total de Indicações</p>
+                  <p className="text-gray-400 text-sm">Total de Indica��es</p>
                   <p className="text-3xl font-bold text-white">
                     {allStats.reduce((sum, s) => sum + s.totalReferred, 0)}
                   </p>
@@ -132,7 +132,7 @@ export default function AdminReferrals() {
             <Card className="bg-gray-900 border-gray-700 p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm">Média por Indicador</p>
+                  <p className="text-gray-400 text-sm">M�dia por Indicador</p>
                   <p className="text-3xl font-bold text-white">
                     {(
                       allStats.reduce((sum, s) => sum + s.totalReferred, 0) / allStats.length
@@ -147,7 +147,7 @@ export default function AdminReferrals() {
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Left: Top Referrers - Mostrar APENAS se não há cliente selecionado */}
+          {/* Left: Top Referrers - Mostrar APENAS se n�o h� cliente selecionado */}
           {!selectedPhone && (
             <div className="lg:col-span-1">
               <Card className="bg-gray-900 border-gray-700 p-6">
@@ -206,7 +206,7 @@ export default function AdminReferrals() {
                     </div>
                     {selectedStats.lastReferralAt && (
                       <p className="text-gray-400 text-sm">
-                        Última indicação: {new Date(selectedStats.lastReferralAt).toLocaleDateString("pt-BR")}
+                        �ltima indica��o: {new Date(selectedStats.lastReferralAt).toLocaleDateString("pt-BR")}
                       </p>
                     )}
                   </Card>
@@ -224,9 +224,9 @@ export default function AdminReferrals() {
                           : "text-gray-400 hover:text-gray-300"
                       }`}
                     >
-                      {tab === "stats" && "Estatísticas"}
+                      {tab === "stats" && "Estat�sticas"}
                       {tab === "indicated" && "Indicados"}
-                      {tab === "history" && "Histórico"}
+                      {tab === "history" && "Hist�rico"}
                       {tab === "chain" && "Cadeia"}
                     </button>
                   ))}
@@ -236,14 +236,14 @@ export default function AdminReferrals() {
                 {activeTab === "stats" && selectedStats && (
                   <div className="space-y-4">
                     <Card className="bg-gray-900 border-gray-700 p-6">
-                      <h3 className="text-lg font-bold text-white mb-4">Estatísticas</h3>
+                      <h3 className="text-lg font-bold text-white mb-4">Estat�sticas</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <p className="text-gray-400 text-sm">Total Indicado</p>
                           <p className="text-3xl font-bold text-green-400">{selectedStats.totalReferred}</p>
                         </div>
                         <div>
-                          <p className="text-gray-400 text-sm">Última Indicação</p>
+                          <p className="text-gray-400 text-sm">�ltima Indica��o</p>
                           <p className="text-lg font-bold text-blue-400">
                             {selectedStats.lastReferralAt 
                               ? new Date(selectedStats.lastReferralAt).toLocaleDateString("pt-BR")
@@ -316,7 +316,7 @@ export default function AdminReferrals() {
                                   </a>
                                   <button
                                     onClick={() => {
-                                      if (confirm(`Deletar ${customer.name} do histórico de indicações?`)) {
+                                      if (confirm(`Deletar ${customer.name} do hist�rico de indica��es?`)) {
                                         deleteIndicatedMutation.mutate(
                                           { referredCustomerId: customer.customerId },
                                           {
@@ -360,7 +360,7 @@ export default function AdminReferrals() {
                   <div className="space-y-4">
                     {!history || history.length === 0 ? (
                       <Card className="bg-gray-900 border-gray-700 p-8 text-center">
-                        <p className="text-gray-400">Nenhum histórico</p>
+                        <p className="text-gray-400">Nenhum hist�rico</p>
                       </Card>
                     ) : (
                       history.map((item) => {
@@ -396,7 +396,7 @@ export default function AdminReferrals() {
                                       : "bg-yellow-900 text-yellow-200"
                                   }`}
                                 >
-                                  {item.status === "completed" ? "Concluído" : "Pendente"}
+                                  {item.status === "completed" ? "Conclu�do" : "Pendente"}
                                 </span>
                               </div>
                             </div>
@@ -411,7 +411,7 @@ export default function AdminReferrals() {
                   <div className="space-y-4">
                     {!chain || chain.length === 0 ? (
                       <Card className="bg-gray-900 border-gray-700 p-8 text-center">
-                        <p className="text-gray-400">Sem cadeia de indicações</p>
+                        <p className="text-gray-400">Sem cadeia de indica��es</p>
                       </Card>
                     ) : (
                       <div>
@@ -440,7 +440,7 @@ export default function AdminReferrals() {
                                   <p className="text-gray-400 text-sm">{item.phone}</p>
                                 </div>
                                 <div className="text-right">
-                                  <p className="text-gray-400 text-sm">Nível {item.level}</p>
+                                  <p className="text-gray-400 text-sm">N�vel {item.level}</p>
                                   <p className="text-green-400 font-semibold">{item.totalReferred} indicados</p>
                                 </div>
                               </div>

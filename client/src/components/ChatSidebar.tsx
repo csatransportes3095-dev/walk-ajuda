@@ -17,7 +17,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // â”€â”€ PresenÃ§a â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ Presença â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const setOnlineMut = trpc.chat.setOnline.useMutation();
 
   useEffect(() => {
@@ -176,7 +176,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
           </div>
           <div className="text-left flex-1">
             <p className="font-bold text-white text-sm">Grupo Geral</p>
-            <p className="text-xs text-green-400/80">Todos os usuÃ¡rios da planilha</p>
+            <p className="text-xs text-green-400/80">Todos os usuários da planilha</p>
           </div>
           {groupGeralMut.isPending && <span className="text-xs text-white/50">...</span>}
         </button>
@@ -223,14 +223,14 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
         );
       })()}
 
-      {/* UsuÃ¡rios */}
+      {/* Usuários */}
       <div className="flex-1 overflow-y-auto">
         <p className="text-[10px] font-bold text-green-400/60 px-4 pt-2.5 pb-1 uppercase tracking-widest sticky top-0"
           style={{ background: '#111827' }}>
-          UsuÃ¡rios ({otherUsers.length})
+          Usuários ({otherUsers.length})
         </p>
         {otherUsers.length === 0 ? (
-          <p className="text-center text-white/30 text-sm py-8">Nenhum usuÃ¡rio disponÃ­vel</p>
+          <p className="text-center text-white/30 text-sm py-8">Nenhum usuário disponível</p>
         ) : (
           otherUsers.map((user: any) => {
             const isOnline = onlinePhones.has(user.phone);
@@ -379,7 +379,7 @@ export function ChatSidebar({ phone, onChatSelect, selectedChatId }: ChatSidebar
 
   return (
     <>
-      {/* â”€â”€ BotÃ£o flutuante â”€â”€ */}
+      {/* â”€â”€ Botão flutuante â”€â”€ */}
       <button
         id="chat-floating-btn"
         onClick={() => setIsOpen(!isOpen)}

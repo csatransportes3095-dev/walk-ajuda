@@ -20,9 +20,9 @@ const STATUS_CONFIG = {
     bg: "bg-yellow-500/10",
     border: "border-yellow-500/30",
     badge: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
-    label: "Em AnÃ¡lise",
-    title: "Seu cadastro estÃ¡ em anÃ¡lise",
-    message: "Nossa equipe estÃ¡ revisando suas informaÃ§Ãµes. Em breve entraremos em contato pelo WhatsApp informado.",
+    label: "Em Análise",
+    title: "Seu cadastro está em análise",
+    message: "Nossa equipe está revisando suas informações. Em breve entraremos em contato pelo WhatsApp informado.",
   },
   aprovado: {
     icon: CheckCircle2,
@@ -31,8 +31,8 @@ const STATUS_CONFIG = {
     border: "border-emerald-500/30",
     badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
     label: "Aprovado",
-    title: "ParabÃ©ns! Seu cadastro foi aprovado",
-    message: "Sua solicitaÃ§Ã£o foi aprovada pela nossa equipe. Aguarde o contato pelo WhatsApp ou entre em contato conosco.",
+    title: "Parabéns! Seu cadastro foi aprovado",
+    message: "Sua solicitação foi aprovada pela nossa equipe. Aguarde o contato pelo WhatsApp ou entre em contato conosco.",
   },
   reprovado: {
     icon: XCircle,
@@ -40,9 +40,9 @@ const STATUS_CONFIG = {
     bg: "bg-red-500/10",
     border: "border-red-500/30",
     badge: "bg-red-500/20 text-red-300 border-red-500/30",
-    label: "NÃ£o Aprovado",
-    title: "Cadastro nÃ£o aprovado",
-    message: "Infelizmente seu cadastro nÃ£o foi aprovado desta vez. Entre em contato conosco pelo WhatsApp para mais informaÃ§Ãµes.",
+    label: "Não Aprovado",
+    title: "Cadastro não aprovado",
+    message: "Infelizmente seu cadastro não foi aprovado desta vez. Entre em contato conosco pelo WhatsApp para mais informações.",
   },
 };
 
@@ -60,7 +60,7 @@ export default function ConsultarCadastro() {
   const [searchedPhone, setSearchedPhone] = useState("");
   const [enabled, setEnabled] = useState(false);
 
-  // Prefill via query params (redirect do formulÃ¡rio)
+  // Prefill via query params (redirect do formulário)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const cpfParam = params.get("cpf");
@@ -110,7 +110,7 @@ export default function ConsultarCadastro() {
     setEnabled(true);
   }
 
-  // Compatibilidade com cÃ³digo antigo
+  // Compatibilidade com código antigo
   const cpf = input;
   const setCpf = (v: string) => handleInputChange(v);
 
@@ -140,12 +140,12 @@ export default function ConsultarCadastro() {
             <span className="text-purple-300 text-sm font-medium">Consultar Status do Cadastro</span>
           </div>
           <p className="text-gray-400 text-sm">
-            Digite seu CPF ou WhatsApp para verificar o status do seu prÃ©-cadastro.
+            Digite seu CPF ou WhatsApp para verificar o status do seu pré-cadastro.
           </p>
         </div>
       </div>
 
-      {/* FormulÃ¡rio de busca */}
+      {/* Formulário de busca */}
       <div className="max-w-md mx-auto">
         <form onSubmit={handleSearch} className="bg-black/40 backdrop-blur-sm border border-white/10 rounded-2xl p-6 shadow-lg mb-6">
           {/* Toggle CPF / WhatsApp */}
@@ -205,22 +205,22 @@ export default function ConsultarCadastro() {
         {error && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center">
             <AlertCircle className="w-10 h-10 text-red-400 mx-auto mb-3" />
-            <p className="text-red-300 font-semibold mb-1">Cadastro nÃ£o encontrado</p>
+            <p className="text-red-300 font-semibold mb-1">Cadastro não encontrado</p>
             <p className="text-gray-400 text-sm">
-              Nenhum prÃ©-cadastro foi encontrado com este CPF. Verifique o CPF informado ou realize o prÃ©-cadastro.
+              Nenhum pré-cadastro foi encontrado com este CPF. Verifique o CPF informado ou realize o pré-cadastro.
             </p>
             <Link
               href="/pre-cadastro"
               className="inline-flex items-center gap-2 mt-4 px-5 py-2.5 rounded-xl bg-purple-600/20 border border-purple-500/30 text-purple-300 text-sm font-medium hover:bg-purple-600/30 transition-colors"
             >
-              Fazer PrÃ©-Cadastro
+              Fazer Pré-Cadastro
             </Link>
           </div>
         )}
 
         {data && cfg && Icon && (
           <div className={`${cfg.bg} border ${cfg.border} rounded-2xl p-6 text-center shadow-lg`}>
-            {/* Ãcone de status */}
+            {/* Ícone de status */}
             <div className={`w-20 h-20 rounded-full ${cfg.bg} border ${cfg.border} flex items-center justify-center mx-auto mb-4`}>
               <Icon className={`w-10 h-10 ${cfg.color}`} />
             </div>
@@ -232,7 +232,7 @@ export default function ConsultarCadastro() {
             </span>
 
             {/* Nome */}
-            <p className="text-gray-400 text-sm mb-1">OlÃ¡,</p>
+            <p className="text-gray-400 text-sm mb-1">Olá,</p>
             <h2 className="text-xl font-bold text-white mb-3">{data.fullName}</h2>
 
             {/* Mensagem */}
@@ -243,10 +243,10 @@ export default function ConsultarCadastro() {
               {cfg.message}
             </p>
 
-            {/* BotÃ£o WhatsApp para aprovados */}
+            {/* Botão WhatsApp para aprovados */}
             {data.status === "aprovado" && (
               <a
-                href="https://wa.me/5511978307371?text=OlÃ¡!%20Meu%20cadastro%20foi%20aprovado%20e%20gostaria%20de%20dar%20continuidade%20ao%20processo."
+                href="https://wa.me/5511978307371?text=Olá!%20Meu%20cadastro%20foi%20aprovado%20e%20gostaria%20de%20dar%20continuidade%20ao%20processo."
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-green-500 hover:bg-green-400 text-white font-semibold text-sm transition-all duration-200 hover:scale-105 shadow-lg shadow-green-500/30"
@@ -258,21 +258,21 @@ export default function ConsultarCadastro() {
               </a>
             )}
 
-            {/* Motivo da ReprovaÃ§Ã£o */}
+            {/* Motivo da Reprovação */}
             {data.status === "reprovado" && data.rejectionReason && (
               <div className="mb-5 bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-left">
                 <div className="flex items-center gap-2 mb-2">
                   <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                  <span className="text-red-400 text-xs font-semibold uppercase tracking-wider">Motivo da ReprovaÃ§Ã£o</span>
+                  <span className="text-red-400 text-xs font-semibold uppercase tracking-wider">Motivo da Reprovação</span>
                 </div>
                 <p className="text-gray-200 text-sm leading-relaxed">{data.rejectionReason}</p>
               </div>
             )}
 
-            {/* BotÃ£o para reprovados */}
+            {/* Botão para reprovados */}
             {data.status === "reprovado" && (
               <a
-                href="https://wa.me/5511978307371?text=OlÃ¡!%20Meu%20cadastro%20nÃ£o%20foi%20aprovado%20e%20gostaria%20de%20entender%20o%20motivo."
+                href="https://wa.me/5511978307371?text=Olá!%20Meu%20cadastro%20não%20foi%20aprovado%20e%20gostaria%20de%20entender%20o%20motivo."
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-gray-300 font-semibold text-sm transition-all duration-200"
@@ -286,11 +286,11 @@ export default function ConsultarCadastro() {
           </div>
         )}
 
-        {/* Link para prÃ©-cadastro */}
+        {/* Link para pré-cadastro */}
         {!data && !error && (
           <div className="text-center mt-4">
             <p className="text-gray-600 text-sm">
-              Ainda nÃ£o fez o prÃ©-cadastro?{" "}
+              Ainda não fez o pré-cadastro?{" "}
               <Link href="/pre-cadastro" className="text-purple-400 hover:text-purple-300 underline underline-offset-2 transition-colors">
                 Clique aqui
               </Link>

@@ -87,7 +87,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regCpf, setRegCpf] = useState("");
-  const [regPhone, setRegPhone] = useState(""); // telefone editÃ¡vel quando entrou pelo CPF
+  const [regPhone, setRegPhone] = useState(""); // telefone editável quando entrou pelo CPF
   const [enteredByCpf, setEnteredByCpf] = useState(false); // true quando o acesso foi feito via CPF
   const [cpfDuplicado, setCpfDuplicado] = useState(false);
   const [regCep, setRegCep] = useState("");
@@ -119,7 +119,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState<string | null>(null);
   const [uploadedPhotoFile, setUploadedPhotoFile] = useState<File | null>(null);
   const [photoUploadFailed, setPhotoUploadFailed] = useState(false);
-  // SessÃ£o pendente: salva dados da validaÃ§Ã£o enquanto aguarda foto de perfil
+  // Sessão pendente: salva dados da validação enquanto aguarda foto de perfil
   const [pendingSession, setPendingSession] = useState<{
     type: string;
     expiresAt: string | null;
@@ -129,7 +129,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const [updateCpfValue, setUpdateCpfValue] = useState("");
   const [updateCpfError, setUpdateCpfError] = useState("");
   const [updateCpfLoading, setUpdateCpfLoading] = useState(false);
-  // CPF obrigatÃ³rio antes de criar senha
+  // CPF obrigatório antes de criar senha
   const [cpwdAddCpfValue, setCpwdAddCpfValue] = useState("");
   const [cpwdAddCpfError, setCpwdAddCpfError] = useState("");
   const [cpwdAddCpfLoading, setCpwdAddCpfLoading] = useState(false);
@@ -148,7 +148,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const cpwdCreateAutoMutation = trpc.customerPassword.clientCreateAuto.useMutation();
   const cpwdCreateManualMutation = trpc.customerPassword.clientCreateManual.useMutation();
   const cpwdSaveCpfMutation = trpc.customerPassword.saveCpf.useMutation();
-  // Token estabilizado em state para evitar condiÃ§Ãµes de corrida durante pedido
+  // Token estabilizado em state para evitar condições de corrida durante pedido
   const [cpToken, setCpToken] = useState(() => localStorage.getItem(CP_TOKEN_KEY) || '');
   const cpwdCheckSessionQuery = trpc.customerPassword.checkSession.useQuery(
     { token: cpToken },
@@ -157,7 +157,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       staleTime: 0,                     // sempre busca dados frescos do banco
       refetchOnWindowFocus: true,       // re-executa ao voltar para a aba (pega telefone atualizado)
       refetchOnReconnect: true,         // re-executa ao reconectar
-      retry: false,                     // nÃ£o tentar novamente em caso de erro
+      retry: false,                     // não tentar novamente em caso de erro
     }
   );
   const [cpwdNewPassword, setCpwdNewPassword] = useState("");
@@ -188,13 +188,13 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const { data: photoModeData } = trpc.appSettings.getPhotoMode.useQuery();
   const photoMode = photoModeData?.mode ?? 'both';
 
-  // Refs para file inputs (para acionar via botÃµes)
+  // Refs para file inputs (para acionar via botões)
   const cameraInputRegRef = useRef<HTMLInputElement>(null);
   const galleryInputRegRef = useRef<HTMLInputElement>(null);
   const cameraInputProfileRef = useRef<HTMLInputElement>(null);
   const galleryInputProfileRef = useRef<HTMLInputElement>(null);
 
-  // ConfiguraÃ§Ãµes da tela de login
+  // Configurações da tela de login
   const loginTitle = settings?.login_title || 'H2 COLOMBIANO';
   const loginSubtitle = settings?.login_subtitle || 'Acesso Restrito';
   const loginFooter = settings?.login_footer || 'Solicite sua senha de acesso via WhatsApp';
@@ -208,10 +208,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-  // DetecÃ§Ã£o de cÃ¢mera disponÃ­vel no dispositivo
+  // Detecção de câmera disponível no dispositivo
   const [hasCameraDevice, setHasCameraDevice] = useState<boolean | null>(null);
   useEffect(() => {
-    if (photoMode !== 'camera') return; // sÃ³ verifica quando cÃ¢mera Ã© obrigatÃ³ria
+    if (photoMode !== 'camera') return; // só verifica quando câmera é obrigatória
     if (!navigator.mediaDevices?.enumerateDevices) {
       setHasCameraDevice(false);
       return;
@@ -222,7 +222,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }).catch(() => setHasCameraDevice(false));
   }, [photoMode]);
 
-  // MÃ¡scara de telefone: (XX) XXXXX-XXXX
+  // Máscara de telefone: (XX) XXXXX-XXXX
   function formatPhone(value: string) {
     const digits = value.replace(/\D/g, '').slice(0, 11);
     if (digits.length <= 2) return digits;
@@ -246,30 +246,30 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
   }, []);
 
-  // Verificar acesso na sessÃ£o
+  // Verificar acesso na sessão
   useEffect(() => {
     // Primeiro verificar cp_token (novo sistema unificado)
     const storedCpToken = localStorage.getItem(CP_TOKEN_KEY);
     if (storedCpToken) {
       // A query cpwdCheckSessionQuery vai verificar automaticamente
-      // O resultado Ã© tratado no useEffect abaixo
-      // Sincronizar state com localStorage na inicializaÃ§Ã£o
+      // O resultado é tratado no useEffect abaixo
+      // Sincronizar state com localStorage na inicialização
       setCpToken(storedCpToken);
       return;
     }
-    // Fallback: verificar sessÃ£o antiga (walk_access_granted)
-    // APENAS se o modo manual NÃƒO estiver ativo
-    // Quando modo manual estÃ¡ ativo, apenas cp_token Ã© aceito
+    // Fallback: verificar sessão antiga (walk_access_granted)
+    // APENAS se o modo manual NÒO estiver ativo
+    // Quando modo manual está ativo, apenas cp_token é aceito
     const sessionAccess = localStorage.getItem(SESSION_KEY);
     if (sessionAccess === "true") {
-      // Verificar no backend se o modo manual estÃ¡ ativo
-      // Se estiver, limpar sessÃ£o antiga e exigir novo login
+      // Verificar no backend se o modo manual está ativo
+      // Se estiver, limpar sessão antiga e exigir novo login
       fetch('/api/trpc/appSettings.getManualMode')
         .then(r => r.json())
         .then(data => {
           const isManual = data?.result?.data?.json?.isManual ?? false;
           if (isManual) {
-            // Modo manual ativo: sessÃ£o antiga nÃ£o Ã© vÃ¡lida, limpar tudo
+            // Modo manual ativo: sessão antiga não é válida, limpar tudo
             localStorage.removeItem(SESSION_KEY);
             localStorage.removeItem(SESSION_CODE_KEY);
             localStorage.removeItem(SESSION_TYPE_KEY);
@@ -277,7 +277,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             localStorage.removeItem(SESSION_PHONE_KEY);
             setAccessGranted(false);
           } else {
-            // Modo auto: aceitar sessÃ£o antiga normalmente
+            // Modo auto: aceitar sessão antiga normalmente
             setAccessGranted(true);
             const savedType = localStorage.getItem(SESSION_TYPE_KEY);
             if (savedType) setAccessType(savedType);
@@ -293,7 +293,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           }
         })
         .catch(() => {
-          // Em caso de erro, manter sessÃ£o antiga por seguranÃ§a
+          // Em caso de erro, manter sessão antiga por segurança
           setAccessGranted(true);
           const savedType = localStorage.getItem(SESSION_TYPE_KEY);
           if (savedType) setAccessType(savedType);
@@ -313,8 +313,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         setAccessGranted(true);
         setAccessType('customer');
       } else if (!accessGranted) {
-        // Token invÃ¡lido: sÃ³ limpar se o cliente NÃƒO estava logado
-        // (evita logout durante pedido ativo por erro transitÃ³rio)
+        // Token inválido: só limpar se o cliente NÒO estava logado
+        // (evita logout durante pedido ativo por erro transitório)
         localStorage.removeItem(CP_TOKEN_KEY);
         localStorage.removeItem(SESSION_KEY);
         localStorage.removeItem(SESSION_TYPE_KEY);
@@ -347,8 +347,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
   }, [indicadorPhone, bypassCode, isCheckingIndicador, indicadorCheckQuery]);
 
-  // CronÃ´metro regressivo e logout automÃ¡tico
-  // Usa expiresAt do localStorage como fonte de verdade para nÃ£o deslogar ao voltar do PIX
+  // Cronômetro regressivo e logout automático
+  // Usa expiresAt do localStorage como fonte de verdade para não deslogar ao voltar do PIX
   useEffect(() => {
     const isVIP = localStorage.getItem(SESSION_TYPE_KEY) === "vip";
     if (!accessGranted || !isVIP) return;
@@ -377,7 +377,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     return () => clearInterval(timer);
   }, [accessGranted]);
 
-  // Helper: obtÃ©m o telefone canÃ´nico para operaÃ§Ãµes (resolvedPhone se disponÃ­vel, senÃ£o clientPhone)
+  // Helper: obtém o telefone canônico para operações (resolvedPhone se disponível, senão clientPhone)
   const getCanonicalPhone = () => resolvedPhone || getPhoneDigits(clientPhone);
 
   // Step 1: Verificar telefone ou CPF
@@ -385,13 +385,13 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     e.preventDefault();
     const phoneDigits = getPhoneDigits(clientPhone);
     const cpfDigits = clientCpf.replace(/\D/g, '');
-    // Usar telefone se preenchido, senÃ£o CPF
+    // Usar telefone se preenchido, senão CPF
     const inputDigits = phoneDigits.length === 11 ? phoneDigits : cpfDigits;
     if (inputDigits.length !== 11) {
       if (phoneDigits.length > 0 && phoneDigits.length !== 11) {
-        toast.error("Telefone deve ter 11 dÃ­gitos (DDD + nÃºmero)");
+        toast.error("Telefone deve ter 11 dígitos (DDD + número)");
       } else if (cpfDigits.length > 0 && cpfDigits.length !== 11) {
-        toast.error("CPF deve ter 11 dÃ­gitos");
+        toast.error("CPF deve ter 11 dígitos");
       } else {
         toast.error("Preencha o telefone ou o CPF para continuar");
       }
@@ -408,7 +408,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       setResolvedPhone(canonical);
 
       if (status === 'not_found') {
-        // NÃ£o encontrado pelo novo sistema â†’ tentar checkByPhone para cadastro
+        // Não encontrado pelo novo sistema �  tentar checkByPhone para cadastro
         const result = await checkByPhoneMutation.mutateAsync({ phone: inputDigits });
         if (result?.blocked) {
           setGateStep("blocked");
@@ -421,16 +421,16 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         }
         if (result?.exists) {
           setCustomerExists(true);
-          // Fallback: cliente existe mas nÃ£o foi encontrado pelo cpwd â†’ ir para senha
+          // Fallback: cliente existe mas não foi encontrado pelo cpwd �  ir para senha
           setGateStep("password");
         } else {
           setCustomerExists(false);
           setRegReferredByPhone("");
-          // Se entrou pelo CPF, prÃ©-preencher o CPF no formulÃ¡rio e deixar telefone livre
+          // Se entrou pelo CPF, pré-preencher o CPF no formulário e deixar telefone livre
           const byCpf = clientCpf.replace(/\D/g, '').length === 11;
           setEnteredByCpf(byCpf);
           if (byCpf) {
-            setRegCpf(clientCpf); // prÃ©-preencher CPF
+            setRegCpf(clientCpf); // pré-preencher CPF
             setRegPhone(""); // telefone livre
           } else {
             setRegCpf(""); // CPF livre
@@ -447,7 +447,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
       setCustomerExists(true);
 
-      // Verificar link de indicaÃ§Ã£o
+      // Verificar link de indicação
       if (urlRefCode) {
         try {
           const refResult = await startRefSessionMutation.mutateAsync({
@@ -467,7 +467,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             localStorage.setItem(SESSION_EXPIRES_KEY, expiresDate.toISOString());
             localStorage.setItem('ref_link_owner', refResult.ownerName || '');
             setTimeRemaining(Math.max(0, Math.floor((refResult.expiresAt - Date.now()) / 1000)));
-            toast.success(`Acesso liberado por 30 minutos via link de indicaÃ§Ã£o!`);
+            toast.success(`Acesso liberado por 30 minutos via link de indicação!`);
             return;
           } else if (refResult.expired) {
             toast.info('Seu acesso por link expirou. Digite sua senha para continuar.');
@@ -476,7 +476,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       }
 
       const hasCpf = (cpwdStatus as any)?.hasCpf ?? true;
-      // Verificar foto de perfil usando mutation com telefone canÃ´nico
+      // Verificar foto de perfil usando mutation com telefone canônico
       const checkResult = await checkByPhoneMutation.mutateAsync({ phone: canonical });
       if ((checkResult as any)?.customerBlocked) {
         setCustomerBlockReason((checkResult as any).blockReason || null);
@@ -520,7 +520,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   };
 
   // Step 2: Cadastro
-  // ValidaÃ§Ã£o de CPF
+  // Validação de CPF
   // Busca CEP via ViaCEP
   async function buscarCep(cep: string) {
     const digits = cep.replace(/\D/g, '');
@@ -544,12 +544,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           const cidadeExata = cidadesDoUf.find(c => c.toLowerCase() === cidade.toLowerCase()) || cidade.toUpperCase();
           setRegCity(cidadeExata);
           setCitySearch(cidadeExata);
-          setShowCityDropdown(false); // Fecha dropdown apÃ³s preenchimento automÃ¡tico
+          setShowCityDropdown(false); // Fecha dropdown após preenchimento automático
           setShowEstadoDropdown(false);
         }
         toast.success(`CEP encontrado: ${cidade} - ${uf}`);
       } else {
-        toast.error('CEP nÃ£o encontrado. Preencha o estado e cidade manualmente.');
+        toast.error('CEP não encontrado. Preencha o estado e cidade manualmente.');
       }
     } catch {
       toast.error('Erro ao buscar CEP. Preencha manualmente.');
@@ -591,32 +591,32 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     e.preventDefault();
     if (!regName.trim()) { toast.error("Preencha seu nome completo"); return; }
     if (!regEmail.trim()) { toast.error("Preencha seu email"); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim())) { toast.error("Email invÃ¡lido"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim())) { toast.error("Email inválido"); return; }
     if (!regCpf.trim() || regCpf.replace(/\D/g,'').length !== 11) { toast.error("Preencha o CPF"); return; }
-    if (!validateCpf(regCpf)) { toast.error("CPF invÃ¡lido. Verifique os nÃºmeros e tente novamente."); return; }
-    if (!enteredByCpf && cpfDuplicado) { toast.error("Este CPF jÃ¡ estÃ¡ cadastrado no sistema."); return; }
-    // Quando entrou pelo CPF, telefone Ã© obrigatÃ³rio
-    if (enteredByCpf && getPhoneDigits(regPhone).length !== 11) { toast.error("Preencha o telefone com DDD (11 dÃ­gitos)"); return; }
+    if (!validateCpf(regCpf)) { toast.error("CPF inválido. Verifique os números e tente novamente."); return; }
+    if (!enteredByCpf && cpfDuplicado) { toast.error("Este CPF já está cadastrado no sistema."); return; }
+    // Quando entrou pelo CPF, telefone é obrigatório
+    if (enteredByCpf && getPhoneDigits(regPhone).length !== 11) { toast.error("Preencha o telefone com DDD (11 dígitos)"); return; }
     if (!regCity.trim()) { toast.error("Selecione a cidade"); return; }
     if (!regUf) { toast.error("Selecione o estado"); return; }
     const referredPhoneDigits = getPhoneDigits(regReferredByPhone);
-    // Telefone do cliente: se entrou pelo CPF usa regPhone, senÃ£o usa clientPhone
+    // Telefone do cliente: se entrou pelo CPF usa regPhone, senão usa clientPhone
     const clientPhoneDigits = enteredByCpf ? getPhoneDigits(regPhone) : getPhoneDigits(clientPhone);
     
-    // Validar indicador apenas se foi preenchido (pode estar vazio se usou cÃ³digo de bypass)
+    // Validar indicador apenas se foi preenchido (pode estar vazio se usou código de bypass)
     if (referredPhoneDigits.length > 0) {
       if (referredPhoneDigits.length !== 11) {
-        toast.error("Telefone do indicador deve ter 11 dÃ­gitos");
+        toast.error("Telefone do indicador deve ter 11 dígitos");
         return;
       }
       if (referredPhoneDigits === clientPhoneDigits) {
-        toast.error("VocÃª nÃ£o pode indicar a si mesmo");
+        toast.error("Você não pode indicar a si mesmo");
         return;
       }
     }
-    // SEGURANÃ‡A: foto Ã© obrigatÃ³ria - nÃ£o pode cadastrar sem foto
+    // SEGURAN�!A: foto é obrigatória - não pode cadastrar sem foto
     if (!regProfilePhoto) {
-      toast.error("Foto de perfil Ã© obrigatÃ³ria para continuar o cadastro.");
+      toast.error("Foto de perfil é obrigatória para continuar o cadastro.");
       return;
     }
     try {
@@ -635,8 +635,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         } catch (err) {
           setPhotoUploadFailed(true);
           const msg = err instanceof Error && err.message.startsWith('Tempo esgotado')
-            ? 'A foto demorou demais para enviar (conexÃ£o lenta). Tente novamente em um sinal melhor ou use uma foto menor.'
-            : 'Erro ao enviar foto. Verifique sua conexÃ£o e tente novamente.';
+            ? 'A foto demorou demais para enviar (conexão lenta). Tente novamente em um sinal melhor ou use uma foto menor.'
+            : 'Erro ao enviar foto. Verifique sua conexão e tente novamente.';
           toast.error(msg);
           setIsUploadingPhoto(false);
           return;
@@ -661,22 +661,22 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         bypassCode: bypassCode.trim().length > 0 ? bypassCode.trim() : undefined,
       });
       if (result.blocked) {
-        toast.error(result.message || 'Cadastro nÃ£o permitido. Entre em contato pelo WhatsApp.');
+        toast.error(result.message || 'Cadastro não permitido. Entre em contato pelo WhatsApp.');
         return;
       }
       if (result.duplicateCpf) {
-        toast.error(result.message || 'CPF jÃ¡ registrado no sistema.');
+        toast.error(result.message || 'CPF já registrado no sistema.');
         setCpfDuplicado(true);
         return;
       }
       // Tratar QUALQUER falha do backend mostrando a mensagem (evita falha silenciosa)
       if (!result.success) {
-        toast.error(result.message || 'NÃ£o foi possÃ­vel concluir o cadastro. Verifique os dados e tente novamente.');
+        toast.error(result.message || 'Não foi possível concluir o cadastro. Verifique os dados e tente novamente.');
         return;
       }
       if (result.success) {
         toast.success("Cadastro realizado com sucesso!");
-        // Se veio por link de indicaÃ§Ã£o, liberar acesso automÃ¡tico sem exigir senha
+        // Se veio por link de indicação, liberar acesso automático sem exigir senha
         if (urlRefCode) {
           try {
             const refResult = await startRefSessionMutation.mutateAsync({
@@ -696,12 +696,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               localStorage.setItem(SESSION_EXPIRES_KEY, expiresDate.toISOString());
               localStorage.setItem('ref_link_owner', refResult.ownerName || '');
               setTimeRemaining(Math.max(0, Math.floor((refResult.expiresAt - Date.now()) / 1000)));
-              toast.success('Acesso liberado via link de indicaÃ§Ã£o!');
+              toast.success('Acesso liberado via link de indicação!');
               return;
             }
           } catch { /* fallback para senha */ }
         }
-        // Se entrou pelo CPF, atualizar clientPhone com o telefone digitado no formulÃ¡rio
+        // Se entrou pelo CPF, atualizar clientPhone com o telefone digitado no formulário
         if (enteredByCpf && getPhoneDigits(regPhone).length === 11) {
           setClientPhone(regPhone);
           setResolvedPhone(getPhoneDigits(regPhone));
@@ -837,18 +837,18 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
         console.error('Erro ao processar foto:', errorMsg);
-        toast.error("Erro ao enviar foto. Verifique sua conexÃ£o e tente novamente.");
+        toast.error("Erro ao enviar foto. Verifique sua conexão e tente novamente.");
         setIsUploadingPhoto(false);
         return;
       }
-      // Se hÃ¡ sessÃ£o pendente (cliente que jÃ¡ tinha senha e estava sem foto),
+      // Se há sessão pendente (cliente que já tinha senha e estava sem foto),
       // liberar acesso diretamente sem pedir senha de novo
       if (pendingSession) {
         const sess = pendingSession;
         // Verificar se o cliente tem CPF cadastrado antes de liberar
         const customerCheck2 = await customerCheckQuery.refetch();
         if (!(customerCheck2.data?.customer as any)?.cpf) {
-          // Sem CPF â†’ forÃ§ar atualizaÃ§Ã£o
+          // Sem CPF �  forçar atualização
           setGateStep("updateCpf");
           setIsUploadingPhoto(false);
           return;
@@ -881,7 +881,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           toast.success("Acesso concedido!");
         }
       } else if (urlRefCode) {
-        // Veio por link de indicaÃ§Ã£o: liberar acesso automÃ¡tico sem senha
+        // Veio por link de indicação: liberar acesso automático sem senha
         try {
           const refResult = await startRefSessionMutation.mutateAsync({
             code: urlRefCode,
@@ -900,7 +900,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             localStorage.setItem(SESSION_EXPIRES_KEY, expiresDate.toISOString());
             localStorage.setItem('ref_link_owner', refResult.ownerName || '');
             setTimeRemaining(Math.max(0, Math.floor((refResult.expiresAt - Date.now()) / 1000)));
-            toast.success('Acesso liberado via link de indicaÃ§Ã£o!');
+            toast.success('Acesso liberado via link de indicação!');
           } else {
             setGateStep("password");
           }
@@ -908,7 +908,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           setGateStep("password");
         }
       } else {
-        // Verificar status da senha para decidir prÃ³ximo step
+        // Verificar status da senha para decidir próximo step
         const cpwdStatus = await cpwdCheckStatusMutation.mutateAsync({ phone: getPhoneDigits(clientPhone) });
         const st = cpwdStatus?.status;
         if (st === 'active') {
@@ -940,7 +940,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       }
       // Limite maior porque a imagem sera comprimida no envio (fotos de iPhone sao grandes)
       if (file.size > 25 * 1024 * 1024) {
-        toast.error("A foto deve ter no mÃ¡ximo 25MB");
+        toast.error("A foto deve ter no máximo 25MB");
         return;
       }
       setRegProfilePhoto(file);
@@ -1003,7 +1003,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           setPassword("");
           setShowPasswordError(true);
         } else if (result.error === 'pending_approval') {
-          toast.info("Sua senha ainda estÃ¡ aguardando aprovaÃ§Ã£o.");
+          toast.info("Sua senha ainda está aguardando aprovação.");
           setGateStep("cpwd_pending");
         } else if (result.error === 'expired') {
           toast.info("Sua senha expirou. Crie uma nova senha.");
@@ -1029,7 +1029,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       return;
     }
     if (cpwdNewPassword !== cpwdConfirmPassword) {
-      toast.error("As senhas nÃ£o coincidem");
+      toast.error("As senhas não coincidem");
       return;
     }
     setCpwdIsCreating(true);
@@ -1059,7 +1059,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           });
           if (manualResult.success) {
             setGateStep("cpwd_pending");
-            toast.info("Senha criada! Aguardando aprovaÃ§Ã£o do administrador.");
+            toast.info("Senha criada! Aguardando aprovação do administrador.");
             return;
           }
         }
@@ -1087,7 +1087,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
   }, [accessGranted, accessType]);
 
-  // â”€â”€ VerificaÃ§Ã£o de cadastro completo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ���� Verificação de cadastro completo ��������������������������������������������������������������������������
   const canonicalPhone = resolvedPhone || getPhoneDigits(clientPhone);
   const profileCheckQuery = trpc.customers.checkByPhone.useQuery(
     { phone: canonicalPhone },
@@ -1107,11 +1107,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
   const handleCompleteProfile = async () => {
     if (missingEmail && !completeEmail.match(/^[^@]+@[^@]+\.[^@]+$/)) {
-      toast.error("Digite um e-mail vÃ¡lido");
+      toast.error("Digite um e-mail válido");
       return;
     }
     if (missingCpf && completeCpf.replace(/\D/g, "").length !== 11) {
-      toast.error("Digite um CPF vÃ¡lido com 11 dÃ­gitos");
+      toast.error("Digite um CPF válido com 11 dígitos");
       return;
     }
     setCompleteSaving(true);
@@ -1143,19 +1143,19 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 <AlertTriangle className="w-8 h-8 text-yellow-500" />
               </div>
               <h1 className="text-2xl font-bold text-white mb-2">Complete seu Cadastro</h1>
-              <p className="text-muted-foreground text-sm">Para continuar, preencha os dados obrigatÃ³rios abaixo.</p>
+              <p className="text-muted-foreground text-sm">Para continuar, preencha os dados obrigatórios abaixo.</p>
             </div>
             <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-              {/* Nome â€” somente leitura */}
+              {/* Nome � somente leitura */}
               <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
                 <User className="w-5 h-5 text-green-400 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Nome</p>
-                  <p className="font-semibold text-white truncate">{profileData?.name || "â€”"}</p>
+                  <p className="font-semibold text-white truncate">{profileData?.name || "�"}</p>
                 </div>
                 <CheckCircle2 className="w-5 h-5 text-green-400 ml-auto shrink-0" />
               </div>
-              {/* Telefone â€” somente leitura */}
+              {/* Telefone � somente leitura */}
               <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
                 <Phone className="w-5 h-5 text-green-400 shrink-0" />
                 <div className="min-w-0">
@@ -1178,7 +1178,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     onChange={e => setCompleteEmail(e.target.value)}
                     className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                   />
-                  <p className="text-xs text-muted-foreground">Usado para receber informaÃ§Ãµes do seu pedido.</p>
+                  <p className="text-xs text-muted-foreground">Usado para receber informações do seu pedido.</p>
                 </div>
               ) : (
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
@@ -1242,7 +1242,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           <div id="vip-timer-bar" className="w-full bg-gradient-to-r from-primary/20 to-purple-600/20 border-b border-primary/30 flex items-center justify-center gap-2 py-1.5 text-white">
             <Clock className="w-4 h-4 text-primary animate-pulse" />
             <span className="font-bold text-sm">{formatTime(timeRemaining)}</span>
-            <span className="text-xs opacity-70">atÃ© expirar</span>
+            <span className="text-xs opacity-70">até expirar</span>
           </div>
         )}
         {children}
@@ -1252,12 +1252,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center relative overflow-hidden px-0 sm:px-6">
-      {/* CronÃ´metro no topo da tela de login */}
+      {/* Cronômetro no topo da tela de login */}
       {(accessType === "vip" || localStorage.getItem(SESSION_TYPE_KEY) === "vip") && timeRemaining !== null && timeRemaining > 0 && (
         <div className="w-full bg-gradient-to-r from-primary/20 to-purple-600/20 border-b border-primary/30 flex items-center justify-center gap-2 py-2 text-white absolute top-0 left-0">
           <Clock className="w-4 h-4 text-primary animate-pulse" />
           <span className="font-bold text-sm">{formatTime(timeRemaining)}</span>
-          <span className="text-xs opacity-70">atÃ© expirar</span>
+          <span className="text-xs opacity-70">até expirar</span>
         </div>
       )}
 
@@ -1267,7 +1267,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
 
       <div className="relative z-10 w-full sm:max-w-md sm:mx-auto">
-        {/* Banner de instalaÃ§Ã£o PWA */}
+        {/* Banner de instalação PWA */}
         {isInstallable && !isInstalled && !dismissed && (
           <div className="mb-4 bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl p-4 shadow-2xl border border-green-400/30 animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="flex items-start justify-between gap-3">
@@ -1277,7 +1277,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 </div>
                 <div>
                   <p className="text-white font-bold text-sm">Instale o App H2 COLOMBIANO!</p>
-                  <p className="text-white/80 text-xs mt-0.5">Acesse mais rÃ¡pido direto da tela inicial</p>
+                  <p className="text-white/80 text-xs mt-0.5">Acesse mais rápido direto da tela inicial</p>
                 </div>
               </div>
               <button onClick={dismiss} className="text-white/60 hover:text-white p-1 flex-shrink-0">
@@ -1294,7 +1294,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </svg>
                   <span>(Compartilhar)</span>
                 </div>
-                <p className="text-white/90 text-xs mt-1">2. Role e toque em "Adicionar Ã  Tela de InÃ­cio"</p>
+                <p className="text-white/90 text-xs mt-1">2. Role e toque em "Adicionar à Tela de Início"</p>
               </div>
             ) : (
               <button
@@ -1309,7 +1309,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         )}
 
         <div className="bg-black/60 backdrop-blur-xl border-0 sm:border border-primary/30 rounded-none sm:rounded-2xl p-6 sm:p-8 shadow-2xl min-h-screen sm:min-h-0 flex flex-col justify-center">
-          {/* CronÃ´metro destacado */}
+          {/* Cronômetro destacado */}
           {(accessType === "vip" || localStorage.getItem(SESSION_TYPE_KEY) === "vip") && timeRemaining !== null && timeRemaining > 0 && (
             <div className={`mb-6 p-4 rounded-lg border-2 flex items-center justify-center gap-3 ${
               timeRemaining <= 300 ? "bg-red-900/30 border-red-500 shadow-lg shadow-red-500/50" :
@@ -1351,7 +1351,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               {gateStep === "password" && "Acesso com senha do cadastro"}
               {gateStep === "updateCpf" && "Atualizar Cadastro"}
               {gateStep === "cpwd_create" && "Crie sua senha"}
-              {gateStep === "cpwd_pending" && "Aguardando aprovaÃ§Ã£o"}
+              {gateStep === "cpwd_pending" && "Aguardando aprovação"}
             </p>
           </div>
 
@@ -1372,7 +1372,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           {gateStep === "phone" && (
             <form onSubmit={handlePhoneSubmit} className="space-y-4">
 
-              {/* InstruÃ§Ã£o de acesso */}
+              {/* Instrução de acesso */}
               <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center">
                 <p className="text-white/90 text-sm font-semibold">Identifique-se para acessar</p>
                 <p className="text-white/50 text-xs mt-0.5">Use o telefone ou CPF cadastrado na H2 COLOMBIANO</p>
@@ -1404,10 +1404,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     autoFocus
                   />
                   {getPhoneDigits(clientPhone).length > 0 && getPhoneDigits(clientPhone).length !== 11 && (
-                    <p className="text-red-400 text-xs mt-1">Telefone deve ter 11 dÃ­gitos (DDD + nÃºmero)</p>
+                    <p className="text-red-400 text-xs mt-1">Telefone deve ter 11 dígitos (DDD + número)</p>
                   )}
                   {getPhoneDigits(clientPhone).length === 11 && (
-                    <p className="text-green-400 text-xs mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Telefone vÃ¡lido</p>
+                    <p className="text-green-400 text-xs mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Telefone válido</p>
                   )}
                 </div>
               </div>
@@ -1422,7 +1422,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               {/* Campo CPF */}
               <div>
                 <label className="block text-xs font-bold text-white/60 mb-2 uppercase tracking-widest flex items-center gap-1.5">
-                  <CreditCard className="w-3.5 h-3.5" /> CPF (somente nÃºmeros)
+                  <CreditCard className="w-3.5 h-3.5" /> CPF (somente números)
                 </label>
                 <div className="relative">
                   <input
@@ -1449,10 +1449,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     disabled={isCheckingPhone || getPhoneDigits(clientPhone).length > 0}
                   />
                   {clientCpf.replace(/\D/g,'').length > 0 && clientCpf.replace(/\D/g,'').length !== 11 && (
-                    <p className="text-red-400 text-xs mt-1">CPF deve ter 11 dÃ­gitos</p>
+                    <p className="text-red-400 text-xs mt-1">CPF deve ter 11 dígitos</p>
                   )}
                   {clientCpf.replace(/\D/g,'').length === 11 && (
-                    <p className="text-green-400 text-xs mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> CPF vÃ¡lido</p>
+                    <p className="text-green-400 text-xs mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> CPF válido</p>
                   )}
                 </div>
               </div>
@@ -1472,20 +1472,20 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </span>
                 ) : (
                   <span className="flex items-center justify-center gap-2">
-                    CONTINUAR â†’
+                    CONTINUAR � 
                   </span>
                 )}
               </button>
 
-              {/* BotÃ£o WhatsApp ao errar senha */}
+              {/* Botão WhatsApp ao errar senha */}
               {showPasswordError && (
                 <div className="mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <div className="bg-orange-950/40 border border-orange-500/40 rounded-xl p-4 mb-3 text-center">
-                    <p className="text-orange-300 font-bold text-sm">ðŸ”‘ Senha nÃ£o reconhecida</p>
-                    <p className="text-white/70 text-xs mt-1">NÃ£o se preocupe! Clique abaixo e te enviamos sua senha pelo WhatsApp em instantes.</p>
+                    <p className="text-orange-300 font-bold text-sm">�x Senha não reconhecida</p>
+                    <p className="text-white/70 text-xs mt-1">Não se preocupe! Clique abaixo e te enviamos sua senha pelo WhatsApp em instantes.</p>
                   </div>
                   <a
-                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`OlÃ¡! Estou tentando acessar o site H2 COLOMBIANO para fazer meu pedido, mas minha senha nÃ£o estÃ¡ funcionando.\nMeu nÃºmero: ${formatPhone(clientPhone)}\nPoderia me ajudar com uma nova senha?`)}`}
+                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Olá! Estou tentando acessar o site H2 COLOMBIANO para fazer meu pedido, mas minha senha não está funcionando.\nMeu número: ${formatPhone(clientPhone)}\nPoderia me ajudar com uma nova senha?`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => {
@@ -1494,7 +1494,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                       el.innerHTML = '<svg class="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Abrindo WhatsApp...';
                       setTimeout(() => {
                         el.classList.remove('opacity-75', 'cursor-wait');
-                        el.innerHTML = 'âœ… Abrindo WhatsApp...';
+                        el.innerHTML = '�S& Abrindo WhatsApp...';
                       }, 1500);
                     }}
                     className="flex items-center justify-center gap-2 w-full py-4 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 active:scale-95 text-white font-black text-base rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg shadow-green-500/40 border border-green-400/30"
@@ -1526,7 +1526,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </div>
                   <div className="flex-1">
                     <p className="text-green-300 font-bold text-sm">Primeiro acesso? Cadastre-se!</p>
-                    <p className="text-white/50 text-xs mt-0.5 leading-relaxed">Se vocÃª ainda nÃ£o tem cadastro na H2 COLOMBIANO, clique abaixo para criar sua conta grÃ¡tis e comeÃ§ar a fazer pedidos.</p>
+                    <p className="text-white/50 text-xs mt-0.5 leading-relaxed">Se você ainda não tem cadastro na H2 COLOMBIANO, clique abaixo para criar sua conta grátis e começar a fazer pedidos.</p>
                   </div>
                 </div>
                 <button
@@ -1552,7 +1552,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             </form>
           )}
 
-          {/* ===== STEP BLOQUEADO: NÃšMERO NA LISTA NEGRA ===== */}
+          {/* ===== STEP BLOQUEADO: N�aMERO NA LISTA NEGRA ===== */}
           {gateStep === "blocked" && (
             <div className="space-y-6 text-center">
               <style>{`
@@ -1575,12 +1575,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               `}</style>
 
               <div className="neon-blocked bg-red-950/50">
-                <p className="text-5xl mb-3">ðŸš«</p>
+                <p className="text-5xl mb-3">�xa�</p>
                 <p className="text-red-400 font-black text-2xl uppercase tracking-widest drop-shadow-[0_0_10px_#ef4444] mb-2">
                   ACESSO RESTRITO
                 </p>
                 <p className="text-white text-base font-semibold">
-                  {customerBlockReason ? 'Seu cadastro foi bloqueado.' : 'Este nÃºmero foi bloqueado pelo sistema.'}
+                  {customerBlockReason ? 'Seu cadastro foi bloqueado.' : 'Este número foi bloqueado pelo sistema.'}
                 </p>
                 {customerBlockReason && (
                   <div className="mt-3 px-3 py-2 bg-red-900/40 border border-red-500/30 rounded-lg">
@@ -1590,14 +1590,14 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 )}
                 {!customerBlockReason && (
                   <p className="text-white/60 text-sm mt-2">
-                    O acesso a este site foi restrito para este nÃºmero.
+                    O acesso a este site foi restrito para este número.
                   </p>
                 )}
               </div>
 
               <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-5">
                 <p className="text-white/70 text-sm">
-                  Se acredita que isso Ã© um erro, entre em contato com o suporte pelo WhatsApp.
+                  Se acredita que isso é um erro, entre em contato com o suporte pelo WhatsApp.
                 </p>
               </div>
 
@@ -1616,11 +1616,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               setRegReferredByPhone(indicadorDigits.length === 11 ? indicadorDigits : "");
               setGateStep("registration");
             }} className="space-y-6">
-              <p className="text-white/60 text-sm text-center">Tem um indicador ou cÃ³digo de liberaÃ§Ã£o? Informe abaixo (opcional).</p>
+              <p className="text-white/60 text-sm text-center">Tem um indicador ou código de liberação? Informe abaixo (opcional).</p>
 
               <div className="border-2 border-yellow-500/50 rounded-lg p-4 bg-yellow-500/10">
                 <div className="flex items-center justify-between mb-4">
-                  <p className="text-yellow-400 font-bold text-sm">INDICADOR OU CÃ“DIGO DE LIBERAÃ‡ÃƒO</p>
+                  <p className="text-yellow-400 font-bold text-sm">INDICADOR OU C�DIGO DE LIBERA�!ÒO</p>
                   <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold uppercase text-white/70">
                     Opcional
                   </span>
@@ -1648,7 +1648,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     {isCheckingIndicador && <p className="text-white/60 text-xs mt-2 text-center">Verificando...</p>}
                     {indicadorName && (
                       <div className="mt-4 text-center">
-                        <p className="text-green-400 text-sm font-bold mb-2">âœ“ Indicador encontrado</p>
+                        <p className="text-green-400 text-sm font-bold mb-2">�S Indicador encontrado</p>
                         <div className="flex justify-center mb-2">
                           {indicadorData?.profilePhotoUrl && (
                             <img src={indicadorData.profilePhotoUrl} alt={indicadorName} className="w-16 h-16 rounded-full border-2 border-green-400" />
@@ -1660,10 +1660,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </div>
                   <div className="text-center text-white text-sm">OU</div>
                   <div>
-                    <label className="text-white mb-2 block text-sm font-medium">CÃ³digo de LiberaÃ§Ã£o</label>
+                    <label className="text-white mb-2 block text-sm font-medium">Código de Liberação</label>
                     <input
                       type="text"
-                      placeholder="CÃ³digo do ADM"
+                      placeholder="Código do ADM"
                       value={bypassCode}
                       onChange={(e) => {
                         const code = e.target.value.toUpperCase();
@@ -1677,7 +1677,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                       }}
                       className="w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 border-black focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all"
                     />
-                    {bypassCodeValidated && <p className="text-green-400 text-sm mt-2 text-center font-bold">âœ“ CÃ³digo vÃ¡lido</p>}
+                    {bypassCodeValidated && <p className="text-green-400 text-sm mt-2 text-center font-bold">�S Código válido</p>}
                   </div>
                 </div>
               </div>
@@ -1715,7 +1715,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     Telefone {enteredByCpf && <span className="text-red-400">*</span>}
                   </label>
                   {enteredByCpf ? (
-                    // Entrou pelo CPF â†’ telefone Ã© livre e obrigatÃ³rio
+                    // Entrou pelo CPF �  telefone é livre e obrigatório
                     <input
                       type="tel"
                       placeholder="(11) 99999-9999"
@@ -1730,7 +1730,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                       }`}
                     />
                   ) : (
-                    // Entrou pelo telefone â†’ bloqueado
+                    // Entrou pelo telefone �  bloqueado
                     <input type="tel" value={formatPhone(clientPhone)} disabled
                       className="w-full px-4 py-4 bg-gray-200 text-black text-lg text-center font-medium rounded-xl border-2 border-black opacity-70" />
                   )}
@@ -1741,9 +1741,9 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   <input type="email" placeholder="seu@email.com" value={regEmail} onChange={(e) => setRegEmail(e.target.value)}
                     className="w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 border-black focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all" />
                   <div className="mt-1.5 flex items-start gap-1.5 bg-yellow-500/20 border border-yellow-500/40 rounded-lg px-2.5 py-2">
-                    <span className="text-yellow-400 text-xs flex-shrink-0 mt-0.5">âš ï¸</span>
+                    <span className="text-yellow-400 text-xs flex-shrink-0 mt-0.5">�a�️</span>
                     <p className="text-yellow-200 text-xs leading-relaxed">
-                      <strong>O email nÃ£o Ã© para criar conta.</strong> Usado apenas para receber atualizaÃ§Ãµes do seu pedido.
+                      <strong>O email não é para criar conta.</strong> Usado apenas para receber atualizações do seu pedido.
                     </p>
                   </div>
                 </div>
@@ -1752,11 +1752,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 <div>
                   <label className="text-white mb-2 block text-sm font-medium">CPF <span className="text-red-400">*</span></label>
                   {enteredByCpf ? (
-                    // Entrou pelo CPF â†’ campo bloqueado com o CPF digitado
+                    // Entrou pelo CPF �  campo bloqueado com o CPF digitado
                     <input type="text" value={regCpf} disabled
                       className="w-full px-4 py-4 bg-gray-200 text-black text-lg text-center font-medium rounded-xl border-2 border-green-500 opacity-80" />
                   ) : (
-                    // Entrou pelo telefone â†’ CPF livre e obrigatÃ³rio
+                    // Entrou pelo telefone �  CPF livre e obrigatório
                     <input type="text" inputMode="numeric" placeholder="000.000.000-00" value={regCpf}
                       onChange={async (e) => {
                         const formatted = formatCpf(e.target.value);
@@ -1778,16 +1778,16 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                       }`} />
                   )}
                   {!enteredByCpf && regCpf.replace(/\D/g,'').length === 11 && !validateCpf(regCpf) && (
-                    <p className="text-red-400 text-xs mt-1">CPF invÃ¡lido. Verifique os nÃºmeros.</p>
+                    <p className="text-red-400 text-xs mt-1">CPF inválido. Verifique os números.</p>
                   )}
                   {!enteredByCpf && cpfDuplicado && (
-                    <p className="text-red-400 text-xs mt-1">Este CPF jÃ¡ estÃ¡ cadastrado. Entre em contato pelo WhatsApp.</p>
+                    <p className="text-red-400 text-xs mt-1">Este CPF já está cadastrado. Entre em contato pelo WhatsApp.</p>
                   )}
                 </div>
 
                 {/* CEP */}
                 <div>
-                  <label className="text-white mb-2 block text-sm font-medium">CEP <span className="text-gray-400 font-normal text-xs">(opcional â€” preenche Estado e Cidade)</span></label>
+                  <label className="text-white mb-2 block text-sm font-medium">CEP <span className="text-gray-400 font-normal text-xs">(opcional � preenche Estado e Cidade)</span></label>
                   <div className="relative">
                     <input type="text" inputMode="numeric" placeholder="00000-000" value={regCep}
                       onChange={(e) => {
@@ -1812,7 +1812,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     onFocus={() => setShowEstadoDropdown(true)}
                     className="w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 border-black focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all" />
                   {regEstado && !showEstadoDropdown && (
-                    <p className="text-green-300 text-xs mt-1 text-center">âœ“ {regEstado} ({regUf})</p>
+                    <p className="text-green-300 text-xs mt-1 text-center">�S {regEstado} ({regUf})</p>
                   )}
                   {showEstadoDropdown && (
                     <div className="absolute z-50 w-full mt-1 bg-white border-2 border-black rounded-xl shadow-xl max-h-48 overflow-y-auto">
@@ -1838,7 +1838,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     onFocus={() => setShowCityDropdown(true)}
                     className="w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 border-black focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all disabled:opacity-50" />
                   {regCity && !showCityDropdown && (
-                    <p className="text-green-300 text-xs mt-1 text-center">âœ“ {regCity}</p>
+                    <p className="text-green-300 text-xs mt-1 text-center">�S {regCity}</p>
                   )}
                   {showCityDropdown && regUf && (
                     <div className="absolute z-50 w-full mt-1 bg-white border-2 border-black rounded-xl shadow-xl max-h-48 overflow-y-auto">
@@ -1859,34 +1859,34 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 </div>
               </div>
 
-              {/* --- Foto de Perfil OBRIGATÃ“RIA --- */}
+              {/* --- Foto de Perfil OBRIGAT�RIA --- */}
               <div className="border-2 border-red-500/50 rounded-xl p-5 space-y-4 bg-red-500/5">
                 <div className="flex items-center justify-between">
                   <p className="text-white/80 text-sm font-bold uppercase tracking-wider">Foto de Perfil</p>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">OBRIGATÃ“RIA</span>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">OBRIGAT�RIA</span>
                 </div>
                 <div className="flex items-center gap-2 bg-yellow-500/15 border border-yellow-500/40 rounded-xl px-4 py-3">
                   <svg className="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                   </svg>
-                  <p className="text-yellow-300 text-xs font-semibold">A foto deve ser obrigatoriamente de rosto. Fotos de documentos, paisagens ou outros nÃ£o serÃ£o aceitas.</p>
+                  <p className="text-yellow-300 text-xs font-semibold">A foto deve ser obrigatoriamente de rosto. Fotos de documentos, paisagens ou outros não serão aceitas.</p>
                 </div>
                 <div className="flex flex-col items-center gap-4">
                   {regProfilePhotoPreview ? (
                     <div className="relative">
                       <img src={regProfilePhotoPreview} alt="Preview" className="w-32 h-32 rounded-full object-cover border-4 border-green-500 shadow-lg" />
                       <button type="button" onClick={() => { setRegProfilePhoto(null); setRegProfilePhotoPreview(null); setUploadedPhotoUrl(null); setUploadedPhotoFile(null); setPhotoUploadFailed(false); }}
-                        className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center text-base font-bold shadow-lg hover:bg-red-600">Ã—</button>
+                        className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center text-base font-bold shadow-lg hover:bg-red-600">�</button>
                     </div>
                   ) : (
                     <div className="w-32 h-32 rounded-full bg-white/10 border-2 border-dashed border-red-400/60 flex flex-col items-center justify-center">
                       <svg className="w-12 h-12 text-white/40 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      <span className="text-red-300 text-xs font-semibold">ObrigatÃ³ria</span>
+                      <span className="text-red-300 text-xs font-semibold">Obrigatória</span>
                     </div>
                   )}
-                  {/* BotÃµes de foto - usando HTML5 file input nativo */}
+                  {/* Botões de foto - usando HTML5 file input nativo */}
                   {photoMode === 'disabled' ? (
                     <div className="w-full text-center py-4 text-white/40 text-sm border border-white/10 rounded-xl">
                       Envio de foto desativado pelo administrador
@@ -1896,8 +1896,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                       <svg className="w-8 h-8 text-red-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                       </svg>
-                      <p className="text-red-300 text-sm font-bold mb-1">ðŸ“· CÃ¢mera obrigatÃ³ria</p>
-                      <p className="text-red-200/70 text-xs">Este dispositivo nÃ£o possui cÃ¢mera. A foto ao vivo Ã© obrigatÃ³ria para o cadastro. Acesse pelo seu celular para continuar.</p>
+                      <p className="text-red-300 text-sm font-bold mb-1">�x� Câmera obrigatória</p>
+                      <p className="text-red-200/70 text-xs">Este dispositivo não possui câmera. A foto ao vivo é obrigatória para o cadastro. Acesse pelo seu celular para continuar.</p>
                     </div>
                   ) : (
                     <div className={`flex gap-3 w-full ${photoMode !== 'both' ? 'justify-center' : ''}`}>
@@ -1907,7 +1907,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
-                          <span>CÃ¢mera</span>
+                          <span>Câmera</span>
                           <input type="file" accept="image/*,.heic,.heif" capture="user" onChange={handlePhotoSelect} className="hidden" ref={cameraInputRegRef} />
                         </label>
                       )}
@@ -1923,7 +1923,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     </div>
                   )}
                   {!regProfilePhoto && (
-                    <p className="text-red-300 text-xs text-center">âš ï¸ Selecione sua foto para continuar o cadastro</p>
+                    <p className="text-red-300 text-xs text-center">�a�️ Selecione sua foto para continuar o cadastro</p>
                   )}
                   {/* Status do pre-upload da foto */}
                   {regProfilePhoto && isUploadingPhoto && (
@@ -1933,18 +1933,18 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     </p>
                   )}
                   {regProfilePhoto && !isUploadingPhoto && uploadedPhotoUrl && uploadedPhotoFile === regProfilePhoto && (
-                    <p className="text-green-400 text-xs text-center font-semibold">âœ“ Foto enviada com sucesso</p>
+                    <p className="text-green-400 text-xs text-center font-semibold">�S Foto enviada com sucesso</p>
                   )}
                   {regProfilePhoto && !isUploadingPhoto && photoUploadFailed && (
                     <div className="text-center">
-                      <p className="text-red-300 text-xs">NÃ£o consegui enviar a foto. Toque para tentar de novo.</p>
+                      <p className="text-red-300 text-xs">Não consegui enviar a foto. Toque para tentar de novo.</p>
                       <button type="button" onClick={() => regProfilePhoto && preUploadPhoto(regProfilePhoto)} className="mt-1 text-xs font-bold text-white bg-red-500 hover:bg-red-600 px-3 py-1 rounded-full">Reenviar foto</button>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Quem indicou foi movido para step separado apÃ³s cadastro */}
+              {/* Quem indicou foi movido para step separado após cadastro */}
 
               <button
                 type="submit"
@@ -1979,12 +1979,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             <div className="space-y-5">
               <p className="text-white/60 text-sm text-center mb-2">Envie sua foto de perfil</p>
 
-              {/* Aviso obrigatÃ³rio de foto de rosto */}
+              {/* Aviso obrigatório de foto de rosto */}
               <div className="flex items-center gap-2 bg-yellow-500/15 border border-yellow-500/40 rounded-xl px-4 py-3">
                 <svg className="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                 </svg>
-                <p className="text-yellow-300 text-sm font-semibold">A foto deve ser obrigatoriamente de rosto. Fotos de documentos, paisagens ou outros nÃ£o serÃ£o aceitas.</p>
+                <p className="text-yellow-300 text-sm font-semibold">A foto deve ser obrigatoriamente de rosto. Fotos de documentos, paisagens ou outros não serão aceitas.</p>
               </div>
 
               <div className="border border-white/20 rounded-xl p-6 space-y-5 flex flex-col items-center">
@@ -1996,7 +1996,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                       onClick={() => { setRegProfilePhoto(null); setRegProfilePhotoPreview(null); }}
                       className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center text-base font-bold shadow-lg hover:bg-red-600"
                     >
-                      Ã—
+                      �
                     </button>
                   </div>
                 ) : (
@@ -2008,7 +2008,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </div>
                 )}
 
-                {/* BotÃµes: cÃ¢mera e/ou galeria conforme configuraÃ§Ã£o do admin - usando HTML5 nativo */}
+                {/* Botões: câmera e/ou galeria conforme configuração do admin - usando HTML5 nativo */}
                 {photoMode === 'disabled' ? (
                   <div className="w-full text-center py-4 text-white/40 text-sm border border-white/10 rounded-xl">
                     Envio de foto desativado pelo administrador
@@ -2018,8 +2018,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     <svg className="w-10 h-10 text-red-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                     </svg>
-                    <p className="text-red-300 text-sm font-bold mb-1">ðŸ“· CÃ¢mera obrigatÃ³ria</p>
-                    <p className="text-red-200/70 text-xs">Este dispositivo nÃ£o possui cÃ¢mera. A foto ao vivo Ã© obrigatÃ³ria para o cadastro.</p>
+                    <p className="text-red-300 text-sm font-bold mb-1">�x� Câmera obrigatória</p>
+                    <p className="text-red-200/70 text-xs">Este dispositivo não possui câmera. A foto ao vivo é obrigatória para o cadastro.</p>
                     <p className="text-yellow-300/80 text-xs mt-2 font-semibold">Acesse pelo seu celular para continuar.</p>
                   </div>
                 ) : (
@@ -2030,7 +2030,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        <span>CÃ¢mera</span>
+                        <span>Câmera</span>
                         <input type="file" accept="image/*,.heic,.heif" capture="user" onChange={handlePhotoSelect} className="hidden" ref={cameraInputProfileRef} />
                       </label>
                     )}
@@ -2046,7 +2046,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </div>
                 )}
 
-                <p className="text-white/40 text-sm text-center">Formatos aceitos: JPG, PNG (mÃ¡x. 5MB)</p>
+                <p className="text-white/40 text-sm text-center">Formatos aceitos: JPG, PNG (máx. 5MB)</p>
               </div>
 
               <button
@@ -2072,10 +2072,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             </div>
           )}
 
-          {/* ===== STEP 2.7: INDICAÃ‡ÃƒO ===== */}
+          {/* ===== STEP 2.7: INDICA�!ÒO ===== */}
           {gateStep === "referral" && (
             <div className="space-y-6">
-              {/* Se veio por link de indicaÃ§Ã£o, registrar automaticamente e pular */}
+              {/* Se veio por link de indicação, registrar automaticamente e pular */}
               {urlRefCode && urlRefValid === null && (
                 <ReferralAutoRegister
                   code={urlRefCode}
@@ -2101,8 +2101,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
-                <h3 className="text-white font-bold text-xl mb-1">AlguÃ©m te indicou?</h3>
-                <p className="text-white/60 text-sm">Deseja informar quem te indicou? Quem indicou pode ganhar pela indicaÃ§Ã£o! ðŸŽ</p>
+                <h3 className="text-white font-bold text-xl mb-1">Alguém te indicou?</h3>
+                <p className="text-white/60 text-sm">Deseja informar quem te indicou? Quem indicou pode ganhar pela indicação! �x}�</p>
               </div>
 
               <div className="flex gap-3">
@@ -2111,7 +2111,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   onClick={() => setShowReferralForm(true)}
                   className="flex-1 py-4 bg-yellow-500/20 hover:bg-yellow-500/30 border-2 border-yellow-500/50 text-yellow-300 font-bold text-lg rounded-xl transition-all"
                 >
-                  âœ… SIM
+                  �S& SIM
                 </button>
                 <button
                   type="button"
@@ -2120,14 +2120,14 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     try {
                       await updateReferralMutation.mutateAsync({
                         phone: getPhoneDigits(clientPhone),
-                        referredBy: 'NÃ£o informou',
+                        referredBy: 'Não informou',
                       });
                     } catch { /* ignora erro silenciosamente */ }
                     setGateStep("password");
                   }}
                   className="flex-1 py-4 bg-white/10 hover:bg-white/20 border-2 border-white/20 text-white/70 font-bold text-lg rounded-xl transition-all"
                 >
-                  âŒ NÃƒO
+                  �R NÒO
                 </button>
               </div>
 
@@ -2143,7 +2143,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     <input type="tel" placeholder="(11) 99999-9999" value={formatPhone(regReferredByPhone)} onChange={(e) => setRegReferredByPhone(e.target.value.replace(/\D/g, ''))}
                       className="w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 border-black focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all" />
                     {getPhoneDigits(regReferredByPhone).length > 0 && getPhoneDigits(regReferredByPhone).length !== 11 && (
-                      <p className="text-red-400 text-sm mt-1">Telefone deve ter 11 dÃ­gitos (DDD + nÃºmero)</p>
+                      <p className="text-red-400 text-sm mt-1">Telefone deve ter 11 dígitos (DDD + número)</p>
                     )}
                   </div>
                   <button
@@ -2152,13 +2152,13 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     onClick={async () => {
                       const referredPhoneDigits = getPhoneDigits(regReferredByPhone);
                       if (referredPhoneDigits.length > 0 && referredPhoneDigits.length !== 11) {
-                        toast.error("Telefone deve ter 11 dÃ­gitos (DDD + nÃºmero)");
+                        toast.error("Telefone deve ter 11 dígitos (DDD + número)");
                         return;
                       }
-                      // ValidaÃ§Ã£o local: nÃ£o pode indicar a si mesmo
+                      // Validação local: não pode indicar a si mesmo
                       const selfDigits = getPhoneDigits(clientPhone);
                       if (referredPhoneDigits.length === 11 && referredPhoneDigits === selfDigits) {
-                        toast.error("VocÃª nÃ£o pode indicar a si mesmo!");
+                        toast.error("Você não pode indicar a si mesmo!");
                         return;
                       }
                       try {
@@ -2168,13 +2168,13 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                           referredByPhone: referredPhoneDigits.length === 11 ? referredPhoneDigits : undefined,
                         });
                         if (!result.success) {
-                          toast.error(result.message || "Erro ao salvar indicaÃ§Ã£o.");
+                          toast.error(result.message || "Erro ao salvar indicação.");
                           return;
                         }
-                        toast.success("IndicaÃ§Ã£o salva!");
+                        toast.success("Indicação salva!");
                         setGateStep("password");
                       } catch {
-                        toast.error("Erro ao salvar indicaÃ§Ã£o. Tente novamente.");
+                        toast.error("Erro ao salvar indicação. Tente novamente.");
                       }
                     }}
                     className="w-full py-4 bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-600/80 hover:to-yellow-500/80 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-lg rounded-xl transition-all"
@@ -2194,7 +2194,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 <svg className="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                 </svg>
-                <p className="text-yellow-300 text-sm font-semibold">Para continuar, Ã© necessÃ¡rio informar seu CPF. Este dado Ã© obrigatÃ³rio para todos os serviÃ§os.</p>
+                <p className="text-yellow-300 text-sm font-semibold">Para continuar, é necessário informar seu CPF. Este dado é obrigatório para todos os serviços.</p>
               </div>
 
               <div>
@@ -2225,7 +2225,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 disabled={updateCpfLoading || updateCpfValue.replace(/\D/g,'').length !== 11}
                 onClick={async () => {
                   const digits = updateCpfValue.replace(/\D/g,'');
-                  // ValidaÃ§Ã£o matemÃ¡tica do CPF
+                  // Validação matemática do CPF
                   const isValidCpf = (cpf: string) => {
                     if (/^(\d)\1{10}$/.test(cpf)) return false;
                     let sum = 0;
@@ -2237,12 +2237,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     r = (sum * 10) % 11; if (r === 10 || r === 11) r = 0;
                     return r === parseInt(cpf[10]);
                   };
-                  if (!isValidCpf(digits)) { setUpdateCpfError('CPF invÃ¡lido'); return; }
+                  if (!isValidCpf(digits)) { setUpdateCpfError('CPF inválido'); return; }
                   setUpdateCpfLoading(true);
                   try {
                     const res = await updateCpfMutation.mutateAsync({ phone: getPhoneDigits(clientPhone), cpf: digits });
                     if (!res.success) { setUpdateCpfError(res.message || 'Erro ao salvar CPF'); return; }
-                    // CPF salvo â€” liberar acesso com a sessÃ£o pendente
+                    // CPF salvo � liberar acesso com a sessão pendente
                     if (pendingSession) {
                       setAccessGranted(true);
                       setAccessType(pendingSession.type);
@@ -2267,14 +2267,14 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             </div>
           )}
 
-          {/* ===== STEP CPF OBRIGATÃ“RIO (antes de criar senha) ===== */}
+          {/* ===== STEP CPF OBRIGAT�RIO (antes de criar senha) ===== */}
           {gateStep === "cpwd_add_cpf" && (
             <div className="space-y-5">
               <div className="flex items-center gap-2 bg-yellow-500/15 border border-yellow-500/40 rounded-xl px-4 py-3">
                 <svg className="w-5 h-5 text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                 </svg>
-                <p className="text-yellow-300 text-sm font-semibold">Para criar sua senha, Ã© necessÃ¡rio informar seu CPF. Este dado Ã© obrigatÃ³rio para todos os serviÃ§os.</p>
+                <p className="text-yellow-300 text-sm font-semibold">Para criar sua senha, é necessário informar seu CPF. Este dado é obrigatório para todos os serviços.</p>
               </div>
 
               <div>
@@ -2306,7 +2306,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 disabled={cpwdAddCpfLoading || cpwdAddCpfValue.replace(/\D/g,'').length !== 11}
                 onClick={async () => {
                   const digits = cpwdAddCpfValue.replace(/\D/g,'');
-                  // ValidaÃ§Ã£o matemÃ¡tica do CPF
+                  // Validação matemática do CPF
                   const isValidCpf = (cpf: string) => {
                     if (/^(\d)\1{10}$/.test(cpf)) return false;
                     let sum = 0;
@@ -2318,7 +2318,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     r = (sum * 10) % 11; if (r === 10 || r === 11) r = 0;
                     return r === parseInt(cpf[10]);
                   };
-                  if (!isValidCpf(digits)) { setCpwdAddCpfError('CPF invÃ¡lido. Verifique os dÃ­gitos.'); return; }
+                  if (!isValidCpf(digits)) { setCpwdAddCpfError('CPF inválido. Verifique os dígitos.'); return; }
                   setCpwdAddCpfLoading(true);
                   try {
                     await cpwdSaveCpfMutation.mutateAsync({ phone: getCanonicalPhone(), cpf: digits });
@@ -2362,7 +2362,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     type={cpwdShowNew ? "text" : "password"}
                     value={cpwdNewPassword}
                     onChange={(e) => setCpwdNewPassword(e.target.value)}
-                    placeholder="MÃ­nimo 4 caracteres"
+                    placeholder="Mínimo 4 caracteres"
                     className="w-full px-4 py-3 bg-white text-black text-lg text-center font-medium rounded-lg border-2 border-black focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all"
                     autoFocus
                     disabled={cpwdIsCreating}
@@ -2398,7 +2398,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </button>
                 </div>
                 {cpwdConfirmPassword && cpwdConfirmPassword !== cpwdNewPassword && (
-                  <p className="text-red-400 text-xs mt-1">As senhas nÃ£o coincidem</p>
+                  <p className="text-red-400 text-xs mt-1">As senhas não coincidem</p>
                 )}
               </div>
 
@@ -2430,26 +2430,26 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             </form>
           )}
 
-          {/* ===== STEP AGUARDANDO APROVAÃ‡ÃƒO ===== */}
+          {/* ===== STEP AGUARDANDO APROVA�!ÒO ===== */}
           {gateStep === "cpwd_pending" && (
             <div className="space-y-6 text-center">
               <div className="bg-yellow-950/40 border border-yellow-500/40 rounded-xl p-6">
-                <p className="text-5xl mb-3">â³</p>
-                <p className="text-yellow-400 font-black text-xl uppercase tracking-widest mb-2">AGUARDANDO APROVAÃ‡ÃƒO</p>
+                <p className="text-5xl mb-3">⏳</p>
+                <p className="text-yellow-400 font-black text-xl uppercase tracking-widest mb-2">AGUARDANDO APROVA�!ÒO</p>
                 <p className="text-white/70 text-sm mt-2">
-                  Sua senha foi criada e estÃ¡ aguardando a aprovaÃ§Ã£o do administrador.
-                  VocÃª serÃ¡ notificado assim que for liberada.
+                  Sua senha foi criada e está aguardando a aprovação do administrador.
+                  Você será notificado assim que for liberada.
                 </p>
               </div>
               <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-5">
-                <p className="text-white/70 text-sm">Em caso de dÃºvidas, entre em contato pelo WhatsApp.</p>
+                <p className="text-white/70 text-sm">Em caso de dúvidas, entre em contato pelo WhatsApp.</p>
               </div>
               <button
                 type="button"
                 onClick={() => { setGateStep("phone"); setCpwdNewPassword(""); setCpwdConfirmPassword(""); }}
                 className="w-full text-white/50 text-xs hover:text-white/80 transition-colors"
               >
-                Voltar ao inÃ­cio
+                Voltar ao início
               </button>
             </div>
           )}
@@ -2458,21 +2458,21 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           {gateStep === "password" && (
             <form onSubmit={handlePasswordSubmit} className="space-y-5">
 
-              {/* Card de identificaÃ§Ã£o do usuÃ¡rio */}
+              {/* Card de identificação do usuário */}
               <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center shrink-0">
                   <Phone className="w-4 h-4 text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-white/50 text-[10px] uppercase tracking-widest font-semibold">NÃºmero identificado</p>
+                  <p className="text-white/50 text-[10px] uppercase tracking-widest font-semibold">Número identificado</p>
                   <p className="text-white font-bold text-base">{formatPhone(clientPhone)}</p>
                 </div>
               </div>
 
-              {/* InstruÃ§Ã£o clara */}
+              {/* Instrução clara */}
               <div className="bg-primary/10 border border-primary/30 rounded-xl px-4 py-3">
-                <p className="text-white/90 text-sm font-semibold text-center">ðŸ” Digite a senha que vocÃª criou no cadastro</p>
-                <p className="text-white/50 text-xs text-center mt-1">A mesma senha definida quando vocÃª se cadastrou no site</p>
+                <p className="text-white/90 text-sm font-semibold text-center">�x� Digite a senha que você criou no cadastro</p>
+                <p className="text-white/50 text-xs text-center mt-1">A mesma senha definida quando você se cadastrou no site</p>
               </div>
 
               {/* Campo de senha */}
@@ -2500,7 +2500,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 </div>
               </div>
 
-              {/* BotÃ£o entrar */}
+              {/* Botão entrar */}
               <button
                 type="submit"
                 disabled={isValidating || !password.trim()}
@@ -2529,7 +2529,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   onClick={() => { setGateStep("phone"); setPassword(""); }}
                   className="text-white/40 text-xs hover:text-white/70 transition-colors underline underline-offset-2"
                 >
-                  â† Trocar nÃºmero de telefone
+                  � � Trocar número de telefone
                 </button>
 
                 <div className="w-full border-t border-white/10" />
@@ -2538,7 +2538,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   Esqueceu sua senha? Entre em contato pelo
                 </p>
                 <a
-                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=OlÃ¡!%20Esqueci%20minha%20senha%20de%20acesso%20ao%20site.%20Meu%20telefone%20Ã©%20${getPhoneDigits(clientPhone)}`}
+                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=Olá!%20Esqueci%20minha%20senha%20de%20acesso%20ao%20site.%20Meu%20telefone%20é%20${getPhoneDigits(clientPhone)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-4 py-2 bg-green-600/20 border border-green-500/30 hover:bg-green-600/30 text-green-400 rounded-xl text-sm font-semibold transition-colors"
@@ -2555,7 +2555,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   );
 }
 
-// â”€â”€â”€ Componente auxiliar: registra automaticamente o uso do link de indicaÃ§Ã£o â”€â”€
+// ������ Componente auxiliar: registra automaticamente o uso do link de indicação ����
 function ReferralAutoRegister({
   code,
   clientName,
@@ -2578,7 +2578,7 @@ function ReferralAutoRegister({
         const name = validateQuery.data.link?.customerName ?? undefined;
         onComplete(true, name);
       } else {
-        // CÃ³digo invÃ¡lido â€” pular e ir para o formulÃ¡rio manual
+        // Código inválido � pular e ir para o formulário manual
         onComplete(false);
       }
     }
@@ -2587,7 +2587,7 @@ function ReferralAutoRegister({
   return (
     <div className="flex flex-col items-center gap-3 py-6">
       <div className="w-10 h-10 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
-      <p className="text-white/70 text-sm">Verificando link de indicaÃ§Ã£o...</p>
+      <p className="text-white/70 text-sm">Verificando link de indicação...</p>
     </div>
   );
 }

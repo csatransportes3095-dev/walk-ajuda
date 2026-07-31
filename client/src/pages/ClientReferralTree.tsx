@@ -21,7 +21,7 @@ export default function ClientReferralTree() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [treeData, setTreeData] = useState<TreeNode | null>(null);
 
-  // Ler parâmetro phone da URL ao carregar
+  // Ler par�metro phone da URL ao carregar
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const phoneParam = params.get('phone');
@@ -32,13 +32,13 @@ export default function ClientReferralTree() {
     }
   }, []);
 
-  // Buscar dados do cliente específico
+  // Buscar dados do cliente espec�fico
   const { data: customerData, isLoading: isLoadingCustomer } = trpc.customers.checkByPhone.useQuery(
     { phone: selectedPhone || '' },
     { enabled: !!selectedPhone }
   );
 
-  // Buscar estatísticas de indicações DO cliente específico (quantos ele indicou)
+  // Buscar estat�sticas de indica��es DO cliente espec�fico (quantos ele indicou)
   const { data: stats } = trpc.referrals.getStats.useQuery(
     { phone: selectedPhone || '' },
     { enabled: !!selectedPhone }
@@ -64,12 +64,12 @@ export default function ClientReferralTree() {
     }
   };
 
-  // Construir árvore quando dados chegam
+  // Construir �rvore quando dados chegam
   useEffect(() => {
     if (customerData?.customer && stats) {
       const customer = customerData.customer;
       
-      // Nó raiz (cliente selecionado)
+      // N� raiz (cliente selecionado)
       const node: TreeNode = {
         id: customer.id,
         name: customer.name,
@@ -87,7 +87,7 @@ export default function ClientReferralTree() {
       };
 
       // Adicionar parent (quem indicou este cliente)
-      // Mas APENAS se não for o ADM (phone 202)
+      // Mas APENAS se n�o for o ADM (phone 202)
       if (referredByCustomer?.customer && referredByCustomer.customer.phone !== '202') {
         node.parent = {
           id: referredByCustomer.customer.id,
@@ -112,7 +112,7 @@ export default function ClientReferralTree() {
   const TreeNodeComponent = ({ node, isRoot = false }: { node: TreeNode; isRoot?: boolean }) => {
     return (
       <div className="flex flex-col items-center">
-        {/* Nó */}
+        {/* N� */}
         <div className={`flex flex-col items-center ${isRoot ? 'mb-8' : 'mb-6'}`}>
           <div className="relative">
             <div
@@ -136,7 +136,7 @@ export default function ClientReferralTree() {
               <p className="text-xs text-slate-400">{node.phone}</p>
               {node.totalReferred > 0 && (
                 <div className="mt-1 px-2 py-1 bg-green-500/20 rounded text-xs text-green-400 font-semibold">
-                  {node.totalReferred} indicações
+                  {node.totalReferred} indica��es
                 </div>
               )}
             </div>
@@ -182,7 +182,7 @@ export default function ClientReferralTree() {
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="text-3xl font-bold text-white">Árvore de Indicações Individual</h1>
+          <h1 className="text-3xl font-bold text-white">�rvore de Indica��es Individual</h1>
         </div>
 
         {/* Search */}
@@ -206,18 +206,18 @@ export default function ClientReferralTree() {
         {!selectedPhone ? (
           <Card className="bg-slate-900/50 border-purple-500/30 p-12 text-center">
             <Search className="w-16 h-16 text-purple-400/50 mx-auto mb-4" />
-            <p className="text-slate-300 text-lg">Digite um telefone para visualizar a árvore de indicações</p>
+            <p className="text-slate-300 text-lg">Digite um telefone para visualizar a �rvore de indica��es</p>
           </Card>
         ) : isLoading ? (
           <div className="text-center py-16">
             <div className="inline-block animate-spin">
               <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full" />
             </div>
-            <p className="text-slate-300 mt-6">Carregando árvore...</p>
+            <p className="text-slate-300 mt-6">Carregando �rvore...</p>
           </div>
         ) : !customerData?.customer ? (
           <Card className="bg-slate-900/50 border-red-500/30 p-12 text-center">
-            <p className="text-red-400 text-lg">Cliente não encontrado</p>
+            <p className="text-red-400 text-lg">Cliente n�o encontrado</p>
           </Card>
         ) : treeData ? (
           <Card className="bg-slate-900/50 border-purple-500/30 p-8 overflow-x-auto">
@@ -249,7 +249,7 @@ export default function ClientReferralTree() {
               <p className="text-lg font-bold text-blue-400">
                 {referredByCustomer?.customer && referredByCustomer.customer.phone !== '202'
                   ? referredByCustomer.customer.name
-                  : 'Ninguém'}
+                  : 'Ningu�m'}
               </p>
             </Card>
             <Card className="bg-slate-900/50 border-purple-500/30 p-4">

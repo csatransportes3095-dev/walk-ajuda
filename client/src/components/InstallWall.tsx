@@ -33,39 +33,39 @@ function getInstructions(
     case "ios-chrome":
       return {
         title: "Instale pelo Safari",
-        subtitle: "O Chrome no iPhone nÃ£o suporta instalaÃ§Ã£o de apps. Siga os passos:",
+        subtitle: "O Chrome no iPhone não suporta instalação de apps. Siga os passos:",
         accentColor: "#ff6b35",
-        warning: "âš ï¸ VocÃª estÃ¡ usando o Chrome no iPhone. Use o Safari para instalar.",
+        warning: "⚠️ Você está usando o Chrome no iPhone. Use o Safari para instalar.",
         steps: [
-          { icon: <Chrome className="w-5 h-5 text-orange-400" />, text: "Copie o link desta pÃ¡gina" },
+          { icon: <Chrome className="w-5 h-5 text-orange-400" />, text: "Copie o link desta página" },
           { icon: <Share className="w-5 h-5 text-blue-400" />, text: "Abra o Safari e cole o link" },
-          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no Ã­cone Compartilhar (â–¡â†‘) na barra inferior' },
-          { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: `"Adicionar Ã  Tela de InÃ­cio" â†’ "Adicionar"` },
+          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no ícone Compartilhar na barra inferior' },
+          { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: '"Adicionar à Tela de Início" -> "Adicionar"' },
         ],
       };
 
     case "ios-safari":
       if (isAlreadyInstalled) {
         return {
-          title: "Abra pelo Ã­cone do App",
-          subtitle: "Este sistema sÃ³ funciona quando aberto pelo Ã­cone instalado.",
+          title: "Abra pelo ícone do App",
+          subtitle: "Este sistema só funciona quando aberto pelo ícone instalado.",
           accentColor: "#5b6af0",
           alreadyInstalled: true,
           steps: [
-            { icon: <Smartphone className="w-5 h-5 text-indigo-400" />, text: `Feche o Safari e abra o app pelo Ã­cone "${APP_SHORT_NAME}" na tela inicial` },
-            { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: `Se nÃ£o encontrar, procure por "${APP_SHORT_NAME}" na tela inicial` },
+            { icon: <Smartphone className="w-5 h-5 text-indigo-400" />, text: `Feche o Safari e abra o app pelo ícone "${APP_SHORT_NAME}" na tela inicial` },
+            { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: `Se não encontrar, procure por "${APP_SHORT_NAME}" na tela inicial` },
           ],
         };
       }
       return {
         title: "Instale o App no iPhone",
-        subtitle: "Siga os passos para adicionar Ã  tela inicial:",
+        subtitle: "Siga os passos para adicionar à tela inicial:",
         accentColor: "#5b6af0",
         steps: [
-          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no Ã­cone Compartilhar (â–¡â†‘) na barra inferior do Safari' },
-          { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: 'Role para baixo e toque em "Adicionar Ã  Tela de InÃ­cio"' },
+          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no ícone Compartilhar na barra inferior do Safari' },
+          { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: 'Role para baixo e toque em "Adicionar à Tela de Início"' },
           { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: 'Toque em "Adicionar" no canto superior direito' },
-          { icon: <ExternalLink className="w-5 h-5 text-indigo-400" />, text: `Abra o app pelo Ã­cone "${APP_SHORT_NAME}" na tela inicial` },
+          { icon: <ExternalLink className="w-5 h-5 text-indigo-400" />, text: `Abra o app pelo ícone "${APP_SHORT_NAME}" na tela inicial` },
         ],
       };
 
@@ -74,11 +74,11 @@ function getInstructions(
         title: "Instale pelo Safari",
         subtitle: "Para instalar no iPhone/iPad, use o Safari:",
         accentColor: "#5b6af0",
-        warning: "âš ï¸ Use o Safari para instalar este app no iPhone/iPad.",
+        warning: "⚠️ Use o Safari para instalar este app no iPhone/iPad.",
         steps: [
           { icon: <Share className="w-5 h-5 text-blue-400" />, text: "Abra este link no Safari" },
-          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no Ã­cone Compartilhar (â–¡â†‘)' },
-          { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: '"Adicionar Ã  Tela de InÃ­cio" â†’ "Adicionar"' },
+          { icon: <Share className="w-5 h-5 text-blue-400" />, text: 'Toque no ícone Compartilhar' },
+          { icon: <Smartphone className="w-5 h-5 text-green-400" />, text: '"Adicionar à Tela de Início" -> "Adicionar"' },
         ],
       };
 
@@ -90,8 +90,8 @@ function getInstructions(
           accentColor: "#5b6af0",
           steps: [
             { icon: <Download className="w-5 h-5 text-indigo-400" />, text: 'Toque em "Instalar App" abaixo' },
-            { icon: <Smartphone className="w-5 h-5 text-blue-400" />, text: 'Confirme a instalaÃ§Ã£o na janela que aparecer' },
-            { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: 'Abra o app pelo Ã­cone na tela inicial' },
+            { icon: <Smartphone className="w-5 h-5 text-blue-400" />, text: 'Confirme a instalação na janela que aparecer' },
+            { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: 'Abra o app pelo ícone na tela inicial' },
           ],
           actionLabel: "Instalar App",
           onAction: promptInstall,
@@ -102,14 +102,14 @@ function getInstructions(
         subtitle: "Siga os passos para instalar:",
         accentColor: "#5b6af0",
         steps: [
-          { icon: <Download className="w-5 h-5 text-indigo-400" />, text: 'Toque nos 3 pontinhos â‹® no canto superior direito do Chrome' },
-          { icon: <Smartphone className="w-5 h-5 text-blue-400" />, text: 'Toque em "Adicionar Ã  tela inicial" ou "Instalar app"' },
-          { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: 'Confirme e abra pelo Ã­cone na tela inicial' },
+          { icon: <Download className="w-5 h-5 text-indigo-400" />, text: 'Toque nos 3 pontinhos no canto superior direito do Chrome' },
+          { icon: <Smartphone className="w-5 h-5 text-blue-400" />, text: 'Toque em "Adicionar à tela inicial" ou "Instalar app"' },
+          { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: 'Confirme e abra pelo ícone na tela inicial' },
         ],
-        actionLabel: "Como instalar â€” ver passo a passo",
+        actionLabel: "Como instalar - ver passo a passo",
         onAction: () => {
           // Open Chrome menu instructions in a visual way
-          alert('Para instalar:\n\n1. Toque nos 3 pontinhos â‹® no Chrome\n2. Toque em "Adicionar Ã  tela inicial"\n3. Confirme a instalaÃ§Ã£o\n4. Abra pelo Ã­cone na tela inicial');
+          alert('Para instalar:\n\n1. Toque nos 3 pontinhos no Chrome\n2. Toque em "Adicionar à tela inicial"\n3. Confirme a instalação\n4. Abra pelo ícone na tela inicial');
         },
       };
 
@@ -117,13 +117,13 @@ function getInstructions(
     default:
       return {
         title: "Acesse pelo Celular",
-        subtitle: "Este sistema Ã© exclusivo para dispositivos mÃ³veis:",
+        subtitle: "Este sistema é exclusivo para dispositivos móveis:",
         accentColor: "#5b6af0",
-        warning: "âš ï¸ Este sistema foi desenvolvido para uso exclusivo em smartphones.",
+        warning: "⚠️ Este sistema foi desenvolvido para uso exclusivo em smartphones.",
         steps: [
           { icon: <Smartphone className="w-5 h-5 text-indigo-400" />, text: "Abra este link no seu celular (Android ou iPhone)" },
-          { icon: <Download className="w-5 h-5 text-green-400" />, text: "Instale o app conforme as instruÃ§Ãµes na tela" },
-          { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: "Acesse sempre pelo Ã­cone instalado na tela inicial" },
+          { icon: <Download className="w-5 h-5 text-green-400" />, text: "Instale o app conforme as instruções na tela" },
+          { icon: <AlertCircle className="w-5 h-5 text-yellow-400" />, text: "Acesse sempre pelo ícone instalado na tela inicial" },
         ],
       };
   }
@@ -157,7 +157,7 @@ export default function InstallWall() {
     } catch {
       // fallback
     }
-    // Fallback: abre a URL normal apÃ³s 1.5s (se o intent nÃ£o funcionou)
+    // Fallback: abre a URL normal após 1.5s (se o intent não funcionou)
     setTimeout(() => {
       window.location.href = appUrl;
     }, 1500);
@@ -225,7 +225,7 @@ export default function InstallWall() {
             >
               <ExternalLink className="w-5 h-5 text-indigo-400 flex-shrink-0" />
               <p className="text-indigo-300 text-xs leading-relaxed">
-                VocÃª estÃ¡ acessando pelo <strong>navegador</strong>. O app sÃ³ funciona pelo Ã­cone instalado.
+                Você está acessando pelo <strong>navegador</strong>. O app só funciona pelo ícone instalado.
               </p>
             </div>
           )}
@@ -280,7 +280,7 @@ export default function InstallWall() {
             </button>
           )}
 
-          {/* iOS Safari: "JÃ¡ instalei" button */}
+          {/* iOS Safari: "Já instalei" button */}
           {showOpenTip && deviceType === "ios-safari" && !iosAlreadyInstalled && (
             <button
               onClick={() => {
@@ -295,7 +295,7 @@ export default function InstallWall() {
               }}
             >
               <Smartphone className="w-4 h-4" />
-              JÃ¡ instalei â€” Ver como abrir
+              Já instalei - Ver como abrir
             </button>
           )}
 

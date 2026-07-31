@@ -27,8 +27,8 @@ function getOrCreateVisitorId() {
   return visitorId;
 }
 function getVisitorIdForPhone(phone: string): string {
-  // Gera um visitorId estÃ¡vel baseado no nÃºmero de telefone
-  // Assim o mesmo nÃºmero sempre tem o mesmo visitorId e a mesma conversa
+  // Gera um visitorId estável baseado no número de telefone
+  // Assim o mesmo número sempre tem o mesmo visitorId e a mesma conversa
   return `v_phone_${phone.replace(/\D/g, "")}`;
 }
 
@@ -40,7 +40,7 @@ function saveVisitorData(name: string, phone: string) {
 }
 
 function getMessagePayload(msg: any): Record<string, any> | null {
-  // Tentar payload já deserializado primeiro
+  // Tentar payload j� deserializado primeiro
   if (msg.payload && typeof msg.payload === "object") return msg.payload as Record<string, any>;
   // Fallback: tentar deserializar payloadJson (string raw do banco)
   if (msg.payloadJson && typeof msg.payloadJson === "string") {
@@ -131,7 +131,7 @@ function renderMessageContent(message: any, handleAction: (actionType?: string, 
         <a href={documentUrl} target="_blank" rel="noreferrer" className="inline-flex text-xs px-3 py-2 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-200 hover:bg-blue-600/30">Abrir documento</a>
       )}
       {!imageUrl && linkUrl && (
-        <a href={linkUrl} target="_blank" rel="noreferrer" className="inline-flex text-xs px-3 py-2 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-200 hover:bg-blue-600/30">Abrir mÃ­dia</a>
+        <a href={linkUrl} target="_blank" rel="noreferrer" className="inline-flex text-xs px-3 py-2 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-200 hover:bg-blue-600/30">Abrir mídia</a>
       )}
       {Array.isArray(payload?.buttons) && payload.buttons.length > 0 && (
         <div className="flex flex-col gap-2 pt-1">
@@ -156,7 +156,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [statusText, setStatusText] = useState<string>("Conectando...");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // visitorId baseado no telefone: mesmo nÃºmero = mesma conversa em qualquer dispositivo
+  // visitorId baseado no telefone: mesmo número = mesma conversa em qualquer dispositivo
   const [visitorId, setVisitorId] = useState<string>(() => {
     const savedPhone = getSavedVisitorPhone();
     if (savedPhone) return getVisitorIdForPhone(savedPhone);
@@ -179,7 +179,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
 
   useEffect(() => {
     if (!publicStateQ.data) return;
-    setStatusText(publicStateQ.data.onlineNow ? "Online" : "Fora do horÃ¡rio");
+    setStatusText(publicStateQ.data.onlineNow ? "Online" : "Fora do horário");
   }, [publicStateQ.data]);
 
   useEffect(() => {
@@ -191,7 +191,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
   useEffect(() => {
     if (!isOpen) return;
     const status = (unreadQ.data as any)?.conversationStatus;
-    // Se conversa foi finalizada pelo admin, limpar e voltar para identificaÃ§Ã£o
+    // Se conversa foi finalizada pelo admin, limpar e voltar para identificação
     if (status === "finalized" || status === "blocked") {
       if (conversationId) {
         setConversationId(null);
@@ -211,16 +211,16 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
 
   const handleIdentifySubmit = () => {
     let hasError = false;
-    if (!visitorName.trim()) { setNameError("Nome Ã© obrigatÃ³rio"); hasError = true; } else setNameError("");
+    if (!visitorName.trim()) { setNameError("Nome é obrigatório"); hasError = true; } else setNameError("");
     const phoneClean = visitorPhone.replace(/\D/g, "");
-    if (!phoneClean || phoneClean.length < 10) { setPhoneError("Telefone invÃ¡lido (mÃ­nimo 10 dÃ­gitos)"); hasError = true; } else setPhoneError("");
+    if (!phoneClean || phoneClean.length < 10) { setPhoneError("Telefone inválido (mínimo 10 dígitos)"); hasError = true; } else setPhoneError("");
     if (hasError) return;
     saveVisitorData(visitorName.trim(), phoneClean);
     setVisitorPhone(phoneClean);
-    // Gerar visitorId baseado no telefone â€” garante que mesmo nÃºmero = mesma conversa
+    // Gerar visitorId baseado no telefone � garante que mesmo número = mesma conversa
     const newVisitorId = getVisitorIdForPhone(phoneClean);
     setVisitorId(newVisitorId);
-    setConversationId(null); // Limpar conversa anterior para buscar a do novo nÃºmero
+    setConversationId(null); // Limpar conversa anterior para buscar a do novo número
     setPhase("chat");
   };
 
@@ -230,11 +230,11 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
     sendVisitorMessageMut.mutate({ conversationId, visitorId, text: message.trim() });
   };
 
-  // Clique num botÃ£o do menu principal (com responseText e subButtons da Ã¡rvore)
+  // Clique num botão do menu principal (com responseText e subButtons da árvore)
   const handleMenuItemClick = (item: any) => {
     if (!conversationId) return;
     const label = item.title || item.label || "";
-    // Enviar o texto do botÃ£o como mensagem do visitante
+    // Enviar o texto do botão como mensagem do visitante
     sendVisitorMessageMut.mutate({ conversationId, visitorId, text: label });
     // Se o item tem responseText ou subButtons, enviar como resposta do bot
     if (item.responseText || (item.subButtons && item.subButtons.length > 0)) {
@@ -249,18 +249,18 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
           }));
         }
         // Enviar via sendVisitorMessage com texto especial que o bot vai interceptar
-        // Na verdade, vamos usar handleMenuAction para aÃ§Ãµes diretas
+        // Na verdade, vamos usar handleMenuAction para ações diretas
       }, 300);
     }
   };
 
   const handleMenuAction = (actionType?: string, actionPayload?: Record<string, any>) => {
     if (!actionType) return;
-    // NÃ³ do fluxo de botÃµes (Ã¡rvore recursiva)
+    // Nó do fluxo de botões (árvore recursiva)
     if (actionType === "flow_node" && actionPayload?.nodeId && conversationId) {
       const nodeActionType = String(actionPayload.nodeActionType || "show_children");
       const nodeActionPayload = (actionPayload.nodeActionPayload || {}) as Record<string, any>;
-      // AÃ§Ãµes diretas: executar imediatamente
+      // Ações diretas: executar imediatamente
       if (nodeActionType === "open_internal" && nodeActionPayload?.path) { window.location.href = String(nodeActionPayload.path); return; }
       if (nodeActionType === "open_external" && nodeActionPayload?.url) { window.open(String(nodeActionPayload.url), "_blank"); return; }
       if (nodeActionType === "open_video" && nodeActionPayload?.url) { window.open(String(nodeActionPayload.url), "_blank"); return; }
@@ -317,7 +317,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
               <MessageCircle className="w-4 h-4 flex-shrink-0" />
               <div className="min-w-0">
                 <p className="font-black text-sm tracking-wide truncate">{publicStateQ.data?.buttonLabel || "ATENDIMENTO ONLINE"}</p>
-                <p className="text-[11px] text-blue-100/90 truncate">{statusText} â€¢ {unreadQ.data?.unreadMessages || 0} nÃ£o lidas</p>
+                <p className="text-[11px] text-blue-100/90 truncate">{statusText} ⬢ {unreadQ.data?.unreadMessages || 0} não lidas</p>
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -330,17 +330,17 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
           </div>
         </div>
 
-        {/* FASE 1: IdentificaÃ§Ã£o */}
+        {/* FASE 1: Identificação */}
         {phase === "identify" && (
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
             <div>
-              <p className="text-base font-bold text-white">{(() => { const h = new Date().getHours(); const g = h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite"; return g + "! ðŸ‘‹ " + (publicStateQ.data?.welcomeMessage || "Bem-vindo ao atendimento H2 COLOMBIANO."); })()}</p>
+              <p className="text-base font-bold text-white">{(() => { const h = new Date().getHours(); const g = h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite"; return g + "! �x9 " + (publicStateQ.data?.welcomeMessage || "Bem-vindo ao atendimento H2 COLOMBIANO."); })()}</p>
               <p className="text-xs text-white/60 mt-1">Para iniciar, preencha seus dados abaixo.</p>
             </div>
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-semibold text-white/70 block mb-1">Seu nome completo <span className="text-red-400">*</span></label>
-                <input value={visitorName} onChange={(e) => { setVisitorName(e.target.value); setNameError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} placeholder="Ex: JoÃ£o da Silva" className={`w-full h-10 rounded-lg bg-white/5 border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${nameError ? "border-red-400" : "border-white/10"}`} />
+                <input value={visitorName} onChange={(e) => { setVisitorName(e.target.value); setNameError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} placeholder="Ex: João da Silva" className={`w-full h-10 rounded-lg bg-white/5 border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${nameError ? "border-red-400" : "border-white/10"}`} />
                 {nameError && <p className="text-xs text-red-400 mt-1">{nameError}</p>}
               </div>
               <div>
@@ -349,7 +349,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
                 {phoneError && <p className="text-xs text-red-400 mt-1">{phoneError}</p>}
               </div>
             </div>
-            <button onClick={handleIdentifySubmit} className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors mt-auto">Iniciar atendimento â†’</button>
+            <button onClick={handleIdentifySubmit} className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors mt-auto">Iniciar atendimento � </button>
           </div>
         )}
 
@@ -357,7 +357,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
         {phase === "chat" && (
           <>
             <div className="px-4 py-2 bg-white/[0.02] border-b border-white/5 flex-shrink-0">
-              <p className="text-xs text-white/50">Atendendo: <span className="text-white/80 font-semibold">{visitorName}</span>{visitorPhone && <span className="ml-2 text-white/40">â€¢ {visitorPhone}</span>}</p>
+              <p className="text-xs text-white/50">Atendendo: <span className="text-white/80 font-semibold">{visitorName}</span>{visitorPhone && <span className="ml-2 text-white/40">⬢ {visitorPhone}</span>}</p>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {!conversationId && <p className="text-xs text-white/60 text-center">Iniciando conversa...</p>}
@@ -373,12 +373,12 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
                   </div>
                 );
               })}
-              {typing && <div className="flex justify-start"><div className="rounded-2xl px-3 py-2 text-xs bg-white/10 text-white/80 border border-white/10">Assistente estÃ¡ digitando...</div></div>}
+              {typing && <div className="flex justify-start"><div className="rounded-2xl px-3 py-2 text-xs bg-white/10 text-white/80 border border-white/10">Assistente está digitando...</div></div>}
               <div ref={messagesEndRef} />
             </div>
             <div className="p-3 border-t border-white/10 bg-[#0b1222] flex-shrink-0">
               {publicStateQ.data?.maintenanceMode || publicStateQ.data?.chatEnabled === false ? (
-                <p className="text-xs text-amber-300">{publicStateQ.data?.disabledMessage || "Atendimento indisponÃ­vel no momento."}</p>
+                <p className="text-xs text-amber-300">{publicStateQ.data?.disabledMessage || "Atendimento indisponível no momento."}</p>
               ) : (
                 <div className="flex gap-2">
                   <input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} placeholder="Digite sua mensagem" className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-blue-400/70" />

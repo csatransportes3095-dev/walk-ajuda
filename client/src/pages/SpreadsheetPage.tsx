@@ -155,7 +155,7 @@ function EditModal({ title, date, fields, onFieldChange, onSave, onCancel, isSav
           ))}
         </div>
 
-        {/* BotÃµes */}
+        {/* Botões */}
         <div className="px-5 py-4 border-t border-border/50 flex gap-3">
           <button
             onClick={onCancel}
@@ -183,7 +183,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     return tokenProp || saved || '';
   });
 
-  // Buscar informaÃ§Ãµes do plano (vencimento)
+  // Buscar informações do plano (vencimento)
   const { data: planInfo } = trpc.spreadsheet.getClientPlanInfo.useQuery(
     { token },
     { enabled: !!token, refetchInterval: 60000 }
@@ -223,7 +223,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
   // Estado do chat
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
-  // Buscar phone real do usuÃ¡rio a partir do token de sessÃ£o
+  // Buscar phone real do usuário a partir do token de sessão
   const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
     { token },
     { enabled: !!token, staleTime: Infinity }
@@ -239,7 +239,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
   // â”€â”€â”€ CONFETE E MARCOS MOTIVACIONAIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fireConfetti = useCallback((type: 'milestone' | 'goal') => {
     if (type === 'goal') {
-      // Confete duplo para meta concluÃ­da
+      // Confete duplo para meta concluída
       const end = Date.now() + 3000;
       const colors = ['#00FF88', '#FFD700', '#FF6B6B', '#4ECDC4', '#A29BFE'];
       const frame = () => {
@@ -262,10 +262,10 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     milestoneTimeoutRef.current = setTimeout(() => setActiveMilestone(null), 4500);
   }, [shownMilestones, fireConfetti]);
 
-  // Banners informativos da pÃ¡gina de gastos
+  // Banners informativos da página de gastos
   const { data: activeBanners = [] } = trpc.banners.listActive.useQuery({ page: 'gastos' });
 
-  // Mutation para registrar acesso via sessÃ£o
+  // Mutation para registrar acesso via sessão
   const recordAccessMutation = trpc.spreadsheet.recordAccess.useMutation();
 
   // â”€â”€â”€ PROPAGANDA OBRIGATÃ“RIA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -313,7 +313,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     }
   }, [tokenProp]);
 
-  // Registrar acesso ao abrir a planilha (token jÃ¡ salvo = usuÃ¡rio voltou sem fazer login)
+  // Registrar acesso ao abrir a planilha (token já salvo = usuário voltou sem fazer login)
   useEffect(() => {
     if (token) {
       recordAccessMutation.mutate({ token });
@@ -324,7 +324,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
   // Carregar dados do banco de dados usando tRPC
   const { data: earningsData, refetch: refetchEarnings, isLoading: earningsLoading } = trpc.spreadsheet.getEarningsByMonth.useQuery({ token, month: selectedMonth }, { enabled: !!token });
   const { data: expensesData, refetch: refetchExpenses, isLoading: expensesLoading } = trpc.spreadsheet.getExpensesByMonth.useQuery({ token, month: selectedMonth }, { enabled: !!token });
-  // Usar o ano do mÃªs selecionado (nÃ£o fixo no ano atual)
+  // Usar o ano do mês selecionado (não fixo no ano atual)
   const selectedYear = selectedMonth.split('-')[0];
   const { data: yearlyEarningsData, refetch: refetchYearlyEarnings } = trpc.spreadsheet.getEarningsByYear.useQuery({ token, year: selectedYear }, { enabled: !!token, staleTime: 300000 });
   const { data: yearlyExpensesData, refetch: refetchYearlyExpenses } = trpc.spreadsheet.getExpensesByYear.useQuery({ token, year: selectedYear }, { enabled: !!token, staleTime: 300000 });
@@ -403,7 +403,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
   // â”€â”€â”€ APAGAR TODOS OS DADOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
-  // Controle de datas abertas/fechadas no histÃ³rico (hoje fica sempre aberto)
+  // Controle de datas abertas/fechadas no histórico (hoje fica sempre aberto)
   const [openExpenseDates, setOpenExpenseDates] = useState<Set<string>>(new Set());
   const [openEarningDates, setOpenEarningDates] = useState<Set<string>>(new Set());
   // Controla grupos de categoria abertos dentro de cada data: chave = "date::catKey"
@@ -417,7 +417,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
   const deleteAllDataMutation = trpc.spreadsheet.deleteAllData.useMutation({
     onSuccess: async () => {
-      // Atualiza tudo em tempo real sem recarregar a pÃ¡gina
+      // Atualiza tudo em tempo real sem recarregar a página
       setEarnings([]);
       setExpenses([]);
       setOperational([]);
@@ -667,7 +667,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
   // Calcular resumo
   const summary = useMemo(() => {
-    // Helper: parse seguro de valor numÃ©rico (evita somar strings com R$)
+    // Helper: parse seguro de valor numérico (evita somar strings com R$)
     const safeNum = (v: any): number => {
       if (v === null || v === undefined || v === '') return 0;
       const s = String(v).replace(/[^0-9.,\-]/g, '').replace(',', '.');
@@ -675,7 +675,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
       return isNaN(n) ? 0 : n;
     };
 
-    // Recalcular totais com safeNum para garantir conversÃ£o correta
+    // Recalcular totais com safeNum para garantir conversão correta
     const safeEarningTotal = (earn: Earning) =>
       safeNum(earn.uber) + safeNum(earn.ninetynine) + safeNum(earn.indrive) +
       safeNum(earn.particular) + safeNum(earn.deliveries) + safeNum(earn.tips) + safeNum(earn.otherEarnings);
@@ -694,7 +694,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     const nowBRT = new Date(Date.now() - 3 * 60 * 60 * 1000);
     const todayStr = `${nowBRT.getUTCFullYear()}-${String(nowBRT.getUTCMonth()+1).padStart(2,'0')}-${String(nowBRT.getUTCDate()).padStart(2,'0')}`;
 
-    // InÃ­cio da semana atual (domingo) no fuso Brasil
+    // Início da semana atual (domingo) no fuso Brasil
     const dayOfWeek = nowBRT.getUTCDay(); // 0=dom, 6=sab
     const startOfWeekBRT = new Date(nowBRT);
     startOfWeekBRT.setUTCDate(nowBRT.getUTCDate() - dayOfWeek);
@@ -704,15 +704,15 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     const dailyEarnings = earnings.filter(e => String(e.date).substring(0,10) === todayStr).reduce((sum, e) => sum + safeEarningTotal(e), 0);
     const dailyExpenses = expenses.filter(e => String(e.date).substring(0,10) === todayStr).reduce((sum, e) => sum + safeExpenseTotal(e), 0);
 
-    // Semanal: de domingo atÃ© hoje (semana corrente)
+    // Semanal: de domingo até hoje (semana corrente)
     const weeklyEarnings = earnings.filter(e => { const d = String(e.date).substring(0,10); return d >= weekStartStr && d <= todayStr; }).reduce((sum, e) => sum + safeEarningTotal(e), 0);
     const weeklyExpenses = expenses.filter(e => { const d = String(e.date).substring(0,10); return d >= weekStartStr && d <= todayStr; }).reduce((sum, e) => sum + safeExpenseTotal(e), 0);
 
-    // Mensal: mÃªs selecionado (jÃ¡ filtrado pela query = total do mÃªs)
+    // Mensal: mês selecionado (já filtrado pela query = total do mês)
     const monthlyEarnings = totalEarnings;
     const monthlyExpenses = totalExpenses;
 
-    // Anual: todos os registros do ano do mÃªs selecionado (via query separada)
+    // Anual: todos os registros do ano do mês selecionado (via query separada)
     const yearlyEarnings = ((yearlyEarningsData as any[]) || []).reduce((sum: number, e: any) => sum + safeEarningTotal(e), 0);
     const yearlyExpenses = ((yearlyExpensesData as any[]) || []).reduce((sum: number, e: any) => sum + safeExpenseTotal(e), 0);
 
@@ -767,7 +767,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     return categories;
   }, [earnings]);
 
-  // Dados para grÃ¡ficos
+  // Dados para gráficos
   const chartData = useMemo(() => {
     const dates = Array.from(new Set(earnings.map(e => e.date))).sort();
     return dates.map(date => {
@@ -783,21 +783,21 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
   // â”€â”€â”€ CAMPOS DO MODAL DE EDIÃ‡ÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  // Gastos: mostra TODOS os campos (todos sÃ£o relevantes para ediÃ§Ã£o)
+  // Gastos: mostra TODOS os campos (todos são relevantes para edição)
   const expenseEditFields: EditField[] = [
-    { label: 'CombustÃ­vel', key: 'fuel' },
+    { label: 'Combustível', key: 'fuel' },
     { label: 'Aluguel do Carro', key: 'carRental' },
-    { label: 'ManutenÃ§Ã£o', key: 'maintenance' },
+    { label: 'Manutenção', key: 'maintenance' },
     { label: 'Troca de Ã“leo', key: 'oilChange' },
     { label: 'Lavagem', key: 'washing' },
     { label: 'Seguro', key: 'insurance' },
     { label: 'Internet/Telefone', key: 'internetPhone' },
-    { label: 'AlimentaÃ§Ã£o', key: 'food' },
+    { label: 'Alimentação', key: 'food' },
     { label: 'Estacionamento', key: 'parking' },
-    { label: 'PedÃ¡gios', key: 'tolls' },
+    { label: 'Pedágios', key: 'tolls' },
     { label: 'Financiamento', key: 'financing' },
     { label: 'Multas', key: 'fines' },
-    { label: 'AcessÃ³rios', key: 'accessories' },
+    { label: 'Acessórios', key: 'accessories' },
     { label: 'Outros Gastos', key: 'otherExpenses' },
   ].map(f => ({ ...f, value: editExpenseValues[f.key] ?? "0" }));
 
@@ -825,7 +825,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     { label: 'Corridas Entregas', key: 'ridesDeliveries' },
   ].map(f => ({ ...f, value: editOperationalValues[f.key] ?? "0" }));
 
-  // Verificar se o plano estÃ¡ expirado
+  // Verificar se o plano está expirado
   const isPlanExpired = planInfo?.expiresAt ? new Date(planInfo.expiresAt).getTime() < Date.now() : false;
 
   // Tela de bloqueio por plano expirado
@@ -833,14 +833,14 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #020617 0%, #0a0f22 100%)' }}>
         <div className="w-full max-w-sm rounded-2xl p-8 text-center space-y-6" style={{ backgroundColor: '#0F172A', border: '2px solid rgba(239,68,68,0.4)', boxShadow: '0 0 40px rgba(239,68,68,0.15)' }}>
-          {/* Ãcone */}
+          {/* Ícone */}
           <div className="flex justify-center">
             <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(239,68,68,0.15)', border: '2px solid rgba(239,68,68,0.4)' }}>
               <Shield className="w-10 h-10 text-red-400" />
             </div>
           </div>
 
-          {/* TÃ­tulo */}
+          {/* Título */}
           <div className="space-y-2">
             <h2 className="text-2xl font-bold text-red-400">Acesso Bloqueado</h2>
             <p className="text-white font-semibold text-lg">Seu plano expirou</p>
@@ -849,10 +849,10 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           {/* Mensagem */}
           <div className="rounded-xl p-4 space-y-2" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
             <p className="text-slate-300 text-sm leading-relaxed">
-              O perÃ­odo de acesso Ã  sua Planilha de Gastos encerrou.
+              O período de acesso à sua Planilha de Gastos encerrou.
             </p>
             <p className="text-slate-400 text-sm leading-relaxed">
-              Para continuar usando, entre em contato com o administrador e solicite a renovaÃ§Ã£o do seu plano.
+              Para continuar usando, entre em contato com o administrador e solicite a renovação do seu plano.
             </p>
           </div>
 
@@ -863,7 +863,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
             </div>
           )}
 
-          {/* BotÃ£o sair */}
+          {/* Botão sair */}
           <button
             onClick={onLogout}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95"
@@ -886,9 +886,9 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <div className="text-4xl mb-3">ðŸ—‘ï¸</div>
               <h2 className="text-xl font-black text-white mb-1">Apagar Todos os Dados?</h2>
               <p className="text-slate-400 text-sm leading-relaxed">
-                Isso vai apagar <strong className="text-orange-400">todos os seus ganhos, gastos, registros operacionais e metas</strong> lanÃ§ados na planilha.
+                Isso vai apagar <strong className="text-orange-400">todos os seus ganhos, gastos, registros operacionais e metas</strong> lançados na planilha.
               </p>
-              <p className="text-red-400 text-xs font-bold mt-2 uppercase tracking-wide">Esta aÃ§Ã£o nÃ£o pode ser desfeita!</p>
+              <p className="text-red-400 text-xs font-bold mt-2 uppercase tracking-wide">Esta ação não pode ser desfeita!</p>
             </div>
             <div className="flex gap-3">
               <button
@@ -917,12 +917,12 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
             className="relative w-full rounded-2xl overflow-hidden shadow-2xl flex flex-col"
             style={{ border: '1.5px solid rgba(0,200,255,0.35)', boxShadow: '0 0 40px 4px rgba(0,180,255,0.15), 0 8px 32px rgba(0,0,0,0.8)', maxWidth: '520px', maxHeight: '96vh' }}
           >
-            {/* Badge obrigatÃ³rio */}
+            {/* Badge obrigatório */}
             <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 border border-white/10">
               <Shield className="w-3 h-3 text-cyan-400" />
-              <span className="text-xs text-gray-300 font-medium">ExibiÃ§Ã£o obrigatÃ³ria</span>
+              <span className="text-xs text-gray-300 font-medium">Exibição obrigatória</span>
             </div>
-            {/* ConteÃºdo */}
+            {/* Conteúdo */}
             <div className="bg-[#080c1e] flex flex-col">
               {adCampaign.type === 'image' && adCampaign.imageUrl ? (
                 <img
@@ -962,7 +962,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                       }
                     }}
                     onError={(e) => {
-                      console.error('[Ad] Erro ao carregar vÃ­deo:', adCampaign.videoUrl, e);
+                      console.error('[Ad] Erro ao carregar vídeo:', adCampaign.videoUrl, e);
                     }}
                   />
                 </div>
@@ -971,7 +971,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                   <span className="text-4xl">ðŸ“¢</span>
                 </div>
               )}
-              {/* TÃ­tulo e descriÃ§Ã£o */}
+              {/* Título e descrição */}
               {(adCampaign.title || adCampaign.description) && (
                 <div className="px-4 pt-3 pb-1">
                   {adCampaign.title && <p className="text-white font-bold text-base">{adCampaign.title}</p>}
@@ -983,7 +983,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs text-gray-400 flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    {adCanClose ? 'Propaganda concluÃ­da' : `Encerrando em ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s`}
+                    {adCanClose ? 'Propaganda concluída' : `Encerrando em ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s`}
                   </span>
                   <span className="text-xs font-bold" style={{ color: adProgress < 30 ? '#ef4444' : adProgress < 70 ? '#f59e0b' : adProgress < 100 ? '#00d4ff' : '#22c55e' }}>
                     {adProgress}%
@@ -1005,7 +1005,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                     }}
                   />
                 </div>
-                {/* BotÃ£o de link (opcional) */}
+                {/* Botão de link (opcional) */}
                 {adCampaign.linkUrl && (
                   <a
                     href={adCampaign.linkUrl}
@@ -1017,7 +1017,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                     {adCampaign.linkText || 'Saiba Mais'}
                   </a>
                 )}
-                {/* BotÃ£o fechar (sÃ³ apÃ³s o tempo) */}
+                {/* Botão fechar (só após o tempo) */}
                 <button
                   onClick={() => adCanClose && setAdVisible(false)}
                   disabled={!adCanClose}
@@ -1064,11 +1064,11 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
             </div>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            {/* Ãcone de chat em destaque no topo */}
+            {/* Ícone de chat em destaque no topo */}
             {phoneFromToken && (
               <button
                 onClick={() => {
-                  // Disparar clique no botÃ£o flutuante do chat
+                  // Disparar clique no botão flutuante do chat
                   const chatBtn = document.getElementById('chat-floating-btn');
                   if (chatBtn) chatBtn.click();
                 }}
@@ -1093,7 +1093,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </div>
         </div>
 
-        {/* ServiÃ§os Extras / Consultas â€” TOPO */}
+        {/* Serviços Extras / Consultas â€” TOPO */}
         {phoneFromToken && (
           <div className="mb-6">
             <ServicosExtras
@@ -1130,7 +1130,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 <p className="text-white text-sm font-medium">
                   {isExpired
                     ? 'Plano expirado'
-                    : `Ativo atÃ© ${expDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
+                    : `Ativo até ${expDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
                 </p>
               </div>
               <div className="text-right">
@@ -1178,7 +1178,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
             </span>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold" style={{ color: '#25d366' }}>ðŸ”´ AO VIVO â€” Novo recurso!</p>
-              <p className="text-xs text-white/70">Agora vocÃª pode conversar com outros usuÃ¡rios em tempo real. Toque para abrir.</p>
+              <p className="text-xs text-white/70">Agora você pode conversar com outros usuários em tempo real. Toque para abrir.</p>
             </div>
             <span className="text-white/50 text-lg">ðŸ’¬</span>
           </div>
@@ -1243,9 +1243,9 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           ))}
         </div>
 
-        {/* Seletor de MÃªs */}
+        {/* Seletor de Mês */}
         <div className="mb-6 max-w-xs">
-          <label className="block text-sm font-medium mb-2 text-muted-foreground">Selecionar MÃªs</label>
+          <label className="block text-sm font-medium mb-2 text-muted-foreground">Selecionar Mês</label>
           <Input
             type="month"
             value={selectedMonth}
@@ -1277,21 +1277,21 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
               <span>Metas</span>
             </TabsTrigger>
-            {/* GRÃFICOS */}
+            {/* GRÁFICOS */}
             <TabsTrigger value="graficos" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-transparent bg-[#0a1518] text-[#22d3ee] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#0f2028] hover:border-cyan-500/50 data-[state=active]:bg-cyan-600 data-[state=active]:text-white data-[state=active]:border-cyan-500 data-[state=active]:shadow-[0_4px_20px_rgba(8,145,178,0.6)] active:scale-95">
               <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-              <span>GrÃ¡ficos</span>
+              <span>Gráficos</span>
             </TabsTrigger>
             {/* EMPRÃ‰STIMOS */}
             <TabsTrigger value="emprestimos" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-amber-600/40 bg-[#1a1200] text-[#fbbf24] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#2a1e00] hover:border-amber-500/60 data-[state=active]:bg-amber-500 data-[state=active]:text-black data-[state=active]:border-amber-400 data-[state=active]:shadow-[0_4px_20px_rgba(245,158,11,0.7)] animate-[neon-pulse_2s_ease-in-out_infinite] data-[state=active]:animate-none active:scale-95">
               <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
-              <span>EmprÃ©stimos</span>
+              <span>Empréstimos</span>
             </TabsTrigger>
           </TabsList>
 
           {/* Aba Gastos */}
           <TabsContent value="gastos" className="space-y-4">
-            {/* Data + botÃ£o */}
+            {/* Data + botão */}
             <div className="flex gap-3">
               <Input
                 type="date"
@@ -1302,22 +1302,22 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <Button onClick={handleAddExpense} className="h-11 px-5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-[0_0_16px_-4px_var(--primary)] whitespace-nowrap">Adicionar Gasto</Button>
             </div>
 
-            {/* Lista unificada: categoria | input | valor lanÃ§ado â€” mesma linha */}
+            {/* Lista unificada: categoria | input | valor lançado â€” mesma linha */}
             <div className="space-y-2">
               {[
-                { label: 'CombustÃ­vel', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 22V8l9-6 9 6v14H3z"/><path d="M10 22v-6h4v6"/><path d="M18 8h2a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-2"/></svg>, key: 'fuel', val: newExpense.fuel, set: (v: string) => setNewExpense({ ...newExpense, fuel: v }) },
+                { label: 'Combustível', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 22V8l9-6 9 6v14H3z"/><path d="M10 22v-6h4v6"/><path d="M18 8h2a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-2"/></svg>, key: 'fuel', val: newExpense.fuel, set: (v: string) => setNewExpense({ ...newExpense, fuel: v }) },
                 { label: 'Aluguel', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>, key: 'carRental', val: newExpense.carRental, set: (v: string) => setNewExpense({ ...newExpense, carRental: v }) },
-                { label: 'ManutenÃ§Ã£o', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>, key: 'maintenance', val: newExpense.maintenance, set: (v: string) => setNewExpense({ ...newExpense, maintenance: v }) },
+                { label: 'Manutenção', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>, key: 'maintenance', val: newExpense.maintenance, set: (v: string) => setNewExpense({ ...newExpense, maintenance: v }) },
                 { label: 'Troca de Ã“leo', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v6l3 3-3 3v6"/><path d="M6 12H2"/><path d="M22 12h-4"/></svg>, key: 'oilChange', val: newExpense.oilChange, set: (v: string) => setNewExpense({ ...newExpense, oilChange: v }) },
                 { label: 'Lavagem', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, key: 'washing', val: newExpense.washing, set: (v: string) => setNewExpense({ ...newExpense, washing: v }) },
                 { label: 'Seguro', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, key: 'insurance', val: newExpense.insurance, set: (v: string) => setNewExpense({ ...newExpense, insurance: v }) },
                 { label: 'Internet/Tel.', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>, key: 'internetPhone', val: newExpense.internetPhone, set: (v: string) => setNewExpense({ ...newExpense, internetPhone: v }) },
-                { label: 'AlimentaÃ§Ã£o', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>, key: 'food', val: newExpense.food, set: (v: string) => setNewExpense({ ...newExpense, food: v }) },
+                { label: 'Alimentação', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>, key: 'food', val: newExpense.food, set: (v: string) => setNewExpense({ ...newExpense, food: v }) },
                 { label: 'Estacionamento', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>, key: 'parking', val: newExpense.parking, set: (v: string) => setNewExpense({ ...newExpense, parking: v }) },
-                { label: 'PedÃ¡gios', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>, key: 'tolls', val: newExpense.tolls, set: (v: string) => setNewExpense({ ...newExpense, tolls: v }) },
+                { label: 'Pedágios', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>, key: 'tolls', val: newExpense.tolls, set: (v: string) => setNewExpense({ ...newExpense, tolls: v }) },
                 { label: 'Financiamento', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>, key: 'financing', val: newExpense.financing, set: (v: string) => setNewExpense({ ...newExpense, financing: v }) },
                 { label: 'Multas', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>, key: 'fines', val: newExpense.fines, set: (v: string) => setNewExpense({ ...newExpense, fines: v }) },
-                { label: 'AcessÃ³rios', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>, key: 'accessories', val: newExpense.accessories, set: (v: string) => setNewExpense({ ...newExpense, accessories: v }) },
+                { label: 'Acessórios', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>, key: 'accessories', val: newExpense.accessories, set: (v: string) => setNewExpense({ ...newExpense, accessories: v }) },
                 { label: 'Outros Gastos', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>, key: 'otherExpenses', val: newExpense.otherExpenses, set: (v: string) => setNewExpense({ ...newExpense, otherExpenses: v }) },
               ].map(({ label, icon, key, val, set }) => (
 <div key={key} className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #2d0808 0%, #180404 100%)', border: '2px solid rgba(239,68,68,0.6)', boxShadow: '0 2px 10px rgba(239,68,68,0.15)' }}>
@@ -1337,34 +1337,34 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               ))}
             </div>
 
-            {/* HistÃ³rico de lanÃ§amentos por data */}
+            {/* Histórico de lançamentos por data */}
             {expenses.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">HistÃ³rico de LanÃ§amentos</p>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Histórico de Lançamentos</p>
                 {uniqueDates.slice().sort((a, b) => b.localeCompare(a)).map((date, idx) => {
                   const expsForDate = expenses.filter(exp => exp.date === date);
                   const isToday = date === todayLocalDate;
                   const isOpen = isToday || openExpenseDates.has(date);
                   const totalDate = expsForDate.reduce((s, e) => s + calculateExpenseTotal(e), 0);
                   const expCats = [
-                    { key: 'fuel', label: 'CombustÃ­vel' },
+                    { key: 'fuel', label: 'Combustível' },
                     { key: 'carRental', label: 'Aluguel' },
-                    { key: 'maintenance', label: 'ManutenÃ§Ã£o' },
+                    { key: 'maintenance', label: 'Manutenção' },
                     { key: 'oilChange', label: 'Troca de Ã“leo' },
                     { key: 'washing', label: 'Lavagem' },
                     { key: 'insurance', label: 'Seguro' },
                     { key: 'internetPhone', label: 'Internet/Tel.' },
-                    { key: 'food', label: 'AlimentaÃ§Ã£o' },
+                    { key: 'food', label: 'Alimentação' },
                     { key: 'parking', label: 'Estacionamento' },
-                    { key: 'tolls', label: 'PedÃ¡gios' },
+                    { key: 'tolls', label: 'Pedágios' },
                     { key: 'financing', label: 'Financiamento' },
                     { key: 'fines', label: 'Multas' },
-                    { key: 'accessories', label: 'AcessÃ³rios' },
+                    { key: 'accessories', label: 'Acessórios' },
                     { key: 'otherExpenses', label: 'Outros Gastos' },
                   ];
                   return (
 <div key={date} className="rounded-xl overflow-hidden shadow-md" style={{ background: 'linear-gradient(135deg, #0d0d1a 0%, #070710 100%)', border: '1.5px solid rgba(99,102,241,0.25)' }}>
-                      {/* CabeÃ§alho da data â€” clicavel para datas anteriores */}
+                      {/* Cabeçalho da data â€” clicavel para datas anteriores */}
                       <button
                         type="button"
                         onClick={() => !isToday && toggleExpenseDate(date)}
@@ -1381,7 +1381,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                         </div>
                         <span className="font-bold text-sm text-red-400">Total: R$ {totalDate.toFixed(2)}</span>
                       </button>
-                      {/* Detalhamento agrupado por categoria â€” sÃ³ visÃ­vel quando aberto */}
+                      {/* Detalhamento agrupado por categoria â€” só visível quando aberto */}
                       {isOpen && (() => {
                         // Montar grupos: catKey -> { label, items: [{exp, value}] }
                         const catGroupsMap: Record<string, { label: string; items: { exp: Expense; value: number }[] }> = {};
@@ -1401,11 +1401,11 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                               const groupKey = `${date}::${catKey}`;
                               const catTotal = group.items.reduce((s, i) => s + i.value, 0);
                               const count = group.items.length;
-                              // Grupos com 1 item ficam abertos por padrÃ£o; com 2+ ficam fechados
+                              // Grupos com 1 item ficam abertos por padrão; com 2+ ficam fechados
                               const isCatOpen = count === 1 || openExpenseCatGroups.has(groupKey);
                               return (
                                 <div key={catKey} className="rounded-lg overflow-hidden border border-border/30">
-                                  {/* CabeÃ§alho do grupo de categoria */}
+                                  {/* Cabeçalho do grupo de categoria */}
                                   <button
                                     type="button"
                                     onClick={() => count > 1 && toggleExpenseCatGroup(groupKey)}
@@ -1460,7 +1460,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
           {/* Aba Ganhos */}
           <TabsContent value="ganhos" className="space-y-4">
-            {/* Data + botÃ£o */}
+            {/* Data + botão */}
             <div className="flex gap-3">
               <Input
                 type="date"
@@ -1471,7 +1471,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <Button onClick={handleAddEarning} className="h-11 px-5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-[0_0_16px_-4px_var(--primary)] whitespace-nowrap">Adicionar Ganho</Button>
             </div>
 
-            {/* Lista unificada: categoria | input | valor lanÃ§ado â€” mesma linha */}
+            {/* Lista unificada: categoria | input | valor lançado â€” mesma linha */}
             <div className="space-y-2">
               {[
                 { label: 'Uber', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3"/><rect x="9" y="11" width="14" height="10" rx="1"/><circle cx="12" cy="21" r="1"/><circle cx="20" cy="21" r="1"/></svg>, key: 'uber', val: newEarning.uber, set: (v: string) => setNewEarning({ ...newEarning, uber: v }) },
@@ -1499,10 +1499,10 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               ))}
             </div>
 
-            {/* HistÃ³rico de lanÃ§amentos por data */}
+            {/* Histórico de lançamentos por data */}
             {earnings.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">HistÃ³rico de LanÃ§amentos</p>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Histórico de Lançamentos</p>
                 {Array.from(new Set(earnings.map(e => e.date))).sort((a, b) => b.localeCompare(a)).map((date, idx) => {
                   const earnsForDate = earnings.filter(e => e.date === date);
                   const isToday = date === todayLocalDate;
@@ -1535,7 +1535,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                         </div>
                         <span className="font-bold text-sm text-emerald-400">Total: R$ {totalDate.toFixed(2)}</span>
                       </button>
-                      {/* Detalhamento agrupado por categoria â€” sÃ³ visÃ­vel quando aberto */}
+                      {/* Detalhamento agrupado por categoria â€” só visível quando aberto */}
                       {isOpen && (() => {
                         const earnGroupsMap: Record<string, { label: string; items: { earn: Earning; value: number }[] }> = {};
                         for (const earn of earnsForDate) {
@@ -1638,7 +1638,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               {/* Hora Inicial */}
               <div className="flex flex-col gap-1">
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  <span>â°</span> Hora de InÃ­cio
+                  <span>â°</span> Hora de Início
                 </label>
                 <Input
                   type="time"
@@ -1646,7 +1646,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                   onChange={(e) => setNewOperational({ ...newOperational, timeInitial: e.target.value })}
                   className="h-11 bg-input border-border text-foreground focus-visible:border-ring"
                 />
-                <p className="text-[11px] text-muted-foreground/60 px-1">HorÃ¡rio em que vocÃª iniciou sua jornada. <span className="text-muted-foreground/40">Ex: 08:00</span></p>
+                <p className="text-[11px] text-muted-foreground/60 px-1">Horário em que você iniciou sua jornada. <span className="text-muted-foreground/40">Ex: 08:00</span></p>
               </div>
               {/* Hora Final */}
               <div className="flex flex-col gap-1">
@@ -1659,7 +1659,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                   onChange={(e) => setNewOperational({ ...newOperational, timeFinal: e.target.value })}
                   className="h-11 bg-input border-border text-foreground focus-visible:border-ring"
                 />
-                <p className="text-[11px] text-muted-foreground/60 px-1">HorÃ¡rio em que vocÃª encerrou sua jornada. <span className="text-muted-foreground/40">Ex: 18:30</span></p>
+                <p className="text-[11px] text-muted-foreground/60 px-1">Horário em que você encerrou sua jornada. <span className="text-muted-foreground/40">Ex: 18:30</span></p>
               </div>
             </div>
 
@@ -1677,7 +1677,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                   <div>
                     <p className="text-xs text-primary/70 font-semibold uppercase tracking-wide">Tempo Trabalhado</p>
                     <p className="text-lg font-extrabold text-primary">{horas}h {minutos.toString().padStart(2,'0')}min</p>
-                    <p className="text-[11px] text-muted-foreground/60">Calculado automaticamente com base nos horÃ¡rios informados</p>
+                    <p className="text-[11px] text-muted-foreground/60">Calculado automaticamente com base nos horários informados</p>
                   </div>
                 </div>
               );
@@ -1687,7 +1687,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
             <div className="flex items-start gap-2 bg-card/60 border border-border/50 rounded-xl px-4 py-3">
               <span className="text-base mt-0.5">ðŸš—</span>
               <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-                Informe o horÃ¡rio de inÃ­cio e tÃ©rmino da sua jornada. O sistema calcularÃ¡ automaticamente o <strong className="text-muted-foreground">tempo total trabalhado</strong>, permitindo acompanhar ganho por hora e produtividade da jornada.
+                Informe o horário de início e término da sua jornada. O sistema calculará automaticamente o <strong className="text-muted-foreground">tempo total trabalhado</strong>, permitindo acompanhar ganho por hora e produtividade da jornada.
               </p>
             </div>
 
@@ -1751,12 +1751,12 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
           {/* Aba Metas */}
           <TabsContent value="metas" className="space-y-5">
-            {/* FormulÃ¡rio de metas */}
+            {/* Formulário de metas */}
             <Card className="bg-card/80 backdrop-blur border border-border/50 rounded-2xl p-5">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">ðŸŽ¯ Definir Metas</h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs text-muted-foreground/70 font-medium">Meta DiÃ¡ria</label>
+                  <label className="text-xs text-muted-foreground/70 font-medium">Meta Diária</label>
                   <Input type="number" placeholder="Ex: 300" value={newGoal.dailyGoal} onChange={(e) => setNewGoal({ ...newGoal, dailyGoal: e.target.value })} className="h-11 bg-input border-border text-foreground placeholder:text-muted-foreground/50 focus-visible:border-ring" />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -1799,15 +1799,15 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 return '0 0 12px #ef4444';
               };
               const getMilestoneMsg = (pct: number) => {
-                if (pct >= 100) return { icon: 'ðŸ†', msg: 'Meta concluÃ­da com sucesso!' };
-                if (pct >= 90) return { icon: 'âš¡', msg: 'Ãšltimo esforÃ§o! Restam apenas 10%.' };
-                if (pct >= 75) return { icon: 'ðŸš€', msg: 'Falta pouco! VocÃª jÃ¡ concluiu 75%.' };
-                if (pct >= 50) return { icon: 'ðŸ”¥', msg: 'ParabÃ©ns! VocÃª chegou Ã  metade da meta.' };
-                if (pct >= 25) return { icon: 'ðŸŽ‰', msg: 'VocÃª jÃ¡ concluiu 25% da sua meta.' };
+                if (pct >= 100) return { icon: 'ðŸ†', msg: 'Meta concluída com sucesso!' };
+                if (pct >= 90) return { icon: 'âš¡', msg: 'Ãšltimo esforço! Restam apenas 10%.' };
+                if (pct >= 75) return { icon: 'ðŸš€', msg: 'Falta pouco! Você já concluiu 75%.' };
+                if (pct >= 50) return { icon: 'ðŸ”¥', msg: 'Parabéns! Você chegou à metade da meta.' };
+                if (pct >= 25) return { icon: 'ðŸŽ‰', msg: 'Você já concluiu 25% da sua meta.' };
                 return null;
               };
 
-              // Dias restantes no mÃªs selecionado
+              // Dias restantes no mês selecionado
               const [selYear, selMonthNum] = selectedMonth.split('-').map(Number);
               const nowBRT2 = new Date(Date.now() - 3 * 60 * 60 * 1000);
               const todayDay = nowBRT2.getUTCDate();
@@ -1824,9 +1824,9 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 .sort((a, b) => b.earnings - a.earnings)
                 .slice(0, 3);
               const rankMedals = [
-                { icon: 'ðŸ¥‡', label: '1Âº', color: '#FFD700', glow: '0 0 14px #FFD700' },
-                { icon: 'ðŸ¥ˆ', label: '2Âº', color: '#C0C0C0', glow: '0 0 14px #C0C0C0' },
-                { icon: 'ðŸ¥‰', label: '3Âº', color: '#CD7F32', glow: '0 0 14px #CD7F32' },
+                { icon: 'ðŸ¥‡', label: '1º', color: '#FFD700', glow: '0 0 14px #FFD700' },
+                { icon: 'ðŸ¥ˆ', label: '2º', color: '#C0C0C0', glow: '0 0 14px #C0C0C0' },
+                { icon: 'ðŸ¥‰', label: '3º', color: '#CD7F32', glow: '0 0 14px #CD7F32' },
               ];
 
               // â”€â”€â”€ DISPARAR MARCOS MOTIVACIONAIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1836,7 +1836,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 50: 'Metade da meta atingida!',
                 75: '75% da meta atingido!',
                 90: '90% da meta atingido!',
-                100: 'META CONCLUÃDA!',
+                100: 'META CONCLUÍDA!',
               };
               MILESTONES.forEach(m => {
                 if (dailyGoalVal > 0 && dailyPct >= m) triggerMilestone(m, milestoneLabels[m], `daily-${m}-${selectedMonth}`);
@@ -1906,18 +1906,18 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                     >
                       <span className="text-2xl">{activeMilestone.pct >= 100 ? 'ðŸ†' : activeMilestone.pct >= 90 ? 'âš¡' : activeMilestone.pct >= 75 ? 'ðŸš€' : activeMilestone.pct >= 50 ? 'ðŸ”¥' : 'ðŸŽ‰'}</span>
                       <div>
-                        <p className="text-xs font-bold text-white/80 uppercase tracking-widest">{activeMilestone.pct >= 100 ? 'META CONCLUÃDA!' : 'Marco atingido'}</p>
+                        <p className="text-xs font-bold text-white/80 uppercase tracking-widest">{activeMilestone.pct >= 100 ? 'META CONCLUÍDA!' : 'Marco atingido'}</p>
                         <p className="text-sm font-extrabold text-white">{activeMilestone.label}</p>
                       </div>
                       <button onClick={() => setActiveMilestone(null)} className="ml-2 text-white/60 hover:text-white text-lg leading-none">Ã—</button>
                     </div>
                   )}
 
-                  {dailyGoalVal > 0 && <GoalCard label="Meta DiÃ¡ria" goal={dailyGoalVal} current={dailyCurrent} pct={dailyPct} icon="â˜€ï¸" />}
+                  {dailyGoalVal > 0 && <GoalCard label="Meta Diária" goal={dailyGoalVal} current={dailyCurrent} pct={dailyPct} icon="â˜€ï¸" />}
                   {weeklyGoalVal > 0 && <GoalCard label="Meta Semanal" goal={weeklyGoalVal} current={weeklyCurrent} pct={weeklyPct} icon="ðŸ“…" />}
                   {monthlyGoalVal > 0 && <GoalCard label="Meta Mensal" goal={monthlyGoalVal} current={monthlyCurrent} pct={monthlyPct} icon="ðŸ—“ï¸" />}
 
-                  {/* Resumo rÃ¡pido + alerta diÃ¡rio */}
+                  {/* Resumo rápido + alerta diário */}
                   {monthlyGoalVal > 0 && (
                     <Card className="bg-card/80 backdrop-blur border border-primary/20 rounded-2xl p-5 space-y-3">
                       <h4 className="text-sm font-bold text-primary uppercase tracking-wide">ðŸ“Š Resumo da Meta Mensal</h4>
@@ -1939,18 +1939,18 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                           <p className="text-base font-extrabold" style={{ color: getBarColor(monthlyPct) }}>{Math.round(monthlyPct)}%</p>
                         </div>
                       </div>
-                      {/* Alerta diÃ¡rio */}
+                      {/* Alerta diário */}
                       <div className="bg-primary/10 border border-primary/30 rounded-xl px-4 py-3 space-y-1">
                         {monthlyCurrent >= monthlyGoalVal ? (
-                          <p className="text-sm font-semibold text-emerald-400">ðŸ† VocÃª jÃ¡ atingiu sua meta mensal! ParabÃ©ns!</p>
+                          <p className="text-sm font-semibold text-emerald-400">ðŸ† Você já atingiu sua meta mensal! Parabéns!</p>
                         ) : dailyAvgNeeded > 0 ? (
                           <>
-                            <p className="text-xs text-muted-foreground/70">ðŸ“ˆ MÃ©dia necessÃ¡ria por dia para atingir a meta:</p>
+                            <p className="text-xs text-muted-foreground/70">ðŸ“ˆ Média necessária por dia para atingir a meta:</p>
                             <p className="text-lg font-extrabold text-primary">{fmtBR(dailyAvgNeeded)} / dia</p>
                             {daysToGoal > 0 && dailyAvgEarned > 0 && (
-                              <p className="text-[11px] text-muted-foreground/60">No ritmo atual ({fmtBR(dailyAvgEarned)}/dia), vocÃª atingirÃ¡ a meta em ~{daysToGoal} dias.</p>
+                              <p className="text-[11px] text-muted-foreground/60">No ritmo atual ({fmtBR(dailyAvgEarned)}/dia), você atingirá a meta em ~{daysToGoal} dias.</p>
                             )}
-                            <p className="text-[11px] text-muted-foreground/50">{daysRemaining} dias restantes no mÃªs.</p>
+                            <p className="text-[11px] text-muted-foreground/50">{daysRemaining} dias restantes no mês.</p>
                           </>
                         ) : null}
                       </div>
@@ -1998,7 +1998,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
             })()}
           </TabsContent>
 
-          {/* Aba GrÃ¡ficos */}
+          {/* Aba Gráficos */}
           <TabsContent value="graficos" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="bg-card/80 backdrop-blur border border-primary/20 rounded-2xl p-6 shadow-lg shadow-primary/10">
@@ -2017,7 +2017,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               </Card>
 
               <Card className="bg-card/80 backdrop-blur border border-primary/20 rounded-2xl p-6 shadow-lg shadow-primary/10">
-                <h3 className="text-lg font-bold mb-4">DistribuiÃ§Ã£o de Gastos</h3>
+                <h3 className="text-lg font-bold mb-4">Distribuição de Gastos</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie

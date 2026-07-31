@@ -24,10 +24,10 @@ export default function AdminLogin() {
       } else if (data.error === "IP_BLOCKED") {
         setScreen("blocked");
       } else {
-        // Extrair nÃºmero de tentativas restantes da mensagem
+        // Extrair número de tentativas restantes da mensagem
         const match = data.message?.match(/(\d+) tentativa/);
         if (match) setRemainingAttempts(parseInt(match[1]));
-        toast.error(data.message || "UsuÃ¡rio ou senha incorretos");
+        toast.error(data.message || "Usuário ou senha incorretos");
       }
     },
     onError: () => {
@@ -38,7 +38,7 @@ export default function AdminLogin() {
   const unlockMutation = trpc.adminAuth.unlock.useMutation({
     onSuccess: (data) => {
       if (data.success) {
-        toast.success("IP desbloqueado! VocÃª pode tentar o login novamente.");
+        toast.success("IP desbloqueado! Você pode tentar o login novamente.");
         setScreen("login");
         setCounterPassword("");
         setRemainingAttempts(null);
@@ -51,9 +51,9 @@ export default function AdminLogin() {
 
   const requestUnlockMutation = trpc.adminAuth.requestUnlock.useMutation({
     onSuccess: () => {
-      toast.success("SolicitaÃ§Ã£o enviada! O administrador serÃ¡ notificado.");
+      toast.success("Solicitação enviada! O administrador será notificado.");
     },
-    onError: () => toast.error("Erro ao enviar solicitaÃ§Ã£o."),
+    onError: () => toast.error("Erro ao enviar solicitação."),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -92,14 +92,14 @@ export default function AdminLogin() {
             <p className="text-white/50 text-sm mt-1">3 tentativas incorretas detectadas</p>
           </div>
 
-          {/* OpÃ§Ã£o 1: Contra-senha */}
+          {/* Opção 1: Contra-senha */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <KeyRound className="w-4 h-4 text-yellow-400" />
               <h2 className="text-sm font-bold text-white">Desbloquear com Contra-Senha</h2>
             </div>
             <p className="text-xs text-white/40 mb-3">
-              Use a contra-senha secreta que vocÃª guardou para desbloquear imediatamente.
+              Use a contra-senha secreta que você guardou para desbloquear imediatamente.
             </p>
             <form onSubmit={handleUnlock} className="space-y-3" autoComplete="off">
               <div className="relative">
@@ -124,14 +124,14 @@ export default function AdminLogin() {
             </form>
           </div>
 
-          {/* OpÃ§Ã£o 2: Solicitar desbloqueio ao administrador */}
+          {/* Opção 2: Solicitar desbloqueio ao administrador */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <MessageSquare className="w-4 h-4 text-blue-400" />
               <h2 className="text-sm font-bold text-white">Solicitar Desbloqueio</h2>
             </div>
             <p className="text-xs text-white/40 mb-3">
-              Envie uma solicitaÃ§Ã£o ao administrador do sistema.
+              Envie uma solicitação ao administrador do sistema.
             </p>
             <div className="space-y-3">
               <textarea
@@ -185,11 +185,11 @@ export default function AdminLogin() {
           </div>
         )}
 
-        {/* FormulÃ¡rio */}
+        {/* Formulário */}
         <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
           <div>
             <label className="block text-sm font-medium text-white/70 mb-1.5">
-              UsuÃ¡rio
+              Usuário
             </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />

@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 // ============================================================
-// ðŸ”§ MODO MANUTENÃ‡ÃƒO â€” mude para false para reabrir o site
+// MODO MANUTENCAO: mude para false para reabrir o site
 // ============================================================
 const MAINTENANCE_MODE = false;
 function MaintenancePage() {
@@ -18,8 +18,8 @@ function MaintenancePage() {
         <h1 className="text-3xl font-bold text-yellow-400 mb-2">H2 COLOMBIANO</h1>
       </div>
       <div className="bg-gray-900 border border-yellow-500/30 rounded-2xl p-8 max-w-sm w-full">
-        <div className="text-5xl mb-4">ðŸ”§</div>
-        <h2 className="text-xl font-bold text-white mb-3">Site em ManutenÃ§Ã£o</h2>
+        <div className="text-5xl mb-4">🔧</div>
+        <h2 className="text-xl font-bold text-white mb-3">Site em Manutenção</h2>
         <p className="text-gray-400 text-sm mb-6">
           Estamos realizando melhorias no sistema.<br />
           Voltamos em breve!
@@ -105,10 +105,10 @@ import { useAdminIdleLogout } from "./hooks/useAdminIdleLogout";
 import { useAntiPrint } from "./hooks/useAntiPrint";
 import DevtoolsGuard from "./components/DevtoolsGuard";
 
-// Guard para rotas admin â€” redireciona para /admin/login se nÃ£o autenticado
+// Guard para rotas admin � redireciona para /admin/login se não autenticado
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { isAdmin, isLoading } = useAdminAuth();
-  // Logout automÃ¡tico apÃ³s 30 minutos de inatividade
+  // Logout automático após 30 minutos de inatividade
   useAdminIdleLogout(isAdmin);
 
   if (isLoading) {
@@ -128,7 +128,7 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
 
 function Router() {
   const [location, navigate] = useLocation();
-  // Normalizar URL para minÃºscula se for /sorteio, /foto ou /acompanhar
+  // Normalizar URL para minúscula se for /sorteio, /foto ou /acompanhar
   const normalizedPath = location.toLowerCase();
 
   useEffect(() => {
@@ -313,7 +313,7 @@ function AppContent() {
   const isPreCadastroRoute = location === "/pre-cadastro";
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
 
-  // ProteÃ§Ã£o anti-print para rotas de cliente
+  // Proteção anti-print para rotas de cliente
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || undefined : undefined;
   const { WarningOverlay } = useAntiPrint(!isAdminRoute ? clientPhone : undefined);
 
@@ -337,17 +337,17 @@ function AppContent() {
     );
   }
 
-  // ðŸ”§ MODO MANUTENÃ‡ÃƒO â€” bloqueia todas as rotas pÃºblicas
+  // �x� MODO MANUTEN�!ÒO � bloqueia todas as rotas públicas
   if (MAINTENANCE_MODE) {
     return <MaintenancePage />;
   }
 
-  // Rota /gastos Ã© pÃºblica â€” sem senha
+  // Rota /gastos é pública � sem senha
   if (isGastosRoute) {
     return <Router />;
   }
 
-  // Rota /login Ã© atalho direto para o PasswordGate â€” mostra a tela bonita com logo, telefone/CPF e CONTINUAR
+  // Rota /login é atalho direto para o PasswordGate � mostra a tela bonita com logo, telefone/CPF e CONTINUAR
   if (isLoginRoute) {
     return (
       <>
@@ -359,7 +359,7 @@ function AppContent() {
     );
   }
 
-  // Rota /acompanhar Ã© pÃºblica â€” sem senha, mas com tela de boas-vindas
+  // Rota /acompanhar é pública � sem senha, mas com tela de boas-vindas
   if (isTrackingRoute) {
     return (
       <>
@@ -375,32 +375,32 @@ function AppContent() {
     return <Router />;
   }
 
-  // Rota /ajuda Ã© pÃºblica â€” pÃ¡gina de FAQ para compartilhar pelo WhatsApp
+  // Rota /ajuda é pública � página de FAQ para compartilhar pelo WhatsApp
   if (isAjudaRoute) {
     return <Router />;
   }
-  // Rota /pre-cadastro Ã© pÃºblica â€” formulÃ¡rio de prÃ©-cadastro sem senha
+  // Rota /pre-cadastro é pública � formulário de pré-cadastro sem senha
   if (isPreCadastroRoute) {
     return <Router />;
   }
-  // Rota /consultar-cadastro Ã© pÃºblica â€” consulta de status por CPF
+  // Rota /consultar-cadastro é pública � consulta de status por CPF
   if (isConsultarCadastroRoute) {
     return <Router />;
   }
 
-  // Rota /video Ã© pÃºblica â€” vÃ­deos tutoriais para clientes
+  // Rota /video é pública � vídeos tutoriais para clientes
   if (isVideoRoute) {
     return <Router />;
   }
 
-  // Rota /agendar/:token Ã© pÃºblica â€” cliente agenda atendimento pelo link individual
+  // Rota /agendar/:token é pública � cliente agenda atendimento pelo link individual
   if (isAgendarRoute) {
     return <Router />;
   }
 
-  // Rota /sorteio Ã© pÃºblica â€” nÃ£o passa pelo PasswordGate do site
-  // O prÃ³prio Raffle.tsx controla o acesso (livre ou com senha prÃ³pria do sorteio)
-  // Rota /gerador-chassi Ã© pÃºblica â€” qualquer pessoa pode usar sem senha
+  // Rota /sorteio é pública � não passa pelo PasswordGate do site
+  // O próprio Raffle.tsx controla o acesso (livre ou com senha própria do sorteio)
+  // Rota /gerador-chassi é pública � qualquer pessoa pode usar sem senha
   if (isGeradorChassiRoute) {
     return (
       <>
@@ -446,7 +446,7 @@ function App() {
   );
 }
 
-// Renderiza o botÃ£o flutuante do WhatsApp em todas as rotas, exceto no painel admin, /gastos e /gerador-chassi
+// Renderiza o botão flutuante do WhatsApp em todas as rotas, exceto no painel admin, /gastos e /gerador-chassi
 function GlobalWhatsApp() {
   const [location] = useLocation();
   if (location.startsWith("/admin")) return null;

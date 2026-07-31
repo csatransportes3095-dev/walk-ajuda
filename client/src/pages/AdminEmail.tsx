@@ -101,25 +101,25 @@ export default function AdminEmail() {
     firstName: "", lastName: "", type: 'membro' as 'principal' | 'membro',
   });
   const [isGeneratingUsername, setIsGeneratingUsername] = useState(false);
-  // DomÃ­nio manual: pode ser sobreposto pelo utilizador
+  // Domínio manual: pode ser sobreposto pelo utilizador
   const [manualDomain, setManualDomain] = useState<string | null>(null);
 
   const allEmails = (groups as ServerGroup[]).flatMap(g => g.users.map(u => u.primaryEmailAddress));
   const totalCount = allEmails.length;
 
-  // DomÃ­nios disponÃ­veis: extrair dos grupos ou usar defaults
+  // Domínios disponíveis: extrair dos grupos ou usar defaults
   const availableDomains = (() => {
     const fromGroups = (groups as ServerGroup[])
       .filter(g => g.domain)
       .map(g => g.domain)
       .filter((d, i, arr) => arr.indexOf(d) === i);
-    // Sempre garantir os dois domÃ­nios conhecidos
+    // Sempre garantir os dois domínios conhecidos
     const known = ['h2colombiano.com', 'h2colombiano.com'];
     const all = [...new Set([...fromGroups, ...known])];
     return all;
   })();
 
-  // DomÃ­nio do servidor selecionado (com fallback inteligente por nome)
+  // Domínio do servidor selecionado (com fallback inteligente por nome)
   const serverDomain = (() => {
     if (selectedServer?.domain) return selectedServer.domain;
     // Fallback por nome do servidor
@@ -139,7 +139,7 @@ export default function AdminEmail() {
   // Abrir modal: selecionar servidor primeiro
   function handleOpenCreate() {
     const serverList = groups as ServerGroup[];
-    // Se sÃ³ hÃ¡ um servidor disponÃ­vel (nÃ£o lotado), pular seleÃ§Ã£o
+    // Se só há um servidor disponível (não lotado), pular seleção
     const available = serverList.filter(g => g.users.length < 5);
     if (available.length === 1) {
       setSelectedServer(available[0]);
@@ -150,9 +150,9 @@ export default function AdminEmail() {
   }
 
   function handleSelectServer(group: ServerGroup) {
-    if (group.users.length >= 5) return; // Lotado, nÃ£o permite
+    if (group.users.length >= 5) return; // Lotado, não permite
     setSelectedServer(group);
-    setManualDomain(null); // Resetar domÃ­nio manual ao trocar servidor
+    setManualDomain(null); // Resetar domínio manual ao trocar servidor
     setModalStep('fill-form');
   }
 
@@ -174,7 +174,7 @@ export default function AdminEmail() {
   });
 
   const deleteMutation = trpc.email.delete.useMutation({
-    onSuccess: () => { setShowDelete(null); utils.email.list.invalidate(); toast.success("Conta excluÃ­da com sucesso"); },
+    onSuccess: () => { setShowDelete(null); utils.email.list.invalidate(); toast.success("Conta excluída com sucesso"); },
     onError: (e) => toast.error("Erro ao excluir conta: " + e.message),
   });
 
@@ -190,7 +190,7 @@ export default function AdminEmail() {
     ),
   }));
 
-  // Servidor selecionado no header (seletor rÃ¡pido)
+  // Servidor selecionado no header (seletor rápido)
   const availableServers = (groups as ServerGroup[]).filter(g => g.users.length < 5);
   const defaultServer = availableServers[0] ?? null;
 
@@ -253,9 +253,9 @@ export default function AdminEmail() {
                       <Badge className={`text-xs ${colors.badge}`}>{group.users.length}/5 contas</Badge>
                     </div>
                     {isLotado ? (
-                      <Badge className="bg-red-500/20 text-red-400 text-xs">ðŸ”´ Lotado</Badge>
+                      <Badge className="bg-red-500/20 text-red-400 text-xs">�x� Lotado</Badge>
                     ) : (
-                      <Badge className="bg-green-500/20 text-green-400 text-xs">ðŸŸ¢ DisponÃ­vel</Badge>
+                      <Badge className="bg-green-500/20 text-green-400 text-xs">�xx� Disponível</Badge>
                     )}
                   </div>
 
@@ -263,7 +263,7 @@ export default function AdminEmail() {
                     {principalEmails.length > 0 && (
                       <div>
                         <div className="px-4 py-2 bg-gray-900/50">
-                          <span className="text-xs font-medium text-gray-400">ðŸ“§ Email Principal</span>
+                          <span className="text-xs font-medium text-gray-400">�x� Email Principal</span>
                         </div>
                         <Table>
                           <TableBody>
@@ -277,7 +277,7 @@ export default function AdminEmail() {
                                     </button>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-muted-foreground">{user.displayName || "â€”"}</TableCell>
+                                <TableCell className="text-muted-foreground">{user.displayName || "�"}</TableCell>
                                 <TableCell>
                                   <div className="flex items-center justify-end">
                                     <Button variant="ghost" size="icon" onClick={() => setShowDelete(user)}>
@@ -294,7 +294,7 @@ export default function AdminEmail() {
                     {membroEmails.length > 0 && (
                       <div>
                         <div className="px-4 py-2 bg-gray-900/50">
-                          <span className="text-xs font-medium text-gray-400">ðŸ‘¥ Email Membros</span>
+                          <span className="text-xs font-medium text-gray-400">�x� Email Membros</span>
                         </div>
                         <Table>
                           <TableBody>
@@ -308,7 +308,7 @@ export default function AdminEmail() {
                                     </button>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-muted-foreground">{user.displayName || "â€”"}</TableCell>
+                                <TableCell className="text-muted-foreground">{user.displayName || "�"}</TableCell>
                                 <TableCell>
                                   <div className="flex items-center justify-end">
                                     <Button variant="ghost" size="icon" onClick={() => setShowDelete(user)}>
@@ -342,7 +342,7 @@ export default function AdminEmail() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-3 py-2">
-              <p className="text-sm text-muted-foreground">Selecione em qual servidor o novo email serÃ¡ criado:</p>
+              <p className="text-sm text-muted-foreground">Selecione em qual servidor o novo email será criado:</p>
               {(groups as ServerGroup[]).map((group, idx) => {
                 const colors = SERVER_COLORS[idx % SERVER_COLORS.length];
                 const isLotado = group.users.length >= 5;
@@ -375,7 +375,7 @@ export default function AdminEmail() {
                           </div>
                         ) : (
                           <div>
-                            <Badge className="bg-green-500/20 text-green-400 text-xs mb-1 block">DISPONÃVEL</Badge>
+                            <Badge className="bg-green-500/20 text-green-400 text-xs mb-1 block">DISPONÍVEL</Badge>
                             <span className={`text-xs font-semibold ${colors.text} bg-gray-800 px-2 py-1 rounded`}>
                               CRIAR NO {group.serverName.toUpperCase()}
                             </span>
@@ -393,7 +393,7 @@ export default function AdminEmail() {
           </DialogContent>
         </Dialog>
 
-        {/* MODAL PASSO 2: Preencher formulÃ¡rio */}
+        {/* MODAL PASSO 2: Preencher formulário */}
         <Dialog open={modalStep === 'fill-form'} onOpenChange={(o) => !o && setModalStep(null)}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -427,17 +427,17 @@ export default function AdminEmail() {
                 <select value={form.type}
                   onChange={(e) => setForm(f => ({ ...f, type: e.target.value as 'principal' | 'membro' }))}
                   className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm">
-                  <option value="principal">ðŸ“§ Email Principal</option>
-                  <option value="membro">ðŸ‘¥ Email Membros</option>
+                  <option value="principal">�x� Email Principal</option>
+                  <option value="membro">�x� Email Membros</option>
                 </select>
               </div>
               <div className="space-y-1">
-                <Label>UsuÃ¡rio *</Label>
+                <Label>Usuário *</Label>
                 <div className="flex items-center gap-1">
                   <Input placeholder="nome.sobrenome" value={form.username}
                     onChange={(e) => setForm(f => ({ ...f, username: e.target.value.toLowerCase().replace(/\s/g, ".") }))} />
                   <Button variant="outline" size="icon" type="button" onClick={handleGenerateUsername}
-                    title="Gerar usuÃ¡rio aleatÃ³rio Ãºnico" className="shrink-0">
+                    title="Gerar usuário aleatório único" className="shrink-0">
                     <Shuffle className={`w-4 h-4 ${isGeneratingUsername ? "animate-spin" : ""}`} />
                   </Button>
                     {availableDomains.length > 1 ? (
@@ -454,17 +454,17 @@ export default function AdminEmail() {
                     <span className="text-sm font-semibold text-blue-400 whitespace-nowrap">@{selectedDomain}</span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">Clique em ðŸ”€ para gerar um usuÃ¡rio aleatÃ³rio Ãºnico</p>
+                <p className="text-xs text-muted-foreground">Clique em �x� para gerar um usuário aleatório único</p>
               </div>
               <div className="space-y-1">
-                <Label>Nome de exibiÃ§Ã£o *</Label>
-                <Input placeholder="Ex: JoÃ£o Silva" value={form.displayName}
+                <Label>Nome de exibição *</Label>
+                <Input placeholder="Ex: João Silva" value={form.displayName}
                   onChange={(e) => setForm(f => ({ ...f, displayName: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label>Primeiro nome</Label>
-                  <Input placeholder="JoÃ£o" value={form.firstName}
+                  <Input placeholder="João" value={form.firstName}
                     onChange={(e) => setForm(f => ({ ...f, firstName: e.target.value }))} />
                 </div>
                 <div className="space-y-1">
@@ -487,14 +487,14 @@ export default function AdminEmail() {
                     <Copy className="w-4 h-4" />
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">MÃ­nimo 8 caracteres</p>
+                <p className="text-xs text-muted-foreground">Mínimo 8 caracteres</p>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setModalStep(null)}>Cancelar</Button>
               <Button
                 onClick={() => {
-                  if (window.confirm(`A conta serÃ¡ criada no servidor ${selectedServer?.serverName?.toUpperCase()}:\n\n${form.username}@${selectedDomain}\n\nConfirmar?`)) {
+                  if (window.confirm(`A conta será criada no servidor ${selectedServer?.serverName?.toUpperCase()}:\n\n${form.username}@${selectedDomain}\n\nConfirmar?`)) {
                     createMutation.mutate({
                       ...form,
                       serverId: selectedServer?.serverId,
@@ -521,11 +521,11 @@ export default function AdminEmail() {
               {showCreated?.serverName && (
                 <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2 text-center">
                   <p className="text-sm text-green-400 font-semibold">
-                    âœ… CONTA CRIADA NO SERVIDOR {showCreated.serverName.toUpperCase()}
+                    �S& CONTA CRIADA NO SERVIDOR {showCreated.serverName.toUpperCase()}
                   </p>
                 </div>
               )}
-              <p className="text-sm text-muted-foreground">Guarde as credenciais e compartilhe com o usuÃ¡rio:</p>
+              <p className="text-sm text-muted-foreground">Guarde as credenciais e compartilhe com o usuário:</p>
               <div className="bg-muted rounded-lg p-3 space-y-2 font-mono text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground">Email:</span>
@@ -557,7 +557,7 @@ export default function AdminEmail() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal: Confirmar exclusÃ£o */}
+        {/* Modal: Confirmar exclusão */}
         <AlertDialog open={!!showDelete} onOpenChange={() => setShowDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -565,7 +565,7 @@ export default function AdminEmail() {
               <AlertDialogDescription>
                 Tem certeza que deseja excluir{" "}
                 <span className="font-mono font-medium text-foreground">{showDelete?.primaryEmailAddress}</span>?
-                Esta aÃ§Ã£o nÃ£o pode ser desfeita.
+                Esta ação não pode ser desfeita.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

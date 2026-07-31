@@ -34,7 +34,7 @@ export default function AdminCustomerPasswordPage() {
       modeQuery.refetch();
       pendingQuery.refetch();
       toast.success(data.mode === 'auto'
-        ? 'âœ… Modo AUTOMÃTICO ativado: cliente cria a prÃ³pria senha (30 dias).'
+        ? 'âœ… Modo AUTOMÁTICO ativado: cliente cria a própria senha (30 dias).'
         : 'âœ… Modo MANUAL ativado: ADM precisa liberar cada senha.');
     },
     onError: (e) => toast.error(e.message || 'Erro ao alterar modo'),
@@ -49,7 +49,7 @@ export default function AdminCustomerPasswordPage() {
 
   const resetMutation = trpc.customerPassword.adminReset.useMutation({
     onSuccess: () => {
-      toast.success('Senha resetada! O cliente poderÃ¡ criar uma nova senha.');
+      toast.success('Senha resetada! O cliente poderá criar uma nova senha.');
       statusQuery.refetch();
     },
     onError: (e) => toast.error(e.message || 'Erro ao resetar senha'),
@@ -83,7 +83,7 @@ export default function AdminCustomerPasswordPage() {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = searchPhone.replace(/\D/g, '');
-    if (clean.length < 10) { toast.error('Informe um telefone vÃ¡lido (com DDD).'); return; }
+    if (clean.length < 10) { toast.error('Informe um telefone válido (com DDD).'); return; }
     setIsSearching(true);
     setSearchedPhone(clean);
     setIsSearching(false);
@@ -93,9 +93,9 @@ export default function AdminCustomerPasswordPage() {
     const msg = [
       `ðŸ” *Acesso Liberado â€” H2 COLOMBIANO*`,
       ``,
-      `OlÃ¡, *${nome}*! Tudo certo por aqui. âœ…`,
+      `Olá, *${nome}*! Tudo certo por aqui. âœ…`,
       ``,
-      `Sua senha de acesso ao sistema foi liberada com sucesso e jÃ¡ estÃ¡ ativa.`,
+      `Sua senha de acesso ao sistema foi liberada com sucesso e já está ativa.`,
       ``,
       `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”`,
       `ðŸŒ *Acesse agora:* https://h2colombiano.com/acompanhar`,
@@ -105,12 +105,12 @@ export default function AdminCustomerPasswordPage() {
       `1ï¸âƒ£ Abra o link acima`,
       `2ï¸âƒ£ Informe seu telefone`,
       `3ï¸âƒ£ Digite sua senha`,
-      `4ï¸âƒ£ Seus dados estarÃ£o disponÃ­veis`,
+      `4ï¸âƒ£ Seus dados estarão disponíveis`,
       ``,
       `âš ï¸ *Importante:*`,
-      `â€¢ NÃ£o compartilhe sua senha com ninguÃ©m`,
-      `â€¢ Os dados de acesso *nÃ£o sÃ£o enviados por mensagem*`,
-      `â€¢ Em caso de dÃºvidas, entre em contato conosco`,
+      `â€¢ Não compartilhe sua senha com ninguém`,
+      `â€¢ Os dados de acesso *não são enviados por mensagem*`,
+      `â€¢ Em caso de dúvidas, entre em contato conosco`,
       ``,
       `_Equipe H2 COLOMBIANO_ ðŸš€`,
     ].join('\n');
@@ -119,8 +119,8 @@ export default function AdminCustomerPasswordPage() {
 
   const handleApprove = async () => {
     if (!pendingModal) return;
-    // PRIMEIRO: abrir WhatsApp de forma sÃ­ncrona (antes de qualquer await/setState)
-    // Isso Ã© necessÃ¡rio para evitar bloqueio de popup do navegador
+    // PRIMEIRO: abrir WhatsApp de forma síncrona (antes de qualquer await/setState)
+    // Isso é necessário para evitar bloqueio de popup do navegador
     const nome = (pendingModal.name || '').split(' ')[0];
     const telefone = pendingModal.phone.replace(/\D/g, '');
     const waUrl = buildReleaseWaMsg(nome, telefone);
@@ -159,7 +159,7 @@ export default function AdminCustomerPasswordPage() {
       <span className="flex items-center gap-1 text-slate-400 text-sm"><ShieldX className="w-4 h-4" /> Sem senha cadastrada</span>
     );
     if (statusData.pending) return (
-      <span className="flex items-center gap-1 text-amber-400 text-sm"><ShieldAlert className="w-4 h-4" /> Aguardando liberaÃ§Ã£o do ADM</span>
+      <span className="flex items-center gap-1 text-amber-400 text-sm"><ShieldAlert className="w-4 h-4" /> Aguardando liberação do ADM</span>
     );
     if (!statusData.expiresAt || statusData.expiresAt < Date.now()) return (
       <span className="flex items-center gap-1 text-red-400 text-sm"><ShieldX className="w-4 h-4" /> Senha expirada</span>
@@ -201,11 +201,11 @@ export default function AdminCustomerPasswordPage() {
               : <ToggleLeft className="w-7 h-7 text-amber-400" />}
             <div>
               <p className={`text-sm font-bold ${currentMode === 'auto' ? 'text-green-300' : 'text-amber-300'}`}>
-                LiberaÃ§Ã£o {currentMode === 'auto' ? 'AUTOMÃTICA' : 'MANUAL'}
+                Liberação {currentMode === 'auto' ? 'AUTOMÁTICA' : 'MANUAL'}
               </p>
               <p className="text-xs text-slate-400">
                 {currentMode === 'auto'
-                  ? 'Cliente cria a prÃ³pria senha (30 dias)'
+                  ? 'Cliente cria a própria senha (30 dias)'
                   : 'ADM libera manualmente cada cliente'}
               </p>
             </div>
@@ -219,10 +219,10 @@ export default function AdminCustomerPasswordPage() {
               <Bell className="w-6 h-6 text-amber-400 flex-shrink-0" />
               <div>
                 <h2 className="text-lg font-bold text-amber-300">
-                  {pendingList.length} senha{pendingList.length > 1 ? 's' : ''} aguardando liberaÃ§Ã£o
+                  {pendingList.length} senha{pendingList.length > 1 ? 's' : ''} aguardando liberação
                 </h2>
                 <p className="text-xs text-amber-200/70">
-                  {pendingList.length > 1 ? 'Clientes criaram' : 'Cliente criou'} senha e aguarda vocÃª definir a validade
+                  {pendingList.length > 1 ? 'Clientes criaram' : 'Cliente criou'} senha e aguarda você definir a validade
                 </p>
               </div>
             </div>
@@ -291,7 +291,7 @@ export default function AdminCustomerPasswordPage() {
                   </Button>
                   {statusData?.hasPassword && (
                     <Button
-                      onClick={() => { if (confirm(`Resetar a senha de ${searchedPhone}? O cliente precisarÃ¡ criar uma nova senha.`)) resetMutation.mutate({ phone: searchedPhone }); }}
+                      onClick={() => { if (confirm(`Resetar a senha de ${searchedPhone}? O cliente precisará criar uma nova senha.`)) resetMutation.mutate({ phone: searchedPhone }); }}
                       size="sm"
                       variant="outline"
                       className="border-red-500/50 text-red-400 hover:bg-red-500/10"
@@ -368,7 +368,7 @@ export default function AdminCustomerPasswordPage() {
                   type={showSetPwd ? 'text' : 'password'}
                   value={setPwdValue}
                   onChange={(e) => setSetPwdValue(e.target.value)}
-                  placeholder="MÃ­nimo 4 caracteres"
+                  placeholder="Mínimo 4 caracteres"
                   className="bg-slate-700 border-slate-600 text-white pr-10"
                 />
                 <button type="button" onClick={() => setShowSetPwd(!showSetPwd)}

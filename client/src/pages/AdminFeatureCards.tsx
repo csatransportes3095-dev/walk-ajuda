@@ -74,7 +74,7 @@ export default function AdminFeatureCards() {
   }
 
   function handleSave() {
-    if (!form.title.trim()) { toast.error("TÃ­tulo obrigatÃ³rio"); return; }
+    if (!form.title.trim()) { toast.error("Título obrigatório"); return; }
     if (editingId !== null) {
       updateMut.mutate({ id: editingId, ...form });
     } else {
@@ -85,7 +85,7 @@ export default function AdminFeatureCards() {
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { toast.error("Arquivo muito grande (mÃ¡x 10MB)"); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Arquivo muito grande (máx 10MB)"); return; }
     setUploading(true);
     try {
       const reader = new FileReader();
@@ -109,7 +109,7 @@ export default function AdminFeatureCards() {
     const swapIdx = dir === "up" ? idx - 1 : idx + 1;
     if (swapIdx < 0 || swapIdx >= sorted.length) return;
     const swapCard = sorted[swapIdx];
-    // Usa os Ã­ndices como valores de sortOrder para garantir que a troca sempre resulte em valores distintos
+    // Usa os índices como valores de sortOrder para garantir que a troca sempre resulte em valores distintos
     updateMut.mutate({ id: card.id, sortOrder: swapIdx });
     updateMut.mutate({ id: swapCard.id, sortOrder: idx });
   }
@@ -123,14 +123,14 @@ export default function AdminFeatureCards() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-black text-white">Cards de Destaque</h1>
-            <p className="text-white/50 text-sm mt-1">Cards que aparecem na pÃ¡gina inicial para os clientes</p>
+            <p className="text-white/50 text-sm mt-1">Cards que aparecem na página inicial para os clientes</p>
           </div>
           <Button onClick={openCreate} className="bg-violet-600 hover:bg-violet-700 text-white font-bold gap-2">
             <Plus className="w-4 h-4" /> Novo Card
           </Button>
         </div>
 
-        {/* FormulÃ¡rio de criaÃ§Ã£o/ediÃ§Ã£o */}
+        {/* Formulário de criação/edição */}
         {showForm && (
           <div className="bg-black/60 border border-violet-500/40 rounded-2xl p-5 mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -168,9 +168,9 @@ export default function AdminFeatureCards() {
                 </div>
               </div>
 
-              {/* TÃ­tulo */}
+              {/* Título */}
               <div>
-                <label className="text-white/70 text-sm font-bold mb-1 block">TÃ­tulo *</label>
+                <label className="text-white/70 text-sm font-bold mb-1 block">Título *</label>
                 <input
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold"
                   placeholder="Ex: GASTOS H2 COLOMBIANO"
@@ -179,9 +179,9 @@ export default function AdminFeatureCards() {
                 />
               </div>
 
-              {/* DescriÃ§Ã£o */}
+              {/* Descrição */}
               <div>
-                <label className="text-white/70 text-sm font-bold mb-1 block">DescriÃ§Ã£o</label>
+                <label className="text-white/70 text-sm font-bold mb-1 block">Descrição</label>
                 <textarea
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white/80 text-sm resize-none"
                   rows={2}
@@ -191,10 +191,10 @@ export default function AdminFeatureCards() {
                 />
               </div>
 
-              {/* BotÃ£o */}
+              {/* Botão */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-white/70 text-sm font-bold mb-1 block">Texto do BotÃ£o</label>
+                  <label className="text-white/70 text-sm font-bold mb-1 block">Texto do Botão</label>
                   <input
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold"
                     placeholder="ACESSAR"
@@ -203,7 +203,7 @@ export default function AdminFeatureCards() {
                   />
                 </div>
                 <div>
-                  <label className="text-white/70 text-sm font-bold mb-1 block">Link do BotÃ£o</label>
+                  <label className="text-white/70 text-sm font-bold mb-1 block">Link do Botão</label>
                   <input
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white/80 text-sm"
                     placeholder="https://... ou /pagina"
@@ -219,9 +219,9 @@ export default function AdminFeatureCards() {
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { label: "Fundo do Card", key: "bgColor" },
-                    { label: "Cor do BotÃ£o", key: "buttonColor" },
-                    { label: "Cor do TÃ­tulo", key: "titleColor" },
-                    { label: "Cor da DescriÃ§Ã£o", key: "descColor" },
+                    { label: "Cor do Botão", key: "buttonColor" },
+                    { label: "Cor do Título", key: "titleColor" },
+                    { label: "Cor da Descrição", key: "descColor" },
                   ].map(({ label, key }) => (
                     <div key={key} className="flex items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-3 py-2">
                       <input
@@ -247,10 +247,10 @@ export default function AdminFeatureCards() {
                     {form.logoUrl ? (
                       <img src={form.logoUrl} alt="logo" className="w-12 h-12 rounded-xl object-cover" />
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">ðŸ“‹</div>
+                      <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">�x9</div>
                     )}
                     <div className="flex-1">
-                      <p className="font-black text-sm" style={{ color: form.titleColor }}>{form.title || "TÃTULO DO CARD"}</p>
+                      <p className="font-black text-sm" style={{ color: form.titleColor }}>{form.title || "TÍTULO DO CARD"}</p>
                       {form.description && <p className="text-xs mt-0.5" style={{ color: form.descColor }}>{form.description}</p>}
                     </div>
                   </div>
@@ -260,7 +260,7 @@ export default function AdminFeatureCards() {
                 </div>
               </div>
 
-              {/* OpÃ§Ãµes */}
+              {/* Opções */}
               <div className="flex items-center gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.openInNewTab === 1} onChange={e => setForm(f => ({ ...f, openInNewTab: e.target.checked ? 1 : 0 }))} className="w-4 h-4 accent-violet-500" />
@@ -268,7 +268,7 @@ export default function AdminFeatureCards() {
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.isActive === 1} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked ? 1 : 0 }))} className="w-4 h-4 accent-violet-500" />
-                  <span className="text-white/70 text-sm">Card ativo (visÃ­vel)</span>
+                  <span className="text-white/70 text-sm">Card ativo (visível)</span>
                 </label>
               </div>
 
@@ -277,7 +277,7 @@ export default function AdminFeatureCards() {
                 disabled={createMut.isPending || updateMut.isPending}
                 className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-3"
               >
-                {editingId ? "Salvar AlteraÃ§Ãµes" : "Criar Card"}
+                {editingId ? "Salvar Alterações" : "Criar Card"}
               </Button>
             </div>
           </div>
@@ -286,9 +286,9 @@ export default function AdminFeatureCards() {
         {/* Lista de cards */}
         {sorted.length === 0 ? (
           <div className="text-center py-16 text-white/30">
-            <p className="text-4xl mb-3">ðŸ“‹</p>
+            <p className="text-4xl mb-3">�x9</p>
             <p className="font-bold">Nenhum card criado ainda</p>
-            <p className="text-sm mt-1">Clique em "Novo Card" para comeÃ§ar</p>
+            <p className="text-sm mt-1">Clique em "Novo Card" para começar</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -298,7 +298,7 @@ export default function AdminFeatureCards() {
                 {card.logoUrl ? (
                   <img src={card.logoUrl} alt="logo" className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
                 ) : (
-                  <div className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center text-xl" style={{ backgroundColor: card.bgColor }}>ðŸ“‹</div>
+                  <div className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center text-xl" style={{ backgroundColor: card.bgColor }}>�x9</div>
                 )}
 
                 {/* Info */}
@@ -317,7 +317,7 @@ export default function AdminFeatureCards() {
                   </div>
                 </div>
 
-                {/* AÃ§Ãµes */}
+                {/* Ações */}
                 <div className="flex flex-col gap-1">
                   <button onClick={() => moveCard(card, "up")} disabled={idx === 0} className="text-white/30 hover:text-white disabled:opacity-20 p-1">
                     <ChevronUp className="w-4 h-4" />
