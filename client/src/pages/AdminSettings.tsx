@@ -503,14 +503,14 @@ export default function AdminSettings() {
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Ícone</label>
                   <select value={form.home_btn3_icon || "trophy"} onChange={e => updateField("home_btn3_icon", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                    <option value="trophy">�x�  Troféu</option>
-                    <option value="gift">�x}� Presente</option>
+                    <option value="trophy">🏆 Troféu</option>
+                    <option value="gift">🎁 Presente</option>
                     <option value="star">⭐ Estrela</option>
-                    <option value="ticket">�x}� Ingresso</option>
-                    <option value="bell">�x Sino</option>
-                    <option value="sparkles">�S� Brilho</option>
-                    <option value="search">�x� Lupa</option>
-                    <option value="clipboard">�x9 Prancheta</option>
+                    <option value="ticket">🎫 Ingresso</option>
+                    <option value="bell">🔔 Sino</option>
+                    <option value="sparkles">✨ Brilho</option>
+                    <option value="search">🔎 Lupa</option>
+                    <option value="clipboard">📋 Prancheta</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
@@ -597,14 +597,14 @@ export default function AdminSettings() {
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Ícone</label>
                   <select value={form.home_btn4_icon || "bell"} onChange={e => updateField("home_btn4_icon", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                    <option value="trophy">�x�  Troféu</option>
-                    <option value="gift">�x}� Presente</option>
+                    <option value="trophy">🏆 Troféu</option>
+                    <option value="gift">🎁 Presente</option>
                     <option value="star">⭐ Estrela</option>
-                    <option value="ticket">�x}� Ingresso</option>
-                    <option value="bell">�x Sino</option>
-                    <option value="sparkles">�S� Brilho</option>
-                    <option value="search">�x� Lupa</option>
-                    <option value="clipboard">�x9 Prancheta</option>
+                    <option value="ticket">🎫 Ingresso</option>
+                    <option value="bell">🔔 Sino</option>
+                    <option value="sparkles">✨ Brilho</option>
+                    <option value="search">🔎 Lupa</option>
+                    <option value="clipboard">📋 Prancheta</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
@@ -664,7 +664,7 @@ export default function AdminSettings() {
               {/* Botão 5 */}
               <div className="bg-[#0d0d2b] border border-violet-500/20 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-violet-300">�x}� Botão 5 (ex: PROMO�!ÒO)</p>
+                  <p className="text-xs font-bold text-violet-300">🎁 Botão 5 (ex: PROMOÇÃO)</p>
                   <div
                     onClick={() => updateField("home_btn5_enabled", form.home_btn5_enabled === "1" ? "0" : "1")}
                     className={`w-10 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${form.home_btn5_enabled === "1" ? "bg-violet-500" : "bg-gray-600"}`}
@@ -672,16 +672,16 @@ export default function AdminSettings() {
                     <div className={`w-4 h-4 bg-white rounded-full mt-0.5 transition-transform ${form.home_btn5_enabled === "1" ? "translate-x-5" : "translate-x-0.5"}`} />
                   </div>
                 </div>
-                <Field label="Texto Principal" k="home_btn5_text" form={form} onChange={updateField} placeholder="PROMO�!ÒO" />
+                <Field label="Texto Principal" k="home_btn5_text" form={form} onChange={updateField} placeholder="PROMOÇÃO" />
                 <Field label="Subtexto (Enter para quebrar linha)" k="home_btn5_subtitle" form={form} onChange={updateField} placeholder="Ofertas especiais para você" textarea />
                 <Field label="Destino (ex: /sorteio ou https://...)" k="home_btn5_url" form={form} onChange={updateField} placeholder="/sorteio" />
                 {form.home_btn5_url && form.home_btn5_url.includes('wa.me') && (
                   <div>
-                    <label className="text-xs text-green-400 font-bold block mb-1">�x� Mensagem WhatsApp (texto pré-preenchido)</label>
+                    <label className="text-xs text-green-400 font-bold block mb-1">💬 Mensagem WhatsApp (texto pré-preenchido)</label>
                     <textarea
                       value={form.home_btn5_wa_msg || ''}
                       onChange={e => updateField('home_btn5_wa_msg', e.target.value)}
-                      placeholder="Ex: Olá! Vim pelo botão PROMO�!ÒO do site..."
+                      placeholder="Ex: Olá! Vim pelo botão PROMOÇÃO do site..."
                       rows={3}
                       style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(34,197,94,0.4)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none', resize: 'vertical' }}
                     />
@@ -691,14 +691,14 @@ export default function AdminSettings() {
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Ícone</label>
                   <select value={form.home_btn5_icon || "gift"} onChange={e => updateField("home_btn5_icon", e.target.value)} style={{ backgroundColor: '#1a1a3e', color: '#ffffff', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', outline: 'none' }}>
-                    <option value="trophy">�x�  Troféu</option>
-                    <option value="gift">�x}� Presente</option>
+                    <option value="trophy">🏆 Troféu</option>
+                    <option value="gift">🎁 Presente</option>
                     <option value="star">⭐ Estrela</option>
-                    <option value="ticket">�x}� Ingresso</option>
-                    <option value="bell">�x Sino</option>
-                    <option value="sparkles">�S� Brilho</option>
-                    <option value="search">�x� Lupa</option>
-                    <option value="clipboard">�x9 Prancheta</option>
+                    <option value="ticket">🎫 Ingresso</option>
+                    <option value="bell">🔔 Sino</option>
+                    <option value="sparkles">✨ Brilho</option>
+                    <option value="search">🔎 Lupa</option>
+                    <option value="clipboard">📋 Prancheta</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
@@ -739,16 +739,16 @@ export default function AdminSettings() {
                   <option value="glow">�S� Brilho (glow colorido)</option>
                   <option value="shake">�x� Vibrar (tremida rápida)</option>
                   <option value="pulse">�x Pulsar (bate como coração)</option>
-                  <option value="bounce">�x�� Quicar (sobe e desce)</option>
-                  <option value="rotate">�x Girar levemente</option>
-                  <option value="darken">�xR Escurecer (cor mais escura)</option>
-                  <option value="none">�: Sem efeito</option>
+                  <option value="bounce">↕ Quicar (sobe e desce)</option>
+                  <option value="rotate">⟳ Girar levemente</option>
+                  <option value="darken">🌑 Escurecer (cor mais escura)</option>
+                  <option value="none">Sem efeito</option>
                 </select>
                 </div>
                 <div className={`flex items-center gap-4 rounded-2xl px-5 py-4 ${form.home_btn5_enabled !== "1" ? "opacity-40" : ""}`} style={{ background: form.home_btn5_color || "#7c3aed", fontFamily: form.home_btn5_font ? `'${form.home_btn5_font}', sans-serif` : undefined }}>
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">�x}�</span></div>
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">🎁</span></div>
                   <div className="flex-1">
-                    <p className="font-black text-lg tracking-wide" style={{ color: form.home_btn5_text_color || "#ffffff" }}>{form.home_btn5_text || "PROMO�!ÒO"}</p>
+                    <p className="font-black text-lg tracking-wide" style={{ color: form.home_btn5_text_color || "#ffffff" }}>{form.home_btn5_text || "PROMOÇÃO"}</p>
                     <p className="text-sm" style={{ color: form.home_btn5_sub_color || "rgba(255,255,255,0.8)" }}>{form.home_btn5_subtitle || "Ofertas especiais para você"}</p>
                   </div>
                   {form.home_btn5_enabled !== "1" && <span className="text-white/60 text-xs font-bold">DESATIVADO</span>}
