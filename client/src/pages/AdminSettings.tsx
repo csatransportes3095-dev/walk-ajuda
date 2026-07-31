@@ -318,7 +318,33 @@ export default function AdminSettings() {
               <Field label="Texto do Rodapé" k="footer_text" form={form} onChange={updateField} textarea />
             </Section>
             <Section title="Botões da Página Inicial">
-              <p className="text-xs text-gray-500 mb-4">Edite os dois botões principais que aparecem na tela inicial do cliente.</p>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs text-gray-500">Edite os dois botões principais que aparecem na tela inicial do cliente.</p>
+                <button
+                  onClick={() => {
+                    // Reset para o padrão elegante (DM Sans, sem borda grossa)
+                    updateField("home_btn1_text", "FAZER PEDIDO");
+                    updateField("home_btn1_subtitle", "Abrir conta Uber, 99 ou InDrive");
+                    updateField("home_btn1_color", "#7c3aed");
+                    updateField("home_btn1_text_color", "#ffffff");
+                    updateField("home_btn1_sub_color", "rgba(255,255,255,0.7)");
+                    updateField("home_btn1_font", "");
+                    updateField("home_btn1_hover", "scale");
+                    updateField("home_btn2_text", "ACOMPANHAR PEDIDO");
+                    updateField("home_btn2_subtitle", "Acompanhe o andamento do seu pedido");
+                    updateField("home_btn2_color", "#059669");
+                    updateField("home_btn2_text_color", "#ffffff");
+                    updateField("home_btn2_sub_color", "rgba(255,255,255,0.7)");
+                    updateField("home_btn2_font", "");
+                    updateField("home_btn2_hover", "scale");
+                    updateField("home_font", "DM Sans");
+                    setTimeout(() => updateMut.mutate({ settings: form }), 100);
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-300 hover:bg-purple-600/30 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  ↺ Restaurar Padrão Elegante
+                </button>
+              </div>
               {/* Botão 1 */}
               <div className="bg-[#0d0d2b] border border-purple-500/20 rounded-xl p-4 mb-4">
                 <p className="text-xs font-bold text-purple-300 mb-3">🔵 Botão 1 (ex: FAZER PEDIDO)</p>

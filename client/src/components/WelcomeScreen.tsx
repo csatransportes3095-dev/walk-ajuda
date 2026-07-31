@@ -464,34 +464,42 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const supportSortOrder = Number(onlineSupportState?.buttonSortOrder || 3);
   const supportStatusText = (onlineSupportState as any)?.customStatusText || (onlineSupportState?.onlineNow ? "online" : "fora do horário");
 
+  // Estilo elegante padrão para todos os botões (DM Sans, sem borda grossa)
+  const elegantBtnStyle = (color: string, extraStyle: React.CSSProperties = {}): React.CSSProperties => ({
+    background: `linear-gradient(135deg, ${color}f0 0%, ${color}b0 100%)`,
+    border: `1px solid ${color}40`,
+    boxShadow: `0 2px 16px ${color}28, 0 1px 4px rgba(0,0,0,0.3)`,
+    padding: "16px 18px",
+    borderRadius: 18,
+    fontFamily: "'DM Sans', 'Inter', -apple-system, sans-serif",
+    ...extraStyle,
+  });
+
   const renderSupportButton = () => {
     if (!supportVisible) return null;
-
     return (
       <button
         onClick={() => setOnlineSupportOpen(true)}
         onMouseEnter={() => setHovered(h => ({ ...h, support: true }))}
         onMouseLeave={() => setHovered(h => ({ ...h, support: false }))}
-        className={`w-full group relative overflow-hidden text-white font-bold rounded-2xl py-4 px-4 transition-all duration-300 flex items-center gap-3 ${getHoverClass("lift")}`}
-        style={{
-          background: `linear-gradient(135deg, ${supportColor} 0%, ${supportColor}cc 100%)`,
-          border: `2px solid ${supportColor}`,
-          boxShadow: `0 6px 24px ${supportColor}66, 0 2px 8px ${supportColor}44`,
-          ...getHoverStyle("lift", supportColor, "support"),
-        }}
+        className={`w-full group relative overflow-hidden text-white rounded-[18px] transition-all duration-300 flex items-center gap-3 ${getHoverClass("lift")}`}
+        style={{ ...elegantBtnStyle(supportColor), ...getHoverStyle("lift", supportColor, "support") }}
       >
-        <div className="w-12 h-12 min-w-[3rem] rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(0,0,0,0.25)" }}>
-          <MessageCircle className="w-7 h-7 text-white" />
+        <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0 }}>
+          <MessageCircle style={{ width: 20, height: 20, color: "#fff" }} />
         </div>
-        <div className="text-left flex-1 min-w-0 pr-2">
-          <p className="text-base font-black leading-snug break-words text-white">{supportLabel}</p>
-          <p className="text-xs font-normal mt-1 leading-relaxed break-words whitespace-pre-wrap text-white/80">{supportDescription}</p>
-          <p className="text-[11px] mt-1 font-semibold text-white/90">Status: {supportStatusText}</p>
+        <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.1px", color: "#fff", lineHeight: 1.3, margin: 0 }}>{supportLabel}</p>
+          <p style={{ fontSize: 11.5, fontWeight: 400, color: "rgba(255,255,255,0.72)", marginTop: 2, lineHeight: 1.4 }}>{supportDescription}</p>
+          <p style={{ fontSize: 10.5, fontWeight: 500, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>● {supportStatusText}</p>
         </div>
-        <div className="flex-shrink-0 opacity-90 bg-black/25 rounded-full min-w-7 h-7 px-2 flex items-center justify-center text-xs font-black">
-          {supportUnreadCount}
-        </div>
-        <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+        {supportUnreadCount > 0 && (
+          <div style={{ flexShrink: 0, background: "rgba(255,255,255,0.22)", borderRadius: 20, minWidth: 24, height: 24, padding: "0 7px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff" }}>
+            {supportUnreadCount}
+          </div>
+        )}
+        <svg style={{ width: 14, height: 14, opacity: 0.45, flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+        <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/8 to-transparent" />
       </button>
     );
   };
@@ -609,29 +617,18 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
             onClick={handleFazerPedido}
             onMouseEnter={() => setHovered(h => ({ ...h, btn1: true }))}
             onMouseLeave={() => setHovered(h => ({ ...h, btn1: false }))}
-            className={`w-full group relative overflow-hidden text-white font-bold rounded-2xl py-4 px-4 transition-all duration-300 flex items-center gap-3 ${getHoverClass(BTN1_HOVER)}`}
-            style={{
-              background: `linear-gradient(135deg, ${BTN1_COLOR} 0%, ${BTN1_COLOR}cc 100%)`,
-              border: `2px solid ${BTN1_COLOR}`,
-              boxShadow: `0 6px 24px ${BTN1_COLOR}66, 0 2px 8px ${BTN1_COLOR}44`,
-              ...getFontStyle(BTN1_FONT),
-              ...getHoverStyle(BTN1_HOVER, BTN1_COLOR, 'btn1')
-            }}
+            className={`w-full group relative overflow-hidden text-white rounded-[18px] transition-all duration-300 flex items-center gap-3 ${getHoverClass(BTN1_HOVER)}`}
+            style={{ ...elegantBtnStyle(BTN1_COLOR, getFontStyle(BTN1_FONT)), ...getHoverStyle(BTN1_HOVER, BTN1_COLOR, 'btn1') }}
           >
-            <div className="w-12 h-12 min-w-[3rem] rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(0,0,0,0.25)' }}>
-              <ClipboardList className="w-7 h-7 text-white" />
+            <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0 }}>
+              <ClipboardList style={{ width: 20, height: 20, color: "#fff" }} />
             </div>
-            <div className="text-left flex-1 min-w-0 pr-2">
-              <p className="text-base font-black leading-snug break-words" style={{ color: BTN1_TEXT_COLOR }}>{BTN1_TEXT}</p>
-              <p className="text-xs font-normal mt-1 leading-relaxed break-words whitespace-pre-wrap" style={{ color: BTN1_SUB_COLOR }}>{BTN1_SUBTITLE}</p>
+            <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.1px", color: BTN1_TEXT_COLOR, lineHeight: 1.3, margin: 0 }}>{BTN1_TEXT}</p>
+              <p style={{ fontSize: 11.5, fontWeight: 400, color: BTN1_SUB_COLOR, marginTop: 2, lineHeight: 1.4 }}>{BTN1_SUBTITLE}</p>
             </div>
-            <div className="flex-shrink-0 opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-              </svg>
-            </div>
-            {/* Shimmer effect */}
-            <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+            <svg style={{ width: 14, height: 14, opacity: 0.45, flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/8 to-transparent" />
           </button>
 
           {supportSortOrder > 1 && supportSortOrder <= 2 && renderSupportButton()}
@@ -641,62 +638,41 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
             onClick={handleAcompanhar}
             onMouseEnter={() => setHovered(h => ({ ...h, btn2: true }))}
             onMouseLeave={() => setHovered(h => ({ ...h, btn2: false }))}
-            className={`w-full group relative overflow-hidden text-white font-bold rounded-2xl py-4 px-4 transition-all duration-300 flex items-center gap-3 ${getHoverClass(BTN2_HOVER)}`}
-            style={{
-              background: `linear-gradient(135deg, ${BTN2_COLOR} 0%, ${BTN2_COLOR}cc 100%)`,
-              border: `2px solid ${BTN2_COLOR}`,
-              boxShadow: `0 6px 24px ${BTN2_COLOR}66, 0 2px 8px ${BTN2_COLOR}44`,
-              ...getFontStyle(BTN2_FONT),
-              ...getHoverStyle(BTN2_HOVER, BTN2_COLOR, 'btn2')
-            }}
+            className={`w-full group relative overflow-hidden text-white rounded-[18px] transition-all duration-300 flex items-center gap-3 ${getHoverClass(BTN2_HOVER)}`}
+            style={{ ...elegantBtnStyle(BTN2_COLOR, getFontStyle(BTN2_FONT)), ...getHoverStyle(BTN2_HOVER, BTN2_COLOR, 'btn2') }}
           >
-            <div className="w-12 h-12 min-w-[3rem] rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(0,0,0,0.25)' }}>
-              <Search className="w-7 h-7 text-white" />
+            <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0 }}>
+              <Search style={{ width: 20, height: 20, color: "#fff" }} />
             </div>
-            <div className="text-left flex-1 min-w-0 pr-2">
-              <p className="text-base font-black leading-snug break-words" style={{ color: BTN2_TEXT_COLOR }}>{BTN2_TEXT}</p>
-              <p className="text-xs font-normal mt-1 leading-relaxed break-words whitespace-pre-wrap" style={{ color: BTN2_SUB_COLOR }}>{BTN2_SUBTITLE}</p>
+            <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.1px", color: BTN2_TEXT_COLOR, lineHeight: 1.3, margin: 0 }}>{BTN2_TEXT}</p>
+              <p style={{ fontSize: 11.5, fontWeight: 400, color: BTN2_SUB_COLOR, marginTop: 2, lineHeight: 1.4 }}>{BTN2_SUBTITLE}</p>
             </div>
-            <div className="flex-shrink-0 opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-              </svg>
-            </div>
-            {/* Shimmer effect */}
-            <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+            <svg style={{ width: 14, height: 14, opacity: 0.45, flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/8 to-transparent" />
           </button>
 
           {supportSortOrder > 2 && renderSupportButton()}
 
           {/* Botões Extras Dinâmicos */}
-          {extraButtons.filter(btn => (btn as any).vipOnly !== 1).map((btn, idx) => (
+          {extraButtons.filter(btn => (btn as any).vipOnly !== 1).map((btn) => (
             <button
               key={btn.id}
               onClick={() => handleExtraBtn(btn.url, btn.waMsg || undefined, (btn as any).openInNewTab)}
               onMouseEnter={() => setHovered(h => ({ ...h, [`extra-${btn.id}`]: true }))}
               onMouseLeave={() => setHovered(h => ({ ...h, [`extra-${btn.id}`]: false }))}
-              className={`w-full group relative overflow-hidden text-white font-bold rounded-2xl py-4 px-4 transition-all duration-300 flex items-center gap-3 ${getHoverClass(btn.hover)}`}
-              style={{
-                background: `linear-gradient(135deg, ${btn.color} 0%, ${btn.color}cc 100%)`,
-                border: `2px solid ${btn.color}`,
-                boxShadow: `0 6px 24px ${btn.color}66, 0 2px 8px ${btn.color}44`,
-                ...getFontStyle(btn.font || HOME_FONT),
-                ...getHoverStyle(btn.hover, btn.color, `extra-${btn.id}`)
-              }}
+              className={`w-full group relative overflow-hidden text-white rounded-[18px] transition-all duration-300 flex items-center gap-3 ${getHoverClass(btn.hover)}`}
+              style={{ ...elegantBtnStyle(btn.color, getFontStyle(btn.font || HOME_FONT)), ...getHoverStyle(btn.hover, btn.color, `extra-${btn.id}`) }}
             >
-              <div className="w-12 h-12 min-w-[3rem] rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(0,0,0,0.25)' }}>
+              <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0, fontSize: 20 }}>
                 {EXTRA_BTN_ICONS[btn.icon] || EXTRA_BTN_ICONS.gift}
               </div>
-              <div className="text-left flex-1 min-w-0 pr-2">
-                <p className="text-base font-black leading-snug break-words" style={{ color: btn.textColor }}>{btn.text}</p>
-                <p className="text-xs font-normal mt-1 leading-relaxed break-words whitespace-pre-wrap" style={{ color: btn.subColor }}>{btn.subtitle}</p>
+              <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.1px", color: btn.textColor, lineHeight: 1.3, margin: 0 }}>{btn.text}</p>
+                <p style={{ fontSize: 11.5, fontWeight: 400, color: btn.subColor, marginTop: 2, lineHeight: 1.4 }}>{btn.subtitle}</p>
               </div>
-              <div className="flex-shrink-0 opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-              <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+              <svg style={{ width: 14, height: 14, opacity: 0.45, flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/8 to-transparent" />
             </button>
           ))}
         </div>
