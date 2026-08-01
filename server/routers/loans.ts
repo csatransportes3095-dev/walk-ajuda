@@ -446,7 +446,7 @@ export const loanRouter = router({
     creditLimit: z.number(),
     interestRate: z.number(),
     loanEnabled: z.number().default(0),
-    allowedPaymentTypes: z.string().default("diario,semanal,mensal"),
+    allowedPaymentTypes: z.string().optional(), // será derivado do perfil se não informado
     pixKey: z.string().optional(),
     pixKeyType: z.enum(["cpf", "cnpj", "telefone", "email", "aleatoria"]).optional(),
     pixName: z.string().optional(),
@@ -454,13 +454,20 @@ export const loanRouter = router({
     notes: z.string().optional(),
   })).mutation(async ({ input }) => {
     const db = await getDb() as any;
+
+    // Buscar perfil para derivar allowedPaymentTypes correto
+    const profiles = await qRows(db, drizzleSql`SELECT * FROM loanProfiles WHERE slug=${input.profileSlug} LIMIT 1`);
+    const profile = profiles[0];
+    // allowedPaymentTypes: usa o do perfil se não informado explicitamente
+    const resolvedAllowedTypes = input.allowedPaymentTypes || (profile?.defaultPaymentTypes ?? "diario");
+
     if (input.id) {
       await db.execute(drizzleSql`
         UPDATE loanClients SET
           name=${input.name}, cpf=${input.cpf || null}, phone=${input.phone || null},
           status=${input.status}, profileSlug=${input.profileSlug},
           creditLimit=${input.creditLimit}, interestRate=${input.interestRate},
-          loanEnabled=${input.loanEnabled}, allowedPaymentTypes=${input.allowedPaymentTypes},
+          loanEnabled=${input.loanEnabled}, allowedPaymentTypes=${resolvedAllowedTypes},
           pixKey=${input.pixKey || null}, pixKeyType=${input.pixKeyType || null},
           pixName=${input.pixName || null}, spreadsheetToken=${input.spreadsheetToken || null},
           notes=${input.notes || null}, updatedAt=NOW()
@@ -473,7 +480,7 @@ export const loanRouter = router({
           loanEnabled, allowedPaymentTypes, pixKey, pixKeyType, pixName, spreadsheetToken, notes, userId)
         VALUES (${input.name}, ${input.cpf || null}, ${input.phone || null}, ${input.status},
           ${input.profileSlug}, ${input.creditLimit}, ${input.interestRate}, ${input.loanEnabled},
-          ${input.allowedPaymentTypes}, ${input.pixKey || null}, ${input.pixKeyType || null},
+          ${resolvedAllowedTypes}, ${input.pixKey || null}, ${input.pixKeyType || null},
           ${input.pixName || null}, ${input.spreadsheetToken || null}, ${input.notes || null}, 1)
       `);
       return { id: (result[0] as any).insertId };
@@ -620,8 +627,20 @@ export const loanRouter = router({
   })).mutation(async ({ input }) => {
     const db = await getDb() as any;
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE id=${input.clientId}`);
-    if (!clients.length) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente nÃƒÂ£o encontrado" });
-    if (clients[0].status === "bloqueado") throw new TRPCError({ code: "BAD_REQUEST", message: "Cliente bloqueado" });
+    if (!clients.length) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado" });
+    const client = clients[0];
+    if (client.status === "bloqueado") throw new TRPCError({ code: "BAD_REQUEST", message: "Cliente bloqueado" });
+
+    // Valida se o modo de pagamento está liberado para este cliente (regra do perfil)
+    const allowedTypes = (client.allowedPaymentTypes || "diario").split(",").map((t: string) => t.trim());
+    if (!allowedTypes.includes(input.paymentType)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `Modo de pagamento "${input.paymentType}" não liberado para este cliente. Modos permitidos: ${allowedTypes.join(", ")}` });
+    }
+
+    // Valida se o valor não excede o limite do cliente
+    if (input.amount > parseFloat(client.creditLimit)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `Valor R$ ${input.amount} excede o limite do cliente de R$ ${parseFloat(client.creditLimit).toFixed(2)}` });
+    }
 
     const interestAmount = Math.round(input.amount * (input.interestRate / 100) * 100) / 100;
     const totalAmount = Math.round((input.amount + interestAmount) * 100) / 100;
