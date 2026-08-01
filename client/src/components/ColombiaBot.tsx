@@ -115,15 +115,30 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     return trimmed.split(',').map(s => s.trim()).filter(Boolean);
   };
 
+  // Retorna perguntas visíveis ordenadas de forma que sub-perguntas aparecem logo após o pai
   const getVisibleQuestions = (questions: ProductQuestion[], answers: Record<number, string>): ProductQuestion[] => {
-    return questions
-      .filter(q => {
-        if (!q.parentQuestionId) return true;
-        const parentAnswer = answers[q.parentQuestionId]?.trim() || "";
-        if (!q.triggerOption) return !!parentAnswer;
-        return parentAnswer === q.triggerOption;
-      })
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const visible = questions.filter(q => {
+      if (!q.parentQuestionId) return true;
+      const parentAnswer = answers[q.parentQuestionId]?.trim() || "";
+      if (!q.triggerOption) return !!parentAnswer;
+      return parentAnswer === q.triggerOption;
+    });
+
+    // Ordenar: cada sub-pergunta fica logo após seu pai
+    const ordered: ProductQuestion[] = [];
+    const roots = visible.filter(q => !q.parentQuestionId).sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const insertWithChildren = (q: ProductQuestion) => {
+      ordered.push(q);
+      // Filhos diretos desta pergunta que estão visíveis
+      const children = visible
+        .filter(c => c.parentQuestionId === q.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      children.forEach(child => insertWithChildren(child));
+    };
+
+    roots.forEach(r => insertWithChildren(r));
+    return ordered;
   };
 
   // ── Fluxo ─────────────────────────────────────────────────────────────────
