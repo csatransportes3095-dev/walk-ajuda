@@ -4627,6 +4627,24 @@ export default function Home() {
             setSelectedProduct(product);
             handleOptionSelection(option, null);
           }}
+          onOrderComplete={(data: any) => {
+            setShowColombiaBot(false);
+            setSubmittedOrderData({
+              cartItems: data.cartItems,
+              answers: data.answers,
+              docs: data.docs,
+              totalValue: data.totalValue,
+              referrerName: data.referrerName,
+              referrerPhone: data.referrerPhone,
+              clientName: data.clientName,
+              clientPhone: data.clientPhone,
+              clientCity: data.clientCity,
+            });
+            if (data.trackingPin) setTrackingPinFromServer(data.trackingPin);
+            setSuccessMessage('Pedido enviado com sucesso!');
+            setPostOrderReferralStep('done');
+            setStep('success');
+          }}
         />
       )}
     </div>

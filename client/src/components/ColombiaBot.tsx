@@ -4,7 +4,8 @@
  * Sub-perguntas aparecem corretamente após a resposta do pai.
  */
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Bot, X, Camera, ChevronRight } from "lucide-react";
+import { Bot, X, Camera, ChevronRight, Loader2 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -38,19 +39,36 @@ type ChatMsg =
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
+export type BotOrderData = {
+  cartItems: Array<{ service: string; nameOption: string; price: string }>;
+  answers: Array<{ question: string; answer: string }>;
+  docs: Array<{ label: string; url: string }>;
+  totalValue: string;
+  referrerName: string;
+  referrerPhone: string;
+  clientName: string;
+  clientPhone: string;
+  clientCity: string;
+  trackingPin?: string;
+};
+
 interface Props {
   products: Product[];
   onStartNormal: () => void;
   onSelectProduct: (product: Product) => void;
   onSelectOption: (product: Product, option: ProductOption) => void;
+  onOrderComplete: (data: BotOrderData) => void;
 }
 
 // ── Componente ───────────────────────────────────────────────────────────────
 
-export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelectOption }: Props) {
+export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelectOption, onOrderComplete }: Props) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const submitMutation = trpc.uploads.submitFiles.useMutation();
 
   // Callbacks armazenados em ref para evitar stale closure
   const callbacks = useRef<Record<string, (...args: any[]) => void>>({});
@@ -65,7 +83,18 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     option: ProductOption | null;
     answers: Record<number, string>;
     docFiles: Record<number, { file: File; url?: string }>;
-  }>({ product: null, option: null, answers: {}, docFiles: {} });
+    clientName: string;
+  }>({ product: null, option: null, answers: {}, docFiles: {}, clientName: '' });
+
+  // Buscar nome do cliente logado
+  const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';
+  const profileQuery = trpc.customers.getMyProfile.useQuery(
+    { phone: clientPhone },
+    { enabled: !!clientPhone }
+  );
+  useEffect(() => {
+    if (profileQuery.data?.name) flowState.current.clientName = profileQuery.data.name;
+  }, [profileQuery.data?.name]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -296,30 +325,73 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   const finishWithProduct = (product: Product, option: ProductOption | null) => {
     const actionId = uid();
-    callbacks.current[actionId] = () => {
+    callbacks.current[actionId] = async () => {
       markActionDone(actionId);
-      // Salvar no localStorage
-      const answersObj: Record<string, string> = {};
+      setIsSubmitting(true);
+
+      // Montar answers array
+      const answersArray: Array<{ question: string; answer: string }> = [];
       if (option) {
         const visible = getVisibleQuestions(option.questions, flowState.current.answers);
         visible.forEach(q => {
-          if (flowState.current.answers[q.id]) answersObj[q.question] = flowState.current.answers[q.id];
+          if (flowState.current.answers[q.id]) {
+            answersArray.push({ question: q.question, answer: flowState.current.answers[q.id] });
+          }
         });
       }
-      localStorage.setItem("colombia_bot_answers", JSON.stringify(answersObj));
-      const docsObj: Record<string, string> = {};
+
+      // Montar documents array
+      const docsArray: Array<{ label: string; url: string; mime?: string }> = [];
       if (option) {
         option.documents.forEach(d => {
-          if (flowState.current.docFiles[d.id]?.url) docsObj[d.label] = flowState.current.docFiles[d.id].url!;
+          const df = flowState.current.docFiles[d.id];
+          if (df?.url) docsArray.push({ label: d.label, url: df.url });
         });
       }
-      localStorage.setItem("colombia_bot_docs", JSON.stringify(docsObj));
-      if (option) onSelectOption(product, option);
-      else onSelectProduct(product);
+
+      const cpToken = localStorage.getItem('cp_token') || '';
+      const clientPhone = localStorage.getItem('walk_client_phone') || '';
+
+      try {
+        addMsgs({ type: "bot", id: uid(), text: "Enviando seu pedido... \u23f3" });
+
+        const result = await submitMutation.mutateAsync({
+          clientName: flowState.current.clientName || 'Cliente',
+          service: product.name,
+          nameOption: option?.label || option?.name || 'N/A',
+          documents: docsArray.length > 0 ? docsArray : undefined,
+          phone: clientPhone || undefined,
+          cpToken: cpToken || undefined,
+          answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
+          price: option?.price || undefined,
+        });
+
+        if (result.success) {
+          addMsgs({ type: "bot", id: uid(), text: "Pedido enviado com sucesso! \u2705\n\nO admin j\u00e1 recebeu e entrar\u00e1 em contato em breve." });
+          onOrderComplete({
+            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: option?.price || '' }],
+            answers: answersArray,
+            docs: docsArray,
+            totalValue: option?.price || '',
+            referrerName: '',
+            referrerPhone: '',
+            clientName: flowState.current.clientName || 'Cliente',
+            clientPhone,
+            clientCity: '',
+            trackingPin: (result as any).trackingPin || undefined,
+          });
+        } else {
+          addMsgs({ type: "bot", id: uid(), text: `Erro ao enviar pedido: ${(result as any).message || 'Tente novamente.'}` });
+        }
+      } catch (err: any) {
+        addMsgs({ type: "bot", id: uid(), text: `Erro ao enviar: ${err?.message || 'Tente novamente.'}` });
+      } finally {
+        setIsSubmitting(false);
+      }
     };
     addMsgs(
-      { type: "bot", id: uid(), text: "Perfeito! Tenho tudo que preciso. ✅\n\nClique abaixo para finalizar seu pedido." },
-      { type: "action", id: actionId, label: "🚀 Finalizar pedido", done: false }
+      { type: "bot", id: uid(), text: "Perfeito! Tenho tudo que preciso. \u2705\n\nClique abaixo para finalizar seu pedido." },
+      { type: "action", id: actionId, label: "\ud83d\ude80 Finalizar pedido", done: false }
     );
   };
 
@@ -441,9 +513,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           <div key={idx} className="ml-10 mb-3">
             <button
               onClick={() => { const cb = callbacks.current[msg.id]; if (cb) cb(); }}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white text-sm font-bold transition-all shadow-lg shadow-violet-500/20"
+              disabled={isSubmitting}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white text-sm font-bold transition-all shadow-lg shadow-violet-500/20 disabled:opacity-60 flex items-center justify-center gap-2"
             >
-              {msg.label}
+              {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : msg.label}
             </button>
           </div>
         );
