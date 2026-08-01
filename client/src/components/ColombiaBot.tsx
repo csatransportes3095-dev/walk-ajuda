@@ -35,6 +35,7 @@ type ChatMsg =
   | { type: "options"; id: string; options: string[]; answered: boolean }
   | { type: "input"; id: string; multiline: boolean; answered: boolean }
   | { type: "doc-upload"; id: string; docId: number; label: string; required: boolean; uploaded: boolean }
+  | { type: "pix-payment"; id: string; pixKey: string; pixName: string; pixBank: string; price: string; uploaded: boolean }
   | { type: "action"; id: string; label: string; done: boolean };
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -84,9 +85,18 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     answers: Record<number, string>;
     docFiles: Record<number, { file: File; url?: string }>;
     clientName: string;
-  }>({ product: null, option: null, answers: {}, docFiles: {}, clientName: '' });
+    pixProofUrl: string;
+    pixProofMime: string;
+  }>({ product: null, option: null, answers: {}, docFiles: {}, clientName: '', pixProofUrl: '', pixProofMime: '' });
 
-  // Buscar nome do cliente logado
+  const [pixCopied, setPixCopied] = useState(false);
+  const [uploadingPix, setUploadingPix] = useState(false);
+  const pixFileInputRef = useRef<HTMLInputElement>(null);
+  const pendingPixMsgId = useRef<string>('');
+
+  // Buscar pix ativo e nome do cliente logado
+  const { data: activePix } = trpc.pix.getActive.useQuery();
+  const { data: settingsData } = trpc.settings.getAll.useQuery();
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';
   const profileQuery = trpc.customers.getMyProfile.useQuery(
     { phone: clientPhone },
@@ -284,7 +294,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const askDocuments = (product: Product, option: ProductOption) => {
     const docs = option.documents || [];
     if (docs.length === 0) {
-      finishWithProduct(product, option);
+      askPix(product, option);
       return;
     }
 
@@ -310,7 +320,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           const required = docs.filter(d => d.isRequired === undefined ? true : d.isRequired === 1);
           const allDone = required.every(d => flowState.current.docFiles[d.id]);
           if (allDone) {
-            setTimeout(() => finishWithProduct(product, option), 400);
+            setTimeout(() => askPix(product, option), 400);
           }
         }
       };
@@ -320,6 +330,43 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     addMsgs(
       { type: "bot", id: uid(), text: `Agora preciso de ${docs.length === 1 ? "um documento" : `${docs.length} documentos`}. Envie abaixo. 📎` },
       ...docMsgs
+    );
+  };
+
+  // Etapa de pagamento Pix — mostra chave, botão copiar, upload comprovante
+  const askPix = (product: Product, option: ProductOption | null) => {
+    const pixKey = activePix?.pixKey || settingsData?.pix_key || '';
+    const pixName = activePix?.pixName || settingsData?.pix_name || '';
+    const pixBank = activePix?.pixBank || settingsData?.pix_bank || '';
+    const price = option?.price || '';
+
+    const msgId = uid();
+    pendingPixMsgId.current = msgId;
+
+    callbacks.current[msgId] = async (file: File) => {
+      setUploadingPix(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/upload/client-file', { method: 'POST', body: formData });
+        const data = await res.json();
+        flowState.current.pixProofUrl = data.url || '';
+        flowState.current.pixProofMime = file.type || 'image/jpeg';
+      } catch {
+        flowState.current.pixProofUrl = '';
+      } finally {
+        setUploadingPix(false);
+        setMessages(prev => prev.map(m =>
+          m.type === 'pix-payment' && m.id === msgId ? { ...m, uploaded: true } : m
+        ));
+        addMsgs({ type: 'user', id: uid(), text: '✅ Comprovante enviado' });
+        setTimeout(() => finishWithProduct(product, option), 400);
+      }
+    };
+
+    addMsgs(
+      { type: 'bot', id: uid(), text: `Agora faça o pagamento via Pix${price ? ` de R$ ${price}` : ''} e envie o comprovante abaixo.` },
+      { type: 'pix-payment', id: msgId, pixKey, pixName, pixBank, price, uploaded: false }
     );
   };
 
@@ -364,6 +411,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           cpToken: cpToken || undefined,
           answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
           price: option?.price || undefined,
+          paymentProofUrl: flowState.current.pixProofUrl || undefined,
+          paymentProofMime: flowState.current.pixProofMime || undefined,
         });
 
         if (result.success) {
@@ -507,6 +556,52 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           </div>
         );
 
+      case "pix-payment":
+        if (msg.uploaded) return null;
+        return (
+          <div key={idx} className="ml-10 mb-3 space-y-2">
+            {/* Card Pix */}
+            <div className="bg-zinc-800 border border-emerald-500/30 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
+                <span>💚</span> CHAVE PIX
+              </div>
+              {msg.pixName && <p className="text-xs text-zinc-400">Beneficiário: <span className="text-white font-semibold">{msg.pixName}</span>{msg.pixBank ? ` — ${msg.pixBank}` : ''}</p>}
+              {msg.price && <p className="text-xs text-zinc-400">Valor: <span className="text-emerald-400 font-bold text-sm">R$ {msg.price}</span></p>}
+              <div className="flex items-center gap-2 bg-zinc-900 rounded-lg px-3 py-2">
+                <span className="text-sm text-white font-mono flex-1 break-all">{msg.pixKey}</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(msg.pixKey).catch(() => {});
+                    setPixCopied(true);
+                    setTimeout(() => setPixCopied(false), 2000);
+                  }}
+                  className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
+                >
+                  {pixCopied ? '✅ Copiado!' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+            {/* Upload comprovante */}
+            {uploadingPix ? (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-xs text-zinc-400">
+                <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
+                Enviando comprovante...
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  pendingPixMsgId.current = msg.id;
+                  pixFileInputRef.current?.click();
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-zinc-700 hover:border-emerald-500 text-zinc-400 hover:text-emerald-300 text-sm transition-all"
+              >
+                <Camera className="w-4 h-4" />
+                Enviar comprovante Pix
+              </button>
+            )}
+          </div>
+        );
+
       case "action":
         if (msg.done) return null;
         return (
@@ -548,7 +643,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input de arquivo oculto */}
+      {/* Input de arquivo oculto — documentos */}
       <input
         ref={fileInputRef}
         type="file"
@@ -563,6 +658,21 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           }
           e.target.value = "";
           pendingUpload.current = null;
+        }}
+      />
+      {/* Input de arquivo oculto — comprovante Pix */}
+      <input
+        ref={pixFileInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0];
+          if (file) {
+            const cb = callbacks.current[pendingPixMsgId.current];
+            if (cb) cb(file);
+          }
+          e.target.value = "";
         }}
       />
     </div>
