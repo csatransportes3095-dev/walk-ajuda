@@ -7835,6 +7835,7 @@ export const appRouter = router({
         zohoClientId: z.string().min(1).optional(),
         zohoClientSecret: z.string().min(1).optional(),
         zohoRefreshToken: z.string().min(1).optional(),
+        domain: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const db2 = await import('../server/db');
@@ -7848,6 +7849,7 @@ export const appRouter = router({
         if (input.zohoClientId) sets.push(`zohoClientId = '${input.zohoClientId.replace(/'/g, "''")}'`);
         if (input.zohoClientSecret) sets.push(`zohoClientSecret = '${input.zohoClientSecret.replace(/'/g, "''")}'`);
         if (input.zohoRefreshToken) sets.push(`zohoRefreshToken = '${input.zohoRefreshToken.replace(/'/g, "''")}'`);
+        if (input.domain !== undefined) sets.push(`\`domain\` = '${input.domain.replace(/'/g, "''")}'`);
         await dbConn.execute(sqlFn.raw(`UPDATE zohoOAuthConfigs SET ${sets.join(', ')} WHERE id = ${input.id}`));
         return { success: true };
       }),
