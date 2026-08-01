@@ -438,15 +438,30 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
-    // Inicializar formulÃ¡rios fixos automaticamente
+    // Inicializar formulários fixos automaticamente
     setTimeout(async () => {
       try {
         const { autoInitBuiltinForms } = await import('../routers/consultas');
         await autoInitBuiltinForms();
       } catch (e) {
-        // silencioso â€” nÃ£o crÃ­tico
+        // silencioso — não crítico
       }
     }, 3000);
+
+    // Keep-alive: ping a cada 10 minutos para evitar cold start do Render
+    const SITE_URL = process.env.SITE_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
+    setInterval(async () => {
+      try {
+        const https = await import('https');
+        const http = await import('http');
+        const url = new URL(`${SITE_URL}/api/trpc/system.health`);
+        const client = url.protocol === 'https:' ? https : http;
+        (client as any).get(url.toString(), (res: any) => {
+          res.resume(); // consumir resposta
+          console.log(`[keep-alive] ping ${url.toString()} → ${res.statusCode}`);
+        }).on('error', () => { /* silencioso */ });
+      } catch { /* silencioso */ }
+    }, 10 * 60 * 1000); // 10 minutos
   });
 }
 
