@@ -4653,8 +4653,8 @@ export default function AdminOrders() {
                   ) : (
                     <>
                       {/* Linha 1: Ordenar por */}
-                      <div className="flex items-center gap-1.5 w-full flex-wrap">
-                        <span className="text-xs text-zinc-500 font-medium">Ordenar por</span>
+                      <div className="flex items-center gap-1.5 w-full">
+                        <span className="text-xs text-zinc-500 font-medium shrink-0">Ordenar por</span>
                         {(["number", "name", "date"] as const).map(k => (
                           <button
                             key={k}
@@ -4662,7 +4662,7 @@ export default function AdminOrders() {
                               if (todosSortKey === k) setTodosSortDir(d => d === "asc" ? "desc" : "asc");
                               else { setTodosSortKey(k); setTodosSortDir("asc"); }
                             }}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors shrink-0 ${
                               todosSortKey === k
                                 ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
                                 : "bg-card border-border text-muted-foreground hover:border-amber-500/40"
@@ -4676,20 +4676,22 @@ export default function AdminOrders() {
                             )}
                           </button>
                         ))}
-                        <span className="ml-auto text-xs text-muted-foreground/60">{group.orders.filter((o: any) => {
-                          if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus !== "confirmed";
-                          if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
-                          if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
-                          return true;
-                        }).length} pedido(s)</span>
+                        <span className="ml-auto text-xs text-zinc-500 shrink-0">
+                          {group.orders.filter((o: any) => {
+                            if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus !== "confirmed";
+                            if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
+                            if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
+                            return true;
+                          }).length} resultado(s)
+                        </span>
                       </div>
-                      {/* Linha 2: Filtros rápidos */}
-                      <div className="flex gap-1.5 w-full mt-1">
+                      {/* Linha 2: Filtros rápidos com scroll horizontal */}
+                      <div className="flex gap-2 w-full mt-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
                         {([
-                          { id: "all",         label: "Todos",            sub: "pedidos",           glow: "#f59e0b", active_bg: "linear-gradient(135deg,#78350f,#92400e)", active_border: "#f59e0b", active_text: "#fde68a" },
-                          { id: "sem_status",  label: "Sem Agendamento",  sub: "não agendados",      glow: "#ef4444", active_bg: "linear-gradient(135deg,#7f1d1d,#991b1b)", active_border: "#ef4444", active_text: "#fca5a5" },
-                          { id: "agendamento", label: "Agendamento",      sub: "aguardando cliente", glow: "#eab308", active_bg: "linear-gradient(135deg,#713f12,#854d0e)", active_border: "#eab308", active_text: "#fef08a" },
-                          { id: "novo",        label: "Novos",            sub: "não visualizados",  glow: "#22c55e", active_bg: "linear-gradient(135deg,#14532d,#166534)", active_border: "#22c55e", active_text: "#86efac" },
+                          { id: "all",         label: "Todos",           desc: "Todos os pedidos",          glow: "#f59e0b", ab: "linear-gradient(135deg,#78350f,#92400e)", ac: "#f59e0b", at: "#fde68a" },
+                          { id: "sem_status",  label: "Sem Agendamento", desc: "Não agendados",             glow: "#ef4444", ab: "linear-gradient(135deg,#7f1d1d,#991b1b)", ac: "#ef4444", at: "#fca5a5" },
+                          { id: "agendamento", label: "Agendamento",     desc: "Aguardando confirmação",    glow: "#eab308", ab: "linear-gradient(135deg,#713f12,#854d0e)", ac: "#eab308", at: "#fef08a" },
+                          { id: "novo",        label: "Novos",           desc: "Não visualizados",          glow: "#22c55e", ab: "linear-gradient(135deg,#14532d,#166534)", ac: "#22c55e", at: "#86efac" },
                         ] as const).map(f => {
                           const cnt = group.orders.filter((o: any) => {
                             if (f.id === "sem_status") return (o as any).scheduleStatus !== "confirmed";
@@ -4702,21 +4704,16 @@ export default function AdminOrders() {
                             <button
                               key={f.id}
                               onClick={() => setTodosQuickFilter(f.id)}
-                              style={active ? {
-                                background: f.active_bg,
-                                borderColor: f.active_border,
-                                color: f.active_text,
-                                boxShadow: `0 0 8px ${f.glow}44`,
-                              } : {}}
-                              className={`flex flex-col items-start justify-center px-3 py-2 rounded-xl border transition-all flex-1 ${
-                                active
-                                  ? "border-opacity-100"
-                                  : "bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                              style={active ? { background: f.ab, borderColor: f.ac, color: f.at, boxShadow: `0 0 10px ${f.glow}55` } : {}}
+                              className={`shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-2xl border transition-all ${
+                                active ? "" : "bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500"
                               }`}
                             >
-                              <span className="text-[10px] font-bold leading-tight tracking-tight">{f.label}</span>
-                              <span className="text-[8px] opacity-60 leading-tight mt-0.5 hidden sm:block">{f.sub}</span>
-                              <span className={`text-[14px] font-black leading-none mt-1 ${active ? "" : "text-zinc-200"}`}>{cnt}</span>
+                              <span className={`text-2xl font-black leading-none ${active ? "" : "text-zinc-100"}`}>{cnt}</span>
+                              <div className="flex flex-col items-start">
+                                <span className="text-[12px] font-bold leading-tight whitespace-nowrap">{f.label}</span>
+                                <span className="text-[10px] opacity-60 leading-tight whitespace-nowrap">{f.desc}</span>
+                              </div>
                             </button>
                           );
                         })}
