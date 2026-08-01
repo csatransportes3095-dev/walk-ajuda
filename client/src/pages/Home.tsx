@@ -3439,29 +3439,7 @@ export default function Home() {
               <p className="text-green-400 font-bold text-sm">Seus arquivos e comprovante foram recebidos!</p>
             </div>
 
-            {/* ===== SENHA DE ACOMPANHAMENTO ===== */}
-            {trackingPinFromServer ? (
-              <div className="bg-amber-400/10 border-2 border-amber-400 rounded-2xl p-5 mb-5 relative overflow-hidden">
-                {/* Brilho de fundo */}
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-400/5 to-yellow-300/5 pointer-events-none" />
-                <div className="relative z-10">
-                  <div className="flex items-center justify-center gap-2 mb-3">
-                    <KeyRound className="w-5 h-5 text-amber-400" />
-                    <p className="text-amber-400 font-black text-sm uppercase tracking-widest">Sua Senha de Acompanhamento</p>
-                  </div>
-                  {/* PIN em destaque GRANDE */}
-                  <div className="bg-amber-400 rounded-xl py-4 px-6 mb-3 shadow-lg shadow-amber-400/30">
-                    <p className="text-black font-black text-6xl tracking-[0.4em] text-center select-all">{trackingPinFromServer}</p>
-                  </div>
-                  <p className="text-white font-semibold text-sm leading-relaxed">
-                    Guarde esta senha! Use-a para acompanhar o status do seu pedido em <span className="text-amber-400 font-black">ACOMPANHAR</span> na tela inicial.
-                  </p>
-                  <p className="text-amber-300/70 text-xs mt-2">
-                    Esta senha foi enviada para o seu email de cadastro.
-                  </p>
-                </div>
-              </div>
-            ) : null}
+            {/* Senha de acompanhamento removida — cliente usa a senha da conta para rastrear */}
 
             {/* ===== FORMULÁRIO DE INDICAÇÃO PÓS-PEDIDO ===== */}
             {/* Só aparece para clientes NOVOS (primeiro pedido) */}
