@@ -1157,7 +1157,7 @@ export default function AdminCustomers() {
                         : 'Indicação: Não respondeu'}
                   </p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <span>📅</span> <span className="text-muted-foreground/70">Cadastro:</span> {formatDateBR(c.createdAt, false)}
+                    <span>📅</span> <span className="text-muted-foreground/70">Cadastro:</span> {formatDateBR(c.createdAt, true)}
                   </p>
                   {c.lastAccessAt && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1.5">
