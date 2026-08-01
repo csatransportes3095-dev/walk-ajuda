@@ -861,8 +861,12 @@ function AppointmentsTab() {
     onError: (e) => toast.error(e.message),
   });
   const manualConfirmMut = trpc.schedule.manualConfirm.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success("Agendamento confirmado manualmente!");
+      if ((data as any).waLink) {
+        window.open((data as any).waLink, '_blank');
+        toast.success("WhatsApp aberto para notificar o cliente");
+      }
       setManualApptId(null);
       setManualDate('');
       setManualTime('');

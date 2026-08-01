@@ -294,7 +294,24 @@ export const scheduleRouter = router({
           }).catch((e: any) => console.warn('[ScheduleEmail] Erro ao enviar e-mail:', e));
         } catch (e) { console.warn('[ScheduleEmail] Erro ao criar transporter:', e); }
       });
-      return { success: true };
+      // Montar waLink para notificar cliente sobre novo horário
+      let waLink: string | null = null;
+      try {
+        const cfg = await getScheduleConfig();
+        const digits = appt.customerPhone.replace(/\D/g, '');
+        const waFull = digits.startsWith('55') ? digits : `55${digits}`;
+        let msg = (cfg as any)?.scheduledWhatsappMessage || '';
+        if (!msg) msg = `Olá ${appt.customerName || ''}! Seu atendimento está confirmado para o dia ${input.slotDate} às ${input.slotTime}. Fique disponível no WhatsApp nesse horário!`;
+        msg = msg
+          .replace(/\{nome\}/gi, appt.customerName || '')
+          .replace(/\{data\}/gi, input.slotDate)
+          .replace(/\{hora\}/gi, input.slotTime)
+          .replace(/\{telefone\}/gi, appt.customerPhone)
+          .replace(/\{servico\}/gi, (appt as any).serviceName || '')
+          .replace(/\{cadastro\}/gi, appt.registrationId ? `*${appt.registrationId}` : '');
+        waLink = `https://wa.me/${waFull}?text=${encodeURIComponent(msg)}`;
+      } catch (e) { console.warn('[ScheduleWA] Erro ao montar waLink:', e); }
+      return { success: true, waLink };
     }),
 
   // Enviar link por e-mail
