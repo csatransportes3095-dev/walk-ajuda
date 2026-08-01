@@ -33,10 +33,12 @@ export default function DevtoolsGuard() {
   const reportDevtoolsMut = trpc.security.reportDevtools.useMutation();
   const adminLogoutMut = trpc.adminAuth.logout.useMutation();
 
-  // Liga/desliga pelo admin (default ligado). '0' = desligado.
-  const protectionEnabled = settings ? settings["devtools_protection"] !== "0" : true;
+  // Liga/desliga pelo admin (default desligado enquanto settings não carregou).
+  // '0' = desligado. Aguarda settings antes de ativar para evitar falso positivo.
+  const settingsLoaded = settings !== undefined;
+  const protectionEnabled = settingsLoaded ? settings!["devtools_protection"] === "1" : false;
 
-  // Só em produção, com proteção ligada e para NÃO-admins.
+  // Só em produção, com proteção explicitamente ligada ('1') e para NÃO-admins.
   const isProd = import.meta.env.PROD;
   const enabled = isProd && protectionEnabled && !isAdmin;
 
