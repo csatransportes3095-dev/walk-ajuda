@@ -243,32 +243,33 @@ export const scheduleRouter = router({
       const digits = appt.customerPhone.replace(/\D/g, '');
       const waFull = digits.startsWith('55') ? digits : `55${digits}`;
       const waUrl = `https://wa.me/${waFull}?text=${encodeURIComponent(waMsg)}`;
-      // Email — fallback: buscar email do cliente pelo telefone se não estiver no agendamento
-      let customerEmail = appt.customerEmail;
-      if (!customerEmail) {
+      // Email — enviar de forma assíncrona para não bloquear o retorno do waLink
+      setImmediate(async () => {
         try {
-          const { getCustomerByPhone } = await import('../db');
-          const phoneDigits = appt.customerPhone.replace(/\D/g, '');
-          const customer = await getCustomerByPhone(phoneDigits);
-          if (customer?.email) customerEmail = customer.email;
-        } catch (e) { console.warn('[ScheduleEmail] Erro ao buscar email do cliente:', e); }
-      }
-      let emailSent = false;
-      if (customerEmail) {
-        const subject = `Reagendamento necessÃƒÂ¡rio Ã¢â‚¬â€ ${siteTitle}`;
-        const html = `
-          <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#ffffff;border-radius:12px">
-            <h2 style="color:${accent};margin:0 0 16px">Reagendamento necessÃƒÂ¡rio</h2>
-            <p style="margin:0 0 12px;font-size:15px;color:#333">OlÃƒÂ¡${customerName}! Seu agendamento do pedido <strong>#${appt.registrationId}</strong> foi liberado para reagendamento.</p>
-            <p style="margin:0 0 12px;font-size:15px;color:#333">Por favor, clique no botÃƒÂ£o abaixo para escolher um novo horÃƒÂ¡rio:</p>
-            <p style="text-align:center;margin:24px 0">
-              <a href="${link}" style="background:${accent};color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">Escolher novo horÃƒÂ¡rio</a>
-            </p>
-            <p style="margin:0 0 12px;font-size:13px;color:#888">Ou copie e cole este link no navegador:<br>${link}</p>
-          </div>`;
-        emailSent = await sendScheduleEmail(customerEmail!, subject, html);
-      }
-      return { success: true, emailSent, waLink: waUrl };
+          let customerEmail = appt.customerEmail;
+          if (!customerEmail) {
+            const { getCustomerByPhone } = await import('../db');
+            const phoneDigits = appt.customerPhone.replace(/\D/g, '');
+            const customer = await getCustomerByPhone(phoneDigits);
+            if (customer?.email) customerEmail = customer.email;
+          }
+          if (customerEmail) {
+            const subject = `Reagendamento necessário — ${siteTitle}`;
+            const html = `
+              <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#ffffff;border-radius:12px">
+                <h2 style="color:${accent};margin:0 0 16px">Reagendamento necessário</h2>
+                <p style="margin:0 0 12px;font-size:15px;color:#333">Olá${customerName}! Seu agendamento do pedido <strong>#${appt.registrationId}</strong> foi liberado para reagendamento.</p>
+                <p style="margin:0 0 12px;font-size:15px;color:#333">Por favor, clique no botão abaixo para escolher um novo horário:</p>
+                <p style="text-align:center;margin:24px 0">
+                  <a href="${link}" style="background:${accent};color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">Escolher novo horário</a>
+                </p>
+                <p style="margin:0 0 12px;font-size:13px;color:#888">Ou copie e cole este link no navegador:<br>${link}</p>
+              </div>`;
+            await sendScheduleEmail(customerEmail, subject, html);
+          }
+        } catch (e) { console.warn('[ScheduleEmail] Erro ao enviar email de reagendamento:', e); }
+      });
+      return { success: true, emailSent: true, waLink: waUrl };
     }),
   cancel: adminProcedure
     .input(z.object({ id: z.number() }))
