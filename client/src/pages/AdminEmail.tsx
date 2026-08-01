@@ -304,7 +304,9 @@ export default function AdminEmail() {
                         </div>
                         <Table>
                           <TableBody>
-                            {membroEmails.map(user => (
+                            {membroEmails.map(user => {
+                              const isProtected = ['h2@h2colombiano.com', 'walkajuda@walkajuda.com'].includes(user.primaryEmailAddress);
+                              return (
                               <TableRow key={user.accountId}>
                                 <TableCell>
                                   <div className="flex items-center gap-2">
@@ -312,18 +314,22 @@ export default function AdminEmail() {
                                     <button onClick={() => copyToClipboard(user.primaryEmailAddress, "Email")} className="opacity-40 hover:opacity-100 transition-opacity">
                                       <Copy className="w-3 h-3" />
                                     </button>
+                                    {isProtected && <span className="text-xs text-yellow-500 font-semibold">🔒 Principal</span>}
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">{user.displayName || "—"}</TableCell>
                                 <TableCell>
                                   <div className="flex items-center justify-end">
-                                    <Button variant="ghost" size="icon" onClick={() => setShowDelete(user)}>
-                                      <Trash2 className="w-4 h-4 text-destructive" />
-                                    </Button>
+                                    {!isProtected && (
+                                      <Button variant="ghost" size="icon" onClick={() => setShowDelete(user)}>
+                                        <Trash2 className="w-4 h-4 text-destructive" />
+                                      </Button>
+                                    )}
                                   </div>
                                 </TableCell>
                               </TableRow>
-                            ))}
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </div>
