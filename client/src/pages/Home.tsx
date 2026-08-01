@@ -234,6 +234,10 @@ export default function Home() {
   const [whatsappClicked, setWhatsappClicked] = useState(false);
   const [step, setStep] = useState<Step>("home");
   const [showColombiaBot, setShowColombiaBot] = useState(false);
+  // Tela de escolha manifesto: mostrar quando bot está ativo e cliente está logado
+  const [showBotChoice, setShowBotChoice] = useState(() => {
+    return !!localStorage.getItem('cp_token');
+  });
   const [selectedOption, setSelectedOption] = useState<ProductOption | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedTier, setSelectedTier] = useState<WarrantyTier | null>(null);
@@ -2103,6 +2107,53 @@ export default function Home() {
   // ========== RENDER ==========
   return (
     <div className="min-h-screen bg-background">
+
+      {/* ========== TELA DE ESCOLHA MANIFESTO ========== */}
+      {botEnabled && showBotChoice && (
+        <div className="fixed inset-0 z-[9995] flex flex-col items-center justify-center bg-zinc-950 px-6">
+          {/* Logo */}
+          <div className="mb-8 flex flex-col items-center gap-3">
+            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shadow-2xl shadow-primary/30">
+              <Zap className="w-12 h-12 text-white" />
+            </div>
+            <h1 className="text-3xl font-black text-white tracking-tight">{SITE_NAME}</h1>
+            <p className="text-zinc-400 text-sm">O que você deseja fazer?</p>
+          </div>
+
+          {/* Opções */}
+          <div className="w-full max-w-sm space-y-3">
+            {/* Botão Colombia Bot */}
+            <button
+              onClick={() => { setShowBotChoice(false); setShowColombiaBot(true); }}
+              className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 active:scale-[0.98] transition-all shadow-lg shadow-violet-500/30"
+            >
+              <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <span className="text-2xl">🤖</span>
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-bold text-white text-base">FAZER PEDIDO COM COLOMBIA</p>
+                <p className="text-xs text-violet-200 mt-0.5">Sou guiado passo a passo pelo assistente</p>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </button>
+
+            {/* Botão Manual */}
+            <button
+              onClick={() => setShowBotChoice(false)}
+              className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 active:scale-[0.98] transition-all"
+            >
+              <div className="w-12 h-12 rounded-xl bg-zinc-700 flex items-center justify-center shrink-0">
+                <span className="text-2xl">📋</span>
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-bold text-white text-base">FAZER PEDIDO MANUALMENTE</p>
+                <p className="text-xs text-zinc-400 mt-0.5">Prefiro navegar e escolher sozinho</p>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ========== MODAL DE PROPAGANDA OBRIGATÓRIA ========== */}
       {adVisible && adCampaign && (
