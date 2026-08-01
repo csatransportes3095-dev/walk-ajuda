@@ -457,19 +457,12 @@ function App() {
           <Toaster />
           <DevtoolsGuard />
           <AppContent />
-          <GlobalWhatsApp />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );
 }
 
-// Renderiza o botão flutuante do WhatsApp em todas as rotas, exceto no painel admin, /gastos e /gerador-chassi
-function GlobalWhatsApp() {
-  const [location] = useLocation();
-  // Mostrar apenas na tela inicial
-  if (location !== "/") return null;
-  return <WhatsAppFloat />;
-}
+
 
 export default App;
