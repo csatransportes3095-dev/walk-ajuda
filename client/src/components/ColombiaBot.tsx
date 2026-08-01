@@ -83,7 +83,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     product: Product | null;
     option: ProductOption | null;
     answers: Record<number, string>;
-    docFiles: Record<number, { file: File; url?: string }>;
+    docFiles: Record<number, { file: File; url?: string; fileKey?: string; mime?: string }>;
     clientName: string;
     clientPhone: string;
     pixProofUrl: string;
@@ -293,6 +293,46 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     }
   };
 
+  // Helper: converter File para base64 (sem prefixo data URI)
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remover prefixo "data:image/jpeg;base64,"
+        const base64 = result.split(',')[1] || result;
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Upload via base64 — mesmo endpoint que o pedido manual usa
+  const uploadFileBase64 = async (file: File, label: string): Promise<{ url: string; fileKey: string; mimeType: string } | null> => {
+    const phone = flowState.current.clientPhone || localStorage.getItem('walk_client_phone')?.replace(/\D/g, '') || '';
+    try {
+      const base64 = await fileToBase64(file);
+      if (!base64) return null;
+      const res = await fetch('/api/upload/client-file-base64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label,
+          phone,
+          data: base64,
+          mimeType: file.type || 'image/jpeg',
+          filename: file.name || `${label}.jpg`,
+        }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return { url: data.fileUrl, fileKey: data.fileKey, mimeType: data.mimeType };
+    } catch {
+      return null;
+    }
+  };
+
   const askDocuments = (product: Product, option: ProductOption) => {
     const docs = option.documents || [];
     if (docs.length === 0) {
@@ -300,25 +340,25 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       return;
     }
 
-      const docMsgs: ChatMsg[] = docs.map(doc => {
+    const docMsgs: ChatMsg[] = docs.map(doc => {
       const msgId = uid();
-      // isRequired ausente = obrigatório por padrão
       const isRequired = doc.isRequired === undefined ? true : doc.isRequired === 1;
       callbacks.current[msgId] = async (file: File) => {
         setUploadingDocId(doc.id);
         try {
-          const formData = new FormData();
-          formData.append("file", file);
-          const res = await fetch("/api/upload/client-file", { method: "POST", body: formData });
-          const data = await res.json();
-          flowState.current.docFiles[doc.id] = { file, url: data.url };
+          const uploaded = await uploadFileBase64(file, doc.label);
+          if (uploaded) {
+            flowState.current.docFiles[doc.id] = { file, url: uploaded.url, fileKey: uploaded.fileKey, mime: uploaded.mimeType };
+          } else {
+            // Fallback: salvar só o file (sem URL)
+            flowState.current.docFiles[doc.id] = { file };
+          }
         } catch {
           flowState.current.docFiles[doc.id] = { file };
         } finally {
           setUploadingDocId(null);
           markDocUploaded(msgId);
-          addMsgs({ type: "user", id: uid(), text: `✅ ${doc.label} enviado` });
-          // Verificar se todos os obrigatórios foram enviados
+          addMsgs({ type: "user", id: uid(), text: `\u2705 ${doc.label} enviado` });
           const required = docs.filter(d => d.isRequired === undefined ? true : d.isRequired === 1);
           const allDone = required.every(d => flowState.current.docFiles[d.id]);
           if (allDone) {
@@ -330,7 +370,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     });
 
     addMsgs(
-      { type: "bot", id: uid(), text: `Agora preciso de ${docs.length === 1 ? "um documento" : `${docs.length} documentos`}. Envie abaixo. 📎` },
+      { type: "bot", id: uid(), text: `Agora preciso de ${docs.length === 1 ? "um documento" : `${docs.length} documentos`}. Envie abaixo. \ud83d\udcce` },
       ...docMsgs
     );
   };
@@ -348,12 +388,13 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     callbacks.current[msgId] = async (file: File) => {
       setUploadingPix(true);
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        const res = await fetch('/api/upload/client-file', { method: 'POST', body: formData });
-        const data = await res.json();
-        flowState.current.pixProofUrl = data.url || '';
-        flowState.current.pixProofMime = file.type || 'image/jpeg';
+        const uploaded = await uploadFileBase64(file, 'comprovante-pix');
+        if (uploaded) {
+          flowState.current.pixProofUrl = uploaded.url;
+          flowState.current.pixProofMime = uploaded.mimeType || file.type || 'image/jpeg';
+        } else {
+          flowState.current.pixProofUrl = '';
+        }
       } catch {
         flowState.current.pixProofUrl = '';
       } finally {
@@ -361,7 +402,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         setMessages(prev => prev.map(m =>
           m.type === 'pix-payment' && m.id === msgId ? { ...m, uploaded: true } : m
         ));
-        addMsgs({ type: 'user', id: uid(), text: '✅ Comprovante enviado' });
+        addMsgs({ type: 'user', id: uid(), text: '\u2705 Comprovante enviado' });
         setTimeout(() => finishWithProduct(product, option), 400);
       }
     };
@@ -389,12 +430,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         });
       }
 
-      // Montar documents array
-      const docsArray: Array<{ label: string; url: string; mime?: string }> = [];
+      // Montar documents array — mesmo formato que o Home.tsx usa
+      const docsArray: Array<{ label: string; url?: string; fileKey?: string; mime?: string }> = [];
       if (option) {
         option.documents.forEach(d => {
           const df = flowState.current.docFiles[d.id];
-          if (df?.url) docsArray.push({ label: d.label, url: df.url });
+          if (df?.url) {
+            docsArray.push({ label: d.label, url: df.url, fileKey: df.fileKey, mime: df.mime || 'image/jpeg' });
+          }
         });
       }
 
