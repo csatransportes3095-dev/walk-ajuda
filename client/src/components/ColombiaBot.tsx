@@ -76,6 +76,15 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   // Callbacks armazenados em ref para evitar stale closure
   const callbacks = useRef<Record<string, (...args: any[]) => void>>({});
 
+  // Histórico de snapshots para o botão Voltar
+  type Snapshot = {
+    messages: ChatMsg[];
+    inputValues: Record<string, string>;
+    flowState: typeof flowState.current;
+    callbacks: Record<string, (...args: any[]) => void>;
+  };
+  const history = useRef<Snapshot[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingUpload = useRef<{ msgId: string; docId: number } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -122,6 +131,24 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   const uid = () => Math.random().toString(36).slice(2, 9);
+
+  // Salvar snapshot do estado atual antes de uma nova pergunta (para o botão Voltar)
+  const saveSnapshot = useCallback(() => {
+    setMessages(prev => {
+      setInputValues(iv => {
+        history.current.push({
+          messages: prev,
+          inputValues: iv,
+          flowState: JSON.parse(JSON.stringify(flowState.current)),
+          callbacks: { ...callbacks.current },
+        });
+        // Manter no máximo 20 snapshots
+        if (history.current.length > 20) history.current.shift();
+        return iv;
+      });
+      return prev;
+    });
+  }, []);
 
   const addMsgs = useCallback((...msgs: ChatMsg[]) => {
     setMessages(prev => [...prev, ...msgs]);
@@ -206,6 +233,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   const askService = () => {
+    saveSnapshot();
     const optId = uid();
     callbacks.current[optId] = (opt: string) => {
       markAnswered(optId);
@@ -231,6 +259,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   const askOption = (product: Product) => {
+    saveSnapshot();
     const optId = uid();
     callbacks.current[optId] = (opt: string) => {
       markAnswered(optId);
@@ -266,6 +295,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       return;
     }
 
+    saveSnapshot();
     const msgId = uid();
 
     if (nextQ.fieldType === "select" && nextQ.options) {
@@ -338,6 +368,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   const askDocuments = (product: Product, option: ProductOption) => {
+    saveSnapshot();
     const docs = option.documents || [];
     if (docs.length === 0) {
       askCoupon(product, option);
@@ -381,6 +412,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   // Etapa de cupom de desconto — antes do Pix
   const askCoupon = (product: Product, option: ProductOption | null) => {
+    saveSnapshot();
     const msgId = uid();
     // Callback para quando o cliente clicar em Sim ou Não
     callbacks.current[msgId] = async (answer: string) => {
@@ -433,6 +465,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   // Etapa de pagamento Pix — mostra chave, botão copiar, upload comprovante
   const askPix = (product: Product, option: ProductOption | null) => {
+    saveSnapshot();
     const pixKey = activePix?.pixKey || settingsData?.pix_key || '';
     const pixName = activePix?.pixName || settingsData?.pix_name || '';
     const pixBank = activePix?.pixBank || settingsData?.pix_bank || '';
@@ -763,12 +796,37 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         <div ref={chatEndRef} />
       </div>
 
-      {/* Rodapé — botão recomeçar */}
+      {/* Rodapé — botões Voltar e Recomeçar */}
       {!isSubmitting && (
-        <div className="shrink-0 px-4 py-2 border-t border-zinc-800/60 flex justify-center">
+        <div className="shrink-0 px-4 py-2 border-t border-zinc-800/60 flex items-center justify-center gap-3">
+          {/* Botão Voltar — só aparece quando há histórico */}
           <button
             onClick={() => {
-              // Resetar tudo e reiniciar o fluxo
+              const snap = history.current.pop();
+              if (!snap) return;
+              setMessages(snap.messages);
+              setInputValues(snap.inputValues);
+              flowState.current = snap.flowState;
+              callbacks.current = snap.callbacks;
+              pendingUpload.current = null;
+              pendingPixMsgId.current = '';
+              setUploadingDocId(null);
+              setPixCopied(false);
+              setUploadingPix(false);
+            }}
+            className="flex items-center gap-1.5 text-sm text-zinc-300 hover:text-white transition-colors py-2 px-4 rounded-xl border border-zinc-700 hover:border-zinc-500 bg-zinc-800 hover:bg-zinc-700 font-medium"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Voltar
+          </button>
+
+          {/* Divisor */}
+          <span className="text-zinc-700 text-xs">|</span>
+
+          {/* Botão Recomeçar */}
+          <button
+            onClick={() => {
+              history.current = [];
               setMessages([]);
               setInputValues({});
               setUploadingDocId(null);
@@ -780,10 +838,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               pendingPixMsgId.current = '';
               setTimeout(() => startWelcome(), 100);
             }}
-            className="flex items-center gap-2 text-sm text-zinc-300 hover:text-white transition-colors py-2 px-5 rounded-xl border border-zinc-700 hover:border-zinc-500 bg-zinc-800 hover:bg-zinc-700 font-medium"
+            className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 transition-colors py-2 px-4 rounded-xl hover:bg-zinc-800"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-            ↺ Recomeçar do início
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            Recomeçar
           </button>
         </div>
       )}
