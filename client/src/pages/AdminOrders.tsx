@@ -4652,30 +4652,39 @@ export default function AdminOrders() {
                     </>
                   ) : (
                     <>
-                      <span className="text-xs text-zinc-500 font-medium mr-1">Ordenar por</span>
-                      {(["number", "name", "date"] as const).map(k => (
-                        <button
-                          key={k}
-                          onClick={() => {
-                            if (todosSortKey === k) setTodosSortDir(d => d === "asc" ? "desc" : "asc");
-                            else { setTodosSortKey(k); setTodosSortDir("asc"); }
-                          }}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                            todosSortKey === k
-                              ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
-                              : "bg-card border-border text-muted-foreground hover:border-amber-500/40"
-                          }`}
-                        >
-                          {k === "number" ? "Número" : k === "name" ? "Nome (A–Z)" : "Data"}
-                          {todosSortKey === k && (
-                            todosSortDir === "asc"
-                              ? <ArrowUp className="w-3 h-3" />
-                              : <ArrowDown className="w-3 h-3" />
-                          )}
-                        </button>
-                      ))}
-                      {/* Filtros rápidos — design profissional */}
-                      <div className="flex gap-1.5 ml-3">
+                      {/* Linha 1: Ordenar por */}
+                      <div className="flex items-center gap-1.5 w-full flex-wrap">
+                        <span className="text-xs text-zinc-500 font-medium">Ordenar por</span>
+                        {(["number", "name", "date"] as const).map(k => (
+                          <button
+                            key={k}
+                            onClick={() => {
+                              if (todosSortKey === k) setTodosSortDir(d => d === "asc" ? "desc" : "asc");
+                              else { setTodosSortKey(k); setTodosSortDir("asc"); }
+                            }}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                              todosSortKey === k
+                                ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
+                                : "bg-card border-border text-muted-foreground hover:border-amber-500/40"
+                            }`}
+                          >
+                            {k === "number" ? "Número" : k === "name" ? "Nome (A–Z)" : "Data"}
+                            {todosSortKey === k && (
+                              todosSortDir === "asc"
+                                ? <ArrowUp className="w-3 h-3" />
+                                : <ArrowDown className="w-3 h-3" />
+                            )}
+                          </button>
+                        ))}
+                        <span className="ml-auto text-xs text-muted-foreground/60">{group.orders.filter((o: any) => {
+                          if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus !== "confirmed";
+                          if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
+                          if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
+                          return true;
+                        }).length} pedido(s)</span>
+                      </div>
+                      {/* Linha 2: Filtros rápidos */}
+                      <div className="flex gap-1.5 w-full mt-1">
                         {([
                           { id: "all",         label: "Todos",            sub: "pedidos",           glow: "#f59e0b", active_bg: "linear-gradient(135deg,#78350f,#92400e)", active_border: "#f59e0b", active_text: "#fde68a" },
                           { id: "sem_status",  label: "Sem Agendamento",  sub: "não agendados",      glow: "#ef4444", active_bg: "linear-gradient(135deg,#7f1d1d,#991b1b)", active_border: "#ef4444", active_text: "#fca5a5" },
@@ -4699,25 +4708,19 @@ export default function AdminOrders() {
                                 color: f.active_text,
                                 boxShadow: `0 0 8px ${f.glow}44`,
                               } : {}}
-                              className={`flex flex-col items-start justify-center px-3 py-2 rounded-xl border transition-all min-w-[90px] ${
+                              className={`flex flex-col items-start justify-center px-3 py-2 rounded-xl border transition-all flex-1 ${
                                 active
                                   ? "border-opacity-100"
                                   : "bg-zinc-900/80 border-zinc-700/60 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
                               }`}
                             >
-                              <span className="text-[11px] font-bold leading-tight tracking-tight">{f.label}</span>
-                              <span className="text-[9px] opacity-60 leading-tight mt-0.5">{f.sub}</span>
-                              <span className={`text-[15px] font-black leading-none mt-1 ${active ? "" : "text-zinc-200"}`}>{cnt}</span>
+                              <span className="text-[10px] font-bold leading-tight tracking-tight">{f.label}</span>
+                              <span className="text-[8px] opacity-60 leading-tight mt-0.5 hidden sm:block">{f.sub}</span>
+                              <span className={`text-[14px] font-black leading-none mt-1 ${active ? "" : "text-zinc-200"}`}>{cnt}</span>
                             </button>
                           );
                         })}
                       </div>
-                      <span className="ml-auto text-xs text-muted-foreground/60">{group.orders.filter((o: any) => {
-                        if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus !== "confirmed";
-                        if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
-                        if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
-                        return true;
-                      }).length} pedido(s)</span>
                     </>
                   )}
                 </div>
