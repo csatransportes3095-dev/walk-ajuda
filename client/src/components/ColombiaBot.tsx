@@ -70,6 +70,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const submitMutation = trpc.uploads.submitFiles.useMutation();
+  const validateCouponMutation = trpc.coupons.validate.useMutation();
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
   // Callbacks armazenados em ref para evitar stale closure
   const callbacks = useRef<Record<string, (...args: any[]) => void>>({});
@@ -88,7 +90,9 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     clientPhone: string;
     pixProofUrl: string;
     pixProofMime: string;
-  }>({ product: null, option: null, answers: {}, docFiles: {}, clientName: '', clientPhone: '', pixProofUrl: '', pixProofMime: '' });
+    couponCode: string;
+    couponDiscount: { type: string; value: number } | null;
+  }>({ product: null, option: null, answers: {}, docFiles: {}, clientName: '', clientPhone: '', pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null });
 
   const [pixCopied, setPixCopied] = useState(false);
   const [uploadingPix, setUploadingPix] = useState(false);
@@ -336,7 +340,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const askDocuments = (product: Product, option: ProductOption) => {
     const docs = option.documents || [];
     if (docs.length === 0) {
-      askPix(product, option);
+      askCoupon(product, option);
       return;
     }
 
@@ -362,7 +366,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           const required = docs.filter(d => d.isRequired === undefined ? true : d.isRequired === 1);
           const allDone = required.every(d => flowState.current.docFiles[d.id]);
           if (allDone) {
-            setTimeout(() => askPix(product, option), 400);
+            setTimeout(() => askCoupon(product, option), 400);
           }
         }
       };
@@ -372,6 +376,58 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     addMsgs(
       { type: "bot", id: uid(), text: `Agora preciso de ${docs.length === 1 ? "um documento" : `${docs.length} documentos`}. Envie abaixo. \ud83d\udcce` },
       ...docMsgs
+    );
+  };
+
+  // Etapa de cupão de desconto — antes do Pix
+  const askCoupon = (product: Product, option: ProductOption | null) => {
+    const msgId = uid();
+    // Callback para quando o cliente clicar em Sim ou Não
+    callbacks.current[msgId] = async (answer: string) => {
+      setMessages(prev => prev.map(m =>
+        m.type === 'options' && m.id === msgId ? { ...m, answered: true } : m
+      ));
+      addMsgs({ type: 'user', id: uid(), text: answer });
+      if (answer === 'SIM, TENHO UM CUPÃO') {
+        // Pedir o código do cupão
+        const inputId = uid();
+        callbacks.current[inputId] = async (code: string) => {
+          setMessages(prev => prev.map(m =>
+            m.type === 'input' && m.id === inputId ? { ...m, answered: true } : m
+          ));
+          addMsgs({ type: 'user', id: uid(), text: code });
+          setIsValidatingCoupon(true);
+          try {
+            const result = await validateCouponMutation.mutateAsync({ code: code.trim() });
+            if (result.valid) {
+              flowState.current.couponCode = code.trim();
+              flowState.current.couponDiscount = result.discount ? { type: result.discount.type, value: result.discount.value } : null;
+              const discountText = result.discount?.type === 'percentage'
+                ? `${result.discount.value}% de desconto`
+                : `R$ ${result.discount?.value?.toFixed(2).replace('.', ',')} de desconto`;
+              addMsgs({ type: 'bot', id: uid(), text: `✅ Cupão aplicado! ${discountText}` });
+            } else {
+              addMsgs({ type: 'bot', id: uid(), text: `❌ Cupão inválido: ${result.reason || 'Código não encontrado.'}` });
+            }
+          } catch {
+            addMsgs({ type: 'bot', id: uid(), text: '❌ Erro ao validar cupão. Continuando sem desconto.' });
+          } finally {
+            setIsValidatingCoupon(false);
+            setTimeout(() => askPix(product, option), 400);
+          }
+        };
+        addMsgs(
+          { type: 'bot', id: uid(), text: 'Digite o código do seu cupão:' },
+          { type: 'input', id: inputId, multiline: false, answered: false }
+        );
+      } else {
+        // Não tem cupão — ir direto para o Pix
+        setTimeout(() => askPix(product, option), 400);
+      }
+    };
+    addMsgs(
+      { type: 'bot', id: uid(), text: 'Você tem um cupão de desconto?' },
+      { type: 'options', id: msgId, options: ['SIM, TENHO UM CUPÃO', 'NÃO TENHO CUPÃO'], answered: false }
     );
   };
 
@@ -461,7 +517,20 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           email: profileQuery.data?.email || undefined,
           cpToken: cpToken || undefined,
           answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
-          price: option?.price || undefined,
+          couponCode: flowState.current.couponCode || undefined,
+          price: (() => {
+            const rawPrice = option?.price;
+            if (!rawPrice) return undefined;
+            const discount = flowState.current.couponDiscount;
+            if (!discount) return rawPrice;
+            // Extrair valor numérico do preço (ex: "R$ 350,00" -> 350)
+            const num = parseFloat(rawPrice.replace(/[^\d,]/g, '').replace(',', '.'));
+            if (isNaN(num)) return rawPrice;
+            const final = discount.type === 'percentage'
+              ? num - (num * discount.value / 100)
+              : num - discount.value;
+            return `R$ ${Math.max(0, final).toFixed(2).replace('.', ',')}`;
+          })(),
           paymentProofUrl: flowState.current.pixProofUrl || undefined,
           paymentProofMime: flowState.current.pixProofMime || undefined,
         });
