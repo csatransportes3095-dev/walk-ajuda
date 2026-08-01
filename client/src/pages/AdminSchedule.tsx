@@ -841,9 +841,17 @@ function AppointmentsTab() {
   const reopenAndNotifyMut = trpc.schedule.reopenAndNotify.useMutation({
     onSuccess: (data) => {
       toast.success("Liberado para o cliente reagendar");
-      if (data.emailSent) toast.success("E-mail enviado ao cliente");
-      else if (!data.emailSent && data.waLink) toast.info("Cliente não possui e-mail cadastrado");
-      if (data.waLink) window.open(data.waLink, "_blank");
+      if (data.emailSent) toast.success("E-mail de reagendamento enviado");
+      if (data.waLink) {
+        toast.success("Abrindo WhatsApp...");
+        const a = document.createElement('a');
+        a.href = data.waLink;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
       utils.schedule.listAppointments.invalidate();
     },
     onError: (e) => toast.error(e.message),
@@ -862,10 +870,16 @@ function AppointmentsTab() {
   });
   const manualConfirmMut = trpc.schedule.manualConfirm.useMutation({
     onSuccess: (data) => {
-      toast.success("Agendamento confirmado manualmente!");
+      toast.success("Agendamento confirmado!");
       if ((data as any).waLink) {
-        window.open((data as any).waLink, '_blank');
-        toast.success("WhatsApp aberto para notificar o cliente");
+        toast.success("Abrindo WhatsApp...");
+        const a = document.createElement('a');
+        a.href = (data as any).waLink;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
       }
       setManualApptId(null);
       setManualDate('');
