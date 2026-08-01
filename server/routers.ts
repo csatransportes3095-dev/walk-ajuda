@@ -7630,12 +7630,13 @@ export const appRouter = router({
         serverId: z.number().optional(), // ID do servidor especÃƒÂ­fico onde criar
       }))
       .mutation(async ({ input }) => {
+        try {
         // Determinar o domÃƒÂ­nio correto baseado no servidor selecionado
         let emailDomain = 'h2colombiano.com';
         if (input.serverId) {
           const { listZohoOAuthConfigs: getConfigs } = await import('../server/db');
           const allCfgs = await getConfigs();
-          const cfg = allCfgs.find((c: any) => c.id === input.serverId);
+          const cfg = allCfgs.find((c: any) => Number(c.id) === Number(input.serverId));
           if (cfg?.domain) emailDomain = cfg.domain;
         }
         const primaryEmailAddress = `${input.username.toLowerCase()}@${emailDomain}`;
@@ -7672,6 +7673,11 @@ export const appRouter = router({
         const { upsertEmailAccount } = await import('../server/db');
         await upsertEmailAccount(primaryEmailAddress, input.type);
         return { success: true, user, serverName: input.serverId ? undefined : 'auto' };
+        } catch (err: any) {
+          const msg = err?.message || String(err);
+          console.error('[email.create] Erro:', msg);
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `Erro ao criar conta: ${msg}` });
+        }
       }),
 
     delete: adminProcedure
