@@ -2110,47 +2110,75 @@ export default function Home() {
 
       {/* ========== TELA DE ESCOLHA MANIFESTO ========== */}
       {botEnabled && showBotChoice && (
-        <div className="fixed inset-0 z-[9995] flex flex-col items-center justify-center bg-zinc-950 px-6">
-          {/* Logo */}
-          <div className="mb-8 flex flex-col items-center gap-3">
-            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shadow-2xl shadow-primary/30">
-              <Zap className="w-12 h-12 text-white" />
+        <div className="fixed inset-0 z-[9995] flex flex-col bg-zinc-950">
+          {/* Fundo gradiente sutil */}
+          <div className="absolute inset-0 bg-gradient-to-b from-violet-950/40 via-zinc-950 to-zinc-950 pointer-events-none" />
+
+          <div className="relative flex-1 flex flex-col items-center justify-center px-6 pb-8">
+
+            {/* Avatar do atendente */}
+            <div className="mb-6 flex flex-col items-center gap-3">
+              <div className="relative">
+                {/* Avatar circular com borda animada */}
+                <div className="w-28 h-28 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center shadow-2xl shadow-violet-500/40 ring-4 ring-violet-500/30">
+                  <span className="text-5xl select-none">👨‍💻</span>
+                </div>
+                {/* Indicador online */}
+                <div className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-400 rounded-full border-2 border-zinc-950 shadow-lg">
+                  <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
+                </div>
+              </div>
+              <div className="text-center">
+                <h2 className="text-2xl font-black text-white tracking-wide">Colombia</h2>
+                <p className="text-emerald-400 text-xs font-semibold mt-0.5">● Online agora — pronto para te atender</p>
+              </div>
             </div>
-            <h1 className="text-3xl font-black text-white tracking-tight">{SITE_NAME}</h1>
-            <p className="text-zinc-400 text-sm">O que você deseja fazer?</p>
-          </div>
 
-          {/* Opções */}
-          <div className="w-full max-w-sm space-y-3">
-            {/* Botão Colombia Bot */}
-            <button
-              onClick={() => { setShowBotChoice(false); setShowColombiaBot(true); }}
-              className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 active:scale-[0.98] transition-all shadow-lg shadow-violet-500/30"
-            >
-              <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <span className="text-2xl">🤖</span>
+            {/* Balão de mensagem */}
+            <div className="w-full max-w-sm mb-8">
+              <div className="bg-zinc-800 border border-zinc-700 rounded-2xl rounded-tl-sm px-5 py-4 shadow-lg">
+                <p className="text-white text-sm leading-relaxed">
+                  Olá! 👋 Sou o <span className="font-bold text-violet-300">Colombia</span>, seu assistente de pedidos.
+                </p>
+                <p className="text-zinc-300 text-sm leading-relaxed mt-2">
+                  Posso te <span className="font-bold text-white">guiar passo a passo</span> para fazer seu pedido de forma rápida e sem erros — ou você pode navegar sozinho pelo site.
+                </p>
+                <p className="text-zinc-400 text-xs mt-3">Como prefere continuar?</p>
               </div>
-              <div className="flex-1 text-left">
-                <p className="font-bold text-white text-base">FAZER PEDIDO COM COLOMBIA</p>
-                <p className="text-xs text-violet-200 mt-0.5">Sou guiado passo a passo pelo assistente</p>
-              </div>
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </button>
+            </div>
 
-            {/* Botão Manual */}
-            <button
-              onClick={() => setShowBotChoice(false)}
-              className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 active:scale-[0.98] transition-all"
-            >
-              <div className="w-12 h-12 rounded-xl bg-zinc-700 flex items-center justify-center shrink-0">
-                <span className="text-2xl">📋</span>
-              </div>
-              <div className="flex-1 text-left">
-                <p className="font-bold text-white text-base">FAZER PEDIDO MANUALMENTE</p>
-                <p className="text-xs text-zinc-400 mt-0.5">Prefiro navegar e escolher sozinho</p>
-              </div>
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </button>
+            {/* Botões de escolha */}
+            <div className="w-full max-w-sm space-y-3">
+              {/* Botão principal — com assistente */}
+              <button
+                onClick={() => { setShowBotChoice(false); setShowColombiaBot(true); }}
+                className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 active:scale-[0.97] transition-all shadow-xl shadow-violet-500/30 border border-violet-400/30"
+              >
+                <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0 text-xl">
+                  👨‍💻
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-black text-white text-sm">QUERO AJUDA DO COLOMBIA</p>
+                  <p className="text-violet-200 text-xs mt-0.5">Atendimento guiado passo a passo</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+              </button>
+
+              {/* Botão secundário — manual */}
+              <button
+                onClick={() => setShowBotChoice(false)}
+                className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700 active:scale-[0.97] transition-all"
+              >
+                <div className="w-11 h-11 rounded-xl bg-zinc-700 flex items-center justify-center shrink-0 text-xl">
+                  📋
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-bold text-zinc-200 text-sm">PREFIRO FAZER SOZINHO</p>
+                  <p className="text-zinc-500 text-xs mt-0.5">Navegar pelo site manualmente</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </button>
+            </div>
           </div>
         </div>
       )}
