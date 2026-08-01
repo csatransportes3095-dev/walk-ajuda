@@ -23,7 +23,7 @@ type ProductQuestion = {
   parentQuestionId: number | null; triggerOption: string | null;
 };
 type ProductDocument = {
-  id: number; label: string; isRequired: number; sortOrder: number;
+  id: number; label: string; isRequired?: number; sortOrder: number;
 };
 
 // ── Mensagem do chat ─────────────────────────────────────────────────────────
@@ -259,8 +259,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       return;
     }
 
-    const docMsgs: ChatMsg[] = docs.map(doc => {
+      const docMsgs: ChatMsg[] = docs.map(doc => {
       const msgId = uid();
+      // isRequired ausente = obrigatório por padrão
+      const isRequired = doc.isRequired === undefined ? true : doc.isRequired === 1;
       callbacks.current[msgId] = async (file: File) => {
         setUploadingDocId(doc.id);
         try {
@@ -276,14 +278,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           markDocUploaded(msgId);
           addMsgs({ type: "user", id: uid(), text: `✅ ${doc.label} enviado` });
           // Verificar se todos os obrigatórios foram enviados
-          const required = docs.filter(d => d.isRequired === 1);
+          const required = docs.filter(d => d.isRequired === undefined ? true : d.isRequired === 1);
           const allDone = required.every(d => flowState.current.docFiles[d.id]);
           if (allDone) {
             setTimeout(() => finishWithProduct(product, option), 400);
           }
         }
       };
-      return { type: "doc-upload" as const, id: msgId, docId: doc.id, label: doc.label, required: doc.isRequired === 1, uploaded: false };
+      return { type: "doc-upload" as const, id: msgId, docId: doc.id, label: doc.label, required: isRequired, uploaded: false };
     });
 
     addMsgs(
