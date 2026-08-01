@@ -7749,8 +7749,9 @@ export const appRouter = router({
         name: String(c.name || ''),
         zohoOrgId: String(c.zohoOrgId || ''),
         zohoClientId: String(c.zohoClientId || ''),
-        zohoClientSecret: 'Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢',
-        zohoRefreshToken: 'Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢',
+        zohoClientSecret: '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
+        zohoRefreshToken: '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
+        domain: String(c.domain || ''),
         isActive: Number(c.isActive),
         status: String(c.status || 'inactive'),
         createdAt: Number(c.createdAt || 0),
@@ -7810,6 +7811,7 @@ export const appRouter = router({
         zohoClientId: z.string().min(1),
         zohoClientSecret: z.string().min(1),
         zohoRefreshToken: z.string().min(1),
+        domain: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const { createZohoOAuthConfig } = await import('../server/db');

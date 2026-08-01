@@ -16,7 +16,7 @@ type Config = {
   status: string; createdAt: number;
 };
 
-const EMPTY_FORM = { name: "", zohoOrgId: "", zohoClientId: "", zohoClientSecret: "", zohoRefreshToken: "" };
+const EMPTY_FORM = { name: "", zohoOrgId: "", zohoClientId: "", zohoClientSecret: "", zohoRefreshToken: "", domain: "" };
 
 export default function AdminZohoConfig() {
   const { data: configs = [], isLoading, refetch } = trpc.zohoConfig.list.useQuery(
@@ -167,6 +167,13 @@ export default function AdminZohoConfig() {
                 <input placeholder="Ex: 920722948" value={form.zohoOrgId}
                   onChange={e => setForm(f => ({ ...f, zohoOrgId: e.target.value }))}
                   className="w-full bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-gray-300 text-xs mb-1 block">Domínio do Email *</Label>
+                <input placeholder="Ex: h2colombiano.com" value={form.domain}
+                  onChange={e => setForm(f => ({ ...f, domain: e.target.value }))}
+                  className="w-full bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-500" />
+                <p className="text-xs text-gray-500 mt-1">Domínio que será usado para criar emails neste servidor (ex: walkajuda.com ou h2colombiano.com)</p>
               </div>
               <div className="sm:col-span-2">
                 <Label className="text-gray-300 text-xs mb-1 block">Client ID *</Label>

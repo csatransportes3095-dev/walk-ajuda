@@ -3730,7 +3730,7 @@ export async function listEmailAccounts(): Promise<Array<{ emailAddress: string;
 
 // ========== ZOHO OAUTH CONFIGURATIONS (100% SQL puro - sem ORM) ==========
 
-export async function createZohoOAuthConfig(data: { name: string; zohoOrgId: string; zohoClientId: string; zohoClientSecret: string; zohoRefreshToken: string }) {
+export async function createZohoOAuthConfig(data: { name: string; zohoOrgId: string; zohoClientId: string; zohoClientSecret: string; zohoRefreshToken: string; domain?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = Date.now();
@@ -3742,23 +3742,36 @@ export async function createZohoOAuthConfig(data: { name: string; zohoOrgId: str
   // Verificar se já existe um registo com este nome
   const existing = await db.execute(sql.raw(`SELECT id, isActive FROM zohoOAuthConfigs WHERE name = '${n}' LIMIT 1`));
   const rows = (existing as any)[0] as any[];
+  const dom = data.domain ? data.domain.replace(/'/g, "''") : '';
   if (rows && rows.length > 0) {
     // UPDATE: atualizar token e credenciais mantendo isActive e domain
+    const domainClause = dom ? `, \`domain\`='${dom}'` : '';
     await db.execute(sql.raw(
-      `UPDATE zohoOAuthConfigs SET zohoOrgId='${org}', zohoClientId='${cid}', zohoClientSecret='${csec}', zohoRefreshToken='${tok}', status='active', isActive=1, updatedAt=${now} WHERE name='${n}'`
+      `UPDATE zohoOAuthConfigs SET zohoOrgId='${org}', zohoClientId='${cid}', zohoClientSecret='${csec}', zohoRefreshToken='${tok}', status='active', isActive=1${domainClause}, updatedAt=${now} WHERE name='${n}'`
     ));
   } else {
     // INSERT: criar novo registo
     await db.execute(sql.raw(
-      `INSERT INTO zohoOAuthConfigs (name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, createdAt, updatedAt)
-       VALUES ('${n}', '${org}', '${cid}', '${csec}', '${tok}', 1, 'active', ${now}, ${now})`
+      `INSERT INTO zohoOAuthConfigs (name, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, \`domain\`, isActive, status, createdAt, updatedAt)
+       VALUES ('${n}', '${org}', '${cid}', '${csec}', '${tok}', '${dom}', 1, 'active', ${now}, ${now})`
     ));
   }
 }
 
+let _zohoColumnMigrated = false;
 export async function listZohoOAuthConfigs(): Promise<any[]> {
   const db = await getDb();
   if (!db) return [];
+  // Garantir que a coluna domain existe (migration automática)
+  if (!_zohoColumnMigrated) {
+    try {
+      await db.execute(sql.raw(`ALTER TABLE zohoOAuthConfigs ADD COLUMN IF NOT EXISTS \`domain\` VARCHAR(128) NULL`));
+      // Preencher domínios vazios baseado no Org ID conhecido
+      await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET \`domain\`='walkajuda.com' WHERE (\`domain\` IS NULL OR \`domain\`='') AND zohoOrgId='920722948'`));
+      await db.execute(sql.raw(`UPDATE zohoOAuthConfigs SET \`domain\`='h2colombiano.com' WHERE (\`domain\` IS NULL OR \`domain\`='') AND zohoOrgId='933183212'`));
+      _zohoColumnMigrated = true;
+    } catch (_) { _zohoColumnMigrated = true; }
+  }
   const result = await db.execute(sql.raw(
     `SELECT id, name, \`domain\`, zohoOrgId, zohoClientId, zohoClientSecret, zohoRefreshToken, isActive, status, createdAt, updatedAt FROM zohoOAuthConfigs ORDER BY createdAt ASC`
   ));

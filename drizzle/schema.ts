@@ -1521,6 +1521,7 @@ export const zohoOAuthConfigs = mysqlTable("zohoOAuthConfigs", {
   zohoClientId: varchar("zohoClientId", { length: 256 }).notNull(),
   zohoClientSecret: varchar("zohoClientSecret", { length: 256 }).notNull(),
   zohoRefreshToken: varchar("zohoRefreshToken", { length: 512 }).notNull(),
+  domain: varchar("domain", { length: 128 }),
   isActive: int("isActive").notNull().default(1),
   status: varchar("status", { length: 20 }).notNull().default("inactive"),
   createdAt: bigint("createdAt", { mode: "number" }).notNull(),
