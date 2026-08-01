@@ -899,8 +899,9 @@ export const appRouter = router({
         try {
           // Validar acesso: aceitar accessCode (sistema antigo) OU cpToken (novo sistema)
           let cpTokenValid = false;
+          let cpTokenPhone = '';
           if (input.cpToken) {
-            // Verificar se o cpToken ÃƒÂ© vÃƒÂ¡lido via banco
+            // Verificar se o cpToken é válido via banco
             try {
               const dbInst = await (await import('./db')).getDb();
               const { eq: eqDrizzle } = await import('drizzle-orm');
@@ -908,11 +909,13 @@ export const appRouter = router({
               const sessRows = await (dbInst as any).select().from(cpSessions).where(eqDrizzle(cpSessions.token, input.cpToken.trim())).limit(1);
               const sess = sessRows?.[0];
               if (!sess || new Date(sess.expiresAt) < new Date()) {
-                return { success: false, message: 'SessÃƒÂ£o expirada. FaÃƒÂ§a login novamente.' };
+                return { success: false, message: 'Sessão expirada. Faça login novamente.' };
               }
-              cpTokenValid = true; // SessÃƒÂ£o vÃƒÂ¡lida Ã¢â‚¬â€ pular checkAccessCodeCanSubmit
+              cpTokenValid = true;
+              // Extrair phone da sessão para garantir que está disponível mesmo quando input.phone vier vazio
+              cpTokenPhone = sess.phone?.replace(/\D/g, '') || '';
             } catch {
-              return { success: false, message: 'Erro ao verificar sessÃƒÂ£o. Tente novamente.' };
+              return { success: false, message: 'Erro ao verificar sessão. Tente novamente.' };
             }
           }
           if (!cpTokenValid) {
@@ -1020,12 +1023,14 @@ export const appRouter = router({
           };
 
           // Obter registrationId para associar os arquivos
+          // Garantir que temos o phone: usar input.phone ou extrair do cpToken
+          const effectivePhone = (input.phone || cpTokenPhone || '').replace(/\D/g, '');
+
           let docRegId = 0;
           try {
             const db2 = await (await import('./db')).getDb();
-            if (db2 && input.phone) {
-              const phoneDigits2 = input.phone.replace(/\D/g, '');
-              const phoneRow2 = await db2.execute(`SELECT id FROM accessCodePhones WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = '${phoneDigits2}' ORDER BY accessedAt DESC LIMIT 1`);
+            if (db2 && effectivePhone) {
+              const phoneRow2 = await db2.execute(`SELECT id FROM accessCodePhones WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = '${effectivePhone}' ORDER BY accessedAt DESC LIMIT 1`);
               docRegId = (phoneRow2[0] as unknown as Array<{ id: number }>)[0]?.id || 0;
             }
           } catch (e) { console.error('[OrderFiles] Erro ao obter regId:', e); }
@@ -1038,12 +1043,12 @@ export const appRouter = router({
                 // Arquivo jÃƒÂ¡ enviado: apenas registrar no banco
                 try {
                   const proofKey = doc.fileKey || doc.url.replace('/manus-storage/', '');
-                  await addOrderFile({ registrationId: docRegId, customerPhone: input.phone || 'desconhecido', label: doc.label, fileUrl: doc.url, fileKey: proofKey, mimeType: doc.mime || 'image/jpeg' });
+                  await addOrderFile({ registrationId: docRegId, customerPhone: effectivePhone || 'desconhecido', label: doc.label, fileUrl: doc.url, fileKey: proofKey, mimeType: doc.mime || 'image/jpeg' });
                   docListHtml.push(`<li>${doc.label}: <a href="${doc.url}">Ver</a></li>`);
                 } catch (e) { console.error(`[OrderFiles] Erro ao registrar doc "${doc.label}":`, e); }
               } else if (doc.data) {
                 // Arquivo em base64: fazer upload
-                await saveDocToStorage(doc.label, doc.data, doc.mime || 'image/jpeg', docRegId, input.phone || 'desconhecido');
+                await saveDocToStorage(doc.label, doc.data, doc.mime || 'image/jpeg', docRegId, effectivePhone || 'desconhecido');
               }
             }
           }
@@ -1067,7 +1072,7 @@ export const appRouter = router({
             try {
               const proofMime2 = input.paymentProofMime || 'image/jpeg';
               const proofKey = paymentProofUrl.replace('/manus-storage/', '');
-              await addOrderFile({ registrationId: docRegId, customerPhone: input.phone || 'desconhecido', label: 'Comprovante PIX', fileUrl: paymentProofUrl, fileKey: proofKey, mimeType: proofMime2 });
+              await addOrderFile({ registrationId: docRegId, customerPhone: effectivePhone || 'desconhecido', label: 'Comprovante PIX', fileUrl: paymentProofUrl, fileKey: proofKey, mimeType: proofMime2 });
               docListHtml.push(`<li>Comprovante PIX: <a href="${paymentProofUrl}">Ver</a></li>`);
             } catch (e) { console.error('[OrderFiles] Erro ao registrar comprovante:', e); }
           }
@@ -1225,9 +1230,9 @@ export const appRouter = router({
           let outerRegId: number | undefined;
           try {
             const db2 = await (await import('./db')).getDb();
-            if (db2 && input.phone) {
-              // Normalizar telefone para apenas dÃƒÂ­gitos (ex: "(11) 99342-5253" -> "11993425253")
-              const phoneDigits = input.phone.replace(/\D/g, '');
+            if (db2 && effectivePhone) {
+              // Usar effectivePhone (input.phone ou phone do cpToken)
+              const phoneDigits = effectivePhone;
               let regId: number | undefined;
 
               // Se senha geral, criar registro em accessCodePhones (nÃƒÂ£o existe cÃƒÂ³digo VIP associado)
@@ -1333,10 +1338,11 @@ export const appRouter = router({
                     await db2.execute(`UPDATE orderFiles SET registrationId = ${regId} WHERE registrationId = ${docRegId} AND customerPhone = '${phoneDigits}' AND createdAt >= NOW() - INTERVAL 5 MINUTE`);
                     console.log('[OrderFiles] Documentos migrados de regId', docRegId, 'para', regId);
                   } catch (e) { console.error('[OrderFiles] Erro ao migrar documentos:', e); }
-                  // Também migrar documentos salvos com customerPhone = 'desconhecido' (quando phone veio vazio)
+                  // Também migrar documentos salvos com customerPhone = 'desconhecido'
                   try {
-                    await db2.execute(`UPDATE orderFiles SET registrationId = ${regId}, customerPhone = '${phoneDigits}' WHERE registrationId = ${docRegId} AND customerPhone = 'desconhecido' AND createdAt >= NOW() - INTERVAL 5 MINUTE`);
-                  } catch (e) { /* silencioso */ }
+                    await db2.execute(`UPDATE orderFiles SET registrationId = ${regId}, customerPhone = '${phoneDigits}' WHERE registrationId = ${docRegId} AND (customerPhone = 'desconhecido' OR customerPhone = '') AND createdAt >= NOW() - INTERVAL 10 MINUTE`);
+                    console.log('[OrderFiles] Documentos desconhecidos migrados para regId', regId);
+                  } catch (e) { console.error('[OrderFiles] Erro ao migrar docs desconhecidos:', e); }
                 }
                 // Salvar thirdPartyName, resellerDiscountApplied e campos de carrinho no registro do pedido
                 const hasExtraFields = input.thirdPartyName || input.resellerDiscountApplied || input.cartGroupId || input.cartTotal !== undefined || input.cartCouponCode || input.cartCouponDiscount !== undefined || input.cartItemIndex !== undefined;

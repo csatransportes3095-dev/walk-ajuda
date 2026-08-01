@@ -85,9 +85,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     answers: Record<number, string>;
     docFiles: Record<number, { file: File; url?: string }>;
     clientName: string;
+    clientPhone: string;
     pixProofUrl: string;
     pixProofMime: string;
-  }>({ product: null, option: null, answers: {}, docFiles: {}, clientName: '', pixProofUrl: '', pixProofMime: '' });
+  }>({ product: null, option: null, answers: {}, docFiles: {}, clientName: '', clientPhone: '', pixProofUrl: '', pixProofMime: '' });
 
   const [pixCopied, setPixCopied] = useState(false);
   const [uploadingPix, setUploadingPix] = useState(false);
@@ -104,7 +105,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   );
   useEffect(() => {
     if (profileQuery.data?.name) flowState.current.clientName = profileQuery.data.name;
-  }, [profileQuery.data?.name]);
+    if (profileQuery.data?.phone) flowState.current.clientPhone = profileQuery.data.phone.replace(/\D/g, '');
+  }, [profileQuery.data?.name, profileQuery.data?.phone]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -397,8 +399,11 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       }
 
       const cpToken = localStorage.getItem('cp_token') || '';
-      // Usar telefone do perfil (mais confiável) ou do localStorage
-      const clientPhoneForSubmit = profileQuery.data?.phone || localStorage.getItem('walk_client_phone') || '';
+      // Usar telefone do flowState (salvo quando perfil carregou) ou fallbacks
+      const clientPhoneForSubmit = flowState.current.clientPhone
+        || profileQuery.data?.phone?.replace(/\D/g, '')
+        || localStorage.getItem('walk_client_phone')?.replace(/\D/g, '')
+        || '';
 
       try {
         addMsgs({ type: "bot", id: uid(), text: "Enviando seu pedido... \u23f3" });
