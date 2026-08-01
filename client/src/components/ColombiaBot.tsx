@@ -102,6 +102,19 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     ));
   }, []);
 
+  // Parseia opções — suporta string simples "A, B, C" e JSON array [{label:"A",...}]
+  const parseOptions = (raw: string | null): string[] => {
+    if (!raw) return [];
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const arr = JSON.parse(trimmed);
+        return arr.map((o: any) => (typeof o === 'string' ? o : o.label || String(o))).filter(Boolean);
+      } catch { /* fallback */ }
+    }
+    return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+  };
+
   const getVisibleQuestions = (questions: ProductQuestion[], answers: Record<number, string>): ProductQuestion[] => {
     return questions
       .filter(q => {
@@ -196,7 +209,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const msgId = uid();
 
     if (nextQ.fieldType === "select" && nextQ.options) {
-      const opts = nextQ.options.split(",").map(o => o.trim()).filter(Boolean);
+      const opts = parseOptions(nextQ.options);
       callbacks.current[msgId] = (val: string) => {
         markAnswered(msgId);
         addMsgs({ type: "user", id: uid(), text: val });
