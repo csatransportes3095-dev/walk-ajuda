@@ -243,9 +243,18 @@ export const scheduleRouter = router({
       const digits = appt.customerPhone.replace(/\D/g, '');
       const waFull = digits.startsWith('55') ? digits : `55${digits}`;
       const waUrl = `https://wa.me/${waFull}?text=${encodeURIComponent(waMsg)}`;
-      // Email
+      // Email — fallback: buscar email do cliente pelo telefone se não estiver no agendamento
+      let customerEmail = appt.customerEmail;
+      if (!customerEmail) {
+        try {
+          const { getCustomerByPhone } = await import('../db');
+          const phoneDigits = appt.customerPhone.replace(/\D/g, '');
+          const customer = await getCustomerByPhone(phoneDigits);
+          if (customer?.email) customerEmail = customer.email;
+        } catch (e) { console.warn('[ScheduleEmail] Erro ao buscar email do cliente:', e); }
+      }
       let emailSent = false;
-      if (appt.customerEmail) {
+      if (customerEmail) {
         const subject = `Reagendamento necessÃƒÂ¡rio Ã¢â‚¬â€ ${siteTitle}`;
         const html = `
           <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#ffffff;border-radius:12px">
@@ -257,7 +266,7 @@ export const scheduleRouter = router({
             </p>
             <p style="margin:0 0 12px;font-size:13px;color:#888">Ou copie e cole este link no navegador:<br>${link}</p>
           </div>`;
-        emailSent = await sendScheduleEmail(appt.customerEmail, subject, html);
+        emailSent = await sendScheduleEmail(customerEmail!, subject, html);
       }
       return { success: true, emailSent, waLink: waUrl };
     }),
