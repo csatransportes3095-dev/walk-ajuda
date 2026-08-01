@@ -7645,11 +7645,12 @@ export const appRouter = router({
         if (input.serverId) {
           const { listZohoOAuthConfigs } = await import('../server/db');
           const allConfigs = await listZohoOAuthConfigs();
-          const config = allConfigs.find((c: any) => c.id === input.serverId);
-          if (!config) throw new Error('Servidor nÃƒÂ£o encontrado');
-          if (config.isActive !== 1) throw new Error('Servidor nÃƒÂ£o estÃƒÂ¡ ativo');
+          // Usar Number() para garantir comparação correta mesmo com BigInt do banco
+          const config = allConfigs.find((c: any) => Number(c.id) === Number(input.serverId));
+          if (!config) throw new Error(`Servidor não encontrado (id=${input.serverId}, disponíveis: ${allConfigs.map((c:any)=>c.id).join(',')})`);
+          if (Number(config.isActive) !== 1) throw new Error(`Servidor ${config.name} não está ativo (isActive=${config.isActive})`);
           const existingUsers = await listZohoUsersForConfig(config, 10);
-          if (existingUsers.length >= 5) throw new Error(`Servidor ${config.name} estÃƒÂ¡ lotado (5/5 contas). Escolha outro servidor.`);
+          if (existingUsers.length >= 5) throw new Error(`Servidor ${config.name} está lotado (5/5 contas). Escolha outro servidor.`);
           user = await createZohoUserInConfig(config, {
             primaryEmailAddress,
             displayName: input.displayName,
