@@ -673,7 +673,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950">
+    <div className="fixed inset-0 z-[9990] flex flex-col bg-zinc-950">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900 shrink-0">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center shadow-lg">
