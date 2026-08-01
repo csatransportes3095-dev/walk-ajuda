@@ -3100,6 +3100,31 @@ export default function AdminOrders() {
               </div>
             )}
 
+            {/* Botão expandir/recolher todos os grupos */}
+            {groups.length > 0 && (
+              <div className="mx-4 mt-2 flex gap-2">
+                <button
+                  onClick={() => {
+                    const allIds = groups.map((g: any) => g.id);
+                    setCollapsedExtraGroups(new Set(allIds));
+                    try { localStorage.setItem('walk_collapsed_extra_groups', JSON.stringify(allIds)); } catch {}
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 transition-colors"
+                >
+                  <span>⊖</span> Recolher todos
+                </button>
+                <button
+                  onClick={() => {
+                    setCollapsedExtraGroups(new Set());
+                    try { localStorage.setItem('walk_collapsed_extra_groups', JSON.stringify([])); } catch {}
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 transition-colors"
+                >
+                  <span>⊕</span> Expandir todos
+                </button>
+              </div>
+            )}
+
             {/* Paineis dos grupos */}
             {groups.map((group: any) => {
               const colorCfg = GROUP_COLOR_MAP[group.color] || GROUP_COLOR_MAP.red;
