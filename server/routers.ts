@@ -1326,13 +1326,17 @@ export const appRouter = router({
                   answers: input.answers,
                 });
                 outerRegId = regId;
-                // Corrigir registrationId dos documentos salvos antes da criaÃƒÂ§ÃƒÂ£o do pedido
-                // Os docs foram salvos com docRegId (ÃƒÂºltimo acesso do telefone), mas devem usar o regId do novo pedido
-                if (docRegId && docRegId !== regId) {
+                // Corrigir registrationId dos documentos salvos antes da criação do pedido
+                // Inclui docRegId = 0 (quando telefone não encontrado em accessCodePhones)
+                if (docRegId !== regId) {
                   try {
                     await db2.execute(`UPDATE orderFiles SET registrationId = ${regId} WHERE registrationId = ${docRegId} AND customerPhone = '${phoneDigits}' AND createdAt >= NOW() - INTERVAL 5 MINUTE`);
                     console.log('[OrderFiles] Documentos migrados de regId', docRegId, 'para', regId);
                   } catch (e) { console.error('[OrderFiles] Erro ao migrar documentos:', e); }
+                  // Também migrar documentos salvos com customerPhone = 'desconhecido' (quando phone veio vazio)
+                  try {
+                    await db2.execute(`UPDATE orderFiles SET registrationId = ${regId}, customerPhone = '${phoneDigits}' WHERE registrationId = ${docRegId} AND customerPhone = 'desconhecido' AND createdAt >= NOW() - INTERVAL 5 MINUTE`);
+                  } catch (e) { /* silencioso */ }
                 }
                 // Salvar thirdPartyName, resellerDiscountApplied e campos de carrinho no registro do pedido
                 const hasExtraFields = input.thirdPartyName || input.resellerDiscountApplied || input.cartGroupId || input.cartTotal !== undefined || input.cartCouponCode || input.cartCouponDiscount !== undefined || input.cartItemIndex !== undefined;
