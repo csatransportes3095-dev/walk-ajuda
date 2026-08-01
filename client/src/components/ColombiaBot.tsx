@@ -397,17 +397,20 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       }
 
       const cpToken = localStorage.getItem('cp_token') || '';
-      const clientPhone = localStorage.getItem('walk_client_phone') || '';
+      // Usar telefone do perfil (mais confiável) ou do localStorage
+      const clientPhoneForSubmit = profileQuery.data?.phone || localStorage.getItem('walk_client_phone') || '';
 
       try {
         addMsgs({ type: "bot", id: uid(), text: "Enviando seu pedido... \u23f3" });
 
         const result = await submitMutation.mutateAsync({
-          clientName: flowState.current.clientName || 'Cliente',
+          clientName: flowState.current.clientName || profileQuery.data?.name || 'Cliente',
           service: product.name,
           nameOption: option?.label || option?.name || 'N/A',
           documents: docsArray.length > 0 ? docsArray : undefined,
-          phone: clientPhone || undefined,
+          phone: clientPhoneForSubmit || undefined,
+          city: profileQuery.data?.city || undefined,
+          email: profileQuery.data?.email || undefined,
           cpToken: cpToken || undefined,
           answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
           price: option?.price || undefined,
@@ -424,9 +427,9 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             totalValue: option?.price || '',
             referrerName: '',
             referrerPhone: '',
-            clientName: flowState.current.clientName || 'Cliente',
-            clientPhone,
-            clientCity: '',
+            clientName: flowState.current.clientName || profileQuery.data?.name || 'Cliente',
+            clientPhone: clientPhoneForSubmit,
+            clientCity: profileQuery.data?.city || '',
             trackingPin: (result as any).trackingPin || undefined,
           });
         } else {
