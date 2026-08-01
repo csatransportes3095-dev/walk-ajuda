@@ -4586,12 +4586,7 @@ export default function Home() {
         </div>
       )}
 
-      {!showColombiaBot && (
-        <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noopener noreferrer"
-          className="fixed bottom-6 right-6 z-30 w-14 h-14 bg-gradient-to-br from-secondary to-green-600 hover:from-secondary/80 hover:to-green-600/80 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-2xl transition-all duration-300 animate-pulse">
-          <MessageCircle className="w-7 h-7" />
-        </a>
-      )}
+      {/* Botão WhatsApp gerenciado globalmente via WhatsAppFloat (App.tsx) — apenas na tela inicial */}
 
       {/* Colombia Bot — modal de tela cheia */}
       {showColombiaBot && (

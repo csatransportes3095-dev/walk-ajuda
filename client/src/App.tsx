@@ -467,9 +467,8 @@ function App() {
 // Renderiza o botão flutuante do WhatsApp em todas as rotas, exceto no painel admin, /gastos e /gerador-chassi
 function GlobalWhatsApp() {
   const [location] = useLocation();
-  if (location.startsWith("/admin")) return null;
-  if (location === "/gastos") return null;
-  if (location === "/gerador-chassi") return null;
+  // Mostrar apenas na tela inicial
+  if (location !== "/") return null;
   return <WhatsAppFloat />;
 }
 
