@@ -7818,6 +7818,31 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    update: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(2).max(128).optional(),
+        zohoOrgId: z.string().min(1).optional(),
+        zohoClientId: z.string().min(1).optional(),
+        zohoClientSecret: z.string().min(1).optional(),
+        zohoRefreshToken: z.string().min(1).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db2 = await import('../server/db');
+        const dbConn = await (db2 as any).getDb();
+        if (!dbConn) throw new Error('Database connection failed');
+        const { sql: sqlFn } = await import('drizzle-orm');
+        const now = Date.now();
+        const sets: string[] = [`updatedAt = ${now}`];
+        if (input.name) sets.push(`name = '${input.name.replace(/'/g, "''")}'`);
+        if (input.zohoOrgId) sets.push(`zohoOrgId = '${input.zohoOrgId.replace(/'/g, "''")}'`);
+        if (input.zohoClientId) sets.push(`zohoClientId = '${input.zohoClientId.replace(/'/g, "''")}'`);
+        if (input.zohoClientSecret) sets.push(`zohoClientSecret = '${input.zohoClientSecret.replace(/'/g, "''")}'`);
+        if (input.zohoRefreshToken) sets.push(`zohoRefreshToken = '${input.zohoRefreshToken.replace(/'/g, "''")}'`);
+        await dbConn.execute(sqlFn.raw(`UPDATE zohoOAuthConfigs SET ${sets.join(', ')} WHERE id = ${input.id}`));
+        return { success: true };
+      }),
+
     test: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
