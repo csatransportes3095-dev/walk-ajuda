@@ -782,6 +782,11 @@ export default function AdminSettings() {
               </div>
             */
 
+            <Section title="Bot Assistente Colombia">
+              <p className="text-xs text-gray-500 mb-2">Quando ativado, clientes logados verão um banner para pedir ajuda ao Colombia Bot na tela inicial. O bot guia o cliente passo a passo no pedido.</p>
+              <ToggleField label="Ativar Bot Colombia" k="bot_assistant_enabled" form={form} onToggle={toggleField} />
+            </Section>
+
             <Section title="Rodapé da Página Inicial">
               <Field label="Texto do Rodapé" k="home_footer_text" form={form} onChange={updateField} placeholder="Motoristas de Uber, 99 e InDrive" />
             </Section>

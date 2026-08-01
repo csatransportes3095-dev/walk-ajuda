@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import PaymentTutorial from "@/components/PaymentTutorial";
+import { ColombiaBot } from "@/components/ColombiaBot";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
 
@@ -232,6 +233,7 @@ export default function Home() {
   const [faqOpenIndex, setFaqOpenIndex] = useState<number | null>(null);
   const [whatsappClicked, setWhatsappClicked] = useState(false);
   const [step, setStep] = useState<Step>("home");
+  const [showColombiaBot, setShowColombiaBot] = useState(false);
   const [selectedOption, setSelectedOption] = useState<ProductOption | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedTier, setSelectedTier] = useState<WarrantyTier | null>(null);
@@ -802,6 +804,7 @@ export default function Home() {
   const HERO_TITLE = settings?.hero_title || '';
   const HERO_SUBTITLE = settings?.hero_subtitle || "";
   const HERO_BUTTON = settings?.hero_button_text || "";
+  const botEnabled = settings?.bot_assistant_enabled !== '0';
   const SERVICES_TITLE = settings?.services_title || "";
   const SERVICES_SUBTITLE = settings?.services_subtitle || "";
   const FOOTER_TEXT = settings?.footer_text || "";
@@ -4050,6 +4053,27 @@ export default function Home() {
             {SERVICES_SUBTITLE && <p className="text-lg text-white/70">{SERVICES_SUBTITLE}</p>}
           </div>
 
+          {/* Banner Colombia Bot — aparece somente para clientes logados quando o bot está ativo */}
+          {botEnabled && !!localStorage.getItem('cp_token') && (
+            <div className="mb-8 mx-auto max-w-lg">
+              <button
+                onClick={() => setShowColombiaBot(true)}
+                className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl border border-violet-500/40 bg-gradient-to-r from-violet-600/20 to-blue-600/20 hover:from-violet-600/30 hover:to-blue-600/30 transition-all active:scale-[0.98] shadow-lg shadow-violet-500/10"
+              >
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center shrink-0 shadow-lg">
+                  <span className="text-2xl">🤖</span>
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-bold text-white text-sm">Colombia — Assistente de Pedidos</p>
+                  <p className="text-xs text-violet-300 mt-0.5">Precisa de ajuda? Clique aqui e eu te guio passo a passo</p>
+                </div>
+                <div className="shrink-0 text-violet-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </div>
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {(products || []).filter((product: Product) => {
               // Filtro 1: restrição por senha VIP (salvo no sessionStorage ao logar)
@@ -4588,6 +4612,23 @@ export default function Home() {
         className="fixed bottom-6 right-6 z-30 w-14 h-14 bg-gradient-to-br from-secondary to-green-600 hover:from-secondary/80 hover:to-green-600/80 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-2xl transition-all duration-300 animate-pulse">
         <MessageCircle className="w-7 h-7" />
       </a>
+
+      {/* Colombia Bot — modal de tela cheia */}
+      {showColombiaBot && (
+        <ColombiaBot
+          products={(products || []) as any}
+          onStartNormal={() => setShowColombiaBot(false)}
+          onSelectProduct={(product: any) => {
+            setShowColombiaBot(false);
+            handleServiceClick(product);
+          }}
+          onSelectOption={(product: any, option: any) => {
+            setShowColombiaBot(false);
+            setSelectedProduct(product);
+            handleOptionSelection(option, null);
+          }}
+        />
+      )}
     </div>
   );
 }
