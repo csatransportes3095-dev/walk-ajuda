@@ -379,7 +379,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     );
   };
 
-  // Etapa de cupão de desconto — antes do Pix
+  // Etapa de cupom de desconto — antes do Pix
   const askCoupon = (product: Product, option: ProductOption | null) => {
     const msgId = uid();
     // Callback para quando o cliente clicar em Sim ou Não
@@ -388,8 +388,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         m.type === 'options' && m.id === msgId ? { ...m, answered: true } : m
       ));
       addMsgs({ type: 'user', id: uid(), text: answer });
-      if (answer === 'SIM, TENHO UM CUPÃO') {
-        // Pedir o código do cupão
+      if (answer === 'SIM, TENHO UM CUPOM') {
+        // Pedir o código do cupom
         const inputId = uid();
         callbacks.current[inputId] = async (code: string) => {
           setMessages(prev => prev.map(m =>
@@ -405,29 +405,29 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               const discountText = result.discount?.type === 'percentage'
                 ? `${result.discount.value}% de desconto`
                 : `R$ ${result.discount?.value?.toFixed(2).replace('.', ',')} de desconto`;
-              addMsgs({ type: 'bot', id: uid(), text: `✅ Cupão aplicado! ${discountText}` });
+              addMsgs({ type: 'bot', id: uid(), text: `✅ Cupom aplicado! ${discountText}` });
             } else {
-              addMsgs({ type: 'bot', id: uid(), text: `❌ Cupão inválido: ${result.reason || 'Código não encontrado.'}` });
+              addMsgs({ type: 'bot', id: uid(), text: `❌ Cupom inválido: ${result.reason || 'Código não encontrado.'}` });
             }
           } catch {
-            addMsgs({ type: 'bot', id: uid(), text: '❌ Erro ao validar cupão. Continuando sem desconto.' });
+            addMsgs({ type: 'bot', id: uid(), text: '❌ Erro ao validar cupom. Continuando sem desconto.' });
           } finally {
             setIsValidatingCoupon(false);
             setTimeout(() => askPix(product, option), 400);
           }
         };
         addMsgs(
-          { type: 'bot', id: uid(), text: 'Digite o código do seu cupão:' },
+          { type: 'bot', id: uid(), text: 'Digite o código do seu cupom:' },
           { type: 'input', id: inputId, multiline: false, answered: false }
         );
       } else {
-        // Não tem cupão — ir direto para o Pix
+        // Não tem cupom — ir direto para o Pix
         setTimeout(() => askPix(product, option), 400);
       }
     };
     addMsgs(
-      { type: 'bot', id: uid(), text: 'Você tem um cupão de desconto?' },
-      { type: 'options', id: msgId, options: ['SIM, TENHO UM CUPÃO', 'NÃO TENHO CUPÃO'], answered: false }
+      { type: 'bot', id: uid(), text: 'Você tem um cupom de desconto?' },
+      { type: 'options', id: msgId, options: ['SIM, TENHO UM CUPOM', 'NÃO TENHO CUPOM'], answered: false }
     );
   };
 
@@ -762,6 +762,31 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         {messages.map((msg, idx) => renderMsg(msg, idx))}
         <div ref={chatEndRef} />
       </div>
+
+      {/* Rodapé — botão recomeçar */}
+      {!isSubmitting && (
+        <div className="shrink-0 px-4 py-2 border-t border-zinc-800/60 flex justify-center">
+          <button
+            onClick={() => {
+              // Resetar tudo e reiniciar o fluxo
+              setMessages([]);
+              setInputValues({});
+              setUploadingDocId(null);
+              setPixCopied(false);
+              setUploadingPix(false);
+              flowState.current = { product: null, option: null, answers: {}, docFiles: {}, clientName: flowState.current.clientName, clientPhone: flowState.current.clientPhone, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
+              callbacks.current = {};
+              pendingUpload.current = null;
+              pendingPixMsgId.current = '';
+              setTimeout(() => startWelcome(), 100);
+            }}
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors py-1 px-3 rounded-lg hover:bg-zinc-800"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            Recomeçar do início
+          </button>
+        </div>
+      )}
 
       {/* Input de arquivo oculto — documentos */}
       <input
