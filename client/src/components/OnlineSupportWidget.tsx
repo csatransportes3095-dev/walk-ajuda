@@ -307,13 +307,15 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
   const panelClass = openModeResolved === "fullscreen" ? "fixed inset-0 z-[9999] flex flex-col"
     : openModeResolved === "sidebar" ? "fixed top-0 right-0 h-full w-[380px] z-[9999] flex flex-col"
     : "w-full max-w-[420px] h-[580px] rounded-2xl flex flex-col";
+  // Altura dinâmica para mobile: usa dvh quando disponível para respeitar o teclado virtual
+  const fullscreenStyle = openModeResolved === "fullscreen" ? { height: "100dvh" } : {};
 
   return (
     <div
       className={openModeResolved === "modal" ? "fixed inset-0 z-[9998] flex items-end justify-center sm:items-center p-4 bg-black/40 backdrop-blur-sm" : "fixed inset-0 z-[9998] pointer-events-none"}
       onClick={openModeResolved === "modal" ? (e) => { if (e.target === e.currentTarget) onMinimize(); } : undefined}
     >
-      <div className={`${panelClass} relative bg-[#0f172a] border border-white/10 shadow-2xl overflow-hidden pointer-events-auto`}>
+      <div className={`${panelClass} relative bg-[#0f172a] border border-white/10 shadow-2xl overflow-hidden pointer-events-auto`} style={fullscreenStyle}>
 
         {/* Header */}
         <div className="px-4 py-3 border-b border-white/10 bg-gradient-to-r from-blue-800 to-sky-700 text-white flex-shrink-0">
@@ -384,12 +386,12 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
                 <p className="text-sm font-bold text-white mb-1">Para começar, informe seus dados:</p>
                 <div>
                   <label className="text-xs font-semibold text-white/60 block mb-1">Nome completo <span className="text-red-400">*</span></label>
-                  <input value={visitorName} onChange={(e) => { setVisitorName(e.target.value); setNameError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} placeholder="Ex: João da Silva" className={`w-full h-11 rounded-xl bg-white/8 border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${nameError ? "border-red-400" : "border-white/10"}`} style={{background: "rgba(255,255,255,0.06)"}} />
+                  <input value={visitorName} onChange={(e) => { setVisitorName(e.target.value); setNameError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ behavior: "smooth", block: "center" }), 300)} placeholder="Ex: João da Silva" className={`w-full h-11 rounded-xl bg-white/8 border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${nameError ? "border-red-400" : "border-white/10"}`} style={{background: "rgba(255,255,255,0.06)"}} />
                   {nameError && <p className="text-xs text-red-400 mt-1">{nameError}</p>}
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-white/60 block mb-1">Telefone (WhatsApp) <span className="text-red-400">*</span></label>
-                  <input value={visitorPhone} onChange={(e) => { setVisitorPhone(e.target.value.replace(/\D/g, "")); setPhoneError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} placeholder="Ex: 11940239867" maxLength={15} className={`w-full h-11 rounded-xl border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${phoneError ? "border-red-400" : "border-white/10"}`} style={{background: "rgba(255,255,255,0.06)"}} />
+                  <input value={visitorPhone} onChange={(e) => { setVisitorPhone(e.target.value.replace(/\D/g, "")); setPhoneError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ behavior: "smooth", block: "center" }), 300)} placeholder="Ex: 11940239867" maxLength={15} className={`w-full h-11 rounded-xl border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${phoneError ? "border-red-400" : "border-white/10"}`} style={{background: "rgba(255,255,255,0.06)"}} />
                   {phoneError && <p className="text-xs text-red-400 mt-1">{phoneError}</p>}
                 </div>
                 <button onClick={handleIdentifySubmit} className="w-full py-3.5 rounded-xl text-white font-bold text-sm transition-all active:scale-95" style={{background: "linear-gradient(135deg, #3b72e8, #7c3aed)", boxShadow: "0 4px 20px rgba(124,58,237,0.4)"}}>
@@ -428,7 +430,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
                 <p className="text-xs text-amber-300">{publicStateQ.data?.disabledMessage || "Atendimento indisponível no momento."}</p>
               ) : (
                 <div className="flex gap-2">
-                  <input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} placeholder="Digite sua mensagem" className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-blue-400/70" />
+                  <input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} onFocus={() => setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 300)} placeholder="Digite sua mensagem" className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-blue-400/70" />
                   <button onClick={handleSend} disabled={!message.trim() || sendVisitorMessageMut.isPending} className="h-10 px-3 rounded-xl bg-blue-600 text-white font-bold disabled:opacity-50 hover:bg-blue-500 transition-colors"><Send className="w-4 h-4" /></button>
                 </div>
               )}
