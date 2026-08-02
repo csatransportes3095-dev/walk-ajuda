@@ -141,7 +141,7 @@ export async function validateAccessCode(code: string, phone?: string): Promise<
   if (!isManualMode && code === generalPassword) return { valid: true, type: 'general' };
   if (isManualMode && code === generalPassword) return { valid: false, type: 'none' };
 
-  // Verificar senha fixa individual do cliente (só aceita se modo manual NÁO estiver ativo)
+  // Verificar senha fixa individual do cliente (só aceita se modo manual NÃO estiver ativo)
   if (phone && !isManualMode) {
     const phoneDigits = phone.replace(/\D/g, '');
     const custRows = await db.execute(sql`SELECT fixedPassword, fixedPasswordActive, name FROM customers WHERE phone = ${phoneDigits} LIMIT 1`);
@@ -2586,7 +2586,7 @@ export async function completeAppointment(id: number): Promise<void> {
   await db.update(scheduleAppointments).set({ status: 'completed', slotId: null, slotDate: null, slotTime: null }).where(eq(scheduleAppointments.id, id));
 }
 
-// CONFIRMAÇÁO ATÔMICA: reserva o slot de forma exclusiva.
+// CONFIRMAÇÃO ATÔMICA: reserva o slot de forma exclusiva.
 // Usa UPDATE condicional (bookedCount < capacity) para garantir que dois clientes
 // não peguem o mesmo slot simultaneamente.
 export async function confirmAppointment(token: string, slotId: number): Promise<{ ok: boolean; reason?: string; appointment?: ScheduleAppointment }> {
@@ -2760,7 +2760,7 @@ export async function manualConfirmAppointment(id: number, slotDate: string, slo
   return rows.length > 0 ? rows[0] : null;
 }
 
-// ─── MARCAÇÁO "EM ATENDIMENTO" ────────────────────────────────────────────────
+// ─── MARCAÇÃO "EM ATENDIMENTO" ────────────────────────────────────────────────
 
 export async function markAttention(registrationId: number, adminName: string, durationMinutes = 30): Promise<void> {
   const db = await getDb();
@@ -2904,7 +2904,7 @@ export async function createHomeButton(data: HomeButtonData): Promise<HomeButton
   const rows = await db.select().from(homeButtons);
   const maxSort = rows.reduce((m, r) => Math.max(m, r.sortOrder), 0);
   await db.insert(homeButtons).values({
-    text: data.text || 'NOVO BOTÁO',
+    text: data.text || 'NOVO BOTÃO',
     subtitle: data.subtitle ?? '',
     url: data.url || '/sorteio',
     waMsg: data.waMsg ?? null,

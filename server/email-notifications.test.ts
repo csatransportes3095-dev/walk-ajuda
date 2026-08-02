@@ -245,7 +245,7 @@ describe('Email Notifications - updateStatus', () => {
     
     (getStatusInfoFromDb as ReturnType<typeof vi.fn>).mockResolvedValue({
       label: 'Processando',
-      description: 'Seu pedido está sendo processado',
+      description: 'Seu pedido estÃ¡ sendo processado',
     });
     
     (updateLastOrderStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
@@ -259,7 +259,7 @@ describe('Email Notifications - updateStatus', () => {
       subOrderIndex: 0,
       customerPhone: '(11) 98765-4321',
       customerEmail: 'customer@example.com',
-      customerName: 'João Silva',
+      customerName: 'JoÃ£o Silva',
       status: 'processando',
       note: 'Iniciando processamento',
       serviceName: 'Conta Uber',
@@ -290,7 +290,7 @@ describe('Email Notifications - updateStatus', () => {
       subOrderIndex: 0,
       customerPhone: '(11) 98765-4321',
       customerEmail: 'customer@example.com',
-      customerName: 'João Silva',
+      customerName: 'JoÃ£o Silva',
       status: 'processando',
       skipEmail: true,
     });

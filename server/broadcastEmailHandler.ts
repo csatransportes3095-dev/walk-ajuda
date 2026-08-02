@@ -38,7 +38,7 @@ export async function broadcastEmailHandler(req: Request, res: Response) {
       return res.json({ ok: true, skipped: "cancelled" });
     }
 
-    // Buscar próximo item pendente
+    // Buscar prÃ³ximo item pendente
     const item = await getNextPendingQueueItem(broadcast.id);
     if (!item) {
       // Fila vazia: finalizar
@@ -57,7 +57,7 @@ export async function broadcastEmailHandler(req: Request, res: Response) {
     // Enviar e-mail para este item
     const typeLabel: Record<string, string> = {
       text: "Mensagem",
-      promo: "ðŸŽ‰ Promoção",
+      promo: "ðŸŽ‰ PromoÃ§Ã£o",
       link: "ðŸ”— Link",
       banner: "ðŸ–¼ï¸ Banner",
       group_invite: "ðŸ‘¥ Convite para Grupo",

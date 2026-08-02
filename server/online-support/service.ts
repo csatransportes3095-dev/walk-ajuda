@@ -632,7 +632,7 @@ export async function sendVisitorMessage(input: {
   }
 
   if (!isOpenNow && config.autoReplyEnabled === 1) {
-    // Mesmo fora do horário: verificar keywords dos botÁµes do menu PRIMEIRO (prioridade máxima)
+    // Mesmo fora do horÃ¡rio: verificar keywords dos botÃµes do menu PRIMEIRO (prioridade mÃ¡xima)
     const inputNormOOH = normalizeText(input.text || "");
     const menuItemOOH = menuItems.find((m: any) => {
       const keywords: string[] = m.keywords || [];
@@ -653,7 +653,7 @@ export async function sendVisitorMessage(input: {
       const actionType = (menuItemOOH as any).actionType || "send_message";
       const actionPayload = (menuItemOOH as any).actionPayload || {};
       const hasDirectAction = ["open_internal", "open_external", "open_video", "open_whatsapp"].includes(actionType);
-      const botText = menuItemOOH.responseText || (hasDirectAction ? "Clique no botão abaixo:" : "Selecione uma opção:");
+      const botText = menuItemOOH.responseText || (hasDirectAction ? "Clique no botÃ£o abaixo:" : "Selecione uma opÃ§Ã£o:");
       const botPayload: Record<string, unknown> = {};
       if (menuItemOOH.subButtons && menuItemOOH.subButtons.length > 0) {
         botPayload.buttons = menuItemOOH.subButtons.map((b: any) => ({
@@ -676,7 +676,7 @@ export async function sendVisitorMessage(input: {
       responses.push({ type: "menu_item", message: menuBotMsgOOH });
       return { conversationId: conversation.id, visitorMessage, responses };
     }
-    // Verificar se é um sub-botão de algum item do menu
+    // Verificar se Ã© um sub-botÃ£o de algum item do menu
     const subButtonMatchOOH = (() => {
       for (const item of menuItems) {
         const subs: any[] = (item as any).subButtons || [];
@@ -695,13 +695,13 @@ export async function sendVisitorMessage(input: {
       const subResponseText = subButtonMatchOOH.responseText || null;
       const subChildren = subButtonMatchOOH.children || null;
       const botPayload: Record<string, unknown> = {};
-      let botText = subResponseText || "Selecione uma opção:";
+      let botText = subResponseText || "Selecione uma opÃ§Ã£o:";
       if (subActionType === "show_children" && subChildren) {
         const childLabels = subChildren.split(",").map((s: string) => s.trim()).filter(Boolean);
         botPayload.buttons = childLabels.map((label: string) => ({ label, actionType: "send_text", actionPayload: { text: label } }));
       } else if (["open_internal", "open_external", "open_video", "open_whatsapp"].includes(subActionType)) {
         botPayload.buttons = [{ label: subButtonMatchOOH.label, actionType: subActionType, actionPayload: buildSubPayload(subActionType, subButtonMatchOOH.value || "") }];
-        if (!subResponseText) botText = "Clique no botão abaixo:";
+        if (!subResponseText) botText = "Clique no botÃ£o abaixo:";
       }
       const subBotMsgOOH = await createMessage({ conversationId: conversation.id, senderType: "bot", senderName: "Assistente", text: botText, messageType: "rich", payload: botPayload });
       await touchConversationForMessage(conversation.id, { previewText: subBotMsgOOH.text || "", incrementVisitorUnread: 1, status: "waiting_customer" });
@@ -709,7 +709,7 @@ export async function sendVisitorMessage(input: {
       return { conversationId: conversation.id, visitorMessage, responses };
     }
 
-    // Depois verifica respostas automáticas por palavras-chave
+    // Depois verifica respostas automÃ¡ticas por palavras-chave
     const matchOutOfHours = await testAutoReply(input.text);
     if (matchOutOfHours.matched && matchOutOfHours.reply) {
       const autoMessage = await createMessage({
@@ -734,14 +734,14 @@ export async function sendVisitorMessage(input: {
       responses.push({ type: "auto_reply", message: autoMessage });
       return { conversationId: conversation.id, visitorMessage, responses };
     }
-    // Sem match: mostra mensagem de fora do horário com menu
+    // Sem match: mostra mensagem de fora do horÃ¡rio com menu
     const outOfHours = await createMessage({
       conversationId: conversation.id,
       senderType: "bot",
       senderName: "Assistente",
       text:
         config.outOfHoursMessage ||
-        "Nosso atendimento está fora do horário, mas posso ajudar com informaçÁµes automáticas. Selecione uma opção abaixo.",
+        "Nosso atendimento estÃ¡ fora do horÃ¡rio, mas posso ajudar com informaÃ§Ãµes automÃ¡ticas. Selecione uma opÃ§Ã£o abaixo.",
     });
     await touchConversationForMessage(conversation.id, {
       previewText: outOfHours.text || "",
@@ -764,7 +764,7 @@ export async function sendVisitorMessage(input: {
     return { conversationId: conversation.id, visitorMessage, responses };
   }
 
-  // Verificar se o texto corresponde a um nó do fluxo de botÁµes (árvore recursiva)
+  // Verificar se o texto corresponde a um nÃ³ do fluxo de botÃµes (Ã¡rvore recursiva)
   const flowNode = await findFlowNodeByLabel(input.text || "", null);
   if (flowNode && flowNode.isActive === 1) {
     const botText = flowNode.botResponse || flowNode.label;
@@ -777,7 +777,7 @@ export async function sendVisitorMessage(input: {
         actionPayload: { nodeId: c.id, nodeActionType: c.actionType, nodeActionPayload: c.actionPayload },
       }));
     }
-    // Se a ação do nó é uma ação direta (não show_children), executar
+    // Se a aÃ§Ã£o do nÃ³ Ã© uma aÃ§Ã£o direta (nÃ£o show_children), executar
     if (flowNode.actionType !== "show_children" && children.length === 0) {
       botPayload.directAction = {
         actionType: flowNode.actionType,
@@ -804,21 +804,21 @@ export async function sendVisitorMessage(input: {
     return { conversationId: conversation.id, visitorMessage, responses };
   }
 
-  // Verificar se o texto corresponde a um botão do menu (por keywords ou título) â€” PRIORIDADE sobre respostas automáticas
+  // Verificar se o texto corresponde a um botÃ£o do menu (por keywords ou tÃ­tulo) â€” PRIORIDADE sobre respostas automÃ¡ticas
   const inputNorm = normalizeText(input.text || "");
   const menuItemMatch = menuItems.find((m: any) => {
-    // 1. Verificar por keywords configuradas no botão (prioridade)
+    // 1. Verificar por keywords configuradas no botÃ£o (prioridade)
     const keywords: string[] = m.keywords || [];
     if (keywords.length > 0) {
       const kwMatch = keywords.some(kw => {
         const kwNorm = normalizeText(kw);
         if (!kwNorm || kwNorm.length < 3) return false;
-        // Match exato ou input contém keyword (sem fuzzy para evitar falsos positivos)
+        // Match exato ou input contÃ©m keyword (sem fuzzy para evitar falsos positivos)
         return inputNorm === kwNorm || inputNorm.includes(kwNorm);
       });
       if (kwMatch) return true;
     }
-    // 2. Verificar pelo título do botão â€” apenas match exato ou input contém título completo
+    // 2. Verificar pelo tÃ­tulo do botÃ£o â€” apenas match exato ou input contÃ©m tÃ­tulo completo
     const titleRaw = (m.title || "").replace(/^[\p{Emoji}\s]+/u, "").trim();
     const title = normalizeText(titleRaw);
     if (title.length < 3) return false;
@@ -829,7 +829,7 @@ export async function sendVisitorMessage(input: {
     const actionPayload = (menuItemMatch as any).actionPayload || {};
     const hasDirectAction = ["open_internal", "open_external", "open_video", "open_whatsapp"].includes(actionType);
 
-    const botText = menuItemMatch.responseText || (hasDirectAction ? `Clique no botão abaixo:` : "Selecione uma opção:");
+    const botText = menuItemMatch.responseText || (hasDirectAction ? `Clique no botÃ£o abaixo:` : "Selecione uma opÃ§Ã£o:");
     const botPayload: Record<string, unknown> = {};
 
     if (menuItemMatch.subButtons && menuItemMatch.subButtons.length > 0) {
@@ -870,7 +870,7 @@ export async function sendVisitorMessage(input: {
     return { conversationId: conversation.id, visitorMessage, responses };
   }
 
-  // Verificar se o texto corresponde a um sub-botão de algum item do menu (show_children ou responseText)
+  // Verificar se o texto corresponde a um sub-botÃ£o de algum item do menu (show_children ou responseText)
   const subButtonMatch = (() => {
     for (const item of menuItems) {
       const subs: any[] = (item as any).subButtons || [];
@@ -890,10 +890,10 @@ export async function sendVisitorMessage(input: {
     const subResponseText = subButtonMatch.responseText || null;
     const subChildren = subButtonMatch.children || null;
     const botPayload: Record<string, unknown> = {};
-    let botText = subResponseText || "Selecione uma opção:";
+    let botText = subResponseText || "Selecione uma opÃ§Ã£o:";
 
     if (subActionType === "show_children" && subChildren) {
-      // Gerar botÁµes a partir da lista separada por vírgula
+      // Gerar botÃµes a partir da lista separada por vÃ­rgula
       const childLabels = subChildren.split(",").map((s: string) => s.trim()).filter(Boolean);
       botPayload.buttons = childLabels.map((label: string) => ({
         label,
@@ -906,7 +906,7 @@ export async function sendVisitorMessage(input: {
         actionType: subActionType,
         actionPayload: buildSubPayload(subActionType, subButtonMatch.value || ""),
       }];
-      if (!subResponseText) botText = "Clique no botão abaixo:";
+      if (!subResponseText) botText = "Clique no botÃ£o abaixo:";
     }
 
     const subBotMsg = await createMessage({

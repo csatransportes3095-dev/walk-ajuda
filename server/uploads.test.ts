@@ -121,12 +121,12 @@ describe('uploads.submitFiles', () => {
     (storagePut as ReturnType<typeof vi.fn>).mockResolvedValue({ key: 'test-key', url: '/manus-storage/test' });
   });
 
-  it('should send email with PDF-only file for EDIÇÁO PDF service', async () => {
+  it('should send email with PDF-only file for EDIÇÃO PDF service', async () => {
     const caller = appRouter.createCaller({ user: null as any, req: { headers: {}, socket: { remoteAddress: '127.0.0.1' } } as any, res: { clearCookie: vi.fn(), cookie: vi.fn() } as any });
     const pdfBase64 = Buffer.from('PDF test content').toString('base64');
     const result = await caller.uploads.submitFiles({
       clientName: 'João Silva',
-      service: 'EDIÇÁO DE DOCUMENTO',
+      service: 'EDIÇÃO DE DOCUMENTO',
       nameOption: 'pdf-only',
       carDocument: pdfBase64,
       carDocumentMime: 'application/pdf',
@@ -137,13 +137,13 @@ describe('uploads.submitFiles', () => {
     expect(result.success).toBe(true);
     expect(mockSendMail).toHaveBeenCalledOnce();
     const callArgs = mockSendMail.mock.calls[0][0];
-    expect(callArgs.subject).toContain('EDIÇÁO DE DOCUMENTO');
+    expect(callArgs.subject).toContain('EDIÇÃO DE DOCUMENTO');
     expect(callArgs.subject).toContain('João Silva');
     // Email HTML should contain client info
     expect(callArgs.html).toContain('João Silva');
     expect(callArgs.html).toContain('(11) 98765-4321');
     expect(callArgs.html).toContain('São Paulo');
-    expect(callArgs.html).toContain('EDIÇÁO DE DOCUMENTO');
+    expect(callArgs.html).toContain('EDIÇÃO DE DOCUMENTO');
     // storagePut should have been called for the document
     expect(storagePut).toHaveBeenCalled();
   });

@@ -83,7 +83,7 @@ export async function sendMessage(chatId: number, senderPhone: string, message: 
     chatId,
     senderPhone,
     message,
-    readByPhones: JSON.stringify([senderPhone]), // Remetente já leu
+    readByPhones: JSON.stringify([senderPhone]), // Remetente jÃ¡ leu
   });
   
   const messageId = Number(result[0].insertId);
@@ -145,7 +145,7 @@ export async function setOnlineStatus(phone: string, isOnline: number) {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
   
-  // Tenta atualizar, se não existir, insere
+  // Tenta atualizar, se nÃ£o existir, insere
   const existing = await db.select().from(spreadsheetOnlineStatus).where(eq(spreadsheetOnlineStatus.phone, phone)).limit(1);
   
   if (existing[0]) {
@@ -181,12 +181,12 @@ export async function getOnlineUsers(phones: string[]) {
     inArray(spreadsheetOnlineStatus.phone, phones)
   );
   
-  // Considerar online apenas se atualizado nos últimos 90 segundos
+  // Considerar online apenas se atualizado nos Ãºltimos 90 segundos
   const ninetySecondsAgo = new Date(Date.now() - 90 * 1000);
   return results.filter(r => r.isOnline === 1 && new Date(r.lastSeenAt) > ninetySecondsAgo);
 }
 
-// Encontrar ou criar o Grupo Geral com todos os usuários
+// Encontrar ou criar o Grupo Geral com todos os usuÃ¡rios
 export async function findOrCreateGroupGeralChat(phone: string, allPhones: string[]) {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
@@ -202,7 +202,7 @@ export async function findOrCreateGroupGeralChat(phone: string, allPhones: strin
   ).limit(1);
 
   if (existing[0]) {
-    // Atualizar participantes para incluir novos usuários se necessário
+    // Atualizar participantes para incluir novos usuÃ¡rios se necessÃ¡rio
     const currentPhones: string[] = JSON.parse(existing[0].participantPhones as string);
     const newPhones = allPhones.filter(p => !currentPhones.includes(p));
     if (newPhones.length > 0) {
