@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { ENV } from "../_core/env";
-import { getDb } from "../db";
+import { getDb, getCustomerByPhone } from "../db";
 import {
   onlineSupportAgents,
   onlineSupportAutoReplies,
@@ -804,8 +804,79 @@ export async function sendVisitorMessage(input: {
     return { conversationId: conversation.id, visitorMessage, responses };
   }
 
-  // Verificar se o texto corresponde a um botÃ£o do menu (por keywords ou tÃ­tulo) â€” PRIORIDADE sobre respostas automÃ¡ticas
+    // === VERIFICAÇÃO DE CADASTRO PARA VALORES ===
+  // Se o cliente perguntar sobre valores/preços, verificar se tem cadastro
   const inputNorm = normalizeText(input.text || "");
+  const isAskingForPrices = [
+    "valor", "valores", "preco", "precos", "quanto custa", "quanto e", "quanto fica",
+    "ver valores", "ver precos", "quanto cobra", "tabela de precos", "tabela precos"
+  ].some(kw => inputNorm.includes(normalizeText(kw)));
+
+  if (isAskingForPrices) {
+    const visitorPhone = (conversation as any).visitorPhone || input.visitorPhone || "";
+    const phoneClean = visitorPhone.replace(/\D/g, "");
+    let hasRegistration = false;
+    if (phoneClean && phoneClean.length >= 10) {
+      try {
+        const customer = await getCustomerByPhone(phoneClean);
+        hasRegistration = !!customer;
+      } catch { hasRegistration = false; }
+    }
+    if (!hasRegistration) {
+      const noRegMsg = await createMessage({
+        conversationId: conversation.id,
+        senderType: "bot",
+        senderName: "Assistente",
+        text: "💰 Para ver os valores dos nossos serviços, é necessário ter cadastro no site.\n\nO cadastro é gratuito e rápido! Clique no botão abaixo para se cadastrar:",
+        messageType: "rich",
+        payload: {
+          buttons: [
+            { label: "👤 Fazer cadastro gratuito", actionType: "open_internal", actionPayload: { path: "/login" } },
+            { label: "📋 Ver nossos serviços", actionType: "send_text", actionPayload: { text: "NOSSOS SERVIÇOS" } },
+          ]
+        },
+      });
+      await touchConversationForMessage(conversation.id, { previewText: noRegMsg.text || "", incrementVisitorUnread: 1, status: "waiting_customer" });
+      responses.push({ type: "no_registration", message: noRegMsg });
+      return { conversationId: conversation.id, visitorMessage, responses };
+    }
+    // Tem cadastro — buscar produtos e mostrar valores
+    try {
+      const { getDb: getDb2 } = await import("../db");
+      const db2 = await getDb2();
+      const productsRaw = db2 ? await (db2 as any).execute("SELECT p.name, o.label, o.price FROM products p JOIN productOptions o ON o.productId = p.id WHERE p.isActive = 1 AND o.isActive = 1 ORDER BY p.sortOrder, o.sortOrder") : [];
+      const rows: Array<{name: string; label: string; price: string}> = (Array.isArray(productsRaw) ? productsRaw : productsRaw?.rows || []);
+      let priceText = "💰 *Tabela de Valores (exclusivo para clientes cadastrados):*\n\n";
+      let currentProduct = "";
+      for (const row of rows) {
+        if (row.name !== currentProduct) {
+          currentProduct = row.name;
+          priceText += `\n🔹 *${row.name}*\n`;
+        }
+        priceText += `   • ${row.label?.trim() || "Opção"}: R$ ${row.price}\n`;
+      }
+      priceText += "\n⚠️ Valores sujeitos a alteração sem aviso prévio.";
+      const priceMsg = await createMessage({
+        conversationId: conversation.id,
+        senderType: "bot",
+        senderName: "Assistente",
+        text: priceText,
+        messageType: "rich",
+        payload: {
+          buttons: [
+            { label: "📝 Fazer pedido agora", actionType: "open_internal", actionPayload: { path: "/" } },
+          ]
+        },
+      });
+      await touchConversationForMessage(conversation.id, { previewText: "Tabela de valores enviada", incrementVisitorUnread: 1, status: "waiting_customer" });
+      responses.push({ type: "prices", message: priceMsg });
+      return { conversationId: conversation.id, visitorMessage, responses };
+    } catch {
+      // fallback — continuar fluxo normal
+    }
+  }
+
+  // Verificar se o texto corresponde a um botão do menu (por keywords ou título) — PRIORIDADE sobre respostas automáticas);
   const menuItemMatch = menuItems.find((m: any) => {
     // 1. Verificar por keywords configuradas no botÃ£o (prioridade)
     const keywords: string[] = m.keywords || [];
