@@ -165,7 +165,15 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
 
   const publicStateQ = trpc.onlineSupport.publicState.useQuery({ pathname: window.location.pathname }, { refetchInterval: 30000 });
   const unreadQ = trpc.onlineSupport.unreadSummary.useQuery({ visitorId }, { refetchInterval: 5000 });
-  const startConversationMut = trpc.onlineSupport.startConversation.useMutation({ onSuccess: (res) => setConversationId(res.id) });
+  const startConversationMut = trpc.onlineSupport.startConversation.useMutation({
+    onSuccess: (res) => {
+      setConversationId(res.id);
+      // Enviar mensagem de boas-vindas automática
+      setTimeout(() => {
+        sendVisitorMessageMut.mutate({ conversationId: res.id, visitorId, visitorName, visitorPhone, text: "olá" });
+      }, 500);
+    }
+  });
   const listMessagesQ = trpc.onlineSupport.listMessages.useQuery(
     { conversationId: conversationId || 0, visitorId, limit: 200 },
     { enabled: !!conversationId, refetchInterval: 2000 }

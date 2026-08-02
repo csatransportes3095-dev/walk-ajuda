@@ -699,7 +699,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
         onClose={() => setOnlineSupportOpen(false)}
         onMinimize={() => setOnlineSupportOpen(false)}
         onBack={() => setOnlineSupportOpen(false)}
-        openMode={(onlineSupportState?.openMode as "modal" | "sidebar" | "fullscreen") || "modal"}
+        openMode="fullscreen"
       />
     </div>
   );
