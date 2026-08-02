@@ -609,7 +609,7 @@ export async function sendVisitorMessage(input: {
   });
 
     const responses: Array<Record<string, unknown>> = [];
-  const isOpenNow = await isInWorkingHours();
+  const isOpenNow = true; // Atendimento 24h — horário de funcionamento desativado
   const menuItems = await listMenuItems(true);
   if (config.chatEnabled !== 1 || config.maintenanceMode === 1) {
     const systemMessage = await createMessage({
@@ -734,14 +734,22 @@ export async function sendVisitorMessage(input: {
       responses.push({ type: "auto_reply", message: autoMessage });
       return { conversationId: conversation.id, visitorMessage, responses };
     }
-    // Sem match: mostra mensagem de fora do horÃ¡rio com menu
+    // Sem match: responder com boas-vindas humanizadas + menu de opções
+    const hour = new Date().getHours();
+    const greeting = hour >= 5 && hour < 12 ? "Bom dia" : hour >= 12 && hour < 18 ? "Boa tarde" : "Boa noite";
+    const welcomeText = `${greeting}! 😊 Sou o assistente virtual da Colombia e estou aqui para te ajudar!\n\nComo posso te ajudar hoje? Escolha uma opção abaixo ou me diga o que precisa:`;
+    const welcomeButtons = menuItems.slice(0, 8).map((m: any) => ({
+      label: m.title,
+      actionType: "send_text",
+      actionPayload: { text: m.title.replace(/^[\p{Emoji}\s]+/u, "").trim() },
+    }));
     const outOfHours = await createMessage({
       conversationId: conversation.id,
       senderType: "bot",
       senderName: "Assistente",
-      text:
-        config.outOfHoursMessage ||
-        "Nosso atendimento estÃ¡ fora do horÃ¡rio, mas posso ajudar com informaÃ§Ãµes automÃ¡ticas. Selecione uma opÃ§Ã£o abaixo.",
+      text: welcomeText,
+      messageType: "rich",
+      payload: { buttons: welcomeButtons },
     });
     await touchConversationForMessage(conversation.id, {
       previewText: outOfHours.text || "",
@@ -1052,40 +1060,31 @@ export async function sendVisitorMessage(input: {
     return { conversationId: conversation.id, visitorMessage, responses };
   }
 
-  // Sem resposta segura: encaminha para humano
-  const fallbackText =
-    config.defaultFallbackMessage ||
-    "Nao encontrei uma resposta segura para essa pergunta. Vou encaminhar voce para um atendente.";
-
+  // Sem resposta específica: mostrar boas-vindas humanizadas com menu de opções
+  const hourNow = new Date().getHours();
+  const greetingNow = hourNow >= 5 && hourNow < 12 ? "Bom dia" : hourNow >= 12 && hourNow < 18 ? "Boa tarde" : "Boa noite";
+  const fallbackWelcome = `${greetingNow}! 😊 Sou o assistente virtual da Colombia!\n\nPosso te ajudar com informações sobre nossos serviços, valores, prazos e muito mais. Escolha uma opção abaixo:`;
+  const fallbackButtons = menuItems.slice(0, 8).map((m: any) => ({
+    label: m.title,
+    actionType: "send_text",
+    actionPayload: { text: m.title.replace(/^[\p{Emoji}\s]+/u, "").trim() },
+  }));
   const fallback = await createMessage({
     conversationId: conversation.id,
     senderType: "bot",
     senderName: "Assistente",
-    text: fallbackText,
-  });
-
-  const handoff = await createMessage({
-    conversationId: conversation.id,
-    senderType: "system",
-    text: "Seu atendimento foi encaminhado para nossa equipe. Aguarde um momento.",
+    text: fallbackWelcome,
+    messageType: "rich",
+    payload: { buttons: fallbackButtons },
   });
 
   await touchConversationForMessage(conversation.id, {
-    previewText: handoff.text || "",
-    incrementVisitorUnread: 2,
-    status: "waiting_agent",
-  });
-
-  await createNotification({
-    conversationId: conversation.id,
-    type: "agent_request",
-    title: "Cliente solicitou atendente",
-    message: `Conversa #${conversation.id} aguardando atendente.`,
-    targetRole: "admin",
+    previewText: fallback.text || "",
+    incrementVisitorUnread: 1,
+    status: "waiting_customer",
   });
 
   responses.push({ type: "fallback", message: fallback });
-  responses.push({ type: "handoff", message: handoff });
 
   return { conversationId: conversation.id, visitorMessage, responses };
 }

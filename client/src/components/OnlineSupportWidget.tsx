@@ -179,7 +179,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
 
   useEffect(() => {
     if (!publicStateQ.data) return;
-    setStatusText(publicStateQ.data.onlineNow ? "Online" : "Fora do horário");
+    setStatusText("Online"); // Atendimento 24h
   }, [publicStateQ.data]);
 
   useEffect(() => {
