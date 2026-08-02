@@ -2120,16 +2120,20 @@ export default function Home() {
             <div className="mb-6 flex flex-col items-center gap-3">
               <div className="relative">
                 {/* Avatar circular com borda animada */}
-                <div className="w-28 h-28 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center shadow-2xl shadow-violet-500/40 ring-4 ring-violet-500/30">
-                  <span className="text-5xl select-none">👨‍💻</span>
-                </div>
+                {settings?.bot_assistant_avatar ? (
+                  <img src={settings.bot_assistant_avatar} alt={settings?.bot_assistant_name || 'Colombia'} className="w-28 h-28 rounded-full object-cover shadow-2xl shadow-violet-500/40 ring-4 ring-violet-500/30" />
+                ) : (
+                  <div className="w-28 h-28 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center shadow-2xl shadow-violet-500/40 ring-4 ring-violet-500/30">
+                    <span className="text-5xl select-none">👨‍💻</span>
+                  </div>
+                )}
                 {/* Indicador online */}
                 <div className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-400 rounded-full border-2 border-zinc-950 shadow-lg">
                   <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
                 </div>
               </div>
               <div className="text-center">
-                <h2 className="text-2xl font-black text-white tracking-wide">Colombia</h2>
+                <h2 className="text-2xl font-black text-white tracking-wide">{settings?.bot_assistant_name || 'Colombia'}</h2>
                 <p className="text-emerald-400 text-xs font-semibold mt-0.5">● Online agora — pronto para te atender</p>
               </div>
             </div>
@@ -2138,7 +2142,7 @@ export default function Home() {
             <div className="w-full max-w-sm mb-8">
               <div className="bg-zinc-800 border border-zinc-700 rounded-2xl rounded-tl-sm px-5 py-4 shadow-lg">
                 <p className="text-white text-sm leading-relaxed">
-                  Olá! 👋 Sou o <span className="font-bold text-violet-300">Colombia</span>, seu assistente de pedidos.
+                  Olá! 👋 Sou o <span className="font-bold text-violet-300">{settings?.bot_assistant_name || 'Colombia'}</span>, seu assistente de pedidos.
                 </p>
                 <p className="text-zinc-300 text-sm leading-relaxed mt-2">
                   Posso te <span className="font-bold text-white">guiar passo a passo</span> para fazer seu pedido de forma rápida e sem erros — ou você pode navegar sozinho pelo site.
@@ -2158,7 +2162,7 @@ export default function Home() {
                   👨‍💻
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="font-black text-white text-sm">QUERO AJUDA DO COLOMBIA</p>
+                  <p className="font-black text-white text-sm">QUERO AJUDA DO {(settings?.bot_assistant_name || 'COLOMBIA').toUpperCase()}</p>
                   <p className="text-violet-200 text-xs mt-0.5">Atendimento guiado passo a passo</p>
                 </div>
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
@@ -4121,7 +4125,7 @@ export default function Home() {
                   <span className="text-2xl">🤖</span>
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="font-bold text-white text-sm">Colombia — Assistente de Pedidos</p>
+                  <p className="font-bold text-white text-sm">{settings?.bot_assistant_name || 'Colombia'} — Assistente de Pedidos</p>
                   <p className="text-xs text-violet-300 mt-0.5">Precisa de ajuda? Clique aqui e eu te guio passo a passo</p>
                 </div>
                 <div className="shrink-0 text-violet-400">
@@ -4671,6 +4675,9 @@ export default function Home() {
       {showColombiaBot && (
         <ColombiaBot
           products={(products || []) as any}
+          botName={settings?.bot_assistant_name || undefined}
+          botAvatar={settings?.bot_assistant_avatar || undefined}
+          botWelcome={settings?.bot_assistant_welcome || undefined}
           onStartNormal={() => setShowColombiaBot(false)}
           onSelectProduct={(product: any) => {
             setShowColombiaBot(false);

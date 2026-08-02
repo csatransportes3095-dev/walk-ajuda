@@ -59,11 +59,16 @@ interface Props {
   onSelectProduct: (product: Product) => void;
   onSelectOption: (product: Product, option: ProductOption) => void;
   onOrderComplete: (data: BotOrderData) => void;
+  botName?: string;
+  botAvatar?: string;
+  botWelcome?: string;
 }
 
-// ── Componente ───────────────────────────────────────────────────────────────
+// ── Componente ───────────────────────────────────────────────────────────────────────────
 
-export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelectOption, onOrderComplete }: Props) {
+export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelectOption, onOrderComplete, botName, botAvatar, botWelcome }: Props) {
+  const displayName = botName || 'Colombia';
+  const displayAvatar = botAvatar || '';
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
@@ -226,9 +231,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         setTimeout(() => askService(), 300);
       }
     };
+    const welcomeMsg = botWelcome || `Olá! Sou o ${displayName}, seu assistente de pedidos. 👋\n\nComo prefere continuar?`;
     addMsgs(
-      { type: "bot", id: uid(), text: "Olá! Sou o Colombia, seu assistente de pedidos. 👋\n\nComo prefere continuar?" },
-      { type: "options", id: optId, options: ["🤖 Quero ajuda do Colombia", "Continuar sozinho"], answered: false }
+      { type: "bot", id: uid(), text: welcomeMsg },
+      { type: "options", id: optId, options: [`🤖 Quero ajuda do ${displayName}`, "Continuar sozinho"], answered: false }
     );
   };
 
@@ -778,11 +784,15 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     <div className="fixed inset-0 z-[9990] flex flex-col bg-zinc-950">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900 shrink-0">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center shadow-lg">
-          <Bot className="w-6 h-6 text-white" />
-        </div>
+        {displayAvatar ? (
+          <img src={displayAvatar} alt={displayName} className="w-10 h-10 rounded-full object-cover shadow-lg" />
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center shadow-lg">
+            <Bot className="w-6 h-6 text-white" />
+          </div>
+        )}
         <div className="flex-1">
-          <p className="font-bold text-white text-sm">Colombia</p>
+          <p className="font-bold text-white text-sm">{displayName}</p>
           <p className="text-xs text-emerald-400">● Online agora</p>
         </div>
         <button onClick={onStartNormal} className="p-2 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">

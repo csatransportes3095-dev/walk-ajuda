@@ -783,8 +783,11 @@ export default function AdminSettings() {
             */
 
             <Section title="Bot Assistente Colombia">
-              <p className="text-xs text-gray-500 mb-2">Quando ativado, clientes logados verão um banner para pedir ajuda ao Colombia Bot na tela inicial. O bot guia o cliente passo a passo no pedido.</p>
-              <ToggleField label="Ativar Bot Colombia" k="bot_assistant_enabled" form={form} onToggle={toggleField} />
+              <p className="text-xs text-gray-500 mb-2">Quando ativado, clientes logados verão um banner para pedir ajuda ao bot na tela inicial. O bot guia o cliente passo a passo no pedido.</p>
+              <ToggleField label="Ativar Bot" k="bot_assistant_enabled" form={form} onToggle={toggleField} />
+              <Field label="Nome do Bot" k="bot_assistant_name" form={form} onChange={updateField} placeholder="Colombia" />
+              <Field label="Mensagem de Boas-vindas" k="bot_assistant_welcome" form={form} onChange={updateField} placeholder="Olá! Sou o Colombia, seu assistente de pedidos. 👋" textarea />
+              <Field label="URL do Avatar/Logo" k="bot_assistant_avatar" form={form} onChange={updateField} placeholder="https://... (deixe vazio para usar ícone padrão)" />
             </Section>
 
             <Section title="Rodapé da Página Inicial">
