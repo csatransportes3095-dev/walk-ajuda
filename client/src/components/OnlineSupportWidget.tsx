@@ -16,6 +16,24 @@ interface OnlineSupportWidgetProps {
 const VISITOR_STORAGE_KEY = "walk_online_support_visitor_id";
 const VISITOR_NAME_KEY = "walk_online_support_visitor_name";
 const VISITOR_PHONE_KEY = "walk_online_support_visitor_phone";
+const VISITOR_SESSION_KEY = "walk_online_support_session_ts";
+const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
+function isSessionValid(): boolean {
+  const ts = localStorage.getItem(VISITOR_SESSION_KEY);
+  if (!ts) return false;
+  return Date.now() - Number(ts) < SESSION_TTL_MS;
+}
+
+function touchSession() {
+  localStorage.setItem(VISITOR_SESSION_KEY, String(Date.now()));
+}
+
+function clearSession() {
+  localStorage.removeItem(VISITOR_NAME_KEY);
+  localStorage.removeItem(VISITOR_PHONE_KEY);
+  localStorage.removeItem(VISITOR_SESSION_KEY);
+}
 
 function getOrCreateVisitorId() {
   const existing = localStorage.getItem(VISITOR_STORAGE_KEY);
@@ -37,6 +55,7 @@ function getSavedVisitorPhone() { return localStorage.getItem(VISITOR_PHONE_KEY)
 function saveVisitorData(name: string, phone: string) {
   localStorage.setItem(VISITOR_NAME_KEY, name);
   localStorage.setItem(VISITOR_PHONE_KEY, phone);
+  touchSession();
 }
 
 function getMessagePayload(msg: any): Record<string, any> | null {
@@ -146,9 +165,13 @@ function renderMessageContent(message: any, handleAction: (actionType?: string, 
 
 export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openMode = "modal" }: OnlineSupportWidgetProps) {
   const isMobile = useIsMobile();
-  const [phase, setPhase] = useState<"identify" | "chat">("identify");
-  const [visitorName, setVisitorName] = useState("");
-  const [visitorPhone, setVisitorPhone] = useState("");
+  const [phase, setPhase] = useState<"identify" | "chat">(() => {
+    // Se a sessão ainda é válida (menos de 30 min), pular identificação
+    if (isSessionValid() && getSavedVisitorName() && getSavedVisitorPhone()) return "chat";
+    return "identify";
+  });
+  const [visitorName, setVisitorName] = useState(() => isSessionValid() ? getSavedVisitorName() : "");
+  const [visitorPhone, setVisitorPhone] = useState(() => isSessionValid() ? getSavedVisitorPhone() : "");
   const [nameError, setNameError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [message, setMessage] = useState("");
@@ -249,6 +272,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
   const handleSend = () => {
     if (!message.trim() || !conversationId) return;
     setTyping(true);
+    touchSession(); // Renovar sessão ao enviar mensagem
     sendVisitorMessageMut.mutate({ conversationId, visitorId, text: message.trim() });
   };
 
@@ -316,8 +340,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
     setPhase("identify");
     setVisitorName("");
     setVisitorPhone("");
-    localStorage.removeItem(VISITOR_NAME_KEY);
-    localStorage.removeItem(VISITOR_PHONE_KEY);
+    clearSession();
   };
 
   const handleBack = () => {
