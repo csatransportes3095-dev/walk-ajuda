@@ -338,26 +338,65 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
           </div>
         </div>
 
-        {/* FASE 1: Identificação */}
+        {/* FASE 1: Identificação — Manifesto tela cheia */}
         {phase === "identify" && (
-          <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-            <div>
-              <p className="text-base font-bold text-white">{(() => { const h = new Date().getHours(); const g = h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite"; return g + "! 👋 " + (publicStateQ.data?.welcomeMessage || "Bem-vindo ao atendimento Walk Ajuda."); })()}</p>
-              <p className="text-xs text-white/60 mt-1">Para iniciar, preencha seus dados abaixo.</p>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-white/70 block mb-1">Seu nome completo <span className="text-red-400">*</span></label>
-                <input value={visitorName} onChange={(e) => { setVisitorName(e.target.value); setNameError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} placeholder="Ex: João da Silva" className={`w-full h-10 rounded-lg bg-white/5 border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${nameError ? "border-red-400" : "border-white/10"}`} />
-                {nameError && <p className="text-xs text-red-400 mt-1">{nameError}</p>}
+          <div className="flex-1 flex flex-col overflow-y-auto" style={{background: "linear-gradient(160deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)"}}>
+            {/* Hero section */}
+            <div className="flex flex-col items-center justify-center px-6 pt-10 pb-6 text-center">
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-4 shadow-2xl" style={{background: "linear-gradient(135deg, #3b72e8, #7c3aed)"}}>
+                <MessageCircle className="w-10 h-10 text-white" />
               </div>
-              <div>
-                <label className="text-xs font-semibold text-white/70 block mb-1">Seu telefone (WhatsApp) <span className="text-red-400">*</span></label>
-                <input value={visitorPhone} onChange={(e) => { setVisitorPhone(e.target.value.replace(/\D/g, "")); setPhoneError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} placeholder="Ex: 11940239867" maxLength={15} className={`w-full h-10 rounded-lg bg-white/5 border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${phoneError ? "border-red-400" : "border-white/10"}`} />
-                {phoneError && <p className="text-xs text-red-400 mt-1">{phoneError}</p>}
+              <h1 className="text-2xl font-black text-white mb-1" style={{letterSpacing: "-0.5px"}}>{publicStateQ.data?.buttonLabel || "ATENDIMENTO ONLINE"}</h1>
+              <div className="flex items-center gap-1.5 mb-3">
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-xs font-semibold text-green-400">Online agora — atendimento 24h</span>
+              </div>
+              <p className="text-sm text-white/70 leading-relaxed max-w-xs">
+                {publicStateQ.data?.welcomeMessage || "Tire suas dúvidas sobre nossos serviços, valores, prazos e muito mais. Estou aqui para te ajudar!"}
+              </p>
+            </div>
+
+            {/* Serviços disponíveis */}
+            <div className="px-5 mb-5">
+              <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Posso te ajudar com</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  {icon: "🟣", label: "Uber App"},
+                  {icon: "🟡", label: "Uber Taxi"},
+                  {icon: "🟢", label: "99 App"},
+                  {icon: "🔵", label: "Edição Doc"},
+                  {icon: "⏳", label: "Prazos"},
+                  {icon: "💳", label: "Pagamento"},
+                  {icon: "📝", label: "Como pedir"},
+                  {icon: "💬", label: "Suporte"},
+                ].map((s) => (
+                  <div key={s.label} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)"}}>
+                    <span className="text-base">{s.icon}</span>
+                    <span className="text-xs font-semibold text-white/80">{s.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
-            <button onClick={handleIdentifySubmit} className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors mt-auto">Iniciar atendimento →</button>
+
+            {/* Formulário de identificação */}
+            <div className="px-5 pb-6 mt-auto">
+              <div className="rounded-2xl p-4 space-y-3" style={{background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)"}}>
+                <p className="text-sm font-bold text-white mb-1">Para começar, informe seus dados:</p>
+                <div>
+                  <label className="text-xs font-semibold text-white/60 block mb-1">Nome completo <span className="text-red-400">*</span></label>
+                  <input value={visitorName} onChange={(e) => { setVisitorName(e.target.value); setNameError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} placeholder="Ex: João da Silva" className={`w-full h-11 rounded-xl bg-white/8 border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${nameError ? "border-red-400" : "border-white/10"}`} style={{background: "rgba(255,255,255,0.06)"}} />
+                  {nameError && <p className="text-xs text-red-400 mt-1">{nameError}</p>}
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-white/60 block mb-1">Telefone (WhatsApp) <span className="text-red-400">*</span></label>
+                  <input value={visitorPhone} onChange={(e) => { setVisitorPhone(e.target.value.replace(/\D/g, "")); setPhoneError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} placeholder="Ex: 11940239867" maxLength={15} className={`w-full h-11 rounded-xl border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${phoneError ? "border-red-400" : "border-white/10"}`} style={{background: "rgba(255,255,255,0.06)"}} />
+                  {phoneError && <p className="text-xs text-red-400 mt-1">{phoneError}</p>}
+                </div>
+                <button onClick={handleIdentifySubmit} className="w-full py-3.5 rounded-xl text-white font-bold text-sm transition-all active:scale-95" style={{background: "linear-gradient(135deg, #3b72e8, #7c3aed)", boxShadow: "0 4px 20px rgba(124,58,237,0.4)"}}>
+                  Iniciar atendimento →
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -384,7 +423,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
               {typing && <div className="flex justify-start"><div className="rounded-2xl px-3 py-2 text-xs bg-white/10 text-white/80 border border-white/10">Assistente está digitando...</div></div>}
               <div ref={messagesEndRef} />
             </div>
-            <div className="p-3 border-t border-white/10 bg-[#0b1222] flex-shrink-0">
+            <div className="p-3 border-t border-white/10 bg-[#0b1222] flex-shrink-0" style={{position: "sticky", bottom: 0}}>
               {publicStateQ.data?.maintenanceMode || publicStateQ.data?.chatEnabled === false ? (
                 <p className="text-xs text-amber-300">{publicStateQ.data?.disabledMessage || "Atendimento indisponível no momento."}</p>
               ) : (
