@@ -535,7 +535,10 @@ export default function AdminCustomers() {
     const isCadastroSearch = rawTerm.startsWith("*");
     const orderSearchNum = isOrderSearch ? rawTerm.slice(1) : "";
     const cadastroSearchNum = isCadastroSearch ? rawTerm.slice(1) : "";
+    // Normalizar número de telefone: remover parênteses, espaços, hífens e +
+    const termDigitsOnly = rawTerm.replace(/[^\d]/g, "");
     const isPureNumber = !isOrderSearch && !isCadastroSearch && /^\d+$/.test(term);
+    const isFormattedPhone = !isOrderSearch && !isCadastroSearch && termDigitsOnly.length >= 8 && termDigitsOnly !== term;
 
     let matchSearch: boolean;
     if (!rawTerm) {
@@ -551,9 +554,14 @@ export default function AdminCustomers() {
         c.phone.includes(term)
       );
       matchSearch = exactMatch || fallback;
+    } else if (isFormattedPhone) {
+      // Busca por telefone formatado: comparar apenas dígitos
+      const phoneDigits = (c.phone || "").replace(/[^\d]/g, "");
+      matchSearch = phoneDigits.includes(termDigitsOnly) || termDigitsOnly.includes(phoneDigits);
     } else {
       matchSearch = c.name.toLowerCase().includes(term) ||
         c.phone.includes(term) ||
+        (c.phone || "").replace(/[^\d]/g, "").includes(termDigitsOnly) ||
         (c.email || "").toLowerCase().includes(term) ||
         (c.city || "").toLowerCase().includes(term) ||
         (c.referredBy || "").toLowerCase().includes(term) ||
