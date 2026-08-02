@@ -57,7 +57,7 @@ describe('splitIntoSubOrders com status dinâmico', () => {
     expect(result[1][0].id).toBe(1);
   });
 
-  it('NÃO deve dividir quando há 2 itens do carrinho com mesmo status (1 único pedido)', () => {
+  it('NÁO deve dividir quando há 2 itens do carrinho com mesmo status (1 único pedido)', () => {
     // Caso do bug: 2 itens do carrinho com mesmo registrationId e mesmo timestamp
     // Após correção: createManualOrderMultiple cria 1 única entrada
     const history = [

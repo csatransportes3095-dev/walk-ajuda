@@ -132,13 +132,13 @@ describe("Sistema de agendamento — reserva exclusiva", () => {
     const sG = all.find(s => s.slotDate === TEST_DATE && s.slotTime === "12:00")!;
     createdSlotIds.push(sA.id, sB.id, sG.id);
 
-    // disponibilidade para o modelo A: vê A + geral, mas NÃO vê B
+    // disponibilidade para o modelo A: vê A + geral, mas NÁO vê B
     const availA = await listAvailableScheduleSlots(TPL_A);
     expect(availA.some(s => s.id === sA.id)).toBe(true);
     expect(availA.some(s => s.id === sG.id)).toBe(true);
     expect(availA.some(s => s.id === sB.id)).toBe(false);
 
-    // disponibilidade para o modelo B: vê B + geral, mas NÃO vê A
+    // disponibilidade para o modelo B: vê B + geral, mas NÁO vê A
     const availB = await listAvailableScheduleSlots(TPL_B);
     expect(availB.some(s => s.id === sB.id)).toBe(true);
     expect(availB.some(s => s.id === sG.id)).toBe(true);

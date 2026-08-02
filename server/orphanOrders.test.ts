@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
 // ============================================================
-// Testes para a lógica de inclusão de pedidos ÓRFÃOS no admin (listOrders)
+// Testes para a lógica de inclusão de pedidos ÓRFÁOS no admin (listOrders)
 //
 // Contexto do bug: alguns pedidos possuem histórico (orderStatusHistory) cujo
-// registrationId NÃO existe em accessCodePhones (dados importados/migrados de
+// registrationId NÁO existe em accessCodePhones (dados importados/migrados de
 // versões anteriores). O admin, que lista pedidos fazendo JOIN entre
 // accessCodePhones.id e orderStatusHistory.registrationId, nunca enxergava esses
 // pedidos, embora o cliente os visse em "Acompanhar Pedido" (busca por telefone).
