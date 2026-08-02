@@ -215,7 +215,21 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
     markReadMut.mutate({ conversationId, visitorId });
   }, [isOpen, conversationId, visitorId]);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [listMessagesQ.data, typing]);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll automático só quando o usuário já está no final
+  useEffect(() => {
+    if (!autoScroll) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [listMessagesQ.data, typing, autoScroll]);
+
+  const handleChatScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setAutoScroll(distFromBottom < 80); // só auto-scroll se estiver a menos de 80px do final
+  };
 
   const handleIdentifySubmit = () => {
     let hasError = false;
@@ -280,9 +294,19 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
       return;
     }
     if (actionType === "open_internal" && actionPayload?.path) { window.location.href = String(actionPayload.path); return; }
-    if (actionType === "open_external" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); return; }
-    if (actionType === "open_video" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); return; }
-    if (actionType === "open_whatsapp" && actionPayload?.phone) { const txt = actionPayload.text ? "?text=" + encodeURIComponent(String(actionPayload.text)) : ""; window.open("https://wa.me/" + String(actionPayload.phone) + txt, "_blank"); return; }
+    if (actionType === "open_external" && actionPayload?.url) {
+      if (conversationId) sendVisitorMessageMut.mutate({ conversationId, visitorId, text: `Abrindo link: ${actionPayload.label || actionPayload.url}` });
+      setTimeout(() => window.open(String(actionPayload.url), "_blank"), 300); return;
+    }
+    if (actionType === "open_video" && actionPayload?.url) {
+      if (conversationId) sendVisitorMessageMut.mutate({ conversationId, visitorId, text: `Assistindo vídeo: ${actionPayload.label || "Vídeo explicativo"}` });
+      setTimeout(() => window.open(String(actionPayload.url), "_blank"), 300); return;
+    }
+    if (actionType === "open_whatsapp" && actionPayload?.phone) {
+      if (conversationId) sendVisitorMessageMut.mutate({ conversationId, visitorId, text: "Abrindo WhatsApp para falar com atendente..." });
+      const txt = actionPayload.text ? "?text=" + encodeURIComponent(String(actionPayload.text)) : "";
+      setTimeout(() => window.open("https://wa.me/" + String(actionPayload.phone) + txt, "_blank"), 300); return;
+    }
     if (actionType === "handoff_human" && conversationId) { sendVisitorMessageMut.mutate({ conversationId, visitorId, text: "Quero falar com um atendente humano." }); return; }
     if (actionType === "send_text" && actionPayload?.text && conversationId) { sendVisitorMessageMut.mutate({ conversationId, visitorId, text: String(actionPayload.text) }); return; }
   };
@@ -408,7 +432,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
             <div className="px-4 py-2 bg-white/[0.02] border-b border-white/5 flex-shrink-0">
               <p className="text-xs text-white/50">Atendendo: <span className="text-white/80 font-semibold">{visitorName}</span>{visitorPhone && <span className="ml-2 text-white/40">• {visitorPhone}</span>}</p>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto p-4 space-y-3">
               {!conversationId && <p className="text-xs text-white/60 text-center">Iniciando conversa...</p>}
 
               {(listMessagesQ.data || []).map((msg: any) => {
