@@ -67,6 +67,7 @@ export default function AdminSettings() {
   });
   const uploadLoginImageMut = trpc.uploads.uploadLoginImage.useMutation();
   const uploadGastosLogoMut = trpc.uploads.uploadGastosLogo.useMutation();
+  const uploadBotAvatarMut = trpc.uploads.uploadBotAvatar.useMutation();
 
   // === PIX ACCOUNTS ===
   type PixAccount = { id: number; label: string; pixKey: string; pixType: string; pixName: string; pixBank: string; isActive: number; createdAt: Date };
@@ -115,6 +116,9 @@ export default function AdminSettings() {
   const [gastosLogoPreview, setGastosLogoPreview] = useState<string | null>(null);
   const [uploadingGastosLogo, setUploadingGastosLogo] = useState(false);
   const gastosLogoInputRef = useRef<HTMLInputElement>(null);
+  const [botAvatarPreview, setBotAvatarPreview] = useState<string | null>(null);
+  const [uploadingBotAvatar, setUploadingBotAvatar] = useState(false);
+  const botAvatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (photoModeData) setPhotoMode(photoModeData.mode);
@@ -125,6 +129,7 @@ export default function AdminSettings() {
       setForm({ ...settings });
       if (settings.login_image_url) setLoginImagePreview(settings.login_image_url);
       if (settings.gastos_logo_url) setGastosLogoPreview(settings.gastos_logo_url);
+      if (settings.bot_assistant_avatar) setBotAvatarPreview(settings.bot_assistant_avatar);
     }
   }, [settings]);
 
@@ -244,6 +249,41 @@ export default function AdminSettings() {
     setGastosLogoPreview(null);
     updateField("gastos_logo_url", "");
     if (gastosLogoInputRef.current) gastosLogoInputRef.current.value = "";
+  };
+
+  const handleBotAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Envie apenas imagens"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Imagem muito grande. Máximo 5MB."); return; }
+    const preview = URL.createObjectURL(file);
+    setBotAvatarPreview(preview);
+    setUploadingBotAvatar(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = (ev) => resolve((ev.target?.result as string).split(",")[1]);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      const result = await uploadBotAvatarMut.mutateAsync({ imageBase64: base64, mimeType: file.type });
+      if (result.url) {
+        updateField("bot_assistant_avatar", result.url);
+        setBotAvatarPreview(result.url);
+        toast.success("Avatar do bot enviado!");
+      }
+    } catch {
+      toast.error("Erro ao enviar avatar");
+    } finally {
+      setUploadingBotAvatar(false);
+      if (botAvatarInputRef.current) botAvatarInputRef.current.value = "";
+    }
+  };
+
+  const removeBotAvatar = () => {
+    setBotAvatarPreview(null);
+    updateField("bot_assistant_avatar", "");
+    if (botAvatarInputRef.current) botAvatarInputRef.current.value = "";
   };
 
   if (isLoading) return <div className="min-h-screen bg-[#0a0a1a] flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full" /></div>;
@@ -783,11 +823,56 @@ export default function AdminSettings() {
             */
 
             <Section title="Bot Assistente Colombia">
-              <p className="text-xs text-gray-500 mb-2">Quando ativado, clientes logados verão um banner para pedir ajuda ao bot na tela inicial. O bot guia o cliente passo a passo no pedido.</p>
+              <p className="text-xs text-gray-500 mb-3">Quando ativado, clientes logados verão uma tela de escolha e poderão ser guiados pelo bot passo a passo.</p>
+
+              {/* Toggle */}
               <ToggleField label="Ativar Bot" k="bot_assistant_enabled" form={form} onToggle={toggleField} />
+
+              {/* Nome */}
               <Field label="Nome do Bot" k="bot_assistant_name" form={form} onChange={updateField} placeholder="Colombia" />
+
+              {/* Cor do nome */}
+              <div className="mb-3">
+                <label className="text-xs text-gray-400 block mb-1">Cor do Nome (na tela de escolha)</label>
+                <div className="flex items-center gap-3">
+                  <input type="color" value={form.bot_assistant_name_color || '#ffffff'} onChange={e => updateField('bot_assistant_name_color', e.target.value)} className="w-10 h-10 rounded-lg border border-zinc-700 cursor-pointer bg-transparent" />
+                  <span className="text-sm font-bold" style={{ color: form.bot_assistant_name_color || '#ffffff' }}>{form.bot_assistant_name || 'Colombia'}</span>
+                  <button onClick={() => updateField('bot_assistant_name_color', '#ffffff')} className="text-xs text-zinc-500 hover:text-zinc-300">Resetar</button>
+                </div>
+              </div>
+
+              {/* Mensagem de boas-vindas */}
               <Field label="Mensagem de Boas-vindas" k="bot_assistant_welcome" form={form} onChange={updateField} placeholder="Olá! Sou o Colombia, seu assistente de pedidos. 👋" textarea />
-              <Field label="URL do Avatar/Logo" k="bot_assistant_avatar" form={form} onChange={updateField} placeholder="https://... (deixe vazio para usar ícone padrão)" />
+
+              {/* Avatar */}
+              <div className="mb-3">
+                <label className="text-xs text-gray-400 block mb-2">Avatar / Logo do Bot</label>
+                {botAvatarPreview || form.bot_assistant_avatar ? (
+                  <div className="flex items-center gap-3 mb-2">
+                    <img src={botAvatarPreview || form.bot_assistant_avatar} alt="Avatar" className="w-16 h-16 object-cover rounded-full border-2 border-violet-500/50" />
+                    <div className="flex flex-col gap-2">
+                      <button onClick={() => botAvatarInputRef.current?.click()} disabled={uploadingBotAvatar} className="text-xs px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-colors">
+                        {uploadingBotAvatar ? 'Enviando...' : 'Trocar foto'}
+                      </button>
+                      <button onClick={removeBotAvatar} className="text-xs px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg transition-colors">Remover</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => botAvatarInputRef.current?.click()} disabled={uploadingBotAvatar}
+                    className="w-full border-2 border-dashed border-violet-500/40 rounded-xl p-4 hover:border-violet-500/70 transition-all flex flex-col items-center gap-2 cursor-pointer">
+                    <span className="text-3xl">👤</span>
+                    <p className="text-white/70 text-sm">{uploadingBotAvatar ? 'Enviando...' : 'Clique para enviar foto'}</p>
+                    <p className="text-zinc-500 text-xs">JPG, PNG ou WEBP — máx. 5MB</p>
+                  </button>
+                )}
+                <input ref={botAvatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleBotAvatarSelect} />
+              </div>
+
+              {/* Textos dos botões */}
+              <Field label="Texto Botão Principal" k="bot_btn_primary_text" form={form} onChange={updateField} placeholder="QUERO AJUDA DO COLOMBIA" />
+              <Field label="Subtítulo Botão Principal" k="bot_btn_primary_sub" form={form} onChange={updateField} placeholder="Atendimento guiado passo a passo" />
+              <Field label="Texto Botão Secundário" k="bot_btn_secondary_text" form={form} onChange={updateField} placeholder="PREFIRO FAZER SOZINHO" />
+              <Field label="Subtítulo Botão Secundário" k="bot_btn_secondary_sub" form={form} onChange={updateField} placeholder="Navegar pelo site manualmente" />
             </Section>
 
             <Section title="Rodapé da Página Inicial">

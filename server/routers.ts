@@ -1611,6 +1611,22 @@ export const appRouter = router({
           return { success: false, url: '' };
         }
       }),
+    uploadBotAvatar: adminProcedure
+      .input(z.object({ imageBase64: z.string().min(1), mimeType: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        try {
+          const mime = input.mimeType || 'image/jpeg';
+          const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+          const suffix = Math.random().toString(36).substring(2, 10);
+          const fileKey = `bot/bot-avatar-${suffix}.${ext}`;
+          const { url } = await storagePut(fileKey, Buffer.from(input.imageBase64, 'base64'), mime);
+          await upsertSettings({ bot_assistant_avatar: url });
+          return { success: true, url };
+        } catch (err) {
+          console.error('[uploadBotAvatar]', err);
+          return { success: false, url: '' };
+        }
+      }),
   }),
 
   // === CLIENTES (CADASTRO) ===

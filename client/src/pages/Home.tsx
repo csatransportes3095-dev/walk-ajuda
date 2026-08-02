@@ -2133,7 +2133,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="text-center">
-                <h2 className="text-2xl font-black text-white tracking-wide">{settings?.bot_assistant_name || 'Colombia'}</h2>
+                <h2 className="text-2xl font-black tracking-wide" style={{ color: settings?.bot_assistant_name_color || '#ffffff' }}>{settings?.bot_assistant_name || 'Colombia'}</h2>
                 <p className="text-emerald-400 text-xs font-semibold mt-0.5">● Online agora — pronto para te atender</p>
               </div>
             </div>
@@ -2142,7 +2142,7 @@ export default function Home() {
             <div className="w-full max-w-sm mb-8">
               <div className="bg-zinc-800 border border-zinc-700 rounded-2xl rounded-tl-sm px-5 py-4 shadow-lg">
                 <p className="text-white text-sm leading-relaxed">
-                  Olá! 👋 Sou o <span className="font-bold text-violet-300">{settings?.bot_assistant_name || 'Colombia'}</span>, seu assistente de pedidos.
+                  Olá! 👋 Sou o <span className="font-bold" style={{ color: settings?.bot_assistant_name_color || '#a78bfa' }}>{settings?.bot_assistant_name || 'Colombia'}</span>, seu assistente de pedidos.
                 </p>
                 <p className="text-zinc-300 text-sm leading-relaxed mt-2">
                   Posso te <span className="font-bold text-white">guiar passo a passo</span> para fazer seu pedido de forma rápida e sem erros — ou você pode navegar sozinho pelo site.
@@ -2162,8 +2162,8 @@ export default function Home() {
                   👨‍💻
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="font-black text-white text-sm">QUERO AJUDA DO {(settings?.bot_assistant_name || 'COLOMBIA').toUpperCase()}</p>
-                  <p className="text-violet-200 text-xs mt-0.5">Atendimento guiado passo a passo</p>
+                  <p className="font-black text-white text-sm">{settings?.bot_btn_primary_text || `QUERO AJUDA DO ${(settings?.bot_assistant_name || 'COLOMBIA').toUpperCase()}`}</p>
+                  <p className="text-violet-200 text-xs mt-0.5">{settings?.bot_btn_primary_sub || 'Atendimento guiado passo a passo'}</p>
                 </div>
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
               </button>
@@ -2177,8 +2177,8 @@ export default function Home() {
                   📋
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="font-bold text-zinc-200 text-sm">PREFIRO FAZER SOZINHO</p>
-                  <p className="text-zinc-500 text-xs mt-0.5">Navegar pelo site manualmente</p>
+                  <p className="font-bold text-zinc-200 text-sm">{settings?.bot_btn_secondary_text || 'PREFIRO FAZER SOZINHO'}</p>
+                  <p className="text-zinc-500 text-xs mt-0.5">{settings?.bot_btn_secondary_sub || 'Navegar pelo site manualmente'}</p>
                 </div>
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </button>
