@@ -92,6 +92,35 @@ async function startServer() {
 
   // Rota dinÃ¢mica de vÃ­deos â€” busca fileKey no banco pelo slug
   // Rota pÃºblica para imagens com slug amigÃ¡vel: /foto/:slug
+  // Proxy público da imagem para WhatsApp preview (og:image)
+  app.get("/foto-img/:slug", async (req, res) => {
+    const { slug } = req.params;
+    try {
+      const { getDb } = await import('../db');
+      const { adminMediaFiles } = await import('../../drizzle/schema');
+      const { eq: eqOp } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) { res.status(503).end(); return; }
+      const rows = await db.select().from(adminMediaFiles).where(eqOp(adminMediaFiles.videoSlug, slug)).limit(1);
+      if (!rows.length) { res.status(404).end(); return; }
+      const imageUrl = (rows[0] as any).url || '';
+      if (!imageUrl) { res.status(502).end(); return; }
+      // Buscar a imagem do S3/CDN e fazer proxy
+      const https = await import('https');
+      const http = await import('http');
+      const urlMod = await import('url');
+      const parsedUrl = new urlMod.URL(imageUrl);
+      const protocol = parsedUrl.protocol === 'https:' ? https : http;
+      protocol.get(imageUrl, (imgRes) => {
+        res.set('Content-Type', imgRes.headers['content-type'] || 'image/jpeg');
+        res.set('Cache-Control', 'public, max-age=86400');
+        imgRes.pipe(res);
+      }).on('error', () => res.redirect(302, imageUrl));
+    } catch (err) {
+      res.status(500).end();
+    }
+  });
+
   app.get("/foto/:slug", async (req, res) => {
     const { slug } = req.params;
     try {
@@ -109,8 +138,9 @@ async function startServer() {
       // Se for vÃ­deo, redirecionar para /video/:slug
       if (media.mimeType.startsWith('video/')) { res.redirect(301, `/video/${slug}`); return; }
       const canonicalUrl = `https://h2colombiano.com/foto/${slug}`;
+      const proxyImageUrl = `https://h2colombiano.com/foto-img/${slug}`;
       res.set('Content-Type', 'text/html; charset=utf-8');
-      res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} - H2 COLOMBIANO</title><meta property="og:title" content="${title}"><meta property="og:description" content="H2 COLOMBIANO - Atendimento rÃ¡pido para motoristas de app"><meta property="og:image" content="${imageUrl}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:type" content="website"><meta property="og:url" content="${canonicalUrl}"><meta property="og:site_name" content="H2 COLOMBIANO"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:image" content="${imageUrl}"><meta name="twitter:description" content="H2 COLOMBIANO - Atendimento rÃ¡pido para motoristas de app"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}img{width:100%;max-width:900px;max-height:100vh;object-fit:contain}</style></head><body><img src="${imageUrl}" alt="${title}"></body></html>`);
+      res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} - H2 COLOMBIANO</title><meta property="og:title" content="${title}"><meta property="og:description" content="H2 COLOMBIANO - Atendimento rapido para motoristas de app"><meta property="og:image" content="${proxyImageUrl}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:type" content="website"><meta property="og:url" content="${canonicalUrl}"><meta property="og:site_name" content="H2 COLOMBIANO"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:image" content="${imageUrl}"><meta name="twitter:description" content="H2 COLOMBIANO - Atendimento rÃ¡pido para motoristas de app"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}img{width:100%;max-width:900px;max-height:100vh;object-fit:contain}</style></head><body><img src="${imageUrl}" alt="${title}"></body></html>`);
     } catch (err) {
       console.error('[FotoRoute] dynamic error:', err);
       res.status(500).send("Erro interno");
