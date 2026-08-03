@@ -3082,6 +3082,37 @@ export const appRouter = router({
         }
       } catch (e) { /* ignora erro */ }
 
+      // Fallback por telefone: agendamentos criados com registrationId diferente (re-cadastro)
+      // Para pedidos sem scheduleStatus, buscar pelo telefone do cliente
+      try {
+        const ordersWithoutSchedule = finalOrders.filter((o: any) => !scheduleStatusMap.has(`${o.id}_${o.subOrderIndex}`));
+        if (ordersWithoutSchedule.length > 0) {
+          const phones = [...new Set(ordersWithoutSchedule.map((o: any) => (o.customerPhone || '').replace(/\D/g, '')).filter((p: string) => p.length >= 8))];
+          if (phones.length > 0) {
+            const phonesStr = phones.map((p: string) => `'${p}'`).join(',');
+            const fallbackResult = await db.execute(
+              sql.raw(`SELECT customerPhone, status FROM scheduleAppointments WHERE customerPhone IN (${phonesStr}) AND status != 'cancelled' ORDER BY FIELD(status,'confirmed','pending'), createdAt DESC`)
+            );
+            const fallbackRows = (fallbackResult as any)[0] as any[];
+            // Mapa de telefone -> status mais prioritário (confirmed > pending)
+            const phoneStatusMap = new Map<string, string>();
+            for (const fr of (fallbackRows || [])) {
+              const phone = (fr.customerPhone || '').replace(/\D/g, '');
+              if (!phoneStatusMap.has(phone)) phoneStatusMap.set(phone, fr.status);
+              else if (fr.status === 'confirmed') phoneStatusMap.set(phone, 'confirmed'); // confirmed tem prioridade
+            }
+            // Aplicar fallback para pedidos sem scheduleStatus
+            for (const o of ordersWithoutSchedule) {
+              const phone = (o.customerPhone || '').replace(/\D/g, '');
+              const fallbackStatus = phoneStatusMap.get(phone);
+              if (fallbackStatus) {
+                scheduleStatusMap.set(`${o.id}_${o.subOrderIndex}`, fallbackStatus);
+              }
+            }
+          }
+        }
+      } catch (e) { /* ignora erro no fallback */ }
+
       // Adicionar flag hasNewDocResponse, hasNewTrackingAnswer e pasta personalizada em cada pedido
       const finalOrdersWithFlag = finalOrders.map((o: any) => {
         const folderInfo = folderByKey.get(`${o.id}_${o.subOrderIndex}`) ?? null;
