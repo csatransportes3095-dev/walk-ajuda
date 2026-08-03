@@ -658,7 +658,7 @@ export default function AdminOrders() {
   const [deliveredPhoneFilter, setDeliveredPhoneFilter] = useState("");
   const [todosSortKey, setTodosSortKey] = useState<FolderSortKey>("date");
   const [todosSortDir, setTodosSortDir] = useState<FolderSortDir>("desc");
-  const [todosQuickFilter, setTodosQuickFilter] = useState<"all" | "sem_status" | "agendamento" | "novo">("all");
+  const [todosQuickFilter, setTodosQuickFilter] = useState<"all" | "sem_status" | "agendamento_confirmado" | "agendamento" | "novo">("all");
   // Estado para expandir cards individuais de ARQUIVO e RG/CNH
   const [expandedArchivedId, setExpandedArchivedId] = useState<string | null>(null);
   const [expandedRgCnhId, setExpandedRgCnhId] = useState<string | null>(null);
@@ -4703,7 +4703,8 @@ export default function AdminOrders() {
                         ))}
                         <span className="ml-auto text-xs text-zinc-500 shrink-0">
                           {group.orders.filter((o: any) => {
-                            if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus !== "confirmed";
+                            if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus === null || (o as any).scheduleStatus === undefined;
+                            if (todosQuickFilter === "agendamento_confirmado") return (o as any).scheduleStatus === "confirmed";
                             if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
                             if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
                             return true;
@@ -4713,13 +4714,15 @@ export default function AdminOrders() {
                       {/* Linha 2: Filtros rápidos com scroll horizontal */}
                       <div className="flex gap-2 w-full mt-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
                         {([
-                          { id: "all",         label: "Todos",           desc: "Todos os pedidos",          glow: "#f59e0b", ab: "linear-gradient(135deg,#78350f,#92400e)", ac: "#f59e0b", at: "#fde68a" },
-                          { id: "sem_status",  label: "Sem Agendamento", desc: "Não agendados",             glow: "#ef4444", ab: "linear-gradient(135deg,#7f1d1d,#991b1b)", ac: "#ef4444", at: "#fca5a5" },
-                          { id: "agendamento", label: "Agendamento",     desc: "Aguardando confirmação",    glow: "#eab308", ab: "linear-gradient(135deg,#713f12,#854d0e)", ac: "#eab308", at: "#fef08a" },
-                          { id: "novo",        label: "Novos",           desc: "Não visualizados",          glow: "#22c55e", ab: "linear-gradient(135deg,#14532d,#166534)", ac: "#22c55e", at: "#86efac" },
+                          { id: "all",                  label: "Todos",                    desc: "Todos os pedidos",            glow: "#f59e0b", ab: "linear-gradient(135deg,#78350f,#92400e)", ac: "#f59e0b", at: "#fde68a" },
+                          { id: "sem_status",            label: "Sem Agendamento",          desc: "Não agendados",               glow: "#ef4444", ab: "linear-gradient(135deg,#7f1d1d,#991b1b)", ac: "#ef4444", at: "#fca5a5" },
+                          { id: "agendamento_confirmado",label: "Agend. Confirmado",         desc: "Agendamento confirmado",       glow: "#22c55e", ab: "linear-gradient(135deg,#14532d,#166534)", ac: "#22c55e", at: "#86efac" },
+                          { id: "agendamento",           label: "Aguardando",               desc: "Aguardando confirmação",      glow: "#eab308", ab: "linear-gradient(135deg,#713f12,#854d0e)", ac: "#eab308", at: "#fef08a" },
+                          { id: "novo",                  label: "Novos",                    desc: "Não visualizados",            glow: "#6366f1", ab: "linear-gradient(135deg,#1e1b4b,#312e81)", ac: "#6366f1", at: "#a5b4fc" },
                         ] as const).map(f => {
                           const cnt = group.orders.filter((o: any) => {
-                            if (f.id === "sem_status") return (o as any).scheduleStatus !== "confirmed";
+                            if (f.id === "sem_status") return (o as any).scheduleStatus === null || (o as any).scheduleStatus === undefined;
+                            if (f.id === "agendamento_confirmado") return (o as any).scheduleStatus === "confirmed";
                             if (f.id === "agendamento") return (o as any).scheduleStatus === "pending";
                             if (f.id === "novo") return !viewedOrders.has(getOrderKey(o));
                             return true;
@@ -4969,7 +4972,8 @@ export default function AdminOrders() {
                   {(!isAllTab || !isEmergencySearch) && (isAllTab
                     ? [{ name: "", orders: sortFolderOrders(
                         group.orders.filter((o: any) => {
-                          if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus !== "confirmed";
+                          if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus === null || (o as any).scheduleStatus === undefined;
+                          if (todosQuickFilter === "agendamento_confirmado") return (o as any).scheduleStatus === "confirmed";
                           if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
                           if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
                           return true;
