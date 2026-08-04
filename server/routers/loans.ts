@@ -2155,14 +2155,14 @@ export const loanRouter = router({
     const fmtDate = (d: string) => d ? new Date(d + 'T12:00:00Z').toLocaleDateString('pt-BR') : 'ââ‚¬â€';
     const statusLabel: Record<string, string> = { aprovado: 'Aprovado', pendente: 'Aguardando Aprovação', reprovado: 'Reprovado', cancelado: 'Cancelado', pago: 'Pago' };
     const payTypeLabel: Record<string, string> = { diario: 'Diário', semanal: 'Semanal', quinzenal: 'Quinzenal', mensal: 'Mensal' };
-    const profileEmoji: Record<string, string> = { bronze: '°Å¸Â¥â€°', prata: 'âÂ­Â', ouro: '°Å¸Â¥â€¡', diamante: '°Å¸â€™Å½' };
+    const profileEmoji: Record<string, string> = { bronze: '', prata: '', ouro: '', diamante: '' };
     console.log('[generateLoanStatement] installments count:', installments.length, 'profiles:', allProfiles.length);
     // Gerar HTML do extrato
     const installmentsRows = installments.map((inst: any) => {
       const isOverdue = inst.status !== 'pago' && inst.status !== 'cancelado' && inst.dueDate < getBrazilToday();
       const statusKey = isOverdue ? 'atrasado' : inst.status;
       const pillColor: Record<string, string> = { pago: 'background:#dcfce7;color:#15803d', pendente: 'background:#fef9c3;color:#854d0e', atrasado: 'background:#fee2e2;color:#b91c1c', em_analise: 'background:#dbeafe;color:#1d4ed8', cancelado: 'background:#f1f5f9;color:#64748b' };
-      const pillLabel: Record<string, string> = { pago: 'âÅ“â€œ Pago', pendente: 'âÂÂ³ Pendente', atrasado: 'âÅ¡Â  Atrasado', em_analise: '°Å¸â€Â Em Análise', cancelado: 'Cancelado' };
+      const pillLabel: Record<string, string> = { pago: 'Pago', pendente: 'Pendente', atrasado: 'Atrasado', em_analise: 'Em Análise', cancelado: 'Cancelado' };
       const pStyle = pillColor[statusKey] || pillColor.pendente;
       const pLabel = pillLabel[statusKey] || inst.status;
       const paidAtStr = inst.paidAt ? fmtDate(inst.paidAt.toString().slice(0, 10)) : 'ââ‚¬â€';
@@ -2176,19 +2176,19 @@ export const loanRouter = router({
     }).join('');
     const upgradeSection = nextProfile ? `
       <div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1.5px solid #fcd34d;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
-        <table width="100%"><tr><td width="36" style="vertical-align:top;font-size:26px;">âÂ­Â</td><td>
+        <table width="100%"><tr><td width="36" style="vertical-align:top;font-size:26px;">★</td><td>
           <p style="font-size:13px;font-weight:700;color:#92400e;margin:0 0 6px;">Parabéns! Você está no caminho certo, ${loan.clientName.split(' ')[0]}!</p>
           <p style="font-size:11px;color:#78350f;line-height:1.6;margin:0 0 10px;">Você está no perfil <strong>${currentProfile?.name || loan.profileSlug}</strong> com limite de <strong>${fmtBRL(parseFloat(loan.clientCreditLimit || 0))}</strong>. Mantendo seus pagamentos em dia, você sobe de categoria <strong>automaticamente</strong> e ganha acesso a limites maiores e taxas menores!</p>
           <div style="display:flex;align-items:center;gap:8px;">
-            <span style="background:#e2e8f0;color:#475569;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;">${profileEmoji[loan.profileSlug] || 'âÂ­Â'} ${currentProfile?.name || loan.profileSlug}</span>
+            <span style="background:#e2e8f0;color:#475569;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;">${profileEmoji[loan.profileSlug] || '★'} ${currentProfile?.name || loan.profileSlug}</span>
             <span style="color:#d97706;font-size:14px;">ââ€ â€™</span>
-            <span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid #fcd34d;">${profileEmoji[nextProfile.slug] || '°Å¸Â¥â€¡'} ${nextProfile.name}</span>
+            <span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid #fcd34d;">${profileEmoji[nextProfile.slug] || ''} ${nextProfile.name}</span>
             <span style="font-size:10px;color:#16a34a;font-weight:600;">ââ€ â€˜ Limite até ${fmtBRL(parseFloat(nextProfile.creditLimit))} Â· Juros a partir de ${nextProfile.interestRate}%</span>
           </div>
         </td></tr></table>
       </div>
       <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
-        <p style="font-size:11px;font-weight:700;color:#15803d;margin:0 0 8px;">âÅ“â€¦ Como subir de categoria automaticamente:</p>
+        <p style="font-size:11px;font-weight:700;color:#15803d;margin:0 0 8px;"> Como subir de categoria automaticamente:</p>
         <ul style="font-size:10px;color:#166534;line-height:1.8;padding-left:16px;margin:0;">
           <li>Pague todas as parcelas no prazo (sem atrasos)</li>
           <li>Mantenha bom histórico por pelo menos 2 empréstimos consecutivos</li>
@@ -2197,7 +2197,7 @@ export const loanRouter = router({
         </ul>
       </div>` : `
       <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
-        <p style="font-size:12px;font-weight:700;color:#15803d;margin:0 0 4px;">°Å¸Ââ€  Você está no nível máximo!</p>
+        <p style="font-size:12px;font-weight:700;color:#15803d;margin:0 0 4px;">  Você está no nível máximo!</p>
         <p style="font-size:11px;color:#166534;margin:0;">Continue mantendo seus pagamentos em dia para preservar seus benefícios exclusivos.</p>
       </div>`;
     const stampColor = loan.status === 'pago' ? '#16a34a' : loan.status === 'reprovado' ? '#dc2626' : loan.status === 'cancelado' ? '#64748b' : '#2563eb';
@@ -2220,27 +2220,27 @@ export const loanRouter = router({
 <div class="page">
   <div class="hdr">
     <div><h1 style="color:#f59e0b;font-size:20px;font-weight:800;margin:0;">CSA EMPRÉSTIMOS SP</h1><p style="color:#94a3b8;font-size:11px;margin:3px 0 0;">h2colombiano.com</p></div>
-    <div style="text-align:right;"><div style="color:#fff;font-size:13px;font-weight:600;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);padding:4px 12px;border-radius:20px;">°Å¸â€œâ€ž EXTRATO DE EMPRÉSTIMO</div><div style="color:#64748b;font-size:10px;margin-top:5px;">Emitido em: ${emittedAt}</div></div>
+    <div style="text-align:right;"><div style="color:#fff;font-size:13px;font-weight:600;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);padding:4px 12px;border-radius:20px;">EXTRATO DE EMPRÉSTIMO</div><div style="color:#64748b;font-size:10px;margin-top:5px;">Emitido em: ${emittedAt}</div></div>
   </div>
   <div class="body">
-    <div class="sec">°Å¸â€˜Â¤ Dados do Cliente</div>
+    <div class="sec">DADOS DO CLIENTE</div>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:16px;">
       <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0;">${loan.clientName.charAt(0).toUpperCase()}</div>
       <div style="flex:1;">
         <p style="font-size:16px;font-weight:700;color:#0f172a;margin:0;">${loan.clientName}</p>
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:5px;">
-          ${loan.clientPhone ? `<span style="font-size:11px;color:#475569;">°Å¸â€œÂ± ${loan.clientPhone}</span>` : ''}
-          ${cpfFmt !== 'Não informado' ? `<span style="font-size:11px;color:#475569;">°Å¸ªª CPF: ${cpfFmt}</span>` : ''}
-          ${loan.clientEmail ? `<span style="font-size:11px;color:#475569;">°Å¸â€œÂ§ ${loan.clientEmail}</span>` : ''}
+          ${loan.clientPhone ? `<span style="font-size:11px;color:#475569;"> ${loan.clientPhone}</span>` : ''}
+          ${cpfFmt !== 'Não informado' ? `<span style="font-size:11px;color:#475569;">CPF: ${cpfFmt}</span>` : ''}
+          ${loan.clientEmail ? `<span style="font-size:11px;color:#475569;"> ${loan.clientEmail}</span>` : ''}
         </div>
       </div>
       <div style="text-align:center;flex-shrink:0;">
-        <div style="display:inline-block;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;background:#e2e8f0;color:#475569;border:1px solid #cbd5e1;">${profileEmoji[loan.profileSlug] || 'âÂ­Â'} ${(currentProfile?.name || loan.profileSlug).toUpperCase()}</div>
+        <div style="display:inline-block;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;background:#e2e8f0;color:#475569;border:1px solid #cbd5e1;">${profileEmoji[loan.profileSlug] || '★'} ${(currentProfile?.name || loan.profileSlug).toUpperCase()}</div>
         <div style="font-size:9px;color:#94a3b8;margin-top:4px;">Limite atual</div>
         <div style="font-size:13px;font-weight:700;color:#0f172a;">${fmtBRL(parseFloat(loan.clientCreditLimit || 0))}</div>
       </div>
     </div>
-    <div class="sec">°Å¸â€™° Resumo Financeiro</div>
+    <div class="sec">RESUMO FINANCEIRO</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
       <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;text-align:center;"><div style="font-size:9px;font-weight:600;color:#94a3b8;text-transform:uppercase;">Valor Solicitado</div><div style="font-size:17px;font-weight:800;color:#0f172a;margin-top:3px;">${fmtBRL(parseFloat(loan.amount))}</div><div style="font-size:9px;color:#94a3b8;">Principal</div></div>
       <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;text-align:center;"><div style="font-size:9px;font-weight:600;color:#94a3b8;text-transform:uppercase;">Juros (${loan.interestRate}%)</div><div style="font-size:17px;font-weight:800;color:#dc2626;margin-top:3px;">${fmtBRL(parseFloat(loan.interestAmount || 0))}</div><div style="font-size:9px;color:#94a3b8;">Taxa aplicada</div></div>
@@ -2253,7 +2253,7 @@ export const loanRouter = router({
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:11px;color:#475569;font-weight:500;">Progresso do pagamento</span><strong style="font-size:12px;color:#0f172a;">${progressPct}% concluído</strong></div>
       <div style="background:#e2e8f0;border-radius:20px;height:10px;overflow:hidden;"><div style="height:100%;border-radius:20px;background:linear-gradient(90deg,#16a34a,#22c55e);width:${progressPct}%;"></div></div>
     </div>
-    <div class="sec">°Å¸â€œâ€¹ Detalhes do Empréstimo</div>
+    <div class="sec">DETALHES DO EMPRÉSTIMO</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;"><span style="font-size:10px;color:#64748b;">NÂº do Empréstimo</span><span style="font-size:11px;font-weight:700;">#EMP-${String(input.loanId).padStart(4,'0')}</span></div>
       <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;"><span style="font-size:10px;color:#64748b;">Status</span><span style="font-size:11px;font-weight:700;color:${loan.status==='aprovado'?'#16a34a':loan.status==='reprovado'?'#dc2626':'#d97706'};">${statusLabel[loan.status] || loan.status}</span></div>
@@ -2264,7 +2264,7 @@ export const loanRouter = router({
       ${loan.approvedBy ? `<div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;"><span style="font-size:10px;color:#64748b;">Aprovado por</span><span style="font-size:11px;font-weight:700;">${loan.approvedBy}</span></div>` : ''}
       ${loan.notes ? `<div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;"><span style="font-size:10px;color:#64748b;">Observações</span><span style="font-size:11px;font-weight:700;">${loan.notes}</span></div>` : ''}
     </div>
-    <div class="sec">°Å¸â€œâ€¦ Histórico de Parcelas</div>
+    <div class="sec">HISTÓRICO DE PARCELAS</div>
     <table class="inst">
       <thead><tr><th>#</th><th>Vencimento</th><th>Valor</th><th>Pago em</th><th>Status</th></tr></thead>
       <tbody>${installmentsRows}</tbody>
@@ -2274,7 +2274,7 @@ export const loanRouter = router({
       <div style="text-align:center;"><div style="font-size:9px;color:#64748b;text-transform:uppercase;">Saldo Devedor</div><div style="font-size:15px;font-weight:800;color:#f59e0b;margin-top:3px;">${fmtBRL(remaining)}</div></div>
       <div style="text-align:center;"><div style="font-size:9px;color:#64748b;text-transform:uppercase;">Parcelas em Atraso</div><div style="font-size:15px;font-weight:800;color:${overdueCount>0?'#f87171':'#22c55e'};margin-top:3px;">${overdueCount}</div></div>
     </div>
-    <div class="sec">°Å¸Å¡â‚¬ Seu Perfil &amp; Próximo Nível</div>
+    <div class="sec">SEU PERFIL &amp; PRÓXIMO NÍVEL</div>
     ${upgradeSection}
   </div>
   <div class="footer">
