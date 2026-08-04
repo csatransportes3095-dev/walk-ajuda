@@ -296,6 +296,7 @@ function Router() {
       <Route path={"/video/tutorial"} component={VideoTutorial} />
       <Route path={"/tutorial"} component={Tutorial} />
       <Route path={"/r/:slug"} component={Home} />
+      <Route path={"/bot"} component={Home} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

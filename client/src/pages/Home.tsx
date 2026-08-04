@@ -190,6 +190,7 @@ export default function Home() {
 
   // Detectar slug do revendedor na URL (/r/:slug)
   const [matchReseller, resellerParams] = useRoute("/r/:slug");
+  const [matchBot] = useRoute("/bot");
   const resellerSlug = matchReseller ? (resellerParams as { slug: string }).slug : null;
 
   // Salvar slug do revendedor no localStorage para persistir durante o fluxo
@@ -233,9 +234,12 @@ export default function Home() {
   const [faqOpenIndex, setFaqOpenIndex] = useState<number | null>(null);
   const [whatsappClicked, setWhatsappClicked] = useState(false);
   const [step, setStep] = useState<Step>("home");
-  const [showColombiaBot, setShowColombiaBot] = useState(false);
+  // Se acessou via /bot, abrir o bot diretamente (sem tela de escolha)
+  const [showColombiaBot, setShowColombiaBot] = useState(() => !!matchBot);
   // Tela de escolha manifesto: mostrar quando bot está ativo e cliente está logado
+  // Não mostrar tela de escolha se já veio direto pelo /bot
   const [showBotChoice, setShowBotChoice] = useState(() => {
+    if (matchBot) return false; // /bot já abre o bot diretamente
     return !!localStorage.getItem('cp_token');
   });
   const [selectedOption, setSelectedOption] = useState<ProductOption | null>(null);
