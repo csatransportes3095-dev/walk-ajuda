@@ -240,9 +240,21 @@ export default function Home() {
   const [showColombiaBot, setShowColombiaBot] = useState(false);
   // Tela de escolha manifesto: mostrar quando bot está ativo e cliente está logado
   // Não mostrar tela de escolha se já veio direto pelo /bot
+  // Não mostrar tela de escolha se há progresso salvo válido (cliente voltou no meio de um pedido)
   const [showBotChoice, setShowBotChoice] = useState(() => {
     if (matchBot) return false; // /bot já abre o bot diretamente
-    return !!localStorage.getItem('cp_token');
+    if (!localStorage.getItem('cp_token')) return false;
+    // Verificar se há progresso salvo válido (menos de 24h)
+    try {
+      const raw = localStorage.getItem('walk_order_progress');
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved?.savedAt && Date.now() - saved.savedAt < 24 * 60 * 60 * 1000 && saved.productId) {
+          return false; // Tem progresso salvo — não mostrar bot, mostrar modal de retomada
+        }
+      }
+    } catch {}
+    return true;
   });
   const [selectedOption, setSelectedOption] = useState<ProductOption | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
