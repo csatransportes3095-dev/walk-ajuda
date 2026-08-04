@@ -109,28 +109,55 @@ async function ensureCicloFaturaColumn() {
     } catch {
       try { await db.execute(sql.raw(`ALTER TABLE cc_gastos ADD COLUMN cicloFatura VARCHAR(7) NULL`)); } catch {}
     }
-    // Backfill: calcular cicloFatura para gastos existentes sem o campo
-    // Para gastos pagos: usar dataOriginal (data antes de ser sobrescrita por NOW())
-    // Para gastos pendentes: usar data
-    // Precisamos do fechamentoDia de cada cartão
+    // ── Backfill de cicloFatura ─────────────────────────────────────────────────
+    // REGRA CRÍTICA para parcelas:
+    //   O cicloFatura de cada parcela é calculado a partir da dataInicio do PARCELAMENTO
+    //   (data da compra original), não da data da parcela individual.
+    //   Parcela i (0-indexed) = ciclo(dataInicio) + i meses
+    //   Exemplo: dataInicio=17/07, fechDia=25 → cicloBase=2026-07
+    //     Parcela 1/2 → cicloFatura=2026-07
+    //     Parcela 2/2 → cicloFatura=2026-08
+    //
+    // REGRA para gastos avulsos (sem parcelamentoId):
+    //   Usar dataOriginal (se pago) ou data (se pendente)
     const cartoes = await db.execute(sql.raw(`SELECT id, fechamentoDia FROM cc_cartoes`));
     const cartoesList = (cartoes[0] as any[]) || [];
     for (const c of cartoesList) {
       const fechDia = c.fechamentoDia ? Number(c.fechamentoDia) : null;
-      // Gastos pendentes sem cicloFatura
-      const gastosPendentes = await db.execute(sql.raw(
-        `SELECT id, data FROM cc_gastos WHERE cartaoId = ${c.id} AND paga = 0 AND (cicloFatura IS NULL OR cicloFatura = '')`
+
+      // 1. Parcelas de parcelamentos: calcular pelo dataInicio do parcelamento
+      // SEMPRE recalcula (sem filtro cicloFatura IS NULL) para corrigir backfills anteriores errados
+      const parcelamentos = await db.execute(sql.raw(
+        `SELECT p.id, p.dataInicio, g.id as gastoId, g.numeroParcela
+         FROM cc_parcelamentos p
+         JOIN cc_gastos g ON g.parcelamentoId = p.id
+         WHERE p.cartaoId = ${c.id}
+         ORDER BY p.id, g.numeroParcela`
       ));
-      for (const g of (gastosPendentes[0] as any[]) || []) {
-        const dataCompra = new Date(g.data);
-        const ciclo = calcCicloFatura(dataCompra, fechDia);
+      for (const row of (parcelamentos[0] as any[]) || []) {
+        const dataInicio = new Date(row.dataInicio);
+        // Ciclo base = ciclo da dataInicio do parcelamento (data da compra original)
+        const cicloBase = calcCicloFatura(dataInicio, fechDia);
+        const [baseAno, baseMes] = cicloBase.split('-').map(Number);
+        // Parcela i (1-indexed) → offset = numeroParcela - 1
+        const offset = (row.numeroParcela || 1) - 1;
+        const cicloDate = new Date(baseAno, baseMes - 1 + offset, 1);
+        const ciclo = `${cicloDate.getFullYear()}-${String(cicloDate.getMonth() + 1).padStart(2, '0')}`;
+        await db.execute(sql.raw(`UPDATE cc_gastos SET cicloFatura = '${ciclo}' WHERE id = ${row.gastoId}`));
+      }
+
+      // 2. Gastos avulsos (sem parcelamentoId) — recalcula todos
+      const gastosAvulsosPendentes = await db.execute(sql.raw(
+        `SELECT id, data FROM cc_gastos WHERE cartaoId = ${c.id} AND parcelamentoId IS NULL AND paga = 0`
+      ));
+      for (const g of (gastosAvulsosPendentes[0] as any[]) || []) {
+        const ciclo = calcCicloFatura(new Date(g.data), fechDia);
         await db.execute(sql.raw(`UPDATE cc_gastos SET cicloFatura = '${ciclo}' WHERE id = ${g.id}`));
       }
-      // Gastos pagos sem cicloFatura: usar dataOriginal se disponível, senão data
-      const gastosPagos = await db.execute(sql.raw(
-        `SELECT id, data, dataOriginal FROM cc_gastos WHERE cartaoId = ${c.id} AND paga = 1 AND (cicloFatura IS NULL OR cicloFatura = '')`
+      const gastosAvulsosPagos = await db.execute(sql.raw(
+        `SELECT id, data, dataOriginal FROM cc_gastos WHERE cartaoId = ${c.id} AND parcelamentoId IS NULL AND paga = 1`
       ));
-      for (const g of (gastosPagos[0] as any[]) || []) {
+      for (const g of (gastosAvulsosPagos[0] as any[]) || []) {
         const dataRef = g.dataOriginal ? new Date(g.dataOriginal) : new Date(g.data);
         const ciclo = calcCicloFatura(dataRef, fechDia);
         await db.execute(sql.raw(`UPDATE cc_gastos SET cicloFatura = '${ciclo}' WHERE id = ${g.id}`));
