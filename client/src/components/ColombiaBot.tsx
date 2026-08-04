@@ -137,6 +137,44 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   const uid = () => Math.random().toString(36).slice(2, 9);
 
+  // Salvar progresso do bot no localStorage (mesmo formato do fluxo manual)
+  // Isso garante que ao recarregar a página, o modal "Continuar de onde parei" aparece
+  const saveBotProgress = useCallback((step: string = 'cadastro', cadastroSubStep: string = 'pagamento') => {
+    const fs = flowState.current;
+    if (!fs.product) return;
+    try {
+      const progress = {
+        step,
+        cadastroSubStep,
+        productId: fs.product.id,
+        optionId: fs.option?.id ?? null,
+        questionAnswers: Object.entries(fs.answers).reduce((acc, [qId, ans]) => {
+          // Converter Record<number, string> para o formato {[questionId]: answer}
+          acc[qId] = ans;
+          return acc;
+        }, {} as Record<string, string>),
+        clientName: fs.clientName || '',
+        clientPhone: fs.clientPhone || '',
+        clientCity: '',
+        clientEmail: '',
+        couponCode: fs.couponCode || '',
+        carDocumentYear: '',
+        savedAt: Date.now(),
+        fromBot: true, // marcador para saber que veio do bot
+      };
+      localStorage.setItem('walk_order_progress', JSON.stringify(progress));
+      // Salvar URLs dos documentos já enviados
+      const uploadedFiles: Record<string, { url: string; mimeType: string }> = {};
+      Object.entries(fs.docFiles).forEach(([docId, df]) => {
+        if (df.url) uploadedFiles[`doc_${docId}`] = { url: df.url, mimeType: df.mime || 'image/jpeg' };
+      });
+      if (fs.pixProofUrl) uploadedFiles['paymentProof'] = { url: fs.pixProofUrl, mimeType: fs.pixProofMime || 'image/jpeg' };
+      if (Object.keys(uploadedFiles).length > 0) {
+        localStorage.setItem('walk_uploaded_files', JSON.stringify(uploadedFiles));
+      }
+    } catch {}
+  }, []);
+
   // Salvar snapshot do estado atual antes de uma nova pergunta (para o botão Voltar)
   const saveSnapshot = useCallback(() => {
     setMessages(prev => {
@@ -247,6 +285,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       const product = products.find(p => p.name === opt);
       if (!product) return;
       flowState.current.product = product;
+      saveBotProgress('questions', 'dados');
       setTimeout(() => {
         if (product.options.length === 0) {
           finishWithProduct(product, null);
@@ -276,6 +315,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       });
       if (!option) return;
       flowState.current.option = option;
+      saveBotProgress('questions', 'dados');
       setTimeout(() => askQuestions(product, option, {}), 300);
     };
     addMsgs(
@@ -311,6 +351,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         addMsgs({ type: "user", id: uid(), text: val });
         const newAnswers = { ...currentAnswers, [nextQ.id]: val };
         flowState.current.answers = newAnswers;
+        saveBotProgress('questions', 'dados');
         // Continuar com as novas respostas — sub-perguntas serão recalculadas
         setTimeout(() => askQuestions(product, option, newAnswers), 300);
       };
@@ -324,6 +365,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         addMsgs({ type: "user", id: uid(), text: val || "(sem resposta)" });
         const newAnswers = { ...currentAnswers, [nextQ.id]: val };
         flowState.current.answers = newAnswers;
+        saveBotProgress('questions', 'dados');
         setTimeout(() => askQuestions(product, option, newAnswers), 300);
       };
       addMsgs(
@@ -502,6 +544,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       }
     };
 
+    // Salvar progresso ao chegar na etapa de pagamento PIX
+    saveBotProgress('cadastro', 'pagamento');
     addMsgs(
       { type: 'bot', id: uid(), text: `Agora faça o pagamento via Pix${price ? ` de R$ ${price}` : ''} e envie o comprovante abaixo.` },
       { type: 'pix-payment', id: msgId, pixKey, pixName, pixBank, price, uploaded: false }
