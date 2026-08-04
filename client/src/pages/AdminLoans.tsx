@@ -709,6 +709,8 @@ function LoansTab() {
 
                     {/* ─── Linha de valores pagos/restantes ─── */}
                     {(() => {
+                      // Empréstimo reprovado ou cancelado: cliente não recebeu nada, não deve nada
+                      const isEncerrado = ['reprovado', 'cancelado'].includes(loan.status);
                       // Parcelas pagas normalmente (status='pago')
                       const paid = Number(loan.paidInstallments) || 0;
                       // Usar installments (original) para o ratio, não totalInstallments (que inclui parcelas roladas)
@@ -724,10 +726,11 @@ function LoansTab() {
                       // Juros pagos = proporção das parcelas quitadas × juros originais + juros de rolagem cobrados
                       const interestPaid = Math.round((interestTotal * ratio + interestOnlyPaid) * 100) / 100;
                       const totalPaid = Math.round((principalPaid + interestPaid) * 100) / 100;
-                      const principalLeft = Math.round((principalTotal - principalPaid) * 100) / 100;
+                      // Se reprovado/cancelado: falta = 0 (cliente não deve nada)
+                      const principalLeft = isEncerrado ? 0 : Math.round((principalTotal - principalPaid) * 100) / 100;
                       // Juros restantes = apenas os juros das parcelas ainda não pagas (não subtrair rolagem pois ela gera novas parcelas)
-                      const interestLeft = Math.round(interestTotal * (1 - ratio) * 100) / 100;
-                      const totalLeft = Math.round((principalLeft + interestLeft) * 100) / 100;
+                      const interestLeft = isEncerrado ? 0 : Math.round(interestTotal * (1 - ratio) * 100) / 100;
+                      const totalLeft = isEncerrado ? 0 : Math.round((principalLeft + interestLeft) * 100) / 100;
                       return (
                         <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 mb-3">
                           <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 text-center">
@@ -812,16 +815,14 @@ function LoansTab() {
                         </button>
                       )}
 
-                      {/* Editar (ativo/aprovado) */}
-                      {!['pago','cancelado','reprovado','pendente'].includes(loan.status) && (
-                        <button
-                          onClick={() => setEditLoanData(loan)}
-                          className="flex flex-col items-center gap-1 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 py-3 px-2 text-center transition-all active:scale-95"
-                        >
-                          <span className="text-xl">✏️</span>
-                          <span className="text-xs font-semibold">Editar</span>
-                        </button>
-                      )}
+                      {/* Editar - visível para todos os status */}
+                      <button
+                        onClick={() => setEditLoanData(loan)}
+                        className="flex flex-col items-center gap-1 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 py-3 px-2 text-center transition-all active:scale-95"
+                      >
+                        <span className="text-xl">✏️</span>
+                        <span className="text-xs font-semibold">Editar</span>
+                      </button>
 
                       {/* Notificar Aprovação (ativo/aprovado) */}
                       {!['pago','cancelado','reprovado','pendente'].includes(loan.status) && (
@@ -2301,6 +2302,8 @@ function EditLoanModal({ loan, onClose, onSuccess }: { loan: any; onClose: () =>
   const [customInstallments, setCustomInstallments] = useState(String(loan.installments || (loan.workDays === "seg_dom" ? 25 : 20)));
   const [releaseDate, setReleaseDate] = useState(loan.releaseDate ? loan.releaseDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState(loan.notes || "");
+  const [status, setStatus] = useState<string>(loan.status || "pendente");
+  const [rejectedReason, setRejectedReason] = useState(loan.rejectedReason || "");
 
   const editLoan = trpc.loans.editLoan.useMutation({
     onSuccess,
@@ -2426,11 +2429,36 @@ function EditLoanModal({ loan, onClose, onSuccess }: { loan: any; onClose: () =>
             <Label>Observações</Label>
             <Textarea placeholder="..." value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
+
+          {/* Campo de Status — ADM pode alterar qualquer status */}
+          <div className="space-y-2">
+            <Label>Status do Empréstimo</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="bg-card/60"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pendente">Aguardando Aprovação</SelectItem>
+                <SelectItem value="aprovado">Aprovado (Ativo)</SelectItem>
+                <SelectItem value="reprovado">Reprovado</SelectItem>
+                <SelectItem value="cancelado">Cancelado</SelectItem>
+                <SelectItem value="pago">Pago</SelectItem>
+              </SelectContent>
+            </Select>
+            {status !== loan.status && (
+              <p className="text-xs text-amber-400">⚠️ Status será alterado de <strong>{loan.status}</strong> para <strong>{status}</strong></p>
+            )}
+          </div>
+
+          {status === "reprovado" && (
+            <div className="space-y-2">
+              <Label>Motivo da reprovação</Label>
+              <Textarea placeholder="Ex: Sem movimentação de pedidos..." value={rejectedReason} onChange={(e) => setRejectedReason(e.target.value)} rows={2} />
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button
-            onClick={() => editLoan.mutate({ id: loan.id, amount: amountNum, interestRate: rateNum, days: daysNum, paymentType, workDays: workDays as "seg_sab" | "seg_dom" | "custom", customInstallments: workDays === "custom" ? (parseInt(customInstallments) || 1) : undefined, releaseDate, notes })}
+            onClick={() => editLoan.mutate({ id: loan.id, amount: amountNum, interestRate: rateNum, days: daysNum, paymentType, workDays: workDays as "seg_sab" | "seg_dom" | "custom", customInstallments: workDays === "custom" ? (parseInt(customInstallments) || 1) : undefined, releaseDate, notes, status, rejectedReason: status === 'reprovado' ? rejectedReason : undefined })}
             disabled={!amount || amountNum <= 0 || editLoan.isPending}>
             {editLoan.isPending ? "Salvando..." : "Salvar alterações"}
           </Button>

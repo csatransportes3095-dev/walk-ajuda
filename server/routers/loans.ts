@@ -1522,20 +1522,25 @@ export const loanRouter = router({
     customInstallments: z.number().min(1).max(365).optional(),
     releaseDate: z.string(),
     notes: z.string().optional(),
+    status: z.enum(["pendente", "aprovado", "reprovado", "cancelado", "pago"]).optional(),
+    rejectedReason: z.string().optional(),
   })).mutation(async ({ input }) => {
     const db = await getDb() as any;
     const loans = await qRows(db, drizzleSql`SELECT * FROM loans WHERE id=${input.id}`);
-    if (!loans.length) throw new TRPCError({ code: "NOT_FOUND", message: "EmprÃƒÂ©stimo nÃƒÂ£o encontrado" });
+    if (!loans.length) throw new TRPCError({ code: "NOT_FOUND", message: "Empréstimo não encontrado" });
     const loan = loans[0];
 
     // Recalcula com os novos valores
     const sim = simulateLoan(input.amount, input.interestRate, input.paymentType, input.days, input.workDays, input.releaseDate, input.customInstallments);
 
-    // Descobre quantas parcelas jÃƒÂ¡ foram pagas
+    // Descobre quantas parcelas já foram pagas
     const paidRows = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanInstallments WHERE loanId=${input.id} AND status='pago'`);
     const paidCount = parseInt(paidRows[0]?.cnt || 0);
 
-    // Atualiza o emprÃƒÂ©stimo
+    // Status a aplicar (usa o atual se não fornecido)
+    const newStatus = input.status || loan.status;
+
+    // Atualiza o empréstimo (inclui status e motivo de reprovação se fornecidos)
     await db.execute(drizzleSql`
       UPDATE loans SET
         amount=${input.amount},
@@ -1548,7 +1553,10 @@ export const loanRouter = router({
         totalAmount=${sim.totalAmount},
         releaseDate=${input.releaseDate},
         dueDate=${sim.dueDate},
-        notes=${input.notes || loan.notes || null}
+        notes=${input.notes || loan.notes || null},
+        status=${newStatus},
+        rejectedReason=${newStatus === 'reprovado' ? (input.rejectedReason || loan.rejectedReason || null) : loan.rejectedReason || null},
+        rejectedAt=${newStatus === 'reprovado' && loan.status !== 'reprovado' ? new Date().toISOString().slice(0,19).replace('T',' ') : loan.rejectedAt || null}
       WHERE id=${input.id}
     `);
 
@@ -1556,18 +1564,21 @@ export const loanRouter = router({
     await db.execute(drizzleSql`DELETE FROM loanInstallments WHERE loanId=${input.id} AND status='pendente'`);
 
     // Recria as parcelas pendentes a partir da (paidCount+1)
+    // (apenas se o status for ativo/aprovado — reprovado/cancelado não precisa de parcelas)
     let pendingNum = 0;
-    for (const inst of sim.schedule) {
-      if (inst.installmentNumber > paidCount) {
-        await db.execute(drizzleSql`
-          INSERT INTO loanInstallments (loanId, installmentNumber, dueDate, amount)
-          VALUES (${input.id}, ${inst.installmentNumber}, ${inst.dueDate}, ${inst.amount})
-        `);
-        pendingNum++;
+    if (!['reprovado', 'cancelado'].includes(newStatus)) {
+      for (const inst of sim.schedule) {
+        if (inst.installmentNumber > paidCount) {
+          await db.execute(drizzleSql`
+            INSERT INTO loanInstallments (loanId, installmentNumber, dueDate, amount)
+            VALUES (${input.id}, ${inst.installmentNumber}, ${inst.dueDate}, ${inst.amount})
+          `);
+          pendingNum++;
+        }
       }
     }
 
-    return { ok: true, totalAmount: sim.totalAmount, installments: sim.installments, pendingRecreated: pendingNum };
+    return { ok: true, totalAmount: sim.totalAmount, installments: sim.installments, pendingRecreated: pendingNum, newStatus };
   }),
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Pagamento SÃƒÂ³ de Juros Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
