@@ -5662,12 +5662,14 @@ export const appRouter = router({
         const fileName = `og-image/og-image-${Date.now()}.${ext}`;
         const buffer = Buffer.from(input.imageBase64, 'base64');
         const { url } = await storagePut(fileName, buffer, mime);
-        // Save storage URL Ã¢â‚¬â€ the /og-image proxy route serves it without redirect for WhatsApp
-        await upsertSettings({ og_image_url: url });
+        // Save storage URL — the /og-image proxy route serves it without redirect for WhatsApp
+        // Also save a version timestamp to bust WhatsApp's og:image cache
+        const imageVersion = String(Date.now());
+        await upsertSettings({ og_image_url: url, og_image_version: imageVersion });
         // Bust the in-memory image cache so the new image is served immediately
         const { bustOgImageCache } = await import('./_core/vite');
         bustOgImageCache();
-        return { success: true, url };
+        return { success: true, url, imageVersion };
       }),
   }),
 

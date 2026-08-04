@@ -8,30 +8,35 @@ import viteConfig from "../../vite.config";
 import { getSettings } from "../db";
 import { ENV } from "./env";
 
-async function getOgMeta(): Promise<{ title: string; description: string; imageUrl: string | null }> {
+async function getOgMeta(): Promise<{ title: string; description: string; imageUrl: string | null; imageVersion: string }> {
   try {
-    const settings = await getSettings(['og_title', 'og_description', 'og_image_url']);
+    const settings = await getSettings(['og_title', 'og_description', 'og_image_url', 'og_image_version']);
     return {
       title: settings['og_title'] ?? 'H2 COLOMBIANO',
       description: settings['og_description'] ?? 'H2 COLOMBIANO',
       imageUrl: settings['og_image_url'] ?? '/og-image.png',
+      imageVersion: settings['og_image_version'] ?? '1',
     };
   } catch {
-    return { title: 'H2 COLOMBIANO', description: 'H2 COLOMBIANO', imageUrl: '/og-image.png' };
+    return { title: 'H2 COLOMBIANO', description: 'H2 COLOMBIANO', imageUrl: '/og-image.png', imageVersion: '1' };
   }
 }
 
-function injectOgMeta(html: string, og: { title: string; description: string; imageUrl: string | null }, origin: string): string {
+function injectOgMeta(html: string, og: { title: string; description: string; imageUrl: string | null; imageVersion?: string }, origin: string): string {
   // Use the dynamic image URL from the database; fall back to /og-image.jpg proxy route
+  // Add ?v= version param so WhatsApp is forced to re-fetch when image changes
+  const ver = og.imageVersion || '1';
   let imgSrc: string | null = null;
   if (og.imageUrl) {
     if (og.imageUrl.startsWith('http')) {
-      imgSrc = og.imageUrl;
+      // External URL: add version as query param to bust WhatsApp cache
+      const sep = og.imageUrl.includes('?') ? '&' : '?';
+      imgSrc = `${og.imageUrl}${sep}v=${ver}`;
     } else if (og.imageUrl.startsWith('/manus-storage/')) {
       // Serve via our proxy route so WhatsApp can fetch without redirects
-      imgSrc = `${origin}/og-image.jpg`;
+      imgSrc = `${origin}/og-image.jpg?v=${ver}`;
     } else {
-      imgSrc = `${origin}${og.imageUrl}`;
+      imgSrc = `${origin}${og.imageUrl}?v=${ver}`;
     }
   }
   const imageTag = imgSrc
