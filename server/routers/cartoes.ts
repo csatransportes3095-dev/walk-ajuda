@@ -63,7 +63,7 @@ function makeCcProtectedProcedure() {
 
 const ccProtected = makeCcProtectedProcedure();
 
-// ─── Helpers de banco ─────────────────────────────────────────────────────────
+// ─── Helpers de banco ───────────────────────────────────────────────────
 async function ccExec(query: string, params: any[] = []) {
   const db = await getDb() as any;
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
@@ -79,66 +79,118 @@ async function ccExec(query: string, params: any[] = []) {
   return (result[0] as any[]) || [];
 }
 
+// ─── calcCicloFatura: calcula o ciclo (YYYY-MM) de uma compra ──────────────────────────────
+// Regra: se a data da compra é APÓS o fechamentoDia, ela pertence ao ciclo do mês seguinte.
+// Exemplo: fechamento=25, compra em 28/07 → ciclo 2026-08 (fatura vence em 02/09)
+//          fechamento=25, compra em 20/07 → ciclo 2026-07 (fatura vence em 02/08)
+// Sem fechamentoDia: ciclo = mês da compra
+function calcCicloFatura(dataCompra: Date, fechamentoDia: number | null): string {
+  const dia = dataCompra.getDate();
+  const mes = dataCompra.getMonth(); // 0-indexed
+  const ano = dataCompra.getFullYear();
+  if (fechamentoDia && dia > fechamentoDia) {
+    // Compra após o fechamento: pertence ao ciclo do próximo mês
+    const proxMes = new Date(ano, mes + 1, 1);
+    return `${proxMes.getFullYear()}-${String(proxMes.getMonth() + 1).padStart(2, '0')}`;
+  }
+  return `${ano}-${String(mes + 1).padStart(2, '0')}`;
+}
+
+// ─── Migração automática da coluna cicloFatura ──────────────────────────────────────────
+let _cicloFaturaMigrated = false;
+async function ensureCicloFaturaColumn() {
+  if (_cicloFaturaMigrated) return;
+  try {
+    const db = await getDb() as any;
+    if (!db) return;
+    // Adicionar coluna cicloFatura se não existir
+    try {
+      await db.execute(sql.raw(`ALTER TABLE cc_gastos ADD COLUMN IF NOT EXISTS cicloFatura VARCHAR(7) NULL`));
+    } catch {
+      try { await db.execute(sql.raw(`ALTER TABLE cc_gastos ADD COLUMN cicloFatura VARCHAR(7) NULL`)); } catch {}
+    }
+    // Backfill: calcular cicloFatura para gastos existentes sem o campo
+    // Para gastos pagos: usar dataOriginal (data antes de ser sobrescrita por NOW())
+    // Para gastos pendentes: usar data
+    // Precisamos do fechamentoDia de cada cartão
+    const cartoes = await db.execute(sql.raw(`SELECT id, fechamentoDia FROM cc_cartoes`));
+    const cartoesList = (cartoes[0] as any[]) || [];
+    for (const c of cartoesList) {
+      const fechDia = c.fechamentoDia ? Number(c.fechamentoDia) : null;
+      // Gastos pendentes sem cicloFatura
+      const gastosPendentes = await db.execute(sql.raw(
+        `SELECT id, data FROM cc_gastos WHERE cartaoId = ${c.id} AND paga = 0 AND (cicloFatura IS NULL OR cicloFatura = '')`
+      ));
+      for (const g of (gastosPendentes[0] as any[]) || []) {
+        const dataCompra = new Date(g.data);
+        const ciclo = calcCicloFatura(dataCompra, fechDia);
+        await db.execute(sql.raw(`UPDATE cc_gastos SET cicloFatura = '${ciclo}' WHERE id = ${g.id}`));
+      }
+      // Gastos pagos sem cicloFatura: usar dataOriginal se disponível, senão data
+      const gastosPagos = await db.execute(sql.raw(
+        `SELECT id, data, dataOriginal FROM cc_gastos WHERE cartaoId = ${c.id} AND paga = 1 AND (cicloFatura IS NULL OR cicloFatura = '')`
+      ));
+      for (const g of (gastosPagos[0] as any[]) || []) {
+        const dataRef = g.dataOriginal ? new Date(g.dataOriginal) : new Date(g.data);
+        const ciclo = calcCicloFatura(dataRef, fechDia);
+        await db.execute(sql.raw(`UPDATE cc_gastos SET cicloFatura = '${ciclo}' WHERE id = ${g.id}`));
+      }
+    }
+    _cicloFaturaMigrated = true;
+  } catch (e) {
+    console.error('[cc-migrate] Erro na migração cicloFatura:', e);
+    _cicloFaturaMigrated = true; // não bloquear o sistema
+  }
+}
+
 // ─── Função central de cálculo financeiro do cartão ─────────────────────────────
-// Regras:
-// - Competência do ciclo corrente é sempre baseada no fechamentoDia (sem avançar por causa de atraso)
-// - Fatura em atraso = gastos paga=0 de competências ANTERIORES ao ciclo corrente
-// - Fatura atual = gastos paga=0 do ciclo corrente
-// - Próxima fatura = gastos paga=0 do próximo ciclo
+// Usa cicloFatura como chave permanente de cada gasto/parcela
 async function calcCartao(c: any) {
+  await ensureCicloFaturaColumn(); // garante migração na primeira chamada
   const cartaoId = c.id;
   const hoje = new Date();
-  const diaHoje = hoje.getDate();
   const fechDia = c.fechamentoDia ? Number(c.fechamentoDia) : null;
   const vencDia = Number(c.vencimentoDia);
   const limiteTotal = parseFloat(c.limiteTotal);
 
-  // ── Determinar competência do ciclo corrente ──────────────────────────────
-  // O ciclo corrente é sempre o mês atual (baseado no fechamento).
-  // Quando diaHoje > fechDia, o ciclo ACABOU DE FECHAR e a fatura está aguardando pagamento.
-  // Não avançamos a competência — isso causaria a fatura vencida desaparecer.
-  // A competência corrente = mês atual até o fechamento.
-  // A competência seguinte = mês seguinte.
-  const compMes = hoje.getMonth() + 1;
-  const compAno = hoje.getFullYear();
-  const compStr = `${compAno}-${String(compMes).padStart(2, '0')}`;
+  // ── Ciclo corrente: calculado pela data de hoje e o fechamentoDia ─────────────────
+  // O ciclo corrente é o ciclo ao qual uma compra feita HOJE pertenceria.
+  // Se hoje é dia 04/08 e fechamento é dia 25: hoje <= 25, então ciclo corrente = 2026-08
+  // Se hoje é dia 28/08 e fechamento é dia 25: hoje > 25, então ciclo corrente = 2026-09
+  const compStr = calcCicloFatura(hoje, fechDia);
 
-  // Próxima competência (mês seguinte)
-  const proxDate = new Date(compAno, compMes, 1);
-  const proxMes = proxDate.getMonth() + 1;
-  const proxAno = proxDate.getFullYear();
-  const proxStr = `${proxAno}-${String(proxMes).padStart(2, '0')}`;
+  // Próxima competência (ciclo seguinte ao corrente)
+  const [cAno, cMes] = compStr.split('-').map(Number);
+  const proxDate = new Date(cAno, cMes, 1); // cMes é 1-indexed, new Date(ano, cMes, 1) = primeiro dia do mês seguinte
+  const proxStr = `${proxDate.getFullYear()}-${String(proxDate.getMonth() + 1).padStart(2, '0')}`;
 
-  // ── Detectar fatura em atraso ─────────────────────────────────────────────
-  // Fatura em atraso = gastos paga=0 de competências ANTERIORES ao mês atual
-  // (ou seja, DATE_FORMAT(data,'%Y-%m') < compStr)
+  // Ciclo anterior ao corrente (para detectar fatura em atraso)
+  const antDate = new Date(cAno, cMes - 2, 1); // cMes-1 é o mês corrente 0-indexed, cMes-2 é o anterior
+  const antStr = `${antDate.getFullYear()}-${String(antDate.getMonth() + 1).padStart(2, '0')}`;
+
+  // ── Detectar fatura em atraso usando cicloFatura ────────────────────────────
+  // Fatura em atraso = gastos paga=0 com cicloFatura < ciclo corrente
   const gastosAtrasados = await ccExec(
-    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') < '${compStr}'`
+    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND cicloFatura IS NOT NULL AND cicloFatura < '${compStr}'`
   );
   const valorEmAtraso = Math.round(gastosAtrasados.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
 
-  // Calcular competência da fatura em atraso (a mais recente anterior ao mês atual)
   let faturaEmAtraso: { valor: number; competencia: string; vencimento: string; diasAtraso: number } | null = null;
   if (valorEmAtraso > 0) {
-    // Buscar a competência mais recente com gastos em atraso
+    // Buscar o ciclo mais recente com gastos em atraso
     const compAtrasadaRows = await ccExec(
-      `SELECT DATE_FORMAT(data, '%Y-%m') as comp FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') < '${compStr}' ORDER BY data DESC LIMIT 1`
+      `SELECT cicloFatura as comp FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND cicloFatura IS NOT NULL AND cicloFatura < '${compStr}' ORDER BY cicloFatura DESC LIMIT 1`
     );
     const compAtrasada = compAtrasadaRows[0]?.comp ?? '';
     if (compAtrasada) {
       const [aAno, aMes] = compAtrasada.split('-').map(Number);
-      // Vencimento da fatura atrasada = dia de vencimento no mês seguinte ao fechamento
-      // Se vencDia > fechDia: vence no mesmo mês do fechamento
-      // Se vencDia <= fechDia: vence no mês seguinte ao fechamento
+      // Vencimento: se vencDia > fechDia, vence no mesmo mês do ciclo; senão no mês seguinte
       let vencAno = aAno;
-      let vencMesIdx = aMes - 1; // 0-indexed
+      let vencMesIdx: number;
       if (fechDia && vencDia > fechDia) {
-        // vence no mesmo mês da competência
-        vencMesIdx = aMes - 1;
-        vencAno = aAno;
+        vencMesIdx = aMes - 1; // mesmo mês do ciclo (0-indexed)
       } else {
-        // vence no mês seguinte à competência
-        vencMesIdx = aMes; // aMes é 1-indexed, então aMes como 0-indexed = próximo mês
+        vencMesIdx = aMes; // mês seguinte ao ciclo (aMes já é 1-indexed, como 0-indexed = próximo)
         if (vencMesIdx > 11) { vencMesIdx = 0; vencAno = aAno + 1; }
       }
       const dataVenc = new Date(vencAno, vencMesIdx, vencDia, 23, 59, 59);
@@ -152,16 +204,15 @@ async function calcCartao(c: any) {
     }
   }
 
-  // ── Fatura Atual = gastos paga=0 do ciclo corrente ────────────────────────
-  // Se há fatura em atraso, a fatura atual mostra o ciclo corrente separado
+  // ── Fatura Atual = gastos paga=0 do ciclo corrente (usando cicloFatura) ────────────
   const gastosAtual = await ccExec(
-    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') = '${compStr}'`
+    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND cicloFatura = '${compStr}'`
   );
   const faturaAtual = Math.round(gastosAtual.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
 
   // ── Próxima Fatura = gastos paga=0 do próximo ciclo ───────────────────────
   const gastosProx = await ccExec(
-    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') = '${proxStr}'`
+    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND cicloFatura = '${proxStr}'`
   );
   const proximaFatura = Math.round(gastosProx.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
 
@@ -173,7 +224,6 @@ async function calcCartao(c: any) {
   const limiteDisponivel = Math.round((limiteTotal - limiteUsado) * 100) / 100;
   const pctLimite = limiteTotal > 0 ? Math.round((limiteUsado / limiteTotal) * 10000) / 100 : 0;
 
-  // Totais para o dashboard
   const totalAVista = Math.round(todosPendentes.filter((g: any) => !g.numeroParcela).reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
   const totalParcelado = Math.round(todosPendentes.filter((g: any) => g.numeroParcela).reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
   const numParcelasAtivas = todosPendentes.filter((g: any) => g.numeroParcela).length;
@@ -417,12 +467,15 @@ export const cartoesRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
-        const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
-        if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND", message: "Cartão não encontrado" });
-        const data = input.data ? `'${input.data.slice(0, 10)} 00:00:00'` : "NOW()";
-        const responsavel = input.responsavel ? `'${input.responsavel.replace(/'/g, "''")}'` : "NULL";
+        const cartaoRows = await ccExec(`SELECT id, fechamentoDia FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        if (!cartaoRows.length) throw new TRPCError({ code: "NOT_FOUND", message: "Cartão não encontrado" });
+        const fechDia = cartaoRows[0].fechamentoDia ? Number(cartaoRows[0].fechamentoDia) : null;
+        const dataCompra = input.data ? new Date(input.data.slice(0, 10) + 'T12:00:00') : new Date();
+        const cicloFatura = calcCicloFatura(dataCompra, fechDia);
+        const dataStr = input.data ? `'${input.data.slice(0, 10)} 00:00:00'` : "NOW()";
+        const responsavel = input.responsavel ? `'${input.responsavel.replace(/'/g, "''")}' ` : "NULL";
         const categoriaId = input.categoriaId ?? "NULL";
-        await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, responsavel, categoriaId) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")}', ${input.valor}, ${data}, ${responsavel}, ${categoriaId})`);
+        await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, responsavel, categoriaId, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")}', ${input.valor}, ${dataStr}, ${responsavel}, ${categoriaId}, '${cicloFatura}')`);
         return { success: true };
       }),
 
@@ -507,7 +560,7 @@ export const cartoesRouter = router({
         cartaoId: z.number().int(),
         valorPago: z.number().positive(),
         observacao: z.string().max(200).optional(),
-        competencia: z.string().optional(), // formato YYYY-MM — quando passado, baixa só gastos dessa competência
+        competencia: z.string().optional(), // formato YYYY-MM — quando passado, baixa só gastos desse cicloFatura
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
@@ -515,19 +568,19 @@ export const cartoesRouter = router({
         if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
         const obs = input.observacao ? `'${input.observacao.replace(/'/g, "''")}' ` : "NULL";
         await ccExec(`INSERT INTO cc_pagamentos (cartaoId, valorPago, observacao) VALUES (${input.cartaoId}, ${input.valorPago}, ${obs})`);
-        // Se competência especificada: baixar apenas gastos daquela competência
-        // Caso contrário: baixar os mais antigos primeiro até cobrir o valor
+        // Baixar gastos pelo cicloFatura (chave permanente)
+        // Se cicloFatura não existir ainda (dados antigos), fallback para DATE_FORMAT
         let gastos: any[];
         if (input.competencia) {
-          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') = '${input.competencia}' ORDER BY data ASC`);
+          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 AND (cicloFatura = '${input.competencia}' OR (cicloFatura IS NULL AND DATE_FORMAT(dataOriginal, '%Y-%m') = '${input.competencia}')) ORDER BY cicloFatura ASC, data ASC`);
         } else {
-          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY data ASC`);
+          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY cicloFatura ASC, data ASC`);
         }
         let restante = input.valorPago;
         let parcelasMarcadas = 0;
         for (const g of gastos) {
           if (restante <= 0) break;
-          await ccExec(`UPDATE cc_gastos SET paga = 1, dataOriginal = data, data = NOW() WHERE id = ${g.id}`);
+          await ccExec(`UPDATE cc_gastos SET paga = 1, dataOriginal = COALESCE(dataOriginal, data), data = NOW() WHERE id = ${g.id}`);
           restante -= parseFloat(g.valor);
           parcelasMarcadas++;
         }
@@ -539,7 +592,7 @@ export const cartoesRouter = router({
         cartaoId: z.number().int(),
         valorPago: z.number().positive(),
         observacao: z.string().max(200).optional(),
-        competencia: z.string().optional(), // formato YYYY-MM — quando passado, baixa só gastos dessa competência
+        competencia: z.string().optional(), // formato YYYY-MM — quando passado, baixa só gastos desse cicloFatura
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
@@ -547,20 +600,24 @@ export const cartoesRouter = router({
         if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
         const obs = input.observacao ? `'${input.observacao.replace(/'/g, "''")}' ` : "NULL";
         await ccExec(`INSERT INTO cc_pagamentos (cartaoId, valorPago, observacao) VALUES (${input.cartaoId}, ${input.valorPago}, ${obs})`);
-        // Se competência especificada: baixar apenas gastos daquela competência
-        // Caso contrário: baixar os mais antigos primeiro até cobrir o valor
+        // Baixar TODOS os gastos do cicloFatura especificado (baixa exata da fatura)
+        // Se cicloFatura não existir ainda (dados antigos), fallback para DATE_FORMAT
         let gastos: any[];
         if (input.competencia) {
-          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') = '${input.competencia}' ORDER BY data ASC`);
+          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 AND (cicloFatura = '${input.competencia}' OR (cicloFatura IS NULL AND DATE_FORMAT(dataOriginal, '%Y-%m') = '${input.competencia}')) ORDER BY cicloFatura ASC, data ASC`);
         } else {
-          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY data ASC`);
+          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY cicloFatura ASC, data ASC`);
         }
-        let restante = input.valorPago;
         let parcelasMarcadas = 0;
         for (const g of gastos) {
-          if (restante <= 0) break;
-          await ccExec(`UPDATE cc_gastos SET paga = 1, dataOriginal = data, data = NOW() WHERE id = ${g.id}`);
-          restante -= parseFloat(g.valor);
+          // Quando competencia é passada: baixa TODOS os gastos daquele ciclo (sem limite de valor)
+          // Quando não é passada: comportamento antigo (até cobrir o valor)
+          if (!input.competencia && parcelasMarcadas > 0) {
+            // sem competencia: parar quando valor coberto
+            const totalMarcado = gastos.slice(0, parcelasMarcadas).reduce((s, g2) => s + parseFloat(g2.valor), 0);
+            if (totalMarcado >= input.valorPago) break;
+          }
+          await ccExec(`UPDATE cc_gastos SET paga = 1, dataOriginal = COALESCE(dataOriginal, data), data = NOW() WHERE id = ${g.id}`);
           parcelasMarcadas++;
         }
         return { success: true, parcelasMarcadas };
@@ -622,19 +679,23 @@ export const cartoesRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
-        const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
-        if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
+        const cartaoRows = await ccExec(`SELECT id, fechamentoDia FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        if (!cartaoRows.length) throw new TRPCError({ code: "NOT_FOUND" });
+        const fechDia = cartaoRows[0].fechamentoDia ? Number(cartaoRows[0].fechamentoDia) : null;
         const valorParcela = Math.round((input.valorTotal / input.numParcelas) * 100) / 100;
-        const responsavel = input.responsavel ? `'${input.responsavel.replace(/'/g, "''")}'` : "NULL";
+        const responsavel = input.responsavel ? `'${input.responsavel.replace(/'/g, "''")}' ` : "NULL";
         await ccExec(`INSERT INTO cc_parcelamentos (cartaoId, descricao, valorTotal, valorParcela, numParcelas, dataInicio, responsavel) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")}', ${input.valorTotal}, ${valorParcela}, ${input.numParcelas}, '${input.dataInicio.slice(0, 10)} 00:00:00', ${responsavel})`);
         const pRows = await ccExec(`SELECT LAST_INSERT_ID() as id`);
         const parcelamentoId = pRows[0]?.id;
-        // Gerar parcelas mensais
+        // Gerar parcelas mensais — cada parcela recebe seu cicloFatura correto
+        // A data de cada parcela é a data da compra + i meses (mesmo dia)
+        // O cicloFatura é calculado com base na data de cada parcela e o fechamentoDia
         const [ano, mes, dia] = input.dataInicio.slice(0, 10).split("-").map(Number);
         for (let i = 0; i < input.numParcelas; i++) {
-          const d = new Date(ano, mes - 1 + i, dia);
+          const d = new Date(ano, mes - 1 + i, dia, 12, 0, 0); // meio-dia para evitar timezone
           const dataStr = d.toISOString().slice(0, 10);
-          await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, parcelamentoId, numeroParcela, totalParcelas, responsavel) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")} (${i + 1}/${input.numParcelas})', ${valorParcela}, '${dataStr} 00:00:00', ${parcelamentoId}, ${i + 1}, ${input.numParcelas}, ${responsavel})`);
+          const cicloFatura = calcCicloFatura(d, fechDia);
+          await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, parcelamentoId, numeroParcela, totalParcelas, responsavel, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")} (${i + 1}/${input.numParcelas})', ${valorParcela}, '${dataStr} 00:00:00', ${parcelamentoId}, ${i + 1}, ${input.numParcelas}, ${responsavel}, '${cicloFatura}')`);
         }
         return { success: true };
       }),
@@ -696,15 +757,17 @@ export const cartoesRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
-        const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
-        if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
+        const cartaoRows = await ccExec(`SELECT id, fechamentoDia FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        if (!cartaoRows.length) throw new TRPCError({ code: "NOT_FOUND" });
+        const fechDia = cartaoRows[0].fechamentoDia ? Number(cartaoRows[0].fechamentoDia) : null;
         const parcelas = await ccExec(`SELECT id, numeroParcela FROM cc_gastos WHERE parcelamentoId = ${input.id} AND cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY numeroParcela ASC`);
         const [ano, mes, dia] = input.novaData.slice(0, 10).split("-").map(Number);
         for (const p of parcelas) {
           const offset = (p.numeroParcela || 1) - 1;
-          const d = new Date(ano, mes - 1 + offset, dia);
+          const d = new Date(ano, mes - 1 + offset, dia, 12, 0, 0);
           const dataStr = d.toISOString().slice(0, 10);
-          await ccExec(`UPDATE cc_gastos SET data = '${dataStr} 00:00:00' WHERE id = ${p.id}`);
+          const cicloFatura = calcCicloFatura(d, fechDia);
+          await ccExec(`UPDATE cc_gastos SET data = '${dataStr} 00:00:00', cicloFatura = '${cicloFatura}' WHERE id = ${p.id}`);
         }
         await ccExec(`UPDATE cc_parcelamentos SET dataInicio = '${input.novaData.slice(0, 10)} 00:00:00' WHERE id = ${input.id}`);
         return { success: true };
