@@ -335,7 +335,8 @@ export default function CartaoDetailPage() {
   const parcelamentosAtivos = parcelamentos.filter((p: any) => p.parcelasRestantes > 0);
 
   // Agrupa gastos: parcelados por parcelamentoId, avulsos separados
-  const gastosAvulsos = gastos.filter((g: any) => !g.parcelamentoId).sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+  // Mostra apenas gastos avulsos PENDENTES (paga=0) — pagos ficam no histórico
+  const gastosAvulsos = gastos.filter((g: any) => !g.parcelamentoId && g.paga === 0).sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
   const gastosPorParcelamento: Record<number, any[]> = {};
   for (const g of gastos) {
     const pid = (g as any).parcelamentoId;

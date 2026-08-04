@@ -409,6 +409,7 @@ export const cartoesRouter = router({
         const userId = (ctx as any).ccUserId as number;
         const cartao = await ccExec(`SELECT * FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
         if (!cartao.length) throw new TRPCError({ code: 'NOT_FOUND' });
+        await ensureCicloFaturaColumn();
         const hoje = new Date();
         const resultado: any[] = [];
         for (let i = 0; i < input.meses; i++) {
@@ -416,12 +417,28 @@ export const cartoesRouter = router({
           const mes = refDate.getMonth() + 1;
           const ano = refDate.getFullYear();
           const mesStr = `${ano}-${String(mes).padStart(2, '0')}`;
-          const gastosMes = await ccExec(`SELECT g.id, g.descricao, g.valor, g.data, g.paga, g.numeroParcela, g.totalParcelas, p.descricao as parcelDescricao FROM cc_gastos g LEFT JOIN cc_parcelamentos p ON g.parcelamentoId = p.id WHERE g.cartaoId = ${input.cartaoId} AND DATE_FORMAT(g.data, '%Y-%m') = '${mesStr}'`);
+          // Usar cicloFatura para agrupar gastos por ciclo de fatura correto
+          // Para gastos sem cicloFatura (dados antigos), fallback para dataOriginal ou data
+          const gastosMes = await ccExec(
+            `SELECT g.id, g.descricao, g.valor,
+              COALESCE(g.dataOriginal, g.data) as data,
+              g.data as dataPagamento,
+              g.paga, g.numeroParcela, g.totalParcelas, g.cicloFatura,
+              p.descricao as parcelDescricao
+             FROM cc_gastos g
+             LEFT JOIN cc_parcelamentos p ON g.parcelamentoId = p.id
+             WHERE g.cartaoId = ${input.cartaoId}
+               AND (
+                 (g.cicloFatura IS NOT NULL AND g.cicloFatura = '${mesStr}')
+                 OR (g.cicloFatura IS NULL AND DATE_FORMAT(COALESCE(g.dataOriginal, g.data), '%Y-%m') = '${mesStr}')
+               )`
+          );
           const totalMes = gastosMes.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0);
           const pagsMes = await ccExec(`SELECT * FROM cc_pagamentos WHERE cartaoId = ${input.cartaoId} AND DATE_FORMAT(dataPagamento, '%Y-%m') = '${mesStr}'`);
           const totalPago = pagsMes.reduce((s: number, p: any) => s + parseFloat(p.valorPago || 0), 0);
-          const isAtual = mes === hoje.getMonth() + 1 && ano === hoje.getFullYear();
-          const status = isAtual ? 'aberta' : (totalPago >= totalMes && totalMes > 0) ? 'paga' : (totalMes > 0 ? 'pendente' : 'vazia');
+          const isAtual = mesStr === calcCicloFatura(hoje, cartao[0].fechamentoDia ? Number(cartao[0].fechamentoDia) : null);
+          const todosPagos = gastosMes.length > 0 && gastosMes.every((g: any) => g.paga === 1);
+          const status = isAtual ? 'aberta' : todosPagos ? 'paga' : (gastosMes.length > 0 ? 'pendente' : 'vazia');
           resultado.push({
             mesStr, mes, ano, total: totalMes, totalPago, status,
             gastos: gastosMes.map((g: any) => ({ ...g, valor: parseFloat(g.valor) })),

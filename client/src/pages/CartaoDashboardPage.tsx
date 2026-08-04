@@ -47,7 +47,11 @@ function diasParaVencer(dia: number) {
   const hoje = new Date();
   const diaHoje = hoje.getDate();
   let venc = new Date(hoje.getFullYear(), hoje.getMonth(), dia);
-  if (dia < diaHoje) venc = new Date(hoje.getFullYear(), hoje.getMonth() + 1, dia);
+  // Não avançar para o próximo mês se já venceu — retornar negativo para indicar atraso
+  if (dia < diaHoje) {
+    // Já passou esse mês: retornar negativo (dias de atraso)
+    return Math.ceil((venc.getTime() - hoje.getTime()) / 86400000);
+  }
   return Math.ceil((venc.getTime() - hoje.getTime()) / 86400000);
 }
 
@@ -63,8 +67,19 @@ export default function DashboardPage() {
   });
 
   const nome = ((user as any)?.name || "Usuário").split(" ")[0];
-  const alertas = cartoes.filter(c => Number((c as any).faturaAtual ?? (c as any).faturaDoMes ?? 0) > 0 && diasParaVencer(c.vencimentoDia) <= 3);
-  const totalFatura = cartoes.reduce((s, c) => s + Number((c as any).faturaAtual ?? (c as any).faturaDoMes ?? 0), 0);
+  // Alertas: cartões com fatura em atraso OU vencendo em até 3 dias
+  const alertas = cartoes.filter(c => {
+    const fa = (c as any).faturaEmAtraso;
+    if (fa && Number(fa.valor) > 0) return true; // fatura em atraso
+    return Number((c as any).faturaAtual ?? 0) > 0 && diasParaVencer(c.vencimentoDia) <= 3;
+  });
+  // Total considera fatura em atraso + fatura atual
+  const totalFatura = cartoes.reduce((s, c) => {
+    const fa = (c as any).faturaEmAtraso;
+    const emAtraso = fa ? Number(fa.valor ?? 0) : 0;
+    const atual = Number((c as any).faturaAtual ?? 0);
+    return s + emAtraso + atual;
+  }, 0);
 
   return (
     <div style={{
@@ -136,9 +151,9 @@ export default function DashboardPage() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#ef4444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</div>
-                  <div style={{ fontSize: 12, color: "rgba(239,68,68,0.7)" }}>{dias <= 0 ? "Fatura vencida!" : dias === 1 ? "Vence amanhã!" : `Vence em ${dias} dias`}</div>
+                  <div style={{ fontSize: 12, color: "rgba(239,68,68,0.7)" }}>{(c as any).faturaEmAtraso?.valor > 0 ? `Em atraso · ${(c as any).faturaEmAtraso.diasAtraso > 0 ? (c as any).faturaEmAtraso.diasAtraso + " dia(s)" : "vence hoje"}` : dias <= 0 ? "Fatura vencida!" : dias === 1 ? "Vence amanhã!" : `Vence em ${dias} dias`}</div>
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: "#ef4444", flexShrink: 0 }}>{fmt(Number((c as any).faturaAtual ?? (c as any).faturaDoMes ?? 0))}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#ef4444", flexShrink: 0 }}>{fmt(Number((c as any).faturaEmAtraso?.valor ?? (c as any).faturaAtual ?? 0))}</div>
               </div>
             );
           })}
@@ -171,12 +186,16 @@ export default function DashboardPage() {
           cartoes.map((c) => {
             const grad = GRADIENTS[c.corCartao] || GRADIENTS.purple;
             const shadow = SHADOWS[c.corCartao] || SHADOWS.purple;
-            const faturaDoMes = Number((c as any).faturaAtual ?? (c as any).faturaDoMes ?? (c as any).valorApagarCicloAtual ?? 0);
-            const mesSeguinte = Number((c as any).proximaFatura ?? (c as any).parcelasMesSeguinte ?? 0);
+            const faturaEmAtrasoInfo = (c as any).faturaEmAtraso as { valor: number; diasAtraso: number } | null;
+            const emAtraso = faturaEmAtrasoInfo ? Number(faturaEmAtrasoInfo.valor ?? 0) : 0;
+            const faturaDoMes = Number((c as any).faturaAtual ?? 0);
+            const faturaTotal = emAtraso + faturaDoMes; // total a pagar
+            const mesSeguinte = Number((c as any).proximaFatura ?? 0);
             const limite = Number(c.limiteTotal ?? 0);
             const disponivel = Number((c as any).limiteDisponivel ?? 0);
-            const pct = Number((c as any).pctLimite ?? (c as any).percentualUsado ?? 0);
+            const pct = Number((c as any).pctLimite ?? 0);
             const dias = diasParaVencer(c.vencimentoDia);
+            const temAtraso = emAtraso > 0;
 
             return (
               <div key={c.id} onClick={() => navigate(`/cartoes/cartao/${c.id}`)}
@@ -204,10 +223,10 @@ export default function DashboardPage() {
                     </div>
                     <div style={{
                       padding: "6px 12px", borderRadius: 50, fontSize: 11, fontWeight: 700,
-                      background: faturaDoMes > 0 && dias <= 0 ? "rgba(239,68,68,0.9)" : faturaDoMes > 0 && dias <= 3 ? "rgba(245,158,11,0.9)" : "rgba(255,255,255,0.15)",
+                      background: temAtraso ? "rgba(239,68,68,0.9)" : faturaDoMes > 0 && dias <= 0 ? "rgba(239,68,68,0.9)" : faturaDoMes > 0 && dias <= 3 ? "rgba(245,158,11,0.9)" : "rgba(255,255,255,0.15)",
                       color: "#fff", backdropFilter: "blur(8px)",
                     }}>
-                      {faturaDoMes > 0 && dias <= 0 ? "⚠ VENCIDO" : faturaDoMes > 0 && dias <= 3 ? `⚠ ${dias}d` : (c as any).fechamentoDia ? `Fecha ${(c as any).fechamentoDia} · Vence ${c.vencimentoDia}` : `Dia ${c.vencimentoDia}`}
+                      {temAtraso ? `⚠ ATRASADO` : faturaDoMes > 0 && dias <= 0 ? "⚠ VENCIDO" : faturaDoMes > 0 && dias <= 3 ? `⚠ ${dias}d` : (c as any).fechamentoDia ? `Fecha ${(c as any).fechamentoDia} · Vence ${c.vencimentoDia}` : `Dia ${c.vencimentoDia}`}
                     </div>
                   </div>
 
@@ -216,16 +235,16 @@ export default function DashboardPage() {
                   {/* 4 métricas */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
                     {[
-                      { label: "Fatura do Mês", value: fmt(faturaDoMes), icon: <TrendingUp size={10} />, highlight: faturaDoMes > 0 },
-                      { label: "Mês Seguinte", value: fmt(mesSeguinte), icon: <Repeat size={10} />, highlight: false },
-                      { label: "Limite Total", value: fmt(limite), icon: null, highlight: false },
-                      { label: "Disponível", value: fmt(disponivel), icon: <CheckCircle size={10} />, highlight: disponivel < limite * 0.2 },
+                      { label: temAtraso ? "Em Atraso" : "Fatura do Mês", value: fmt(temAtraso ? emAtraso : faturaDoMes), icon: <TrendingUp size={10} />, highlight: true, red: temAtraso },
+                      { label: temAtraso ? "Fatura Atual" : "Mês Seguinte", value: fmt(temAtraso ? faturaDoMes : mesSeguinte), icon: <Repeat size={10} />, highlight: false, red: false },
+                      { label: "Limite Total", value: fmt(limite), icon: null, highlight: false, red: false },
+                      { label: "Disponível", value: fmt(disponivel), icon: <CheckCircle size={10} />, highlight: disponivel < limite * 0.2, red: false },
                     ].map((item, i) => (
                       <div key={i} style={{ background: "rgba(0,0,0,0.25)", backdropFilter: "blur(8px)", borderRadius: 12, padding: "8px 10px" }}>
                         <div style={{ fontSize: 9, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3, display: "flex", alignItems: "center", gap: 4 }}>
                           {item.icon}{item.label}
                         </div>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: item.highlight ? "#fca5a5" : "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.value}</div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: (item as any).red ? "#ef4444" : item.highlight ? "#fca5a5" : "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.value}</div>
                       </div>
                     ))}
                   </div>

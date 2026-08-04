@@ -140,7 +140,7 @@ export default function CartaoHistoricoPage() {
                               {g.numeroParcela && (
                                 <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>Parcela {g.numeroParcela}/{g.totalParcelas}</div>
                               )}
-                              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>{new Date(g.data).toLocaleDateString("pt-BR")}</div>
+                              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>{new Date(g.data).toLocaleDateString("pt-BR")}{g.paga === 1 ? " • Pago" : ""}</div>
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                               {g.paga === 1 && <CheckCircle size={12} color="#10b981" />}
