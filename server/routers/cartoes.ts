@@ -80,54 +80,92 @@ async function ccExec(query: string, params: any[] = []) {
 }
 
 // ─── Função central de cálculo financeiro do cartão ─────────────────────────────
-// Segue as 18 regras financeiras:
-// - Fatura atual = apenas parcelas/gastos da competência atual (baseada no fechamento)
-// - Limite utilizado = todas as parcelas pendentes (não pagas, não canceladas)
-// - Próxima fatura = parcelas da próxima competência
+// Regras:
+// - Competência do ciclo corrente é sempre baseada no fechamentoDia (sem avançar por causa de atraso)
+// - Fatura em atraso = gastos paga=0 de competências ANTERIORES ao ciclo corrente
+// - Fatura atual = gastos paga=0 do ciclo corrente
+// - Próxima fatura = gastos paga=0 do próximo ciclo
 async function calcCartao(c: any) {
   const cartaoId = c.id;
   const hoje = new Date();
   const diaHoje = hoje.getDate();
   const fechDia = c.fechamentoDia ? Number(c.fechamentoDia) : null;
+  const vencDia = Number(c.vencimentoDia);
   const limiteTotal = parseFloat(c.limiteTotal);
 
-  // ── Determinar competência atual e próxima ────────────────────────────────
-  // A competência é determinada pelo dia de fechamento:
-  // Se hoje <= fechamento: competência = mês atual
-  // Se hoje > fechamento: competência = próximo mês
-  let compMes: number, compAno: number;
-  if (fechDia && diaHoje > fechDia) {
-    // Após o fechamento: competência é o próximo mês
-    const prox = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
-    compMes = prox.getMonth() + 1;
-    compAno = prox.getFullYear();
-  } else {
-    compMes = hoje.getMonth() + 1;
-    compAno = hoje.getFullYear();
-  }
+  // ── Determinar competência do ciclo corrente ──────────────────────────────
+  // O ciclo corrente é sempre o mês atual (baseado no fechamento).
+  // Quando diaHoje > fechDia, o ciclo ACABOU DE FECHAR e a fatura está aguardando pagamento.
+  // Não avançamos a competência — isso causaria a fatura vencida desaparecer.
+  // A competência corrente = mês atual até o fechamento.
+  // A competência seguinte = mês seguinte.
+  const compMes = hoje.getMonth() + 1;
+  const compAno = hoje.getFullYear();
   const compStr = `${compAno}-${String(compMes).padStart(2, '0')}`;
 
-  // Próxima competência
-  const proxDate = new Date(compAno, compMes, 1); // compMes já é 0-indexed aqui não, usar compMes-1+1
+  // Próxima competência (mês seguinte)
+  const proxDate = new Date(compAno, compMes, 1);
   const proxMes = proxDate.getMonth() + 1;
   const proxAno = proxDate.getFullYear();
   const proxStr = `${proxAno}-${String(proxMes).padStart(2, '0')}`;
 
-  // ── REGRA 3: Fatura Atual = parcelas pendentes da competência atual + gastos à vista da competência atual ──
-  // Para parcelas: a data do gasto define a competência (DATE_FORMAT)
-  // Para gastos à vista: idem
+  // ── Detectar fatura em atraso ─────────────────────────────────────────────
+  // Fatura em atraso = gastos paga=0 de competências ANTERIORES ao mês atual
+  // (ou seja, DATE_FORMAT(data,'%Y-%m') < compStr)
+  const gastosAtrasados = await ccExec(
+    `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') < '${compStr}'`
+  );
+  const valorEmAtraso = Math.round(gastosAtrasados.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
+
+  // Calcular competência da fatura em atraso (a mais recente anterior ao mês atual)
+  let faturaEmAtraso: { valor: number; competencia: string; vencimento: string; diasAtraso: number } | null = null;
+  if (valorEmAtraso > 0) {
+    // Buscar a competência mais recente com gastos em atraso
+    const compAtrasadaRows = await ccExec(
+      `SELECT DATE_FORMAT(data, '%Y-%m') as comp FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') < '${compStr}' ORDER BY data DESC LIMIT 1`
+    );
+    const compAtrasada = compAtrasadaRows[0]?.comp ?? '';
+    if (compAtrasada) {
+      const [aAno, aMes] = compAtrasada.split('-').map(Number);
+      // Vencimento da fatura atrasada = dia de vencimento no mês seguinte ao fechamento
+      // Se vencDia > fechDia: vence no mesmo mês do fechamento
+      // Se vencDia <= fechDia: vence no mês seguinte ao fechamento
+      let vencAno = aAno;
+      let vencMesIdx = aMes - 1; // 0-indexed
+      if (fechDia && vencDia > fechDia) {
+        // vence no mesmo mês da competência
+        vencMesIdx = aMes - 1;
+        vencAno = aAno;
+      } else {
+        // vence no mês seguinte à competência
+        vencMesIdx = aMes; // aMes é 1-indexed, então aMes como 0-indexed = próximo mês
+        if (vencMesIdx > 11) { vencMesIdx = 0; vencAno = aAno + 1; }
+      }
+      const dataVenc = new Date(vencAno, vencMesIdx, vencDia, 23, 59, 59);
+      const diasAtraso = Math.max(0, Math.ceil((hoje.getTime() - dataVenc.getTime()) / 86400000));
+      faturaEmAtraso = {
+        valor: valorEmAtraso,
+        competencia: compAtrasada,
+        vencimento: dataVenc.toISOString().slice(0, 10),
+        diasAtraso,
+      };
+    }
+  }
+
+  // ── Fatura Atual = gastos paga=0 do ciclo corrente ────────────────────────
+  // Se há fatura em atraso, a fatura atual mostra o ciclo corrente separado
   const gastosAtual = await ccExec(
     `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') = '${compStr}'`
   );
   const faturaAtual = Math.round(gastosAtual.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
 
-  // ── REGRA 4: Próxima Fatura = parcelas da próxima competência ──
+  // ── Próxima Fatura = gastos paga=0 do próximo ciclo ───────────────────────
   const gastosProx = await ccExec(
     `SELECT valor FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') = '${proxStr}'`
   );
   const proximaFatura = Math.round(gastosProx.reduce((s: number, g: any) => s + parseFloat(g.valor || 0), 0) * 100) / 100;
 
-  // ── REGRA 6: Limite Utilizado = todas as parcelas pendentes (não pagas, não canceladas) ──
+  // ── Limite Utilizado = todas as parcelas pendentes ────────────────────────
   const todosPendentes = await ccExec(
     `SELECT valor, numeroParcela FROM cc_gastos WHERE cartaoId = ${cartaoId} AND paga = 0`
   );
@@ -143,6 +181,7 @@ async function calcCartao(c: any) {
   return {
     faturaAtual,
     proximaFatura,
+    faturaEmAtraso,
     limiteUsado,
     limiteDisponivel,
     pctLimite,
@@ -462,27 +501,69 @@ export const cartoesRouter = router({
         return rows.map((p: any) => ({ ...p, valorPago: parseFloat(p.valorPago) }));
       }),
 
+    // Alias para compatibilidade com chamadas antigas
     create: ccProtected
       .input(z.object({
         cartaoId: z.number().int(),
         valorPago: z.number().positive(),
         observacao: z.string().max(200).optional(),
+        competencia: z.string().optional(), // formato YYYY-MM — quando passado, baixa só gastos dessa competência
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
         const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
         if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
-        const obs = input.observacao ? `'${input.observacao.replace(/'/g, "''")}'` : "NULL";
+        const obs = input.observacao ? `'${input.observacao.replace(/'/g, "''")}' ` : "NULL";
         await ccExec(`INSERT INTO cc_pagamentos (cartaoId, valorPago, observacao) VALUES (${input.cartaoId}, ${input.valorPago}, ${obs})`);
-        // Marcar gastos como pagos (os mais antigos primeiro até cobrir o valor)
-        const gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY data ASC`);
+        // Se competência especificada: baixar apenas gastos daquela competência
+        // Caso contrário: baixar os mais antigos primeiro até cobrir o valor
+        let gastos: any[];
+        if (input.competencia) {
+          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') = '${input.competencia}' ORDER BY data ASC`);
+        } else {
+          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY data ASC`);
+        }
         let restante = input.valorPago;
+        let parcelasMarcadas = 0;
         for (const g of gastos) {
           if (restante <= 0) break;
           await ccExec(`UPDATE cc_gastos SET paga = 1, dataOriginal = data, data = NOW() WHERE id = ${g.id}`);
           restante -= parseFloat(g.valor);
+          parcelasMarcadas++;
         }
-        return { success: true };
+        return { success: true, parcelasMarcadas };
+      }),
+
+    pagar: ccProtected
+      .input(z.object({
+        cartaoId: z.number().int(),
+        valorPago: z.number().positive(),
+        observacao: z.string().max(200).optional(),
+        competencia: z.string().optional(), // formato YYYY-MM — quando passado, baixa só gastos dessa competência
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const userId = (ctx as any).ccUserId as number;
+        const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
+        const obs = input.observacao ? `'${input.observacao.replace(/'/g, "''")}' ` : "NULL";
+        await ccExec(`INSERT INTO cc_pagamentos (cartaoId, valorPago, observacao) VALUES (${input.cartaoId}, ${input.valorPago}, ${obs})`);
+        // Se competência especificada: baixar apenas gastos daquela competência
+        // Caso contrário: baixar os mais antigos primeiro até cobrir o valor
+        let gastos: any[];
+        if (input.competencia) {
+          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 AND DATE_FORMAT(data, '%Y-%m') = '${input.competencia}' ORDER BY data ASC`);
+        } else {
+          gastos = await ccExec(`SELECT id, valor FROM cc_gastos WHERE cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY data ASC`);
+        }
+        let restante = input.valorPago;
+        let parcelasMarcadas = 0;
+        for (const g of gastos) {
+          if (restante <= 0) break;
+          await ccExec(`UPDATE cc_gastos SET paga = 1, dataOriginal = data, data = NOW() WHERE id = ${g.id}`);
+          restante -= parseFloat(g.valor);
+          parcelasMarcadas++;
+        }
+        return { success: true, parcelasMarcadas };
       }),
 
     cancelar: ccProtected

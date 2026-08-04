@@ -28,8 +28,8 @@ function fmt(v: number) {
 function diasParaVencer(dia: number) {
   const hoje = new Date();
   // Usa fim do dia (23:59:59) para não mostrar "vencida" antes de acabar o dia
-  let venc = new Date(hoje.getFullYear(), hoje.getMonth(), dia, 23, 59, 59);
-  if (venc < hoje) venc = new Date(hoje.getFullYear(), hoje.getMonth() + 1, dia, 23, 59, 59);
+  // NÃO avança para o próximo mês — retorna negativo quando já venceu
+  const venc = new Date(hoje.getFullYear(), hoje.getMonth(), dia, 23, 59, 59);
   return Math.ceil((venc.getTime() - hoje.getTime()) / 86400000);
 }
 
@@ -308,12 +308,26 @@ export default function CartaoDetailPage() {
   const dias = diasParaVencer(cartao.vencimentoDia);
 
   // Fatura fechada: quando hoje > fechamentoDia, a fatura está fechada aguardando pagamento
+  // Fatura em atraso: retornada diretamente pelo backend (calcCartao)
+  const faturaEmAtrasoInfo = (cartao as any).faturaEmAtraso as {
+    valor: number;
+    competencia: string;
+    vencimento: string;
+    diasAtraso: number;
+  } | null | undefined;
+  const isFaturaEmAtraso = !!faturaEmAtrasoInfo && faturaEmAtrasoInfo.valor > 0;
+  const faturaEmAtrasoValor = Number(faturaEmAtrasoInfo?.valor ?? 0);
+  const faturaEmAtrasoVenc = faturaEmAtrasoInfo?.vencimento ? new Date(faturaEmAtrasoInfo.vencimento + 'T12:00:00') : null;
+  const faturaEmAtrasoDias = Number(faturaEmAtrasoInfo?.diasAtraso ?? 0);
+  const faturaEmAtrasoComp = faturaEmAtrasoInfo?.competencia ?? '';
+
+  // Compatibilidade com campo antigo faturaFechada (mantido para não quebrar)
   const faturaFechadaInfo = (cartao as any).faturaFechada as {
     fechada: boolean;
     vencimento?: string;
     valor?: number;
   } | undefined;
-  const isFaturaFechada = faturaFechadaInfo?.fechada === true;
+  const isFaturaFechada = !isFaturaEmAtraso && faturaFechadaInfo?.fechada === true;
   const faturaFechadaVenc = faturaFechadaInfo?.vencimento ? new Date(faturaFechadaInfo.vencimento) : null;
   const faturaFechadaValor = Number(faturaFechadaInfo?.valor ?? 0);
 
@@ -468,8 +482,35 @@ export default function CartaoDetailPage() {
         </div>
       </div>
 
-      {/* ── Banner: Fatura Fechada Aguardando Pagamento ── */}
-      {isFaturaFechada && faturaFechadaValor > 0 && (
+      {/* ── Banner: FATURA EM ATRASO (novo sistema) ── */}
+      {isFaturaEmAtraso && (
+        <div style={{ margin: "12px 16px 0", background: "rgba(239,68,68,0.1)", borderRadius: 16, padding: "16px", border: "2px solid rgba(239,68,68,0.4)", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 20, background: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <AlertTriangle size={20} color="#fff" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#ef4444", textTransform: "uppercase", letterSpacing: 0.5 }}>Fatura em Atraso</div>
+              <div style={{ fontSize: 12, color: "rgba(239,68,68,0.8)", marginTop: 2 }}>
+                Venceu em {faturaEmAtrasoVenc ? faturaEmAtrasoVenc.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—"}
+                {faturaEmAtrasoDias > 0 ? ` · ${faturaEmAtrasoDias} dia${faturaEmAtrasoDias !== 1 ? 's' : ''} em atraso` : ''}
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#ef4444" }}>{fmt(faturaEmAtrasoValor)}</div>
+              <div style={{ fontSize: 10, color: "rgba(239,68,68,0.7)", textTransform: "uppercase" }}>a pagar</div>
+            </div>
+          </div>
+          <button onClick={() => setShowPagar(true)}
+            style={{ width: "100%", height: 50, borderRadius: 12, border: "none", background: "#ef4444", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 16px rgba(239,68,68,0.4)" }}>
+            <CheckCircle size={18} />
+            Paguei a Fatura — {fmt(faturaEmAtrasoValor)}
+          </button>
+        </div>
+      )}
+
+      {/* ── Banner: Fatura Fechada Aguardando Pagamento (sistema antigo — fallback) ── */}
+      {!isFaturaEmAtraso && isFaturaFechada && faturaFechadaValor > 0 && (
         <div style={{ margin: "12px 16px 0", background: "rgba(245,158,11,0.1)", borderRadius: 16, padding: "14px 16px", border: "1px solid rgba(245,158,11,0.3)", display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 36, height: 36, borderRadius: 18, background: "#FF9800", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -487,19 +528,21 @@ export default function CartaoDetailPage() {
             </div>
           </div>
           <div style={{ fontSize: 11, color: "#795548", background: "rgba(255,152,0,0.1)", borderRadius: 8, padding: "6px 10px" }}>
-            ⚠️ Compras após o fechamento entrarão na próxima fatura. Clique em “Paguei a Fatura” para registrar o pagamento.
+            Compras após o fechamento entrarão na próxima fatura. Clique em "Paguei a Fatura" para registrar o pagamento.
           </div>
         </div>
       )}
 
-      {/* ── Botão Paguei ── */}
-      <div style={{ padding: "12px 16px 0" }}>
-        <button onClick={() => setShowPagar(true)}
-          style={{ width: "100%", height: 52, borderRadius: 14, border: "none", background: isFaturaFechada ? "#E65100" : `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: `0 4px 16px ${isFaturaFechada ? "#E6510055" : accent + "55"}` }}>
-          <CheckCircle size={20} />
-          {isFaturaFechada ? `Pagar Fatura — ${fmt(faturaFechadaValor)}` : "Paguei a Fatura"}
-        </button>
-      </div>
+      {/* ── Botão Paguei (quando não há fatura em atraso) ── */}
+      {!isFaturaEmAtraso && (
+        <div style={{ padding: "12px 16px 0" }}>
+          <button onClick={() => setShowPagar(true)}
+            style={{ width: "100%", height: 52, borderRadius: 14, border: "none", background: isFaturaFechada ? "#E65100" : `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: `0 4px 16px ${isFaturaFechada ? "#E6510055" : accent + "55"}` }}>
+            <CheckCircle size={20} />
+            {isFaturaFechada ? `Pagar Fatura — ${fmt(faturaFechadaValor)}` : "Paguei a Fatura"}
+          </button>
+        </div>
+      )}
 
       {/* ── Botão Histórico ── */}
       <div style={{ padding: "8px 16px 0" }}>
@@ -508,7 +551,7 @@ export default function CartaoDetailPage() {
           📋 Ver Histórico de Faturas
         </button>
       </div>
-      {/* ── Fatura Mês Seguinte ── */}
+      {/* ── Fatura Mês Seguinte / Próxima Fatura ── */}
       {mesSeguinte > 0 && (
         <FaturaMesSeguinteCard
           accent={accent}
@@ -516,6 +559,7 @@ export default function CartaoDetailPage() {
           gastos={gastos}
           vencimentoDia={cartao.vencimentoDia}
           fechamentoDia={cartao.fechamentoDia ?? null}
+          titulo={isFaturaEmAtraso ? "Próxima Fatura" : "Fatura Mês Seguinte"}
         />
       )}
 
@@ -752,7 +796,7 @@ export default function CartaoDetailPage() {
 
       {/* ── Modais ── */}
       {showGasto && <GastoSheet accent={accent} cartaoId={id} onClose={() => setShowGasto(false)} onSuccess={() => { setShowGasto(false); utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Gasto adicionado!"); }} />}
-      {showPagar && <PagarSheet accent={accent} cartaoId={id} faturaAtual={fatura} onClose={() => setShowPagar(false)} onSuccess={(data: any) => { setShowPagar(false); utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.pagamentos.list.invalidate({ cartaoId: id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); if (data?.parcelasMarcadas > 0) { toast.success(`Pagamento registrado! ${data.parcelasMarcadas} parcela(s) marcada(s) como paga(s).`); } else { toast.success("Pagamento registrado!"); } }} />}
+      {showPagar && <PagarSheet accent={accent} cartaoId={id} faturaAtual={isFaturaEmAtraso ? faturaEmAtrasoValor : fatura} competencia={isFaturaEmAtraso ? faturaEmAtrasoComp : undefined} isFaturaEmAtraso={isFaturaEmAtraso} onClose={() => setShowPagar(false)} onSuccess={(data: any) => { setShowPagar(false); utils.cartoes.cartoes.get.invalidate({ id }); utils.cartoes.cartoes.list.invalidate(); utils.cartoes.pagamentos.list.invalidate({ cartaoId: id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); if (data?.parcelasMarcadas > 0) { toast.success(`Pagamento registrado! ${data.parcelasMarcadas} parcela(s) baixada(s) da fatura.`); } else { toast.success("Pagamento registrado!"); } }} />}
       {showEdit && <EditCartaoSheet cartao={cartao} accent={accent} onClose={() => setShowEdit(false)} onSuccess={() => { setShowEdit(false); utils.cartoes.cartoes.list.invalidate({ id }); toast.success("Cartão atualizado!"); }} />}
       {editarGastoData && (
         <EditarGastoSheet
@@ -961,7 +1005,7 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
   );
 }
 
-function PagarSheet({ accent, cartaoId, faturaAtual, onClose, onSuccess }: { accent: string; cartaoId: number; faturaAtual: number; onClose: () => void; onSuccess: (data?: any) => void }) {
+function PagarSheet({ accent, cartaoId, faturaAtual, competencia, isFaturaEmAtraso, onClose, onSuccess }: { accent: string; cartaoId: number; faturaAtual: number; competencia?: string; isFaturaEmAtraso?: boolean; onClose: () => void; onSuccess: (data?: any) => void }) {
   const [valor, setValor] = useState(faturaAtual > 0 ? faturaAtual.toFixed(2).replace(".", ",") : "");
   const [data, setData] = useState(new Date().toISOString().split("T")[0]);
   const [obs, setObs] = useState("");
@@ -970,14 +1014,15 @@ function PagarSheet({ accent, cartaoId, faturaAtual, onClose, onSuccess }: { acc
   const submit = () => {
     const v = parseFloat(valor.replace(",", "."));
     if (!v || v <= 0) return toast.error("Valor inválido");
-    mut.mutate({ cartaoId, valorPago: v, observacao: obs.trim() || undefined });
+    // Quando há fatura em atraso, passa a competência para baixar apenas os gastos daquela fatura
+    mut.mutate({ cartaoId, valorPago: v, observacao: obs.trim() || undefined, competencia });
   };
 
   return (
     <Sheet title="Registrar Pagamento" onClose={onClose}>
-      <div style={{ background: `${accent}10`, borderRadius: 14, padding: "12px 16px", marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>Fatura atual</span>
-        <span style={{ fontSize: 18, fontWeight: 700, color: accent }}>{fmt(faturaAtual)}</span>
+      <div style={{ background: isFaturaEmAtraso ? "rgba(239,68,68,0.1)" : `${accent}10`, borderRadius: 14, padding: "12px 16px", marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center", border: isFaturaEmAtraso ? "1px solid rgba(239,68,68,0.3)" : "none" }}>
+        <span style={{ fontSize: 13, color: isFaturaEmAtraso ? "#ef4444" : "rgba(255,255,255,0.6)" }}>{isFaturaEmAtraso ? "Fatura em atraso" : "Fatura atual"}</span>
+        <span style={{ fontSize: 18, fontWeight: 700, color: isFaturaEmAtraso ? "#ef4444" : accent }}>{fmt(faturaAtual)}</span>
       </div>
       <Field label="VALOR PAGO (R$)">
         <input value={valor} onChange={e => setValor(e.target.value.replace(/[^\d,.]/g, ""))} placeholder="0,00" inputMode="decimal" style={iStyle(accent)} onFocus={e => (e.target.style.borderColor = accent)} onBlur={e => (e.target.style.borderColor = "#E7E0EC")} />
@@ -1264,12 +1309,14 @@ function FaturaMesSeguinteCard({
   gastos,
   vencimentoDia,
   fechamentoDia,
+  titulo,
 }: {
   accent: string;
   mesSeguinte: number;
   gastos: any[];
   vencimentoDia: number;
   fechamentoDia: number | null;
+  titulo?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -1334,7 +1381,7 @@ function FaturaMesSeguinteCard({
             <Calendar size={18} color={accent} />
           </div>
           <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Fatura Mês Seguinte</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{titulo ?? "Fatura Mês Seguinte"}</div>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>
               {fmtData(inicioCicloProx)} → {fmtData(proxProxVenc)} · {gastosProxCiclo.length} parcela(s)
             </div>
