@@ -67,7 +67,7 @@ interface Props {
 // ── Componente ───────────────────────────────────────────────────────────────────────────
 
 export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelectOption, onOrderComplete, botName, botAvatar, botWelcome }: Props) {
-  const displayName = botName || 'Colombia';
+  const displayName = botName || 'Carminha';
   const displayAvatar = botAvatar || '';
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});

@@ -235,7 +235,9 @@ export default function Home() {
   const [whatsappClicked, setWhatsappClicked] = useState(false);
   const [step, setStep] = useState<Step>("home");
   // Se acessou via /bot, abrir o bot diretamente (sem tela de escolha)
-  const [showColombiaBot, setShowColombiaBot] = useState(() => !!matchBot);
+  // Não inicializar como true aqui — products ainda não carregou
+  // Será aberto via useEffect quando products estiver pronto
+  const [showColombiaBot, setShowColombiaBot] = useState(false);
   // Tela de escolha manifesto: mostrar quando bot está ativo e cliente está logado
   // Não mostrar tela de escolha se já veio direto pelo /bot
   const [showBotChoice, setShowBotChoice] = useState(() => {
@@ -322,6 +324,15 @@ export default function Home() {
     { page: 'pedidos', sessionKey: adSessionKey },
     { staleTime: Infinity }
   );
+  // Abrir bot automaticamente quando rota é /bot e products já carregou
+  const [botAutoOpened, setBotAutoOpened] = useState(false);
+  useEffect(() => {
+    if (matchBot && products && products.length > 0 && !botAutoOpened) {
+      setBotAutoOpened(true);
+      setShowColombiaBot(true);
+    }
+  }, [matchBot, products, botAutoOpened]);
+
   useEffect(() => {
     if (adData?.campaign) {
       setAdCampaign(adData.campaign);
