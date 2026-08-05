@@ -1050,17 +1050,7 @@ export function LoansTab({ token }: LoansTabProps) {
                     </div>
                     {parceladoSelecionado && (
                       <div className="space-y-2">
-                        <Label>Frequência</Label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(['mensal','quinzenal','semanal'] as const).map(f => (
-                            <button key={f} onClick={() => setParceladoFrequencia(f)}
-                              className={`rounded-xl border p-2 text-xs font-bold transition-all ${
-                                parceladoFrequencia === f ? 'border-violet-500 bg-violet-500/20 text-violet-300' : 'border-border/50 text-muted-foreground'
-                              }`}>
-                              {f === 'mensal' ? 'Mensal' : f === 'quinzenal' ? 'Quinzenal' : 'Semanal'}
-                            </button>
-                          ))}
-                        </div>
+                        {/* Parcelado é sempre mensal */}
                         <div className="space-y-1">
                           <Label>Primeiro vencimento</Label>
                           <input type="date" value={parceladoPrimeiroVenc} onChange={e => setParceladoPrimeiroVenc(e.target.value)}
@@ -1094,7 +1084,7 @@ export function LoansTab({ token }: LoansTabProps) {
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Valor solicitado</span><span className="font-bold">{fmt(parseFloat(requestAmount))}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Parcelamento</span><span className="font-bold text-violet-300">{op.parcelas}x de {fmt(op.valorParcela)}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Valor total</span><span className="font-bold">{fmt(op.valorTotal)}</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-muted-foreground">Frequência</span><span className="font-bold capitalize">{parceladoFrequencia}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-muted-foreground">Frequência</span><span className="font-bold">Mensal</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Primeiro vencimento</span><span className="font-bold">{new Date(parceladoPrimeiroVenc + 'T12:00:00').toLocaleDateString('pt-BR')}</span></div>
                   </div>
                   <div className="border-t border-border/30 pt-2 space-y-1">
