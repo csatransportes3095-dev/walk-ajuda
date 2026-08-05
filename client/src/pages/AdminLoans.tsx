@@ -2720,7 +2720,7 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
           {/* Modos de pagamento liberados */}
           <div className="space-y-2">
             <Label className="text-xs font-semibold">Modos de pagamento liberados</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {(["diario", "semanal", "mensal", "parcelado"] as const).map(m => (
                 <button
                   key={m}
@@ -2873,7 +2873,7 @@ function ProfilesTab() {
               {/* Modos de pagamento padrão do perfil */}
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Modos de pagamento padrão</Label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-5 gap-2">
                   {(["diario", "semanal", "quinzenal", "mensal", "parcelado"] as const).map(m => {
                     const profileModes: string[] = (editProfile.defaultPaymentTypes || "diario").split(",").map((t: string) => t.trim());
                     const active = profileModes.includes(m);
