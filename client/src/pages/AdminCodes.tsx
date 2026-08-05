@@ -282,7 +282,11 @@ export default function AdminCodes() {
           </a>
           <a href="/admin/flow-config" className="bg-sky-600/20 border border-sky-500/30 rounded-xl p-3 text-center hover:bg-sky-600/30 transition-all">
             <Layers className="w-5 h-5 text-sky-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Fluxo</span>
+            <span className="text-xs font-bold text-white">Fluxo Bot</span>
+          </a>
+          <a href="/admin/chat-flow" className="bg-violet-600/20 border border-violet-500/30 rounded-xl p-3 text-center hover:bg-violet-600/30 transition-all">
+            <MessageCircle className="w-5 h-5 text-violet-400 mx-auto mb-1" />
+            <span className="text-xs font-bold text-white">Bot Carminha</span>
           </a>
           <a href="/admin/protected-photo" className="bg-purple-900/30 border border-purple-500/30 rounded-xl p-3 text-center hover:bg-purple-900/50 transition-all">
             <Lock className="w-5 h-5 text-purple-400 mx-auto mb-1" />
