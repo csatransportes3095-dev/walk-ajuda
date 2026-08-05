@@ -2148,6 +2148,7 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                 {allowedModes.includes("semanal") && <SelectItem value="semanal">Semanal</SelectItem>}
                 {allowedModes.includes("quinzenal") && <SelectItem value="quinzenal">Quinzenal (15 em 15 dias)</SelectItem>}
                 {allowedModes.includes("mensal") && <SelectItem value="mensal">Mensal</SelectItem>}
+                {allowedModes.includes("parcelado") && <SelectItem value="parcelado">Parcelado</SelectItem>}
               </SelectContent>
             </Select>
             {selectedClient && allowedModes.length < 4 && (
@@ -2367,6 +2368,7 @@ function EditLoanModal({ loan, onClose, onSuccess }: { loan: any; onClose: () =>
                 {editAllowedModes.includes("semanal") && <SelectItem value="semanal">Semanal</SelectItem>}
                 {editAllowedModes.includes("quinzenal") && <SelectItem value="quinzenal">Quinzenal (15 em 15 dias)</SelectItem>}
                 {editAllowedModes.includes("mensal") && <SelectItem value="mensal">Mensal</SelectItem>}
+                {editAllowedModes.includes("parcelado") && <SelectItem value="parcelado">Parcelado</SelectItem>}
               </SelectContent>
             </Select>
             {editAllowedModes.length < 4 && (
@@ -2719,7 +2721,7 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
           <div className="space-y-2">
             <Label className="text-xs font-semibold">Modos de pagamento liberados</Label>
             <div className="grid grid-cols-3 gap-2">
-              {(["diario", "semanal", "mensal"] as const).map(m => (
+              {(["diario", "semanal", "mensal", "parcelado"] as const).map(m => (
                 <button
                   key={m}
                   type="button"
@@ -2730,7 +2732,7 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
                       : "border-border/50 text-muted-foreground hover:border-violet-500/40"
                   }`}
                 >
-                  {m === "diario" ? "Diário" : m === "semanal" ? "Semanal" : "Mensal"}
+                  {m === "diario" ? "Diário" : m === "semanal" ? "Semanal" : m === "parcelado" ? "Parcelado" : "Mensal"}
                 </button>
               ))}
             </div>
@@ -2872,7 +2874,7 @@ function ProfilesTab() {
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Modos de pagamento padrão</Label>
                 <div className="grid grid-cols-4 gap-2">
-                  {(["diario", "semanal", "quinzenal", "mensal"] as const).map(m => {
+                  {(["diario", "semanal", "quinzenal", "mensal", "parcelado"] as const).map(m => {
                     const profileModes: string[] = (editProfile.defaultPaymentTypes || "diario").split(",").map((t: string) => t.trim());
                     const active = profileModes.includes(m);
                     return (
@@ -2890,7 +2892,7 @@ function ProfilesTab() {
                             : "border-border/50 text-muted-foreground hover:border-violet-500/40"
                         }`}
                       >
-                        {m === "diario" ? "Diário" : m === "semanal" ? "Semanal" : m === "quinzenal" ? "Quinzenal" : "Mensal"}
+                        {m === "diario" ? "Diário" : m === "semanal" ? "Semanal" : m === "quinzenal" ? "Quinzenal" : m === "parcelado" ? "Parcelado" : "Mensal"}
                       </button>
                     );
                   })}
