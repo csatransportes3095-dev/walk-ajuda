@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, MessageCircle, Minimize2, RefreshCcw, Send, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Bot, RefreshCcw, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { useIsMobile } from "@/hooks/useMobile";
 
+// ─── Tipos ───────────────────────────────────────────────────────────────────
 type OpenMode = "modal" | "sidebar" | "fullscreen";
-
 interface OnlineSupportWidgetProps {
   isOpen: boolean;
   onClose: () => void;
@@ -13,435 +12,298 @@ interface OnlineSupportWidgetProps {
   openMode?: OpenMode;
 }
 
+// ─── Storage ─────────────────────────────────────────────────────────────────
 const VISITOR_STORAGE_KEY = "walk_online_support_visitor_id";
 const VISITOR_NAME_KEY = "walk_online_support_visitor_name";
 const VISITOR_PHONE_KEY = "walk_online_support_visitor_phone";
 const VISITOR_SESSION_KEY = "walk_online_support_session_ts";
-const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutos
+const SESSION_TTL_MS = 30 * 60 * 1000;
 
-function isSessionValid(): boolean {
+function isSessionValid() {
   const ts = localStorage.getItem(VISITOR_SESSION_KEY);
   if (!ts) return false;
   return Date.now() - Number(ts) < SESSION_TTL_MS;
 }
-
-function touchSession() {
-  localStorage.setItem(VISITOR_SESSION_KEY, String(Date.now()));
-}
-
+function touchSession() { localStorage.setItem(VISITOR_SESSION_KEY, String(Date.now())); }
 function clearSession() {
   localStorage.removeItem(VISITOR_NAME_KEY);
   localStorage.removeItem(VISITOR_PHONE_KEY);
   localStorage.removeItem(VISITOR_SESSION_KEY);
 }
-
 function getOrCreateVisitorId() {
   const existing = localStorage.getItem(VISITOR_STORAGE_KEY);
   if (existing) return existing;
-  const randomPart = Math.random().toString(36).slice(2, 10);
-  const timestampPart = Date.now().toString(36);
-  const visitorId = `v_${timestampPart}_${randomPart}`;
-  localStorage.setItem(VISITOR_STORAGE_KEY, visitorId);
-  return visitorId;
+  const id = `v_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  localStorage.setItem(VISITOR_STORAGE_KEY, id);
+  return id;
 }
-function getVisitorIdForPhone(phone: string): string {
-  // Gera um visitorId estável baseado no número de telefone
-  // Assim o mesmo número sempre tem o mesmo visitorId e a mesma conversa
-  return `v_phone_${phone.replace(/\D/g, "")}`;
-}
-
-function getSavedVisitorName() { return localStorage.getItem(VISITOR_NAME_KEY) || ""; }
-function getSavedVisitorPhone() { return localStorage.getItem(VISITOR_PHONE_KEY) || ""; }
+function getVisitorIdForPhone(phone: string) { return `v_phone_${phone.replace(/\D/g, "")}`; }
+function getSavedName() { return localStorage.getItem(VISITOR_NAME_KEY) || ""; }
+function getSavedPhone() { return localStorage.getItem(VISITOR_PHONE_KEY) || ""; }
 function saveVisitorData(name: string, phone: string) {
   localStorage.setItem(VISITOR_NAME_KEY, name);
   localStorage.setItem(VISITOR_PHONE_KEY, phone);
   touchSession();
 }
 
-function getMessagePayload(msg: any): Record<string, any> | null {
-  // Tentar payload já deserializado primeiro
-  if (msg.payload && typeof msg.payload === "object") return msg.payload as Record<string, any>;
-  // Fallback: tentar deserializar payloadJson (string raw do banco)
-  if (msg.payloadJson && typeof msg.payloadJson === "string") {
-    try { return JSON.parse(msg.payloadJson); } catch { return null; }
-  }
-  return null;
-}
+// ─── Tipos de mensagem ────────────────────────────────────────────────────────
+type Msg =
+  | { type: "bot"; text: string; buttons?: { label: string; actionType?: string; actionPayload?: any }[] }
+  | { type: "user"; text: string }
+  | { type: "identify" }
+  | { type: "typing" };
 
-function toRenderableUrl(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (
-    trimmed.startsWith("http://") ||
-    trimmed.startsWith("https://") ||
-    trimmed.startsWith("/") ||
-    trimmed.startsWith("data:") ||
-    trimmed.startsWith("blob:")
-  ) {
-    return trimmed;
-  }
-  return null;
-}
-
-function getMediaField(payload: Record<string, any> | null, field: string): string | null {
-  const candidates = [
-    payload?.media?.[field],
-    payload?.media?.url,
-    payload?.media?.src,
-    payload?.media?.fileUrl,
-    payload?.[field],
-    payload?.url,
-    payload?.src,
-    payload?.fileUrl,
-  ];
-
-  for (const candidate of candidates) {
-    const url = toRenderableUrl(candidate);
-    if (url) return url;
-  }
-
-  return null;
-}
-
-function MediaImage({ src }: { src: string }) {
-  const [ready, setReady] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    setReady(false);
-    setFailed(false);
-
-    const image = new window.Image();
-    image.onload = () => {
-      if (active) setReady(true);
-    };
-    image.onerror = () => {
-      if (active) setFailed(true);
-    };
-    image.src = src;
-
-    return () => {
-      active = false;
-    };
-  }, [src]);
-
-  if (failed) return null;
-  if (!ready) return null;
-
-  return <img src={src} alt="" aria-hidden className="max-w-full rounded-lg border border-white/10" />;
-}
-
-function renderMessageContent(message: any, handleAction: (actionType?: string, payload?: Record<string, any>) => void) {
-  const payload = getMessagePayload(message);
-  const imageUrl = getMediaField(payload, "imageUrl");
-  const videoUrl = getMediaField(payload, "videoUrl");
-  const audioUrl = getMediaField(payload, "audioUrl");
-  const documentUrl = getMediaField(payload, "documentUrl");
-  const linkUrl = getMediaField(payload, "linkUrl");
-  return (
-    <div className="space-y-2">
-      {message.text && <p className="whitespace-pre-wrap break-words leading-relaxed">{message.text}</p>}
-      {imageUrl && <MediaImage src={imageUrl} />}
-      {videoUrl && <video controls className="max-w-full rounded-lg border border-white/10"><source src={videoUrl} /></video>}
-      {audioUrl && <audio controls className="w-full"><source src={audioUrl} /></audio>}
-      {documentUrl && (
-        <a href={documentUrl} target="_blank" rel="noreferrer" className="inline-flex text-xs px-3 py-2 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-200 hover:bg-blue-600/30">Abrir documento</a>
-      )}
-      {!imageUrl && linkUrl && (
-        <a href={linkUrl} target="_blank" rel="noreferrer" className="inline-flex text-xs px-3 py-2 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-200 hover:bg-blue-600/30">Abrir mídia</a>
-      )}
-      {Array.isArray(payload?.buttons) && payload.buttons.length > 0 && (
-        <div className="flex flex-col gap-2 pt-1">
-          {payload.buttons.map((btn: any, idx: number) => (
-            <button key={`${btn.label || "btn"}-${idx}`} onClick={() => handleAction(btn.actionType, { ...(btn.actionPayload || {}), label: btn.label })} className="text-left text-xs font-bold px-3 py-2 rounded-lg bg-indigo-600/25 border border-indigo-500/40 text-indigo-100 hover:bg-indigo-600/35">{btn.label || "Abrir"}</button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
+// ─── Componente principal ─────────────────────────────────────────────────────
 export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openMode = "modal" }: OnlineSupportWidgetProps) {
-  const isMobile = useIsMobile();
-  const [phase, setPhase] = useState<"identify" | "chat">(() => {
-    // Se a sessão ainda é válida (menos de 30 min), pular identificação
-    if (isSessionValid() && getSavedVisitorName() && getSavedVisitorPhone()) return "chat";
-    return "identify";
-  });
-  const [visitorName, setVisitorName] = useState(() => isSessionValid() ? getSavedVisitorName() : "");
-  const [visitorPhone, setVisitorPhone] = useState(() => isSessionValid() ? getSavedVisitorPhone() : "");
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [phase, setPhase] = useState<"identify" | "chat">(() =>
+    isSessionValid() && getSavedName() && getSavedPhone() ? "chat" : "identify"
+  );
+  const [visitorName, setVisitorName] = useState(() => isSessionValid() ? getSavedName() : "");
+  const [visitorPhone, setVisitorPhone] = useState(() => isSessionValid() ? getSavedPhone() : "");
   const [nameError, setNameError] = useState("");
   const [phoneError, setPhoneError] = useState("");
-  const [message, setMessage] = useState("");
-  const [typing, setTyping] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
-  const [statusText, setStatusText] = useState<string>("Conectando...");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  // visitorId baseado no telefone: mesmo número = mesma conversa em qualquer dispositivo
   const [visitorId, setVisitorId] = useState<string>(() => {
-    const savedPhone = getSavedVisitorPhone();
+    const savedPhone = getSavedPhone();
     if (savedPhone) return getVisitorIdForPhone(savedPhone);
     return getOrCreateVisitorId();
   });
+  const [inputText, setInputText] = useState("");
+  const [showInput, setShowInput] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const initialized = useRef(false);
 
-  const publicStateQ = trpc.onlineSupport.publicState.useQuery({ pathname: window.location.pathname }, { refetchInterval: 30000 });
-  const unreadQ = trpc.onlineSupport.unreadSummary.useQuery({ visitorId }, { refetchInterval: 5000 });
-  const startConversationMut = trpc.onlineSupport.startConversation.useMutation({
-    onSuccess: (res) => {
-      setConversationId(res.id);
-      // Enviar mensagem de boas-vindas automática
-      setTimeout(() => {
-        sendVisitorMessageMut.mutate({ conversationId: res.id, visitorId, visitorName, visitorPhone, text: "olá" });
-      }, 500);
-    }
-  });
+  const publicStateQ = trpc.onlineSupport.publicState.useQuery(
+    { pathname: window.location.pathname },
+    { refetchInterval: 30000 }
+  );
+  const unreadQ = trpc.onlineSupport.unreadSummary.useQuery(
+    { visitorId },
+    { refetchInterval: 5000, enabled: !!conversationId }
+  );
   const listMessagesQ = trpc.onlineSupport.listMessages.useQuery(
     { conversationId: conversationId || 0, visitorId, limit: 200 },
     { enabled: !!conversationId, refetchInterval: 2000 }
   );
-  const sendVisitorMessageMut = trpc.onlineSupport.sendVisitorMessage.useMutation({
-    onSuccess: async () => { setMessage(""); await listMessagesQ.refetch(); await unreadQ.refetch(); setTyping(false); },
-    onError: () => setTyping(false),
+  const startConversationMut = trpc.onlineSupport.startConversation.useMutation({
+    onSuccess: (res) => {
+      setConversationId(res.id);
+      // Enviar "olá" para disparar boas-vindas do bot
+      setTimeout(() => {
+        sendMut.mutate({ conversationId: res.id, visitorId, visitorName, visitorPhone, text: "olá" });
+      }, 400);
+    }
+  });
+  const sendMut = trpc.onlineSupport.sendVisitorMessage.useMutation({
+    onSuccess: async () => { await listMessagesQ.refetch(); }
   });
   const markReadMut = trpc.onlineSupport.markVisitorRead.useMutation();
-  const menuItems = publicStateQ.data?.menuItems || [];
 
+  // Sincronizar mensagens do backend para o estado local
   useEffect(() => {
-    if (!publicStateQ.data) return;
-    setStatusText("Online"); // Atendimento 24h
-  }, [publicStateQ.data]);
+    if (!listMessagesQ.data || !conversationId) return;
+    const msgs: Msg[] = (listMessagesQ.data as any[]).map((m: any) => {
+      if (m.senderType === "visitor") return { type: "user" as const, text: m.text || "" };
+      // Mensagem do bot — extrair texto e botões
+      let payload: any = null;
+      if (m.payload && typeof m.payload === "object") payload = m.payload;
+      else if (m.payloadJson) { try { payload = JSON.parse(m.payloadJson); } catch {} }
+      const buttons = Array.isArray(payload?.buttons) ? payload.buttons : [];
+      return { type: "bot" as const, text: m.text || "", buttons };
+    });
+    setMessages(msgs);
+  }, [listMessagesQ.data, conversationId]);
 
+  // Scroll automático
   useEffect(() => {
-    if (phase === "chat" && isOpen && !conversationId) {
-      startConversationMut.mutate({ visitorId, visitorName, visitorPhone, originPage: window.location.pathname, privacyConsent: true });
-    }
-  }, [phase, isOpen, conversationId]);
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
+  // Iniciar conversa quando entra no chat
   useEffect(() => {
-    if (!isOpen) return;
-    const status = (unreadQ.data as any)?.conversationStatus;
-    // Se conversa foi finalizada pelo admin, limpar e voltar para identificação
-    if (status === "finalized" || status === "blocked") {
-      if (conversationId) {
-        setConversationId(null);
-        setPhase("identify");
-      }
-      return;
-    }
-    if (unreadQ.data?.openConversationId && !conversationId) setConversationId(unreadQ.data.openConversationId);
-  }, [isOpen, unreadQ.data, conversationId]);
+    if (phase !== "chat" || !isOpen || conversationId || initialized.current) return;
+    initialized.current = true;
+    startConversationMut.mutate({
+      visitorId, visitorName, visitorPhone,
+      originPage: window.location.pathname,
+      privacyConsent: true
+    });
+  }, [phase, isOpen]);
 
+  // Marcar como lido
   useEffect(() => {
     if (!isOpen || !conversationId) return;
     markReadMut.mutate({ conversationId, visitorId });
-  }, [isOpen, conversationId, visitorId]);
+  }, [isOpen, conversationId]);
 
-  const [autoScroll, setAutoScroll] = useState(true);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-
-  // Scroll automático só quando o usuário já está no final
+  // Detectar conversa existente
   useEffect(() => {
-    if (!autoScroll) return;
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [listMessagesQ.data, typing, autoScroll]);
-
-  const handleChatScroll = () => {
-    const el = chatContainerRef.current;
-    if (!el) return;
-    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setAutoScroll(distFromBottom < 80); // só auto-scroll se estiver a menos de 80px do final
-  };
+    if (!isOpen) return;
+    const status = (unreadQ.data as any)?.conversationStatus;
+    if (status === "finalized" || status === "blocked") {
+      setConversationId(null);
+      setPhase("identify");
+      initialized.current = false;
+      return;
+    }
+    if (unreadQ.data?.openConversationId && !conversationId) {
+      setConversationId(unreadQ.data.openConversationId);
+    }
+  }, [isOpen, unreadQ.data, conversationId]);
 
   const handleIdentifySubmit = () => {
     let hasError = false;
     if (!visitorName.trim()) { setNameError("Nome é obrigatório"); hasError = true; } else setNameError("");
     const phoneClean = visitorPhone.replace(/\D/g, "");
-    if (!phoneClean || phoneClean.length < 10) { setPhoneError("Telefone inválido (mínimo 10 dígitos)"); hasError = true; } else setPhoneError("");
+    if (!phoneClean || phoneClean.length < 10) { setPhoneError("Telefone inválido"); hasError = true; } else setPhoneError("");
     if (hasError) return;
     saveVisitorData(visitorName.trim(), phoneClean);
     setVisitorPhone(phoneClean);
-    // Gerar visitorId baseado no telefone — garante que mesmo número = mesma conversa
-    const newVisitorId = getVisitorIdForPhone(phoneClean);
-    setVisitorId(newVisitorId);
-    setConversationId(null); // Limpar conversa anterior para buscar a do novo número
+    const newId = getVisitorIdForPhone(phoneClean);
+    setVisitorId(newId);
+    setConversationId(null);
+    initialized.current = false;
     setPhase("chat");
   };
 
-  const handleSend = () => {
-    if (!message.trim() || !conversationId) return;
-    setTyping(true);
-    touchSession(); // Renovar sessão ao enviar mensagem
-    sendVisitorMessageMut.mutate({ conversationId, visitorId, text: message.trim() });
-  };
-
-  // Clique num botão do menu principal (com responseText e subButtons da árvore)
-  const handleMenuItemClick = (item: any) => {
+  const handleButtonClick = (btn: { label: string; actionType?: string; actionPayload?: any }) => {
     if (!conversationId) return;
-    const label = item.title || item.label || "";
-    // Enviar o texto do botão como mensagem do visitante
-    sendVisitorMessageMut.mutate({ conversationId, visitorId, text: label });
-    // Se o item tem responseText ou subButtons, enviar como resposta do bot
-    if (item.responseText || (item.subButtons && item.subButtons.length > 0)) {
-      setTimeout(() => {
-        // Criar mensagem bot com responseText + subButtons
-        const payload: Record<string, any> = {};
-        if (item.subButtons && item.subButtons.length > 0) {
-          payload.buttons = item.subButtons.map((b: any) => ({
-            label: b.label,
-            actionType: b.actionType,
-            actionPayload: b.actionPayload || {},
-          }));
-        }
-        // Enviar via sendVisitorMessage com texto especial que o bot vai interceptar
-        // Na verdade, vamos usar handleMenuAction para ações diretas
-      }, 300);
+    const { actionType, actionPayload, label } = btn;
+    // Ações diretas
+    if (actionType === "open_internal" && actionPayload?.path) { window.location.href = String(actionPayload.path); return; }
+    if (actionType === "open_external" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); }
+    if (actionType === "open_video" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); }
+    if (actionType === "open_whatsapp" && actionPayload?.phone) {
+      const txt = actionPayload.text ? "?text=" + encodeURIComponent(String(actionPayload.text)) : "";
+      window.open("https://wa.me/" + String(actionPayload.phone) + txt, "_blank");
     }
+    // Enviar label como mensagem para o bot processar
+    touchSession();
+    sendMut.mutate({ conversationId, visitorId, text: label });
   };
 
-  const handleMenuAction = (actionType?: string, actionPayload?: Record<string, any>) => {
-    if (!actionType) return;
-    // Nó do fluxo de botões (árvore recursiva)
-    if (actionType === "flow_node" && actionPayload?.nodeId && conversationId) {
-      const nodeActionType = String(actionPayload.nodeActionType || "show_children");
-      const nodeActionPayload = (actionPayload.nodeActionPayload || {}) as Record<string, any>;
-      // Ações diretas: executar imediatamente
-      if (nodeActionType === "open_internal" && nodeActionPayload?.path) { window.location.href = String(nodeActionPayload.path); return; }
-      if (nodeActionType === "open_external" && nodeActionPayload?.url) { window.open(String(nodeActionPayload.url), "_blank"); return; }
-      if (nodeActionType === "open_video" && nodeActionPayload?.url) { window.open(String(nodeActionPayload.url), "_blank"); return; }
-      if (nodeActionType === "open_whatsapp" && nodeActionPayload?.phone) { const txt = nodeActionPayload.text ? "?text=" + encodeURIComponent(String(nodeActionPayload.text)) : ""; window.open("https://wa.me/" + String(nodeActionPayload.phone) + txt, "_blank"); return; }
-      if (nodeActionType === "handoff_human") { sendVisitorMessageMut.mutate({ conversationId, visitorId, text: "Quero falar com um atendente humano." }); return; }
-      // show_children ou send_text: enviar label como mensagem para o bot processar
-      const label = String(actionPayload.label || "");
-      if (label) sendVisitorMessageMut.mutate({ conversationId, visitorId, text: label });
-      return;
-    }
-    if (actionType === "open_internal" && actionPayload?.path) { window.location.href = String(actionPayload.path); return; }
-    if (actionType === "open_external" && actionPayload?.url) {
-      if (conversationId) sendVisitorMessageMut.mutate({ conversationId, visitorId, text: `Abrindo link: ${actionPayload.label || actionPayload.url}` });
-      setTimeout(() => window.open(String(actionPayload.url), "_blank"), 300); return;
-    }
-    if (actionType === "open_video" && actionPayload?.url) {
-      if (conversationId) sendVisitorMessageMut.mutate({ conversationId, visitorId, text: `Assistindo vídeo: ${actionPayload.label || "Vídeo explicativo"}` });
-      setTimeout(() => window.open(String(actionPayload.url), "_blank"), 300); return;
-    }
-    if (actionType === "open_whatsapp" && actionPayload?.phone) {
-      if (conversationId) sendVisitorMessageMut.mutate({ conversationId, visitorId, text: "Abrindo WhatsApp para falar com atendente..." });
-      const txt = actionPayload.text ? "?text=" + encodeURIComponent(String(actionPayload.text)) : "";
-      setTimeout(() => window.open("https://wa.me/" + String(actionPayload.phone) + txt, "_blank"), 300); return;
-    }
-    if (actionType === "handoff_human" && conversationId) { sendVisitorMessageMut.mutate({ conversationId, visitorId, text: "Quero falar com um atendente humano." }); return; }
-    if (actionType === "send_text" && actionPayload?.text && conversationId) { sendVisitorMessageMut.mutate({ conversationId, visitorId, text: String(actionPayload.text) }); return; }
+  const handleSendText = () => {
+    if (!inputText.trim() || !conversationId) return;
+    touchSession();
+    sendMut.mutate({ conversationId, visitorId, text: inputText.trim() });
+    setInputText("");
+    setShowInput(false);
   };
 
   const handleRestart = () => {
     setConversationId(null);
+    setMessages([]);
     setPhase("identify");
     setVisitorName("");
     setVisitorPhone("");
+    initialized.current = false;
     clearSession();
-  };
-
-  const handleBack = () => {
-    if (phase === "chat") { setPhase("identify"); }
-    else { if (onBack) onBack(); else onMinimize(); }
   };
 
   if (!isOpen) return null;
 
-  const openModeResolved: OpenMode = isMobile ? "fullscreen" : openMode;
-  const panelClass = openModeResolved === "fullscreen" ? "fixed inset-0 z-[9999] flex flex-col"
-    : openModeResolved === "sidebar" ? "fixed top-0 right-0 h-full w-[380px] z-[9999] flex flex-col"
-    : "w-full max-w-[420px] h-[580px] rounded-2xl flex flex-col";
-  // Altura dinâmica para mobile: usa dvh quando disponível para respeitar o teclado virtual
-  const fullscreenStyle = openModeResolved === "fullscreen" ? { height: "100dvh" } : {};
+  const isMobile = window.innerWidth < 640;
+  const isFullscreen = isMobile || openMode === "fullscreen";
+  const panelStyle: React.CSSProperties = isFullscreen
+    ? { position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", height: "100dvh" }
+    : { position: "fixed", bottom: 80, right: 16, width: 380, height: 580, zIndex: 9999, borderRadius: 20, display: "flex", flexDirection: "column", overflow: "hidden" };
+
+  const botName = publicStateQ.data?.buttonLabel || "Atendimento Online";
+  const botAvatar = (publicStateQ.data as any)?.botAvatar || null;
+  const isTyping = sendMut.isPending || startConversationMut.isPending;
 
   return (
     <div
-      className={openModeResolved === "modal" ? "fixed inset-0 z-[9998] flex items-end justify-center sm:items-center p-4 bg-black/40 backdrop-blur-sm" : "fixed inset-0 z-[9998] pointer-events-none"}
-      onClick={openModeResolved === "modal" ? (e) => { if (e.target === e.currentTarget) onMinimize(); } : undefined}
+      style={isFullscreen ? {} : { position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 16 }}
+      onClick={!isFullscreen ? (e) => { if (e.target === e.currentTarget) onMinimize(); } : undefined}
     >
-      <div className={`${panelClass} relative bg-[#0f172a] border border-white/10 shadow-2xl overflow-hidden pointer-events-auto`} style={fullscreenStyle}>
+      <div style={{ ...panelStyle, background: "#09090b", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 25px 60px rgba(0,0,0,0.6)" }}>
 
         {/* Header */}
-        <div className="px-4 py-3 border-b border-white/10 bg-gradient-to-r from-blue-800 to-sky-700 text-white flex-shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <button onClick={handleBack} className="p-1.5 rounded-lg hover:bg-white/15 transition-colors" title={phase === "chat" ? "Voltar ao menu" : "Fechar"}>
-                <ArrowLeft className="w-4 h-4" />
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "linear-gradient(135deg,#1e1b4b,#0f172a)", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={phase === "chat" ? () => setPhase("identify") : (onBack || onMinimize)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: 4, borderRadius: 8 }}>
+            <ArrowLeft size={18} />
+          </button>
+          {botAvatar ? (
+            <img src={botAvatar} alt={botName} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover" }} />
+          ) : (
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Bot size={18} color="#fff" />
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: "#fff", letterSpacing: 0.3 }}>{botName}</div>
+            <div style={{ fontSize: 11, color: "#4ade80", display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", display: "inline-block" }} />
+              Online agora
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {phase === "chat" && (
+              <button onClick={handleRestart} title="Recomeçar" style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: 4, borderRadius: 8 }}>
+                <RefreshCcw size={16} />
               </button>
-              <MessageCircle className="w-4 h-4 flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="font-black text-sm tracking-wide truncate">{publicStateQ.data?.buttonLabel || "ATENDIMENTO ONLINE"}</p>
-                <p className="text-[11px] text-blue-100/90 truncate">{statusText} • {unreadQ.data?.unreadMessages || 0} não lidas</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {phase === "chat" && (
-                <button onClick={handleRestart} className="p-1.5 rounded-lg hover:bg-white/15 transition-colors" title="Novo atendimento"><RefreshCcw className="w-4 h-4" /></button>
-              )}
-              <button onClick={onMinimize} className="p-1.5 rounded-lg hover:bg-white/15 transition-colors" title="Minimizar"><Minimize2 className="w-4 h-4" /></button>
-              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/15 transition-colors" title="Fechar"><X className="w-4 h-4" /></button>
-            </div>
+            )}
+            <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: 4, borderRadius: 8 }}>
+              <X size={18} />
+            </button>
           </div>
         </div>
 
-        {/* FASE 1: Identificação — Manifesto tela cheia */}
+        {/* FASE 1: Identificação */}
         {phase === "identify" && (
-          <div className="flex-1 flex flex-col overflow-y-auto" style={{background: "linear-gradient(160deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)"}}>
-            {/* Hero section */}
-            <div className="flex flex-col items-center justify-center px-6 pt-10 pb-6 text-center">
-              <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-4 shadow-2xl" style={{background: "linear-gradient(135deg, #3b72e8, #7c3aed)"}}>
-                <MessageCircle className="w-10 h-10 text-white" />
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", background: "linear-gradient(160deg,#09090b,#1e1b4b 50%,#09090b)" }}>
+            {/* Avatar e boas-vindas */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "32px 24px 20px", textAlign: "center" }}>
+              {botAvatar ? (
+                <img src={botAvatar} alt={botName} style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", marginBottom: 12, border: "3px solid rgba(124,58,237,0.5)" }} />
+              ) : (
+                <div style={{ width: 80, height: 80, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                  <Bot size={36} color="#fff" />
+                </div>
+              )}
+              <h2 style={{ fontWeight: 900, fontSize: 20, color: "#fff", margin: "0 0 6px", letterSpacing: -0.5 }}>{botName}</h2>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", display: "inline-block" }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>Online agora — atendimento 24h</span>
               </div>
-              <h1 className="text-2xl font-black text-white mb-1" style={{letterSpacing: "-0.5px"}}>{publicStateQ.data?.buttonLabel || "ATENDIMENTO ONLINE"}</h1>
-              <div className="flex items-center gap-1.5 mb-3">
-                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-xs font-semibold text-green-400">Online agora — atendimento 24h</span>
-              </div>
-              <p className="text-sm text-white/70 leading-relaxed max-w-xs">
-                {publicStateQ.data?.welcomeMessage || "Tire suas dúvidas sobre nossos serviços, valores, prazos e muito mais. Estou aqui para te ajudar!"}
+              <p style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.5, maxWidth: 280 }}>
+                {publicStateQ.data?.welcomeMessage || "Olá! Como posso te ajudar hoje?"}
               </p>
             </div>
 
-            {/* Serviços disponíveis */}
-            <div className="px-5 mb-5">
-              <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Posso te ajudar com</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  {icon: "🟣", label: "Uber App"},
-                  {icon: "🟡", label: "Uber Taxi"},
-                  {icon: "🟢", label: "99 App"},
-                  {icon: "🔵", label: "Edição Doc"},
-                  {icon: "⏳", label: "Prazos"},
-                  {icon: "💳", label: "Pagamento"},
-                  {icon: "📝", label: "Como pedir"},
-                  {icon: "💬", label: "Suporte"},
-                ].map((s) => (
-                  <div key={s.label} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)"}}>
-                    <span className="text-base">{s.icon}</span>
-                    <span className="text-xs font-semibold text-white/80">{s.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Formulário de identificação */}
-            <div className="px-5 pb-6 mt-auto">
-              <div className="rounded-2xl p-4 space-y-3" style={{background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)"}}>
-                <p className="text-sm font-bold text-white mb-1">Para começar, informe seus dados:</p>
+            {/* Formulário */}
+            <div style={{ padding: "0 20px 32px", marginTop: "auto" }}>
+              <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20, padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+                <p style={{ fontWeight: 700, fontSize: 14, color: "#fff", margin: 0 }}>Para começar, informe seus dados:</p>
                 <div>
-                  <label className="text-xs font-semibold text-white/60 block mb-1">Nome completo <span className="text-red-400">*</span></label>
-                  <input value={visitorName} onChange={(e) => { setVisitorName(e.target.value); setNameError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ behavior: "smooth", block: "center" }), 300)} placeholder="Ex: João da Silva" className={`w-full h-11 rounded-xl bg-white/8 border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${nameError ? "border-red-400" : "border-white/10"}`} style={{background: "rgba(255,255,255,0.06)"}} />
-                  {nameError && <p className="text-xs text-red-400 mt-1">{nameError}</p>}
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 6 }}>Nome completo <span style={{ color: "#f87171" }}>*</span></label>
+                  <input
+                    value={visitorName}
+                    onChange={e => { setVisitorName(e.target.value); setNameError(""); }}
+                    onKeyDown={e => e.key === "Enter" && handleIdentifySubmit()}
+                    placeholder="Ex: João da Silva"
+                    style={{ width: "100%", height: 44, borderRadius: 12, background: "rgba(255,255,255,0.06)", border: `1px solid ${nameError ? "#f87171" : "rgba(255,255,255,0.1)"}`, padding: "0 12px", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                  />
+                  {nameError && <p style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>{nameError}</p>}
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-white/60 block mb-1">Telefone (WhatsApp) <span className="text-red-400">*</span></label>
-                  <input value={visitorPhone} onChange={(e) => { setVisitorPhone(e.target.value.replace(/\D/g, "")); setPhoneError(""); }} onKeyDown={(e) => e.key === "Enter" && handleIdentifySubmit()} onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ behavior: "smooth", block: "center" }), 300)} placeholder="Ex: 11940239867" maxLength={15} className={`w-full h-11 rounded-xl border px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400 ${phoneError ? "border-red-400" : "border-white/10"}`} style={{background: "rgba(255,255,255,0.06)"}} />
-                  {phoneError && <p className="text-xs text-red-400 mt-1">{phoneError}</p>}
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 6 }}>Telefone (WhatsApp) <span style={{ color: "#f87171" }}>*</span></label>
+                  <input
+                    value={visitorPhone}
+                    onChange={e => { setVisitorPhone(e.target.value.replace(/\D/g, "")); setPhoneError(""); }}
+                    onKeyDown={e => e.key === "Enter" && handleIdentifySubmit()}
+                    placeholder="Ex: 11940239867"
+                    maxLength={15}
+                    style={{ width: "100%", height: 44, borderRadius: 12, background: "rgba(255,255,255,0.06)", border: `1px solid ${phoneError ? "#f87171" : "rgba(255,255,255,0.1)"}`, padding: "0 12px", color: "#fff", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                  />
+                  {phoneError && <p style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>{phoneError}</p>}
                 </div>
-                <button onClick={handleIdentifySubmit} className="w-full py-3.5 rounded-xl text-white font-bold text-sm transition-all active:scale-95" style={{background: "linear-gradient(135deg, #3b72e8, #7c3aed)", boxShadow: "0 4px 20px rgba(124,58,237,0.4)"}}>
+                <button
+                  onClick={handleIdentifySubmit}
+                  style={{ width: "100%", height: 48, borderRadius: 14, background: "linear-gradient(135deg,#7c3aed,#3b82f6)", border: "none", color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer", boxShadow: "0 4px 20px rgba(124,58,237,0.4)" }}
+                >
                   Iniciar atendimento →
                 </button>
               </div>
@@ -449,42 +311,134 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
           </div>
         )}
 
-        {/* FASE 2: Chat */}
+        {/* FASE 2: Chat com botões */}
         {phase === "chat" && (
           <>
-            <div className="px-4 py-2 bg-white/[0.02] border-b border-white/5 flex-shrink-0">
-              <p className="text-xs text-white/50">Atendendo: <span className="text-white/80 font-semibold">{visitorName}</span>{visitorPhone && <span className="ml-2 text-white/40">• {visitorPhone}</span>}</p>
-            </div>
-            <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto p-4 space-y-3">
-              {!conversationId && <p className="text-xs text-white/60 text-center">Iniciando conversa...</p>}
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {!conversationId && (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "rgba(255,255,255,0.3)", fontSize: 13 }}>
+                  <div style={{ width: 24, height: 24, border: "2px solid #7c3aed", borderTopColor: "transparent", borderRadius: "50%", margin: "0 auto 12px", animation: "spin 1s linear infinite" }} />
+                  Iniciando atendimento...
+                </div>
+              )}
 
-              {(listMessagesQ.data || []).map((msg: any) => {
-                const own = msg.senderType === "visitor";
-                return (
-                  <div key={msg.id} className={`flex ${own ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${own ? "bg-blue-600 text-white rounded-br-sm" : "bg-white/10 text-white rounded-bl-sm border border-white/10"}`}>
-                      {renderMessageContent(msg, handleMenuAction)}
-                      <p className="text-[10px] mt-1 opacity-70">{new Date(msg.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p>
+              {messages.map((msg, idx) => {
+                if (msg.type === "user") {
+                  return (
+                    <div key={idx} style={{ display: "flex", justifyContent: "flex-end" }}>
+                      <div style={{ background: "linear-gradient(135deg,#7c3aed,#3b82f6)", borderRadius: "18px 18px 4px 18px", padding: "10px 14px", maxWidth: "80%", fontSize: 14, color: "#fff", fontWeight: 500 }}>
+                        {msg.text}
+                      </div>
                     </div>
-                  </div>
-                );
+                  );
+                }
+                if (msg.type === "bot") {
+                  const isLast = idx === messages.length - 1 || messages.slice(idx + 1).every(m => m.type !== "bot");
+                  return (
+                    <div key={idx} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {/* Avatar + texto */}
+                      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                        {botAvatar ? (
+                          <img src={botAvatar} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0, marginTop: 2 }} />
+                        ) : (
+                          <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
+                            <Bot size={14} color="#fff" />
+                          </div>
+                        )}
+                        {msg.text && (
+                          <div style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "18px 18px 18px 4px", padding: "10px 14px", maxWidth: "85%", fontSize: 14, color: "#fff", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                            {msg.text}
+                          </div>
+                        )}
+                      </div>
+                      {/* Botões — só mostrar nos botões da última mensagem do bot */}
+                      {isLast && msg.buttons && msg.buttons.length > 0 && (
+                        <div style={{ marginLeft: 36, display: "flex", flexDirection: "column", gap: 8 }}>
+                          {msg.buttons.map((btn, bi) => (
+                            <button
+                              key={bi}
+                              onClick={() => handleButtonClick(btn)}
+                              disabled={sendMut.isPending}
+                              style={{
+                                background: "rgba(124,58,237,0.15)",
+                                border: "1px solid rgba(124,58,237,0.4)",
+                                borderRadius: 14,
+                                padding: "12px 16px",
+                                color: "#c4b5fd",
+                                fontSize: 14,
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                textAlign: "left",
+                                transition: "all 0.15s",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: 8,
+                              }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.3)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.7)"; }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.15)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.4)"; }}
+                            >
+                              <span>{btn.label}</span>
+                              <span style={{ fontSize: 12, opacity: 0.5 }}>›</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
               })}
-              {typing && <div className="flex justify-start"><div className="rounded-2xl px-3 py-2 text-xs bg-white/10 text-white/80 border border-white/10">Assistente está digitando...</div></div>}
-              <div ref={messagesEndRef} />
+
+              {isTyping && (
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Bot size={14} color="#fff" />
+                  </div>
+                  <div style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "18px 18px 18px 4px", padding: "10px 14px", fontSize: 13, color: "rgba(255,255,255,0.5)" }}>
+                    digitando...
+                  </div>
+                </div>
+              )}
+
+              <div ref={chatEndRef} />
             </div>
-            <div className="p-3 border-t border-white/10 bg-[#0b1222] flex-shrink-0" style={{position: "sticky", bottom: 0}}>
-              {publicStateQ.data?.maintenanceMode || publicStateQ.data?.chatEnabled === false ? (
-                <p className="text-xs text-amber-300">{publicStateQ.data?.disabledMessage || "Atendimento indisponível no momento."}</p>
+
+            {/* Rodapé */}
+            <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.08)", background: "#0b0b0f", flexShrink: 0 }}>
+              {showInput ? (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    autoFocus
+                    value={inputText}
+                    onChange={e => setInputText(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSendText()}
+                    placeholder="Digite sua mensagem..."
+                    style={{ flex: 1, height: 40, borderRadius: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", padding: "0 12px", color: "#fff", fontSize: 14, outline: "none" }}
+                  />
+                  <button onClick={handleSendText} disabled={!inputText.trim()} style={{ height: 40, padding: "0 16px", borderRadius: 12, background: "linear-gradient(135deg,#7c3aed,#3b82f6)", border: "none", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                    Enviar
+                  </button>
+                  <button onClick={() => setShowInput(false)} style={{ height: 40, width: 40, borderRadius: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <X size={16} />
+                  </button>
+                </div>
               ) : (
-                <div className="flex gap-2">
-                  <input value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSend()} onFocus={() => setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 300)} placeholder="Digite sua mensagem" className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-blue-400/70" />
-                  <button onClick={handleSend} disabled={!message.trim() || sendVisitorMessageMut.isPending} className="h-10 px-3 rounded-xl bg-blue-600 text-white font-bold disabled:opacity-50 hover:bg-blue-500 transition-colors"><Send className="w-4 h-4" /></button>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                  <button
+                    onClick={() => setShowInput(true)}
+                    style={{ flex: 1, height: 38, borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontSize: 13, cursor: "pointer" }}
+                  >
+                    ✏️ Digitar mensagem
+                  </button>
                 </div>
               )}
             </div>
           </>
         )}
       </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
