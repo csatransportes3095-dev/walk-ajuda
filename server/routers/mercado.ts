@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, adminProcedure } from "../_core/trpc";
+import { invokeLLM } from "../_core/llm";
 import { getDb } from "../db";
 import { sql } from "drizzle-orm";
 import * as jose from "jose";
@@ -107,6 +108,52 @@ export const mercadoRouter = router({
       .mutation(async ({ ctx, input }) => {
         await exec(`DELETE FROM cc_mercado_produtos WHERE id = ${input.id} AND userId = ${ctx.userId}`);
         return { ok: true };
+      }),
+
+    // Sugerir categoria via IA
+    suggestCategory: ccP
+      .input(z.object({ nome: z.string().min(1) }))
+      .mutation(async ({ input }) => {
+        const categorias = [
+          "🥩 Açougue","🍎 Hortifruti","🥛 Laticínios","🥖 Padaria","🧴 Limpeza",
+          "🧻 Higiene","🍝 Mercearia","🥤 Bebidas","🍦 Frios","🐟 Peixaria",
+          "🌾 Grãos","🍬 Doces","🧊 Congelados","📦 Outros"
+        ];
+        const unidades = ["un","kg","g","L","ml","pct","cx","dz","lt"];
+        try {
+          const res = await invokeLLM({
+            messages: [{
+              role: "user",
+              content: `Produto de supermercado: "${input.nome}"
+
+Categoria mais adequada (escolha EXATAMENTE uma da lista):
+${categorias.join("\n")}
+
+Unidade mais adequada (escolha EXATAMENTE uma da lista):
+${unidades.join(", ")}
+
+Responda APENAS em JSON: {"categoria": "...", "unidade": "..."}`
+            }],
+            outputSchema: {
+              name: "sugestao",
+              schema: {
+                type: "object",
+                properties: {
+                  categoria: { type: "string" },
+                  unidade: { type: "string" }
+                },
+                required: ["categoria","unidade"]
+              }
+            }
+          });
+          const content = res.choices?.[0]?.message?.content;
+          const parsed = typeof content === "string" ? JSON.parse(content) : content;
+          const cat = categorias.includes(parsed?.categoria) ? parsed.categoria : "📦 Outros";
+          const unid = unidades.includes(parsed?.unidade) ? parsed.unidade : "un";
+          return { categoria: cat, unidade: unid };
+        } catch {
+          return { categoria: "📦 Outros", unidade: "un" };
+        }
       }),
 
     // Pré-cadastrar lista padrão de produtos essenciais

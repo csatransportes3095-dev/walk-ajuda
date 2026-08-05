@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Search, Plus, Minus, Star, ShoppingCart, Trash2, Edit3, CheckCircle, X, History, ShoppingBag, Package, ChevronDown, ChevronUp, LayoutList, AlignJustify } from "lucide-react";
@@ -140,9 +140,12 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
   const [nome, setNome] = useState("");
   const [cat, setCat] = useState("");
   const [unid, setUnid] = useState("un");
-  const [inline, setInline] = useState<Record<number, { qtd: string; valorCents: number; open: boolean }>>({});
+  const [inline, setInline] = useState<Record<number, { qtd: string; valorCents: number; open: boolean }>>({}); 
+  const [suggestion, setSuggestion] = useState<{ categoria: string; unidade: string } | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
 
   const { data: produtos = [], refetch } = trpc.mercado.produtos.list.useQuery({ search: search || undefined }, { refetchOnWindowFocus: false });
+  const suggestMut = trpc.mercado.produtos.suggestCategory.useMutation();
   const createMut = trpc.mercado.produtos.create.useMutation({ onSuccess: () => { refetch(); setShowAdd(false); setNome(""); setCat(""); setUnid("un"); toast.success("Produto criado!"); } });
   const updateMut = trpc.mercado.produtos.update.useMutation({ onSuccess: () => { refetch(); setEditingProduto(null); toast.success("Atualizado!"); } });
   const deleteMut = trpc.mercado.produtos.delete.useMutation({ onSuccess: () => { refetch(); toast.success("Removido!"); } });
@@ -159,6 +162,21 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
   };
 
   const maisComprados = produtos.filter((p: any) => p.vezesComprado > 0).sort((a: any, b: any) => b.vezesComprado - a.vezesComprado).slice(0, 6);
+
+  // Sugestão automática quando busca retorna 0 resultados
+  useEffect(() => {
+    if (search.trim().length < 2) { setSuggestion(null); return; }
+    if (produtos.length > 0) { setSuggestion(null); return; }
+    const timer = setTimeout(async () => {
+      setSuggestionLoading(true);
+      try {
+        const s = await suggestMut.mutateAsync({ nome: search.trim() });
+        setSuggestion(s);
+      } catch { setSuggestion({ categoria: "📦 Outros", unidade: "un" }); }
+      finally { setSuggestionLoading(false); }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [search, produtos.length]);
 
   const cardProps = (p: any) => ({
     p, inline, setInline,
@@ -283,9 +301,48 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
       )}
 
       {produtos.length === 0 && (
-        <div style={{ textAlign: "center", padding: "32px 0", color: "rgba(255,255,255,0.3)" }}>
-          <Package size={40} style={{ margin: "0 auto 12px", display: "block" }} />
-          <div style={{ marginBottom: 16 }}>{search ? "Nenhum produto encontrado" : "Nenhum produto cadastrado"}</div>
+        <div style={{ textAlign: "center", padding: "24px 0", color: "rgba(255,255,255,0.3)" }}>
+          {!search && <Package size={40} style={{ margin: "0 auto 12px", display: "block" }} />}
+          {search && !suggestion && !suggestionLoading && (
+            <Package size={40} style={{ margin: "0 auto 12px", display: "block" }} />
+          )}
+          {search && suggestionLoading && (
+            <div style={{ marginBottom: 12, fontSize: 13, color: "rgba(255,255,255,0.5)" }}>🤖 Identificando categoria...</div>
+          )}
+          {search && suggestion && !suggestionLoading && (
+            <div style={{ background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.4)", borderRadius: 16, padding: "16px", textAlign: "left", marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>Produto não encontrado. Adicionar?</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: "#fff" }}>{search.trim()}</div>
+                  <div style={{ fontSize: 12, color: "#a78bfa", marginTop: 2 }}>🤖 {suggestion.categoria} · {suggestion.unidade}</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={async () => {
+                    const result = await createMut.mutateAsync({ nome: search.trim(), categoria: suggestion.categoria, unidade: suggestion.unidade });
+                    const novoProduto = { id: result.id, nome: search.trim(), categoria: suggestion.categoria, unidade: suggestion.unidade, favorito: 0, vezesComprado: 0 };
+                    onAddToList(novoProduto, 1, null);
+                    setSearch("");
+                    setSuggestion(null);
+                    toast.success(`"${search.trim()}" adicionado à lista!`);
+                  }}
+                  disabled={createMut.isPending}
+                  style={{ ...S.btn("linear-gradient(135deg,#7c3aed,#3b82f6)"), flex: 1, justifyContent: "center", fontSize: 13 }}
+                >
+                  <CheckCircle size={15} /> {createMut.isPending ? "Adicionando..." : "✓ Confirmar e Adicionar"}
+                </button>
+                <button
+                  onClick={() => { setNome(search.trim()); setCat(suggestion.categoria); setUnid(suggestion.unidade); setShowAdd(true); }}
+                  style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 14, padding: "12px 14px", color: "rgba(255,255,255,0.7)", fontSize: 13, cursor: "pointer" }}
+                >
+                  ✏️
+                </button>
+              </div>
+            </div>
+          )}
+          {!search && <div style={{ marginBottom: 16 }}>Nenhum produto cadastrado</div>}
           {!search && (
             <button onClick={() => seedMut.mutate()} disabled={seedMut.isPending} style={{ ...S.btn("linear-gradient(135deg,#10b981,#059669)"), margin: "0 auto" }}>
               {seedMut.isPending ? "Carregando..." : "📦 Carregar Lista Padrão"}
