@@ -44,6 +44,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   semanal: "Semanal",
   quinzenal: "Quinzenal",
   mensal: "Mensal",
+  parcelado: "Parcelado",
 };
 
 // ─── StatusBadge ────────────────────────────────────────────────────────────
@@ -444,15 +445,27 @@ export function LoansTab({ token }: LoansTabProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [simAmount, setSimAmount] = useState(0);
   const [simEnabled, setSimEnabled] = useState(false);
+  // Parcelado
+  const [parceladoAmount, setParceladoAmount] = useState(0);
+  const [parceladoEnabled, setParceladoEnabled] = useState(false);
+  const [parceladoSelecionado, setParceladoSelecionado] = useState<number | null>(null);
+  const [parceladoFrequencia, setParceladoFrequencia] = useState<'mensal' | 'quinzenal' | 'semanal'>('mensal');
+  const [parceladoConfirm, setParceladoConfirm] = useState(false);
 
   useEffect(() => {
     const v = parseFloat(requestAmount);
-    if (v > 0) {
+    if (v > 0 && paymentType !== 'parcelado') {
       const t = setTimeout(() => { setSimAmount(v); setSimEnabled(true); }, 700);
       return () => clearTimeout(t);
     } else {
       setSimEnabled(false);
       setSimAmount(0);
+    }
+    if (v > 0 && paymentType === 'parcelado') {
+      const t = setTimeout(() => { setParceladoAmount(v); setParceladoEnabled(true); setParceladoSelecionado(null); setParceladoConfirm(false); }, 700);
+      return () => clearTimeout(t);
+    } else if (paymentType === 'parcelado') {
+      setParceladoEnabled(false); setParceladoAmount(0);
     }
   }, [requestAmount, paymentType, workDays]);
 
@@ -481,6 +494,20 @@ export function LoansTab({ token }: LoansTabProps) {
   const savePixKey = trpc.loans.saveClientPixKey.useMutation({
     onSuccess: () => { toast.success("Chave PIX salva!"); setEditingPix(false); refetch(); },
     onError: (e) => toast.error(e.message || "Erro ao salvar chave PIX"),
+  });
+
+  const simParceladoQuery = trpc.loans.simulateParcelado.useQuery(
+    { token, amount: parceladoAmount },
+    { enabled: parceladoEnabled && parceladoAmount > 0, retry: false }
+  );
+
+  const requestParceladoMutation = trpc.loans.requestParcelado.useMutation({
+    onSuccess: () => {
+      setSubmitted(true); setRequestOpen(false); setRequestAmount(""); setRequestNotes("");
+      setParceladoEnabled(false); setParceladoAmount(0); setParceladoSelecionado(null); setParceladoConfirm(false);
+      refetch();
+    },
+    onError: (e) => toast.error(e.message || "Erro ao solicitar empréstimo"),
   });
 
   const requestMutation = trpc.loans.requestLoan.useMutation({
@@ -547,9 +574,9 @@ export function LoansTab({ token }: LoansTabProps) {
   const nextInstallment = (data as any).nextInstallment;
   const futureLimit = (data as any).futureLimit;
   const futureProfileName = (data as any).futureProfileName;
-  const allowedTypes: ("diario" | "semanal" | "mensal")[] = (client.allowedPaymentTypes || "diario")
+  const allowedTypes: string[] = (client.allowedPaymentTypes || "diario")
     .split(",").map((t: string) => t.trim())
-    .filter((t: string) => ["diario", "semanal", "mensal"].includes(t)) as ("diario" | "semanal" | "mensal")[];
+    .filter((t: string) => ["diario", "semanal", "mensal", "parcelado"].includes(t));
 
   const activeLoans = (loans as any[]).filter((l) => !["pago", "cancelado", "reprovado"].includes(l.status));
   const hasActive = activeLoans.length > 0;
@@ -968,7 +995,9 @@ export function LoansTab({ token }: LoansTabProps) {
                 </div>
               </div>
             )}
-            {simEnabled && (
+
+            {/* Simulação para modos normais */}
+            {simEnabled && paymentType !== 'parcelado' && (
               <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
                 {simQuery.isLoading ? (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -989,6 +1018,72 @@ export function LoansTab({ token }: LoansTabProps) {
                 ) : null}
               </div>
             )}
+
+            {/* Parcelado: escolha de parcelas */}
+            {paymentType === 'parcelado' && parceladoEnabled && !parceladoConfirm && (
+              <div className="space-y-3">
+                {simParceladoQuery.isLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground"><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Calculando opções...</div>
+                ) : simParceladoQuery.isError ? (
+                  <p className="text-xs text-red-400">{simParceladoQuery.error?.message}</p>
+                ) : simParceladoQuery.data?.opcoes?.length ? (
+                  <>
+                    <Label>Escolha o parcelamento</Label>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {simParceladoQuery.data.opcoes.map((op: any) => (
+                        <button key={op.parcelas} onClick={() => setParceladoSelecionado(op.parcelas)}
+                          className={`w-full rounded-xl border p-3 text-left transition-all ${
+                            parceladoSelecionado === op.parcelas
+                              ? 'border-violet-500 bg-violet-500/20'
+                              : 'border-border/50 hover:border-violet-500/40'
+                          }`}>
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-sm">{op.parcelas}x de <span className="text-violet-300">{fmt(op.valorParcela)}</span></span>
+                            <span className="text-xs text-muted-foreground">Total: {fmt(op.valorTotal)}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    {parceladoSelecionado && (
+                      <div className="space-y-2">
+                        <Label>Frequência</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(['mensal','quinzenal','semanal'] as const).map(f => (
+                            <button key={f} onClick={() => setParceladoFrequencia(f)}
+                              className={`rounded-xl border p-2 text-xs font-bold transition-all ${
+                                parceladoFrequencia === f ? 'border-violet-500 bg-violet-500/20 text-violet-300' : 'border-border/50 text-muted-foreground'
+                              }`}>
+                              {f === 'mensal' ? 'Mensal' : f === 'quinzenal' ? 'Quinzenal' : 'Semanal'}
+                            </button>
+                          ))}
+                        </div>
+                        <Button className="w-full bg-violet-600 hover:bg-violet-700" onClick={() => setParceladoConfirm(true)}>
+                          Ver resumo da solicitação
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : null}
+              </div>
+            )}
+
+            {/* Parcelado: tela de confirmação */}
+            {paymentType === 'parcelado' && parceladoConfirm && parceladoSelecionado && simParceladoQuery.data && (() => {
+              const op = simParceladoQuery.data.opcoes.find((o: any) => o.parcelas === parceladoSelecionado);
+              if (!op) return null;
+              return (
+                <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3">
+                  <p className="text-sm font-black text-violet-300 uppercase tracking-wide">Resumo da Solicitação</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm"><span className="text-muted-foreground">Valor solicitado</span><span className="font-bold">{fmt(parseFloat(requestAmount))}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-muted-foreground">Parcelamento</span><span className="font-bold text-violet-300">{op.parcelas}x de {fmt(op.valorParcela)}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-muted-foreground">Valor total</span><span className="font-bold">{fmt(op.valorTotal)}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-muted-foreground">Frequência</span><span className="font-bold capitalize">{parceladoFrequencia}</span></div>
+                  </div>
+                  <button onClick={() => setParceladoConfirm(false)} className="text-xs text-muted-foreground underline">Voltar e alterar</button>
+                </div>
+              );
+            })()}
             <div className="space-y-2">
               <Label>Observações (opcional)</Label>
               <Textarea placeholder="Motivo do empréstimo..." value={requestNotes} onChange={(e) => setRequestNotes(e.target.value)} rows={2} />
@@ -996,10 +1091,22 @@ export function LoansTab({ token }: LoansTabProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRequestOpen(false)}>Cancelar</Button>
-            <Button onClick={handleRequest} disabled={!requestAmount || parseFloat(requestAmount) <= 0 || requestMutation.isPending}
-              className="bg-violet-600 hover:bg-violet-700">
-              {requestMutation.isPending ? "Enviando..." : <><Send className="w-4 h-4 mr-1" /> Solicitar</>}
-            </Button>
+            {paymentType === 'parcelado' ? (
+              <Button
+                onClick={() => {
+                  if (!parceladoSelecionado || !parceladoConfirm) { toast.error('Selecione e confirme o parcelamento'); return; }
+                  requestParceladoMutation.mutate({ token, amount: parseFloat(requestAmount), parcelas: parceladoSelecionado, frequencia: parceladoFrequencia });
+                }}
+                disabled={!requestAmount || !parceladoSelecionado || !parceladoConfirm || requestParceladoMutation.isPending}
+                className="bg-violet-600 hover:bg-violet-700">
+                {requestParceladoMutation.isPending ? 'Enviando...' : <><Send className="w-4 h-4 mr-1" /> Confirmar Solicitação</>}
+              </Button>
+            ) : (
+              <Button onClick={handleRequest} disabled={!requestAmount || parseFloat(requestAmount) <= 0 || requestMutation.isPending}
+                className="bg-violet-600 hover:bg-violet-700">
+                {requestMutation.isPending ? "Enviando..." : <><Send className="w-4 h-4 mr-1" /> Solicitar</>}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

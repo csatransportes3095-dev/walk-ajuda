@@ -84,7 +84,7 @@ const INST_STATUS_COLORS: Record<string, string> = {
   pago_juros:  "bg-orange-500/20 text-orange-300 border-orange-400/50",
 };
 
-type TabId = "dashboard" | "loans" | "clients" | "profiles" | "pix" | "access" | "latefee" | "financeiro" | "proofhistory";
+type TabId = "dashboard" | "loans" | "clients" | "profiles" | "pix" | "access" | "latefee" | "financeiro" | "proofhistory" | "parcelamento";
 
 export default function AdminLoans() {
   const [tab, setTab] = useState<TabId>("dashboard");
@@ -104,6 +104,7 @@ export default function AdminLoans() {
             ["latefee",   "⚠️ Taxas & Regras"],
             ["financeiro", "📈 Análise Financeira"],
             ["proofhistory", "📎 Comprovantes"],
+            ["parcelamento", "📊 Parcelamento"],
           ] as [TabId, string][]).map(([id, label]) => (
             <Button key={id} size="sm" variant={tab === id ? "default" : "outline"}
               className={tab !== id ? "bg-transparent border-border text-muted-foreground hover:text-foreground" : ""}
@@ -122,6 +123,7 @@ export default function AdminLoans() {
         {tab === "latefee"  && <LateFeeTab />}
         {tab === "financeiro" && <FinanceiroTab />}
         {tab === "proofhistory" && <ProofHistoryTab />}
+        {tab === "parcelamento" && <InstallmentPlansTab />}
       </div>
     </div>
   );
@@ -3640,6 +3642,136 @@ function ProofHistoryTab() {
         </DialogContent>
       </Dialog>
 
+    </div>
+  );
+}
+
+// ─── Configuração do Parcelamento ────────────────────────────────────────────
+function InstallmentPlansTab() {
+  const utils = trpc.useUtils();
+  const { data: plans = [], isLoading } = trpc.loans.listInstallmentPlans.useQuery();
+  const savePlan = trpc.loans.saveInstallmentPlan.useMutation({
+    onSuccess: () => { toast.success("Plano salvo!"); utils.loans.listInstallmentPlans.invalidate(); setEditingPlan(null); setNewParcelas(""); setNewPercentual(""); },
+    onError: (e) => toast.error(e.message),
+  });
+  const deletePlan = trpc.loans.deleteInstallmentPlan.useMutation({
+    onSuccess: () => { toast.success("Plano excluído!"); utils.loans.listInstallmentPlans.invalidate(); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const [editingPlan, setEditingPlan] = useState<any>(null);
+  const [newParcelas, setNewParcelas] = useState("");
+  const [newPercentual, setNewPercentual] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+
+  if (isLoading) return <div className="text-center py-12"><RefreshCw className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold">Configuração do Parcelamento</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Defina as taxas de juros para cada quantidade de parcelas. Os percentuais são visíveis apenas aqui no ADM.</p>
+        </div>
+        <Button onClick={() => setShowAdd(true)} className="gap-2"><Plus className="w-4 h-4" />Nova opção</Button>
+      </div>
+
+      {/* Aviso de privacidade */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-300">Os percentuais de juros ficam armazenados apenas no banco de dados e nesta tela. O cliente vê somente os valores finais das parcelas — nunca o percentual aplicado.</p>
+      </div>
+
+      {/* Tabela de planos */}
+      <Card className="bg-card/60 border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/30 border-b border-border">
+              <tr>
+                <th className="text-left px-4 py-3 text-muted-foreground font-medium">Parcelas</th>
+                <th className="text-left px-4 py-3 text-muted-foreground font-medium">Percentual (ADM)</th>
+                <th className="text-left px-4 py-3 text-muted-foreground font-medium">Status</th>
+                <th className="text-left px-4 py-3 text-muted-foreground font-medium">Ordem</th>
+                <th className="text-right px-4 py-3 text-muted-foreground font-medium">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(plans as any[]).map((plan: any) => (
+                <tr key={plan.id} className="border-b border-border/50 hover:bg-muted/10">
+                  {editingPlan?.id === plan.id ? (
+                    <>
+                      <td className="px-4 py-2"><Input type="number" value={editingPlan.parcelas} onChange={(e) => setEditingPlan({ ...editingPlan, parcelas: parseInt(e.target.value) || 1 })} className="w-20 h-8 text-sm" /></td>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-1">
+                          <Input type="number" value={editingPlan.percentual} onChange={(e) => setEditingPlan({ ...editingPlan, percentual: parseFloat(e.target.value) || 0 })} className="w-24 h-8 text-sm" />
+                          <span className="text-muted-foreground text-xs">%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2">
+                        <button onClick={() => setEditingPlan({ ...editingPlan, ativo: editingPlan.ativo ? 0 : 1 })} className={`text-xs px-2 py-1 rounded-full font-medium ${editingPlan.ativo ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>
+                          {editingPlan.ativo ? 'Ativo' : 'Inativo'}
+                        </button>
+                      </td>
+                      <td className="px-4 py-2"><Input type="number" value={editingPlan.ordem} onChange={(e) => setEditingPlan({ ...editingPlan, ordem: parseInt(e.target.value) || 0 })} className="w-16 h-8 text-sm" /></td>
+                      <td className="px-4 py-2 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button size="sm" onClick={() => savePlan.mutate({ id: plan.id, parcelas: editingPlan.parcelas, percentual: editingPlan.percentual, ativo: editingPlan.ativo, ordem: editingPlan.ordem })} disabled={savePlan.isPending} className="h-7 text-xs">Salvar</Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditingPlan(null)} className="h-7 text-xs">Cancelar</Button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-4 py-3 font-bold">{plan.parcelas}x</td>
+                      <td className="px-4 py-3 text-yellow-400 font-semibold">{parseFloat(plan.percentual).toFixed(0)}%</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${plan.ativo ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>
+                          {plan.ativo ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{plan.ordem}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setEditingPlan({ ...plan })} className="h-7 text-xs gap-1"><Pencil className="w-3 h-3" />Editar</Button>
+                          <Button size="sm" variant="outline" onClick={() => { if (confirm(`Excluir ${plan.parcelas}x?`)) deletePlan.mutate({ id: plan.id }); }} className="h-7 text-xs gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10"><Trash2 className="w-3 h-3" /></Button>
+                        </div>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Modal adicionar novo plano */}
+      {showAdd && (
+        <Dialog open onOpenChange={() => setShowAdd(false)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Nova Opção de Parcelamento</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Quantidade de parcelas</Label>
+                <Input type="number" min={1} max={120} placeholder="Ex: 10" value={newParcelas} onChange={(e) => setNewParcelas(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Percentual de juros (%)</Label>
+                <Input type="number" min={0} max={9999} step={0.5} placeholder="Ex: 250" value={newPercentual} onChange={(e) => setNewPercentual(e.target.value)} />
+                <p className="text-xs text-muted-foreground">Visível apenas no ADM. O cliente verá apenas o valor final da parcela.</p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAdd(false)}>Cancelar</Button>
+              <Button
+                onClick={() => savePlan.mutate({ parcelas: parseInt(newParcelas) || 1, percentual: parseFloat(newPercentual) || 0, ativo: 1, ordem: (plans as any[]).length })}
+                disabled={!newParcelas || !newPercentual || savePlan.isPending}>
+                {savePlan.isPending ? "Salvando..." : "Adicionar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

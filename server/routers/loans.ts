@@ -264,6 +264,32 @@ async function qRows(db: any, query: ReturnType<typeof drizzleSql>): Promise<any
 
 // ââ€â‚¬ââ€â‚¬ââ€â‚¬ Router ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
 
+// ── Migração automática: tabela loanInstallmentPlans ──────────────────────
+let _installmentPlansMigrated = false;
+async function ensureInstallmentPlansTable(db: any) {
+  if (_installmentPlansMigrated) return;
+  _installmentPlansMigrated = true;
+  await db.execute(drizzleSql`
+    CREATE TABLE IF NOT EXISTS loanInstallmentPlans (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      parcelas INT NOT NULL,
+      percentual DECIMAL(10,2) NOT NULL,
+      ativo TINYINT(1) NOT NULL DEFAULT 1,
+      ordem INT NOT NULL DEFAULT 0,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+  const existing = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanInstallmentPlans`);
+  if (parseInt(existing[0]?.cnt || '0') === 0) {
+    const defaults = [[1,30],[2,50],[3,75],[4,100],[5,125],[6,150],[7,175],[8,200],[9,225]];
+    for (let i = 0; i < defaults.length; i++) {
+      const [parcelas, percentual] = defaults[i];
+      await db.execute(drizzleSql`INSERT INTO loanInstallmentPlans (parcelas, percentual, ativo, ordem) VALUES (${parcelas}, ${percentual}, 1, ${i})`);
+    }
+  }
+}
+
 export const loanRouter = router({
 
   // ââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Â
@@ -271,6 +297,136 @@ export const loanRouter = router({
   // ââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Â
 
   // ââ€â‚¬ââ€â‚¬ BUSCA CLIENTE NO SISTEMA PRINCIPAL ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
+  // ── CONFIGURAÇÃO DO PARCELAMENTO (ADM) ───────────────────────────────────────────────────
+  listInstallmentPlans: adminProcedure.query(async () => {
+    const db = await getDb() as any;
+    await ensureInstallmentPlansTable(db);
+    return await qRows(db, drizzleSql`SELECT * FROM loanInstallmentPlans ORDER BY ordem ASC, parcelas ASC`);
+  }),
+
+  saveInstallmentPlan: adminProcedure.input(z.object({
+    id: z.number().optional(),
+    parcelas: z.number().int().min(1).max(120),
+    percentual: z.number().min(0).max(9999),
+    ativo: z.number().int().min(0).max(1).default(1),
+    ordem: z.number().int().default(0),
+  })).mutation(async ({ input }) => {
+    const db = await getDb() as any;
+    await ensureInstallmentPlansTable(db);
+    if (input.id) {
+      await db.execute(drizzleSql`UPDATE loanInstallmentPlans SET parcelas=${input.parcelas}, percentual=${input.percentual}, ativo=${input.ativo}, ordem=${input.ordem}, updatedAt=NOW() WHERE id=${input.id}`);
+    } else {
+      await db.execute(drizzleSql`INSERT INTO loanInstallmentPlans (parcelas, percentual, ativo, ordem) VALUES (${input.parcelas}, ${input.percentual}, ${input.ativo}, ${input.ordem})`);
+    }
+    return { ok: true };
+  }),
+
+  deleteInstallmentPlan: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    const db = await getDb() as any;
+    // Verificar se já foi usado em algum empréstimo
+    const used = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loans WHERE paymentType='parcelado' AND installments=(SELECT parcelas FROM loanInstallmentPlans WHERE id=${input.id})`);
+    if (parseInt(used[0]?.cnt || '0') > 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Não é possível excluir: já utilizado em empréstimos.' });
+    await db.execute(drizzleSql`DELETE FROM loanInstallmentPlans WHERE id=${input.id}`);
+    return { ok: true };
+  }),
+
+  // ── SIMULAR PARCELADO (público, sem expor juros) ───────────────────────────────────────────
+  simulateParcelado: publicProcedure.input(z.object({
+    token: z.string(),
+    amount: z.number().positive(),
+  })).query(async ({ input }) => {
+    const db = await getDb() as any;
+    await ensureInstallmentPlansTable(db);
+    const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${input.token.trim()} AND loanEnabled=1`);
+    if (!clients.length) throw new TRPCError({ code: 'UNAUTHORIZED' });
+    const client = clients[0];
+    const allowed = (client.allowedPaymentTypes || '').split(',').map((t: string) => t.trim());
+    if (!allowed.includes('parcelado')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Parcelado não liberado para este cliente' });
+    if (input.amount > parseFloat(client.creditLimit)) throw new TRPCError({ code: 'BAD_REQUEST', message: `Valor excede seu limite de R$ ${parseFloat(client.creditLimit).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` });
+    const plans = await qRows(db, drizzleSql`SELECT parcelas, percentual FROM loanInstallmentPlans WHERE ativo=1 ORDER BY ordem ASC, parcelas ASC`);
+    // Retornar apenas valores finais — sem percentual
+    const opcoes = plans.map((p: any) => {
+      const pct = parseFloat(p.percentual);
+      const total = Math.round(input.amount * (1 + pct / 100) * 100) / 100;
+      const parcela = Math.round((total / parseInt(p.parcelas)) * 100) / 100;
+      return { parcelas: parseInt(p.parcelas), valorParcela: parcela, valorTotal: total };
+    });
+    return { opcoes };
+  }),
+
+  // ── SIMULAR PARCELADO ADM (com percentual) ───────────────────────────────────────────────
+  simulateParceladoAdmin: adminProcedure.input(z.object({
+    amount: z.number().positive(),
+    parcelas: z.number().int().min(1),
+    releaseDate: z.string(),
+    frequencia: z.enum(['mensal', 'quinzenal', 'semanal']).default('mensal'),
+  })).query(async ({ input }) => {
+    const db = await getDb() as any;
+    await ensureInstallmentPlansTable(db);
+    const plan = await qRows(db, drizzleSql`SELECT * FROM loanInstallmentPlans WHERE parcelas=${input.parcelas} AND ativo=1 LIMIT 1`);
+    if (!plan.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Plano não encontrado' });
+    const pct = parseFloat(plan[0].percentual);
+    const valorJuros = Math.round(input.amount * (pct / 100) * 100) / 100;
+    const total = Math.round((input.amount + valorJuros) * 100) / 100;
+    const parcela = Math.round((total / input.parcelas) * 100) / 100;
+    // Gerar datas das parcelas
+    const schedule = generateInstallments(input.releaseDate, input.frequencia === 'mensal' ? 'mensal' : input.frequencia === 'quinzenal' ? 'quinzenal' : 'semanal', input.parcelas, total);
+    return {
+      valorLiberado: input.amount,
+      parcelas: input.parcelas,
+      percentualJuros: pct,
+      valorJuros,
+      valorTotal: total,
+      valorParcela: parcela,
+      frequencia: input.frequencia,
+      schedule,
+    };
+  }),
+
+  // ── SOLICITAR PARCELADO (cliente) ──────────────────────────────────────────────────────────────
+  requestParcelado: publicProcedure.input(z.object({
+    token: z.string(),
+    amount: z.number().positive(),
+    parcelas: z.number().int().min(1),
+    frequencia: z.enum(['mensal', 'quinzenal', 'semanal']).default('mensal'),
+    primeiroVencimento: z.string().optional(),
+  })).mutation(async ({ input }) => {
+    const db = await getDb() as any;
+    await ensureInstallmentPlansTable(db);
+    const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${input.token.trim()} AND loanEnabled=1`);
+    if (!clients.length) throw new TRPCError({ code: 'UNAUTHORIZED' });
+    const client = clients[0];
+    if (!client.client_pix_key || !client.client_pix_name || !client.client_pix_bank) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cadastre sua chave PIX completa antes de solicitar.' });
+    }
+    const allowed = (client.allowedPaymentTypes || '').split(',').map((t: string) => t.trim());
+    if (!allowed.includes('parcelado')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Parcelado não liberado para este cliente' });
+    if (input.amount > parseFloat(client.creditLimit)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Valor excede seu limite.' });
+    const plan = await qRows(db, drizzleSql`SELECT * FROM loanInstallmentPlans WHERE parcelas=${input.parcelas} AND ativo=1 LIMIT 1`);
+    if (!plan.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Plano de parcelamento não encontrado.' });
+    const pct = parseFloat(plan[0].percentual);
+    const valorJuros = Math.round(input.amount * (pct / 100) * 100) / 100;
+    const total = Math.round((input.amount + valorJuros) * 100) / 100;
+    const today = getBrazilToday();
+    const releaseDate = input.primeiroVencimento || today;
+    const payType = input.frequencia === 'mensal' ? 'mensal' : input.frequencia === 'quinzenal' ? 'quinzenal' : 'semanal';
+    const schedule = generateInstallments(releaseDate, payType, input.parcelas, total);
+    const dueDate = schedule[schedule.length - 1].dueDate;
+    const result = await db.execute(drizzleSql`
+      INSERT INTO loans (userId, clientId, amount, interestRate, days, paymentType, installments,
+        interestAmount, totalAmount, releaseDate, dueDate, status, notes, workDays)
+      VALUES (1, ${client.id}, ${input.amount}, ${pct}, ${input.parcelas},
+        'parcelado', ${input.parcelas}, ${valorJuros}, ${total},
+        ${today}, ${dueDate}, 'pendente', ${null}, 'seg_dom')
+    `);
+    const loanId = (result[0] as any).insertId;
+    for (const inst of schedule) {
+      await db.execute(drizzleSql`INSERT INTO loanInstallments (loanId, installmentNumber, dueDate, amount) VALUES (${loanId}, ${inst.installmentNumber}, ${inst.dueDate}, ${inst.amount})`);
+    }
+    // Retornar apenas valores finais ao cliente (sem percentual)
+    return { id: loanId, parcelas: input.parcelas, valorParcela: Math.round((total / input.parcelas) * 100) / 100, valorTotal: total, primeiroVencimento: schedule[0].dueDate };
+  }),
+
   searchMainCustomer: adminProcedure.input(z.object({
     query: z.string().min(2),
   })).query(async ({ input }) => {
