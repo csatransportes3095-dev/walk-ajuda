@@ -451,6 +451,10 @@ export function LoansTab({ token }: LoansTabProps) {
   const [parceladoSelecionado, setParceladoSelecionado] = useState<number | null>(null);
   const [parceladoFrequencia, setParceladoFrequencia] = useState<'mensal' | 'quinzenal' | 'semanal'>('mensal');
   const [parceladoConfirm, setParceladoConfirm] = useState(false);
+  const [parceladoPrimeiroVenc, setParceladoPrimeiroVenc] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 30);
+    return d.toISOString().slice(0, 10);
+  });
 
   useEffect(() => {
     const v = parseFloat(requestAmount);
@@ -1057,6 +1061,11 @@ export function LoansTab({ token }: LoansTabProps) {
                             </button>
                           ))}
                         </div>
+                        <div className="space-y-1">
+                          <Label>Primeiro vencimento</Label>
+                          <input type="date" value={parceladoPrimeiroVenc} onChange={e => setParceladoPrimeiroVenc(e.target.value)}
+                            className="w-full rounded-lg border border-border bg-card/60 px-3 py-2 text-sm text-foreground" />
+                        </div>
                         <Button className="w-full bg-violet-600 hover:bg-violet-700" onClick={() => setParceladoConfirm(true)}>
                           Ver resumo da solicitação
                         </Button>
@@ -1071,14 +1080,31 @@ export function LoansTab({ token }: LoansTabProps) {
             {paymentType === 'parcelado' && parceladoConfirm && parceladoSelecionado && simParceladoQuery.data && (() => {
               const op = simParceladoQuery.data.opcoes.find((o: any) => o.parcelas === parceladoSelecionado);
               if (!op) return null;
+              const diasFreq = parceladoFrequencia === 'semanal' ? 7 : parceladoFrequencia === 'quinzenal' ? 15 : 30;
+              const datas: string[] = [];
+              for (let i = 0; i < op.parcelas; i++) {
+                const d = new Date(parceladoPrimeiroVenc + 'T12:00:00');
+                d.setDate(d.getDate() + i * diasFreq);
+                datas.push(d.toLocaleDateString('pt-BR'));
+              }
               return (
-                <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3">
+                <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3 max-h-64 overflow-y-auto">
                   <p className="text-sm font-black text-violet-300 uppercase tracking-wide">Resumo da Solicitação</p>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Valor solicitado</span><span className="font-bold">{fmt(parseFloat(requestAmount))}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Parcelamento</span><span className="font-bold text-violet-300">{op.parcelas}x de {fmt(op.valorParcela)}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Valor total</span><span className="font-bold">{fmt(op.valorTotal)}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Frequência</span><span className="font-bold capitalize">{parceladoFrequencia}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-muted-foreground">Primeiro vencimento</span><span className="font-bold">{new Date(parceladoPrimeiroVenc + 'T12:00:00').toLocaleDateString('pt-BR')}</span></div>
+                  </div>
+                  <div className="border-t border-border/30 pt-2 space-y-1">
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Parcelas:</p>
+                    {datas.map((data, i) => (
+                      <div key={i} className="flex justify-between text-xs bg-muted/20 rounded px-2 py-1">
+                        <span className="text-muted-foreground">Parcela {i + 1} de {op.parcelas}</span>
+                        <span className="font-medium">{fmt(op.valorParcela)} — {data}</span>
+                      </div>
+                    ))}
                   </div>
                   <button onClick={() => setParceladoConfirm(false)} className="text-xs text-muted-foreground underline">Voltar e alterar</button>
                 </div>
@@ -1095,7 +1121,7 @@ export function LoansTab({ token }: LoansTabProps) {
               <Button
                 onClick={() => {
                   if (!parceladoSelecionado || !parceladoConfirm) { toast.error('Selecione e confirme o parcelamento'); return; }
-                  requestParceladoMutation.mutate({ token, amount: parseFloat(requestAmount), parcelas: parceladoSelecionado, frequencia: parceladoFrequencia });
+                  requestParceladoMutation.mutate({ token, amount: parseFloat(requestAmount), parcelas: parceladoSelecionado, frequencia: parceladoFrequencia, primeiroVencimento: parceladoPrimeiroVenc });
                 }}
                 disabled={!requestAmount || !parceladoSelecionado || !parceladoConfirm || requestParceladoMutation.isPending}
                 className="bg-violet-600 hover:bg-violet-700">
