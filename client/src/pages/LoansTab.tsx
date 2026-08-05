@@ -543,6 +543,10 @@ export function LoansTab({ token }: LoansTabProps) {
   }
 
   const { client, loans, pixConfig } = data;
+  const clientScore = (data as any).clientScore;
+  const nextInstallment = (data as any).nextInstallment;
+  const futureLimit = (data as any).futureLimit;
+  const futureProfileName = (data as any).futureProfileName;
   const allowedTypes: ("diario" | "semanal" | "mensal")[] = (client.allowedPaymentTypes || "diario")
     .split(",").map((t: string) => t.trim())
     .filter((t: string) => ["diario", "semanal", "mensal"].includes(t)) as ("diario" | "semanal" | "mensal")[];
@@ -600,6 +604,95 @@ export function LoansTab({ token }: LoansTabProps) {
           </button>
         )}
       </div>
+
+      {/* ─── Score + Próxima Parcela + Limite Futuro ─────────────────────── */}
+      {clientScore && (
+        <div className="rounded-2xl overflow-hidden border border-white/8 bg-gradient-to-br from-slate-800/60 to-slate-900/80">
+          <div className="px-4 py-2.5 bg-white/5 border-b border-white/5 flex items-center gap-2">
+            <span className="text-xs font-bold text-violet-300 uppercase tracking-wider">📊 Seu Perfil de Crédito</span>
+          </div>
+          <div className="p-4 space-y-3">
+
+            {/* Score badge */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-14 h-14 rounded-2xl flex flex-col items-center justify-center shadow-lg"
+                  style={{ background: clientScore.scoreColor + '22', border: `2px solid ${clientScore.scoreColor}55` }}
+                >
+                  <span className="text-2xl font-black" style={{ color: clientScore.scoreColor }}>{clientScore.score}</span>
+                  <span className="text-xs font-bold" style={{ color: clientScore.scoreColor }}>{clientScore.scorePct}%</span>
+                </div>
+                <div>
+                  <p className="font-black text-base text-foreground">{clientScore.scoreLabel}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {clientScore.score === 'A' && 'Todas as parcelas em dia'}
+                    {clientScore.score === 'B' && 'Bom histórico, pequenos atrasos'}
+                    {clientScore.score === 'C' && 'Parcelas com atrasos recorrentes'}
+                    {clientScore.score === 'D' && 'Conta desativada ou inadimplente'}
+                  </p>
+                </div>
+              </div>
+              {/* Barra de score */}
+              <div className="flex flex-col items-end gap-1">
+                {(['A','B','C','D'] as const).map(s => (
+                  <div key={s} className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold w-3" style={{ color: clientScore.score === s ? clientScore.scoreColor : 'rgba(255,255,255,0.2)' }}>{s}</span>
+                    <div className="w-16 h-2 rounded-full" style={{ background: clientScore.score === s ? clientScore.scoreColor : 'rgba(255,255,255,0.08)' }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Próxima parcela */}
+            {nextInstallment && (() => {
+              const days = daysUntil(nextInstallment.dueDate);
+              const isLate = days !== null && days < 0;
+              const isToday = days === 0;
+              const isUrgent = days !== null && days <= 2 && days >= 0;
+              return (
+                <div className={`rounded-xl p-3 border ${
+                  isLate ? 'bg-red-500/10 border-red-500/30' :
+                  isUrgent ? 'bg-amber-500/10 border-amber-500/30' :
+                  'bg-violet-500/10 border-violet-500/20'
+                } flex items-center justify-between gap-3`}>
+                  <div className="flex items-center gap-2">
+                    <Calendar className={`w-4 h-4 ${isLate ? 'text-red-400' : isUrgent ? 'text-amber-400' : 'text-violet-400'}`} />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Próxima parcela</p>
+                      <p className={`text-sm font-black ${
+                        isLate ? 'text-red-300' : isUrgent ? 'text-amber-300' : 'text-violet-300'
+                      }`}>{fmtDate(nextInstallment.dueDate)}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-base font-black text-foreground">{fmt(nextInstallment.amount)}</p>
+                    <p className={`text-xs font-bold ${
+                      isLate ? 'text-red-400' : isUrgent ? 'text-amber-400' : 'text-muted-foreground'
+                    }`}>
+                      {isLate ? `${Math.abs(days!)}d em atraso` : isToday ? 'HOJE' : days === 1 ? 'amanhã' : `${days} dias`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Limite futuro */}
+            {futureLimit && !hasActive && (
+              <div className="rounded-xl p-3 bg-emerald-500/8 border border-emerald-500/20 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Limite ao quitar tudo</p>
+                    {futureProfileName && <p className="text-xs text-emerald-400 font-semibold">{futureProfileName}</p>}
+                  </div>
+                </div>
+                <p className="text-base font-black text-emerald-400">{fmt(futureLimit)}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Chave PIX do cliente */}
       {(() => {
@@ -746,6 +839,12 @@ export function LoansTab({ token }: LoansTabProps) {
                       <p className="text-xs text-muted-foreground mb-1">📅 Vencimento final</p>
                       <p className={`text-base font-bold ${loan.isOverdue ? "text-red-400" : ""}`}>{fmtDate(loan.dueDate)}</p>
                     </div>
+                    {loan.releaseDate && (
+                      <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground mb-1">🟢 Liberação</p>
+                        <p className="text-base font-bold text-emerald-400">{fmtDate(loan.releaseDate)}</p>
+                      </div>
+                    )}
                     <div className="bg-white/5 rounded-xl p-3">
                       <p className="text-xs text-muted-foreground mb-1">📋 Modo</p>
                       <p className="text-sm font-bold capitalize">

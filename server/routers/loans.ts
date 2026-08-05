@@ -1048,7 +1048,65 @@ export const loanRouter = router({
     const pixRows = await qRows(db, drizzleSql`SELECT * FROM loanPixConfig WHERE isActive=1 ORDER BY id DESC LIMIT 1`);
     const pixConfig = pixRows[0] || null;
 
-    return { enabled: true, client, loans: loansWithStatus, pixConfig };
+    // ── Score A/B/C/D ────────────────────────────────────────────────────────
+    // Buscar histórico de todos os empréstimos do cliente
+    const allLoans = await qRows(db, drizzleSql`SELECT id, status FROM loans WHERE clientId=${client.id}`);
+    const allLoanIds = allLoans.map((l: any) => l.id);
+    let score: 'A' | 'B' | 'C' | 'D' = 'A';
+    let scorePct = 100;
+    let scoreLabel = 'Excelente';
+    let scoreColor = '#10b981'; // verde
+
+    if (client.status === 'bloqueado' || client.status === 'inativo') {
+      score = 'D'; scorePct = 0; scoreLabel = 'Desativado'; scoreColor = '#6b7280';
+    } else if (allLoanIds.length > 0) {
+      // Contar parcelas atrasadas (pagas com atraso ou ainda pendentes vencidas)
+      const overdueInstalls = await qRows(db, drizzleSql`
+        SELECT COUNT(*) as cnt FROM loanInstallments
+        WHERE loanId IN (${drizzleSql.raw(allLoanIds.join(','))})
+        AND (status='pendente' AND dueDate < ${today})
+      `);
+      const overdueCount = parseInt(overdueInstalls[0]?.cnt || '0');
+      const paidLate = await qRows(db, drizzleSql`
+        SELECT COUNT(*) as cnt FROM loanInstallments
+        WHERE loanId IN (${drizzleSql.raw(allLoanIds.join(','))})
+        AND status='pago' AND paidAt IS NOT NULL AND paidAt > dueDate
+      `);
+      const lateCount = parseInt(paidLate[0]?.cnt || '0') + overdueCount;
+      if (lateCount === 0) { score = 'A'; scorePct = 100; scoreLabel = 'Excelente'; scoreColor = '#10b981'; }
+      else if (lateCount <= 2) { score = 'B'; scorePct = 75; scoreLabel = 'Bom'; scoreColor = '#f59e0b'; }
+      else if (lateCount <= 5) { score = 'C'; scorePct = 50; scoreLabel = 'Regular'; scoreColor = '#f97316'; }
+      else { score = 'D'; scorePct = 0; scoreLabel = 'Desativado'; scoreColor = '#6b7280'; }
+    }
+
+    // ── Próxima parcela (de todos os empréstimos ativos) ─────────────────────
+    let nextInstallment: any = null;
+    if (allLoanIds.length > 0) {
+      const nextInsts = await qRows(db, drizzleSql`
+        SELECT li.*, l.id as loanId FROM loanInstallments li
+        JOIN loans l ON l.id = li.loanId
+        WHERE li.loanId IN (${drizzleSql.raw(allLoanIds.join(','))})
+        AND li.status IN ('pendente', 'atrasado')
+        AND l.status NOT IN ('pago','cancelado','reprovado')
+        ORDER BY li.dueDate ASC LIMIT 1
+      `);
+      nextInstallment = nextInsts[0] || null;
+    }
+
+    // ── Limite futuro (ao quitar tudo) ───────────────────────────────────────
+    const profiles = await qRows(db, drizzleSql`SELECT * FROM loanProfiles WHERE isActive=1 ORDER BY sortOrder ASC`);
+    const currentProfile = profiles.find((p: any) => p.slug === client.profileSlug) || profiles[0];
+    const nextProfile = profiles.find((p: any) => p.sortOrder > (currentProfile?.sortOrder || 0)) || null;
+    const futureLimit = nextProfile ? nextProfile.creditLimit : (currentProfile?.creditLimit || client.creditLimit);
+    const futureProfileName = nextProfile ? nextProfile.name : null;
+
+    return {
+      enabled: true, client, loans: loansWithStatus, pixConfig,
+      clientScore: { score, scorePct, scoreLabel, scoreColor },
+      nextInstallment,
+      futureLimit,
+      futureProfileName,
+    };
   }),
 
   getClientInstallments: publicProcedure.input(z.object({
