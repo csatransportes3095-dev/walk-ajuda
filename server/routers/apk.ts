@@ -17,7 +17,7 @@ let _migrated = false;
 export async function ensureApkTable() {
   if (_migrated) return;
   _migrated = true;
-  const db = getDb();
+  const db = await getDb() as any;
   try {
     await db.execute(sql.raw(`
       CREATE TABLE IF NOT EXISTS apk_releases (
@@ -39,7 +39,7 @@ export async function ensureApkTable() {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 export async function getActiveApk() {
   await ensureApkTable();
-  const db = getDb();
+  const db = await getDb() as any;
   const rows = await db.execute(sql.raw(
     `SELECT id, filename, r2Key, publicUrl, fileSize, version, uploadedAt FROM apk_releases WHERE isActive = 1 ORDER BY uploadedAt DESC LIMIT 1`
   )) as unknown as Array<Array<{ id: number; filename: string; r2Key: string; publicUrl: string; fileSize: number | null; version: string | null; uploadedAt: number }>>;
@@ -49,7 +49,7 @@ export async function getActiveApk() {
 
 export async function saveApkRelease(opts: { filename: string; r2Key: string; publicUrl: string; fileSize: number; version?: string }) {
   await ensureApkTable();
-  const db = getDb();
+  const db = await getDb() as any;
   // Desativar releases anteriores
   await db.execute(sql.raw(`UPDATE apk_releases SET isActive = 0`));
   // Inserir novo release

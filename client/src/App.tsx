@@ -89,6 +89,7 @@ import { GastosPage } from "./pages/GastosPage";
 import CartaoPage from "./pages/CartaoPage";
 import CartaoMercadoPage from "./pages/CartaoMercadoPage";
 import CartaoHistoricoPage from "./pages/CartaoHistoricoPage";
+import AppDownloadPage from "./pages/AppDownloadPage";
 import Ajuda from "./pages/Ajuda";
 import GeradorChassiPublico from "./pages/GeradorChassiPublico";
 import ProtectedPhotoPage from "./pages/ProtectedPhotoPage";
@@ -297,6 +298,7 @@ function Router() {
       <Route path={"/tutorial"} component={Tutorial} />
       <Route path={"/r/:slug"} component={Home} />
       <Route path={"/bot"} component={Home} />
+      <Route path={"/app"} component={AppDownloadPage} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -317,6 +319,7 @@ function AppContent() {
   const isLoginRoute = location === "/login";
   const isRaffleRoute = location === "/sorteio";
   const isGeradorChassiRoute = location === "/gerador-chassi";
+  const isAppDownloadRoute = location === "/app";
   const isFotoRoute = location === "/foto";
   const isResellerRoute = location.startsWith("/revendedor");
   const isAjudaRoute = location === "/ajuda";
@@ -396,6 +399,10 @@ function AppContent() {
 
   // Rota /ajuda é pública — página de FAQ para compartilhar pelo WhatsApp
   if (isAjudaRoute) {
+    return <Router />;
+  }
+  // Rota /app é pública — página de download do APK Android
+  if (isAppDownloadRoute) {
     return <Router />;
   }
   // Rota /pre-cadastro é pública — formulário de pré-cadastro sem senha
