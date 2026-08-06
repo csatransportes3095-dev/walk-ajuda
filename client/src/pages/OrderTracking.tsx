@@ -141,7 +141,7 @@ export default function OrderTracking() {
 
   // Ler configuração global de proteção DevTools
   const siteSettingsQuery = trpc.settings.getAll.useQuery();
-  const devtoolsProtectionEnabled = siteSettingsQuery.data ? siteSettingsQuery.data['devtools_protection'] !== '0' : true;
+  const devtoolsProtectionEnabled = siteSettingsQuery.data ? siteSettingsQuery.data['devtools_protection'] === '1' : false;
 
   const statusQuery = trpc.orderStatus.getMyStatus.useQuery(
     { phone: searchPhone },
