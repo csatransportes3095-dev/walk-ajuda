@@ -136,93 +136,146 @@ function DashboardTab() {
   if (isLoading) return <div className="text-center py-12 text-muted-foreground"><RefreshCw className="w-6 h-6 animate-spin mx-auto" /></div>;
   if (!data) return null;
 
-  const SectionTitle = ({ icon, title }: { icon: string; title: string }) => (
-    <div className="flex items-center gap-2 mb-3">
-      <span className="text-base">{icon}</span>
-      <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{title}</h3>
-      <div className="flex-1 h-px bg-border/50" />
-    </div>
-  );
-
-  const MetricCard = ({ label, value, color, icon, tooltip, size = 'normal' }: { label: string; value: string; color: string; icon: React.ReactNode; tooltip?: string; size?: 'normal' | 'large' }) => (
-    <Card className="p-4 bg-card/60 border-border hover:bg-card/80 transition-colors" title={tooltip}>
-      <div className={`flex items-center gap-2 mb-2 ${color}`}>{icon}<span className="text-xs text-muted-foreground font-medium">{label}</span></div>
-      <div className={`font-bold ${color} ${size === 'large' ? 'text-2xl' : 'text-xl'}`}>{value}</div>
-      {tooltip && <p className="text-xs text-muted-foreground/40 mt-1 leading-tight">{tooltip}</p>}
-    </Card>
-  );
+  const lucroAReceber = (data as any).lucroAReceber ?? 0;
+  const capitalAReceber = Math.max(0, data.valorEmAberto - lucroAReceber);
+  const temAtraso = data.totalOverdue > 0;
+  const temVenceHoje = (data.totalDueToday ?? 0) > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* ── CAIXA ── */}
-      <div>
-        <SectionTitle icon="💰" title="Caixa" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <MetricCard label="Recebido Hoje" value={fmt(data.totalReceivedToday ?? 0)} color="text-emerald-400" icon={<CheckCircle className="w-5 h-5" />} tooltip="Parcelas confirmadas como pagas hoje" size="large" />
-          <MetricCard label="Recebimento Total" value={fmt(data.totalReceived)} color="text-green-400" icon={<DollarSign className="w-5 h-5" />} tooltip="Soma de todas as parcelas já pagas" />
-          <MetricCard label="Lucro Recebido" value={fmt(data.totalInterestReceived)} color="text-teal-400" icon={<TrendingUp className="w-5 h-5" />} tooltip="Juros já recebidos" />
-          {/* Caixa Disponível — estrutura preparada para futura implementação */}
-          <Card className="p-4 bg-card/60 border-border border-dashed border-emerald-500/30">
-            <div className="flex items-center gap-2 mb-2 text-emerald-400"><DollarSign className="w-5 h-5" /><span className="text-xs text-muted-foreground font-medium">Caixa Disponível</span></div>
-            <div className="text-xl font-bold text-emerald-400/40">—</div>
-            <p className="text-xs text-muted-foreground/40 mt-1 leading-tight">Em breve — disponível para novos empréstimos</p>
-          </Card>
+      {/* ── RESUMO DA CARTEIRA ── */}
+      <Card className="p-5 bg-gradient-to-br from-card/80 to-card/40 border-border">
+        <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
+          <TrendingUp className="w-4 h-4" /> Resumo da Carteira
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Saldo Total a Receber</p>
+            <p className="text-2xl font-bold text-yellow-400">{fmt(data.valorEmAberto)}</p>
+            <p className="text-xs text-muted-foreground/50 mt-1">Total que ainda falta receber</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Capital a Receber</p>
+            <p className="text-2xl font-bold text-blue-400">{fmt(capitalAReceber)}</p>
+            <p className="text-xs text-muted-foreground/50 mt-1">Capital que retornará ao caixa</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Lucro a Receber</p>
+            <p className="text-2xl font-bold text-emerald-400">{fmt(lucroAReceber)}</p>
+            <p className="text-xs text-muted-foreground/50 mt-1">Lucro futuro dos empréstimos ativos</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Vence Hoje</p>
+            <p className={`text-2xl font-bold ${temVenceHoje ? 'text-amber-400' : 'text-muted-foreground'}`}>{fmt(data.totalDueToday ?? 0)}</p>
+            <p className="text-xs text-muted-foreground/50 mt-1">Parcelas com vencimento hoje</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Em Atraso</p>
+            <p className={`text-2xl font-bold ${temAtraso ? 'text-red-400' : 'text-muted-foreground'}`}>{fmt(data.totalOverdue)}</p>
+            <p className="text-xs text-muted-foreground/50 mt-1">{data.overdueClientsCount > 0 ? `${data.overdueClientsCount} cliente(s) inadimplente(s)` : 'Nenhum atraso'}</p>
+          </div>
         </div>
-      </div>
+      </Card>
 
-      {/* ── COBRANÇA ── */}
-      <div>
-        <SectionTitle icon="📋" title="Cobrança" />
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <MetricCard label="Saldo a Receber" value={fmt(data.valorEmAberto)} color="text-yellow-400" icon={<Clock className="w-5 h-5" />} tooltip="Total previsto menos o que já foi recebido" size="large" />
-          {/* Movimento de Hoje — card unificado */}
-          <Card className="p-4 bg-card/60 border-border hover:bg-card/80 transition-colors">
-            <div className="flex items-center gap-2 mb-3 text-blue-400"><Calendar className="w-5 h-5" /><span className="text-xs text-muted-foreground font-medium">Movimento de Hoje</span></div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">Recebido Hoje</span>
-                <span className="text-sm font-bold text-emerald-400">{fmt(data.totalReceivedToday ?? 0)}</span>
-              </div>
-              <div className="h-px bg-border/30" />
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">Parcelas com Vencimento Hoje</span>
-                <span className="text-sm font-bold text-amber-400">{fmt(data.totalDueToday ?? 0)}</span>
-              </div>
+      {/* ── 7 CARDS ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+        {/* Card 1 — Saldo Total a Receber */}
+        <Card className="p-4 bg-card/60 border-border border-yellow-500/20">
+          <div className="flex items-center gap-2 mb-2 text-yellow-400">
+            <Clock className="w-4 h-4" />
+            <span className="text-xs text-muted-foreground font-medium">Saldo Total a Receber</span>
+          </div>
+          <div className="text-2xl font-bold text-yellow-400">{fmt(data.valorEmAberto)}</div>
+          <p className="text-xs text-muted-foreground/40 mt-1">Total que ainda falta receber</p>
+        </Card>
+
+        {/* Card 2 — Lucro a Receber */}
+        <Card className="p-4 bg-card/60 border-border border-emerald-500/20">
+          <div className="flex items-center gap-2 mb-2 text-emerald-400">
+            <TrendingUp className="w-4 h-4" />
+            <span className="text-xs text-muted-foreground font-medium">Lucro a Receber</span>
+          </div>
+          <div className="text-2xl font-bold text-emerald-400">{fmt(lucroAReceber)}</div>
+          <p className="text-xs text-muted-foreground/40 mt-1">Lucro futuro dos empréstimos ativos</p>
+        </Card>
+
+        {/* Card 3 — Capital a Receber */}
+        <Card className="p-4 bg-card/60 border-border border-blue-500/20">
+          <div className="flex items-center gap-2 mb-2 text-blue-400">
+            <DollarSign className="w-4 h-4" />
+            <span className="text-xs text-muted-foreground font-medium">Capital a Receber</span>
+          </div>
+          <div className="text-2xl font-bold text-blue-400">{fmt(capitalAReceber)}</div>
+          <p className="text-xs text-muted-foreground/40 mt-1">Capital que retornará ao caixa</p>
+        </Card>
+
+        {/* Card 4 — Parcelas com Vencimento Hoje */}
+        <Card className={`p-4 bg-card/60 border-border ${temVenceHoje ? 'border-amber-500/30' : ''}`}>
+          <div className={`flex items-center gap-2 mb-2 ${temVenceHoje ? 'text-amber-400' : 'text-muted-foreground'}`}>
+            <Calendar className="w-4 h-4" />
+            <span className="text-xs text-muted-foreground font-medium">Parcelas com Vencimento Hoje</span>
+          </div>
+          <div className={`text-2xl font-bold ${temVenceHoje ? 'text-amber-400' : 'text-muted-foreground'}`}>{fmt(data.totalDueToday ?? 0)}</div>
+          <p className="text-xs text-muted-foreground/40 mt-1">Valor que vence hoje</p>
+        </Card>
+
+        {/* Card 5 — Cobranças em Atraso */}
+        <Card className={`p-4 bg-card/60 border-border ${temAtraso ? 'border-red-500/30' : ''}`}>
+          <div className={`flex items-center gap-2 mb-3 ${temAtraso ? 'text-red-400' : 'text-muted-foreground'}`}>
+            <AlertTriangle className="w-4 h-4" />
+            <span className="text-xs text-muted-foreground font-medium">Cobranças em Atraso</span>
+          </div>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-muted-foreground">Clientes</span>
+              <span className={`text-sm font-bold ${temAtraso ? 'text-orange-400' : 'text-muted-foreground'}`}>{data.overdueClientsCount}</span>
             </div>
-          </Card>
-          {/* Cobranças em Atraso — card unificado */}
-          <Card className="p-4 bg-card/60 border-border border-red-500/20 hover:bg-card/80 transition-colors">
-            <div className="flex items-center gap-2 mb-3 text-red-400"><AlertTriangle className="w-5 h-5" /><span className="text-xs text-muted-foreground font-medium">Cobranças em Atraso</span></div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">Clientes</span>
-                <span className="text-sm font-bold text-orange-400">{data.overdueClientsCount}</span>
-              </div>
-              <div className="h-px bg-border/30" />
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">Valor</span>
-                <span className="text-sm font-bold text-red-400">{fmt(data.totalOverdue)}</span>
-              </div>
+            <div className="h-px bg-border/30" />
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-muted-foreground">Valor</span>
+              <span className={`text-sm font-bold ${temAtraso ? 'text-red-400' : 'text-muted-foreground'}`}>{fmt(data.totalOverdue)}</span>
             </div>
-          </Card>
-        </div>
+          </div>
+        </Card>
+
+        {/* Card 6 — Empréstimos Ativos */}
+        <Card className="p-4 bg-card/60 border-border border-purple-500/20">
+          <div className="flex items-center gap-2 mb-2 text-purple-400">
+            <Users className="w-4 h-4" />
+            <span className="text-xs text-muted-foreground font-medium">Empréstimos Ativos</span>
+          </div>
+          <div className="text-2xl font-bold text-purple-400">{data.activeCount}</div>
+          <p className="text-xs text-muted-foreground/40 mt-1">Empréstimos em andamento</p>
+        </Card>
+
+        {/* Card 7 — Caixa Disponível */}
+        <Card className="p-4 bg-card/60 border-border border-dashed border-emerald-500/20">
+          <div className="flex items-center gap-2 mb-2 text-emerald-400/50">
+            <DollarSign className="w-4 h-4" />
+            <span className="text-xs text-muted-foreground font-medium">Caixa Disponível</span>
+          </div>
+          <div className="text-2xl font-bold text-emerald-400/30">—</div>
+          <p className="text-xs text-muted-foreground/30 mt-1">Em breve — disponível para novos empréstimos</p>
+        </Card>
+
+        {/* Card 8 — Aguardando Conferência */}
+        <Card className="p-4 bg-card/60 border-border">
+          <div className="flex items-center gap-2 mb-2 text-blue-400">
+            <Paperclip className="w-4 h-4" />
+            <span className="text-xs text-muted-foreground font-medium">Aguardando Conferência</span>
+          </div>
+          <div className="text-2xl font-bold text-blue-400">{proofStats?.awaitingReview ?? 0}</div>
+          <p className="text-xs text-muted-foreground/40 mt-1">Comprovantes aguardando confirmação</p>
+        </Card>
+
       </div>
 
-      {/* ── OPERAÇÃO ── */}
-      <div>
-        <SectionTitle icon="⚙️" title="Operação" />
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <MetricCard label="Empréstimos Ativos" value={String(data.activeCount)} color="text-purple-400" icon={<Users className="w-5 h-5" />} tooltip="Empréstimos em andamento" size="large" />
-          <MetricCard label="Aguardando Conferência" value={String(proofStats?.awaitingReview ?? 0)} color="text-blue-400" icon={<Paperclip className="w-5 h-5" />} tooltip="Comprovantes enviados pelo cliente aguardando confirmação" />
-          <MetricCard label="Com Comprovante" value={String(proofStats?.withProof ?? 0)} color="text-slate-400" icon={<Paperclip className="w-4 h-4" />} tooltip="Pagamentos com comprovante anexado" />
-        </div>
-      </div>
-
-      {/* ── GRÁFICO ── */}
+      {/* ── GRÁFICO — Recebimentos por Mês ── */}
       {data.monthlyChart.length > 0 && (
         <Card className="p-4 bg-card/60 border-border">
-          <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Emprestado × Recebido (últimos 6 meses)</h3>
+          <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Recebimentos por Mês</h3>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={data.monthlyChart}>
               <CartesianGrid strokeDasharray="3 3" stroke="#333" />
@@ -230,15 +283,16 @@ function DashboardTab() {
               <YAxis tick={{ fontSize: 11, fill: "#888" }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ background: "#1a1a2e", border: "1px solid #333" }} />
               <Legend />
-              <Bar dataKey="lent" fill="#3b82f6" name="Emprestado" radius={[3, 3, 0, 0]} />
               <Bar dataKey="received" fill="#22c55e" name="Recebido" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
       )}
+
     </div>
   );
 }
+
 
 // ─── Pagamento Só de Juros (Admin) ──────────────────────────────────────────
 function InterestOnlySection({ loan }: { loan: any }) {
