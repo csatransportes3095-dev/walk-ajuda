@@ -850,6 +850,13 @@ export function LoansTab({ token }: LoansTabProps) {
                       <p className="text-xs text-blue-300 font-medium">Solicitação em análise — aguarde a aprovação.</p>
                     </div>
                   )}
+                  {/* Banner aprovado sem liberação */}
+                  {loan.status === "aprovado" && !loan.releaseDate && (
+                    <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 mb-4">
+                      <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+                      <p className="text-xs text-amber-300 font-medium">Empréstimo aprovado! O PIX será enviado em até 24h após a confirmação.</p>
+                    </div>
+                  )}
 
                   {/* Status + valores principais */}
                   <div className="flex items-start justify-between gap-2 mb-4">
@@ -1050,11 +1057,9 @@ export function LoansTab({ token }: LoansTabProps) {
                     </div>
                     {parceladoSelecionado && (
                       <div className="space-y-2">
-                        {/* Parcelado é sempre mensal */}
-                        <div className="space-y-1">
-                          <Label>Primeiro vencimento</Label>
-                          <input type="date" value={parceladoPrimeiroVenc} onChange={e => setParceladoPrimeiroVenc(e.target.value)}
-                            className="w-full rounded-lg border border-border bg-card/60 px-3 py-2 text-sm text-foreground" />
+                        <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                          <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                          <p className="text-xs text-amber-300">Após aprovação, o PIX será enviado em até 24h. O primeiro vencimento será 30 dias após a liberação.</p>
                         </div>
                         <Button className="w-full bg-violet-600 hover:bg-violet-700" onClick={() => setParceladoConfirm(true)}>
                           Ver resumo da solicitação
@@ -1085,16 +1090,10 @@ export function LoansTab({ token }: LoansTabProps) {
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Parcelamento</span><span className="font-bold text-violet-300">{op.parcelas}x de {fmt(op.valorParcela)}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Valor total</span><span className="font-bold">{fmt(op.valorTotal)}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Frequência</span><span className="font-bold">Mensal</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-muted-foreground">Primeiro vencimento</span><span className="font-bold">{new Date(parceladoPrimeiroVenc + 'T12:00:00').toLocaleDateString('pt-BR')}</span></div>
                   </div>
-                  <div className="border-t border-border/30 pt-2 space-y-1">
-                    <p className="text-xs font-semibold text-muted-foreground mb-1">Parcelas:</p>
-                    {datas.map((data, i) => (
-                      <div key={i} className="flex justify-between text-xs bg-muted/20 rounded px-2 py-1">
-                        <span className="text-muted-foreground">Parcela {i + 1} de {op.parcelas}</span>
-                        <span className="font-medium">{fmt(op.valorParcela)} — {data}</span>
-                      </div>
-                    ))}
+                  <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                    <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                    <p className="text-xs text-amber-300">Após aprovação, o PIX será enviado em até 24h. O 1º vencimento será 30 dias após a liberação.</p>
                   </div>
                   <button onClick={() => setParceladoConfirm(false)} className="text-xs text-muted-foreground underline">Voltar e alterar</button>
                 </div>
@@ -1110,10 +1109,10 @@ export function LoansTab({ token }: LoansTabProps) {
             {paymentType === 'parcelado' ? (
               <Button
                 onClick={() => {
-                  if (!parceladoSelecionado || !parceladoConfirm) { toast.error('Selecione e confirme o parcelamento'); return; }
-                  requestParceladoMutation.mutate({ token, amount: parseFloat(requestAmount), parcelas: parceladoSelecionado, frequencia: parceladoFrequencia, primeiroVencimento: parceladoPrimeiroVenc });
+                  if (!parceladoSelecionado) { toast.error('Selecione o parcelamento'); return; }
+                  requestParceladoMutation.mutate({ token, amount: parseFloat(requestAmount), parcelas: parceladoSelecionado, frequencia: parceladoFrequencia });
                 }}
-                disabled={!requestAmount || !parceladoSelecionado || !parceladoConfirm || requestParceladoMutation.isPending}
+                disabled={!requestAmount || !parceladoSelecionado || requestParceladoMutation.isPending}
                 className="bg-violet-600 hover:bg-violet-700">
                 {requestParceladoMutation.isPending ? 'Enviando...' : <><Send className="w-4 h-4 mr-1" /> Confirmar Solicitação</>}
               </Button>
