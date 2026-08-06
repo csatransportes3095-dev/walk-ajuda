@@ -15,7 +15,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, Users, AlertTriangle, Clock,
   Plus, Search, Eye, CheckCircle, XCircle, ChevronDown, ChevronUp,
   Settings, Banknote, RefreshCw, ExternalLink, Trash2, RotateCcw,
-  Paperclip, Download, Pencil, ImageIcon, FileText, X
+  Paperclip, Download, Pencil, ImageIcon, FileText, X, Calendar
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -136,52 +136,90 @@ function DashboardTab() {
   if (isLoading) return <div className="text-center py-12 text-muted-foreground"><RefreshCw className="w-6 h-6 animate-spin mx-auto" /></div>;
   if (!data) return null;
 
-  const cards = [
-    { label: "📅 A Receber Hoje",        value: fmt(data.totalDueToday ?? 0),     color: "text-amber-400",   icon: <Clock className="w-5 h-5" />,         tooltip: "Soma das parcelas que vencem hoje (ainda pendentes)" },
-    { label: "✅ Recebido Hoje",         value: fmt(data.totalReceivedToday ?? 0),color: "text-emerald-400", icon: <CheckCircle className="w-5 h-5" />,   tooltip: "Soma das parcelas confirmadas como pagas hoje" },
-    { label: "💰 Total Emprestado",      value: fmt(data.totalLent),              color: "text-blue-400",    icon: <TrendingUp className="w-5 h-5" />,    tooltip: "Capital que saiu do caixa" },
-    { label: "📈 Total Previsto",        value: fmt(data.totalExpected),          color: "text-cyan-400",    icon: <TrendingUp className="w-5 h-5" />,    tooltip: "Capital + juros de todos os empréstimos" },
-    { label: "✅ Total Recebido",        value: fmt(data.totalReceived),          color: "text-green-400",   icon: <DollarSign className="w-5 h-5" />,    tooltip: "Soma das parcelas já pagas" },
-    { label: "⏳ Valor em Aberto",       value: fmt(data.valorEmAberto),          color: "text-yellow-400",  icon: <Clock className="w-5 h-5" />,         tooltip: "Total Previsto − Total Recebido (ainda na rua)" },
-    { label: "💵 Lucro Recebido",        value: fmt(data.totalInterestReceived),  color: "text-emerald-400", icon: <DollarSign className="w-5 h-5" />,    tooltip: "Juros já recebidos" },
-    { label: "👥 Empréstimos Ativos",    value: String(data.activeCount),         color: "text-purple-400",  icon: <Users className="w-5 h-5" />,         tooltip: "Empréstimos em andamento" },
-    { label: "⚠️ Inadimplentes",         value: String(data.overdueClientsCount), color: "text-orange-400",  icon: <AlertTriangle className="w-5 h-5" />, tooltip: "Empréstimos com parcelas vencidas" },
-    { label: "🚨 Valor Vencido",         value: fmt(data.totalOverdue),           color: "text-red-400",     icon: <TrendingDown className="w-5 h-5" />,  tooltip: "Parcelas vencidas não pagas" },
-    { label: "📊 Lucro Total Previsto",   value: fmt(data.totalExpectedProfit),    color: "text-teal-400",    icon: <TrendingUp className="w-5 h-5" />,    tooltip: "Soma dos juros de todos os empréstimos ativos" },
-    { label: "💵 Lucro a Receber",        value: fmt((data as any).lucroAReceber ?? 0), color: "text-lime-400",  icon: <DollarSign className="w-5 h-5" />,    tooltip: "Juros ainda pendentes de recebimento dos empréstimos ativos." },
-  ];
+  const SectionTitle = ({ icon, title }: { icon: string; title: string }) => (
+    <div className="flex items-center gap-2 mb-3">
+      <span className="text-base">{icon}</span>
+      <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{title}</h3>
+      <div className="flex-1 h-px bg-border/50" />
+    </div>
+  );
 
-  const proofCards = [
-    { label: "📎 Com Comprovante",     value: String(proofStats?.withProof ?? 0),      color: "text-blue-400",   tooltip: "Pagamentos com comprovante anexado" },
-    { label: "⚠️ Sem Comprovante",    value: String(proofStats?.withoutProof ?? 0),   color: "text-amber-400",  tooltip: "Pagamentos confirmados sem comprovante" },
-    { label: "📅 Comprovantes no Mês", value: String(proofStats?.thisMonthProofs ?? 0), color: "text-emerald-400", tooltip: "Comprovantes anexados no mês atual" },
-    { label: "🔍 Aguardando Conferência", value: String(proofStats?.awaitingReview ?? 0), color: "text-purple-400",  tooltip: "Parcelas com comprovante enviado pelo cliente aguardando confirmação" },
-  ];
+  const MetricCard = ({ label, value, color, icon, tooltip, size = 'normal' }: { label: string; value: string; color: string; icon: React.ReactNode; tooltip?: string; size?: 'normal' | 'large' }) => (
+    <Card className="p-4 bg-card/60 border-border hover:bg-card/80 transition-colors" title={tooltip}>
+      <div className={`flex items-center gap-2 mb-2 ${color}`}>{icon}<span className="text-xs text-muted-foreground font-medium">{label}</span></div>
+      <div className={`font-bold ${color} ${size === 'large' ? 'text-2xl' : 'text-xl'}`}>{value}</div>
+      {tooltip && <p className="text-xs text-muted-foreground/40 mt-1 leading-tight">{tooltip}</p>}
+    </Card>
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {cards.map((c) => (
-          <Card key={c.label} className="p-3 bg-card/60 border-border" title={c.tooltip}>
-            <div className={`flex items-center gap-2 mb-1 ${c.color}`}>{c.icon}<span className="text-xs text-muted-foreground">{c.label}</span></div>
-            <div className={`text-xl font-bold ${c.color}`}>{c.value}</div>
-            {c.tooltip && <p className="text-xs text-muted-foreground/50 mt-1 leading-tight">{c.tooltip}</p>}
-          </Card>
-        ))}
-      </div>
-      {/* Cards de comprovantes */}
+    <div className="space-y-6">
+
+      {/* ── CAIXA ── */}
       <div>
-        <h3 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Comprovantes de Pagamento</h3>
+        <SectionTitle icon="💰" title="Caixa" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {proofCards.map((c) => (
-            <Card key={c.label} className="p-3 bg-card/60 border-border" title={c.tooltip}>
-              <div className={`flex items-center gap-2 mb-1 ${c.color}`}><Paperclip className="w-4 h-4" /><span className="text-xs text-muted-foreground">{c.label}</span></div>
-              <div className={`text-xl font-bold ${c.color}`}>{c.value}</div>
-              {c.tooltip && <p className="text-xs text-muted-foreground/50 mt-1 leading-tight">{c.tooltip}</p>}
-            </Card>
-          ))}
+          <MetricCard label="Recebido Hoje" value={fmt(data.totalReceivedToday ?? 0)} color="text-emerald-400" icon={<CheckCircle className="w-5 h-5" />} tooltip="Parcelas confirmadas como pagas hoje" size="large" />
+          <MetricCard label="Recebimento Total" value={fmt(data.totalReceived)} color="text-green-400" icon={<DollarSign className="w-5 h-5" />} tooltip="Soma de todas as parcelas já pagas" />
+          <MetricCard label="Lucro Recebido" value={fmt(data.totalInterestReceived)} color="text-teal-400" icon={<TrendingUp className="w-5 h-5" />} tooltip="Juros já recebidos" />
+          {/* Caixa Disponível — estrutura preparada para futura implementação */}
+          <Card className="p-4 bg-card/60 border-border border-dashed border-emerald-500/30">
+            <div className="flex items-center gap-2 mb-2 text-emerald-400"><DollarSign className="w-5 h-5" /><span className="text-xs text-muted-foreground font-medium">Caixa Disponível</span></div>
+            <div className="text-xl font-bold text-emerald-400/40">—</div>
+            <p className="text-xs text-muted-foreground/40 mt-1 leading-tight">Em breve — disponível para novos empréstimos</p>
+          </Card>
         </div>
       </div>
+
+      {/* ── COBRANÇA ── */}
+      <div>
+        <SectionTitle icon="📋" title="Cobrança" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <MetricCard label="Saldo a Receber" value={fmt(data.valorEmAberto)} color="text-yellow-400" icon={<Clock className="w-5 h-5" />} tooltip="Total previsto menos o que já foi recebido" size="large" />
+          {/* Movimento de Hoje — card unificado */}
+          <Card className="p-4 bg-card/60 border-border hover:bg-card/80 transition-colors">
+            <div className="flex items-center gap-2 mb-3 text-blue-400"><Calendar className="w-5 h-5" /><span className="text-xs text-muted-foreground font-medium">Movimento de Hoje</span></div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">Recebido Hoje</span>
+                <span className="text-sm font-bold text-emerald-400">{fmt(data.totalReceivedToday ?? 0)}</span>
+              </div>
+              <div className="h-px bg-border/30" />
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">Parcelas com Vencimento Hoje</span>
+                <span className="text-sm font-bold text-amber-400">{fmt(data.totalDueToday ?? 0)}</span>
+              </div>
+            </div>
+          </Card>
+          {/* Cobranças em Atraso — card unificado */}
+          <Card className="p-4 bg-card/60 border-border border-red-500/20 hover:bg-card/80 transition-colors">
+            <div className="flex items-center gap-2 mb-3 text-red-400"><AlertTriangle className="w-5 h-5" /><span className="text-xs text-muted-foreground font-medium">Cobranças em Atraso</span></div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">Clientes</span>
+                <span className="text-sm font-bold text-orange-400">{data.overdueClientsCount}</span>
+              </div>
+              <div className="h-px bg-border/30" />
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">Valor</span>
+                <span className="text-sm font-bold text-red-400">{fmt(data.totalOverdue)}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* ── OPERAÇÃO ── */}
+      <div>
+        <SectionTitle icon="⚙️" title="Operação" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <MetricCard label="Empréstimos Ativos" value={String(data.activeCount)} color="text-purple-400" icon={<Users className="w-5 h-5" />} tooltip="Empréstimos em andamento" size="large" />
+          <MetricCard label="Aguardando Conferência" value={String(proofStats?.awaitingReview ?? 0)} color="text-blue-400" icon={<Paperclip className="w-5 h-5" />} tooltip="Comprovantes enviados pelo cliente aguardando confirmação" />
+          <MetricCard label="Com Comprovante" value={String(proofStats?.withProof ?? 0)} color="text-slate-400" icon={<Paperclip className="w-4 h-4" />} tooltip="Pagamentos com comprovante anexado" />
+        </div>
+      </div>
+
+      {/* ── GRÁFICO ── */}
       {data.monthlyChart.length > 0 && (
         <Card className="p-4 bg-card/60 border-border">
           <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Emprestado × Recebido (últimos 6 meses)</h3>
