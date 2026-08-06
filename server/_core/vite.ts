@@ -226,6 +226,17 @@ export async function serveStatic(app: Express) {
     );
   }
 
+  // Rota de download do APK Android — redireciona para o arquivo no R2
+  app.get('/download/app', async (_req, res) => {
+    try {
+      const { buildR2PublicUrl } = await import('../r2Storage.js');
+      const apkUrl = buildR2PublicUrl('app/Colombiano.apk');
+      res.redirect(302, apkUrl);
+    } catch {
+      res.status(404).json({ error: 'APK not found' });
+    }
+  });
+
   app.use(express.static(distPath, {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.html')) {
