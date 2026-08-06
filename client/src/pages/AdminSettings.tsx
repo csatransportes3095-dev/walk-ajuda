@@ -82,7 +82,24 @@ export default function AdminSettings() {
   const [editPix, setEditPix] = useState<{ label: string; pixKey: string; pixType: string; pixName: string; pixBank: string }>({ label: '', pixKey: '', pixType: 'TELEFONE', pixName: '', pixBank: '' });
 
   const [form, setForm] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<"page" | "login" | "pix" | "contact" | "features" | "advanced" | "photo" | "security" | "og" | "trackingForm" | "whatsappOrder" | "whatsappLogin">("page");
+  const [activeTab, setActiveTab] = useState<"page" | "login" | "pix" | "contact" | "features" | "advanced" | "photo" | "security" | "og" | "trackingForm" | "whatsappOrder" | "whatsappLogin" | "apk">("page");
+  const [apkFile, setApkFile] = useState<File | null>(null);
+  const [uploadingApk, setUploadingApk] = useState(false);
+  const [apkUrl, setApkUrl] = useState<string | null>(null);
+  const apkInputRef = useRef<HTMLInputElement>(null);
+  const handleApkUpload = async () => {
+    if (!apkFile) return;
+    setUploadingApk(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', apkFile);
+      const res = await fetch('/api/upload/apk', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) { setApkUrl(data.url); toast.success('APK enviado! Acesse: h2colombiano.com/app'); }
+      else toast.error(data.error || 'Erro ao enviar APK');
+    } catch { toast.error('Erro ao enviar APK'); }
+    finally { setUploadingApk(false); }
+  };
 
   // === PERGUNTAS DE ACOMPANHAMENTO ===
   type TQOption = { label: string; color?: string; blocking?: boolean };
@@ -301,6 +318,7 @@ export default function AdminSettings() {
     { id: "trackingForm" as const, label: "Form. Acompanhamento", icon: MessageSquare },
     { id: "whatsappOrder" as const, label: "WhatsApp Pedidos", icon: Smartphone },
     { id: "whatsappLogin" as const, label: "WhatsApp Login", icon: Smartphone },
+    { id: "apk" as const, label: "App Android", icon: Smartphone },
   ];
 
   return (
@@ -1448,8 +1466,37 @@ export default function AdminSettings() {
         {activeTab === 'whatsappLogin' && (
           <WhatsappLoginTemplateTab />
         )}
+        {activeTab === 'apk' && (
+          <div className="space-y-4">
+            <div className="bg-[#111128] border border-white/10 rounded-xl p-5">
+              <h2 className="text-base font-bold text-white mb-1">App Android — Colombiano</h2>
+              <p className="text-xs text-gray-400 mb-4">Faça upload do .apk para disponibilizar em <strong className="text-purple-400">h2colombiano.com/app</strong></p>
+              <div className="flex flex-col gap-3">
+                <input ref={apkInputRef} type="file" accept=".apk" className="hidden" onChange={e => setApkFile(e.target.files?.[0] || null)} />
+                <button onClick={() => apkInputRef.current?.click()} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm text-white">
+                  <Upload className="w-4 h-4 text-purple-400" />
+                  {apkFile ? apkFile.name : 'Selecionar arquivo .apk'}
+                </button>
+                {apkFile && (
+                  <button onClick={handleApkUpload} disabled={uploadingApk} className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 rounded-xl px-4 py-3 text-sm font-bold text-white">
+                    <Upload className="w-4 h-4" />
+                    {uploadingApk ? 'Enviando...' : 'Enviar APK'}
+                  </button>
+                )}
+                {apkUrl && <div className="bg-green-900/30 border border-green-500/30 rounded-xl p-3 text-xs text-green-400">✅ APK enviado! <a href="/app" target="_blank" className="underline">h2colombiano.com/app</a></div>}
+              </div>
+            </div>
+            <div className="bg-[#111128] border border-white/10 rounded-xl p-5">
+              <h3 className="text-sm font-bold text-white mb-2">Link de download</h3>
+              <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
+                <span className="text-xs text-purple-300 font-mono flex-1">https://h2colombiano.com/app</span>
+                <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/app'); toast.success('Copiado!'); }} className="text-xs text-gray-400 hover:text-white">Copiar</button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Save button at bottom */}
-        {activeTab !== 'photo' && activeTab !== 'security' && activeTab !== 'og' && activeTab !== 'trackingForm' && activeTab !== 'whatsappOrder' && activeTab !== 'whatsappLogin' && (
+        {activeTab !== 'photo' && activeTab !== 'security' && activeTab !== 'og' && activeTab !== 'trackingForm' && activeTab !== 'whatsappOrder' && activeTab !== 'whatsappLogin' && activeTab !== 'apk' && (
         <div className="mt-8 flex justify-end">
           <Button onClick={saveAll} disabled={updateMut.isPending} className="bg-green-600 hover:bg-green-700 text-white px-8">
             <Save className="w-4 h-4 mr-2" /> {updateMut.isPending ? "Salvando..." : "Salvar Todas as Configurações"}
