@@ -108,7 +108,6 @@ import WhatsAppFloat from "./components/WhatsAppFloat";
 import { useAdminAuth } from "./hooks/useAdminAuth";
 import { useAdminIdleLogout } from "./hooks/useAdminIdleLogout";
 import { useAntiPrint } from "./hooks/useAntiPrint";
-import DevtoolsGuard from "./components/DevtoolsGuard";
 
 // Guard para rotas admin — redireciona para /admin/login se não autenticado
 function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -463,7 +462,6 @@ function App() {
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
-          <DevtoolsGuard />
           <AppContent />
         </TooltipProvider>
       </ThemeProvider>
