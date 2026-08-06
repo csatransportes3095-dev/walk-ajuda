@@ -67,12 +67,14 @@ export function registerApkDownloadRoute(app: Express) {
         res.status(404).json({ error: 'Nenhum APK disponível. Faça upload pelo painel ADM.' });
         return;
       }
-      // Redirecionar para URL do R2 com headers de download
-      const url = apk.publicUrl || buildR2PublicUrl(apk.r2Key);
+      // Fazer proxy do arquivo via R2 (sem redirecionar para URL pública que pode ser privada)
+      const { r2GetObjectBuffer } = await import('../r2Storage');
+      const buffer = await r2GetObjectBuffer(apk.r2Key);
       res.setHeader('Content-Disposition', `attachment; filename="${apk.filename}"`);
       res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Length', buffer.length.toString());
       res.setHeader('Cache-Control', 'public, max-age=3600');
-      res.redirect(302, url);
+      res.send(buffer);
     } catch (err: any) {
       console.error('[APK] download error:', err);
       res.status(500).json({ error: err?.message ?? 'Erro ao baixar APK' });
