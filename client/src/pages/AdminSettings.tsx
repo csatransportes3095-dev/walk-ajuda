@@ -1468,6 +1468,7 @@ export default function AdminSettings() {
         )}
         {activeTab === 'apk' && (
           <div className="space-y-4">
+            {/* Upload */}
             <div className="bg-[#111128] border border-white/10 rounded-xl p-5">
               <h2 className="text-base font-bold text-white mb-1">App Android — Colombiano</h2>
               <p className="text-xs text-gray-400 mb-4">Faça upload do .apk para disponibilizar em <strong className="text-purple-400">h2colombiano.com/app</strong></p>
@@ -1475,7 +1476,7 @@ export default function AdminSettings() {
                 <input ref={apkInputRef} type="file" accept=".apk" className="hidden" onChange={e => setApkFile(e.target.files?.[0] || null)} />
                 <button onClick={() => apkInputRef.current?.click()} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm text-white">
                   <Upload className="w-4 h-4 text-purple-400" />
-                  {apkFile ? apkFile.name : 'Selecionar arquivo .apk'}
+                  {apkFile ? `${apkFile.name} (${(apkFile.size / 1024 / 1024).toFixed(1)} MB)` : 'Selecionar arquivo .apk'}
                 </button>
                 {apkFile && (
                   <button onClick={handleApkUpload} disabled={uploadingApk} className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 rounded-xl px-4 py-3 text-sm font-bold text-white">
@@ -1483,14 +1484,33 @@ export default function AdminSettings() {
                     {uploadingApk ? 'Enviando...' : 'Enviar APK'}
                   </button>
                 )}
-                {apkUrl && <div className="bg-green-900/30 border border-green-500/30 rounded-xl p-3 text-xs text-green-400">✅ APK enviado! <a href="/app" target="_blank" className="underline">h2colombiano.com/app</a></div>}
+                {apkUrl && (
+                  <div className="bg-green-900/30 border border-green-500/30 rounded-xl p-4 space-y-3">
+                    <p className="text-xs text-green-400 font-bold">✅ APK enviado com sucesso!</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <a href="/app" target="_blank" className="flex items-center justify-center gap-1 bg-green-700/40 hover:bg-green-700/60 rounded-lg px-3 py-2 text-xs text-green-300 font-medium">Abrir Página</a>
+                      <a href="/api/app/download" target="_blank" className="flex items-center justify-center gap-1 bg-blue-700/40 hover:bg-blue-700/60 rounded-lg px-3 py-2 text-xs text-blue-300 font-medium">Testar Download</a>
+                      <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/app'); toast.success('Copiado!'); }} className="flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 rounded-lg px-3 py-2 text-xs text-gray-300">Copiar Link Página</button>
+                      <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/api/app/download'); toast.success('Copiado!'); }} className="flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 rounded-lg px-3 py-2 text-xs text-gray-300">Copiar Link Direto</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="bg-[#111128] border border-white/10 rounded-xl p-5">
-              <h3 className="text-sm font-bold text-white mb-2">Link de download</h3>
-              <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
-                <span className="text-xs text-purple-300 font-mono flex-1">https://h2colombiano.com/app</span>
-                <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/app'); toast.success('Copiado!'); }} className="text-xs text-gray-400 hover:text-white">Copiar</button>
+            {/* Links */}
+            <div className="bg-[#111128] border border-white/10 rounded-xl p-5 space-y-3">
+              <h3 className="text-sm font-bold text-white">Links</h3>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
+                  <span className="text-xs text-gray-400 w-24 flex-shrink-0">Página pública</span>
+                  <span className="text-xs text-purple-300 font-mono flex-1">https://h2colombiano.com/app</span>
+                  <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/app'); toast.success('Copiado!'); }} className="text-xs text-gray-400 hover:text-white">Copiar</button>
+                </div>
+                <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
+                  <span className="text-xs text-gray-400 w-24 flex-shrink-0">Download direto</span>
+                  <span className="text-xs text-blue-300 font-mono flex-1">https://h2colombiano.com/api/app/download</span>
+                  <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/api/app/download'); toast.success('Copiado!'); }} className="text-xs text-gray-400 hover:text-white">Copiar</button>
+                </div>
               </div>
             </div>
           </div>

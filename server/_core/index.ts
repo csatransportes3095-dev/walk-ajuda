@@ -9,6 +9,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerStorageProxy } from "./storageProxy";
 import { registerUploadRoute } from "../uploadRoute";
+import { registerApkDownloadRoute, ensureApkTable } from "../routers/apk";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -52,6 +53,8 @@ async function startServer() {
   const server = createServer(app);
   // Register upload route BEFORE body parsers so multer can handle multipart streams correctly
   registerUploadRoute(app);
+  registerApkDownloadRoute(app);
+  ensureApkTable().catch(console.error);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "200mb" }));
   app.use(express.urlencoded({ limit: "200mb", extended: true }));

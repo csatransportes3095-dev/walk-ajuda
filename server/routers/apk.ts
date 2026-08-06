@@ -1,0 +1,97 @@
+/**
+ * apk.ts — Gerenciamento do APK Android
+ * - Migração automática da tabela apk_releases
+ * - Endpoint de upload (admin only) via uploadRoute.ts
+ * - Endpoint público GET /api/app/download com headers corretos
+ * - tRPC: getLatest, saveRelease
+ */
+import { router, publicProcedure } from "../_core/trpc";
+import { getDb } from "../db";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { buildR2PublicUrl } from "../r2Storage";
+import type { Express, Request, Response } from "express";
+
+// ─── Migração automática ──────────────────────────────────────────────────────
+let _migrated = false;
+export async function ensureApkTable() {
+  if (_migrated) return;
+  _migrated = true;
+  const db = getDb();
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS apk_releases (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL DEFAULT 'Colombiano.apk',
+        r2Key VARCHAR(512) NOT NULL,
+        publicUrl TEXT NOT NULL,
+        fileSize BIGINT NULL,
+        version VARCHAR(64) NULL,
+        uploadedAt BIGINT NOT NULL,
+        isActive TINYINT(1) NOT NULL DEFAULT 1
+      )
+    `));
+  } catch (e) {
+    console.error("[APK] ensureApkTable error:", e);
+  }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+export async function getActiveApk() {
+  await ensureApkTable();
+  const db = getDb();
+  const rows = await db.execute(sql.raw(
+    `SELECT id, filename, r2Key, publicUrl, fileSize, version, uploadedAt FROM apk_releases WHERE isActive = 1 ORDER BY uploadedAt DESC LIMIT 1`
+  )) as unknown as Array<Array<{ id: number; filename: string; r2Key: string; publicUrl: string; fileSize: number | null; version: string | null; uploadedAt: number }>>;
+  const row = Array.isArray(rows[0]) ? rows[0][0] : (rows as any)[0];
+  return row || null;
+}
+
+export async function saveApkRelease(opts: { filename: string; r2Key: string; publicUrl: string; fileSize: number; version?: string }) {
+  await ensureApkTable();
+  const db = getDb();
+  // Desativar releases anteriores
+  await db.execute(sql.raw(`UPDATE apk_releases SET isActive = 0`));
+  // Inserir novo release
+  await db.execute(sql.raw(
+    `INSERT INTO apk_releases (filename, r2Key, publicUrl, fileSize, version, uploadedAt, isActive) VALUES ('${opts.filename}', '${opts.r2Key}', '${opts.publicUrl}', ${opts.fileSize}, ${opts.version ? `'${opts.version}'` : 'NULL'}, ${Date.now()}, 1)`
+  ));
+}
+
+// ─── Rota Express de download ─────────────────────────────────────────────────
+export function registerApkDownloadRoute(app: Express) {
+  app.get('/api/app/download', async (_req: Request, res: Response) => {
+    try {
+      const apk = await getActiveApk();
+      if (!apk) {
+        res.status(404).json({ error: 'Nenhum APK disponível. Faça upload pelo painel ADM.' });
+        return;
+      }
+      // Redirecionar para URL do R2 com headers de download
+      const url = apk.publicUrl || buildR2PublicUrl(apk.r2Key);
+      res.setHeader('Content-Disposition', `attachment; filename="${apk.filename}"`);
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.redirect(302, url);
+    } catch (err: any) {
+      console.error('[APK] download error:', err);
+      res.status(500).json({ error: err?.message ?? 'Erro ao baixar APK' });
+    }
+  });
+}
+
+// ─── tRPC router ─────────────────────────────────────────────────────────────
+export const apkRouter = router({
+  getLatest: publicProcedure.query(async () => {
+    const apk = await getActiveApk();
+    if (!apk) return null;
+    return {
+      filename: apk.filename,
+      publicUrl: apk.publicUrl,
+      fileSize: apk.fileSize,
+      version: apk.version,
+      uploadedAt: apk.uploadedAt,
+      downloadUrl: '/api/app/download',
+    };
+  }),
+});

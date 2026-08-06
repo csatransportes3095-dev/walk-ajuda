@@ -23,6 +23,7 @@ import { resellersRouter } from "./routers/resellers";
 import { scheduleRouter } from "./routers/schedule";
 import { spreadsheetRouter } from "./routers/spreadsheet";
 import { loanRouter } from "./routers/loans";
+import { apkRouter } from "./routers/apk";
 import { customerPasswordRouter } from "./routers/customerPassword";
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
@@ -212,6 +213,7 @@ export const appRouter = router({
   schedule: scheduleRouter,
   spreadsheet: spreadsheetRouter,
   loans: loanRouter,
+  apk: apkRouter,
   customerPassword: customerPasswordRouter,
   adCampaigns: adCampaignsRouter,
   preRegistrations: preRegistrationsRouter,

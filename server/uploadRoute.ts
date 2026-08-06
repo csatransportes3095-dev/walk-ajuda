@@ -2363,8 +2363,15 @@ export function registerUploadRoute(app: Express) {
       if (!isAdminRequest(req)) { res.status(401).json({ error: 'Unauthorized' }); return; }
       const file = req.file;
       if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
-      const { url } = await r2PutObject('app/Colombiano.apk', file.buffer, 'application/vnd.android.package-archive');
-      res.json({ success: true, url });
+      if (!file.originalname.toLowerCase().endsWith('.apk') && file.mimetype !== 'application/vnd.android.package-archive') {
+        res.status(400).json({ error: 'Arquivo deve ser um .apk' }); return;
+      }
+      const r2Key = 'app/Colombiano.apk';
+      const { url } = await r2PutObject(r2Key, file.buffer, 'application/vnd.android.package-archive');
+      // Salvar metadados no banco
+      const { saveApkRelease } = await import('./routers/apk');
+      await saveApkRelease({ filename: 'Colombiano.apk', r2Key, publicUrl: url, fileSize: file.size });
+      res.json({ success: true, url, downloadUrl: '/api/app/download', pageUrl: '/app', fileSize: file.size });
     } catch (err: any) {
       console.error('[UploadRoute] apk error:', err);
       res.status(500).json({ error: err?.message ?? 'Upload failed' });
