@@ -2370,19 +2370,4 @@ export function registerUploadRoute(app: Express) {
       res.status(500).json({ error: err?.message ?? 'Upload failed' });
     }
   });
-
-  // ─── UPLOAD DO APK (admin only) ─────────────────────────────────────────────
-  const uploadApkMw = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
-  app.post('/api/upload/apk', uploadApkMw.single('file'), async (req: Request, res: Response) => {
-    try {
-      if (!isAdminRequest(req)) { res.status(401).json({ error: 'Unauthorized' }); return; }
-      const file = req.file;
-      if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
-      const { url } = await r2PutObject('app/Colombiano.apk', file.buffer, 'application/vnd.android.package-archive');
-      res.json({ success: true, url });
-    } catch (err: any) {
-      console.error('[UploadRoute] apk error:', err);
-      res.status(500).json({ error: err?.message ?? 'Upload failed' });
-    }
-  });
 }
