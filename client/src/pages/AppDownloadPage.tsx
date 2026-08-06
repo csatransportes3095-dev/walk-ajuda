@@ -38,7 +38,7 @@ export default function AppDownloadPage() {
       <div className="flex flex-col items-center mb-8">
         <div className="w-24 h-24 rounded-2xl overflow-hidden shadow-lg mb-4 border-2 border-yellow-500 bg-black flex items-center justify-center">
           <img
-            src="https://midia.h2colombiano.com/app/icon.png"
+            src="/og-image.jpg"
             alt="Colombiano"
             className="w-full h-full object-cover"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
