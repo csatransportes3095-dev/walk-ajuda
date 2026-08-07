@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { ENV } from "../_core/env";
-import { getDb, getCustomerByPhone, listActiveProducts, listProductOptions, listOptionDocuments, listOptionQuestions } from "../db";
+import { getDb, getCustomerByPhone, listActiveProducts, listProductOptions } from "../db";
 import {
   onlineSupportAgents,
   onlineSupportAutoReplies,
@@ -908,33 +908,24 @@ export async function sendVisitorMessage(input: {
     const actionPayload = (menuItemMatch as any).actionPayload || {};
     const hasDirectAction = ["open_internal", "open_external", "open_video", "open_whatsapp"].includes(actionType);
 
-    // Busca dinâmica de produto se o menuItem tem productId configurado
-    let dynamicProductText: string | null = null;
+    // Buscar apenas valores do produto (sem dump de documentos/perguntas)
+    let productPriceText: string | null = null;
     const dynamicProductId = (menuItemMatch as any).actionPayload?.productId;
     if (dynamicProductId) {
       try {
         const dynOpts = await listProductOptions(Number(dynamicProductId));
         const activeOpts = dynOpts.filter((o: any) => o.isActive);
         if (activeOpts.length > 0) {
-          let txt = "";
-          for (const opt of activeOpts) {
-            const docs = await listOptionDocuments(opt.id);
-            const qs = await listOptionQuestions(opt.id);
-            const mainQs = qs.filter((q: any) => !q.parentQuestionId && q.question);
-            txt += `\n📦 *${opt.label?.trim()}*`;
-            if (docs.length > 0) {
-              txt += `\n📋 Documentos: ${docs.map((d: any) => d.label).join(", ")}`;
-            }
-            if (mainQs.length > 0) {
-              txt += `\n❓ Perguntas: ${mainQs.slice(0, 5).map((q: any) => q.question).join(" | ")}`;
-            }
-            txt += "\n";
-          }
-          dynamicProductText = txt;
+          const lines = activeOpts.map((o: any) => `• ${o.label?.trim()}: ${o.price}`);
+          productPriceText = `💰 *Valores:*\n${lines.join("\n")}`;
         }
       } catch { /* fallback para texto fixo */ }
     }
-    const botText = (dynamicProductText ? (menuItemMatch.responseText || "").replace(/📦 \*Opções disponíveis:\*[\s\S]*?(?=\n\n[^•]|$)/, dynamicProductText) : menuItemMatch.responseText) || (hasDirectAction ? `Clique no botão abaixo:` : "Selecione uma opção:");
+    // Resposta: responseText do painel + valores do produto (sem documentos, sem perguntas)
+    let botText = menuItemMatch.responseText || (hasDirectAction ? `Clique no botão abaixo:` : "Selecione uma opção:");
+    if (productPriceText) {
+      botText = botText ? `${botText}\n\n${productPriceText}` : productPriceText;
+    }
     const botPayload: Record<string, unknown> = {};
 
     if (menuItemMatch.subButtons && menuItemMatch.subButtons.length > 0) {
