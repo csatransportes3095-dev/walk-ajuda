@@ -441,10 +441,10 @@ export const loanRouter = router({
     try {
       const result = await db.execute(drizzleSql`
         INSERT INTO loans (userId, clientId, amount, interestRate, days, paymentType, installments,
-          interestAmount, totalAmount, releaseDate, dueDate, status, notes, workDays)
+          interestAmount, totalAmount, dueDate, status, notes, workDays)
         VALUES (1, ${client.id}, ${input.amount}, ${pct}, ${input.parcelas},
           'parcelado', ${input.parcelas}, ${valorJuros}, ${total},
-          ${today}, ${dueDate}, 'pendente', ${null}, 'seg_dom')
+          ${dueDate}, 'pendente', ${null}, 'seg_dom')
       `);
       const loanId = (result[0] as any).insertId;
       for (const inst of schedule) {
