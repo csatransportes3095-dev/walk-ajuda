@@ -408,23 +408,26 @@ export const loanRouter = router({
     const valorJuros = Math.round(input.amount * (pct / 100) * 100) / 100;
     const total = Math.round((input.amount + valorJuros) * 100) / 100;
     const today = getBrazilToday();
-    const releaseDate = input.primeiroVencimento || today;
-    const payType = input.frequencia === 'mensal' ? 'mensal' : input.frequencia === 'quinzenal' ? 'quinzenal' : 'semanal';
-    const schedule = generateInstallments(releaseDate, payType, input.parcelas, total);
+    // Parcelado é sempre mensal — data de liberação definida pelo ADM após aprovação
+    const schedule = generateInstallments(today, 'mensal', input.parcelas, total);
     const dueDate = schedule[schedule.length - 1].dueDate;
-    const result = await db.execute(drizzleSql`
-      INSERT INTO loans (userId, clientId, amount, interestRate, days, paymentType, installments,
-        interestAmount, totalAmount, releaseDate, dueDate, status, notes, workDays)
-      VALUES (1, ${client.id}, ${input.amount}, ${pct}, ${input.parcelas},
-        'parcelado', ${input.parcelas}, ${valorJuros}, ${total},
-        ${today}, ${dueDate}, 'pendente', ${null}, 'seg_dom')
-    `);
-    const loanId = (result[0] as any).insertId;
-    for (const inst of schedule) {
-      await db.execute(drizzleSql`INSERT INTO loanInstallments (loanId, installmentNumber, dueDate, amount) VALUES (${loanId}, ${inst.installmentNumber}, ${inst.dueDate}, ${inst.amount})`);
+    try {
+      const result = await db.execute(drizzleSql`
+        INSERT INTO loans (userId, clientId, amount, interestRate, days, paymentType, installments,
+          interestAmount, totalAmount, releaseDate, dueDate, status, notes, workDays)
+        VALUES (1, ${client.id}, ${input.amount}, ${pct}, ${input.parcelas},
+          'parcelado', ${input.parcelas}, ${valorJuros}, ${total},
+          ${today}, ${dueDate}, 'pendente', ${null}, 'seg_dom')
+      `);
+      const loanId = (result[0] as any).insertId;
+      for (const inst of schedule) {
+        await db.execute(drizzleSql`INSERT INTO loanInstallments (loanId, installmentNumber, dueDate, amount) VALUES (${loanId}, ${inst.installmentNumber}, ${inst.dueDate}, ${inst.amount})`);
+      }
+      return { id: loanId, parcelas: input.parcelas, valorParcela: Math.round((total / input.parcelas) * 100) / 100, valorTotal: total, primeiroVencimento: schedule[0].dueDate };
+    } catch (err: any) {
+      console.error('[requestParcelado] DB error:', err?.message || err);
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao registrar empréstimo: ' + (err?.message || 'erro desconhecido') });
     }
-    // Retornar apenas valores finais ao cliente (sem percentual)
-    return { id: loanId, parcelas: input.parcelas, valorParcela: Math.round((total / input.parcelas) * 100) / 100, valorTotal: total, primeiroVencimento: schedule[0].dueDate };
   }),
 
   searchMainCustomer: adminProcedure.input(z.object({
