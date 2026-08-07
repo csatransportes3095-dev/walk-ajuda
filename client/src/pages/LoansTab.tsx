@@ -1083,7 +1083,7 @@ export function LoansTab({ token }: LoansTabProps) {
                 datas.push(d.toLocaleDateString('pt-BR'));
               }
               return (
-                <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3 max-h-64 overflow-y-auto">
+                <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3">
                   <p className="text-sm font-black text-violet-300 uppercase tracking-wide">Resumo da Solicitação</p>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Valor solicitado</span><span className="font-bold">{fmt(parseFloat(requestAmount))}</span></div>
@@ -1095,7 +1095,16 @@ export function LoansTab({ token }: LoansTabProps) {
                     <Clock className="w-4 h-4 text-amber-400 shrink-0" />
                     <p className="text-xs text-amber-300">Após aprovação, o PIX será enviado em até 24h. O 1º vencimento será 30 dias após a liberação.</p>
                   </div>
-                  <button onClick={() => setParceladoConfirm(false)} className="text-xs text-muted-foreground underline">Voltar e alterar</button>
+                  <Button
+                    onClick={() => {
+                      if (!parceladoSelecionado) { toast.error('Selecione o parcelamento'); return; }
+                      requestParceladoMutation.mutate({ token, amount: parseFloat(requestAmount), parcelas: parceladoSelecionado, frequencia: parceladoFrequencia });
+                    }}
+                    disabled={!requestAmount || !parceladoSelecionado || requestParceladoMutation.isPending}
+                    className="w-full bg-violet-600 hover:bg-violet-700">
+                    {requestParceladoMutation.isPending ? 'Enviando...' : <><Send className="w-4 h-4 mr-1" /> Confirmar Solicitação</>}
+                  </Button>
+                  <button onClick={() => setParceladoConfirm(false)} className="text-xs text-muted-foreground underline w-full text-center">Voltar e alterar</button>
                 </div>
               );
             })()}
