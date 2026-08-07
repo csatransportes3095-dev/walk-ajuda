@@ -507,6 +507,7 @@ export function LoansTab({ token }: LoansTabProps) {
 
   const requestParceladoMutation = trpc.loans.requestParcelado.useMutation({
     onSuccess: () => {
+      toast.success('Solicitação enviada! Aguarde a aprovação.');
       setSubmitted(true); setRequestOpen(false); setRequestAmount(""); setRequestNotes("");
       setParceladoEnabled(false); setParceladoAmount(0); setParceladoSelecionado(null); setParceladoConfirm(false);
       refetch();
@@ -1115,17 +1116,7 @@ export function LoansTab({ token }: LoansTabProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRequestOpen(false)}>Cancelar</Button>
-            {paymentType === 'parcelado' ? (
-              <Button
-                onClick={() => {
-                  if (!parceladoSelecionado) { toast.error('Selecione o parcelamento'); return; }
-                  requestParceladoMutation.mutate({ token, amount: parseFloat(requestAmount), parcelas: parceladoSelecionado, frequencia: parceladoFrequencia });
-                }}
-                disabled={!requestAmount || !parceladoSelecionado || requestParceladoMutation.isPending}
-                className="bg-violet-600 hover:bg-violet-700">
-                {requestParceladoMutation.isPending ? 'Enviando...' : <><Send className="w-4 h-4 mr-1" /> Confirmar Solicitação</>}
-              </Button>
-            ) : (
+            {paymentType !== 'parcelado' && (
               <Button onClick={handleRequest} disabled={!requestAmount || parseFloat(requestAmount) <= 0 || requestMutation.isPending}
                 className="bg-violet-600 hover:bg-violet-700">
                 {requestMutation.isPending ? "Enviando..." : <><Send className="w-4 h-4 mr-1" /> Solicitar</>}
