@@ -270,23 +270,30 @@ async function ensureParceladoPaymentType(db: any) {
   if (_paymentTypeParceladoMigrated) return;
   _paymentTypeParceladoMigrated = true;
   try {
-    // Verificar se paymentType já aceita 'parcelado'
+    // 1. Verificar se paymentType já aceita 'parcelado'
     const cols = await qRows(db, drizzleSql`SHOW COLUMNS FROM loans LIKE 'paymentType'`);
     if (cols.length > 0) {
       const colType = String(cols[0].Type || cols[0].type || '');
       if (!colType.includes('parcelado')) {
-        // Extrair os valores atuais do ENUM e adicionar 'parcelado'
-        // Padrão: enum('diario','semanal','mensal','quinzenal',...)
         const match = colType.match(/enum\((.+)\)/i);
         if (match) {
-          const currentVals = match[1]; // já tem as aspas simples
+          const currentVals = match[1];
           await db.execute(drizzleSql.raw(`ALTER TABLE loans MODIFY COLUMN paymentType ENUM(${currentVals},'parcelado') NOT NULL DEFAULT 'diario'`));
           console.log('[loans] paymentType ENUM atualizado com parcelado');
         }
       }
     }
+    // 2. Tornar releaseDate nullable para empréstimos parcelados (PIX confirmado depois)
+    const relCols = await qRows(db, drizzleSql`SHOW COLUMNS FROM loans LIKE 'releaseDate'`);
+    if (relCols.length > 0) {
+      const nullable = String(relCols[0].Null || relCols[0].null || '').toUpperCase();
+      if (nullable !== 'YES') {
+        await db.execute(drizzleSql.raw(`ALTER TABLE loans MODIFY COLUMN releaseDate VARCHAR(10) NULL DEFAULT NULL`));
+        console.log('[loans] releaseDate agora aceita NULL');
+      }
+    }
   } catch (e: any) {
-    console.warn('[loans] Não foi possível migrar paymentType:', e?.message);
+    console.warn('[loans] Não foi possível migrar paymentType/releaseDate:', e?.message);
   }
 }
 
