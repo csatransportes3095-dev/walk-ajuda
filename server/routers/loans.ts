@@ -264,11 +264,38 @@ async function qRows(db: any, query: ReturnType<typeof drizzleSql>): Promise<any
 
 // ââ€â‚¬ââ€â‚¬ââ€â‚¬ Router ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
 
+// ── Migração automática: adicionar 'parcelado' ao ENUM paymentType ──────────
+let _paymentTypeParceladoMigrated = false;
+async function ensureParceladoPaymentType(db: any) {
+  if (_paymentTypeParceladoMigrated) return;
+  _paymentTypeParceladoMigrated = true;
+  try {
+    // Verificar se paymentType já aceita 'parcelado'
+    const cols = await qRows(db, drizzleSql`SHOW COLUMNS FROM loans LIKE 'paymentType'`);
+    if (cols.length > 0) {
+      const colType = String(cols[0].Type || cols[0].type || '');
+      if (!colType.includes('parcelado')) {
+        // Extrair os valores atuais do ENUM e adicionar 'parcelado'
+        // Padrão: enum('diario','semanal','mensal','quinzenal',...)
+        const match = colType.match(/enum\((.+)\)/i);
+        if (match) {
+          const currentVals = match[1]; // já tem as aspas simples
+          await db.execute(drizzleSql.raw(`ALTER TABLE loans MODIFY COLUMN paymentType ENUM(${currentVals},'parcelado') NOT NULL DEFAULT 'diario'`));
+          console.log('[loans] paymentType ENUM atualizado com parcelado');
+        }
+      }
+    }
+  } catch (e: any) {
+    console.warn('[loans] Não foi possível migrar paymentType:', e?.message);
+  }
+}
+
 // ── Migração automática: tabela loanInstallmentPlans ──────────────────────
 let _installmentPlansMigrated = false;
 async function ensureInstallmentPlansTable(db: any) {
   if (_installmentPlansMigrated) return;
   _installmentPlansMigrated = true;
+  await ensureParceladoPaymentType(db);
   await db.execute(drizzleSql`
     CREATE TABLE IF NOT EXISTS loanInstallmentPlans (
       id INT AUTO_INCREMENT PRIMARY KEY,
