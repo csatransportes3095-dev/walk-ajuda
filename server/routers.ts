@@ -445,6 +445,7 @@ export const appRouter = router({
         cardBtnColor: z.string().nullable().optional(),
         isActive: z.number().optional(), sortOrder: z.number().optional(),
         resellerDiscount: z.number().nullable().optional(), // % de desconto por produto para revendedores
+        deliveryDays: z.string().nullable().optional(), // Ex: "2 a 5 dias úteis"
       }))
       .mutation(async ({ input }) => {
         const { id, resellerDiscount, ...data } = input;

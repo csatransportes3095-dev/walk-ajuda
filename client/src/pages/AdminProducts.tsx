@@ -1136,6 +1136,7 @@ export default function AdminProducts() {
   const [editCardTextColor, setEditCardTextColor] = useState("");
   const [editCardBtnColor, setEditCardBtnColor] = useState("");
   const [editResellerDiscount, setEditResellerDiscount] = useState<string>("");
+  const [editDeliveryDays, setEditDeliveryDays] = useState<string>("");
 
   // New option form
   const [newOptLabel, setNewOptLabel] = useState("");
@@ -1212,6 +1213,7 @@ export default function AdminProducts() {
     setEditCardBgColor(p.cardBgColor || ""); setEditCardTextColor(p.cardTextColor || "");
     setEditCardBtnColor(p.cardBtnColor || "");
     setEditResellerDiscount((p as any).resellerDiscount != null ? String((p as any).resellerDiscount) : "");
+    setEditDeliveryDays((p as any).deliveryDays || "");
   };
 
 
@@ -1361,10 +1363,19 @@ export default function AdminProducts() {
                         {editResellerDiscount && <span className="text-[10px] text-green-400">Revendedor paga {(100 - parseFloat(editResellerDiscount || '0')).toFixed(0)}% do preço</span>}
                       </div>
                     </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">⏳ Prazo de Entrega (exibido no bot)</label>
+                      <input
+                        value={editDeliveryDays}
+                        onChange={e => setEditDeliveryDays(e.target.value)}
+                        placeholder="Ex: 2 a 5 dias úteis"
+                        style={{ ...whiteInputStyle, maxWidth: '280px' }}
+                      />
+                    </div>
                     <div className="flex gap-2">
                       <Button onClick={() => {
                         const discountVal = editResellerDiscount.trim() !== '' ? parseFloat(editResellerDiscount) : null;
-                        updateMut.mutate({ id: product.id, name: editName, description: editDesc || null, buttonText: editButtonText, cardColor: editCardColor || null, cardBgColor: editCardBgColor || null, cardTextColor: editCardTextColor || null, cardBtnColor: editCardBtnColor || null, resellerDiscount: discountVal !== null && !isNaN(discountVal) ? discountVal : null } as any);
+                        updateMut.mutate({ id: product.id, name: editName, description: editDesc || null, buttonText: editButtonText, cardColor: editCardColor || null, cardBgColor: editCardBgColor || null, cardTextColor: editCardTextColor || null, cardBtnColor: editCardBtnColor || null, resellerDiscount: discountVal !== null && !isNaN(discountVal) ? discountVal : null, deliveryDays: editDeliveryDays.trim() || null } as any);
                       }} className="bg-green-600 hover:bg-green-700 text-white text-sm"><Save className="w-3 h-3 mr-1" /> Salvar Card</Button>
                       <Button onClick={() => setEditingProduct(null)} variant="outline" className="text-white border-gray-600 hover:bg-white/10 text-sm"><X className="w-3 h-3 mr-1" /> Cancelar</Button>
                     </div>

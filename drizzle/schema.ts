@@ -105,6 +105,7 @@ export const products = mysqlTable("products", {
   isActive: int("isActive").notNull().default(1),
   sortOrder: int("sortOrder").notNull().default(0),
   resellerDiscount: decimal("resellerDiscount", { precision: 5, scale: 2 }), // % de desconto para revendedores por produto (prioridade sobre % global do cadastro)
+  deliveryDays: varchar("deliveryDays", { length: 64 }), // Ex: "2 a 5 dias úteis"
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

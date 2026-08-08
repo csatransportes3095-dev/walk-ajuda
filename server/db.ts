@@ -419,6 +419,7 @@ export async function updateProduct(id: number, data: Partial<{
   requireCondutaxi: number; requireVehicle2016: number; isPdfOnly: number;
   showYearField: number; cardColor: string | null; cardBgColor: string | null;
   cardTextColor: string | null; cardBtnColor: string | null; isActive: number; sortOrder: number;
+  deliveryDays: string | null;
 }>): Promise<void> {
   const db = await getDb();
   if (!db) return;

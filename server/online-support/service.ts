@@ -927,12 +927,27 @@ export async function sendVisitorMessage(input: {
     const dynamicProductId = (menuItemMatch as any).actionPayload?.productId;
     if (dynamicProductId) {
       try {
+        // Migração automática do campo deliveryDays
+        const db2 = await getDb();
+        if (db2) {
+          await (db2 as any).execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS deliveryDays VARCHAR(64) NULL").catch(() => {});
+        }
         const dynOpts = await listProductOptions(Number(dynamicProductId));
         const activeOpts = dynOpts.filter((o: any) => o.isActive);
-        if (activeOpts.length > 0) {
-          const lines = activeOpts.map((o: any) => `• ${o.label?.trim()}: ${o.price}`);
-          productPriceText = `💰 *Valores:*\n${lines.join("\n")}`;
+        // Buscar prazo do produto
+        let deliveryDaysText = "";
+        if (db2) {
+          const prodRows = await (db2 as any).execute(`SELECT deliveryDays FROM products WHERE id = ${Number(dynamicProductId)} LIMIT 1`);
+          const prodRow = Array.isArray(prodRows) ? prodRows[0] : prodRows?.rows?.[0];
+          if (prodRow?.deliveryDays) deliveryDaysText = prodRow.deliveryDays;
         }
+        let parts: string[] = [];
+        if (deliveryDaysText) parts.push(`⏳ *Prazo:* ${deliveryDaysText}`);
+        if (activeOpts.length > 0) {
+          const lines = activeOpts.map((o: any) => `• ${o.label?.trim()}: R$ ${o.price}`);
+          parts.push(`💰 *Valores:*\n${lines.join("\n")}`);
+        }
+        if (parts.length > 0) productPriceText = parts.join("\n\n");
       } catch { /* fallback para texto fixo */ }
     }
     // Resposta: responseText do painel + valores do produto (sem documentos, sem perguntas)
