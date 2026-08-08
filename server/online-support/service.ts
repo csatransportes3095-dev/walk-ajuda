@@ -740,8 +740,8 @@ export async function sendVisitorMessage(input: {
     const welcomeText = `${greeting}! 😊 Sou o assistente virtual da Colombia e estou aqui para te ajudar!\n\nComo posso te ajudar hoje? Escolha uma opção abaixo ou me diga o que precisa:`;
     const welcomeButtons = menuItems.slice(0, 8).map((m: any) => ({
       label: m.title,
-      actionType: "send_text",
-      actionPayload: { text: m.title.replace(/^[\p{Emoji}\s]+/u, "").trim() },
+      actionType: "menu_item",
+      actionPayload: { menuItemId: m.id },
     }));
     const outOfHours = await createMessage({
       conversationId: conversation.id,
@@ -1083,8 +1083,8 @@ export async function sendVisitorMessage(input: {
   const fallbackWelcome = `${greetingNow}! 😊 Sou o assistente virtual da Colombia!\n\nPosso te ajudar com informações sobre nossos serviços, valores, prazos e muito mais. Escolha uma opção abaixo:`;
   const fallbackButtons = menuItems.slice(0, 8).map((m: any) => ({
     label: m.title,
-    actionType: "send_text",
-    actionPayload: { text: m.title.replace(/^[\p{Emoji}\s]+/u, "").trim() },
+    actionType: "menu_item",
+    actionPayload: { menuItemId: m.id },
   }));
   const fallback = await createMessage({
     conversationId: conversation.id,
