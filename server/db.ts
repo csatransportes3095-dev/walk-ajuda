@@ -695,8 +695,20 @@ export async function getCustomerByPhone(phone: string): Promise<Customer | null
 export async function getCustomerByCpf(cpf: string): Promise<Customer | null> {
   const db = await getDb();
   if (!db) return null;
-  const result = await db.select().from(customers).where(eq(customers.cpf, cpf)).limit(1);
-  return result.length > 0 ? result[0] : null;
+  // Buscar por CPF exato
+  let result = await db.select().from(customers).where(eq(customers.cpf, cpf)).limit(1);
+  if (result.length > 0) return result[0];
+  // Buscar por CPF normalizado (só dígitos)
+  const digits = cpf.replace(/\D/g, '');
+  if (digits !== cpf && digits.length === 11) {
+    result = await db.select().from(customers).where(eq(customers.cpf, digits)).limit(1);
+    if (result.length > 0) return result[0];
+    // Buscar por CPF formatado (000.000.000-00)
+    const formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9)}`;
+    result = await db.select().from(customers).where(eq(customers.cpf, formatted)).limit(1);
+    if (result.length > 0) return result[0];
+  }
+  return null;
 }
 
 export async function createCustomer(data: { name: string; phone: string; email?: string; cpf?: string; city?: string; uf?: string; referredBy?: string; referredByPhone?: string; profilePhotoUrl?: string }): Promise<Customer> {

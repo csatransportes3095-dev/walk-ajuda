@@ -1133,7 +1133,64 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     setCompleteSaving(false);
   };
 
+  // Verificar permissão de rota 'site' (só para clientes com cp_token, ou seja, cadastro novo)
+  const cpTokenForRoute = localStorage.getItem(CP_TOKEN_KEY) || '';
+  const routeAccessSiteQuery = trpc.spreadsheet.checkRouteAccess.useQuery(
+    { token: cpTokenForRoute, route: 'site' },
+    { enabled: accessGranted && accessType === 'customer' && !!cpTokenForRoute, staleTime: 0 }
+  );
+
   if (accessGranted) {
+    // Verificar se o cliente tem permissão para acessar o site principal
+    // Só bloquear se a query retornou explicitamente allowed=false (null = ainda carregando = não bloquear)
+    if (accessType === 'customer' && cpTokenForRoute && routeAccessSiteQuery.data && routeAccessSiteQuery.data.allowed === false) {
+      const whatsappNum = (settings?.whatsapp_number || '5511978307371').replace(/[^\d+]/g, '');
+      const allowedRoutes: string[] = (routeAccessSiteQuery.data as any).allowedRoutes || [];
+      const routeLabels: Record<string, { label: string; path: string }> = {
+        gastos: { label: 'Controle de Gastos', path: '/gastos' },
+        emprestimo: { label: 'Empréstimos', path: '/emprestimo' },
+        site: { label: 'Site Principal', path: '/' },
+      };
+      return (
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
+          <div className="w-full max-w-md text-center">
+            <div className="w-16 h-16 rounded-full bg-red-500/20 border-2 border-red-500 flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-8 h-8 text-red-400" />
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">🔒 Acesso Restrito</h2>
+            {allowedRoutes.length > 0 ? (
+              <>
+                <p className="text-slate-400 text-sm mb-4">Você só tem acesso às seguintes áreas:</p>
+                <div className="flex flex-col gap-2 mb-6">
+                  {allowedRoutes.filter(r => r !== 'site').map(r => {
+                    const info = routeLabels[r];
+                    if (!info) return null;
+                    return (
+                      <a key={r} href={info.path}
+                        className="block bg-primary/20 border border-primary/40 hover:bg-primary/30 text-white font-semibold px-4 py-3 rounded-xl transition-colors text-sm">
+                        Acessar: h2colombiano.com{info.path}
+                      </a>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <p className="text-slate-400 text-sm mb-6">Você não tem permissão para acessar esta área. Solicite liberação ao administrador.</p>
+            )}
+            <a
+              href={`https://wa.me/55${whatsappNum}?text=${encodeURIComponent('Olá, preciso de liberação de acesso ao site.')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
+            >
+              <MessageCircle className="w-5 h-5" />
+              Solicitar liberação via WhatsApp
+            </a>
+          </div>
+        </div>
+      );
+    }
+
     // Mostrar tela de completar cadastro se faltar email ou CPF
     if (hasIncomplete) {
       return (

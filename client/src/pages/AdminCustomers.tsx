@@ -93,6 +93,7 @@ function RouteAccessWidget({ phone }: { phone: string }) {
   });
 
   const ROUTES = [
+    { key: 'site', label: 'Site Principal', icon: '🏠' },
     { key: 'gastos', label: 'Gastos', icon: '📊' },
     { key: 'emprestimo', label: 'Empréstimos', icon: '💳' },
   ];
