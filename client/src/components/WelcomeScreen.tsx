@@ -475,31 +475,74 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     ...extraStyle,
   });
 
+  const [robotPhraseIdx, setRobotPhraseIdx] = React.useState(0);
+  const robotPhrases = [
+    "Estou aqui 24h! 🤖",
+    "Tire suas dúvidas agora",
+    "Resposta imediata!",
+    "Como posso ajudar?",
+    "Fale comigo! 💬",
+  ];
+  React.useEffect(() => {
+    const t = setInterval(() => setRobotPhraseIdx(i => (i + 1) % robotPhrases.length), 2800);
+    return () => clearInterval(t);
+  }, []);
+
   const renderSupportButton = () => {
     if (!supportVisible) return null;
     return (
       <button
         onClick={() => setOnlineSupportOpen(true)}
-        onMouseEnter={() => setHovered(h => ({ ...h, support: true }))}
-        onMouseLeave={() => setHovered(h => ({ ...h, support: false }))}
-        className={`w-full group relative overflow-hidden text-white rounded-[18px] transition-all duration-300 flex items-center gap-3 ${getHoverClass("lift")}`}
-        style={{ ...elegantBtnStyle(supportColor), ...getHoverStyle("lift", supportColor, "support") }}
+        style={{
+          width: "100%", background: `linear-gradient(135deg, ${supportColor}f0 0%, ${supportColor}80 100%)`,
+          border: `1px solid ${supportColor}50`, borderRadius: 22,
+          boxShadow: `0 4px 24px ${supportColor}40, 0 1px 4px rgba(0,0,0,0.3)`,
+          padding: "18px 20px", cursor: "pointer", display: "flex", alignItems: "center", gap: 16,
+          fontFamily: "'DM Sans','Inter',-apple-system,sans-serif", position: "relative", overflow: "hidden",
+        }}
       >
-        <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0 }}>
-          <MessageCircle style={{ width: 20, height: 20, color: "#fff" }} />
-        </div>
-        <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.1px", color: "#fff", lineHeight: 1.3, margin: 0 }}>{supportLabel}</p>
-          <p style={{ fontSize: 11.5, fontWeight: 400, color: "rgba(255,255,255,0.72)", marginTop: 2, lineHeight: 1.4 }}>{supportDescription}</p>
-          <p style={{ fontSize: 10.5, fontWeight: 500, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>● {supportStatusText}</p>
-        </div>
-        {supportUnreadCount > 0 && (
-          <div style={{ flexShrink: 0, background: "rgba(255,255,255,0.22)", borderRadius: 20, minWidth: 24, height: 24, padding: "0 7px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff" }}>
-            {supportUnreadCount}
+        {/* Robô animado */}
+        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
+          <style>{`
+            @keyframes robotFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+            @keyframes robotEyeBlink { 0%,90%,100%{transform:scaleY(1)} 95%{transform:scaleY(0.1)} }
+            @keyframes antennaPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.4)} }
+            @keyframes phraseIn { 0%{opacity:0;transform:translateY(6px)} 20%,80%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-6px)} }
+          `}</style>
+          <div style={{ animation: "robotFloat 2.4s ease-in-out infinite", display: "flex", flexDirection: "column", alignItems: "center" }}>
+            {/* Antena */}
+            <div style={{ width: 2, height: 10, background: "rgba(255,255,255,0.7)", borderRadius: 2, marginBottom: 1 }} />
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", animation: "antennaPulse 1.2s ease-in-out infinite", marginBottom: 2, boxShadow: "0 0 8px #fff" }} />
+            {/* Cabeça */}
+            <div style={{ width: 44, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.22)", border: "2px solid rgba(255,255,255,0.5)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, position: "relative" }}>
+              {/* Olhos */}
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", animation: "robotEyeBlink 3s ease-in-out infinite" }} />
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", animation: "robotEyeBlink 3s ease-in-out infinite 0.15s" }} />
+            </div>
+            {/* Corpo */}
+            <div style={{ width: 40, height: 28, borderRadius: 8, background: "rgba(255,255,255,0.18)", border: "2px solid rgba(255,255,255,0.4)", marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: 16, height: 8, borderRadius: 4, background: "rgba(255,255,255,0.5)" }} />
+            </div>
+            {/* Braços */}
+            <div style={{ display: "flex", gap: 36, marginTop: -20, position: "relative", zIndex: -1 }}>
+              <div style={{ width: 8, height: 18, borderRadius: 4, background: "rgba(255,255,255,0.3)", transform: "rotate(-10deg)" }} />
+              <div style={{ width: 8, height: 18, borderRadius: 4, background: "rgba(255,255,255,0.3)", transform: "rotate(10deg)" }} />
+            </div>
           </div>
-        )}
-        <svg style={{ width: 14, height: 14, opacity: 0.45, flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-        <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/8 to-transparent" />
+        </div>
+        {/* Texto */}
+        <div style={{ flex: 1, textAlign: "left" }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: "#fff", margin: "0 0 4px", letterSpacing: -0.2 }}>{supportLabelBase}</p>
+          <p key={robotPhraseIdx} style={{ fontSize: 12.5, color: "rgba(255,255,255,0.9)", margin: 0, animation: "phraseIn 2.8s ease-in-out forwards", fontWeight: 500 }}>
+            {robotPhrases[robotPhraseIdx]}
+          </p>
+          <p style={{ fontSize: 10.5, color: "rgba(255,255,255,0.7)", marginTop: 4 }}>
+            <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#4ade80", marginRight: 4, animation: "antennaPulse 1.5s ease-in-out infinite" }} />
+            {supportStatusText}
+            {supportUnreadCount > 0 && <span style={{ marginLeft: 8, background: "rgba(255,255,255,0.25)", borderRadius: 10, padding: "1px 7px", fontWeight: 700 }}>{supportUnreadCount} nova{supportUnreadCount > 1 ? "s" : ""}</span>}
+          </p>
+        </div>
+        <svg style={{ width: 14, height: 14, opacity: 0.4, flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
       </button>
     );
   };
