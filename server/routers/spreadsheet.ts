@@ -1499,7 +1499,37 @@ export const spreadsheetRouter = router({
           clientResultAuto = await db.select().from(spreadsheetClients)
             .where(eq(spreadsheetClients.phone, sem_ddd)).limit(1);
         }
-        const client = clientResultAuto?.[0] || null;
+        let client: any = clientResultAuto?.[0] || null;
+
+        // Se não encontrou em spreadsheetClients, buscar em customers e criar automaticamente
+        if (!client) {
+          let custResult = await db.select().from(customers)
+            .where(eq(customers.phone, normalizedPhone)).limit(1);
+          if (!custResult?.[0] && normalizedPhone.length === 11) {
+            const sem_ddd = normalizedPhone.slice(2);
+            custResult = await db.select().from(customers)
+              .where(eq(customers.phone, sem_ddd)).limit(1);
+          }
+          const customer = custResult?.[0] || null;
+          if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cadastro não encontrado' });
+          if ((customer as any).blocked === 1) throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso bloqueado' });
+          // Criar spreadsheetClient automaticamente a partir do customers
+          const insertResult = await db.insert(spreadsheetClients).values({
+            phone: normalizedPhone,
+            name: customer.name,
+            cpf: (customer as any).cpf || null,
+            status: 'active',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+          client = {
+            id: (insertResult as any).insertId,
+            phone: normalizedPhone,
+            name: customer.name,
+            status: 'active',
+            preservedExpiresAt: null,
+          };
+        }
 
         if (!client) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cadastro não encontrado' });
         if (client.status === 'blocked') throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso bloqueado' });
