@@ -433,6 +433,9 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             setRegCpf(clientCpf); // pré-preencher CPF
             setRegPhone(""); // telefone livre
           } else {
+            // Garantir que clientPhone está definido com os dígitos corretos
+            setClientPhone(inputDigits);
+            sessionStorage.setItem('reg_phone_temp', inputDigits);
             setRegCpf(""); // CPF livre
           }
           setGateStep("registration");
@@ -512,6 +515,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         setGateStep("password");
       } else {
         setCustomerExists(false);
+        setClientPhone(inputDigits);
+        sessionStorage.setItem('reg_phone_temp', inputDigits);
         setGateStep("registration");
       }
     } finally {
