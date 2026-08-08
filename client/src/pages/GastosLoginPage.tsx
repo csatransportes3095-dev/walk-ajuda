@@ -218,11 +218,14 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
         return;
       }
 
-      // 3. Cadastro OK — agora criar senha
+      // 3. Cadastro OK — chamar checkPhone para criar spreadsheetClient automaticamente
       toast.success('Cadastro realizado! Agora crie sua senha de acesso.');
-      // Usar o telefone do cadastro para o próximo passo
       setPhone(cleanPhone);
       setClientName(regName.trim());
+      // Disparar checkPhone para garantir que spreadsheetClient seja criado
+      try {
+        await checkPhoneMutation.mutateAsync({ identifier: cleanPhone, isCpf: false });
+      } catch (_) { /* ignora erro — spreadsheetClient pode já ter sido criado */ }
       setStep('create_password');
     } catch (err: any) {
       setError(err?.message || 'Erro ao realizar cadastro. Tente novamente.');
