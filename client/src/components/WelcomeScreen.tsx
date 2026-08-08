@@ -475,7 +475,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     ...extraStyle,
   });
 
-  const [robotPhraseIdx, setRobotPhraseIdx] = React.useState(0);
+  const [robotPhraseIdx, setRobotPhraseIdx] = useState(0);
   const robotPhrases = [
     "Estou aqui 24h! 🤖",
     "Tire suas dúvidas agora",
@@ -483,7 +483,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     "Como posso ajudar?",
     "Fale comigo! 💬",
   ];
-  React.useEffect(() => {
+  useEffect(() => {
     const t = setInterval(() => setRobotPhraseIdx(i => (i + 1) % robotPhrases.length), 2800);
     return () => clearInterval(t);
   }, []);
