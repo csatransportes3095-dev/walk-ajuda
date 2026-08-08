@@ -289,36 +289,7 @@ INSERT INTO `onlineSupportBusinessHours` (`weekDay`, `openTime`, `closeTime`, `b
 SELECT 0, NULL, NULL, NULL, NULL, 0 WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportBusinessHours` WHERE `weekDay` = 0);
 
 --> statement-breakpoint
-INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
-SELECT 'Fazer pedido', 'Abrir fluxo para criacao de pedido', 'shopping-cart', '#2563eb', 'send_buttons',
-       '[{"label":"FAZER PEDIDO","actionType":"open_internal","actionPayload":{"path":"/"}},{"label":"VER VIDEO EXPLICATIVO","actionType":"open_internal","actionPayload":{"path":"/video/tutorial"}},{"label":"FALAR COM ATENDENTE","actionType":"handoff_human","actionPayload":{}}]', 1, 1
-WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Fazer pedido');
-
---> statement-breakpoint
-INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
-SELECT 'Consultar pedido', 'Acompanhar status do pedido', 'search', '#059669', 'open_internal', '{"path":"/acompanhar"}', 2, 1
-WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Consultar pedido');
-
---> statement-breakpoint
-INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
-SELECT 'Agendar atendimento', 'Escolher horario disponivel', 'calendar', '#7c3aed', 'send_text', '{"text":"Para agendar atendimento, envie seu nome completo e telefone."}', 3, 1
-WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Agendar atendimento');
-
---> statement-breakpoint
-INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
-SELECT 'Ver videos explicativos', 'Tutoriais de uso', 'play-circle', '#0ea5e9', 'open_internal', '{"path":"/video/tutorial"}', 4, 1
-WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Ver videos explicativos');
-
---> statement-breakpoint
-INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
-SELECT 'Duvidas frequentes', 'Acessar base de conhecimento', 'help-circle', '#f59e0b', 'send_text', '{"text":"Posso ajudar com pedidos, prazos, pagamento e documentacao. O que voce precisa?"}', 5, 1
-WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Duvidas frequentes');
-
---> statement-breakpoint
-INSERT INTO `onlineSupportMenuItems` (`title`, `description`, `icon`, `color`, `actionType`, `actionPayloadJson`, `sortOrder`, `isActive`)
-SELECT 'Falar com atendente', 'Encaminhar para equipe humana', 'user-round', '#ef4444', 'handoff_human', '{}', 6, 1
-WHERE NOT EXISTS (SELECT 1 FROM `onlineSupportMenuItems` WHERE `title` = 'Falar com atendente');
-
+-- Botões padrão removidos — gerenciados pelo painel ADM em /admin/online-support
 --> statement-breakpoint
 INSERT INTO `onlineSupportAutoReplies` (`internalName`, `title`, `category`, `relatedQuestionsJson`, `keywordsJson`, `priority`, `responseText`, `mediaJson`, `buttonsJson`, `nextStep`, `waitTimeMs`, `isActive`, `updatedBy`)
 SELECT 'como_fazer_pedido', 'Como fazer pedido', 'pedidos',
