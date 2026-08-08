@@ -1405,8 +1405,9 @@ export const spreadsheetRouter = router({
             createdAt: new Date(client.createdAt).toISOString(),
             totalAccess,
             accessLast7Days,
-            hasEverCreatedPassword, // true = cliente já criou senha antes, não pode criar novamente
+            hasEverCreatedPassword,
             profilePhotoUrl,
+            allowedRoutes: (client as any).allowedRoutes || '',
           });
         }
 
@@ -1472,6 +1473,7 @@ export const spreadsheetRouter = router({
       phone: z.string().min(10, 'Telefone inválido'),
       password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
       confirmPassword: z.string().min(6),
+      sourceRoute: z.string().optional(), // rota de origem: 'gastos' ou 'emprestimo'
     }))
     .mutation(async ({ input }) => {
       try {
@@ -1570,12 +1572,20 @@ export const spreadsheetRouter = router({
           expiresAt,
         });
 
-        // Limpar o vencimento preservado após uso
+                // Limpar o vencimento preservado após uso e salvar rota de origem
+        const updateSet: any = { preservedExpiresAt: null };
+        if (input.sourceRoute) {
+          // Adicionar a rota de origem se ainda não estiver nas rotas permitidas
+          const existingRoutes = ((client as any).allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
+          if (!existingRoutes.includes(input.sourceRoute)) {
+            existingRoutes.push(input.sourceRoute);
+          }
+          updateSet.allowedRoutes = existingRoutes.join(',');
+        }
         await db.update(spreadsheetClients)
-          .set({ preservedExpiresAt: null })
+          .set(updateSet)
           .where(eq(spreadsheetClients.id, client.id));
-
-                return { success: true, clientName: client.name, expiresAt: expiresAt.toISOString() };
+        return { success: true, clientName: client.name, expiresAt: expiresAt.toISOString() };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar senha' });
@@ -1583,6 +1593,58 @@ export const spreadsheetRouter = router({
     }),
 
   // ADM atualiza dados do cliente (nome, telefone, CPF)
+  // Atualizar rotas permitidas por cliente
+  adminUpdateAllowedRoutes: publicProcedure
+    .input(z.object({
+      clientId: z.number(),
+      allowedRoutes: z.string(), // ex: "gastos,emprestimo" ou "gastos" ou ""
+    }))
+    .mutation(async ({ input }) => {
+      try {
+        const db = await getDb() as any;
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
+        // Migração automática: adicionar coluna allowedRoutes se não existir
+        try {
+          await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`);
+        } catch (_) { /* coluna já existe */ }
+        await db.update(spreadsheetClients)
+          .set({ allowedRoutes: input.allowedRoutes || null, updatedAt: new Date() } as any)
+          .where(eq(spreadsheetClients.id, input.clientId));
+        return { success: true };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao atualizar rotas' });
+      }
+    }),
+
+  // Verificar se cliente tem acesso a uma rota específica (por token de sessão)
+  checkRouteAccess: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      route: z.string(), // ex: "gastos" ou "emprestimo"
+    }))
+    .query(async ({ input }) => {
+      try {
+        const db = await getDb() as any;
+        if (!db) return { allowed: false };
+        // Migração automática: garantir que a coluna allowedRoutes existe
+        try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
+        const cleanToken = input.token.trim();
+        const sessionResult = await db.select().from(spreadsheetSessions)
+          .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
+        const session = sessionResult?.[0] || null;
+        if (!session || new Date(session.expiresAt) < new Date()) return { allowed: false };
+        const clientResult = await db.select().from(spreadsheetClients)
+          .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
+        const client = clientResult?.[0] || null;
+        if (!client) return { allowed: false };
+        const routes = (client.allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
+        return { allowed: routes.includes(input.route), allowedRoutes: routes };
+      } catch (_) {
+        return { allowed: false };
+      }
+    }),
+
   adminUpdateClient: publicProcedure
     .input(z.object({
       clientId: z.number(),

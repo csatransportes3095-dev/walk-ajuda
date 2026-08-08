@@ -40,6 +40,7 @@ export default function AdminGastosPage() {
   const deletePasswordMutation = trpc.spreadsheet.adminDeletePassword.useMutation();
   const renewAccessMutation = trpc.spreadsheet.adminRenewAccess.useMutation();
   const updateClientMutation = trpc.spreadsheet.adminUpdateClient.useMutation();
+  const updateAllowedRoutesMutation = trpc.spreadsheet.adminUpdateAllowedRoutes.useMutation();
 
   // Modal de confirmar renovação de acesso
   const [renewModal, setRenewModal] = useState<{ clientId: number; clientName: string } | null>(null);
@@ -638,6 +639,42 @@ export default function AdminGastosPage() {
                         >
                           Gerar/renovar senha →
                         </button>
+                      </div>
+                      {/* Controle de rotas permitidas */}
+                      <div className="mt-3 pt-3 border-t border-slate-700/50">
+                        <p className="text-xs text-slate-400 mb-2 font-semibold">🔑 Rotas permitidas:</p>
+                        <div className="flex flex-wrap gap-4">
+                          {[{ key: 'gastos', label: '📊 Gastos' }, { key: 'emprestimo', label: '💳 Empréstimos' }].map(({ key, label }) => {
+                            const routes = (c.allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
+                            const isAllowed = routes.includes(key);
+                            return (
+                              <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={isAllowed}
+                                  onChange={async (e) => {
+                                    const newRoutes = e.target.checked
+                                      ? [...routes.filter((r: string) => r !== key), key]
+                                      : routes.filter((r: string) => r !== key);
+                                    try {
+                                      await updateAllowedRoutesMutation.mutateAsync({
+                                        clientId: c.id,
+                                        allowedRoutes: newRoutes.join(','),
+                                      });
+                                      clientsQuery.refetch();
+                                    } catch (err) {
+                                      console.error('Erro ao atualizar rotas', err);
+                                    }
+                                  }}
+                                  className="w-4 h-4 accent-primary"
+                                />
+                                <span className={`text-xs font-medium ${isAllowed ? 'text-green-300' : 'text-slate-500'}`}>
+                                  {label}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   );

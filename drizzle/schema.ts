@@ -1259,6 +1259,7 @@ export const spreadsheetClients = mysqlTable("spreadsheetClients", {
   cpf: varchar("cpf", { length: 14 }),
   status: mysqlEnum("status", ["active", "blocked"]).notNull().default("active"),
   preservedExpiresAt: timestamp("preservedExpiresAt"),
+  allowedRoutes: varchar("allowedRoutes", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

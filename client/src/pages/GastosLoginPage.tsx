@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 
 interface GastosLoginPageProps {
   onLoginSuccess: (token: string, clientId: number, clientName: string) => void;
+  sourceRoute?: string; // 'gastos' ou 'emprestimo'
 }
 
 type Step =
@@ -38,7 +39,7 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
+export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPageProps) {
   const { data: settings } = trpc.settings.getAll.useQuery();
   const gastosLogoUrl = settings?.gastos_logo_url || '';
 
@@ -245,7 +246,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
     try {
       const cleanPhone = (regPhone || phone).replace(/\D/g, '');
       if (isAutoMode) {
-        await clientCreatePasswordAutoMutation.mutateAsync({ phone: cleanPhone, password, confirmPassword });
+        await clientCreatePasswordAutoMutation.mutateAsync({ phone: cleanPhone, password, confirmPassword, sourceRoute });
         const loginResult = await loginMutation.mutateAsync({ phone: cleanPhone, password });
         if (loginResult.success) {
           localStorage.setItem('gastos_token', loginResult.token);
