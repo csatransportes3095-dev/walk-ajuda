@@ -331,10 +331,14 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
 
               {messages.map((msg, idx) => {
                 if (msg.type === "user") {
+                  // Ocultar mensagens internas do sistema (__menuitem__:ID:label)
+                  const displayText = msg.text.startsWith("__menuitem__:") 
+                    ? msg.text.split(":").slice(2).join(":") 
+                    : msg.text;
                   return (
                     <div key={idx} style={{ display: "flex", justifyContent: "flex-end" }}>
                       <div style={{ background: "linear-gradient(135deg,#7c3aed,#3b82f6)", borderRadius: "18px 18px 4px 18px", padding: "10px 14px", maxWidth: "80%", fontSize: 14, color: "#fff", fontWeight: 500 }}>
-                        {msg.text}
+                        {displayText}
                       </div>
                     </div>
                   );
