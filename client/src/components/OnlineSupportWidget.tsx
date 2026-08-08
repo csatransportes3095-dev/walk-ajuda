@@ -170,13 +170,20 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
   const handleButtonClick = (btn: { label: string; actionType?: string; actionPayload?: any }) => {
     if (!conversationId) return;
     const { actionType, actionPayload, label } = btn;
-    // Ações diretas
+    // Ações diretas — não enviam mensagem ao bot
     if (actionType === "open_internal" && actionPayload?.path) { window.location.href = String(actionPayload.path); return; }
-    if (actionType === "open_external" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); }
-    if (actionType === "open_video" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); }
+    if (actionType === "open_external" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); return; }
+    if (actionType === "open_video" && actionPayload?.url) { window.open(String(actionPayload.url), "_blank"); return; }
     if (actionType === "open_whatsapp" && actionPayload?.phone) {
       const txt = actionPayload.text ? "?text=" + encodeURIComponent(String(actionPayload.text)) : "";
       window.open("https://wa.me/" + String(actionPayload.phone) + txt, "_blank");
+      return;
+    }
+    // menu_item com ID — enviar como __menuitem__:ID para o bot processar diretamente
+    if (actionType === "menu_item" && actionPayload?.menuItemId) {
+      touchSession();
+      sendMut.mutate({ conversationId, visitorId, text: `__menuitem__:${actionPayload.menuItemId}:${label}` });
+      return;
     }
     // Enviar label como mensagem para o bot processar
     touchSession();
@@ -333,7 +340,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
                   );
                 }
                 if (msg.type === "bot") {
-                  const isLast = idx === messages.length - 1 || messages.slice(idx + 1).every(m => m.type !== "bot");
+                  // Mostrar botões sempre que a mensagem tiver botões
                   return (
                     <div key={idx} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {/* Avatar + texto */}
@@ -351,8 +358,8 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
                           </div>
                         )}
                       </div>
-                      {/* Botões — só mostrar nos botões da última mensagem do bot */}
-                      {isLast && msg.buttons && msg.buttons.length > 0 && (
+                      {/* Botões — mostrar sempre que a mensagem tiver botões */}
+                      {msg.buttons && msg.buttons.length > 0 && (
                         <div style={{ marginLeft: 36, display: "flex", flexDirection: "column", gap: 8 }}>
                           {msg.buttons.map((btn, bi) => (
                             <button

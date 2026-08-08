@@ -884,8 +884,22 @@ export async function sendVisitorMessage(input: {
     }
   }
 
+  // Tratamento especial: clique direto em botão com __menuitem__:ID:label
+  const menuItemDirectMatch = (() => {
+    const txt = input.text || "";
+    if (!txt.startsWith("__menuitem__:")) return null;
+    const parts = txt.split(":");
+    const id = Number(parts[1]);
+    if (!id) return null;
+    return menuItems.find((m: any) => m.id === id) || null;
+  })();
+  if (menuItemDirectMatch) {
+    // Reusar o mesmo fluxo do menuItemMatch — substituir input.text pelo título do item
+    (input as any).text = menuItemDirectMatch.title;
+  }
+
   // Verificar se o texto corresponde a um botão do menu (por keywords ou título) — PRIORIDADE sobre respostas automáticas);
-  const menuItemMatch = menuItems.find((m: any) => {
+  const menuItemMatch = menuItemDirectMatch || menuItems.find((m: any) => {
     // 1. Verificar por keywords configuradas no botão (prioridade)
     const keywords: string[] = m.keywords || [];
     if (keywords.length > 0) {
