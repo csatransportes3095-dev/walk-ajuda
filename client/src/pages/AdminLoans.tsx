@@ -2388,7 +2388,7 @@ function EditLoanModal({ loan, onClose, onSuccess }: { loan: any; onClose: () =>
   const [amount, setAmount] = useState(String(loan.amount || ""));
   const [interestRate, setInterestRate] = useState(String(loan.interestRate || ""));
   const [days, setDays] = useState(String(loan.days || ""));
-  const [paymentType, setPaymentType] = useState<"diario" | "semanal" | "mensal" | "quinzenal">(loan.paymentType || "diario");
+  const [paymentType, setPaymentType] = useState<"diario" | "semanal" | "mensal" | "quinzenal" | "parcelado">(loan.paymentType || "diario");
   const editAllowedModes: string[] = loan.profileAllowedModes
     ? loan.profileAllowedModes.split(",").map((t: string) => t.trim()).filter(Boolean)
     : ["diario", "semanal", "quinzenal", "mensal"];

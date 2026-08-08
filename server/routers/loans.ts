@@ -1768,10 +1768,10 @@ export const loanRouter = router({
     amount: z.number().positive(),
     interestRate: z.number().min(0),
     days: z.number().positive(),
-    paymentType: z.enum(["diario", "semanal", "mensal", "quinzenal"]),
+    paymentType: z.enum(["diario", "semanal", "mensal", "quinzenal", "parcelado"]),
     workDays: z.enum(["seg_sab", "seg_dom", "custom"]).default("seg_sab"),
     customInstallments: z.number().min(1).max(365).optional(),
-    releaseDate: z.string(),
+    releaseDate: z.string().optional(),
     notes: z.string().optional(),
     status: z.enum(["pendente", "aprovado", "reprovado", "cancelado", "pago"]).optional(),
     rejectedReason: z.string().optional(),
@@ -1781,8 +1781,11 @@ export const loanRouter = router({
     if (!loans.length) throw new TRPCError({ code: "NOT_FOUND", message: "Empréstimo não encontrado" });
     const loan = loans[0];
 
-    // Recalcula com os novos valores
-    const sim = simulateLoan(input.amount, input.interestRate, input.paymentType, input.days, input.workDays, input.releaseDate, input.customInstallments);
+    // Recalcula com os novos valores (parcelado usa releaseDate do banco se não fornecido)
+    const effectiveReleaseDate = input.releaseDate || loan.releaseDate || getBrazilToday();
+    // Para parcelado, simulateLoan usa mensal internamente
+    const simPaymentType = (input.paymentType === 'parcelado' ? 'mensal' : input.paymentType) as 'diario' | 'semanal' | 'mensal' | 'quinzenal';
+    const sim = simulateLoan(input.amount, input.interestRate, simPaymentType, input.days, input.workDays, effectiveReleaseDate, input.customInstallments);
 
     // Descobre quantas parcelas já foram pagas
     const paidRows = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanInstallments WHERE loanId=${input.id} AND status='pago'`);
@@ -1802,7 +1805,7 @@ export const loanRouter = router({
         installments=${sim.installments},
         interestAmount=${sim.interestAmount},
         totalAmount=${sim.totalAmount},
-        releaseDate=${input.releaseDate},
+        releaseDate=${effectiveReleaseDate},
         dueDate=${sim.dueDate},
         notes=${input.notes || loan.notes || null},
         status=${newStatus},
