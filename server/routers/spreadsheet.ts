@@ -1316,6 +1316,8 @@ export const spreadsheetRouter = router({
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
+        // Migração automática: adicionar coluna allowedRoutes se não existir
+        try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
 
         const clients = await db.select().from(spreadsheetClients);
         const now = new Date();
@@ -1592,6 +1594,73 @@ export const spreadsheetRouter = router({
       }
     }),
 
+  // Buscar rotas permitidas de um cliente pelo telefone
+  getClientRoutesByPhone: publicProcedure
+    .input(z.object({ phone: z.string() }))
+    .query(async ({ input }) => {
+      try {
+        const db = await getDb() as any;
+        if (!db) return { allowedRoutes: '' };
+        try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
+        const normalizedPhone = input.phone.replace(/\D/g, '');
+        let result = await db.select().from(spreadsheetClients)
+          .where(eq(spreadsheetClients.phone, normalizedPhone)).limit(1);
+        if (!result?.[0] && normalizedPhone.length === 11) {
+          result = await db.select().from(spreadsheetClients)
+            .where(eq(spreadsheetClients.phone, normalizedPhone.slice(2))).limit(1);
+        }
+        const client = result?.[0] || null;
+        return { allowedRoutes: (client as any)?.allowedRoutes || '', clientId: client?.id || null };
+      } catch (_) {
+        return { allowedRoutes: '', clientId: null };
+      }
+    }),
+
+  // Atualizar rotas permitidas pelo telefone do cliente (para o AdminCustomers)
+  updateClientRoutesByPhone: publicProcedure
+    .input(z.object({
+      phone: z.string(),
+      allowedRoutes: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      try {
+        const db = await getDb() as any;
+        if (!db) return { success: false };
+        try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
+        const normalizedPhone = input.phone.replace(/\D/g, '');
+        let result = await db.select().from(spreadsheetClients)
+          .where(eq(spreadsheetClients.phone, normalizedPhone)).limit(1);
+        if (!result?.[0] && normalizedPhone.length === 11) {
+          result = await db.select().from(spreadsheetClients)
+            .where(eq(spreadsheetClients.phone, normalizedPhone.slice(2))).limit(1);
+        }
+        const client = result?.[0] || null;
+        if (!client) {
+          // Criar spreadsheetClient se não existir
+          const custResult = await db.select().from(customers)
+            .where(eq(customers.phone, normalizedPhone)).limit(1);
+          const customer = custResult?.[0] || null;
+          if (!customer) return { success: false, message: 'Cliente não encontrado' };
+          await db.insert(spreadsheetClients).values({
+            phone: normalizedPhone,
+            name: customer.name,
+            cpf: (customer as any).cpf || null,
+            status: 'active',
+            allowedRoutes: input.allowedRoutes || null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        } else {
+          await db.update(spreadsheetClients)
+            .set({ allowedRoutes: input.allowedRoutes || null, updatedAt: new Date() } as any)
+            .where(eq(spreadsheetClients.id, client.id));
+        }
+        return { success: true };
+      } catch (error) {
+        return { success: false };
+      }
+    }),
+
   // ADM atualiza dados do cliente (nome, telefone, CPF)
   // Atualizar rotas permitidas por cliente
   adminUpdateAllowedRoutes: publicProcedure
@@ -1638,7 +1707,9 @@ export const spreadsheetRouter = router({
           .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
         const client = clientResult?.[0] || null;
         if (!client) return { allowed: false };
-        const routes = (client.allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
+        // null = sem restrição (acesso total a todas as rotas)
+        if (!(client as any).allowedRoutes) return { allowed: true, allowedRoutes: [] };
+        const routes = ((client as any).allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
         return { allowed: routes.includes(input.route), allowedRoutes: routes };
       } catch (_) {
         return { allowed: false };

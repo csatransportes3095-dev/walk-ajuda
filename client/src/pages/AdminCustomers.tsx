@@ -82,6 +82,75 @@ function ReferrerAutoFill({ phone, onNameFound }: { phone: string; onNameFound: 
   return <span className="text-xs text-yellow-400 block mt-0.5">⚠ Não encontrado no sistema</span>;
 }
 
+// Widget de controle de rotas permitidas por cliente
+function RouteAccessWidget({ phone }: { phone: string }) {
+  const { data, refetch } = trpc.spreadsheet.getClientRoutesByPhone.useQuery(
+    { phone: phone.replace(/\D/g, '') },
+    { staleTime: 0 }
+  );
+  const updateRoutesMut = trpc.spreadsheet.updateClientRoutesByPhone.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  const ROUTES = [
+    { key: 'gastos', label: 'Gastos', icon: '📊' },
+    { key: 'emprestimo', label: 'Empréstimos', icon: '💳' },
+  ];
+
+  // null = sem restrição (acesso total)
+  const hasRestriction = !!(data?.allowedRoutes);
+  const routes = (data?.allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
+
+  const handleToggle = async (routeKey: string, checked: boolean) => {
+    let newRoutes: string[];
+    if (!hasRestriction) {
+      // Primeira restrição: liberar todas exceto a que foi desmarcada
+      newRoutes = checked
+        ? ROUTES.map(r => r.key)
+        : ROUTES.map(r => r.key).filter(k => k !== routeKey);
+    } else {
+      newRoutes = checked
+        ? [...routes.filter(r => r !== routeKey), routeKey]
+        : routes.filter(r => r !== routeKey);
+    }
+    await updateRoutesMut.mutateAsync({
+      phone: phone.replace(/\D/g, ''),
+      allowedRoutes: newRoutes.join(','),
+    });
+  };
+
+  return (
+    <div className="w-full px-2.5 py-1.5 bg-gradient-to-r from-slate-700/20 to-slate-700/20 border border-slate-600/40 rounded-lg">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-semibold text-slate-300 flex items-center gap-1">
+          🔑 Rotas
+        </span>
+        {!hasRestriction && (
+          <span className="text-[9px] text-green-400 font-bold">TOTAL</span>
+        )}
+      </div>
+      <div className="flex flex-col gap-1">
+        {ROUTES.map(({ key, label, icon }) => {
+          const isAllowed = !hasRestriction || routes.includes(key);
+          return (
+            <label key={key} className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isAllowed}
+                onChange={(e) => handleToggle(key, e.target.checked)}
+                className="w-3.5 h-3.5 accent-primary"
+              />
+              <span className={`text-[10px] font-medium ${isAllowed ? 'text-green-300' : 'text-slate-500'}`}>
+                {icon} {label}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Botão de contador de indicações
 function ReferralCountButton({ phone, name }: { phone: string; name: string }) {
   const [, setLocation] = useLocation();
@@ -1184,6 +1253,7 @@ export default function AdminCustomers() {
                     </p>
                   )}
                   <ReferralCountButton phone={c.phone} name={c.name} />
+                  <RouteAccessWidget phone={c.phone} />
                   {!c.email && (
                     <p className="text-xs text-amber-400/80 flex items-center gap-1.5">
                       <span>⚠️</span> Sem email cadastrado
