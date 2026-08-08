@@ -709,11 +709,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         // Ir para a tela de criar senha (novo sistema)
         setGateStep("cpwd_create");
       }
-    } catch {
-      toast.error("Erro ao realizar cadastro. Tente novamente.");
+        } catch (err: any) {
+      const msg = err?.message || err?.data?.message || (err?.shape?.message) || '';
+      toast.error(msg || "Erro ao realizar cadastro. Tente novamente.");
+      console.error('[Register error]', err);
     }
   };
-
   // Helper base: ler arquivo como base64 puro (fallback bruto)
   const readFileAsBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {

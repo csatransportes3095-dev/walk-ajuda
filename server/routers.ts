@@ -356,7 +356,7 @@ export const appRouter = router({
 
   // === PRODUTOS / CARDS DE SERVIÍ"¡O ===
   products: router({
-    // Público: listar produtos ativos com opçÍÂµes, perguntas, documentos e tiers de garantia por opção
+    // Público: listar produtos ativos com opções, perguntas, documentos e tiers de garantia por opção
     listActive: publicProcedure.query(async () => {
       const prods = await listActiveProducts();
       const now = Date.now();
@@ -383,7 +383,7 @@ export const appRouter = router({
       return result;
     }),
 
-    // Admin: listar todos os produtos com opçÍÂµes, perguntas, documentos e tiers de garantia por opção
+    // Admin: listar todos os produtos com opções, perguntas, documentos e tiers de garantia por opção
     list: adminProcedure.query(async () => {
       const prods = await listProducts();
       const now = Date.now();
@@ -554,7 +554,7 @@ export const appRouter = router({
         delete: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
-        // Deletar documentos associados ÍÂ  opção
+        // Deletar documentos associados Â  opção
         await deleteOptionDocumentsByOptionId(input.id);
         // Deletar tiers de garantia associados
         await deleteWarrantyTiersByOptionId(input.id);
@@ -616,7 +616,7 @@ export const appRouter = router({
       }),
   }),
 
-  // === DOCUMENTOS DINÍ"šMICOS POR OPÍ"¡ÍÆ’O ===
+  // === DOCUMENTOS DINÂMICOS POR OPÍ"¡ÍÆ’O ===
   optionDocuments: router({
     list: adminProcedure
       .input(z.object({ optionId: z.number() }))
@@ -1086,7 +1086,7 @@ export const appRouter = router({
             try {
               const cartItemsList = JSON.parse(input.cartItems) as Array<{ service: string; nameOption: string; price: string }>;
               servicoHtml = `<h3>CARRINHO (${cartItemsList.length} itens)</h3>` +
-                cartItemsList.map((ci, idx) => `<p><strong>${idx + 1}. ${ci.service}</strong> ââ‚¬" ${ci.nameOption} ââ‚¬" ${ci.price}</p>`).join('') +
+                cartItemsList.map((ci, idx) => `<p><strong>${idx + 1}. ${ci.service}</strong> — ${ci.nameOption} — ${ci.price}</p>`).join('') +
                 (input.cartCouponCode ? `<p><strong>Cupom:</strong> ${input.cartCouponCode} (desconto: R$ ${(input.cartCouponDiscount ?? 0).toFixed(2).replace('.', ',')})</p>` : '') +
                 (input.cartTotal ? `<p><strong>Total Pago:</strong> R$ ${(input.cartTotal - (input.cartCouponDiscount ?? 0)).toFixed(2).replace('.', ',')}</p>` : '');
             } catch { servicoHtml = `<p><strong>Serviço:</strong> ${input.service}</p><p><strong>Opção:</strong> ${input.nameOption}</p>`; }
@@ -1500,7 +1500,7 @@ export const appRouter = router({
                   if (ans.length > 0) {
                     answersClientHtml = `
                       <div style="margin:16px 0;">
-                        <p style="color:#a855f7;font-weight:bold;font-size:14px;margin-bottom:8px;">Í°Å¸""¹ RESPOSTAS DO FORMULÍÂRIO</p>
+                        <p style="color:#a855f7;font-weight:bold;font-size:14px;margin-bottom:8px;">📋 RESPOSTAS DO FORMULÂRIO</p>
                         ${ans.map(a => {
                           const d = a.depth || 0;
                           const ml = d * 16;
@@ -1514,7 +1514,7 @@ export const appRouter = router({
               await sendEmailWithTimeout({
                 from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
                 to: input.email,
-                subject: `âÅ“"¦ Pedido Recebido ââ‚¬" ${emailBranding.siteTitle}`,
+                subject: `âÅ“"¦ Pedido Recebido — ${emailBranding.siteTitle}`,
                 html: emailPedidoRecebidoCliente({
                   ...emailBranding,
                   customerName: input.clientName,
@@ -1656,7 +1656,7 @@ export const appRouter = router({
         return { exists: !!customer, customer, hasOrders };
       }),
 
-    // Verificar cadastro por telefone (mutation ââ‚¬" aceita telefone canônico dinâmico)
+    // Verificar cadastro por telefone (mutation — aceita telefone canônico dinâmico)
     checkByPhoneMutation: publicProcedure
       .input(z.object({ phone: z.string().min(1) }))
       .mutation(async ({ input, ctx }) => {
@@ -1722,7 +1722,7 @@ export const appRouter = router({
         profilePhotoUrl: z.string().min(1, "Foto de perfil é obrigatória"),
       }))
       .mutation(async ({ input, ctx }) => {
-        // SEGURANÍ"¡A: foto é obrigatória no servidor
+        // SEGURANÇA: foto é obrigatória no servidor
         if (!input.profilePhotoUrl || input.profilePhotoUrl.trim() === '') {
           return { success: false, blocked: false, message: 'Foto de perfil é obrigatória para finalizar o cadastro.' };
         }
@@ -1815,12 +1815,12 @@ export const appRouter = router({
               });
               console.log(`[Indicação] E-mail enviado ao indicador ${referrer.email}`);
             } else {
-              console.log(`[Indicação] Indicador ${referrerCleanPhone} sem e-mail cadastrado ââ‚¬" notificação não enviada`);
+              console.log(`[Indicação] Indicador ${referrerCleanPhone} sem e-mail cadastrado — notificação não enviada`);
             }
           } catch (e) { console.error('Erro ao notificar indicador:', e); }
         }
         
-        // Notificação: finalização do cadastro ââ‚¬" enviado em segundo plano para não bloquear
+        // Notificação: finalização do cadastro — enviado em segundo plano para não bloquear
         void (async () => {
           try {
             const emailTo = await getSetting('contact_email') || 'h2@h2colombiano.com';
@@ -1833,7 +1833,7 @@ export const appRouter = router({
             await transporter.sendMail({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: emailTo,
-              subject: `âÅ“"¦ Cadastro finalizado ââ‚¬" ${safeInput.name} (${safeInput.phone})`,
+              subject: `âÅ“"¦ Cadastro finalizado — ${safeInput.name} (${safeInput.phone})`,
               html: emailCadastroFinalizadoAdmin({
                 ...(await getEmailBranding()),
                 name: safeInput.name,
@@ -2152,7 +2152,7 @@ export const appRouter = router({
           await transporter.sendMail({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: emailTo,
-            subject: `Í°Å¸"Â¸ Novo cliente iniciou cadastro ââ‚¬" ${input.phone}`,
+            subject: `Í°Å¸"Â¸ Novo cliente iniciou cadastro — ${input.phone}`,
             html: emailInicioCadastroAdmin({
               ...emailBranding,
               phone: input.phone,
@@ -2200,7 +2200,7 @@ export const appRouter = router({
         const db = await (await import('./db')).getDb();
         if (!db) return { success: false };
         const phone = input.phone.replace(/\D/g, '');
-        // Remover permissÍÂµes antigas e inserir as novas
+        // Remover permissões antigas e inserir as novas
         await db.execute(sql`DELETE FROM customerProductAccess WHERE phone = ${phone}`);
         for (const productId of input.productIds) {
           await db.execute(sql`INSERT INTO customerProductAccess (phone, productId) VALUES (${phone}, ${productId})`);
@@ -2796,7 +2796,7 @@ export const appRouter = router({
 
       // ---- Pedidos Í"RFÍÆ’OS ----
       // Alguns pedidos têm histórico (orderStatusHistory) cujo registrationId NÍÆ’O existe em
-      // accessCodePhones (dados importados/migrados de versÍÂµes anteriores). Sem isto eles
+      // accessCodePhones (dados importados/migrados de versões anteriores). Sem isto eles
       // ficam invisíveis no admin, apesar de o cliente enxergá-los em "Acompanhar Pedido"
       // (que busca por telefone). Aqui reconstruímos uma linha virtual de acp para cada
       // registrationId órfão, ligando ao cliente pelo telefone quando possível.
@@ -3287,7 +3287,7 @@ export const appRouter = router({
         note: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        // NUNCA inserir 'recebido' via update do admin ââ‚¬" esse status é exclusivo do sistema
+        // NUNCA inserir 'recebido' via update do admin — esse status é exclusivo do sistema
         // (inserir 'recebido' cria um novo sub-pedido duplicado)
         if (input.status === 'recebido') {
           return { success: false, error: 'Status recebido não pode ser definido manualmente' };
@@ -3343,7 +3343,7 @@ export const appRouter = router({
               throw new Error('Mail channel not configured');
             }
             const emailBranding = await getEmailBranding();
-            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Í°Å¸""¹ Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
+            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml = statusInfo.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo.description}</p></div>` : '';
             // Buscar PIN gerado para o cliente (tabela customerPins)
             let phonePin: string = input.customerPhone ? input.customerPhone.replace(/\D/g, '').slice(-4) : '????';
@@ -3361,7 +3361,7 @@ export const appRouter = router({
             await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.customerEmail,
-              subject: `${statusLabel} ââ‚¬" ${emailBranding.siteTitle}`,
+              subject: `${statusLabel} — ${emailBranding.siteTitle}`,
               html: emailStatusCliente({
                 ...emailBranding,
                 customerName: input.customerName || undefined,
@@ -3498,7 +3498,7 @@ export const appRouter = router({
               throw new Error('Mail channel not configured');
             }
             const emailBranding = await getEmailBranding();
-            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Í°Å¸""¹ Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
+            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml = statusInfo.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo.description}</p></div>` : '';
             // Buscar PIN gerado para o cliente (tabela customerPins)
             let phonePin: string = input.customerPhone ? input.customerPhone.replace(/\D/g, '').slice(-4) : '????';
@@ -3529,9 +3529,9 @@ export const appRouter = router({
             const pedidoRows: string[] = [];
             if (input.customerNumber) pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Cadastro</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">*${input.customerNumber}</td></tr>`);
             if (input.orderNumber) pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">NÍ‚º Pedido</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">#${input.orderNumber}</td></tr>`);
-            const svcLabelU = [input.serviceName, input.serviceOption].filter(Boolean).join(' ââ‚¬" ');
+            const svcLabelU = [input.serviceName, input.serviceOption].filter(Boolean).join(' — ');
             if (svcLabelU) pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Serviço</td><td style="color:#fff;font-size:13px;padding:4px 0;">${svcLabelU}</td></tr>`);
-            const localidadeU = [input.customerCity, input.customerUf].filter(Boolean).join(' ââ‚¬" ');
+            const localidadeU = [input.customerCity, input.customerUf].filter(Boolean).join(' — ');
             if (localidadeU) pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Cidade</td><td style="color:#fff;font-size:13px;padding:4px 0;">${localidadeU}</td></tr>`);
             if (input.deliveryEstimate) {
               const previsaoU = new Date(input.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -3560,7 +3560,7 @@ export const appRouter = router({
                       loginDataHtml += `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:11px;font-weight:bold;margin:0 0 10px;text-transform:uppercase;letter-spacing:1px;">Í°Å¸"Â Seus Dados de Acesso</p><table style="width:100%;border-collapse:collapse;">${loginRows2.join('')}</table></div>`;
                     }
                     if (ld.loginNotes) {
-                      loginDataHtml += `<div style="background:#0d1a2b;border:1px solid #3b82f640;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#60a5fa;font-size:11px;font-weight:bold;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;">Í°Å¸"Â InstruçÍÂµes</p><p style="color:#ccc;font-size:13px;margin:0;white-space:pre-line;line-height:1.7;">${ld.loginNotes}</p></div>`;
+                      loginDataHtml += `<div style="background:#0d1a2b;border:1px solid #3b82f640;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#60a5fa;font-size:11px;font-weight:bold;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;">Í°Å¸"Â Instruções</p><p style="color:#ccc;font-size:13px;margin:0;white-space:pre-line;line-height:1.7;">${ld.loginNotes}</p></div>`;
                     }
                   }
                 }
@@ -3569,7 +3569,7 @@ export const appRouter = router({
             await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.customerEmail,
-              subject: `${statusLabel} ââ‚¬" ${emailBranding.siteTitle}`,
+              subject: `${statusLabel} — ${emailBranding.siteTitle}`,
               html: emailStatusCliente({
                 ...emailBranding,
                 customerName: input.customerName || undefined,
@@ -3733,7 +3733,7 @@ export const appRouter = router({
           if (stRows && stRows.length > 0 && stRows[0].key) initialStatusForHidden = stRows[0].key;
         } catch (e) { /* fallback */ }
 
-        // Função de divisão em sub-pedidos ââ‚¬" IDÍÅ NTICA ÍÂ  do admin (history em ASC)
+        // Função de divisão em sub-pedidos — IDÍÅ NTICA Â  do admin (history em ASC)
         function splitIntoSubOrdersForHidden(historyAsc: typeof allHistory): typeof allHistory[] {
           if (historyAsc.length === 0) return [];
           const result: typeof allHistory[] = [];
@@ -3751,7 +3751,7 @@ export const appRouter = router({
           return result.reverse();
         }
 
-        // Agrupar por registrationId em ordem ASC (mais antigo primeiro ââ‚¬" igual ao admin)
+        // Agrupar por registrationId em ordem ASC (mais antigo primeiro — igual ao admin)
         const byRegId = new Map<number, typeof allHistory>();
         for (const entry of [...allHistory].reverse()) { // allHistory é DESC, reverter para ASC
           const regId = entry.registrationId;
@@ -3822,7 +3822,7 @@ export const appRouter = router({
           const statusInfo2 = await getStatusInfoFromDb(input.status);
           const statusLabel = statusInfo2.label;
           const emailBranding = await getEmailBranding();
-          const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Í°Å¸""¹ Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
+          const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
           const descriptionHtml2 = statusInfo2.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo2.description}</p></div>` : '';
           // Buscar PIN gerado para o cliente (tabela customerPins)
           let phonePin: string | null = input.customerPhone ? input.customerPhone.replace(/\D/g, '').slice(-4) : null;
@@ -3841,9 +3841,9 @@ export const appRouter = router({
           const reRows: string[] = [];
           if (input.customerNumber) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Cadastro</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">*${input.customerNumber}</td></tr>`);
           if (input.orderNumber) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">NÍ‚º Pedido</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">#${input.orderNumber}</td></tr>`);
-          const svcLabelR = [input.serviceName, input.serviceOption].filter(Boolean).join(' ââ‚¬" ');
+          const svcLabelR = [input.serviceName, input.serviceOption].filter(Boolean).join(' — ');
           if (svcLabelR) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Serviço</td><td style="color:#fff;font-size:13px;padding:4px 0;">${svcLabelR}</td></tr>`);
-          const localidadeR = [input.customerCity, input.customerUf].filter(Boolean).join(' ââ‚¬" ');
+          const localidadeR = [input.customerCity, input.customerUf].filter(Boolean).join(' — ');
           if (localidadeR) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Cidade</td><td style="color:#fff;font-size:13px;padding:4px 0;">${localidadeR}</td></tr>`);
           if (input.deliveryEstimate) {
             const previsaoR = new Date(input.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -3858,7 +3858,7 @@ export const appRouter = router({
           await sendMailDirect({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: input.customerEmail,
-            subject: `[Reenvio] ${statusLabel} ââ‚¬" ${emailBranding.siteTitle}`,
+            subject: `[Reenvio] ${statusLabel} — ${emailBranding.siteTitle}`,
               html: emailStatusCliente({
                 ...emailBranding,
                 customerName: input.customerName || undefined,
@@ -4375,7 +4375,7 @@ export const appRouter = router({
         return rows.map((r: { statusKey: string }) => r.statusKey);
       }),
 
-    // Admin: relatório de comissÍÂµes (pedidos com indicador)
+    // Admin: relatório de comissões (pedidos com indicador)
     listCommissions: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) return [];
@@ -4563,7 +4563,7 @@ export const appRouter = router({
             referredByPhone: input.referredByPhone,
           });
          } else {
-          // Atualizar dados existentes ââ‚¬" NÍÆ’O sobrescrever referredBy se cliente já existe
+          // Atualizar dados existentes — NÍÆ’O sobrescrever referredBy se cliente já existe
           // Indicação só conta para clientes novos (primeiro cadastro)
           await updateCustomer(customer.id, {
             name: input.name,
@@ -4619,7 +4619,7 @@ export const appRouter = router({
           try {
             if (!hasMailChannel()) throw new Error('Mail channel not configured');
             const emailBranding = await getEmailBranding();
-            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Í°Å¸""¹ Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
+            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml3 = statusInfo3.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo3.description}</p></div>` : '';
             // Buscar PIN do cliente
             let phonePin3: string | null = input.phone ? input.phone.replace(/\D/g, '').slice(-4) : null;
@@ -4638,7 +4638,7 @@ export const appRouter = router({
             await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.email,
-              subject: `${statusLabel} ââ‚¬" ${emailBranding.siteTitle}`,
+              subject: `${statusLabel} — ${emailBranding.siteTitle}`,
               html: emailStatusCliente({
                 ...emailBranding,
                 customerName: input.name || undefined,
@@ -4773,9 +4773,9 @@ export const appRouter = router({
             if (!hasMailChannel()) throw new Error('Mail channel not configured');
             const emailBranding = await getEmailBranding();
             const itemsHtml = input.items.map((item, i) =>
-              `<tr><td style="padding:6px 8px;color:#ccc;font-size:13px;border-bottom:1px solid #ffffff10;">${i + 1}. ${item.serviceName}${item.serviceOption ? ` ââ‚¬" ${item.serviceOption}` : ''}</td></tr>`
+              `<tr><td style="padding:6px 8px;color:#ccc;font-size:13px;border-bottom:1px solid #ffffff10;">${i + 1}. ${item.serviceName}${item.serviceOption ? ` — ${item.serviceOption}` : ''}</td></tr>`
             ).join('');
-            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">Í°Å¸""¹ Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
+            const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             // Buscar PIN do cliente
             let phonePinM: string | null = input.phone ? input.phone.replace(/\D/g, '').slice(-4) : null;
             try {
@@ -4793,7 +4793,7 @@ export const appRouter = router({
             await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.email,
-              subject: `${statusLabel} ââ‚¬" ${emailBranding.siteTitle}`,
+              subject: `${statusLabel} — ${emailBranding.siteTitle}`,
               html: emailStatusCliente({
                 ...emailBranding,
                 customerName: input.name || undefined,
@@ -4886,7 +4886,7 @@ export const appRouter = router({
         return { blocked: (row?.blocked ?? 0) === 1, attempts: row?.attempts ?? 0 };
       }),
 
-    // Admin: busca de emergência ââ‚¬" busca em TODAS as pastas (ativas, arquivo, rgcnh, pastas personalizadas)
+    // Admin: busca de emergência — busca em TODAS as pastas (ativas, arquivo, rgcnh, pastas personalizadas)
     emergencySearch: adminProcedure
       .input(z.object({ term: z.string().min(1) }))
       .query(async ({ input }) => {
@@ -4995,7 +4995,7 @@ export const appRouter = router({
             folderLabel = 'Í°Å¸ª· RG/CNH Aprovado';
             folderType = 'rgcnh';
           } else {
-            folderLabel = 'Í°Å¸""¹ Pedidos Ativos';
+            folderLabel = '📋 Pedidos Ativos';
             folderType = 'active';
           }
           return {
@@ -5024,7 +5024,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ConfiguraçÍÂµes globais do app
+  // Configurações globais do app
   appSettings: router({
     // Público: ler modo de captura de foto
     getPhotoMode: publicProcedure.query(async () => {
@@ -5171,9 +5171,9 @@ export const appRouter = router({
       }),
   }),
 
-  // â"â‚¬â"â‚¬ AnotaçÍÂµes Internas do Admin por Pedido â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬
+  // â"â‚¬â"â‚¬ Anotações Internas do Admin por Pedido â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬
   orderNotes: router({
-    // Buscar anotação do pedido (legado ââ‚¬" retorna primeiro bloco)
+    // Buscar anotação do pedido (legado — retorna primeiro bloco)
     get: adminProcedure
       .input(z.object({ registrationId: z.number().int() }))
       .query(async ({ input }) => {
@@ -5481,7 +5481,7 @@ export const appRouter = router({
 
   // === SOLICITAÍ"¡Í"¢ES DE DOCUMENTOS PENDENTES ===
   docRequests: router({
-    // Admin: listar solicitaçÍÂµes de um pedido
+    // Admin: listar solicitações de um pedido
     listByRegistration: adminProcedure
       .input(z.object({ registrationId: z.number() }))
       .query(async ({ input }) => {
@@ -5523,7 +5523,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Público: cliente busca solicitaçÍÂµes pendentes pelo telefone
+    // Público: cliente busca solicitações pendentes pelo telefone
     getPendingForClient: publicProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
@@ -5781,7 +5781,7 @@ export const appRouter = router({
       const subtitle = await getSetting('raffle_page_subtitle') || 'Participe do nosso sorteio exclusivo!';
       return { passwordRequired: enabled === '1', title, subtitle };
     }),
-    // Admin: obter configuraçÍÂµes do sorteio
+    // Admin: obter configurações do sorteio
     getConfig: adminProcedure.query(async () => {
       const password = await getSetting('raffle_password') || '';
       const enabled = await getSetting('raffle_password_enabled') || '0';
@@ -5789,7 +5789,7 @@ export const appRouter = router({
       const subtitle = await getSetting('raffle_page_subtitle') || 'Participe do nosso sorteio exclusivo!';
       return { password, enabled, title, subtitle };
     }),
-    // Admin: salvar configuraçÍÂµes do sorteio
+    // Admin: salvar configurações do sorteio
     saveConfig: adminProcedure
       .input(z.object({
         password: z.string(),
@@ -5865,7 +5865,7 @@ export const appRouter = router({
           const phones: string[] = JSON.parse(broadcast.targetPhones);
           recipients = allCustomers.filter(c => phones.includes(c.phone));
         }
-        // Filtrar clientes bloqueados ââ‚¬" não recebem nenhuma comunicação
+        // Filtrar clientes bloqueados — não recebem nenhuma comunicação
         recipients = recipients.filter(c => !(c as any).blocked || (c as any).blocked === 0);
         // Filtrar apenas clientes com e-mail
         const emailRecipients = recipients.filter(c => c.email && c.email.trim() !== '');
@@ -5950,7 +5950,7 @@ export const appRouter = router({
                 ${imageHtml}
               </div>
               <div style="background:#1a1a2e;padding:16px;text-align:center">
-                <p style="color:#6b7280;font-size:12px;margin:0">H2 COLOMBIANO ââ‚¬" h2colombiano.com</p>
+                <p style="color:#6b7280;font-size:12px;margin:0">H2 COLOMBIANO — h2colombiano.com</p>
               </div>
             </div>`;
 
@@ -6406,7 +6406,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Registrar uso de link de indicação (público) ââ‚¬" chamado após cadastro bem-sucedido
+    // Registrar uso de link de indicação (público) — chamado após cadastro bem-sucedido
     recordUsage: publicProcedure
       .input(z.object({
         code: z.string(),
@@ -6457,7 +6457,7 @@ export const appRouter = router({
             // Sessão ainda válida
             return { success: true, expiresAt: exp, ownerName: link.customerName, sessionId: row.id };
           }
-          // Sessão expirada ââ‚¬" não criar nova, exigir senha
+          // Sessão expirada — não criar nova, exigir senha
           return { success: false, reason: 'Sessão expirada', expired: true };
         }
         // Criar nova entrada em accessCodePhones com codeId = 0 (sem senha VIP)
@@ -6502,7 +6502,7 @@ export const appRouter = router({
         return { valid: false, expired: true };
       }),
 
-    // Validar código de indicação (público) ââ‚¬" verifica se código existe e se telefone é novo
+    // Validar código de indicação (público) — verifica se código existe e se telefone é novo
     validateCode: publicProcedure
       .input(z.object({ code: z.string(), phone: z.string().optional() }))
       .query(async ({ input }) => {
@@ -6560,7 +6560,7 @@ export const appRouter = router({
       }),
   }),
 
-  // === FORMULÍÂRIO DINÍ"šMICO - TELA DE ACOMPANHAMENTO ===
+  // === FORMULÂRIO DINÂMICO - TELA DE ACOMPANHAMENTO ===
   trackingQuestions: router({
     // Admin: listar todas as perguntas
     list: adminProcedure.query(async () => {
@@ -7100,7 +7100,7 @@ export const appRouter = router({
 
   // ===================== CONFIGURAÍ"¡ÍÆ’O DAS PASTAS FIXAS =====================
   folderConfig: router({
-    // Buscar configuraçÍÂµes de todas as pastas fixas
+    // Buscar configurações de todas as pastas fixas
     getAll: adminProcedure.query(async () => {
       const { getDb } = await import('./db');
       const { folderConfig: folderConfigTable } = await import('../drizzle/schema');
@@ -7248,9 +7248,9 @@ export const appRouter = router({
       }),
   }),
 
-  // BotÍÂµes extras da tela inicial do cliente (antes do login) ââ‚¬" gerenciáveis pelo admin
+  // Botões extras da tela inicial do cliente (antes do login) — gerenciáveis pelo admin
   homeButtons: router({
-    // Público: lista apenas os botÍÂµes ativos, em ordem (usado no WelcomeScreen)
+    // Público: lista apenas os botões ativos, em ordem (usado no WelcomeScreen)
     listPublic: publicProcedure.query(async () => await listActiveHomeButtons()),
     // Admin: lista todos (ativos e inativos)
     list: adminProcedure.query(async () => await listHomeButtons()),
@@ -7633,7 +7633,7 @@ export const appRouter = router({
       }),
   }),
   media: router({
-    // Upload de foto ou vídeo pelo admin ââ‚¬" retorna URL pública hospedada no Manus
+    // Upload de foto ou vídeo pelo admin — retorna URL pública hospedada no Manus
     upload: adminProcedure
       .input(z.object({
         fileBase64: z.string(),
