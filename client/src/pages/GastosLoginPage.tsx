@@ -1,34 +1,13 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import {
-  AlertCircle, Loader2, BarChart3, Phone, Lock, Clock, CheckCircle2, Eye, EyeOff, MessageCircle
+  AlertCircle, Loader2, BarChart3, Phone, Lock, Clock, CheckCircle2,
+  Eye, EyeOff, User, Mail, MapPin, Camera, Upload
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
-
-// Componente: botão de solicitar cadastro via WhatsApp
-function WhatsAppRequestButton({ phone }: { phone: string }) {
-  const { data: settings } = trpc.settings.getAll.useQuery();
-  const rawNumber = settings?.whatsapp_number || '5511978307371';
-  const adminNumber = rawNumber.replace(/\D/g, '');
-  const clientPhone = phone.replace(/\D/g, '');
-  const message = encodeURIComponent(
-    `Olá! Gostaria de solicitar meu cadastro no Gestor de Gastos Walk Ajuda.\nMeu número de telefone é: ${clientPhone || phone}`
-  );
-  const href = `https://wa.me/${adminNumber}?text=${message}`;
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center justify-center gap-2.5 w-full h-12 rounded-xl font-semibold text-white bg-[#25D366] hover:bg-[#1ebe5d] active:scale-[0.97] transition-all duration-150 shadow-lg shadow-green-900/30"
-    >
-      <MessageCircle className="w-5 h-5" />
-      Solicitar cadastro pelo WhatsApp
-    </a>
-  );
-}
+import { toast } from 'sonner';
 
 interface GastosLoginPageProps {
   onLoginSuccess: (token: string, clientId: number, clientName: string) => void;
@@ -36,21 +15,36 @@ interface GastosLoginPageProps {
 
 type Step =
   | 'phone'             // Etapa 1: digitar telefone
-  | 'create_password'   // Etapa 2: criar senha (cliente sem senha - APENAS primeiro acesso)
-  | 'enter_password'    // Etapa 2b: digitar senha (cliente já tem senha)
-  | 'pending_approval'  // Aguardando admin definir validade
-  | 'expired'           // Senha expirada - aguardar admin renovar
-  | 'expired_no_renew'  // Senha venceu e admin não renovou (sem senha ativa)
-  | 'not_found'         // Telefone sem cadastro
+  | 'register'          // Etapa 1b: cadastro completo (não encontrado)
+  | 'register_done'     // Cadastro concluído — aguardar senha
+  | 'create_password'   // Etapa 2: criar senha
+  | 'enter_password'    // Etapa 2b: digitar senha existente
+  | 'pending_approval'  // Aguardando admin
+  | 'expired'           // Senha expirada
+  | 'expired_no_renew'  // Senha venceu sem renovação
   | 'blocked';          // Bloqueado
+
+// Helper: converte File para base64
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove o prefixo data:image/...;base64,
+      resolve(result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
   const { data: settings } = trpc.settings.getAll.useQuery();
   const gastosLogoUrl = settings?.gastos_logo_url || '';
+
   const [step, setStep] = useState<Step>('phone');
-  const [phone, setPhone] = useState(''); // telefone
-  const [cpfInput, setCpfInput] = useState(''); // CPF (campo separado)
-  // Qual campo está ativo: 'phone' | 'cpf' | null
+  const [phone, setPhone] = useState('');
+  const [cpfInput, setCpfInput] = useState('');
   const activeField = phone.replace(/\D/g, '').length > 0 ? 'phone' : cpfInput.replace(/\D/g, '').length > 0 ? 'cpf' : null;
   const [clientName, setClientName] = useState('');
   const [password, setPassword] = useState('');
@@ -61,20 +55,30 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [passwordCreated, setPasswordCreated] = useState(false);
 
+  // Campos de cadastro
+  const [regName, setRegName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regCpf, setRegCpf] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regCity, setRegCity] = useState('');
+  const [regUf, setRegUf] = useState('');
+  const [regPhoto, setRegPhoto] = useState<File | null>(null);
+  const [regPhotoPreview, setRegPhotoPreview] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const checkPhoneMutation = trpc.spreadsheet.checkPhone.useMutation();
   const clientCreatePasswordMutation = trpc.spreadsheet.clientCreatePassword.useMutation();
   const clientCreatePasswordAutoMutation = trpc.spreadsheet.clientCreatePasswordAuto.useMutation();
   const loginMutation = trpc.spreadsheet.login.useMutation();
   const passwordModeQuery = trpc.spreadsheet.getPasswordMode.useQuery();
   const isAutoMode = passwordModeQuery.data?.mode === 'auto';
+  const registerMutation = trpc.customers.register.useMutation();
+  const uploadPhotoMutation = trpc.customers.uploadProfilePhoto.useMutation();
 
-  // Normaliza telefone: remove espaços, traços, parênteses e código do país (55)
   const normalizePhone = (raw: string): string => {
-    let d = raw.replace(/\D/g, ''); // só dígitos
-    // Remove código do país: 55 no início se resultar em 12-13 dígitos
-    if ((d.length === 12 || d.length === 13) && d.startsWith('55')) {
-      d = d.slice(2);
-    }
+    let d = raw.replace(/\D/g, '');
+    if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2);
     return d.slice(0, 11);
   };
 
@@ -102,7 +106,6 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
     setError('');
     const cleanPhone = phone.replace(/\D/g, '');
     const cleanCpf = cpfInput.replace(/\D/g, '');
-    // Prioridade: CPF se preenchido (11 dígitos), senão telefone
     const useCpf = cleanCpf.length === 11;
     const cleanId = useCpf ? cleanCpf : cleanPhone;
     if (cleanId.length < 10) {
@@ -115,7 +118,9 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
       setClientName(result.clientName || '');
       switch (result.status) {
         case 'not_found':
-          setStep('not_found');
+          // Pré-preencher o telefone no formulário de cadastro
+          setRegPhone(cleanPhone);
+          setStep('register');
           break;
         case 'blocked':
           setStep('blocked');
@@ -143,29 +148,101 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
     }
   };
 
-  // Etapa 2: cliente cria senha
+  // Selecionar foto
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRegPhoto(file);
+    const url = URL.createObjectURL(file);
+    setRegPhotoPreview(url);
+  };
+
+  // Cadastro completo
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    const cleanPhone = regPhone.replace(/\D/g, '');
+    const cleanCpf = regCpf.replace(/\D/g, '');
+
+    if (!regName.trim()) { setError('Informe seu nome completo'); return; }
+    if (cleanPhone.length < 10) { setError('Informe um telefone válido'); return; }
+    if (cleanCpf.length !== 11) { setError('Informe um CPF válido (11 dígitos)'); return; }
+    if (!regEmail.trim() || !regEmail.includes('@')) { setError('Informe um e-mail válido'); return; }
+    if (!regCity.trim()) { setError('Informe sua cidade'); return; }
+    if (!regUf.trim() || regUf.length !== 2) { setError('Informe o estado (UF) com 2 letras'); return; }
+    if (!regPhoto) { setError('Selecione uma foto de perfil'); return; }
+
+    setIsLoading(true);
+    setIsUploadingPhoto(true);
+
+    try {
+      // 1. Upload da foto
+      const base64 = await fileToBase64(regPhoto);
+      const uploadResult = await uploadPhotoMutation.mutateAsync({
+        imageBase64: base64,
+        phone: cleanPhone,
+      });
+      setIsUploadingPhoto(false);
+
+      if (!uploadResult?.url) {
+        setError('Erro ao enviar foto. Tente novamente.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Registrar cliente
+      const result = await registerMutation.mutateAsync({
+        name: regName.trim(),
+        phone: cleanPhone,
+        email: regEmail.trim(),
+        cpf: formatCpf(regCpf),
+        city: regCity.trim(),
+        uf: regUf.toUpperCase().slice(0, 2),
+        profilePhotoUrl: uploadResult.url,
+      });
+
+      if (result.blocked) {
+        setError(result.message || 'Cadastro não permitido.');
+        setIsLoading(false);
+        return;
+      }
+      if (result.duplicateCpf) {
+        setError(result.message || 'CPF já registrado no sistema.');
+        setIsLoading(false);
+        return;
+      }
+      if (!result.success) {
+        setError(result.message || 'Erro ao concluir cadastro. Verifique os dados.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 3. Cadastro OK — agora criar senha
+      toast.success('Cadastro realizado! Agora crie sua senha de acesso.');
+      // Usar o telefone do cadastro para o próximo passo
+      setPhone(cleanPhone);
+      setClientName(regName.trim());
+      setStep('create_password');
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao realizar cadastro. Tente novamente.');
+    } finally {
+      setIsLoading(false);
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  // Criar senha
   const handleCreatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('As senhas não coincidem');
-      return;
-    }
+    if (password.length < 6) { setError('A senha deve ter pelo menos 6 caracteres'); return; }
+    if (password !== confirmPassword) { setError('As senhas não coincidem'); return; }
     setIsLoading(true);
     try {
-      const cleanPhone = phone.replace(/\D/g, '');
+      const cleanPhone = (regPhone || phone).replace(/\D/g, '');
       if (isAutoMode) {
-        // Modo AUTO: cria senha com 30 dias, sem precisar de aprovação do ADM
-        const result = await clientCreatePasswordAutoMutation.mutateAsync({
-          phone: cleanPhone,
-          password,
-          confirmPassword,
-        });
-        // Fazer login automático após criar a senha
+        await clientCreatePasswordAutoMutation.mutateAsync({ phone: cleanPhone, password, confirmPassword });
         const loginResult = await loginMutation.mutateAsync({ phone: cleanPhone, password });
         if (loginResult.success) {
           localStorage.setItem('gastos_token', loginResult.token);
@@ -174,12 +251,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
           onLoginSuccess(loginResult.token, loginResult.clientId, loginResult.clientName);
         }
       } else {
-        // Modo MANUAL: cria senha pendente, aguarda ADM liberar
-        await clientCreatePasswordMutation.mutateAsync({
-          phone: cleanPhone,
-          password,
-          confirmPassword,
-        });
+        await clientCreatePasswordMutation.mutateAsync({ phone: cleanPhone, password, confirmPassword });
         setPasswordCreated(true);
         setStep('pending_approval');
       }
@@ -198,17 +270,13 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
     }
   };
 
-  // Etapa 2b: login com senha existente
+  // Login com senha existente
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
     try {
-      const result = await loginMutation.mutateAsync({
-        phone: phone.replace(/\D/g, ''),
-        password,
-        isCpf: false,
-      });
+      const result = await loginMutation.mutateAsync({ phone: phone.replace(/\D/g, ''), password, isCpf: false });
       if (result.success) {
         localStorage.setItem('gastos_token', result.token);
         localStorage.setItem('gastos_clientId', result.clientId.toString());
@@ -217,13 +285,9 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
       }
     } catch (err: any) {
       const msg = err?.message || '';
-      if (msg === 'PENDING_APPROVAL') {
-        setStep('pending_approval');
-      } else if (msg === 'Senha expirada') {
-        setStep('expired');
-      } else {
-        setError(msg || 'Senha incorreta');
-      }
+      if (msg === 'PENDING_APPROVAL') setStep('pending_approval');
+      else if (msg === 'Senha expirada') setStep('expired');
+      else setError(msg || 'Senha incorreta');
     } finally {
       setIsLoading(false);
     }
@@ -237,24 +301,25 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
     setPasswordCreated(false);
   };
 
+  const UF_LIST = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#070a16] via-[#0a0f22] to-[#070a16] text-foreground flex items-center justify-center p-4">
       <Card className="relative w-full max-w-md overflow-hidden bg-card/80 backdrop-blur border border-primary/20 rounded-2xl shadow-lg shadow-primary/10 ring-1 ring-primary/10">
-        {/* Brilhos decorativos */}
         <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-primary/20 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-20 -left-20 h-40 w-40 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
 
         <div className="relative p-8">
           {/* Header */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-6">
             <div className="w-16 h-16 bg-primary/15 border border-primary/30 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[0_0_24px_-4px_var(--primary)]">
               {gastosLogoUrl ? (
-                <img src={gastosLogoUrl} alt="Logo Gastos" className="w-12 h-12 object-contain rounded-xl" />
+                <img src={gastosLogoUrl} alt="Logo" className="w-12 h-12 object-contain rounded-xl" />
               ) : (
                 <BarChart3 className="w-8 h-8 text-primary" />
               )}
             </div>
-            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-primary/70 bg-clip-text text-transparent mb-2">
+            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-primary/70 bg-clip-text text-transparent mb-1">
               GASTOS WALK AJUDA
             </h1>
             <p className="text-sm text-muted-foreground">Controle seus ganhos e gastos</p>
@@ -271,49 +336,178 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               )}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
-                  <Phone className="w-4 h-4 inline mr-1.5 opacity-70" />
-                  Telefone
+                  <Phone className="w-4 h-4 inline mr-1.5 opacity-70" />Telefone
                 </label>
                 <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="(11) 99999-9999"
+                  type="text" inputMode="numeric" placeholder="(11) 99999-9999"
                   value={formatPhone(phone)}
                   onChange={(e) => setPhone(normalizePhone(e.target.value))}
-                  disabled={isLoading}
-                  autoFocus
-                  className="h-11 bg-input border-border text-foreground placeholder:text-muted-foreground/70 focus-visible:border-ring"
+                  disabled={isLoading} autoFocus
+                  className="h-11 bg-input border-border text-foreground placeholder:text-muted-foreground/70"
                 />
               </div>
-              {/* Campo CPF: só aparece se telefone estiver vazio */}
               {activeField !== 'phone' && (
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  CPF <span className="text-muted-foreground font-normal text-xs">{activeField === 'cpf' ? '' : '(opcional)'}</span>
-                </label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="000.000.000-00"
-                  value={formatCpf(cpfInput)}
-                  onChange={(e) => setCpfInput(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                  disabled={isLoading}
-                  className="h-11 bg-input border-border text-foreground placeholder:text-muted-foreground/70 focus-visible:border-ring"
-                />
-                {activeField === null && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Preencha telefone ou CPF para continuar
-                  </p>
-                )}
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    CPF <span className="text-muted-foreground font-normal text-xs">{activeField === 'cpf' ? '' : '(opcional)'}</span>
+                  </label>
+                  <Input
+                    type="text" inputMode="numeric" placeholder="000.000.000-00"
+                    value={formatCpf(cpfInput)}
+                    onChange={(e) => setCpfInput(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                    disabled={isLoading}
+                    className="h-11 bg-input border-border text-foreground placeholder:text-muted-foreground/70"
+                  />
+                </div>
               )}
               <Button
                 type="submit"
                 disabled={isLoading || (phone.replace(/\D/g, '').length < 10 && cpfInput.replace(/\D/g, '').length !== 11)}
-                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg shadow-[0_0_16px_-4px_var(--primary)] transition-all duration-200 disabled:opacity-50"
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg"
               >
                 {isLoading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verificando...</> : 'Continuar'}
               </Button>
+            </form>
+          )}
+
+          {/* ETAPA CADASTRO COMPLETO */}
+          {step === 'register' && (
+            <form onSubmit={handleRegister} className="space-y-3">
+              <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg mb-1">
+                <p className="text-sm text-blue-300 font-medium">📋 Novo cadastro</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Preencha seus dados para criar sua conta.</p>
+              </div>
+              {error && (
+                <div className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                  <p className="text-sm text-red-300">{error}</p>
+                </div>
+              )}
+
+              {/* Foto de perfil */}
+              <div className="flex flex-col items-center gap-2">
+                <div
+                  className="w-20 h-20 rounded-full border-2 border-dashed border-primary/40 flex items-center justify-center cursor-pointer hover:border-primary/70 transition-colors overflow-hidden bg-card/60"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {regPhotoPreview ? (
+                    <img src={regPhotoPreview} alt="Foto" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="text-center">
+                      <Camera className="w-6 h-6 text-muted-foreground mx-auto" />
+                      <span className="text-xs text-muted-foreground">Foto</span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  <Upload className="w-3 h-3" />
+                  {regPhoto ? 'Trocar foto' : 'Selecionar foto de perfil *'}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  className="hidden"
+                  onChange={handlePhotoSelect}
+                />
+              </div>
+
+              {/* Nome */}
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">
+                  <User className="w-3 h-3 inline mr-1 opacity-70" />Nome completo *
+                </label>
+                <Input
+                  type="text" placeholder="Seu nome completo"
+                  value={regName} onChange={(e) => setRegName(e.target.value)}
+                  disabled={isLoading}
+                  className="h-10 bg-input border-border text-foreground text-sm"
+                />
+              </div>
+
+              {/* Telefone */}
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">
+                  <Phone className="w-3 h-3 inline mr-1 opacity-70" />Telefone (WhatsApp) *
+                </label>
+                <Input
+                  type="text" inputMode="numeric" placeholder="(11) 99999-9999"
+                  value={formatPhone(regPhone)}
+                  onChange={(e) => setRegPhone(normalizePhone(e.target.value))}
+                  disabled={isLoading}
+                  className="h-10 bg-input border-border text-foreground text-sm"
+                />
+              </div>
+
+              {/* CPF */}
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">CPF *</label>
+                <Input
+                  type="text" inputMode="numeric" placeholder="000.000.000-00"
+                  value={formatCpf(regCpf)}
+                  onChange={(e) => setRegCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  disabled={isLoading}
+                  className="h-10 bg-input border-border text-foreground text-sm"
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">
+                  <Mail className="w-3 h-3 inline mr-1 opacity-70" />E-mail *
+                </label>
+                <Input
+                  type="email" placeholder="seu@email.com"
+                  value={regEmail} onChange={(e) => setRegEmail(e.target.value)}
+                  disabled={isLoading}
+                  className="h-10 bg-input border-border text-foreground text-sm"
+                />
+              </div>
+
+              {/* Cidade + UF */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-foreground mb-1">
+                    <MapPin className="w-3 h-3 inline mr-1 opacity-70" />Cidade *
+                  </label>
+                  <Input
+                    type="text" placeholder="Sua cidade"
+                    value={regCity} onChange={(e) => setRegCity(e.target.value)}
+                    disabled={isLoading}
+                    className="h-10 bg-input border-border text-foreground text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">UF *</label>
+                  <select
+                    value={regUf}
+                    onChange={(e) => setRegUf(e.target.value)}
+                    disabled={isLoading}
+                    className="w-full h-10 rounded-md border border-border bg-input text-foreground text-sm px-2"
+                  >
+                    <option value="">UF</option>
+                    {UF_LIST.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isLoading || !regName || !regPhoto || regPhone.replace(/\D/g,'').length < 10 || regCpf.replace(/\D/g,'').length !== 11 || !regEmail || !regCity || !regUf}
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg mt-1"
+              >
+                {isLoading
+                  ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{isUploadingPhoto ? 'Enviando foto...' : 'Cadastrando...'}</>
+                  : '✅ Criar minha conta'}
+              </Button>
+              <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
+                ← Voltar
+              </button>
             </form>
           )}
 
@@ -338,55 +532,39 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               )}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
-                  <Lock className="w-4 h-4 inline mr-1.5 opacity-70" />
-                  Criar senha
+                  <Lock className="w-4 h-4 inline mr-1.5 opacity-70" />Criar senha
                 </label>
                 <div className="relative">
                   <Input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Mínimo 6 caracteres"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
-                    autoFocus
-                    className="h-11 bg-input border-border text-foreground pr-10"
+                    type={showPassword ? 'text' : 'password'} placeholder="Mínimo 6 caracteres"
+                    value={password} onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading} autoFocus className="h-11 bg-input border-border text-foreground pr-10"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
-                  <Lock className="w-4 h-4 inline mr-1.5 opacity-70" />
-                  Confirmar senha
+                  <Lock className="w-4 h-4 inline mr-1.5 opacity-70" />Confirmar senha
                 </label>
                 <div className="relative">
                   <Input
-                    type={showConfirm ? 'text' : 'password'}
-                    placeholder="Repita a senha"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    disabled={isLoading}
-                    className="h-11 bg-input border-border text-foreground pr-10"
+                    type={showConfirm ? 'text' : 'password'} placeholder="Repita a senha"
+                    value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                    disabled={isLoading} className="h-11 bg-input border-border text-foreground pr-10"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirm(!showConfirm)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
+                  <button type="button" onClick={() => setShowConfirm(!showConfirm)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
               <Button
-                type="submit"
-                disabled={isLoading || password.length < 6 || !confirmPassword}
-                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg shadow-[0_0_16px_-4px_var(--primary)] transition-all duration-200 disabled:opacity-50"
+                type="submit" disabled={isLoading || password.length < 6 || !confirmPassword}
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg"
               >
                 {isLoading
                   ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{isAutoMode ? 'Criando e entrando...' : 'Salvando...'}</>
@@ -402,9 +580,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
           {step === 'enter_password' && (
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="p-3 bg-primary/10 border border-primary/30 rounded-lg mb-2">
-                <p className="text-sm text-primary font-medium">
-                  Bem-vindo{clientName ? `, ${clientName}` : ''}!
-                </p>
+                <p className="text-sm text-primary font-medium">Bem-vindo{clientName ? `, ${clientName}` : ''}!</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Digite sua senha para entrar.</p>
               </div>
               {error && (
@@ -415,32 +591,23 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               )}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
-                  <Lock className="w-4 h-4 inline mr-1.5 opacity-70" />
-                  Senha
+                  <Lock className="w-4 h-4 inline mr-1.5 opacity-70" />Senha
                 </label>
                 <div className="relative">
                   <Input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Digite sua senha"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
-                    autoFocus
-                    className="h-11 bg-input border-border text-foreground pr-10"
+                    type={showPassword ? 'text' : 'password'} placeholder="Digite sua senha"
+                    value={password} onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading} autoFocus className="h-11 bg-input border-border text-foreground pr-10"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
               <Button
-                type="submit"
-                disabled={isLoading || !password}
-                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg shadow-[0_0_16px_-4px_var(--primary)] transition-all duration-200 disabled:opacity-50"
+                type="submit" disabled={isLoading || !password}
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg"
               >
                 {isLoading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Entrando...</> : 'Entrar'}
               </Button>
@@ -463,14 +630,9 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
                 </div>
               )}
               <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-                <p className="text-amber-300 font-semibold text-base mb-1">
-                  Aguardando liberação
-                </p>
+                <p className="text-amber-300 font-semibold text-base mb-1">Aguardando liberação</p>
                 <p className="text-sm text-muted-foreground">
                   Sua senha foi registrada. O administrador precisa definir a validade do seu acesso.
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Entre em contato com o administrador para liberar seu acesso.
                 </p>
               </div>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center mt-2">
@@ -479,7 +641,7 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
             </div>
           )}
 
-          {/* SENHA EXPIRADA - aguardar admin renovar */}
+          {/* SENHA EXPIRADA */}
           {step === 'expired' && (
             <div className="space-y-4 text-center">
               <div className="w-16 h-16 bg-red-500/15 border border-red-500/30 rounded-full flex items-center justify-center mx-auto">
@@ -487,20 +649,13 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               </div>
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
                 <p className="text-red-300 font-semibold text-base mb-1">Acesso expirado</p>
-                <p className="text-sm text-muted-foreground">
-                  Seu período de acesso encerrou. Aguarde o administrador renovar seu acesso.
-                </p>
-                <p className="text-xs text-muted-foreground mt-2 text-amber-400/80">
-                  ⚠️ Não é possível criar uma nova senha. Somente o administrador pode renovar.
-                </p>
+                <p className="text-sm text-muted-foreground">Seu período de acesso encerrou. Aguarde o administrador renovar.</p>
               </div>
-              <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                ← Voltar
-              </button>
+              <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">← Voltar</button>
             </div>
           )}
 
-          {/* VENCIDO SEM RENOVAÇÃO - senha venceu e não tem ativa */}
+          {/* VENCIDO SEM RENOVAÇÃO */}
           {step === 'expired_no_renew' && (
             <div className="space-y-4 text-center">
               <div className="w-16 h-16 bg-orange-500/15 border border-orange-500/30 rounded-full flex items-center justify-center mx-auto">
@@ -508,35 +663,9 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
               </div>
               <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
                 <p className="text-orange-300 font-semibold text-base mb-1">Acesso encerrado</p>
-                <p className="text-sm text-muted-foreground">
-                  {clientName ? `${clientName}, o` : 'O'} seu acesso ao Gestor de Gastos foi encerrado.
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Para voltar a ter acesso, entre em contato com o administrador para que ele renove seu plano.
-                </p>
-                <p className="text-xs text-amber-400/80 mt-2 font-medium">
-                  🔒 A senha não pode ser alterada. Apenas o administrador pode renovar o acesso.
-                </p>
+                <p className="text-sm text-muted-foreground">Entre em contato com o administrador para renovar seu acesso.</p>
               </div>
-              <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                ← Voltar
-              </button>
-            </div>
-          )}
-
-          {/* NÃO ENCONTRADO */}
-          {step === 'not_found' && (
-            <div className="space-y-4 text-center">
-              <div className="p-4 bg-slate-500/10 border border-slate-500/30 rounded-xl">
-                <p className="text-slate-300 font-semibold text-base mb-1">Telefone não cadastrado</p>
-                <p className="text-sm text-muted-foreground">
-                  Este número não possui cadastro no sistema. Solicite seu cadastro ao administrador pelo WhatsApp.
-                </p>
-              </div>
-              <WhatsAppRequestButton phone={phone} />
-              <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                ← Tentar outro número
-              </button>
+              <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">← Voltar</button>
             </div>
           )}
 
@@ -545,21 +674,15 @@ export function GastosLoginPage({ onLoginSuccess }: GastosLoginPageProps) {
             <div className="space-y-4 text-center">
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
                 <p className="text-red-300 font-semibold text-base mb-1">Acesso bloqueado</p>
-                <p className="text-sm text-muted-foreground">
-                  Este número está bloqueado. Entre em contato com o administrador.
-                </p>
+                <p className="text-sm text-muted-foreground">Este número está bloqueado. Entre em contato com o administrador.</p>
               </div>
-              <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                ← Voltar
-              </button>
+              <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">← Voltar</button>
             </div>
           )}
 
           {/* Footer */}
-          <div className="mt-6 pt-6 border-t border-primary/15">
-            <p className="text-xs text-muted-foreground text-center">
-              Problemas com acesso? Fale com o administrador
-            </p>
+          <div className="mt-6 pt-4 border-t border-primary/15">
+            <p className="text-xs text-muted-foreground text-center">Problemas com acesso? Fale com o administrador</p>
           </div>
         </div>
       </Card>
