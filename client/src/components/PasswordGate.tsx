@@ -601,7 +601,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     if (!regUf) { toast.error("Selecione o estado"); return; }
     const referredPhoneDigits = getPhoneDigits(regReferredByPhone);
     // Telefone do cliente: se entrou pelo CPF usa regPhone, senão usa clientPhone
-    const clientPhoneDigits = enteredByCpf ? getPhoneDigits(regPhone) : getPhoneDigits(clientPhone);
+    // Restaurar do sessionStorage se o estado foi perdido (ex: iOS remontou o componente)
+    const storedPhone = sessionStorage.getItem('reg_phone_temp') || '';
+    const effectiveClientPhone = getPhoneDigits(clientPhone).length === 11 ? clientPhone : storedPhone;
+    const clientPhoneDigits = enteredByCpf ? getPhoneDigits(regPhone) : getPhoneDigits(effectiveClientPhone);
     // Validação extra: garantir que o telefone não está vazio
     if (clientPhoneDigits.length < 10) {
       toast.error("Telefone inválido. Volte e digite o telefone com DDD.");
@@ -1452,8 +1455,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     type="tel"
                     value={formatPhone(clientPhone)}
                     onChange={(e) => {
-                      setClientPhone(e.target.value.replace(/\D/g, ''));
-                      if (e.target.value.replace(/\D/g, '').length > 0) setClientCpf('');
+                      const digits = e.target.value.replace(/\D/g, '');
+                      setClientPhone(digits);
+                      if (digits.length > 0) setClientCpf('');
+                      // Persistir no sessionStorage para não perder ao rolar/remontar
+                      if (digits.length === 11) sessionStorage.setItem('reg_phone_temp', digits);
                     }}
                     placeholder="(99) 99999-9999"
                     className={`w-full pl-12 pr-4 py-4 bg-white/10 text-white text-lg text-center font-bold rounded-xl border-2 outline-none transition-all placeholder:text-white/25 ${
