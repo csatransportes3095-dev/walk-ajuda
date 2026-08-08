@@ -602,6 +602,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     const referredPhoneDigits = getPhoneDigits(regReferredByPhone);
     // Telefone do cliente: se entrou pelo CPF usa regPhone, senão usa clientPhone
     const clientPhoneDigits = enteredByCpf ? getPhoneDigits(regPhone) : getPhoneDigits(clientPhone);
+    // Validação extra: garantir que o telefone não está vazio
+    if (clientPhoneDigits.length < 10) {
+      toast.error("Telefone inválido. Volte e digite o telefone com DDD.");
+      return;
+    }
     
     // Validar indicador apenas se foi preenchido (pode estar vazio se usou código de bypass)
     if (referredPhoneDigits.length > 0) {
@@ -1787,10 +1792,25 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                           : 'border-black focus:border-primary focus:ring-2 focus:ring-primary/30'
                       }`}
                     />
-                  ) : (
-                    // Entrou pelo telefone → bloqueado
+                  ) : getPhoneDigits(clientPhone).length === 11 ? (
+                    // Entrou pelo telefone e telefone está preenchido → bloqueado
                     <input type="tel" value={formatPhone(clientPhone)} disabled
-                      className="w-full px-4 py-4 bg-gray-200 text-black text-lg text-center font-medium rounded-xl border-2 border-black opacity-70" />
+                      className="w-full px-4 py-4 bg-gray-200 text-black text-lg text-center font-medium rounded-xl border-2 border-green-500 opacity-80" />
+                  ) : (
+                    // Telefone perdido (ex: recarregou a página) → deixar editar
+                    <input
+                      type="tel"
+                      placeholder="(11) 99999-9999"
+                      value={regPhone}
+                      onChange={(e) => { setRegPhone(formatPhone(e.target.value)); setClientPhone(formatPhone(e.target.value)); }}
+                      className={`w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 outline-none transition-all ${
+                        getPhoneDigits(regPhone).length > 0 && getPhoneDigits(regPhone).length !== 11
+                          ? 'border-red-500 focus:ring-2 focus:ring-red-400/30'
+                          : getPhoneDigits(regPhone).length === 11
+                          ? 'border-green-500 focus:ring-2 focus:ring-green-400/30'
+                          : 'border-black focus:border-primary focus:ring-2 focus:ring-primary/30'
+                      }`}
+                    />
                   )}
                 </div>
 
