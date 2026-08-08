@@ -86,6 +86,7 @@ import ClientReferralTree from "./pages/ClientReferralTree";
 import SchedulePage from "./pages/SchedulePage";
 import { SpreadsheetPage } from "./pages/SpreadsheetPage";
 import { GastosPage } from "./pages/GastosPage";
+import { EmprestimoPage } from "./pages/EmprestimoPage";
 import CartaoPage from "./pages/CartaoPage";
 import CartaoMercadoPage from "./pages/CartaoMercadoPage";
 import CartaoHistoricoPage from "./pages/CartaoHistoricoPage";
@@ -286,6 +287,7 @@ function Router() {
       </Route>
       <Route path={"/agendar/:token"} component={SchedulePage} />
       <Route path={"/gastos"} component={GastosPage} />
+      <Route path={"/emprestimo"} component={EmprestimoPage} />
       <Route path={"/cartoes"} component={CartaoPage} />
       <Route path={"/cartoes/cartao/:id"} component={CartaoPage} />
       <Route path={"/cartoes/despesas"} component={CartaoPage} />
@@ -325,6 +327,7 @@ function AppContent() {
   const isAgendarRoute = location.startsWith("/agendar");
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location === "/gastos";
+  const isEmprestimoRoute = location === "/emprestimo";
   const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
@@ -360,6 +363,11 @@ function AppContent() {
 
   // Rota /gastos é pública — sem senha
   if (isGastosRoute) {
+    return <Router />;
+  }
+
+  // Rota /emprestimo é pública — login inline na própria página
+  if (isEmprestimoRoute) {
     return <Router />;
   }
 
