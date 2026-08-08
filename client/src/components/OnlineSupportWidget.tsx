@@ -115,9 +115,13 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
     setMessages(msgs);
   }, [listMessagesQ.data, conversationId]);
 
-  // Scroll automático
+  // Scroll automático — só rola se o usuário estiver perto do fim (não impede ler mensagens anteriores)
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = chatContainerRef.current;
+    if (!container) { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); return; }
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    if (isNearBottom) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   // Iniciar conversa quando entra no chat
@@ -321,7 +325,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
         {/* FASE 2: Chat com botões */}
         {phase === "chat" && (
           <>
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div ref={chatContainerRef} style={{ flex: 1, overflowY: "auto", padding: "16px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
               {!conversationId && (
                 <div style={{ textAlign: "center", padding: "40px 0", color: "rgba(255,255,255,0.3)", fontSize: 13 }}>
                   <div style={{ width: 24, height: 24, border: "2px solid #7c3aed", borderTopColor: "transparent", borderRadius: "50%", margin: "0 auto 12px", animation: "spin 1s linear infinite" }} />
