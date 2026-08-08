@@ -404,12 +404,14 @@ export async function createProduct(data: {
 export async function listProducts(): Promise<Product[]> {
   const db = await getDb();
   if (!db) return [];
+  await (db as any).execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS deliveryDays VARCHAR(64) NULL").catch(() => {});
   return await db.select().from(products).orderBy(asc(products.sortOrder));
 }
 
 export async function listActiveProducts(): Promise<Product[]> {
   const db = await getDb();
   if (!db) return [];
+  await (db as any).execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS deliveryDays VARCHAR(64) NULL").catch(() => {});
   return await db.select().from(products).where(eq(products.isActive, 1)).orderBy(asc(products.sortOrder));
 }
 
