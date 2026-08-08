@@ -10,7 +10,7 @@ import {
   createGoal, getGoalsByUserAndMonth, updateGoal, deleteGoal,
 } from "../db";
 import { getDb } from "../db";
-import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, customers, appSettings } from "../../drizzle/schema";
+import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 
 // Resolve o clientId a partir do token de sessão da planilha.
@@ -1695,24 +1695,55 @@ export const spreadsheetRouter = router({
     .query(async ({ input }) => {
       try {
         const db = await getDb() as any;
-        if (!db) return { allowed: false };
+        if (!db) return { allowed: true }; // se banco indisponível, não bloquear
         // Migração automática: garantir que a coluna allowedRoutes existe
         try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
         const cleanToken = input.token.trim();
-        const sessionResult = await db.select().from(spreadsheetSessions)
-          .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
-        const session = sessionResult?.[0] || null;
-        if (!session || new Date(session.expiresAt) < new Date()) return { allowed: false };
-        const clientResult = await db.select().from(spreadsheetClients)
-          .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
-        const client = clientResult?.[0] || null;
-        if (!client) return { allowed: false };
+        if (!cleanToken) return { allowed: true };
+
+        let phone: string | null = null;
+
+        // 1) Tentar como cp_token (sistema de senha do site - customerPasswordSessions)
+        try {
+          const cpSessionResult = await db.select().from(customerPasswordSessions)
+            .where(eq(customerPasswordSessions.token, cleanToken)).limit(1);
+          const cpSession = cpSessionResult?.[0] || null;
+          if (cpSession && new Date(cpSession.expiresAt) >= new Date()) {
+            phone = cpSession.phone ? cpSession.phone.replace(/\D/g, '') : null;
+          }
+        } catch (_) {}
+
+        // 2) Se não encontrou como cp_token, tentar como spreadsheetSession
+        if (!phone) {
+          const sessionResult = await db.select().from(spreadsheetSessions)
+            .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
+          const session = sessionResult?.[0] || null;
+          if (session && new Date(session.expiresAt) >= new Date()) {
+            // Buscar telefone pelo clientId
+            const clientResult = await db.select().from(spreadsheetClients)
+              .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
+            const client = clientResult?.[0] || null;
+            if (client) phone = (client as any).phone ? (client as any).phone.replace(/\D/g, '') : null;
+          }
+        }
+
+        // Se não encontrou sessão válida, não bloquear (token pode ser de outro sistema)
+        if (!phone) return { allowed: true };
+
+        // Buscar allowedRoutes pelo telefone em spreadsheetClients
+        const clientByPhone = await db.select().from(spreadsheetClients)
+          .where(eq(spreadsheetClients.phone, phone)).limit(1);
+        const client = clientByPhone?.[0] || null;
+
+        // Se não tem spreadsheetClient, não bloquear
+        if (!client) return { allowed: true };
+
         // null = sem restrição (acesso total a todas as rotas)
         if (!(client as any).allowedRoutes) return { allowed: true, allowedRoutes: [] };
         const routes = ((client as any).allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
         return { allowed: routes.includes(input.route), allowedRoutes: routes };
       } catch (_) {
-        return { allowed: false };
+        return { allowed: true }; // em caso de erro, não bloquear
       }
     }),
 
