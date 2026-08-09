@@ -425,6 +425,11 @@ function LoansTab() {
   // Mapeia a aba selecionada para o filtro de status
   const tabStatusFilter = loanTab;
   const { data: loans = [], isLoading } = trpc.loans.listLoans.useQuery({ search, status: tabStatusFilter });
+  // Alertas de score D
+  const { data: scoreDAlerts = [] } = trpc.loans.getScoreDAlerts.useQuery();
+  // Aplica taxas automáticas ao montar o componente
+  const autoApplyFees = trpc.loans.autoApplyLateFees.useMutation();
+  useEffect(() => { autoApplyFees.mutate(); }, []);
   const { data: instData } = trpc.loans.getLoan.useQuery(
     { id: expandedLoan! },
     { enabled: !!expandedLoan }
@@ -661,10 +666,27 @@ function LoansTab() {
     } finally {
       setPrUploading(false);
     }
-  };
-
+    };
   return (
     <div className="space-y-3">
+      {/* Banner de alerta score D */}
+      {scoreDAlerts.length > 0 && (
+        <div className="bg-red-500/10 border border-red-500/40 rounded-xl p-3 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-red-300 font-semibold text-sm">
+              ⚠️ {scoreDAlerts.length} cliente{scoreDAlerts.length > 1 ? 's' : ''} com score D — risco de inadimplência
+            </p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {scoreDAlerts.map((a: any) => (
+                <span key={a.clientId} className="text-xs bg-red-500/20 text-red-200 border border-red-500/30 rounded-full px-2 py-0.5">
+                  {a.name} — {a.lateCount} atrasos
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[160px]">
           <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />

@@ -1253,17 +1253,23 @@ export const loanRouter = router({
     if (client.status === 'bloqueado' || client.status === 'inativo') {
       score = 'D'; scorePct = 0; scoreLabel = 'Desativado'; scoreColor = '#6b7280';
     } else if (allLoanIds.length > 0) {
-      // Contar parcelas atrasadas (pagas com atraso ou ainda pendentes vencidas)
+      // Contar parcelas atrasadas com regra de 18h:
+      // - Pendentes com vencimento antes de hoje = atrasadas
+      // - Pagas após 18h do dia de vencimento = pagas com atraso
+      // Limite: dueDate + 18h = UNIX_TIMESTAMP(dueDate) * 1000 + 64800000 ms
       const overdueInstalls = await qRows(db, drizzleSql`
         SELECT COUNT(*) as cnt FROM loanInstallments
         WHERE loanId IN (${drizzleSql.raw(allLoanIds.join(','))})
-        AND (status='pendente' AND dueDate < ${today})
+        AND status='pendente' AND dueDate < ${today}
       `);
       const overdueCount = parseInt(overdueInstalls[0]?.cnt || '0');
+      // paidAt é timestamp em ms; dueDate é 'YYYY-MM-DD' (meia-noite UTC)
+      // Limite de pontualidade = dueDate + 18h = UNIX_TIMESTAMP(STR_TO_DATE(dueDate,'%Y-%m-%d')) * 1000 + 64800000
       const paidLate = await qRows(db, drizzleSql`
         SELECT COUNT(*) as cnt FROM loanInstallments
         WHERE loanId IN (${drizzleSql.raw(allLoanIds.join(','))})
-        AND status='pago' AND paidAt IS NOT NULL AND paidAt > dueDate
+        AND status='pago' AND paidAt IS NOT NULL
+        AND paidAt > (UNIX_TIMESTAMP(STR_TO_DATE(dueDate, '%Y-%m-%d')) * 1000 + 64800000)
       `);
       const lateCount = parseInt(paidLate[0]?.cnt || '0') + overdueCount;
       if (lateCount === 0) { score = 'A'; scorePct = 100; scoreLabel = 'Excelente'; scoreColor = '#10b981'; }
@@ -2786,6 +2792,88 @@ export const loanRouter = router({
     const updated = total - created;
 
     return { ok: true, created, updated, total };
+  }),
+
+  // Aplica taxas de atraso automaticamente em todas as parcelas vencidas não pagas
+  // Deve ser chamado diariamente (ex: via cron ou na abertura do painel ADM)
+  autoApplyLateFees: adminProcedure.mutation(async () => {
+    const db = await getDb() as any;
+    const today = getBrazilToday();
+    // Buscar config de taxa
+    const cfgRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+    const cfg = cfgRows[0];
+    if (!cfg || !cfg.enabled) return { ok: true, applied: 0, message: 'Taxa desativada' };
+    // Buscar parcelas vencidas, pendentes, sem taxa já aplicada hoje
+    const overdueInsts = await qRows(db, drizzleSql`
+      SELECT li.*, lc.late_fee_disabled, lc.id as clientId
+      FROM loanInstallments li
+      JOIN loans l ON l.id = li.loanId
+      JOIN loanClients lc ON lc.id = l.clientId
+      WHERE li.status IN ('pendente', 'atrasado')
+      AND li.dueDate < ${today}
+      AND li.originalAmount IS NULL
+      AND l.status NOT IN ('pago', 'cancelado', 'reprovado')
+      AND (lc.late_fee_disabled IS NULL OR lc.late_fee_disabled = 0)
+    `);
+    let applied = 0;
+    const nowHour = new Date().getHours();
+    // Determinar valor da taxa baseado no horário
+    let feeAmount = 0;
+    if (nowHour >= 20) feeAmount = parseFloat(cfg.fee_after_20h || '0');
+    else if (nowHour >= 18) feeAmount = parseFloat(cfg.fee_after_18h || '0');
+    else {
+      // Passou da meia-noite = dia seguinte ao vencimento
+      // Aplica percentual sobre o valor original
+      feeAmount = 0; // será calculado por parcela
+    }
+    for (const inst of overdueInsts) {
+      const originalAmount = parseFloat(inst.amount);
+      let fee = feeAmount;
+      if (fee === 0 && cfg.fee_after_midnight_pct > 0) {
+        fee = Math.round(originalAmount * (parseFloat(cfg.fee_after_midnight_pct) / 100) * 100) / 100;
+      }
+      if (fee <= 0) continue;
+      const newAmount = Math.round((originalAmount + fee) * 100) / 100;
+      const note = `Taxa de atraso automática: +R$ ${fee.toFixed(2).replace('.', ',')} aplicada em ${new Date().toLocaleDateString('pt-BR')}`;
+      await db.execute(drizzleSql`
+        UPDATE loanInstallments
+        SET amount=${newAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)},
+            feeApplied=${fee.toFixed(2)}, notes=${note}, status='atrasado'
+        WHERE id=${inst.id}
+      `);
+      applied++;
+    }
+    return { ok: true, applied };
+  }),
+
+  // Busca clientes com score D para alerta no ADM
+  getScoreDAlerts: adminProcedure.query(async () => {
+    const db = await getDb() as any;
+    const today = getBrazilToday();
+    // Buscar clientes ativos com 6+ parcelas atrasadas
+    const alerts = await qRows(db, drizzleSql`
+      SELECT lc.id, lc.name, lc.phone,
+        COUNT(*) as lateCount
+      FROM loanClients lc
+      JOIN loans l ON l.clientId = lc.id
+      JOIN loanInstallments li ON li.loanId = l.id
+      WHERE lc.status NOT IN ('bloqueado', 'inativo')
+      AND (
+        (li.status = 'pendente' AND li.dueDate < ${today})
+        OR (li.status = 'pago' AND li.paidAt IS NOT NULL
+            AND li.paidAt > (UNIX_TIMESTAMP(STR_TO_DATE(li.dueDate, '%Y-%m-%d')) * 1000 + 64800000))
+      )
+      GROUP BY lc.id, lc.name, lc.phone
+      HAVING lateCount >= 6
+      ORDER BY lateCount DESC
+      LIMIT 20
+    `);
+    return alerts.map((a: any) => ({
+      clientId: a.id,
+      name: a.name,
+      phone: a.phone,
+      lateCount: parseInt(a.lateCount),
+    }));
   }),
 
   getProofDashboardStats: adminProcedure.query(async () => {
