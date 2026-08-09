@@ -58,8 +58,24 @@ export async function saveApkRelease(opts: { filename: string; r2Key: string; pu
   ));
 }
 
+// Versão atual do APK publicada — incrementar a cada novo upload
+// O UpdateChecker do app compara esse versionCode com o BuildConfig.VERSION_CODE
+const CURRENT_APK_VERSION_CODE = 2;
+const CURRENT_APK_VERSION_NAME = "2.0.0";
+
 // ─── Rota Express de download ─────────────────────────────────────────────────
 export function registerApkDownloadRoute(app: Express) {
+
+  // Endpoint de versão — usado pelo UpdateChecker do APK
+  app.get('/api/app/version', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    res.json({
+      versionCode: CURRENT_APK_VERSION_CODE,
+      versionName: CURRENT_APK_VERSION_NAME,
+      downloadUrl: '/api/app/download',
+    });
+  });
+
   app.get('/api/app/download', async (_req: Request, res: Response) => {
     try {
       const apk = await getActiveApk();
