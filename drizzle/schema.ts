@@ -431,6 +431,21 @@ export const spreadsheetGoals = mysqlTable("spreadsheetGoals", {
 export type SpreadsheetGoal = typeof spreadsheetGoals.$inferSelect;
 export type InsertSpreadsheetGoal = typeof spreadsheetGoals.$inferInsert;
 
+// Configuração do veículo para o analisador de corridas
+export const spreadsheetVehicleConfig = mysqlTable("spreadsheetVehicleConfig", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  vehicleName: varchar("vehicleName", { length: 100 }).default("Meu Veículo"),
+  kmPerLiter: decimal("kmPerLiter", { precision: 8, scale: 2 }).default("10"),
+  fuelPricePerLiter: decimal("fuelPricePerLiter", { precision: 8, scale: 2 }).default("6"),
+  tankCapacityLiters: decimal("tankCapacityLiters", { precision: 8, scale: 2 }).default("50"),
+  minRatePerKm: decimal("minRatePerKm", { precision: 8, scale: 2 }).default("2"),
+  minRatePerMin: decimal("minRatePerMin", { precision: 8, scale: 2 }).default("0.60"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SpreadsheetVehicleConfig = typeof spreadsheetVehicleConfig.$inferSelect;
+
 // PermissÃµes de produto por cliente (controle de acesso via senha fixa)
 export const customerProductAccess = mysqlTable("customerProductAccess", {
   id: int("id").autoincrement().primaryKey(),

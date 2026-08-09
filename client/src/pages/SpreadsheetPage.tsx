@@ -1287,6 +1287,11 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
               <span>Empréstimos</span>
             </TabsTrigger>
+            {/* ANALISADOR DE CORRIDAS */}
+            <TabsTrigger value="analisador" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-orange-600/40 bg-[#1a0d00] text-[#fb923c] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#2a1500] hover:border-orange-500/60 data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:border-orange-400 data-[state=active]:shadow-[0_4px_20px_rgba(249,115,22,0.7)] active:scale-95">
+              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M5 3L3 5"/><path d="M19 3l2 2"/></svg>
+              <span>Analisador</span>
+            </TabsTrigger>
             {/* CARTÕES — atalho externo */}
             <button
               onClick={() => window.location.href = '/cartoes'}
@@ -2068,6 +2073,10 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           <TabsContent value="emprestimos" className="space-y-4">
             <LoansTab token={token} />
           </TabsContent>
+
+          <TabsContent value="analisador" className="space-y-4">
+            <RideAnalyzerTab token={token} />
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -2117,6 +2126,236 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           selectedChatId={selectedChatId}
         />
       )}
+    </div>
+  );
+}
+
+// ─── ANALISADOR DE CORRIDAS ────────────────────────────────────────────────────
+function RideAnalyzerTab({ token }: { token: string }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayMonth = today.slice(0, 7);
+
+  // Configuração do veículo
+  const { data: vehicleConfig, refetch: refetchConfig } = trpc.spreadsheet.getVehicleConfig.useQuery({ token }, { enabled: !!token });
+  const saveConfigMut = trpc.spreadsheet.saveVehicleConfig.useMutation({ onSuccess: () => { refetchConfig(); setEditingConfig(false); } });
+  const acceptRideMut = trpc.spreadsheet.acceptRide.useMutation();
+
+  // Buscar gastos do dia para combustível
+  const { data: expensesMonth } = trpc.spreadsheet.getExpensesByMonth.useQuery({ token, month: todayMonth }, { enabled: !!token });
+  const todayExpense = expensesMonth?.find((e: any) => e.date === today);
+  const todayFuel = parseFloat(todayExpense?.fuel || '0');
+
+  // Buscar ganhos do dia para resumo
+  const { data: earningsMonth, refetch: refetchEarnings } = trpc.spreadsheet.getEarningsByMonth.useQuery({ token, month: todayMonth }, { enabled: !!token });
+  const todayEarning = earningsMonth?.find((e: any) => e.date === today);
+
+  // Estado do formulário de corrida
+  const [platform, setPlatform] = useState<'uber' | 'ninetynine' | 'indrive' | 'particular' | 'deliveries'>('uber');
+  const [fareValue, setFareValue] = useState('');
+  const [pickupKm, setPickupKm] = useState('');
+  const [tripKm, setTripKm] = useState('');
+  const [analysis, setAnalysis] = useState<null | {
+    totalKm: number; fuelCost: number; netProfit: number; ratePerKm: number; score: number; label: string; color: string;
+  }>(null);
+  const [accepted, setAccepted] = useState(false);
+
+  // Estado de configuração do veículo
+  const [editingConfig, setEditingConfig] = useState(false);
+  const [cfgName, setCfgName] = useState('');
+  const [cfgKmL, setCfgKmL] = useState('');
+  const [cfgFuelPrice, setCfgFuelPrice] = useState('');
+  const [cfgTank, setCfgTank] = useState('');
+  const [cfgMinKm, setCfgMinKm] = useState('');
+
+  useEffect(() => {
+    if (vehicleConfig) {
+      setCfgName(vehicleConfig.vehicleName || 'Meu Veículo');
+      setCfgKmL(vehicleConfig.kmPerLiter || '10');
+      setCfgFuelPrice(vehicleConfig.fuelPricePerLiter || '6');
+      setCfgTank(vehicleConfig.tankCapacityLiters || '50');
+      setCfgMinKm(vehicleConfig.minRatePerKm || '2');
+    }
+  }, [vehicleConfig]);
+
+  const kmPerLiter = parseFloat(vehicleConfig?.kmPerLiter || '10');
+  const fuelPrice = parseFloat(vehicleConfig?.fuelPricePerLiter || '6');
+  const minRatePerKm = parseFloat(vehicleConfig?.minRatePerKm || '2');
+  const costPerKm = fuelPrice / kmPerLiter;
+
+  function calcAnalysis() {
+    const fare = parseFloat(fareValue.replace(',', '.')) || 0;
+    const pkm = parseFloat(pickupKm.replace(',', '.')) || 0;
+    const tkm = parseFloat(tripKm.replace(',', '.')) || 0;
+    const totalKm = pkm + tkm;
+    if (fare <= 0 || totalKm <= 0) return;
+    const fuelCost = totalKm * costPerKm;
+    const netProfit = fare - fuelCost;
+    const ratePerKm = fare / totalKm;
+    // Nota: baseada na taxa por km vs meta mínima
+    const ratio = ratePerKm / minRatePerKm;
+    let score = Math.min(100, Math.round(ratio * 70 + (netProfit > 0 ? 30 : 0)));
+    let label = 'Ruim'; let color = '#ef4444';
+    if (score >= 85) { label = 'Excelente'; color = '#10b981'; }
+    else if (score >= 70) { label = 'Boa'; color = '#22c55e'; }
+    else if (score >= 55) { label = 'Aceitável'; color = '#f59e0b'; }
+    else if (score >= 40) { label = 'Fraca'; color = '#f97316'; }
+    setAnalysis({ totalKm, fuelCost, netProfit, ratePerKm, score, label, color });
+    setAccepted(false);
+  }
+
+  async function handleAccept() {
+    if (!analysis) return;
+    try {
+      await acceptRideMut.mutateAsync({ token, date: today, platform, fareValue: fareValue.replace(',', '.'), pickupKm: pickupKm || '0', tripKm: tripKm || '0', note: analysis.score });
+      setAccepted(true);
+      refetchEarnings();
+      setFareValue(''); setPickupKm(''); setTripKm(''); setAnalysis(null);
+    } catch (e: any) {
+      alert(e.message || 'Erro ao registrar corrida');
+    }
+  }
+
+  const platformLabels: Record<string, string> = { uber: 'Uber', ninetynine: '99', indrive: 'InDrive', particular: 'Particular', deliveries: 'Entregas' };
+  const todayTotal = todayEarning ? ['uber','ninetynine','indrive','particular','deliveries','tips','otherEarnings'].reduce((s, k) => s + parseFloat((todayEarning as any)[k] || '0'), 0) : 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Resumo do dia */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-emerald-900/30 border border-emerald-500/30 rounded-xl p-3 text-center">
+          <p className="text-xs text-emerald-400/70 mb-1">Ganhos Hoje</p>
+          <p className="text-xl font-bold text-emerald-400">R$ {todayTotal.toFixed(2).replace('.', ',')}</p>
+        </div>
+        <div className="bg-orange-900/30 border border-orange-500/30 rounded-xl p-3 text-center">
+          <p className="text-xs text-orange-400/70 mb-1">Combustível Hoje</p>
+          <p className="text-xl font-bold text-orange-400">R$ {todayFuel.toFixed(2).replace('.', ',')}</p>
+          {todayFuel > 0 && <p className="text-[10px] text-orange-400/50">R$ {costPerKm.toFixed(2)}/km</p>}
+        </div>
+      </div>
+
+      {/* Configuração do veículo */}
+      <div className="bg-card/60 border border-border rounded-xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-orange-400">🚗 {vehicleConfig?.vehicleName || 'Meu Veículo'}</h3>
+          <button onClick={() => setEditingConfig(!editingConfig)} className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg px-2 py-1">
+            {editingConfig ? 'Cancelar' : '⚙️ Configurar'}
+          </button>
+        </div>
+        {!editingConfig ? (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div><p className="text-xs text-muted-foreground">Consumo</p><p className="text-sm font-bold text-white">{kmPerLiter} km/L</p></div>
+            <div><p className="text-xs text-muted-foreground">Combustível</p><p className="text-sm font-bold text-white">R$ {fuelPrice.toFixed(2)}/L</p></div>
+            <div><p className="text-xs text-muted-foreground">Meta/km</p><p className="text-sm font-bold text-white">R$ {minRatePerKm.toFixed(2)}</p></div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <input className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" placeholder="Nome do veículo" value={cfgName} onChange={e => setCfgName(e.target.value)} />
+            <div className="grid grid-cols-2 gap-2">
+              <input className="bg-background border border-border rounded-lg px-3 py-2 text-sm" placeholder="km/L (ex: 10)" value={cfgKmL} onChange={e => setCfgKmL(e.target.value)} />
+              <input className="bg-background border border-border rounded-lg px-3 py-2 text-sm" placeholder="R$/L (ex: 6.00)" value={cfgFuelPrice} onChange={e => setCfgFuelPrice(e.target.value)} />
+              <input className="bg-background border border-border rounded-lg px-3 py-2 text-sm" placeholder="Tanque (L)" value={cfgTank} onChange={e => setCfgTank(e.target.value)} />
+              <input className="bg-background border border-border rounded-lg px-3 py-2 text-sm" placeholder="Meta R$/km (ex: 2)" value={cfgMinKm} onChange={e => setCfgMinKm(e.target.value)} />
+            </div>
+            <button
+              onClick={() => saveConfigMut.mutate({ token, vehicleName: cfgName, kmPerLiter: cfgKmL, fuelPricePerLiter: cfgFuelPrice, tankCapacityLiters: cfgTank, minRatePerKm: cfgMinKm })}
+              disabled={saveConfigMut.isPending}
+              className="w-full bg-orange-600 hover:bg-orange-500 text-white rounded-lg py-2 text-sm font-bold"
+            >
+              {saveConfigMut.isPending ? 'Salvando...' : 'Salvar Configuração'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Formulário de análise */}
+      <div className="bg-card/60 border border-border rounded-xl p-4 space-y-3">
+        <h3 className="text-sm font-bold text-orange-400">🏁 Analisar Corrida</h3>
+
+        {/* Plataforma */}
+        <div className="grid grid-cols-5 gap-1">
+          {(['uber','ninetynine','indrive','particular','deliveries'] as const).map(p => (
+            <button key={p} onClick={() => setPlatform(p)}
+              className={`py-2 rounded-lg text-[10px] font-bold border transition-all ${platform === p ? 'bg-orange-500 border-orange-400 text-white' : 'bg-background border-border text-muted-foreground'}`}>
+              {platformLabels[p]}
+            </button>
+          ))}
+        </div>
+
+        {/* Campos */}
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Valor (R$)</label>
+            <input className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" placeholder="35,00" value={fareValue} onChange={e => setFareValue(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Busca (km)</label>
+            <input className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" placeholder="3,0" value={pickupKm} onChange={e => setPickupKm(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Viagem (km)</label>
+            <input className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" placeholder="12,0" value={tripKm} onChange={e => setTripKm(e.target.value)} />
+          </div>
+        </div>
+
+        <button onClick={calcAnalysis} className="w-full bg-orange-600 hover:bg-orange-500 text-white rounded-xl py-3 font-bold text-sm">
+          ⚡ CALCULAR
+        </button>
+      </div>
+
+      {/* Resultado da análise */}
+      {analysis && (
+        <div className="border-2 rounded-xl p-4 space-y-3" style={{ borderColor: analysis.color + '60', background: analysis.color + '10' }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-2xl font-black" style={{ color: analysis.color }}>{analysis.label}</p>
+              <p className="text-xs text-muted-foreground">Nota {analysis.score}/100</p>
+            </div>
+            <div className="text-right">
+              <p className="text-3xl font-black" style={{ color: analysis.color }}>{analysis.score}</p>
+              <div className="w-16 h-2 bg-border rounded-full overflow-hidden mt-1">
+                <div className="h-full rounded-full transition-all" style={{ width: `${analysis.score}%`, background: analysis.color }} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="bg-background/50 rounded-lg p-2">
+              <p className="text-xs text-muted-foreground">Total km</p>
+              <p className="font-bold">{analysis.totalKm.toFixed(1)} km</p>
+            </div>
+            <div className="bg-background/50 rounded-lg p-2">
+              <p className="text-xs text-muted-foreground">R$/km</p>
+              <p className="font-bold">R$ {analysis.ratePerKm.toFixed(2)}</p>
+            </div>
+            <div className="bg-background/50 rounded-lg p-2">
+              <p className="text-xs text-muted-foreground">Combustível</p>
+              <p className="font-bold text-orange-400">- R$ {analysis.fuelCost.toFixed(2)}</p>
+            </div>
+            <div className="bg-background/50 rounded-lg p-2">
+              <p className="text-xs text-muted-foreground">Lucro líquido</p>
+              <p className={`font-bold ${analysis.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>R$ {analysis.netProfit.toFixed(2)}</p>
+            </div>
+          </div>
+
+          {accepted ? (
+            <div className="bg-emerald-900/40 border border-emerald-500/40 rounded-xl p-3 text-center">
+              <p className="text-emerald-400 font-bold">✅ Corrida registrada nos ganhos do dia!</p>
+            </div>
+          ) : (
+            <button onClick={handleAccept} disabled={acceptRideMut.isPending}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl py-3 font-bold text-sm">
+              {acceptRideMut.isPending ? 'Registrando...' : `✅ ACEITAR E REGISTRAR — ${platformLabels[platform]}`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Dica */}
+      <div className="bg-muted/20 border border-border/50 rounded-xl p-3 text-xs text-muted-foreground">
+        <p className="font-semibold mb-1">💡 Como funciona</p>
+        <p>Digite o valor, km de busca e km da viagem. O sistema calcula automaticamente o custo de combustível proporcional e a nota da corrida. Ao aceitar, o valor é lançado direto na aba <strong>Ganhos</strong> e a corrida é contada na aba <strong>Operacional</strong>.</p>
+        {todayFuel > 0 && <p className="mt-1 text-orange-400/70">Combustível do dia (R$ {todayFuel.toFixed(2)}) já considerado no cálculo de custo por km.</p>}
+      </div>
     </div>
   );
 }

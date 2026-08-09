@@ -1807,7 +1807,7 @@ export const spreadsheetRouter = router({
       }
     }),
 
-  // Apagar TODOS os dados lançados pelo cliente (ganhos, gastos, operacional, metas)
+    // Apagar TODOS os dados lançados pelo cliente (ganhos, gastos, operacional, metas)
   deleteAllData: publicProcedure
     .input(z.object({ token: z.string() }))
     .mutation(async ({ input }) => {
@@ -1823,4 +1823,133 @@ export const spreadsheetRouter = router({
       return { success: true };
     }),
 
+  // === ANALISADOR DE CORRIDAS ===
+
+  getVehicleConfig: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ input }) => {
+      const clientId = await resolveClientId(input.token);
+      const db = await getDb() as any;
+      if (!db) return null;
+      try {
+        await db.execute(`CREATE TABLE IF NOT EXISTS spreadsheetVehicleConfig (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          userId INT NOT NULL UNIQUE,
+          vehicleName VARCHAR(100) DEFAULT 'Meu Veículo',
+          kmPerLiter DECIMAL(8,2) DEFAULT 10,
+          fuelPricePerLiter DECIMAL(8,2) DEFAULT 6,
+          tankCapacityLiters DECIMAL(8,2) DEFAULT 50,
+          minRatePerKm DECIMAL(8,2) DEFAULT 2,
+          minRatePerMin DECIMAL(8,2) DEFAULT 0.60,
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )`);
+      } catch {}
+      const { spreadsheetVehicleConfig } = await import('../../drizzle/schema');
+      const { eq: eqOp } = await import('drizzle-orm');
+      const rows = await db.select().from(spreadsheetVehicleConfig).where(eqOp(spreadsheetVehicleConfig.userId, clientId)).limit(1);
+      return rows[0] || null;
+    }),
+
+  saveVehicleConfig: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      vehicleName: z.string().optional(),
+      kmPerLiter: z.string().optional(),
+      fuelPricePerLiter: z.string().optional(),
+      tankCapacityLiters: z.string().optional(),
+      minRatePerKm: z.string().optional(),
+      minRatePerMin: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const clientId = await resolveClientId(input.token);
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
+      try {
+        await db.execute(`CREATE TABLE IF NOT EXISTS spreadsheetVehicleConfig (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          userId INT NOT NULL UNIQUE,
+          vehicleName VARCHAR(100) DEFAULT 'Meu Veículo',
+          kmPerLiter DECIMAL(8,2) DEFAULT 10,
+          fuelPricePerLiter DECIMAL(8,2) DEFAULT 6,
+          tankCapacityLiters DECIMAL(8,2) DEFAULT 50,
+          minRatePerKm DECIMAL(8,2) DEFAULT 2,
+          minRatePerMin DECIMAL(8,2) DEFAULT 0.60,
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )`);
+      } catch {}
+      const { spreadsheetVehicleConfig } = await import('../../drizzle/schema');
+      const { eq: eqOp } = await import('drizzle-orm');
+      const { token, ...data } = input;
+      const existing = await db.select().from(spreadsheetVehicleConfig).where(eqOp(spreadsheetVehicleConfig.userId, clientId)).limit(1);
+      if (existing.length > 0) {
+        await db.update(spreadsheetVehicleConfig).set({ ...data, updatedAt: new Date() }).where(eqOp(spreadsheetVehicleConfig.userId, clientId));
+      } else {
+        await db.insert(spreadsheetVehicleConfig).values({ userId: clientId, ...data });
+      }
+      return { success: true };
+    }),
+
+  // Registrar corrida analisada (aceitar e lançar nos ganhos + operacional)
+  acceptRide: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      date: z.string(), // YYYY-MM-DD
+      platform: z.enum(['uber', 'ninetynine', 'indrive', 'particular', 'deliveries']),
+      fareValue: z.string(), // valor da corrida em R$
+      pickupKm: z.string().default('0'),
+      tripKm: z.string().default('0'),
+      note: z.number().optional(), // nota calculada 0-100
+    }))
+    .mutation(async ({ input }) => {
+      const clientId = await resolveClientId(input.token);
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
+      const { spreadsheetEarnings, spreadsheetOperational } = await import('../../drizzle/schema');
+      const { eq: eqOp, and: andOp } = await import('drizzle-orm');
+
+      // 1. Atualizar ou criar registro de ganhos do dia
+      const existingEarning = await db.select().from(spreadsheetEarnings)
+        .where(andOp(eqOp(spreadsheetEarnings.userId, clientId), eqOp(spreadsheetEarnings.date, input.date))).limit(1);
+      const fare = parseFloat(input.fareValue) || 0;
+      if (existingEarning.length > 0) {
+        const current = existingEarning[0];
+        const fieldMap: Record<string, string> = { uber: 'uber', ninetynine: 'ninetynine', indrive: 'indrive', particular: 'particular', deliveries: 'deliveries' };
+        const field = fieldMap[input.platform];
+        const currentVal = parseFloat((current as any)[field] || '0');
+        await db.update(spreadsheetEarnings).set({ [field]: String(currentVal + fare), updatedAt: new Date() })
+          .where(andOp(eqOp(spreadsheetEarnings.userId, clientId), eqOp(spreadsheetEarnings.date, input.date)));
+      } else {
+        const earningData: any = { userId: clientId, date: input.date, uber: '0', ninetynine: '0', indrive: '0', particular: '0', deliveries: '0', tips: '0', otherEarnings: '0' };
+        const fieldMap: Record<string, string> = { uber: 'uber', ninetynine: 'ninetynine', indrive: 'indrive', particular: 'particular', deliveries: 'deliveries' };
+        earningData[fieldMap[input.platform]] = String(fare);
+        await db.insert(spreadsheetEarnings).values(earningData);
+      }
+
+      // 2. Atualizar ou criar registro operacional do dia
+      const existingOp = await db.select().from(spreadsheetOperational)
+        .where(andOp(eqOp(spreadsheetOperational.userId, clientId), eqOp(spreadsheetOperational.date, input.date))).limit(1);
+      const rideFieldMap: Record<string, string> = { uber: 'ridesUber', ninetynine: 'rides99', indrive: 'ridesIndrive', particular: 'ridesParticular', deliveries: 'ridesDeliveries' };
+      const rideField = rideFieldMap[input.platform];
+      const totalKm = (parseFloat(input.pickupKm) || 0) + (parseFloat(input.tripKm) || 0);
+      if (existingOp.length > 0) {
+        const current = existingOp[0];
+        const currentRides = parseInt((current as any)[rideField] || '0');
+        const currentKmFinal = parseFloat((current as any).kmFinal || '0');
+        const currentRideCount = parseInt((current as any).rideCount || '0');
+        await db.update(spreadsheetOperational).set({
+          [rideField]: currentRides + 1,
+          rideCount: currentRideCount + 1,
+          kmFinal: String(currentKmFinal + totalKm),
+          updatedAt: new Date()
+        }).where(andOp(eqOp(spreadsheetOperational.userId, clientId), eqOp(spreadsheetOperational.date, input.date)));
+      } else {
+        const opData: any = { userId: clientId, date: input.date, kmInitial: '0', kmFinal: String(totalKm), ridesUber: 0, rides99: 0, ridesIndrive: 0, ridesParticular: 0, ridesDeliveries: 0, rideCount: 1 };
+        opData[rideField] = 1;
+        await db.insert(spreadsheetOperational).values(opData);
+      }
+
+      return { success: true };
+    }),
 });
