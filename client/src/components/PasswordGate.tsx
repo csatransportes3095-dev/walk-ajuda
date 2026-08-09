@@ -1118,6 +1118,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
   // ── Verificação de cadastro completo ─────────────────────────────────────
   const canonicalPhone = resolvedPhone || getPhoneDigits(clientPhone);
+
   const profileCheckQuery = trpc.customers.checkByPhone.useQuery(
     { phone: canonicalPhone },
     { enabled: accessGranted && !!canonicalPhone, staleTime: 0, refetchOnWindowFocus: true }
@@ -1160,6 +1161,20 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
     setCompleteSaving(false);
   };
+
+  // Verificar permissão de rota 'site' por telefone (antes do login)
+  const routeByPhoneQuery = trpc.spreadsheet.checkRouteAccessByPhone.useQuery(
+    { phone: canonicalPhone, route: 'site' },
+    { enabled: gateStep === 'password' && !!canonicalPhone, staleTime: 0 }
+  );
+
+  // Bloquear acesso ao site principal se rota 'site' não estiver liberada
+  useEffect(() => {
+    if (gateStep === 'password' && routeByPhoneQuery.data && routeByPhoneQuery.data.allowed === false) {
+      setBlockedRoutes((routeByPhoneQuery.data as any).allowedRoutes || []);
+      setGateStep('route_blocked');
+    }
+  }, [gateStep, routeByPhoneQuery.data]);
 
   // Verificar permissão de rota 'site' (só para clientes com cp_token, ou seja, cadastro novo)
   const cpTokenForRoute = localStorage.getItem(CP_TOKEN_KEY) || '';
