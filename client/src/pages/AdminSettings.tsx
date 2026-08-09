@@ -996,8 +996,14 @@ export default function AdminSettings() {
             </Section>
 
             {/* Logo da Página Gastos */}
-            <Section title="Logo da Página Gastos">
-              <p className="text-xs text-gray-400 mb-3">Substitui o ícone de gráfico na tela de login do Gestor de Gastos. Se não definido, o ícone padrão é exibido.</p>
+            <Section title="Tela de Login — Gastos / Empréstimos">
+              <p className="text-xs text-gray-400 mb-3">Personalize a tela de login das páginas /gastos e /emprestimo.</p>
+              <div className="space-y-3 mb-4">
+                <Field label="Título" k="gastos_title" form={form} onChange={updateField} />
+                <Field label="Subtítulo" k="gastos_subtitle" form={form} onChange={updateField} />
+                <Field label="Texto do Botão Continuar" k="gastos_button_text" form={form} onChange={updateField} />
+                <Field label="Texto do Rodapé" k="gastos_footer_text" form={form} onChange={updateField} />
+              </div>
               <div className="mt-3">
                 {gastosLogoPreview || form.gastos_logo_url ? (
                   <div className="flex items-start gap-4">

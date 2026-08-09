@@ -42,6 +42,10 @@ function fileToBase64(file: File): Promise<string> {
 export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPageProps) {
   const { data: settings } = trpc.settings.getAll.useQuery();
   const gastosLogoUrl = settings?.gastos_logo_url || '';
+  const gastosTitle = settings?.gastos_title || 'GASTOS WALK AJUDA';
+  const gastosSubtitle = settings?.gastos_subtitle || 'Controle seus ganhos e gastos';
+  const gastosButtonText = settings?.gastos_button_text || 'Continuar';
+  const gastosFooterText = settings?.gastos_footer_text || 'Problemas com acesso? Fale com o administrador';
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -324,9 +328,9 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
               )}
             </div>
             <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-primary/70 bg-clip-text text-transparent mb-1">
-              GASTOS WALK AJUDA
+              {gastosTitle}
             </h1>
-            <p className="text-sm text-muted-foreground">Controle seus ganhos e gastos</p>
+            <p className="text-sm text-muted-foreground">{gastosSubtitle}</p>
           </div>
 
           {/* ETAPA 1: TELEFONE */}
@@ -369,7 +373,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
                 disabled={isLoading || (phone.replace(/\D/g, '').length < 10 && cpfInput.replace(/\D/g, '').length !== 11)}
                 className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg"
               >
-                {isLoading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verificando...</> : 'Continuar'}
+                {isLoading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verificando...</> : gastosButtonText}
               </Button>
             </form>
           )}
@@ -686,7 +690,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
 
           {/* Footer */}
           <div className="mt-6 pt-4 border-t border-primary/15">
-            <p className="text-xs text-muted-foreground text-center">Problemas com acesso? Fale com o administrador</p>
+            <p className="text-xs text-muted-foreground text-center">{gastosFooterText}</p>
           </div>
         </div>
       </Card>
