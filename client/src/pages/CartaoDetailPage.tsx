@@ -835,7 +835,7 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
   const deleteCat = trpc.cartoes.categorias.delete.useMutation({ onSuccess: () => { utils.categorias.list.invalidate(); setCategoriaId(prev => prev === editCatId ? null : prev); } });
 
   const mutGasto = trpc.cartoes.gastos.create.useMutation({ onSuccess, onError: e => toast.error(e.message) });
-  const mutParcelamento = trpc.cartoes.parcelamentos.criar.useMutation({ onSuccess, onError: e => toast.error(e.message) });
+  const mutParcelamento = trpc.cartoes.parcelamentos.create.useMutation({ onSuccess, onError: e => toast.error(e.message) });
 
   const submit = () => {
     if (!desc.trim()) return toast.error("Descrição obrigatória");
