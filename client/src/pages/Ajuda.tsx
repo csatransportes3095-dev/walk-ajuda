@@ -88,7 +88,7 @@ export default function Ajuda() {
           <p className="text-gray-500 text-xs mb-4">Ainda tem dúvidas? Fale com a gente:</p>
           <div className="flex flex-col gap-3 justify-center max-w-sm mx-auto w-full">
             <a
-              href="https://wa.me/5511978307371?text=Olá!%20Tenho%20uma%20dúvida%20e%20gostaria%20de%20falar%20com%20o%20suporte."
+              href={`https://wa.me/5511978307371?text=${encodeURIComponent('Olá! Tenho uma dúvida e gostaria de falar com o suporte.')}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white transition-all hover:scale-105 active:scale-95 w-full"

@@ -2669,7 +2669,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   Esqueceu sua senha? Entre em contato pelo
                 </p>
                 <a
-                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=Olá!%20Esqueci%20minha%20senha%20de%20acesso%20ao%20site.%20Meu%20telefone%20é%20${getPhoneDigits(clientPhone)}`}
+                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Olá! Esqueci minha senha de acesso ao site. Meu telefone é ${getPhoneDigits(clientPhone)}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-4 py-2 bg-green-600/20 border border-green-500/30 hover:bg-green-600/30 text-green-400 rounded-xl text-sm font-semibold transition-colors"
