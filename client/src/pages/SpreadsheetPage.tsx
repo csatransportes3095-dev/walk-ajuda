@@ -1256,49 +1256,49 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
         {/* Abas */}
         <Tabs defaultValue="gastos" className="w-full">
-          <TabsList className="grid grid-cols-3 gap-2.5 h-auto bg-transparent p-0 mb-4">
+          <TabsList className="grid grid-cols-3 gap-2 h-auto bg-transparent p-0 mb-4">
             {/* GASTOS */}
-            <TabsTrigger value="gastos" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-transparent bg-[#1a0a0a] text-[#ff4d4d] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#2a0f0f] hover:border-red-600/50 data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:border-red-500 data-[state=active]:shadow-[0_4px_20px_rgba(220,38,38,0.6)] active:scale-95">
-              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            <TabsTrigger value="gastos" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#ff6b6b] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#c0392b] data-[state=active]:text-white data-[state=active]:border-[#c0392b] active:scale-95">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
               <span>Gastos</span>
             </TabsTrigger>
             {/* GANHOS */}
-            <TabsTrigger value="ganhos" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-transparent bg-[#0a1a0f] text-[#00e676] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#0f2a18] hover:border-emerald-500/50 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:border-emerald-500 data-[state=active]:shadow-[0_4px_20px_rgba(5,150,105,0.6)] active:scale-95">
-              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+            <TabsTrigger value="ganhos" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#2ecc71] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#27ae60] data-[state=active]:text-white data-[state=active]:border-[#27ae60] active:scale-95">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
               <span>Ganhos</span>
             </TabsTrigger>
             {/* OPERACIONAL */}
-            <TabsTrigger value="operacional" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-transparent bg-[#0a0f1a] text-[#4d9fff] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#0f1a2a] hover:border-blue-500/50 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:border-blue-500 data-[state=active]:shadow-[0_4px_20px_rgba(37,99,235,0.6)] active:scale-95">
-              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <TabsTrigger value="operacional" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#3498db] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#2980b9] data-[state=active]:text-white data-[state=active]:border-[#2980b9] active:scale-95">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               <span>Operacional</span>
             </TabsTrigger>
             {/* METAS */}
-            <TabsTrigger value="metas" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-transparent bg-[#120a1a] text-[#c084fc] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#1e0f2a] hover:border-purple-500/50 data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:border-purple-500 data-[state=active]:shadow-[0_4px_20px_rgba(124,58,237,0.6)] active:scale-95">
-              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            <TabsTrigger value="metas" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#9b59b6] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#8e44ad] data-[state=active]:text-white data-[state=active]:border-[#8e44ad] active:scale-95">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
               <span>Metas</span>
             </TabsTrigger>
             {/* GRÁFICOS */}
-            <TabsTrigger value="graficos" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-transparent bg-[#0a1518] text-[#22d3ee] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#0f2028] hover:border-cyan-500/50 data-[state=active]:bg-cyan-600 data-[state=active]:text-white data-[state=active]:border-cyan-500 data-[state=active]:shadow-[0_4px_20px_rgba(8,145,178,0.6)] active:scale-95">
-              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            <TabsTrigger value="graficos" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#1abc9c] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#16a085] data-[state=active]:text-white data-[state=active]:border-[#16a085] active:scale-95">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               <span>Gráficos</span>
             </TabsTrigger>
             {/* EMPRÉSTIMOS */}
-            <TabsTrigger value="emprestimos" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-amber-600/40 bg-[#1a1200] text-[#fbbf24] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#2a1e00] hover:border-amber-500/60 data-[state=active]:bg-amber-500 data-[state=active]:text-black data-[state=active]:border-amber-400 data-[state=active]:shadow-[0_4px_20px_rgba(245,158,11,0.7)] animate-[neon-pulse_2s_ease-in-out_infinite] data-[state=active]:animate-none active:scale-95">
-              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+            <TabsTrigger value="emprestimos" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#f39c12] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#e67e22] data-[state=active]:text-white data-[state=active]:border-[#e67e22] active:scale-95">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
               <span>Empréstimos</span>
             </TabsTrigger>
-            {/* ANALISADOR DE CORRIDAS */}
-            <TabsTrigger value="analisador" className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-orange-600/40 bg-[#1a0d00] text-[#fb923c] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#2a1500] hover:border-orange-500/60 data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:border-orange-400 data-[state=active]:shadow-[0_4px_20px_rgba(249,115,22,0.7)] active:scale-95">
-              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M5 3L3 5"/><path d="M19 3l2 2"/></svg>
+            {/* ANALISADOR */}
+            <TabsTrigger value="analisador" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#e74c3c] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#c0392b] data-[state=active]:text-white data-[state=active]:border-[#c0392b] active:scale-95">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M20 2v4h-4"/></svg>
               <span>Analisador</span>
             </TabsTrigger>
             {/* CARTÕES — atalho externo */}
             <button
               onClick={() => window.location.href = '/cartoes'}
-              className="group flex flex-col items-center justify-center gap-2 h-20 rounded-2xl border-2 border-purple-600/40 bg-[#0d0a1a] text-[#a78bfa] font-bold text-[11px] uppercase tracking-wider transition-all duration-200 hover:bg-[#1a1030] hover:border-purple-500/60 active:scale-95 animate-[neon-pulse_2s_ease-in-out_infinite]"
+              className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#a29bfe] font-semibold text-[10px] uppercase tracking-wide transition-colors hover:bg-[#2d2d2d] active:scale-95"
               style={{ cursor: 'pointer' }}
             >
-              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
               <span>Cartões</span>
             </button>
           </TabsList>
