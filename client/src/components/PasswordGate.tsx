@@ -67,11 +67,12 @@ function useInstallPWA() {
   return { isInstallable, isInstalled, dismissed, install, dismiss, deferredPrompt };
 }
 
-type GateStep = "phone" | "newUser" | "indicador" | "registration" | "profilePhoto" | "referral" | "password" | "blocked" | "updateCpf" | "cpwd_create" | "cpwd_pending" | "cpwd_add_cpf";
+type GateStep = "phone" | "newUser" | "indicador" | "registration" | "profilePhoto" | "referral" | "password" | "blocked" | "updateCpf" | "cpwd_create" | "cpwd_pending" | "cpwd_add_cpf" | "route_blocked";
 
 export default function PasswordGate({ children }: PasswordGateProps) {
   const [accessGranted, setAccessGranted] = useState(false);
   const [gateStep, setGateStep] = useState<GateStep>("phone");
+  const [blockedRoutes, setBlockedRoutes] = useState<string[]>([]);
   const [clientPhone, setClientPhone] = useState("");
   const [clientCpf, setClientCpf] = useState("");
   const [password, setPassword] = useState("");
@@ -502,6 +503,20 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         if (!hasPhoto) {
           setGateStep("profilePhoto");
         } else {
+          // Verificar permissão de rota 'site' antes de mostrar a tela de senha
+          try {
+            const params = encodeURIComponent(JSON.stringify({ phone: canonical, route: 'site' }));
+            const res = await fetch(`/api/trpc/spreadsheet.checkRouteAccessByPhone?input=${params}`);
+            if (res.ok) {
+              const json = await res.json();
+              const routeCheck = json?.result?.data;
+              if (routeCheck && routeCheck.allowed === false) {
+                setBlockedRoutes(routeCheck.allowedRoutes || []);
+                setGateStep("route_blocked");
+                return;
+              }
+            }
+          } catch (_) {}
           setGateStep("password");
         }
       } else {
@@ -1680,6 +1695,46 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           )}
 
 
+
+          {/* ===== STEP: ROTA BLOQUEADA ===== */}
+          {gateStep === "route_blocked" && (
+            <div className="space-y-6 text-center">
+              <div className="bg-orange-950/50 border-2 border-orange-500 rounded-2xl p-6">
+                <p className="text-5xl mb-3">🔒</p>
+                <p className="text-orange-400 font-black text-xl uppercase tracking-widest mb-2">
+                  Acesso Restrito
+                </p>
+                <p className="text-white/80 text-sm">
+                  Você não tem permissão para acessar o site principal.
+                </p>
+                {blockedRoutes.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-white/60 text-xs uppercase tracking-wide">Você tem acesso a:</p>
+                    {blockedRoutes.map(r => {
+                      const labels: Record<string, { label: string; path: string }> = {
+                        gastos: { label: '📊 Controle de Gastos', path: '/gastos' },
+                        emprestimo: { label: '💳 Empréstimos', path: '/emprestimo' },
+                        site: { label: '🏠 Site Principal', path: '/' },
+                      };
+                      const info = labels[r];
+                      if (!info) return null;
+                      return (
+                        <a key={r} href={info.path} className="block w-full py-3 px-4 bg-primary/20 border border-primary/40 rounded-xl text-primary font-semibold text-sm hover:bg-primary/30 transition-colors">
+                          {info.label}
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => { setGateStep("phone"); setClientPhone(""); setClientCpf(""); }}
+                className="text-white/50 text-sm underline"
+              >
+                ← Voltar
+              </button>
+            </div>
+          )}
 
           {/* ===== STEP 1.5: INDICADOR ===== */}
           {gateStep === "indicador" && (

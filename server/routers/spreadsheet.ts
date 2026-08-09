@@ -1747,6 +1747,30 @@ export const spreadsheetRouter = router({
       }
     }),
 
+  checkRouteAccessByPhone: publicProcedure
+    .input(z.object({
+      phone: z.string(),
+      route: z.string(),
+    }))
+    .query(async ({ input }) => {
+      try {
+        const db = await getDb() as any;
+        if (!db) return { allowed: true };
+        try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
+        const cleanPhone = input.phone.replace(/\D/g, '');
+        if (!cleanPhone) return { allowed: true };
+        const clientByPhone = await db.select().from(spreadsheetClients)
+          .where(eq(spreadsheetClients.phone, cleanPhone)).limit(1);
+        const client = clientByPhone?.[0] || null;
+        if (!client) return { allowed: true };
+        if (!(client as any).allowedRoutes) return { allowed: true, allowedRoutes: [] };
+        const routes = ((client as any).allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
+        return { allowed: routes.includes(input.route), allowedRoutes: routes };
+      } catch (_) {
+        return { allowed: true };
+      }
+    }),
+
   adminUpdateClient: publicProcedure
     .input(z.object({
       clientId: z.number(),
