@@ -503,20 +503,6 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         if (!hasPhoto) {
           setGateStep("profilePhoto");
         } else {
-          // Verificar permissão de rota 'site' antes de mostrar a tela de senha
-          try {
-            const params = encodeURIComponent(JSON.stringify({ phone: canonical, route: 'site' }));
-            const res = await fetch(`/api/trpc/spreadsheet.checkRouteAccessByPhone?input=${params}`);
-            if (res.ok) {
-              const json = await res.json();
-              const routeCheck = json?.result?.data;
-              if (routeCheck && routeCheck.allowed === false) {
-                setBlockedRoutes(routeCheck.allowedRoutes || []);
-                setGateStep("route_blocked");
-                return;
-              }
-            }
-          } catch (_) {}
           setGateStep("password");
         }
       } else {
@@ -1161,27 +1147,6 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
     setCompleteSaving(false);
   };
-
-  // Verificar permissão de rota 'site' por telefone (antes do login)
-  const routeByPhoneQuery = trpc.spreadsheet.checkRouteAccessByPhone.useQuery(
-    { phone: canonicalPhone, route: 'site' },
-    { enabled: gateStep === 'password' && !!canonicalPhone, staleTime: 0 }
-  );
-  const routeBlockChecked = useRef(false);
-
-  // Bloquear acesso ao site principal se rota 'site' não estiver liberada
-  useEffect(() => {
-    if (gateStep !== 'password') { routeBlockChecked.current = false; return; }
-    if (!routeByPhoneQuery.data) return;
-    if (routeBlockChecked.current) return;
-    routeBlockChecked.current = true;
-    if (routeByPhoneQuery.data.allowed === false) {
-      const routes = (routeByPhoneQuery.data as any).allowedRoutes || [];
-      setBlockedRoutes(routes);
-      setGateStep('route_blocked');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeByPhoneQuery.data, gateStep]);
 
   // Verificar permissão de rota 'site' (só para clientes com cp_token, ou seja, cadastro novo)
   const cpTokenForRoute = localStorage.getItem(CP_TOKEN_KEY) || '';
