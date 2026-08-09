@@ -328,11 +328,6 @@ function AppContent() {
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location.toLowerCase() === "/gastos";
   const isEmprestimoRoute = location.toLowerCase() === "/emprestimo";
-
-  // Redirect de rotas com maiúsculas para minúsculas
-  if (location !== location.toLowerCase() && !isAdminRoute) {
-    return <Redirect to={location.toLowerCase()} />;
-  }
   const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
@@ -351,6 +346,11 @@ function AppContent() {
       link.href = "/manifest.json";
     }
   }, [isAdminRoute]);
+
+  // Redirect de rotas com maiúsculas para minúsculas (DEVE ficar após todos os hooks)
+  if (location !== location.toLowerCase() && !isAdminRoute) {
+    return <Redirect to={location.toLowerCase()} />;
+  }
 
   if (isAdminRoute) {
     return (
