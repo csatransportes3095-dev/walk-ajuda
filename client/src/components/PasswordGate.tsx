@@ -1167,14 +1167,21 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     { phone: canonicalPhone, route: 'site' },
     { enabled: gateStep === 'password' && !!canonicalPhone, staleTime: 0 }
   );
+  const routeBlockChecked = useRef(false);
 
   // Bloquear acesso ao site principal se rota 'site' não estiver liberada
   useEffect(() => {
-    if (gateStep === 'password' && routeByPhoneQuery.data && routeByPhoneQuery.data.allowed === false) {
-      setBlockedRoutes((routeByPhoneQuery.data as any).allowedRoutes || []);
+    if (gateStep !== 'password') { routeBlockChecked.current = false; return; }
+    if (!routeByPhoneQuery.data) return;
+    if (routeBlockChecked.current) return;
+    routeBlockChecked.current = true;
+    if (routeByPhoneQuery.data.allowed === false) {
+      const routes = (routeByPhoneQuery.data as any).allowedRoutes || [];
+      setBlockedRoutes(routes);
       setGateStep('route_blocked');
     }
-  }, [gateStep, routeByPhoneQuery.data]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeByPhoneQuery.data, gateStep]);
 
   // Verificar permissão de rota 'site' (só para clientes com cp_token, ou seja, cadastro novo)
   const cpTokenForRoute = localStorage.getItem(CP_TOKEN_KEY) || '';
