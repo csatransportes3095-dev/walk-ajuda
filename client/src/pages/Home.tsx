@@ -4306,29 +4306,56 @@ export default function Home() {
             </div>
           )}
           
-          {/* Atalho dos APKs — aparece somente quando o site está instalado como app (standalone/APK) */}
-          {typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) && (
-            <div className="flex gap-3 mt-4">
-              <a
-                href="/app"
-                className="flex-1 flex items-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 rounded-xl px-3 py-2.5 text-xs font-bold text-yellow-400 transition-all"
-              >
-                <span className="text-base">📱</span>
-                <div>
-                  <div className="font-bold">App Colombiano</div>
-                  <div className="text-yellow-400/60 font-normal">Baixar / Atualizar</div>
-                </div>
-              </a>
-              <a
-                href="/app-pro"
-                className="flex-1 flex items-center gap-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl px-3 py-2.5 text-xs font-bold text-blue-400 transition-all"
-              >
-                <span className="text-base">⚡</span>
-                <div>
-                  <div className="font-bold">H2 Driver Pro</div>
-                  <div className="text-blue-400/60 font-normal">Baixar / Atualizar</div>
-                </div>
-              </a>
+          {/* Boneco Android — aparece no navegador, oculto quando já está no APK (standalone) */}
+          {typeof window !== 'undefined' && !window.matchMedia('(display-mode: standalone)').matches && (window.navigator as any).standalone !== true && (
+            <div className="mt-6 flex flex-col items-center">
+              {/* Boneco Android CSS animado */}
+              <div className="relative flex flex-col items-center mb-3" style={{ animation: 'androidBounce 2s ease-in-out infinite' }}>
+                <style>{`
+                  @keyframes androidBounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+                  @keyframes androidAntenna { 0%,100%{transform:rotate(-10deg)} 50%{transform:rotate(10deg)} }
+                `}</style>
+                <svg width="64" height="72" viewBox="0 0 64 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* Antenas */}
+                  <line x1="22" y1="10" x2="16" y2="2" stroke="#3ddc84" strokeWidth="2.5" strokeLinecap="round"/>
+                  <line x1="42" y1="10" x2="48" y2="2" stroke="#3ddc84" strokeWidth="2.5" strokeLinecap="round"/>
+                  {/* Cabeça */}
+                  <path d="M12 22 Q12 10 32 10 Q52 10 52 22 L52 28 Q52 32 48 32 L16 32 Q12 32 12 28 Z" fill="#3ddc84"/>
+                  {/* Olhos */}
+                  <circle cx="24" cy="21" r="2.5" fill="white"/>
+                  <circle cx="40" cy="21" r="2.5" fill="white"/>
+                  {/* Corpo */}
+                  <rect x="10" y="34" width="44" height="26" rx="6" fill="#3ddc84"/>
+                  {/* Braços */}
+                  <rect x="2" y="34" width="6" height="18" rx="3" fill="#3ddc84"/>
+                  <rect x="56" y="34" width="6" height="18" rx="3" fill="#3ddc84"/>
+                  {/* Pernas */}
+                  <rect x="16" y="62" width="10" height="10" rx="3" fill="#3ddc84"/>
+                  <rect x="38" y="62" width="10" height="10" rx="3" fill="#3ddc84"/>
+                  {/* Linha do corpo */}
+                  <line x1="32" y1="34" x2="32" y2="60" stroke="#2db870" strokeWidth="1.5" strokeDasharray="3 3"/>
+                </svg>
+              </div>
+              <p className="text-sm font-bold text-[#3ddc84] mb-1">Baixe o aplicativo</p>
+              <p className="text-xs text-gray-400 mb-4 text-center">Acesse o sistema completo pelo app</p>
+              <div className="flex gap-3 w-full max-w-xs">
+                <a
+                  href="/app"
+                  className="flex-1 flex flex-col items-center gap-1 bg-[#3ddc84]/10 hover:bg-[#3ddc84]/20 border border-[#3ddc84]/30 rounded-xl px-3 py-3 text-xs font-bold text-[#3ddc84] transition-all active:scale-95"
+                >
+                  <span className="text-lg">📱</span>
+                  <span>Colombiano</span>
+                  <span className="text-[#3ddc84]/50 font-normal text-[10px]">Sistema completo</span>
+                </a>
+                <a
+                  href="/app-pro"
+                  className="flex-1 flex flex-col items-center gap-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl px-3 py-3 text-xs font-bold text-blue-400 transition-all active:scale-95"
+                >
+                  <span className="text-lg">⚡</span>
+                  <span>Driver Pro</span>
+                  <span className="text-blue-400/50 font-normal text-[10px]">Planilha + Analisador</span>
+                </a>
+              </div>
             </div>
           )}
 
