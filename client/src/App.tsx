@@ -91,6 +91,7 @@ import CartaoPage from "./pages/CartaoPage";
 import CartaoMercadoPage from "./pages/CartaoMercadoPage";
 import CartaoHistoricoPage from "./pages/CartaoHistoricoPage";
 import AppDownloadPage from "./pages/AppDownloadPage";
+import AppProDownloadPage from "./pages/AppProDownloadPage";
 import Ajuda from "./pages/Ajuda";
 import GeradorChassiPublico from "./pages/GeradorChassiPublico";
 import ProtectedPhotoPage from "./pages/ProtectedPhotoPage";
@@ -300,6 +301,7 @@ function Router() {
       <Route path={"/r/:slug"} component={Home} />
       <Route path={"/bot"} component={Home} />
       <Route path={"/app"} component={AppDownloadPage} />
+      <Route path={"/app-pro"} component={AppProDownloadPage} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -320,7 +322,7 @@ function AppContent() {
   const isLoginRoute = location === "/login";
   const isRaffleRoute = location === "/sorteio";
   const isGeradorChassiRoute = location === "/gerador-chassi";
-  const isAppDownloadRoute = location === "/app";
+  const isAppDownloadRoute = location === "/app" || location === "/app-pro";
   const isFotoRoute = location === "/foto";
   const isResellerRoute = location.startsWith("/revendedor");
   const isAjudaRoute = location === "/ajuda";
@@ -413,7 +415,7 @@ function AppContent() {
   if (isAjudaRoute) {
     return <Router />;
   }
-  // Rota /app é pública — página de download do APK Android
+  // Rotas /app e /app-pro são públicas — páginas de download dos APKs Android
   if (isAppDownloadRoute) {
     return <Router />;
   }

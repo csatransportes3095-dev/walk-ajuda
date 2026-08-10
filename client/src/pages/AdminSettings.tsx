@@ -100,6 +100,24 @@ export default function AdminSettings() {
     } catch { toast.error('Erro ao enviar APK'); }
     finally { setUploadingApk(false); }
   };
+  // APK Driver Pro
+  const [apkProFile, setApkProFile] = useState<File | null>(null);
+  const [uploadingApkPro, setUploadingApkPro] = useState(false);
+  const [apkProUrl, setApkProUrl] = useState<string | null>(null);
+  const apkProInputRef = useRef<HTMLInputElement>(null);
+  const handleApkProUpload = async () => {
+    if (!apkProFile) return;
+    setUploadingApkPro(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', apkProFile);
+      const res = await fetch('/api/upload/apk-pro', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) { setApkProUrl(data.url); toast.success('APK Driver Pro enviado! Acesse: h2colombiano.com/app-pro'); }
+      else toast.error(data.error || 'Erro ao enviar APK Driver Pro');
+    } catch { toast.error('Erro ao enviar APK Driver Pro'); }
+    finally { setUploadingApkPro(false); }
+  };
 
   // === PERGUNTAS DE ACOMPANHAMENTO ===
   type TQOption = { label: string; color?: string; blocking?: boolean };
@@ -1503,9 +1521,9 @@ export default function AdminSettings() {
                 )}
               </div>
             </div>
-            {/* Links */}
+            {/* Links Colombiano */}
             <div className="bg-[#111128] border border-white/10 rounded-xl p-5 space-y-3">
-              <h3 className="text-sm font-bold text-white">Links</h3>
+              <h3 className="text-sm font-bold text-white">Links — Colombiano</h3>
               <div className="space-y-2">
                 <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
                   <span className="text-xs text-gray-400 w-24 flex-shrink-0">Página pública</span>
@@ -1516,6 +1534,52 @@ export default function AdminSettings() {
                   <span className="text-xs text-gray-400 w-24 flex-shrink-0">Download direto</span>
                   <span className="text-xs text-blue-300 font-mono flex-1">https://h2colombiano.com/api/app/download</span>
                   <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/api/app/download'); toast.success('Copiado!'); }} className="text-xs text-gray-400 hover:text-white">Copiar</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Upload Driver Pro */}
+            <div className="bg-[#111128] border border-blue-500/20 rounded-xl p-5">
+              <h2 className="text-base font-bold text-white mb-1">App Android — H2 Driver Pro</h2>
+              <p className="text-xs text-gray-400 mb-4">Faça upload do .apk para disponibilizar em <strong className="text-blue-400">h2colombiano.com/app-pro</strong></p>
+              <div className="flex flex-col gap-3">
+                <input ref={apkProInputRef} type="file" accept=".apk" className="hidden" onChange={e => setApkProFile(e.target.files?.[0] || null)} />
+                <button onClick={() => apkProInputRef.current?.click()} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm text-white">
+                  <Upload className="w-4 h-4 text-blue-400" />
+                  {apkProFile ? `${apkProFile.name} (${(apkProFile.size / 1024 / 1024).toFixed(1)} MB)` : 'Selecionar arquivo .apk'}
+                </button>
+                {apkProFile && (
+                  <button onClick={handleApkProUpload} disabled={uploadingApkPro} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-xl px-4 py-3 text-sm font-bold text-white">
+                    <Upload className="w-4 h-4" />
+                    {uploadingApkPro ? 'Enviando...' : 'Enviar APK Driver Pro'}
+                  </button>
+                )}
+                {apkProUrl && (
+                  <div className="bg-green-900/30 border border-green-500/30 rounded-xl p-4 space-y-3">
+                    <p className="text-xs text-green-400 font-bold">✅ APK Driver Pro enviado com sucesso!</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <a href="/app-pro" target="_blank" className="flex items-center justify-center gap-1 bg-green-700/40 hover:bg-green-700/60 rounded-lg px-3 py-2 text-xs text-green-300 font-medium">Abrir Página</a>
+                      <a href="/api/app/download-pro" target="_blank" className="flex items-center justify-center gap-1 bg-blue-700/40 hover:bg-blue-700/60 rounded-lg px-3 py-2 text-xs text-blue-300 font-medium">Testar Download</a>
+                      <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/app-pro'); toast.success('Copiado!'); }} className="flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 rounded-lg px-3 py-2 text-xs text-gray-300">Copiar Link Página</button>
+                      <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/api/app/download-pro'); toast.success('Copiado!'); }} className="flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 rounded-lg px-3 py-2 text-xs text-gray-300">Copiar Link Direto</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* Links Driver Pro */}
+            <div className="bg-[#111128] border border-blue-500/20 rounded-xl p-5 space-y-3">
+              <h3 className="text-sm font-bold text-white">Links — H2 Driver Pro</h3>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
+                  <span className="text-xs text-gray-400 w-24 flex-shrink-0">Página pública</span>
+                  <span className="text-xs text-blue-300 font-mono flex-1">https://h2colombiano.com/app-pro</span>
+                  <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/app-pro'); toast.success('Copiado!'); }} className="text-xs text-gray-400 hover:text-white">Copiar</button>
+                </div>
+                <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
+                  <span className="text-xs text-gray-400 w-24 flex-shrink-0">Download direto</span>
+                  <span className="text-xs text-blue-300 font-mono flex-1">https://h2colombiano.com/api/app/download-pro</span>
+                  <button onClick={() => { navigator.clipboard.writeText('https://h2colombiano.com/api/app/download-pro'); toast.success('Copiado!'); }} className="text-xs text-gray-400 hover:text-white">Copiar</button>
                 </div>
               </div>
             </div>

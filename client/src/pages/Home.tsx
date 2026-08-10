@@ -4306,6 +4306,32 @@ export default function Home() {
             </div>
           )}
           
+          {/* Atalho dos APKs — aparece somente quando o site está instalado como app (standalone/APK) */}
+          {typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) && (
+            <div className="flex gap-3 mt-4">
+              <a
+                href="/app"
+                className="flex-1 flex items-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 rounded-xl px-3 py-2.5 text-xs font-bold text-yellow-400 transition-all"
+              >
+                <span className="text-base">📱</span>
+                <div>
+                  <div className="font-bold">App Colombiano</div>
+                  <div className="text-yellow-400/60 font-normal">Baixar / Atualizar</div>
+                </div>
+              </a>
+              <a
+                href="/app-pro"
+                className="flex-1 flex items-center gap-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl px-3 py-2.5 text-xs font-bold text-blue-400 transition-all"
+              >
+                <span className="text-base">⚡</span>
+                <div>
+                  <div className="font-bold">H2 Driver Pro</div>
+                  <div className="text-blue-400/60 font-normal">Baixar / Atualizar</div>
+                </div>
+              </a>
+            </div>
+          )}
+
           {/* Banners Informativos — no mesmo grid dos cards, mesma largura de coluna */}
           {activeBanners.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">

@@ -2377,4 +2377,24 @@ export function registerUploadRoute(app: Express) {
       res.status(500).json({ error: err?.message ?? 'Upload failed' });
     }
   });
+
+  // ─── UPLOAD DO APK DRIVER PRO (admin only) ───────────────────────────────────────────
+  app.post('/api/upload/apk-pro', uploadApkMw.single('file'), async (req: Request, res: Response) => {
+    try {
+      if (!isAdminRequest(req)) { res.status(401).json({ error: 'Unauthorized' }); return; }
+      const file = req.file;
+      if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
+      if (!file.originalname.toLowerCase().endsWith('.apk') && file.mimetype !== 'application/vnd.android.package-archive') {
+        res.status(400).json({ error: 'Arquivo deve ser um .apk' }); return;
+      }
+      const r2Key = 'app/H2DriverPro.apk';
+      const { url } = await r2PutObject(r2Key, file.buffer, 'application/vnd.android.package-archive');
+      const { saveApkProRelease } = await import('./routers/apk');
+      await saveApkProRelease({ filename: 'H2DriverPro.apk', r2Key, publicUrl: url, fileSize: file.size });
+      res.json({ success: true, url, downloadUrl: '/api/app/download-pro', pageUrl: '/app-pro', fileSize: file.size });
+    } catch (err: any) {
+      console.error('[UploadRoute] apk-pro error:', err);
+      res.status(500).json({ error: err?.message ?? 'Upload failed' });
+    }
+  });
 }
