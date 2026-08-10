@@ -731,6 +731,43 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
           </div>
         )}
 
+        {/* Boneco Android — aparece no navegador, oculto no APK (standalone) */}
+        {typeof window !== 'undefined' && !window.matchMedia('(display-mode: standalone)').matches && (window.navigator as any).standalone !== true && (
+          <div className="mt-6 flex flex-col items-center w-full">
+            <style>{`
+              @keyframes androidBounce2 { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+            `}</style>
+            <div style={{ animation: 'androidBounce2 2s ease-in-out infinite' }}>
+              <svg width="52" height="60" viewBox="0 0 64 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="22" y1="10" x2="16" y2="2" stroke="#3ddc84" strokeWidth="2.5" strokeLinecap="round"/>
+                <line x1="42" y1="10" x2="48" y2="2" stroke="#3ddc84" strokeWidth="2.5" strokeLinecap="round"/>
+                <path d="M12 22 Q12 10 32 10 Q52 10 52 22 L52 28 Q52 32 48 32 L16 32 Q12 32 12 28 Z" fill="#3ddc84"/>
+                <circle cx="24" cy="21" r="2.5" fill="white"/>
+                <circle cx="40" cy="21" r="2.5" fill="white"/>
+                <rect x="10" y="34" width="44" height="26" rx="6" fill="#3ddc84"/>
+                <rect x="2" y="34" width="6" height="18" rx="3" fill="#3ddc84"/>
+                <rect x="56" y="34" width="6" height="18" rx="3" fill="#3ddc84"/>
+                <rect x="16" y="62" width="10" height="10" rx="3" fill="#3ddc84"/>
+                <rect x="38" y="62" width="10" height="10" rx="3" fill="#3ddc84"/>
+              </svg>
+            </div>
+            <p className="text-xs font-bold text-[#3ddc84] mt-2 mb-1">Baixe o aplicativo</p>
+            <p className="text-[10px] text-white/40 mb-3 text-center">Acesse pelo app Android</p>
+            <div className="flex gap-2 w-full max-w-xs">
+              <a href="/app" className="flex-1 flex flex-col items-center gap-1 bg-[#3ddc84]/10 hover:bg-[#3ddc84]/20 border border-[#3ddc84]/30 rounded-xl px-2 py-2.5 text-[11px] font-bold text-[#3ddc84] transition-all active:scale-95">
+                <span>📱</span>
+                <span>Colombiano</span>
+                <span className="text-[#3ddc84]/40 font-normal text-[9px]">Sistema completo</span>
+              </a>
+              <a href="/app-pro" className="flex-1 flex flex-col items-center gap-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl px-2 py-2.5 text-[11px] font-bold text-blue-400 transition-all active:scale-95">
+                <span>⚡</span>
+                <span>Driver Pro</span>
+                <span className="text-blue-400/40 font-normal text-[9px]">Planilha + Analisador</span>
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* Rodapé */}
         <p className="mt-8 text-white/30 text-xs text-center">
           {HOME_FOOTER_TEXT}
