@@ -1208,9 +1208,11 @@ export const loanRouter = router({
         const creditLimit = profile?.creditLimit || 500;
         const interestRate = profile?.interestRate || 5;
         const maxDays = profile?.maxDays || 30;
+        // Usar defaultPaymentTypes do perfil (não hardcoded) para respeitar a configuração do ADM
+        const defaultPaymentTypes = profile?.defaultPaymentTypes || 'diario';
         await db.execute(drizzleSql`
           INSERT INTO loanClients (userId, name, cpf, phone, status, profileSlug, creditLimit, interestRate, maxDays, loanEnabled, allowedPaymentTypes, spreadsheetToken)
-          VALUES (1, ${session.name}, ${session.cpf || null}, ${session.phone}, 'ativo', 'bronze', ${creditLimit}, ${interestRate}, ${maxDays}, 1, 'diario,semanal,mensal', ${token})
+          VALUES (1, ${session.name}, ${session.cpf || null}, ${session.phone}, 'ativo', 'bronze', ${creditLimit}, ${interestRate}, ${maxDays}, 1, ${defaultPaymentTypes}, ${token})
         `);
         clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
       }
@@ -1407,9 +1409,19 @@ export const loanRouter = router({
     }
 
     // Valida se o tipo de pagamento está liberado para este cliente
-    const allowed = (client.allowedPaymentTypes || "diario").split(",").map((t: string) => t.trim());
-    if (!allowed.includes(input.paymentType)) {
-      throw new TRPCError({ code: "BAD_REQUEST", message: `Modo de pagamento "${input.paymentType}" não liberado para este cliente` });
+    // Usa allowedPaymentTypes do cliente, mas também valida contra o perfil atual
+    const clientAllowed = (client.allowedPaymentTypes || "diario").split(",").map((t: string) => t.trim());
+    // Buscar perfil atual do cliente para validação adicional
+    const profileRows = await qRows(db, drizzleSql`SELECT defaultPaymentTypes FROM loanProfiles WHERE slug=${client.profileSlug} LIMIT 1`);
+    const profileAllowed = profileRows.length > 0
+      ? (profileRows[0].defaultPaymentTypes || "diario").split(",").map((t: string) => t.trim())
+      : clientAllowed;
+    // O modo deve estar liberado TANTO no cliente quanto no perfil
+    const effectiveAllowed = clientAllowed.filter((t: string) => profileAllowed.includes(t));
+    if (!effectiveAllowed.includes(input.paymentType)) {
+      const modeLabel: Record<string, string> = { diario: 'Diário', semanal: 'Semanal', mensal: 'Mensal', quinzenal: 'Quinzenal', parcelado: 'Parcelado' };
+      const allowedLabels = effectiveAllowed.map((t: string) => modeLabel[t] || t).join(', ');
+      throw new TRPCError({ code: "BAD_REQUEST", message: `Modo de pagamento não liberado para seu perfil. Modos disponíveis: ${allowedLabels}` });
     }
 
     const today = getBrazilToday();
