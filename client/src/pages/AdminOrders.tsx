@@ -4979,11 +4979,15 @@ export default function AdminOrders() {
                           return true;
                         });
                         // Quando filtro é agendamento_confirmado, ordenar por slotDate+slotTime crescente (mais cedo primeiro)
+                        // Fallback: usa confirmedAt quando slotDate/slotTime não estão disponíveis
                         if (todosQuickFilter === "agendamento_confirmado") {
                           return [...filtered].sort((a: any, b: any) => {
-                            const da = a.scheduleSlotDate && a.scheduleSlotTime ? `${a.scheduleSlotDate}T${a.scheduleSlotTime}` : '9999-99-99T99:99';
-                            const db = b.scheduleSlotDate && b.scheduleSlotTime ? `${b.scheduleSlotDate}T${b.scheduleSlotTime}` : '9999-99-99T99:99';
-                            return da.localeCompare(db);
+                            const getKey = (o: any): string => {
+                              if (o.scheduleSlotDate && o.scheduleSlotTime) return `${o.scheduleSlotDate}T${o.scheduleSlotTime}`;
+                              if (o.scheduleConfirmedAt) return o.scheduleConfirmedAt;
+                              return '9999-99-99T99:99';
+                            };
+                            return getKey(a).localeCompare(getKey(b));
                           });
                         }
                         return sortFolderOrders(filtered, todosSortKey, todosSortDir);

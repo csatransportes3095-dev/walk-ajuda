@@ -3073,10 +3073,10 @@ export const appRouter = router({
 
       // Buscar scheduleStatus de cada pedido (pending = aguardando, confirmed = confirmado, null = sem agendamento)
       const scheduleStatusMap = new Map<string, string>();
-      const scheduleSlotMap = new Map<string, { slotDate: string | null; slotTime: string | null }>();
+      const scheduleSlotMap = new Map<string, { slotDate: string | null; slotTime: string | null; confirmedAt: string | null }>();
       try {
         const schedResult = await db.execute(
-          sql.raw(`SELECT registrationId, subOrderIndex, status, slotDate, slotTime FROM scheduleAppointments WHERE registrationId IN (${idsList}) AND status != 'cancelled' ORDER BY createdAt DESC`)
+          sql.raw(`SELECT registrationId, subOrderIndex, status, slotDate, slotTime, confirmedAt FROM scheduleAppointments WHERE registrationId IN (${idsList}) AND status != 'cancelled' ORDER BY createdAt DESC`)
         );
         const schedRows = (schedResult as any)[0] as any[];
         // Pegar o status mais recente por (registrationId, subOrderIndex)
@@ -3084,7 +3084,9 @@ export const appRouter = router({
           const key = `${sr.registrationId}_${sr.subOrderIndex}`;
           if (!scheduleStatusMap.has(key)) {
             scheduleStatusMap.set(key, sr.status);
-            scheduleSlotMap.set(key, { slotDate: sr.slotDate ?? null, slotTime: sr.slotTime ?? null });
+            // confirmedAt como ISO string para fallback de ordenação
+            const confirmedAtStr = sr.confirmedAt ? new Date(sr.confirmedAt).toISOString() : null;
+            scheduleSlotMap.set(key, { slotDate: sr.slotDate ?? null, slotTime: sr.slotTime ?? null, confirmedAt: confirmedAtStr });
           }
         }
       } catch (e) { /* ignora erro */ }
@@ -3132,6 +3134,7 @@ export const appRouter = router({
           scheduleStatus: scheduleStatusMap.get(`${o.id}_${o.subOrderIndex}`) ?? null,
           scheduleSlotDate: scheduleSlotMap.get(`${o.id}_${o.subOrderIndex}`)?.slotDate ?? null,
           scheduleSlotTime: scheduleSlotMap.get(`${o.id}_${o.subOrderIndex}`)?.slotTime ?? null,
+          scheduleConfirmedAt: scheduleSlotMap.get(`${o.id}_${o.subOrderIndex}`)?.confirmedAt ?? null,
         };
       });
 
