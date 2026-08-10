@@ -720,16 +720,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
           ))}
         </div>
 
-        {/* Card de instalação PWA — estilo Play Store */}
-        {pwaInstallable && !pwaInstalled && (
-          <PWAInstallCard onInstall={pwaInstall} logoUrl={loginImageUrl || undefined} />
-        )}
-        {pwaInstalled && (
-          <div className="mt-6 w-full flex items-center justify-center gap-2 text-emerald-400 text-sm font-semibold">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-            Walk Ajuda instalado na tela inicial!
-          </div>
-        )}
+        {/* Card PWA Walk Ajuda removido */}
 
         {/* Boneco Android — aparece no navegador, oculto no APK (standalone) */}
         {typeof window !== 'undefined' && !window.matchMedia('(display-mode: standalone)').matches && (window.navigator as any).standalone !== true && (

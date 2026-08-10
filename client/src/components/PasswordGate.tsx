@@ -1340,46 +1340,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
 
       <div className="relative z-10 w-full sm:max-w-md sm:mx-auto">
-        {/* Banner de instalação PWA */}
-        {isInstallable && !isInstalled && !dismissed && (
-          <div className="mb-4 bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl p-4 shadow-2xl border border-green-400/30 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3 flex-1">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Download className="w-7 h-7 text-white" />
-                </div>
-                <div>
-                  <p className="text-white font-bold text-sm">Instale o App Walk Ajuda!</p>
-                  <p className="text-white/80 text-xs mt-0.5">Acesse mais rápido direto da tela inicial</p>
-                </div>
-              </div>
-              <button onClick={dismiss} className="text-white/60 hover:text-white p-1 flex-shrink-0">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            {isIOS ? (
-              <div className="mt-3 bg-white/10 rounded-lg p-3">
-                <p className="text-white text-xs font-medium mb-1">Como instalar no iPhone:</p>
-                <div className="flex items-center gap-2 text-white/90 text-xs">
-                  <span>1. Toque em</span>
-                  <svg className="w-5 h-5 inline" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.11 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/>
-                  </svg>
-                  <span>(Compartilhar)</span>
-                </div>
-                <p className="text-white/90 text-xs mt-1">2. Role e toque em "Adicionar à Tela de Início"</p>
-              </div>
-            ) : (
-              <button
-                onClick={install}
-                disabled={!deferredPrompt}
-                className="mt-3 w-full py-2.5 bg-white text-green-700 font-bold text-sm rounded-lg hover:bg-white/90 transition-all transform hover:scale-[1.02] active:scale-95 shadow-lg"
-              >
-                INSTALAR AGORA
-              </button>
-            )}
-          </div>
-        )}
+        {/* Banner PWA removido */}
 
         <div className="bg-black/60 backdrop-blur-xl border-0 sm:border border-primary/30 rounded-none sm:rounded-2xl p-6 sm:p-8 shadow-2xl min-h-screen sm:min-h-0 flex flex-col justify-center">
           {/* Cronômetro destacado */}
