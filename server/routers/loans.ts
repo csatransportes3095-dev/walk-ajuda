@@ -1263,19 +1263,12 @@ export const loanRouter = router({
         AND status='pendente' AND dueDate < ${today}
       `);
       const overdueCount = parseInt(overdueInstalls[0]?.cnt || '0');
-      // paidAt é timestamp em ms; dueDate é 'YYYY-MM-DD' (meia-noite UTC)
-      // Limite de pontualidade = dueDate + 18h = UNIX_TIMESTAMP(STR_TO_DATE(dueDate,'%Y-%m-%d')) * 1000 + 64800000
-      const paidLate = await qRows(db, drizzleSql`
-        SELECT COUNT(*) as cnt FROM loanInstallments
-        WHERE loanId IN (${drizzleSql.raw(allLoanIds.join(','))})
-        AND status='pago' AND paidAt IS NOT NULL
-        AND paidAt > (UNIX_TIMESTAMP(STR_TO_DATE(dueDate, '%Y-%m-%d')) * 1000 + 64800000)
-      `);
-      const lateCount = parseInt(paidLate[0]?.cnt || '0') + overdueCount;
-      if (lateCount === 0) { score = 'A'; scorePct = 100; scoreLabel = 'Excelente'; scoreColor = '#10b981'; }
-      else if (lateCount <= 2) { score = 'B'; scorePct = 75; scoreLabel = 'Bom'; scoreColor = '#f59e0b'; }
-      else if (lateCount <= 5) { score = 'C'; scorePct = 50; scoreLabel = 'Regular'; scoreColor = '#f97316'; }
-      else { score = 'D'; scorePct = 0; scoreLabel = 'Desativado'; scoreColor = '#6b7280'; }
+      // Score baseado APENAS em parcelas pendentes vencidas atualmente
+      // Histórico de pagas com atraso não contamina o score atual
+      if (overdueCount === 0) { score = 'A'; scorePct = 100; scoreLabel = 'Excelente'; scoreColor = '#10b981'; }
+      else if (overdueCount <= 2) { score = 'B'; scorePct = 75; scoreLabel = 'Bom'; scoreColor = '#f59e0b'; }
+      else if (overdueCount <= 5) { score = 'C'; scorePct = 50; scoreLabel = 'Regular'; scoreColor = '#f97316'; }
+      else { score = 'D'; scorePct = 0; scoreLabel = 'Inadimplente'; scoreColor = '#ef4444'; }
     }
 
     // ── Próxima parcela (de todos os empréstimos ativos) ─────────────────────
@@ -2855,16 +2848,13 @@ export const loanRouter = router({
       SELECT lc.id, lc.name, lc.phone,
         COUNT(*) as lateCount
       FROM loanClients lc
-      JOIN loans l ON l.clientId = lc.id
+      JOIN loans l ON l.clientId = lc.id AND l.status NOT IN ('pago','cancelado','reprovado')
       JOIN loanInstallments li ON li.loanId = l.id
       WHERE lc.status NOT IN ('bloqueado', 'inativo')
-      AND (
-        (li.status = 'pendente' AND li.dueDate < ${today})
-        OR (li.status = 'pago' AND li.paidAt IS NOT NULL
-            AND li.paidAt > (UNIX_TIMESTAMP(STR_TO_DATE(li.dueDate, '%Y-%m-%d')) * 1000 + 64800000))
-      )
+      AND li.status = 'pendente'
+      AND li.dueDate < ${today}
       GROUP BY lc.id, lc.name, lc.phone
-      HAVING lateCount >= 6
+      HAVING lateCount >= 1
       ORDER BY lateCount DESC
       LIMIT 20
     `);
