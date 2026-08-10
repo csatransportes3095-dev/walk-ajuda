@@ -3100,15 +3100,22 @@ export const appRouter = router({
           if (phones.length > 0) {
             const phonesStr = phones.map((p: string) => `'${p}'`).join(',');
             const fallbackResult = await db.execute(
-              sql.raw(`SELECT customerPhone, status FROM scheduleAppointments WHERE customerPhone IN (${phonesStr}) AND status != 'cancelled' ORDER BY FIELD(status,'confirmed','pending'), createdAt DESC`)
+              sql.raw(`SELECT customerPhone, status, slotDate, slotTime, confirmedAt FROM scheduleAppointments WHERE customerPhone IN (${phonesStr}) AND status != 'cancelled' ORDER BY FIELD(status,'confirmed','pending'), createdAt DESC`)
             );
             const fallbackRows = (fallbackResult as any)[0] as any[];
-            // Mapa de telefone -> status mais prioritário (confirmed > pending)
+            // Mapa de telefone -> status + slot mais prioritário (confirmed > pending)
             const phoneStatusMap = new Map<string, string>();
+            const phoneSlotMap = new Map<string, { slotDate: string | null; slotTime: string | null; confirmedAt: string | null }>();
             for (const fr of (fallbackRows || [])) {
               const phone = (fr.customerPhone || '').replace(/\D/g, '');
-              if (!phoneStatusMap.has(phone)) phoneStatusMap.set(phone, fr.status);
-              else if (fr.status === 'confirmed') phoneStatusMap.set(phone, 'confirmed'); // confirmed tem prioridade
+              const confirmedAtStr = fr.confirmedAt ? new Date(fr.confirmedAt).toISOString() : null;
+              if (!phoneStatusMap.has(phone)) {
+                phoneStatusMap.set(phone, fr.status);
+                phoneSlotMap.set(phone, { slotDate: fr.slotDate ?? null, slotTime: fr.slotTime ?? null, confirmedAt: confirmedAtStr });
+              } else if (fr.status === 'confirmed') {
+                phoneStatusMap.set(phone, 'confirmed'); // confirmed tem prioridade
+                phoneSlotMap.set(phone, { slotDate: fr.slotDate ?? null, slotTime: fr.slotTime ?? null, confirmedAt: confirmedAtStr });
+              }
             }
             // Aplicar fallback para pedidos sem scheduleStatus
             for (const o of ordersWithoutSchedule) {
@@ -3116,6 +3123,8 @@ export const appRouter = router({
               const fallbackStatus = phoneStatusMap.get(phone);
               if (fallbackStatus) {
                 scheduleStatusMap.set(`${o.id}_${o.subOrderIndex}`, fallbackStatus);
+                const slotInfo = phoneSlotMap.get(phone);
+                if (slotInfo) scheduleSlotMap.set(`${o.id}_${o.subOrderIndex}`, slotInfo);
               }
             }
           }
