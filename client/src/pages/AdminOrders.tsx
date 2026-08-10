@@ -4970,15 +4970,24 @@ export default function AdminOrders() {
                   })()}
                   {/* ===== MODO NORMAL ===== */}
                   {(!isAllTab || !isEmergencySearch) && (isAllTab
-                    ? [{ name: "", orders: sortFolderOrders(
-                        group.orders.filter((o: any) => {
+                    ? [{ name: "", orders: (() => {
+                        const filtered = group.orders.filter((o: any) => {
                           if (todosQuickFilter === "sem_status") return (o as any).scheduleStatus === null || (o as any).scheduleStatus === undefined;
                           if (todosQuickFilter === "agendamento_confirmado") return (o as any).scheduleStatus === "confirmed";
                           if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
                           if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
                           return true;
-                        }),
-                        todosSortKey, todosSortDir) }]
+                        });
+                        // Quando filtro é agendamento_confirmado, ordenar por slotDate+slotTime crescente (mais cedo primeiro)
+                        if (todosQuickFilter === "agendamento_confirmado") {
+                          return [...filtered].sort((a: any, b: any) => {
+                            const da = a.scheduleSlotDate && a.scheduleSlotTime ? `${a.scheduleSlotDate}T${a.scheduleSlotTime}` : '9999-99-99T99:99';
+                            const db = b.scheduleSlotDate && b.scheduleSlotTime ? `${b.scheduleSlotDate}T${b.scheduleSlotTime}` : '9999-99-99T99:99';
+                            return da.localeCompare(db);
+                          });
+                        }
+                        return sortFolderOrders(filtered, todosSortKey, todosSortDir);
+                      })() }]
                     : group.isDelivered
                       ? [{ name: "", orders: sortDeliveredOrders(group.orders, deliveredSortKey, deliveredSortDir) }]
                       : buildOptionGroups(group.orders)
