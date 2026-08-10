@@ -364,7 +364,7 @@ function readFileAsBase64(file: File): Promise<string> {
 // ─── Empréstimos ─────────────────────────────────────────────────────────────
 function LoansTab() {
   const [search, setSearch] = useState("");
-  const [loanTab, setLoanTab] = useState<"ativos" | "finalizados" | "aguardando_pagamento" | "atrasado" | "em_analise" | "pago_hoje" | "todos">("ativos");
+  const [loanTab, setLoanTab] = useState<"ativos" | "finalizados" | "aguardando_pagamento" | "atrasado" | "em_analise" | "pago_hoje" | "todos" | "pendente" | "aprovado">("ativos");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [showCreate, setShowCreate] = useState(false);
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
@@ -695,6 +695,8 @@ function LoansTab() {
         <div className="w-full grid grid-cols-3 gap-2">
           {([
             { id: "ativos",             emoji: "⚡", label: "Ativos",            color: "border-violet-500/50 bg-violet-500/10 text-violet-300",  active: "border-violet-500 bg-violet-600 text-white shadow-lg" },
+            { id: "pendente",           emoji: "🕐", label: "Ag. Aprovação",    color: "border-orange-500/50 bg-orange-500/10 text-orange-300", active: "border-orange-500 bg-orange-600 text-white shadow-lg" },
+            { id: "aprovado",           emoji: "✔️", label: "Aprovado",          color: "border-teal-500/50 bg-teal-500/10 text-teal-300",       active: "border-teal-500 bg-teal-600 text-white shadow-lg" },
             { id: "aguardando_pagamento", emoji: "⏳", label: "Aguardando",        color: "border-yellow-500/50 bg-yellow-500/10 text-yellow-300", active: "border-yellow-500 bg-yellow-600 text-white shadow-lg" },
             { id: "atrasado",           emoji: "🔴", label: "Atrasado",          color: "border-red-500/50 bg-red-500/10 text-red-300",         active: "border-red-500 bg-red-600 text-white shadow-lg" },
             { id: "em_analise",         emoji: "🔍", label: "Em Análise",        color: "border-purple-500/50 bg-purple-500/10 text-purple-300", active: "border-purple-500 bg-purple-600 text-white shadow-lg" },
