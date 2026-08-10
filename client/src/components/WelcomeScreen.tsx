@@ -681,7 +681,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
               <a href="/app-pro" className="flex-1 flex flex-col items-center gap-0.5 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl px-2 py-2 text-[11px] font-bold text-blue-400 transition-all active:scale-95">
                 <span>⚡</span>
                 <span>Driver Pro</span>
-                <span className="text-blue-400/50 font-normal text-[9px]">Planilha + Analisador</span>
+                <span className="text-blue-400/50 font-normal text-[9px]">Planilha + Empréstimo</span>
               </a>
             </div>
           </div>
