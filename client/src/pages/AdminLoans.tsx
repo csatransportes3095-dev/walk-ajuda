@@ -2200,11 +2200,14 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
     if (!selectedClient) return 30;
     if (paymentType === "semanal") return parseInt(selectedClient.maxDaysSemanal) || parseInt(selectedClient.maxDays) || 60;
     if (paymentType === "quinzenal") return parseInt(selectedClient.maxDaysQuinzenal) || parseInt(selectedClient.maxDays) || 60;
-    if (paymentType === "mensal") return parseInt(selectedClient.maxDaysMensal) || parseInt(selectedClient.maxDays) || 90;
+    // Mensal normal sempre gera uma parcela, com vencimento em 30 dias.
+    if (paymentType === "mensal") return 30;
     return parseInt(selectedClient.maxDays) || 30; // diario
   };
-  // Prazo efetivo: usa customDays se preenchido, senão usa padrão do perfil
-  const days = paymentType !== "diario" && customDays ? (parseInt(customDays) || getDefaultDaysByType()) : getDefaultDaysByType();
+  // Apenas semanal e quinzenal usam prazo editável. Mensal é sempre 30 dias.
+  const days = paymentType === "mensal"
+    ? 30
+    : (paymentType !== "diario" && customDays ? (parseInt(customDays) || getDefaultDaysByType()) : getDefaultDaysByType());
 
   // Calcula parcelas conforme regime
   const calcInstallments = () => {
@@ -2223,31 +2226,46 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="box-border w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[90dvh] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+      <DialogContent className="!top-3 !right-3 !bottom-3 !left-3 !grid !h-auto !w-auto !max-w-none !translate-x-0 !translate-y-0 box-border overflow-x-hidden overflow-y-auto p-4 sm:!top-[50%] sm:!right-auto sm:!bottom-auto sm:!left-[50%] sm:!w-full sm:!max-w-md sm:!-translate-x-1/2 sm:!-translate-y-1/2 sm:p-6">
         <DialogHeader><DialogTitle>Novo Empréstimo</DialogTitle></DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Cliente</Label>
+          <div className="min-w-0 space-y-2">
+            <Label>Localizar cliente</Label>
             <Input
               value={clientSearch}
-              onChange={(e) => setClientSearch(e.target.value)}
-              placeholder="Buscar por nome, CPF ou telefone..."
+              onChange={(e) => {
+                setClientSearch(e.target.value);
+                if (clientId) setClientId("");
+              }}
+              placeholder="Nome, CPF ou telefone"
               aria-label="Buscar cliente por nome, CPF ou telefone"
-              className="bg-card/60"
+              className="w-full bg-card/60"
             />
-            <Select value={clientId} onValueChange={setClientId}>
-              <SelectTrigger className="bg-card/60"><SelectValue placeholder="Selecione o cliente..." /></SelectTrigger>
-              <SelectContent>
-                {filteredClients.length > 0 ? filteredClients.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}{c.cpf ? ` · CPF ${c.cpf}` : ""}{c.phone ? ` · ${c.phone}` : ""}
-                  </SelectItem>
-                )) : (
-                  <div className="px-3 py-2 text-sm text-muted-foreground">Nenhum cliente encontrado.</div>
-                )}
-              </SelectContent>
-            </Select>
-            {clientSearch && <p className="text-xs text-muted-foreground">{filteredClients.length} cliente(s) encontrado(s)</p>}
+            {selectedClient && !clientSearch && (
+              <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{selectedClient.name}</p>
+                  <p className="break-all text-xs text-muted-foreground">{selectedClient.cpf ? `CPF ${selectedClient.cpf}` : "CPF não informado"}{selectedClient.phone ? ` · ${selectedClient.phone}` : ""}</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => setClientId("")}>Trocar</Button>
+              </div>
+            )}
+            {clientSearch && (
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border bg-card/60 p-1">
+                {filteredClients.length > 0 ? filteredClients.slice(0, 8).map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => { setClientId(String(c.id)); setClientSearch(""); }}
+                    className="w-full rounded-md px-3 py-2 text-left transition-colors hover:bg-muted focus:bg-muted"
+                  >
+                    <p className="truncate text-sm font-medium">{c.name}</p>
+                    <p className="break-all text-xs text-muted-foreground">{c.cpf ? `CPF ${c.cpf}` : "CPF não informado"}{c.phone ? ` · ${c.phone}` : ""}</p>
+                  </button>
+                )) : <p className="px-3 py-2 text-sm text-muted-foreground">Nenhum cliente encontrado.</p>}
+              </div>
+            )}
+            {clientSearch && filteredClients.length > 8 && <p className="text-xs text-muted-foreground">Mostrando os 8 primeiros resultados. Refine a busca.</p>}
           </div>
 
           {selectedClient && (
@@ -2297,7 +2315,7 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
               <p className="text-xs text-amber-400/80">Perfil permite apenas: {allowedModes.map((m: string) => m === "diario" ? "Diário" : m === "semanal" ? "Semanal" : m === "quinzenal" ? "Quinzenal" : "Mensal").join(", ")}</p>
             )}
           </div>
-          {paymentType !== "diario" && (
+          {(paymentType === "semanal" || paymentType === "quinzenal") && (
             <div className="space-y-2">
               <Label>Prazo (dias)</Label>
               <Input
@@ -2314,6 +2332,13 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                 {paymentType === "quinzenal" && `${Math.max(1, Math.floor(days / 15))} parcela(s) quinzenal(is)`}
                 {paymentType === "mensal" && `${Math.max(1, Math.floor(days / 30))} parcela(s) mensal(is)`}
               </p>
+            </div>
+          )}
+
+          {paymentType === "mensal" && (
+            <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-sm">
+              <p className="font-medium text-cyan-300">Mensal: 1 parcela em 30 dias</p>
+              <p className="mt-1 break-words text-xs text-muted-foreground">O vencimento será exatamente 30 dias após a liberação. Para dividir em mais de um mês, use o modo Parcelado.</p>
             </div>
           )}
 
@@ -2398,11 +2423,11 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
           </div>
 
           {amountNum > 0 && selectedClient && (
-            <div className="bg-muted/30 rounded-lg p-3 text-sm space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Juros</span><span className="text-yellow-400">{fmt(interest)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Total a receber</span><span className="font-bold text-green-400">{fmt(total)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Parcelas</span><span>{numInstallments}x de {fmt(perInstallment)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Prazo</span><span>{days} dias</span></div>
+            <div className="min-w-0 space-y-2 rounded-lg bg-muted/30 p-3 text-sm">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"><span className="min-w-0 text-muted-foreground">Juros</span><span className="max-w-[55vw] break-words text-right text-yellow-400">{fmt(interest)}</span></div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"><span className="min-w-0 text-muted-foreground">Total a receber</span><span className="max-w-[55vw] break-words text-right font-bold text-green-400">{fmt(total)}</span></div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"><span className="min-w-0 text-muted-foreground">Parcelas</span><span className="max-w-[55vw] break-words text-right">{numInstallments}x de {fmt(perInstallment)}</span></div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"><span className="min-w-0 text-muted-foreground">Prazo</span><span className="max-w-[55vw] break-words text-right">{days} dias</span></div>
               {paymentType === "diario" && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Regime</span>
