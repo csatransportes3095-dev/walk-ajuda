@@ -1660,6 +1660,10 @@ export const loans = mysqlTable("loans", {
   status: mysqlEnum("status", ["aguardando_pagamento", "em_analise", "pago", "cancelado"]).notNull().default("aguardando_pagamento"),
   paidAt: timestamp("paidAt"),
   paidBy: varchar("paidBy", { length: 100 }),
+  // Registro administrativo do PIX enviado ao cliente para liberar o empréstimo.
+  pixSentAt: timestamp("pixSentAt"),
+  pixSentBy: varchar("pixSentBy", { length: 100 }),
+  pixSendNote: text("pixSendNote"),
   refusedReason: text("refusedReason"),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

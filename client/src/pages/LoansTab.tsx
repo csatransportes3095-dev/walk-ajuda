@@ -587,7 +587,15 @@ export function LoansTab({ token }: LoansTabProps) {
   const hasActive = activeLoans.length > 0;
   const sim = simQuery.data;
   const rejectedLoans = (loans as any[]).filter((l) => l.status === "reprovado").slice(0, 3);
-  const visibleLoans = (loans as any[]).filter((l) => l.status !== "reprovado");
+  // O empréstimo atual vem sempre antes de históricos quitados, mesmo que existam registros antigos.
+  const clientLoanPriority: Record<string, number> = { pendente: 0, aprovado: 1, aguardando_pagamento: 2, em_analise: 3, pago: 4, cancelado: 5 };
+  const visibleLoans = [...(loans as any[])]
+    .filter((l) => l.status !== "reprovado")
+    .sort((a, b) => {
+      const priority = (clientLoanPriority[a.status] ?? 9) - (clientLoanPriority[b.status] ?? 9);
+      if (priority !== 0) return priority;
+      return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+    });
 
   return (
     <div className="space-y-4 pb-12">
@@ -822,7 +830,7 @@ export function LoansTab({ token }: LoansTabProps) {
         <div className="space-y-4">
           {visibleLoans.map((loan: any) => {
             const isExpanded = expandedLoan === loan.id;
-            const showSendProof = ["aprovado", "aguardando_pagamento"].includes(loan.status);
+            const showSendProof = ["aprovado", "aguardando_pagamento"].includes(loan.status) && !!loan.pixSentAt;
             const paidCount = parseInt(loan.paidInstallments || 0);
             const totalCount = parseInt(loan.totalInstallments || 1);
             const totalAmt = parseFloat(loan.totalAmount || 0);
@@ -851,11 +859,17 @@ export function LoansTab({ token }: LoansTabProps) {
                       <p className="text-xs text-blue-300 font-medium">Solicitação em análise — aguarde a aprovação.</p>
                     </div>
                   )}
-                  {/* Banner aprovado sem liberação */}
-                  {loan.status === "aprovado" && !loan.releaseDate && (
+                  {/* Empréstimo aprovado, aguardando a transferência PIX pelo ADM */}
+                  {loan.status === "aprovado" && !loan.pixSentAt && (
                     <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 mb-4">
                       <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-                      <p className="text-xs text-amber-300 font-medium">Empréstimo aprovado! O PIX será enviado em até 24h após a confirmação.</p>
+                      <p className="text-xs text-amber-300 font-medium">Empréstimo aprovado — aguardando a liberação do PIX pelo administrador.</p>
+                    </div>
+                  )}
+                  {loan.status === "aprovado" && loan.pixSentAt && (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2 mb-4">
+                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <p className="text-xs text-emerald-300 font-medium">PIX liberado. Seu empréstimo está ativo e as parcelas já estão disponíveis.</p>
                     </div>
                   )}
 

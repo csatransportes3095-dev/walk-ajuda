@@ -364,7 +364,7 @@ function readFileAsBase64(file: File): Promise<string> {
 // ─── Empréstimos ─────────────────────────────────────────────────────────────
 function LoansTab() {
   const [search, setSearch] = useState("");
-  const [loanTab, setLoanTab] = useState<"ativos" | "finalizados" | "aguardando_pagamento" | "atrasado" | "em_analise" | "pago_hoje" | "todos" | "pendente" | "aprovado">("ativos");
+  const [loanTab, setLoanTab] = useState<"ativos" | "finalizados" | "aguardando_pagamento" | "atrasado" | "em_analise" | "pago_hoje" | "todos" | "pendente" | "aprovado" | "solicitacoes_novas">("ativos");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [showCreate, setShowCreate] = useState(false);
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
@@ -375,6 +375,8 @@ function LoansTab() {
   const [rejectWaSending, setRejectWaSending] = useState(false);
   const [editLoanData, setEditLoanData] = useState<any | null>(null);
   const [approvalNotifyModal, setApprovalNotifyModal] = useState<any | null>(null); // loan object
+  const [pixConfirmLoan, setPixConfirmLoan] = useState<any | null>(null);
+  const [pixSendNote, setPixSendNote] = useState("");
   const [installmentNotifyModal, setInstallmentNotifyModal] = useState<{ loan: any; inst: any } | null>(null);
   const [rescheduleModal, setRescheduleModal] = useState<{ loanId: number; clientName: string; currentWorkDays: string; pendingCount: number } | null>(null);
   const [rescheduleWorkDays, setRescheduleWorkDays] = useState<"seg_sab" | "seg_dom">("seg_sab");
@@ -441,7 +443,15 @@ function LoansTab() {
   );
 
   const approveLoan = trpc.loans.approveLoan.useMutation({
-    onSuccess: () => { toast.success("Empréstimo aprovado!"); utils.loans.listLoans.invalidate(); utils.loans.getDashboard.invalidate(); },
+    onSuccess: () => { toast.success("Empréstimo aprovado. Agora confirme o PIX depois de enviar ao cliente."); utils.loans.listLoans.invalidate(); utils.loans.getDashboard.invalidate(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const confirmPixSent = trpc.loans.confirmPixSent.useMutation({
+    onSuccess: () => {
+      toast.success("PIX enviado confirmado. O empréstimo foi liberado para cobrança normal.");
+      setPixConfirmLoan(null); setPixSendNote("");
+      utils.loans.listLoans.invalidate(); utils.loans.getDashboard.invalidate();
+    },
     onError: (e) => toast.error(e.message),
   });
   const rejectLoan = trpc.loans.rejectLoan.useMutation({
@@ -694,9 +704,9 @@ function LoansTab() {
         </div>
         <div className="w-full grid grid-cols-3 gap-2">
           {([
-            { id: "ativos",             emoji: "⚡", label: "Ativos",            color: "border-violet-500/50 bg-violet-500/10 text-violet-300",  active: "border-violet-500 bg-violet-600 text-white shadow-lg" },
-            { id: "pendente",           emoji: "🕐", label: "Ag. Aprovação",    color: "border-orange-500/50 bg-orange-500/10 text-orange-300", active: "border-orange-500 bg-orange-600 text-white shadow-lg" },
-            { id: "aprovado",           emoji: "✔️", label: "Aprovado",          color: "border-teal-500/50 bg-teal-500/10 text-teal-300",       active: "border-teal-500 bg-teal-600 text-white shadow-lg" },
+            { id: "solicitacoes_novas", emoji: "📥", label: "Solicitações Novas", color: "border-blue-500/50 bg-blue-500/10 text-blue-300", active: "border-blue-500 bg-blue-600 text-white shadow-lg" },
+            { id: "ativos",             emoji: "⚡", label: "Empréstimos Normais", color: "border-violet-500/50 bg-violet-500/10 text-violet-300",  active: "border-violet-500 bg-violet-600 text-white shadow-lg" },
+            { id: "aprovado",           emoji: "✔️", label: "PIX Enviado",        color: "border-teal-500/50 bg-teal-500/10 text-teal-300",       active: "border-teal-500 bg-teal-600 text-white shadow-lg" },
             { id: "aguardando_pagamento", emoji: "⏳", label: "Aguardando",        color: "border-yellow-500/50 bg-yellow-500/10 text-yellow-300", active: "border-yellow-500 bg-yellow-600 text-white shadow-lg" },
             { id: "atrasado",           emoji: "🔴", label: "Atrasado",          color: "border-red-500/50 bg-red-500/10 text-red-300",         active: "border-red-500 bg-red-600 text-white shadow-lg" },
             { id: "em_analise",         emoji: "🔍", label: "Em Análise",        color: "border-purple-500/50 bg-purple-500/10 text-purple-300", active: "border-purple-500 bg-purple-600 text-white shadow-lg" },
@@ -743,12 +753,17 @@ function LoansTab() {
           const photoUrl = loan.clientPhoto;
           const initials = (loan.clientName || "?").split(" ").slice(0, 2).map((w: string) => w[0]).join("").toUpperCase();
           const paymentLabel = loan.paymentType === "diario" ? "Diário" : loan.paymentType === "semanal" ? "Semanal" : loan.paymentType === "quinzenal" ? "Quinzenal" : "Mensal";
-          const workDaysLabel = loan.workDays === "seg_sab" ? "Seg–Sáb (20x)" : loan.workDays === "seg_dom" ? "Seg–Dom (25x)" : loan.workDays === "custom" ? `Personalizado (${loan.installments}x)` : "";
+          const workDaysLabel = loan.paymentType === "diario"
+            ? (loan.workDays === "seg_sab" ? "Seg–Sáb (20x)" : loan.workDays === "seg_dom" ? "Seg–Dom (25x)" : loan.workDays === "custom" ? `Personalizado (${loan.installments}x)` : "")
+            : "";
+          const isPixPending = loan.status === "aprovado" && !loan.pixSentAt;
+          const isPixSent = loan.status === "aprovado" && !!loan.pixSentAt;
+          const isPreRelease = loan.status === "pendente" || isPixPending;
 
           return (
             <Card key={loan.id} className={`border ${loan.isOverdue ? "border-red-500/40" : loan.status === "pendente" ? "border-yellow-500/40" : "border-border/60"} bg-card/60 overflow-hidden`}>
               {/* Barra de status colorida no topo */}
-              <div className={`h-1 w-full ${loan.status === "pendente" ? "bg-yellow-500" : loan.status === "aprovado" ? "bg-green-500" : loan.status === "pago" ? "bg-emerald-500" : loan.status === "reprovado" ? "bg-red-500" : loan.isOverdue ? "bg-red-500" : "bg-violet-500"}`} />
+              <div className={`h-1 w-full ${loan.status === "pendente" ? "bg-blue-500" : isPixPending ? "bg-amber-500" : isPixSent ? "bg-emerald-500" : loan.status === "pago" ? "bg-emerald-500" : loan.status === "reprovado" ? "bg-red-500" : loan.isOverdue ? "bg-red-500" : "bg-violet-500"}`} />
               <CardContent className="p-4">
                 <div className="flex flex-col sm:flex-row gap-3">
                   {/* Avatar do cliente + botão WhatsApp */}
@@ -805,7 +820,27 @@ function LoansTab() {
                       )}
                     </div>
 
-                    {/* Grid de valores */}
+                    {/* Etapa de solicitação e liberação — separada da cobrança */}
+                    {(loan.status === "pendente" || isPixPending || isPixSent) && (
+                      <section className={`mb-3 rounded-xl border p-3 ${
+                        loan.status === "pendente" ? "border-blue-500/30 bg-blue-500/10" :
+                        isPixPending ? "border-amber-500/40 bg-amber-500/10" : "border-emerald-500/30 bg-emerald-500/10"
+                      }`}>
+                        <p className={`mb-2 text-xs font-bold uppercase tracking-wide ${loan.status === "pendente" ? "text-blue-300" : isPixPending ? "text-amber-300" : "text-emerald-300"}`}>
+                          {loan.status === "pendente" ? "1. Solicitação nova — aguardando análise" : isPixPending ? "2. Aprovado — falta enviar PIX ao cliente" : "3. PIX enviado — empréstimo liberado"}
+                        </p>
+                        {loan.status === "pendente" && <p className="text-xs text-muted-foreground">Analise a solicitação e escolha aprovar ou reprovar abaixo.</p>}
+                        {isPixPending && (
+                          <div className="space-y-2 text-xs">
+                            {loan.clientPixKey ? <p className="break-all text-amber-100">PIX do cliente: <strong className="font-mono">{loan.clientPixKey}</strong>{loan.clientPixName ? ` · ${loan.clientPixName}` : ""}{loan.clientPixBank ? ` · ${loan.clientPixBank}` : ""}</p> : <p className="text-red-300">Não é possível liberar: o cliente ainda não cadastrou chave PIX.</p>}
+                            <p className="text-amber-200/80">Após fazer a transferência no banco, confirme abaixo para liberar a cobrança deste empréstimo.</p>
+                          </div>
+                        )}
+                        {isPixSent && <p className="text-xs text-emerald-200">PIX confirmado em {fmtDateTime(loan.pixSentAt)}{loan.pixSentBy ? ` por ${loan.pixSentBy}` : ""}. Este empréstimo já está na cobrança normal.</p>}
+                      </section>
+                    )}
+
+                    {/* Valores e cobrança do empréstimo */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
                       <div className="bg-muted/30 rounded-lg p-2 text-center">
                         <p className="text-xs text-muted-foreground mb-0.5">Solicitado</p>
@@ -894,31 +929,61 @@ function LoansTab() {
 
                 </div>
 
-                {/* Rodapé de ações */}
-                <div className="mt-4 pt-3 border-t border-border/40">
-                    <div className="grid grid-cols-3 gap-2">
-                      {/* Parcelas - sempre visível */}
-                      <button
-                        onClick={() => setExpandedLoan(isExpanded ? null : loan.id)}
-                        className={`flex flex-col items-center gap-1 rounded-xl border py-3 px-2 text-center transition-all active:scale-95 ${
-                          isExpanded ? "border-violet-500 bg-violet-600 text-white shadow-lg" : "border-violet-500/40 bg-violet-500/10 text-violet-300"
-                        }`}
-                      >
-                        <span className="text-xl">{isExpanded ? "▲" : "▼"}</span>
-                        <span className="text-xs font-semibold">Parcelas</span>
-                      </button>
+                {/* Ações da etapa de liberação */}
+                {(loan.status === "pendente" || isPixPending || isPixSent) && (
+                  <div className="mt-4 border-t border-border/40 pt-3">
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Liberação do empréstimo</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {loan.status === 'pendente' && (
+                        <button onClick={() => approveLoan.mutate({ id: loan.id })} className="flex flex-col items-center gap-1 rounded-xl border border-green-500/40 bg-green-500/10 px-2 py-3 text-center text-green-300 transition-all active:scale-95 hover:bg-green-500/20">
+                          <span className="text-xl">✅</span><span className="text-xs font-semibold">Aprovar solicitação</span>
+                        </button>
+                      )}
+                      {loan.status === 'pendente' && (
+                        <button onClick={() => { setRejectDialog({ id: loan.id, clientName: loan.clientName, clientPhone: loan.clientPhone, clientEmail: loan.clientEmail }); setRejectReason(''); setRejectEmailInput(loan.clientEmail || ''); }} className="flex flex-col items-center gap-1 rounded-xl border border-red-500/40 bg-red-500/10 px-2 py-3 text-center text-red-300 transition-all active:scale-95 hover:bg-red-500/20">
+                          <span className="text-xl">❌</span><span className="text-xs font-semibold">Reprovar solicitação</span>
+                        </button>
+                      )}
+                      {isPixPending && (
+                        <button disabled={!loan.clientPixKey} onClick={() => { setPixConfirmLoan(loan); setPixSendNote(""); }} className="col-span-2 flex flex-col items-center gap-1 rounded-xl border border-amber-500/50 bg-amber-500/15 px-2 py-3 text-center text-amber-200 transition-all active:scale-95 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-45">
+                          <span className="text-xl">🏦</span><span className="text-xs font-semibold">Confirmar PIX enviado ao cliente</span>
+                        </button>
+                      )}
+                      {isPixSent && (
+                        <button onClick={() => setApprovalNotifyModal(loan)} className="col-span-2 flex flex-col items-center gap-1 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-2 py-3 text-center text-emerald-300 transition-all active:scale-95 hover:bg-emerald-500/20">
+                          <span className="text-xl">📨</span><span className="text-xs font-semibold">Notificar liberação ao cliente</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-                      {/* Extrato PDF - sempre visível */}
-                      <button
-                        onClick={() => handleOpenStatement(loan)}
-                        className="flex flex-col items-center gap-1 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 py-3 px-2 text-center transition-all active:scale-95"
-                      >
-                        <span className="text-xl">📄</span>
-                        <span className="text-xs font-semibold">Extrato PDF</span>
-                      </button>
+                {/* Ações de cobrança e gestão */}
+                <div className="mt-4 pt-3 border-t border-border/40">
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">{isPreRelease ? "Gestão da solicitação" : "Cobrança e gestão"}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {/* Parcelas e extrato só entram após a liberação PIX */}
+                      {!isPreRelease && <>
+                        <button
+                          onClick={() => setExpandedLoan(isExpanded ? null : loan.id)}
+                          className={`flex flex-col items-center gap-1 rounded-xl border py-3 px-2 text-center transition-all active:scale-95 ${
+                            isExpanded ? "border-violet-500 bg-violet-600 text-white shadow-lg" : "border-violet-500/40 bg-violet-500/10 text-violet-300"
+                          }`}
+                        >
+                          <span className="text-xl">{isExpanded ? "▲" : "▼"}</span>
+                          <span className="text-xs font-semibold">Parcelas</span>
+                        </button>
+                        <button
+                          onClick={() => handleOpenStatement(loan)}
+                          className="flex flex-col items-center gap-1 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 py-3 px-2 text-center transition-all active:scale-95"
+                        >
+                          <span className="text-xl">📄</span>
+                          <span className="text-xs font-semibold">Extrato PDF</span>
+                        </button>
+                      </>}
 
                       {/* Reagendar parcelas (diário ativo) */}
-                      {loan.paymentType === 'diario' && !['pago','cancelado','reprovado'].includes(loan.status) && (
+                      {loan.paymentType === 'diario' && !isPreRelease && !['pago','cancelado','reprovado'].includes(loan.status) && (
                         <button
                           onClick={() => {
                             const pending = (loan.installmentsList || []).filter((i: any) => i.status !== 'pago').length;
@@ -941,38 +1006,6 @@ function LoansTab() {
                         <span className="text-xl">✏️</span>
                         <span className="text-xs font-semibold">Editar</span>
                       </button>
-
-                      {/* Notificar Aprovação (ativo/aprovado) */}
-                      {!['pago','cancelado','reprovado','pendente'].includes(loan.status) && (
-                        <button
-                          onClick={() => setApprovalNotifyModal(loan)}
-                          className="flex flex-col items-center gap-1 rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 py-3 px-2 text-center transition-all active:scale-95"
-                        >
-                          <span className="text-xl">📨</span>
-                          <span className="text-xs font-semibold">Notificar</span>
-                        </button>
-                      )}
-                      {/* Aprovar (pendente) */}
-                      {loan.status === 'pendente' && (
-                        <button
-                          onClick={() => approveLoan.mutate({ id: loan.id })}
-                          className="flex flex-col items-center gap-1 rounded-xl border border-green-500/40 bg-green-500/10 text-green-300 hover:bg-green-500/20 py-3 px-2 text-center transition-all active:scale-95"
-                        >
-                          <span className="text-xl">✅</span>
-                          <span className="text-xs font-semibold">Aprovar</span>
-                        </button>
-                      )}
-
-                      {/* Reprovar (pendente) */}
-                      {loan.status === 'pendente' && (
-                        <button
-                          onClick={() => { setRejectDialog({ id: loan.id, clientName: loan.clientName, clientPhone: loan.clientPhone, clientEmail: loan.clientEmail }); setRejectReason(''); setRejectEmailInput(loan.clientEmail || ''); }}
-                          className="flex flex-col items-center gap-1 rounded-xl border border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20 py-3 px-2 text-center transition-all active:scale-95"
-                        >
-                          <span className="text-xl">❌</span>
-                          <span className="text-xs font-semibold">Reprovar</span>
-                        </button>
-                      )}
 
                       {/* Cancelar (ativo/aprovado) */}
                       {!['pago','cancelado','reprovado','pendente'].includes(loan.status) && (
@@ -998,7 +1031,7 @@ function LoansTab() {
                 </div>
 
                 {/* Parcelas expandidas */}
-                {isExpanded && instData && instData.id === loan.id && (
+                {!isPreRelease && isExpanded && instData && instData.id === loan.id && (
                   <div className="mt-4 border-t border-border pt-4 space-y-2">
                     <p className="text-sm font-medium mb-3">
                       Parcelas — {loan.paymentType === "diario" ? "Pagamento Diário" : loan.paymentType === "semanal" ? "Pagamento Semanal" : loan.paymentType === "quinzenal" ? "Pagamento Quinzenal" : "Pagamento Mensal"}
@@ -1278,6 +1311,34 @@ function LoansTab() {
       )}
 
       {/* Dialog reprovar */}
+      <Dialog open={!!pixConfirmLoan} onOpenChange={(open) => { if (!open) { setPixConfirmLoan(null); setPixSendNote(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Confirmar PIX enviado ao cliente</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+              <p className="font-semibold text-amber-200">Confirme somente após fazer a transferência no banco.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Esta ação libera o empréstimo para a cobrança normal e registra a data, hora e administrador responsável.</p>
+            </div>
+            <div className="space-y-1 rounded-xl bg-muted/30 p-3 text-sm">
+              <p><span className="text-muted-foreground">Cliente:</span> <strong>{pixConfirmLoan?.clientName}</strong></p>
+              <p><span className="text-muted-foreground">Valor a enviar:</span> <strong className="text-amber-300">{fmt(pixConfirmLoan?.amount)}</strong></p>
+              <p className="break-all"><span className="text-muted-foreground">Chave PIX:</span> <strong className="font-mono text-emerald-300">{pixConfirmLoan?.clientPixKey}</strong></p>
+              {(pixConfirmLoan?.clientPixName || pixConfirmLoan?.clientPixBank) && <p className="text-xs text-muted-foreground">{pixConfirmLoan?.clientPixName || ""}{pixConfirmLoan?.clientPixBank ? ` · ${pixConfirmLoan.clientPixBank}` : ""}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label>Observação do PIX (opcional)</Label>
+              <Textarea value={pixSendNote} onChange={(e) => setPixSendNote(e.target.value)} placeholder="Ex.: comprovante salvo no banco, identificador da transferência..." rows={3} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPixConfirmLoan(null); setPixSendNote(""); }}>Cancelar</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" disabled={confirmPixSent.isPending} onClick={() => confirmPixSent.mutate({ id: pixConfirmLoan.id, note: pixSendNote })}>
+              {confirmPixSent.isPending ? "Confirmando..." : "Confirmar PIX enviado"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!rejectDialog} onOpenChange={(o) => { if (!o) { setRejectDialog(null); setRejectReason(""); setRejectEmailInput(""); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>

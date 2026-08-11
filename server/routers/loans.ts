@@ -297,6 +297,22 @@ async function ensureParceladoPaymentType(db: any) {
   }
 }
 
+// ── Migração automática: controle de PIX de liberação ao cliente ────────────
+let _pixDisbursementMigrated = false;
+async function ensurePixDisbursementColumns(db: any) {
+  if (_pixDisbursementMigrated) return;
+  _pixDisbursementMigrated = true;
+  try {
+    const columns = await qRows(db, drizzleSql`SHOW COLUMNS FROM loans`);
+    const names = new Set(columns.map((col: any) => String(col.Field || col.field || '').toLowerCase()));
+    if (!names.has('pixsentat')) await db.execute(drizzleSql.raw(`ALTER TABLE loans ADD COLUMN pixSentAt DATETIME NULL DEFAULT NULL`));
+    if (!names.has('pixsentby')) await db.execute(drizzleSql.raw(`ALTER TABLE loans ADD COLUMN pixSentBy VARCHAR(100) NULL DEFAULT NULL`));
+    if (!names.has('pixsendnote')) await db.execute(drizzleSql.raw(`ALTER TABLE loans ADD COLUMN pixSendNote TEXT NULL`));
+  } catch (e: any) {
+    console.warn('[loans] Não foi possível preparar os campos de PIX enviado:', e?.message);
+  }
+}
+
 // ── Migração automática: tabela loanInstallmentPlans ──────────────────────
 let _installmentPlansMigrated = false;
 async function ensureInstallmentPlansTable(db: any) {
@@ -704,6 +720,7 @@ export const loanRouter = router({
     search: z.string().optional(),
   }).optional()).query(async ({ input }) => {
     const db = await getDb() as any;
+    await ensurePixDisbursementColumns(db);
     const searchVal = input?.search ? `%${input.search}%` : null;
     const clientId = input?.clientId || null;
 
@@ -763,9 +780,12 @@ export const loanRouter = router({
       hasInstallmentDueToday: todayDueLoanIds.has(r.id) && !['pago', 'cancelado', 'reprovado'].includes(r.status),
     }));
     if (input?.status && input.status !== 'todos') {
-      if (input.status === 'ativos') {
-        // Aba Ativos: todos exceto pago, cancelado, reprovado
-        result = result.filter((r: any) => !['pago', 'cancelado', 'reprovado'].includes(r.status));
+      if (input.status === 'solicitacoes_novas') {
+        // Solicitação ainda em análise ou aprovada, porém sem confirmação do PIX de liberação.
+        result = result.filter((r: any) => r.status === 'pendente' || (r.status === 'aprovado' && !r.pixSentAt));
+      } else if (input.status === 'ativos') {
+        // Só entra na cobrança normal após o ADM confirmar que o PIX de liberação foi enviado.
+        result = result.filter((r: any) => !['pago', 'cancelado', 'reprovado', 'pendente'].includes(r.status) && !(r.status === 'aprovado' && !r.pixSentAt));
       } else if (input.status === 'finalizados') {
         // Aba Finalizados: pago, cancelado ou reprovado
         result = result.filter((r: any) => ['pago', 'cancelado', 'reprovado'].includes(r.status));
@@ -777,6 +797,12 @@ export const loanRouter = router({
       } else if (input.status === 'em_analise') {
         // Empréstimos que têm pelo menos uma parcela em análise (comprovante enviado pelo cliente)
         result = result.filter((r: any) => Number(r.pendingProofs) > 0);
+      } else if (input.status === 'pix_pendente') {
+        // Mantido para compatibilidade: mostra somente os aprovados sem PIX de liberação confirmado.
+        result = result.filter((r: any) => r.status === 'aprovado' && !r.pixSentAt);
+      } else if (input.status === 'aprovado') {
+        // Aprovados que já tiveram o PIX de liberação confirmado pelo ADM.
+        result = result.filter((r: any) => r.status === 'aprovado' && !!r.pixSentAt);
       } else if (input.status === 'pago_hoje') {
         // Empréstimos com pelo menos uma parcela paga hoje (convertendo paidAt para BRT)
         const pagoHojeRows = await qRows(db, drizzleSql`
@@ -860,6 +886,30 @@ export const loanRouter = router({
     const db = await getDb() as any;
     const approvedBy = ctx.user?.name || "admin";
     await db.execute(drizzleSql`UPDATE loans SET status='aprovado', approvedAt=NOW(), approvedBy=${approvedBy} WHERE id=${input.id}`);
+    return { ok: true };
+  }),
+
+  confirmPixSent: adminProcedure.input(z.object({
+    id: z.number(),
+    note: z.string().max(1000).optional(),
+  })).mutation(async ({ ctx, input }) => {
+    const db = await getDb() as any;
+    await ensurePixDisbursementColumns(db);
+    const rows = await qRows(db, drizzleSql`
+      SELECT l.id, l.status, l.pixSentAt, lc.client_pix_key as clientPixKey
+      FROM loans l JOIN loanClients lc ON lc.id=l.clientId
+      WHERE l.id=${input.id} LIMIT 1
+    `);
+    if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Empréstimo não encontrado' });
+    const loan = rows[0];
+    if (loan.status !== 'aprovado') throw new TRPCError({ code: 'BAD_REQUEST', message: 'A liberação só pode ser confirmada após a aprovação.' });
+    if (!loan.clientPixKey) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cadastre a chave PIX do cliente antes de confirmar a liberação.' });
+    if (loan.pixSentAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Este PIX já foi confirmado como enviado.' });
+    const sentBy = ctx.user?.name || 'admin';
+    await db.execute(drizzleSql`
+      UPDATE loans SET pixSentAt=NOW(), pixSentBy=${sentBy}, pixSendNote=${input.note?.trim() || null}, updatedAt=NOW()
+      WHERE id=${input.id}
+    `);
     return { ok: true };
   }),
 
@@ -1176,6 +1226,7 @@ export const loanRouter = router({
 
   getClientLoanInfo: publicProcedure.input(z.object({ token: z.string() })).query(async ({ input }) => {
     const db = await getDb() as any;
+    await ensurePixDisbursementColumns(db);
     const token = input.token.trim();
     // Buscar sessão da planilha para obter dados do cliente
     const sessions = await qRows(db, drizzleSql`
@@ -1221,12 +1272,22 @@ export const loanRouter = router({
     const client = clients[0];
     if (!client.loanEnabled) return { enabled: false, client, loans: [], pixConfig: null };
 
+    // Um mesmo cliente pode ter sido vinculado por token, CPF ou telefone em momentos diferentes.
+    // Reunimos esses vínculos para o empréstimo atual nunca ficar escondido por um cadastro antigo quitado.
+    const identityRows = session.cpf
+      ? await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR cpf=${session.cpf} OR phone=${session.phone}`)
+      : await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR phone=${session.phone}`);
+    const relatedClientIds = Array.from(new Set(identityRows.map((row: any) => Number(row.id)).filter(Boolean)));
+    const relatedClientIdsSql = drizzleSql.raw(relatedClientIds.join(','));
+
     const loans = await qRows(db, drizzleSql`
       SELECT l.*,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='pago') as paidInstallments,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id) as totalInstallments,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='em_analise') as pendingProofs
-      FROM loans l WHERE l.clientId=${client.id} ORDER BY l.createdAt DESC
+      FROM loans l
+      WHERE l.clientId IN (${relatedClientIdsSql})
+      ORDER BY CASE WHEN l.status IN ('pendente','aprovado','aguardando_pagamento','em_analise') THEN 0 ELSE 1 END, l.createdAt DESC
     `);
     const today = getBrazilToday();
     // Busca empréstimos com parcelas pendentes vencidas
@@ -1245,7 +1306,7 @@ export const loanRouter = router({
 
     // ── Score A/B/C/D ────────────────────────────────────────────────────────
     // Buscar histórico de todos os empréstimos do cliente
-    const allLoans = await qRows(db, drizzleSql`SELECT id, status FROM loans WHERE clientId=${client.id}`);
+    const allLoans = loans;
     const allLoanIds = allLoans.map((l: any) => l.id);
     let score: 'A' | 'B' | 'C' | 'D' = 'A';
     let scorePct = 100;
@@ -1312,8 +1373,11 @@ export const loanRouter = router({
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED" });
     const client = clients[0];
-
-    const loans = await qRows(db, drizzleSql`SELECT * FROM loans WHERE id=${input.loanId} AND clientId=${client.id}`);
+    const identities = client.cpf
+      ? await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR cpf=${client.cpf} OR phone=${client.phone}`)
+      : await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR phone=${client.phone}`);
+    const clientIds = Array.from(new Set(identities.map((row: any) => Number(row.id)).filter(Boolean)));
+    const loans = await qRows(db, drizzleSql`SELECT * FROM loans WHERE id=${input.loanId} AND clientId IN (${drizzleSql.raw(clientIds.join(','))})`);
     if (!loans.length) throw new TRPCError({ code: "NOT_FOUND" });
 
     const today = getBrazilToday();
@@ -1336,11 +1400,15 @@ export const loanRouter = router({
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED" });
     const client = clients[0];
+    const identities = client.cpf
+      ? await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR cpf=${client.cpf} OR phone=${client.phone}`)
+      : await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR phone=${client.phone}`);
+    const clientIds = Array.from(new Set(identities.map((row: any) => Number(row.id)).filter(Boolean)));
 
     const inst = await qRows(db, drizzleSql`
       SELECT li.* FROM loanInstallments li
       JOIN loans l ON l.id = li.loanId
-      WHERE li.id=${input.installmentId} AND l.clientId=${client.id}
+      WHERE li.id=${input.installmentId} AND l.clientId IN (${drizzleSql.raw(clientIds.join(','))})
     `);
     if (!inst.length) throw new TRPCError({ code: "NOT_FOUND" });
 
