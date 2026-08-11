@@ -658,7 +658,7 @@ export default function AdminOrders() {
   const [deliveredPhoneFilter, setDeliveredPhoneFilter] = useState("");
   const [todosSortKey, setTodosSortKey] = useState<FolderSortKey>("date");
   const [todosSortDir, setTodosSortDir] = useState<FolderSortDir>("desc");
-  const [todosQuickFilter, setTodosQuickFilter] = useState<"all" | "sem_status" | "agendamento_confirmado" | "agendamento" | "novo">("all");
+  const [todosQuickFilter, setTodosQuickFilter] = useState<"all" | "sem_status" | "agendamento_confirmado" | "agendamento" | "novo" | "aguardando_ativa" | "conta_ativa">("all");
   // Estado para expandir cards individuais de ARQUIVO e RG/CNH
   const [expandedArchivedId, setExpandedArchivedId] = useState<string | null>(null);
   const [expandedRgCnhId, setExpandedRgCnhId] = useState<string | null>(null);
@@ -4707,6 +4707,8 @@ export default function AdminOrders() {
                             if (todosQuickFilter === "agendamento_confirmado") return (o as any).scheduleStatus === "confirmed";
                             if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
                             if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
+                            if (todosQuickFilter === "aguardando_ativa") return (o as any).status === "aguardando_ativa";
+                            if (todosQuickFilter === "conta_ativa") return (o as any).status === "conta_ativa";
                             return true;
                           }).length} resultado(s)
                         </span>
@@ -4719,12 +4721,16 @@ export default function AdminOrders() {
                           { id: "agendamento_confirmado",label: "Agend. Confirmado",         desc: "Agendamento confirmado",       glow: "#22c55e", ab: "linear-gradient(135deg,#14532d,#166534)", ac: "#22c55e", at: "#86efac" },
                           { id: "agendamento",           label: "Aguardando",               desc: "Aguardando confirmação",      glow: "#eab308", ab: "linear-gradient(135deg,#713f12,#854d0e)", ac: "#eab308", at: "#fef08a" },
                           { id: "novo",                  label: "Novos",                    desc: "Não visualizados",            glow: "#6366f1", ab: "linear-gradient(135deg,#1e1b4b,#312e81)", ac: "#6366f1", at: "#a5b4fc" },
+                          { id: "aguardando_ativa",      label: "Ag. Ficar Ativa",          desc: "Aguardando ficar ativa",      glow: "#84cc16", ab: "linear-gradient(135deg,#1a2e05,#365314)", ac: "#84cc16", at: "#bef264" },
+                          { id: "conta_ativa",           label: "Conta Ativa",              desc: "Conta já ativa",              glow: "#10b981", ab: "linear-gradient(135deg,#022c22,#064e3b)", ac: "#10b981", at: "#6ee7b7" },
                         ] as const).map(f => {
                           const cnt = group.orders.filter((o: any) => {
                             if (f.id === "sem_status") return (o as any).scheduleStatus === null || (o as any).scheduleStatus === undefined;
                             if (f.id === "agendamento_confirmado") return (o as any).scheduleStatus === "confirmed";
                             if (f.id === "agendamento") return (o as any).scheduleStatus === "pending";
                             if (f.id === "novo") return !viewedOrders.has(getOrderKey(o));
+                            if (f.id === "aguardando_ativa") return (o as any).status === "aguardando_ativa";
+                            if (f.id === "conta_ativa") return (o as any).status === "conta_ativa";
                             return true;
                           }).length;
                           const active = todosQuickFilter === f.id;
@@ -4976,6 +4982,8 @@ export default function AdminOrders() {
                           if (todosQuickFilter === "agendamento_confirmado") return (o as any).scheduleStatus === "confirmed";
                           if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
                           if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
+                          if (todosQuickFilter === "aguardando_ativa") return (o as any).status === "aguardando_ativa";
+                          if (todosQuickFilter === "conta_ativa") return (o as any).status === "conta_ativa";
                           return true;
                         });
                         // Quando filtro é agendamento_confirmado, ordenar por slotDate+slotTime crescente (mais cedo primeiro)
