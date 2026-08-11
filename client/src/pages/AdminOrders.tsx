@@ -4707,8 +4707,8 @@ export default function AdminOrders() {
                             if (todosQuickFilter === "agendamento_confirmado") return (o as any).scheduleStatus === "confirmed";
                             if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
                             if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
-                            if (todosQuickFilter === "aguardando_ativa") return (o as any).status === "aguardando_ativa";
-                            if (todosQuickFilter === "conta_ativa") return (o as any).status === "conta_ativa";
+                            if (todosQuickFilter === "aguardando_ativa") return (o as any).latestStatus === "aguardando_ativa";
+                            if (todosQuickFilter === "conta_ativa") return (o as any).latestStatus === "conta_ativa";
                             return true;
                           }).length} resultado(s)
                         </span>
@@ -4729,8 +4729,8 @@ export default function AdminOrders() {
                             if (f.id === "agendamento_confirmado") return (o as any).scheduleStatus === "confirmed";
                             if (f.id === "agendamento") return (o as any).scheduleStatus === "pending";
                             if (f.id === "novo") return !viewedOrders.has(getOrderKey(o));
-                            if (f.id === "aguardando_ativa") return (o as any).status === "aguardando_ativa";
-                            if (f.id === "conta_ativa") return (o as any).status === "conta_ativa";
+                            if (f.id === "aguardando_ativa") return (o as any).latestStatus === "aguardando_ativa";
+                            if (f.id === "conta_ativa") return (o as any).latestStatus === "conta_ativa";
                             return true;
                           }).length;
                           const active = todosQuickFilter === f.id;
@@ -4982,8 +4982,8 @@ export default function AdminOrders() {
                           if (todosQuickFilter === "agendamento_confirmado") return (o as any).scheduleStatus === "confirmed";
                           if (todosQuickFilter === "agendamento") return (o as any).scheduleStatus === "pending";
                           if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
-                          if (todosQuickFilter === "aguardando_ativa") return (o as any).status === "aguardando_ativa";
-                          if (todosQuickFilter === "conta_ativa") return (o as any).status === "conta_ativa";
+                          if (todosQuickFilter === "aguardando_ativa") return (o as any).latestStatus === "aguardando_ativa";
+                          if (todosQuickFilter === "conta_ativa") return (o as any).latestStatus === "conta_ativa";
                           return true;
                         });
                         // Quando filtro é agendamento_confirmado, ordenar por slotDate+slotTime crescente (mais cedo primeiro)
