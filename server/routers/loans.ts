@@ -2430,7 +2430,7 @@ export const loanRouter = router({
       const pillLabel: Record<string, string> = { pago: 'Pago', pendente: 'Pendente', atrasado: 'Atrasado', em_analise: 'Em Análise', cancelado: 'Cancelado' };
       const pStyle = pillColor[statusKey] || pillColor.pendente;
       const pLabel = pillLabel[statusKey] || inst.status;
-      const paidAtStr = inst.paidAt ? fmtDate(inst.paidAt.toString().slice(0, 10)) : 'ââ‚¬â€';
+      const paidAtStr = inst.paidAt ? fmtDate(inst.paidAt.toString().slice(0, 10)) : '&mdash;';
       return `<tr>
         <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;color:#374151;"><strong>${inst.installmentNumber}</strong></td>
         <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;color:#374151;">${fmtDate(inst.dueDate)}</td>
@@ -2446,9 +2446,9 @@ export const loanRouter = router({
           <p style="font-size:11px;color:#78350f;line-height:1.6;margin:0 0 10px;">Você está no perfil <strong>${currentProfile?.name || loan.profileSlug}</strong> com limite de <strong>${fmtBRL(parseFloat(loan.clientCreditLimit || 0))}</strong>. Mantendo seus pagamentos em dia, você sobe de categoria <strong>automaticamente</strong> e ganha acesso a limites maiores e taxas menores!</p>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="background:#e2e8f0;color:#475569;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;">${profileEmoji[loan.profileSlug] || '★'} ${currentProfile?.name || loan.profileSlug}</span>
-            <span style="color:#d97706;font-size:14px;">ââ€ â€™</span>
+            <span style="color:#d97706;font-size:14px;">&rarr;</span>
             <span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid #fcd34d;">${profileEmoji[nextProfile.slug] || ''} ${nextProfile.name}</span>
-            <span style="font-size:10px;color:#16a34a;font-weight:600;">ââ€ â€˜ Limite até ${fmtBRL(parseFloat(nextProfile.creditLimit))} Â· Juros a partir de ${nextProfile.interestRate}%</span>
+            <span style="font-size:10px;color:#16a34a;font-weight:600;">&#10004; Limite até ${fmtBRL(parseFloat(nextProfile.creditLimit))} &middot; Juros a partir de ${nextProfile.interestRate}%</span>
           </div>
         </td></tr></table>
       </div>
@@ -2520,7 +2520,7 @@ export const loanRouter = router({
     </div>
     <div class="sec">DETALHES DO EMPRÉSTIMO</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;"><span style="font-size:10px;color:#64748b;">NÂº do Empréstimo</span><span style="font-size:11px;font-weight:700;">#EMP-${String(input.loanId).padStart(4,'0')}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;"><span style="font-size:10px;color:#64748b;">N&ordm; do Empréstimo</span><span style="font-size:11px;font-weight:700;">#EMP-${String(input.loanId).padStart(4,'0')}</span></div>
       <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;"><span style="font-size:10px;color:#64748b;">Status</span><span style="font-size:11px;font-weight:700;color:${loan.status==='aprovado'?'#16a34a':loan.status==='reprovado'?'#dc2626':'#d97706'};">${statusLabel[loan.status] || loan.status}</span></div>
       <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;"><span style="font-size:10px;color:#64748b;">Data de Liberação</span><span style="font-size:11px;font-weight:700;">${fmtDate(loan.releaseDate)}</span></div>
       <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;"><span style="font-size:10px;color:#64748b;">Data de Vencimento</span><span style="font-size:11px;font-weight:700;">${fmtDate(loan.dueDate)}</span></div>
@@ -2543,7 +2543,7 @@ export const loanRouter = router({
     ${upgradeSection}
   </div>
   <div class="footer">
-    <div><p style="font-size:9px;color:#94a3b8;">CSA Empréstimos SP Â· h2colombiano.com Â· h2@h2colombiano.com</p><p style="font-size:9px;color:#94a3b8;margin-top:3px;">Documento gerado automaticamente. Válido como comprovante de situação do empréstimo.</p></div>
+    <div><p style="font-size:9px;color:#94a3b8;">CSA Empréstimos SP &middot; h2colombiano.com &middot; h2@h2colombiano.com</p><p style="font-size:9px;color:#94a3b8;margin-top:3px;">Documento gerado automaticamente. Válido como comprovante de situação do empréstimo.</p></div>
     <div style="text-align:right;"><div style="display:inline-block;border:2px solid ${stampColor};color:${stampColor};font-size:11px;font-weight:800;padding:3px 12px;border-radius:4px;letter-spacing:1px;transform:rotate(-3deg);">${stampText}</div><div style="font-size:9px;color:#cbd5e1;margin-top:6px;font-family:monospace;">${docId}</div></div>
   </div>
 </div></body></html>`;
