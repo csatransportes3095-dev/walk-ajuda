@@ -2223,7 +2223,7 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="box-border w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[90dvh] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
         <DialogHeader><DialogTitle>Novo Empréstimo</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -2252,9 +2252,9 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 
           {selectedClient && (
             <div className="bg-muted/30 rounded-lg p-3 text-sm space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Limite</span><span className="text-green-400 font-medium">{fmt(selectedClient.creditLimit)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Taxa</span><span>{interestRate.toFixed(1)}%</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Prazo máximo ({paymentType === "diario" ? "Diário" : paymentType === "semanal" ? "Semanal" : paymentType === "quinzenal" ? "Quinzenal" : "Mensal"})</span><span>{days} dias</span></div>
+              <div className="flex min-w-0 justify-between gap-3"><span className="min-w-0 text-muted-foreground">Limite</span><span className="shrink-0 text-green-400 font-medium">{fmt(selectedClient.creditLimit)}</span></div>
+              <div className="flex min-w-0 justify-between gap-3"><span className="min-w-0 text-muted-foreground">Taxa</span><span className="shrink-0">{interestRate.toFixed(1)}%</span></div>
+              <div className="flex min-w-0 justify-between gap-3"><span className="min-w-0">Prazo máximo ({paymentType === "diario" ? "Diário" : paymentType === "semanal" ? "Semanal" : paymentType === "quinzenal" ? "Quinzenal" : "Mensal"})</span><span className="shrink-0">{days} dias</span></div>
             </div>
           )}
 
@@ -2336,11 +2336,11 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
           {paymentType === "diario" && (
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Regime de dias úteis (opcional)</Label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid min-w-0 grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => { setWorkDays("seg_sab"); setCustomInstallments("20"); }}
-                  className={`rounded-lg border-2 p-3 text-sm font-medium transition-all ${
+                  className={`min-w-0 rounded-lg border-2 p-2 text-xs font-medium transition-all sm:p-3 sm:text-sm ${
                     workDays === "seg_sab"
                       ? "border-violet-500 bg-violet-500/20 text-violet-300"
                       : "border-border bg-card/40 text-muted-foreground hover:border-violet-500/50"
@@ -2352,7 +2352,7 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                 <button
                   type="button"
                   onClick={() => { setWorkDays("seg_dom"); setCustomInstallments("25"); }}
-                  className={`rounded-lg border-2 p-3 text-sm font-medium transition-all ${
+                  className={`min-w-0 rounded-lg border-2 p-2 text-xs font-medium transition-all sm:p-3 sm:text-sm ${
                     workDays === "seg_dom"
                       ? "border-green-500 bg-green-500/20 text-green-300"
                       : "border-border bg-card/40 text-muted-foreground hover:border-green-500/50"
@@ -2364,7 +2364,7 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                 <button
                   type="button"
                   onClick={() => setWorkDays("custom")}
-                  className={`rounded-lg border-2 p-3 text-sm font-medium transition-all ${
+                  className={`min-w-0 rounded-lg border-2 p-2 text-xs font-medium transition-all sm:p-3 sm:text-sm ${
                     workDays === "custom"
                       ? "border-orange-500 bg-orange-500/20 text-orange-300"
                       : "border-border bg-card/40 text-muted-foreground hover:border-orange-500/50"
@@ -2538,14 +2538,14 @@ function EditLoanModal({ loan, onClose, onSuccess }: { loan: any; onClose: () =>
               <Label className="text-xs text-muted-foreground">Regime padrão (opcional)</Label>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => { setWorkDays("seg_sab"); setCustomInstallments("20"); }}
-                  className={`rounded-lg border-2 p-3 text-sm font-medium transition-all ${
+                  className={`min-w-0 rounded-lg border-2 p-2 text-xs font-medium transition-all sm:p-3 sm:text-sm ${
                     workDays === "seg_sab" ? "border-violet-500 bg-violet-500/20 text-violet-300" : "border-border bg-card/40 text-muted-foreground hover:border-violet-500/50"
                   }`}>
                   <div className="font-bold">Seg – Sáb</div>
                   <div className="text-xs opacity-75">20 parcelas · folga domingo</div>
                 </button>
                 <button type="button" onClick={() => { setWorkDays("seg_dom"); setCustomInstallments("25"); }}
-                  className={`rounded-lg border-2 p-3 text-sm font-medium transition-all ${
+                  className={`min-w-0 rounded-lg border-2 p-2 text-xs font-medium transition-all sm:p-3 sm:text-sm ${
                     workDays === "seg_dom" ? "border-green-500 bg-green-500/20 text-green-300" : "border-border bg-card/40 text-muted-foreground hover:border-green-500/50"
                   }`}>
                   <div className="font-bold">Seg – Dom</div>
