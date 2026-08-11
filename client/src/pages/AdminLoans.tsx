@@ -2138,6 +2138,7 @@ function InstallmentNotifyModal({ loan, inst, lateFeeConfig, onClose }: { loan: 
 function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const { data: clients = [] } = trpc.loans.listClients.useQuery({});
   const [clientId, setClientId] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
   const [amount, setAmount] = useState("");
   const [paymentType, setPaymentType] = useState<"diario" | "semanal" | "mensal" | "quinzenal">("diario");
   const [workDays, setWorkDays] = useState<"seg_sab" | "seg_dom" | "custom">("seg_sab");
@@ -2147,7 +2148,20 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
   const [customDays, setCustomDays] = useState(""); // prazo editável para semanal/quinzenal/mensal
   const [customRate, setCustomRate] = useState(""); // taxa de juros editável
 
-    const selectedClient = (clients as any[]).find((c) => String(c.id) === clientId);
+  const selectedClient = (clients as any[]).find((c) => String(c.id) === clientId);
+  // Clientes disponíveis para um novo empréstimo: ativos e liberados para crédito.
+  const eligibleClients = (clients as any[]).filter((c) => c.status === "ativo" && c.loanEnabled);
+  // Busca tolerante a formatação: encontra nome, CPF e telefone mesmo com pontos, traços ou parênteses.
+  const normalizedClientSearch = clientSearch.trim().toLowerCase();
+  const digitsClientSearch = clientSearch.replace(/\D/g, "");
+  const filteredClients = eligibleClients.filter((c) => {
+    if (!normalizedClientSearch) return true;
+    const name = String(c.name || "").toLowerCase();
+    const cpf = String(c.cpf || "").replace(/\D/g, "");
+    const phone = String(c.phone || "").replace(/\D/g, "");
+    return name.includes(normalizedClientSearch)
+      || (!!digitsClientSearch && (cpf.includes(digitsClientSearch) || phone.includes(digitsClientSearch)));
+  });
   // Modos de pagamento permitidos pelo perfil do cliente
   const allowedModes: string[] = selectedClient?.defaultPaymentTypes
     ? selectedClient.defaultPaymentTypes.split(",").map((t: string) => t.trim()).filter(Boolean)
@@ -2214,14 +2228,26 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Cliente</Label>
+            <Input
+              value={clientSearch}
+              onChange={(e) => setClientSearch(e.target.value)}
+              placeholder="Buscar por nome, CPF ou telefone..."
+              aria-label="Buscar cliente por nome, CPF ou telefone"
+              className="bg-card/60"
+            />
             <Select value={clientId} onValueChange={setClientId}>
               <SelectTrigger className="bg-card/60"><SelectValue placeholder="Selecione o cliente..." /></SelectTrigger>
               <SelectContent>
-                {(clients as any[]).filter((c) => c.status === "ativo" && c.loanEnabled).map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.name}{c.phone ? ` · ${c.phone}` : ""}</SelectItem>
-                ))}
+                {filteredClients.length > 0 ? filteredClients.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}{c.cpf ? ` · CPF ${c.cpf}` : ""}{c.phone ? ` · ${c.phone}` : ""}
+                  </SelectItem>
+                )) : (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">Nenhum cliente encontrado.</div>
+                )}
               </SelectContent>
             </Select>
+            {clientSearch && <p className="text-xs text-muted-foreground">{filteredClients.length} cliente(s) encontrado(s)</p>}
           </div>
 
           {selectedClient && (
