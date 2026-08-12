@@ -5,7 +5,7 @@ import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { onlineSupportConversations } from "../../drizzle/schema";
 import { getOnlineCustomerLoans, getOnlineCustomerOrders, getOnlineLoanInstallments, getOnlineOrderDetails, requireOnlineEntrySession, submitOnlineInstallmentProof } from "../online-support/entry";
-import { CUSTOMER_ROUTES, getRouteAccess, getRouteReleaseMode, requestCustomerRouteAccess, setCustomerRoutePermissions } from "../customerAccess";
+import { CUSTOMER_ROUTES, getCustomerRouteStates, getRouteAccess, getRouteReleaseMode, requestCustomerRouteAccess, setCustomerRoutePermissions } from "../customerAccess";
 import { cancelOnlineRegistrationDraft, findOnlineRegistrationIdentity, getOnlineRegistrationDraft, saveOnlineRegistrationDraft } from "../online-support/registration";
 import {
   clearLogs,
@@ -84,7 +84,8 @@ export const onlineSupportRouter = router({
       try {
         const session = await requireOnlineEntrySession(input.token);
         const access = await getRouteAccess(session.customerId);
-        return { authenticated: true, customer: session, access };
+        const routeStates = await getCustomerRouteStates(session.customerId);
+        return { authenticated: true, customer: session, access, routeStates };
       } catch (error: any) {
         return { authenticated: false, message: error?.message || 'Sessão inválida.' };
       }

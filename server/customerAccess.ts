@@ -153,7 +153,54 @@ export async function setCustomerRoutePermissions(
   return routes;
 }
 
-export async function requestCustomerRouteAccess(customerId: number, route: CustomerRoute, dbArg?: any): Promise<{ created: boolean; pending: boolean }> {
+export type CustomerRouteState = {
+  allowed: boolean;
+  pending: boolean;
+  denied: boolean;
+  retryAtMs: number | null;
+  daysRemaining: number;
+};
+
+const ROUTE_DENIAL_COOLDOWN_MS = 15 * 24 * 60 * 60 * 1000;
+
+export async function getCustomerRouteStates(customerId: number, dbArg?: any): Promise<Record<CustomerRoute, CustomerRouteState>> {
+  const db = dbArg || await getDb() as any;
+  const access = await getRouteAccess(customerId, db);
+  const defaults = Object.fromEntries(CUSTOMER_ROUTES.map((route) => [route, {
+    allowed: !access.restricted || access.routes.includes(route),
+    pending: false,
+    denied: false,
+    retryAtMs: null,
+    daysRemaining: 0,
+  }])) as Record<CustomerRoute, CustomerRouteState>;
+  if (!db || !access.restricted) return defaults;
+
+  const requests = await rows(db, sql`
+    SELECT route, status, UNIX_TIMESTAMP(COALESCE(analyzedAt, createdAt)) * 1000 AS actionAtMs
+    FROM customerAccessRequests
+    WHERE customerId=${customerId}
+    ORDER BY id DESC
+  `);
+  for (const route of CUSTOMER_ROUTES) {
+    if (defaults[route].allowed) continue;
+    const latest = requests.find((request: any) => String(request.route) === route);
+    if (!latest) continue;
+    if (String(latest.status) === 'pending') {
+      defaults[route].pending = true;
+      continue;
+    }
+    if (String(latest.status) === 'denied') {
+      const retryAtMs = Number(latest.actionAtMs || 0) + ROUTE_DENIAL_COOLDOWN_MS;
+      const remainingMs = retryAtMs - Date.now();
+      defaults[route].denied = true;
+      defaults[route].retryAtMs = retryAtMs;
+      defaults[route].daysRemaining = Math.max(0, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
+    }
+  }
+  return defaults;
+}
+
+export async function requestCustomerRouteAccess(customerId: number, route: CustomerRoute, dbArg?: any): Promise<{ created: boolean; pending: boolean; cooldown: boolean; retryAtMs: number | null; daysRemaining: number }> {
   const db = dbArg || await getDb() as any;
   if (!db) throw new Error("Banco de dados indisponível");
   await ensureCustomerIdentityInfrastructure(db);
@@ -162,12 +209,27 @@ export async function requestCustomerRouteAccess(customerId: number, route: Cust
     WHERE customerId=${customerId} AND route=${route} AND pendingKey=1
     LIMIT 1
   `);
-  if (pending.length) return { created: false, pending: true };
+  if (pending.length) return { created: false, pending: true, cooldown: false, retryAtMs: null, daysRemaining: 0 };
+
+  const denied = await rows(db, sql`
+    SELECT UNIX_TIMESTAMP(COALESCE(analyzedAt, createdAt)) * 1000 AS actionAtMs
+    FROM customerAccessRequests
+    WHERE customerId=${customerId} AND route=${route} AND status='denied'
+    ORDER BY id DESC LIMIT 1
+  `);
+  if (denied[0]?.actionAtMs) {
+    const retryAtMs = Number(denied[0].actionAtMs) + ROUTE_DENIAL_COOLDOWN_MS;
+    const remainingMs = retryAtMs - Date.now();
+    if (remainingMs > 0) {
+      return { created: false, pending: false, cooldown: true, retryAtMs, daysRemaining: Math.ceil(remainingMs / (24 * 60 * 60 * 1000)) };
+    }
+  }
+
   await db.execute(sql`
     INSERT INTO customerAccessRequests (customerId, route, status, pendingKey, createdAt)
     VALUES (${customerId}, ${route}, 'pending', 1, NOW())
   `);
-  return { created: true, pending: true };
+  return { created: true, pending: true, cooldown: false, retryAtMs: null, daysRemaining: 0 };
 }
 
 export async function ensureCustomerIdentityInfrastructure(dbArg?: any): Promise<void> {

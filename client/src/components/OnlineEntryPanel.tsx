@@ -55,25 +55,57 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
     setToken("");
   };
 
-  const hasRouteAccess = (route: 'site' | 'acompanhar' | 'gastos' | 'emprestimo') => {
+  type RouteName = 'site' | 'acompanhar' | 'gastos' | 'emprestimo';
+  const hasRouteAccess = (route: RouteName) => {
     const access = sessionQ.data?.access;
     return !!access && (!access.restricted || access.routes.includes(route));
   };
-  const openRoute = (route: 'site' | 'acompanhar' | 'gastos' | 'emprestimo') => {
+  const routeState = (route: RouteName) => sessionQ.data?.routeStates?.[route] || {
+    allowed: hasRouteAccess(route), pending: false, denied: false, retryAtMs: null, daysRemaining: 0,
+  };
+  const routeLabel = (route: RouteName, allowedLabel: string) => {
+    const state = routeState(route);
+    if (state.allowed) return allowedLabel;
+    if (state.pending) return 'Solicitação em análise';
+    if (state.denied && state.daysRemaining > 0) {
+      const date = state.retryAtMs ? new Date(state.retryAtMs).toLocaleDateString('pt-BR') : '';
+      return `Solicitar novamente em ${date}`;
+    }
+    return 'Solicitar acesso';
+  };
+  const canRequestRoute = (route: RouteName) => {
+    const state = routeState(route);
+    return state.allowed || (!state.pending && !(state.denied && state.daysRemaining > 0));
+  };
+  const routeButtonStyle = (route: RouteName): React.CSSProperties => {
+    const state = routeState(route);
+    if (state.allowed) return { ...routeBaseStyle, color: '#dcfce7', background: 'rgba(22,163,74,.18)', border: '1px solid rgba(34,197,94,.72)' };
+    if (state.pending) return { ...routeBaseStyle, color: '#fef3c7', background: 'rgba(217,119,6,.16)', border: '1px solid rgba(245,158,11,.68)', cursor: 'not-allowed' };
+    if (state.denied && state.daysRemaining > 0) return { ...routeBaseStyle, color: '#fecaca', background: 'rgba(185,28,28,.13)', border: '1px solid rgba(248,113,113,.62)', cursor: 'not-allowed' };
+    return { ...routeBaseStyle, color: '#fee2e2', background: 'rgba(185,28,28,.18)', border: '1px solid rgba(248,113,113,.72)' };
+  };
+  const openRoute = (route: RouteName) => {
     window.location.href = route === 'gastos' ? '/gastos' : route === 'emprestimo' ? '/emprestimo' : route === 'acompanhar' ? '/acompanhar' : '/login';
   };
-  const requestRoute = async (route: 'site' | 'acompanhar' | 'gastos' | 'emprestimo') => {
+  const requestRoute = async (route: RouteName) => {
     try {
       setError('');
-      if (hasRouteAccess(route)) { openRoute(route); return; }
+      const state = routeState(route);
+      if (state.allowed) { openRoute(route); return; }
+      if (state.pending) { setError('Sua solicitação já está em análise pelo administrador.'); return; }
+      if (state.denied && state.daysRemaining > 0) {
+        const date = state.retryAtMs ? new Date(state.retryAtMs).toLocaleDateString('pt-BR') : '';
+        setError(`Sua solicitação foi reprovada. Você poderá solicitar novamente em ${date}.`);
+        return;
+      }
       const result = await routeMut.mutateAsync({ token, route });
-      if (result.released) {
-        await sessionQ.refetch();
-        openRoute(route);
+      await sessionQ.refetch();
+      if (result.released) { openRoute(route); return; }
+      if (result.cooldown && result.retryAtMs) {
+        setError(`Sua solicitação foi reprovada. Você poderá solicitar novamente em ${new Date(result.retryAtMs).toLocaleDateString('pt-BR')}.`);
         return;
       }
       setError('Solicitação enviada ao administrador. Você será avisado após a liberação.');
-      await sessionQ.refetch();
     } catch (e: any) { setError(e?.message || 'Não foi possível solicitar o acesso.'); }
   };
 
@@ -104,24 +136,24 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
       <button onClick={logout} style={backStyle}><LogOut size={14} /> Sair</button>
     </div>
     <div style={cardStyle}><Package size={20} color="#60a5fa" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Meus pedidos</strong>
-      {ordersQ.isLoading ? <p style={smallStyle}>Consultando...</p> : ordersQ.data?.length ? ordersQ.data.map((o: any) => <button key={o.registrationId} onClick={() => setSelectedOrderId(o.registrationId)} style={{ ...rowStyle, width:'100%', border: selectedOrderId === o.registrationId ? '1px solid #60a5fa' : '1px solid transparent', cursor:'pointer', textAlign:'left' }}>Pedido #{o.orderNumber || o.registrationId}<span>{o.status || 'Sem status'}</span></button>) : <p style={smallStyle}>Nenhum pedido encontrado.</p>}
-      {selectedOrderId && <div style={{ marginTop:8 }}>
-        {!hasRouteAccess('acompanhar') ? <button onClick={() => requestRoute('acompanhar')} style={secondaryStyle}>Solicitar acesso a Acompanhar Pedido</button> : <>
-          <button onClick={() => setSelectedOrderId(null)} style={backStyle}>Fechar detalhes do pedido</button>
-          {orderDetailsQ.isLoading ? <p style={smallStyle}>Consultando pedido...</p> : orderDetailsQ.data?.current ? <OrderDetails data={orderDetailsQ.data.current} /> : <p style={smallStyle}>Não foi possível carregar os detalhes.</p>}
-        </>}
+      {(hasRouteAccess('site') || hasRouteAccess('acompanhar')) && <>
+        {ordersQ.isLoading ? <p style={smallStyle}>Consultando...</p> : ordersQ.data?.length ? ordersQ.data.map((o: any) => <button key={o.registrationId} onClick={() => setSelectedOrderId(o.registrationId)} style={{ ...rowStyle, width:'100%', border: selectedOrderId === o.registrationId ? '1px solid #60a5fa' : '1px solid transparent', cursor:'pointer', textAlign:'left' }}>Pedido #{o.orderNumber || o.registrationId}<span>{o.status || 'Sem status'}</span></button>) : <p style={smallStyle}>Nenhum pedido encontrado.</p>}
+      </>}
+      {selectedOrderId && hasRouteAccess('acompanhar') && <div style={{ marginTop:8 }}>
+        <button onClick={() => setSelectedOrderId(null)} style={backStyle}>Fechar detalhes do pedido</button>
+        {orderDetailsQ.isLoading ? <p style={smallStyle}>Consultando pedido...</p> : orderDetailsQ.data?.current ? <OrderDetails data={orderDetailsQ.data.current} /> : <p style={smallStyle}>Não foi possível carregar os detalhes.</p>}
       </div>}
-      <button onClick={() => requestRoute('acompanhar')} style={secondaryStyle}>{hasRouteAccess('acompanhar') ? 'Acessar Acompanhar Pedido' : 'Solicitar Acompanhar Pedido'}</button>
-      <button onClick={() => requestRoute('site')} style={secondaryStyle}>{hasRouteAccess('site') ? 'Fazer Pedido' : 'Fazer Pedido indisponível'}</button>
+      <button disabled={!canRequestRoute('acompanhar') || routeMut.isPending} onClick={() => requestRoute('acompanhar')} style={routeButtonStyle('acompanhar')}>{routeLabel('acompanhar', 'Acessar Acompanhar Pedido')}</button>
+      <button disabled={!canRequestRoute('site') || routeMut.isPending} onClick={() => requestRoute('site')} style={routeButtonStyle('site')}>{routeLabel('site', 'Fazer Pedido')}</button>
     </div>
-    <div style={{ ...cardStyle, opacity: hasRouteAccess('emprestimo') ? 1 : .52 }}><WalletCards size={20} color="#fbbf24" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Empréstimos</strong>
-      {hasRouteAccess('emprestimo') ? <>
+    <div style={cardStyle}><WalletCards size={20} color="#fbbf24" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Empréstimos</strong>
+      {hasRouteAccess('emprestimo') && <>
         {loansQ.isLoading ? <p style={smallStyle}>Consultando...</p> : loansQ.data?.loans?.length ? loansQ.data.loans.map((loan: any) => <button key={loan.id} onClick={() => setSelectedLoanId(loan.id)} style={{ ...rowStyle, border: selectedLoanId === loan.id ? '1px solid #fbbf24' : '1px solid transparent', cursor:'pointer', textAlign:'left' }}>Empréstimo #{loan.id}<span>{loan.status}</span></button>) : <p style={smallStyle}>Nenhum empréstimo encontrado.</p>}
         {selectedLoanId && <div style={{ marginTop:8 }}><button onClick={() => setSelectedLoanId(null)} style={backStyle}>Fechar parcelas</button>{installmentsQ.isLoading ? <p style={smallStyle}>Consultando parcelas...</p> : installmentsQ.data?.map((i: any) => <div key={i.id} style={{ ...rowStyle, display:'block' }}><div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>Parcela {i.installmentNumber} · R$ {i.amount}<span>{i.status} · {String(i.dueDate).slice(0,10)}</span></div>{['pendente','atrasado'].includes(String(i.status)) && <label style={{ ...secondaryStyle, display:'block', boxSizing:'border-box', textAlign:'center', marginTop:7 }}>Enviar comprovante<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => { const file = e.target.files?.[0]; if (file) sendProof(i.id, file); }} style={{ display:'none' }} /></label>}</div>)}</div>}
-        <button onClick={() => requestRoute('emprestimo')} style={secondaryStyle}>Acessar Empréstimos</button>
-      </> : <button disabled style={disabledStyle}>Empréstimos desabilitados pelo administrador</button>}
+      </>}
+      <button disabled={!canRequestRoute('emprestimo') || routeMut.isPending} onClick={() => requestRoute('emprestimo')} style={routeButtonStyle('emprestimo')}>{routeLabel('emprestimo', 'Acessar Empréstimos')}</button>
     </div>
-    {hasRouteAccess('gastos') ? <button onClick={() => requestRoute('gastos')} style={secondaryStyle}>Acessar Controle de Gastos</button> : <button disabled style={disabledStyle}>Controle de Gastos desabilitado pelo administrador</button>}
+    <button disabled={!canRequestRoute('gastos') || routeMut.isPending} onClick={() => requestRoute('gastos')} style={routeButtonStyle('gastos')}>{routeLabel('gastos', 'Acessar Controle de Gastos')}</button>
   </div>;
 }
 
@@ -141,6 +173,7 @@ const cardStyle: React.CSSProperties = { background: 'rgba(255,255,255,.06)', bo
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', height: 42, borderRadius: 10, border: '1px solid rgba(255,255,255,.14)', background: 'rgba(0,0,0,.25)', color: '#fff', padding: '0 11px', outline: 'none' };
 const primaryStyle: React.CSSProperties = { width: '100%', marginTop: 10, height: 42, border: 0, borderRadius: 10, color: '#fff', fontWeight: 800, background: 'linear-gradient(135deg,#7c3aed,#2563eb)', cursor: 'pointer' };
 const secondaryStyle: React.CSSProperties = { width: '100%', marginTop: 10, minHeight: 36, borderRadius: 9, color: '#c4b5fd', fontSize: 12, fontWeight: 700, background: 'rgba(124,58,237,.12)', border: '1px solid rgba(124,58,237,.35)', cursor: 'pointer' };
+const routeBaseStyle: React.CSSProperties = { width: '100%', marginTop: 10, minHeight: 38, borderRadius: 9, fontSize: 12, fontWeight: 800, cursor: 'pointer' };
 const disabledStyle: React.CSSProperties = { ...secondaryStyle, color: 'rgba(255,255,255,.42)', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.10)', cursor: 'not-allowed', opacity: .8 };
 const backStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, color: 'rgba(255,255,255,.65)', background: 'transparent', border: 0, cursor: 'pointer', fontSize: 12, padding: 0 };
 const smallStyle: React.CSSProperties = { color: 'rgba(255,255,255,.55)', fontSize: 12, margin: '7px 0' };
