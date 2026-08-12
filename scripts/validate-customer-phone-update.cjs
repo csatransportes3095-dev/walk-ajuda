@@ -27,6 +27,13 @@ if (saveMain < 0 || firstPropagation < 0 || saveMain > firstPropagation) {
 if (!adminCustomers.includes('onError: (error) => toast.error(error.message || "Erro ao atualizar cliente")')) {
   throw new Error('A tela principal ainda esconde a causa real do erro de telefone');
 }
+if (!adminCustomers.includes('const payload: Record<string, any> = { id: editingId }') ||
+    !adminCustomers.includes("if (phoneDigits && changed('phone', phoneDigits)) payload.phone = phoneDigits")) {
+  throw new Error('A tela ainda não envia o telefone de forma isolada');
+}
+if (!adminCustomers.includes("if (Object.keys(payload).length === 1)")) {
+  throw new Error('A tela não protege o cadastro contra salvamento sem mudança');
+}
 
 const normalize = (value) => String(value || '').replace(/\D/g, '');
 if (normalize('(11) 98979-3464') !== '11989793464') throw new Error('Normalização de telefone falhou');

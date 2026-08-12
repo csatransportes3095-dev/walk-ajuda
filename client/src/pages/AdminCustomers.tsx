@@ -330,6 +330,8 @@ export default function AdminCustomers() {
   const [editReferredByPhone, setEditReferredByPhone] = useState("");
   const [editCpf, setEditCpf] = useState("");
   const [editCustomerNumber, setEditCustomerNumber] = useState<string>("");
+  // Valores originais: o update envia somente o que o ADM realmente modificar.
+  const [editOriginal, setEditOriginal] = useState<Record<string, string> | null>(null);
   const [editIsReseller, setEditIsReseller] = useState(false);
   const [editResellerDiscountType, setEditResellerDiscountType] = useState<'percent' | 'fixed'>('percent');
   const [editResellerDiscountValue, setEditResellerDiscountValue] = useState<string>('0');
@@ -643,6 +645,17 @@ export default function AdminCustomers() {
   });
 
   const startEdit = (c: Customer) => {
+    setEditOriginal({
+      name: String(c.name || '').trim(),
+      phone: String(c.phone || '').replace(/\D/g, ''),
+      city: String(c.city || '').trim(),
+      uf: String(c.uf || '').trim().toUpperCase(),
+      email: String(c.email || '').trim().toLowerCase(),
+      referredBy: String(c.referredBy || '').trim(),
+      referredByPhone: String(c.referredByPhone || '').replace(/\D/g, ''),
+      cpf: String((c as any).cpf || '').replace(/\D/g, ''),
+      customerNumber: (c as any).customerNumber ? String((c as any).customerNumber) : '',
+    });
     setEditingId(c.id);
     setEditName(c.name);
     setEditPhone(c.phone || "");
@@ -670,18 +683,37 @@ export default function AdminCustomers() {
       toast.error("Número de cadastro inválido");
       return;
     }
-    updateMut.mutate({
-      id: editingId,
-      name: editName.trim() || undefined,
-      phone: phoneDigits || undefined,
-      email: editEmail.trim() || undefined,
-      city: editCity.trim() || undefined,
-      uf: editUf || undefined,
-      referredBy: editReferredBy.trim() || undefined,
-      referredByPhone: editReferredByPhone.trim() || undefined,
-      cpf: editCpf.replace(/\D/g, '') || undefined,
-      customerNumber: parsedCustomerNumber || undefined,
-    });
+
+    // Não reenviar CPF, e-mail, número de cadastro ou outros campos se o ADM só
+    // alterou o telefone. Isso impede que uma regra antiga de outro campo bloqueie
+    // a atualização principal do telefone.
+    const original = editOriginal || {};
+    const payload: Record<string, any> = { id: editingId };
+    const changed = (field: string, value: string) => value !== String(original[field] || '');
+    const name = editName.trim();
+    const city = editCity.trim();
+    const uf = editUf.trim().toUpperCase();
+    const email = editEmail.trim().toLowerCase();
+    const referredBy = editReferredBy.trim();
+    const referredByPhone = editReferredByPhone.replace(/\D/g, '');
+    const cpf = editCpf.replace(/\D/g, '');
+    const customerNumber = parsedCustomerNumber ? String(parsedCustomerNumber) : '';
+
+    if (name && changed('name', name)) payload.name = name;
+    if (phoneDigits && changed('phone', phoneDigits)) payload.phone = phoneDigits;
+    if (email && changed('email', email)) payload.email = email;
+    if (city && changed('city', city)) payload.city = city;
+    if (uf && changed('uf', uf)) payload.uf = uf;
+    if (referredBy && changed('referredBy', referredBy)) payload.referredBy = referredBy;
+    if (referredByPhone && changed('referredByPhone', referredByPhone)) payload.referredByPhone = referredByPhone;
+    if (cpf && changed('cpf', cpf)) payload.cpf = cpf;
+    if (customerNumber && changed('customerNumber', customerNumber)) payload.customerNumber = parsedCustomerNumber;
+
+    if (Object.keys(payload).length === 1) {
+      toast.info('Nenhuma alteração para salvar.');
+      return;
+    }
+    updateMut.mutate(payload);
   };
 
   const handleDownloadPhoto = async (url: string, name: string) => {
