@@ -39,6 +39,18 @@ const VPN_CHECK_KEY = "walk_vpn_checked";
 const PWA_DISMISSED_KEY = "walk_home_pwa_dismissed_v2";
 const ONLINE_SUPPORT_VISITOR_KEY = "walk_online_support_visitor_id";
 const HOME_ACCESS_GRANTED_KEY = "walk_home_access_granted";
+const HOME_ACCESS_TTL_MS = 30 * 60 * 1000;
+
+function hasActiveHomeAccessGrant() {
+  const expiresAt = Number(sessionStorage.getItem(HOME_ACCESS_GRANTED_KEY) || 0);
+  if (!expiresAt || Date.now() >= expiresAt) {
+    sessionStorage.removeItem(HOME_ACCESS_GRANTED_KEY);
+    sessionStorage.removeItem("walk_home_referral_phone");
+    sessionStorage.removeItem("walk_home_new_phone");
+    return false;
+  }
+  return true;
+}
 
 function getOrCreateOnlineSupportVisitorId() {
   const stored = localStorage.getItem(ONLINE_SUPPORT_VISITOR_KEY);
@@ -177,8 +189,25 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const [, navigate] = useLocation();
   const [location] = useLocation();
   const [onlineSupportOpen, setOnlineSupportOpen] = useState(false);
-  const [homeAccessGranted, setHomeAccessGranted] = useState(() => sessionStorage.getItem(HOME_ACCESS_GRANTED_KEY) === "1");
+  const [homeAccessGranted, setHomeAccessGranted] = useState(() => hasActiveHomeAccessGrant());
   const [choiceMade, setChoiceMade] = useState(false);
+
+  useEffect(() => {
+    if (!homeAccessGranted) return;
+    const expiresAt = Number(sessionStorage.getItem(HOME_ACCESS_GRANTED_KEY) || 0);
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) {
+      setHomeAccessGranted(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      sessionStorage.removeItem(HOME_ACCESS_GRANTED_KEY);
+      sessionStorage.removeItem("walk_home_referral_phone");
+      sessionStorage.removeItem("walk_home_new_phone");
+      setHomeAccessGranted(false);
+    }, remaining);
+    return () => window.clearTimeout(timeout);
+  }, [homeAccessGranted]);
   // Marca que o usuário acabou de clicar no card "Cadastro" (fluxo na própria rota "/").
   // Persiste no contexto de memória da aba via window, sobrevive a navegações internas mas
   // é limpo ao voltar/recarregar a partir de outra tela.
@@ -632,7 +661,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   // O manifesto é exibido antes da tela principal. O Atendimento Online não participa desta etapa.
   if (location === "/" && !homeAccessGranted) {
     return <HomeAccessManifest onGranted={() => {
-      sessionStorage.setItem(HOME_ACCESS_GRANTED_KEY, "1");
+      sessionStorage.setItem(HOME_ACCESS_GRANTED_KEY, String(Date.now() + HOME_ACCESS_TTL_MS));
       setHomeAccessGranted(true);
     }} />;
   }
