@@ -307,6 +307,7 @@ async function ensurePixDisbursementColumns(db: any) {
     const names = new Set(columns.map((col: any) => String(col.Field || col.field || '').toLowerCase()));
     if (!names.has('pixsentat')) await db.execute(drizzleSql.raw(`ALTER TABLE loans ADD COLUMN pixSentAt DATETIME NULL DEFAULT NULL`));
     if (!names.has('pixsentby')) await db.execute(drizzleSql.raw(`ALTER TABLE loans ADD COLUMN pixSentBy VARCHAR(100) NULL DEFAULT NULL`));
+    if (!names.has('pixconfirmeddate')) await db.execute(drizzleSql.raw(`ALTER TABLE loans ADD COLUMN pixConfirmedDate VARCHAR(10) NULL DEFAULT NULL`));
     if (!names.has('pixsendnote')) await db.execute(drizzleSql.raw(`ALTER TABLE loans ADD COLUMN pixSendNote TEXT NULL`));
   } catch (e: any) {
     console.warn('[loans] Não foi possível preparar os campos de PIX enviado:', e?.message);
@@ -895,6 +896,8 @@ export const loanRouter = router({
 
   confirmPixSent: adminProcedure.input(z.object({
     id: z.number(),
+    // Data que o ADM declara como a confirmação do PIX. Em branco = hoje.
+    confirmedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     note: z.string().max(1000).optional(),
   })).mutation(async ({ ctx, input }) => {
     const db = await getDb() as any;
@@ -911,10 +914,24 @@ export const loanRouter = router({
     if (!loan.clientPixKey) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cadastre a chave PIX do cliente antes de confirmar a liberação.' });
     if (loan.pixSentAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Este PIX já foi confirmado como enviado.' });
     const sentBy = ctx.user?.name || 'admin';
+    const confirmedDate = input.confirmedDate || getBrazilToday();
     await db.execute(drizzleSql`
-      UPDATE loans SET pixSentAt=NOW(), pixSentBy=${sentBy}, pixSendNote=${input.note?.trim() || null}, updatedAt=NOW()
+      UPDATE loans SET pixSentAt=NOW(), pixConfirmedDate=${confirmedDate}, pixSentBy=${sentBy}, pixSendNote=${input.note?.trim() || null}, updatedAt=NOW()
       WHERE id=${input.id}
     `);
+    return { ok: true, confirmedDate };
+  }),
+
+  updatePixConfirmedDate: adminProcedure.input(z.object({
+    id: z.number(),
+    confirmedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  })).mutation(async ({ input }) => {
+    const db = await getDb() as any;
+    await ensurePixDisbursementColumns(db);
+    const rows = await qRows(db, drizzleSql`SELECT pixSentAt FROM loans WHERE id=${input.id} LIMIT 1`);
+    if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Empréstimo não encontrado' });
+    if (!rows[0].pixSentAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Confirme o PIX enviado antes de editar a data.' });
+    await db.execute(drizzleSql`UPDATE loans SET pixConfirmedDate=${input.confirmedDate}, updatedAt=NOW() WHERE id=${input.id}`);
     return { ok: true };
   }),
 

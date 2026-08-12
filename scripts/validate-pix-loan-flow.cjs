@@ -13,6 +13,8 @@ const requiredBackend = [
   "WHERE l.clientId IN",
   "COALESCE(NULLIF(lc.client_pix_key, ''), NULLIF(lc.pixKey, '')) as clientPixKey",
   "client_pix_key=${input.pixKey || null}, client_pix_name=${input.pixName || null}",
+  "pixConfirmedDate=${confirmedDate}",
+  "updatePixConfirmedDate: adminProcedure",
 ];
 for (const snippet of requiredBackend) {
   if (!backend.includes(snippet)) throw new Error(`Backend sem regra obrigatória: ${snippet}`);
@@ -26,6 +28,8 @@ const requiredAdmin = [
   'Gestão da solicitação',
   'utils.loans.listLoans.invalidate()',
   'client?.pixKey || client?.client_pix_key || ""',
+  'Editar data PIX',
+  'Data de PIX confirmado',
 ];
 for (const snippet of requiredAdmin) {
   if (!admin.includes(snippet)) throw new Error(`Painel ADM sem regra obrigatória: ${snippet}`);

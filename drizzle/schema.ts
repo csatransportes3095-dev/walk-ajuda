@@ -1662,6 +1662,7 @@ export const loans = mysqlTable("loans", {
   paidBy: varchar("paidBy", { length: 100 }),
   // Registro administrativo do PIX enviado ao cliente para liberar o empréstimo.
   pixSentAt: timestamp("pixSentAt"),
+  pixConfirmedDate: varchar("pixConfirmedDate", { length: 10 }),
   pixSentBy: varchar("pixSentBy", { length: 100 }),
   pixSendNote: text("pixSendNote"),
   refusedReason: text("refusedReason"),

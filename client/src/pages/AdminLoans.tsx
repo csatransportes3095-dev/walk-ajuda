@@ -377,6 +377,9 @@ function LoansTab() {
   const [approvalNotifyModal, setApprovalNotifyModal] = useState<any | null>(null); // loan object
   const [pixConfirmLoan, setPixConfirmLoan] = useState<any | null>(null);
   const [pixSendNote, setPixSendNote] = useState("");
+  const [pixConfirmedDate, setPixConfirmedDate] = useState("");
+  const [pixDateEditLoan, setPixDateEditLoan] = useState<any | null>(null);
+  const [pixDateEditValue, setPixDateEditValue] = useState("");
   const [installmentNotifyModal, setInstallmentNotifyModal] = useState<{ loan: any; inst: any } | null>(null);
   const [rescheduleModal, setRescheduleModal] = useState<{ loanId: number; clientName: string; currentWorkDays: string; pendingCount: number } | null>(null);
   const [rescheduleWorkDays, setRescheduleWorkDays] = useState<"seg_sab" | "seg_dom">("seg_sab");
@@ -449,8 +452,16 @@ function LoansTab() {
   const confirmPixSent = trpc.loans.confirmPixSent.useMutation({
     onSuccess: () => {
       toast.success("PIX enviado confirmado. O empréstimo foi liberado para cobrança normal.");
-      setPixConfirmLoan(null); setPixSendNote("");
+      setPixConfirmLoan(null); setPixSendNote(""); setPixConfirmedDate("");
       utils.loans.listLoans.invalidate(); utils.loans.getDashboard.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const updatePixConfirmedDate = trpc.loans.updatePixConfirmedDate.useMutation({
+    onSuccess: () => {
+      toast.success("Data de PIX confirmado atualizada.");
+      setPixDateEditLoan(null); setPixDateEditValue("");
+      utils.loans.listLoans.invalidate();
     },
     onError: (e) => toast.error(e.message),
   });
@@ -758,6 +769,7 @@ function LoansTab() {
             : "";
           const isPixPending = loan.status === "aprovado" && !loan.pixSentAt;
           const isPixSent = loan.status === "aprovado" && !!loan.pixSentAt;
+          const pixConfirmedDisplay = loan.pixConfirmedDate ? fmtDate(loan.pixConfirmedDate) : fmtDateTime(loan.pixSentAt);
           const isPreRelease = loan.status === "pendente" || isPixPending;
 
           return (
@@ -836,7 +848,7 @@ function LoansTab() {
                             <p className="text-amber-200/80">Após fazer a transferência no banco, confirme abaixo para liberar a cobrança deste empréstimo.</p>
                           </div>
                         )}
-                        {isPixSent && <p className="text-xs text-emerald-200">PIX confirmado em {fmtDateTime(loan.pixSentAt)}{loan.pixSentBy ? ` por ${loan.pixSentBy}` : ""}. Este empréstimo já está na cobrança normal.</p>}
+                        {isPixSent && <p className="text-xs text-emerald-200">PIX confirmado em {pixConfirmedDisplay}{loan.pixSentBy ? ` por ${loan.pixSentBy}` : ""}. Este empréstimo já está na cobrança normal.</p>}
                       </section>
                     )}
 
@@ -945,15 +957,18 @@ function LoansTab() {
                         </button>
                       )}
                       {isPixPending && (
-                        <button disabled={!loan.clientPixKey} onClick={() => { setPixConfirmLoan(loan); setPixSendNote(""); }} className="col-span-2 flex flex-col items-center gap-1 rounded-xl border border-amber-500/50 bg-amber-500/15 px-2 py-3 text-center text-amber-200 transition-all active:scale-95 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-45">
+                        <button disabled={!loan.clientPixKey} onClick={() => { setPixConfirmLoan(loan); setPixSendNote(""); setPixConfirmedDate(new Date().toLocaleDateString('en-CA')); }} className="col-span-2 flex flex-col items-center gap-1 rounded-xl border border-amber-500/50 bg-amber-500/15 px-2 py-3 text-center text-amber-200 transition-all active:scale-95 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-45">
                           <span className="text-xl">🏦</span><span className="text-xs font-semibold">Confirmar PIX enviado ao cliente</span>
                         </button>
                       )}
-                      {isPixSent && (
-                        <button onClick={() => setApprovalNotifyModal(loan)} className="col-span-2 flex flex-col items-center gap-1 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-2 py-3 text-center text-emerald-300 transition-all active:scale-95 hover:bg-emerald-500/20">
-                          <span className="text-xl">📨</span><span className="text-xs font-semibold">Notificar liberação ao cliente</span>
+                      {isPixSent && <>
+                        <button onClick={() => { setPixDateEditLoan(loan); setPixDateEditValue(loan.pixConfirmedDate || new Date(loan.pixSentAt).toLocaleDateString('en-CA')); }} className="flex flex-col items-center gap-1 rounded-xl border border-sky-500/40 bg-sky-500/10 px-2 py-3 text-center text-sky-300 transition-all active:scale-95 hover:bg-sky-500/20">
+                          <span className="text-xl">📅</span><span className="text-xs font-semibold">Editar data PIX</span>
                         </button>
-                      )}
+                        <button onClick={() => setApprovalNotifyModal(loan)} className="flex flex-col items-center gap-1 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-2 py-3 text-center text-emerald-300 transition-all active:scale-95 hover:bg-emerald-500/20">
+                          <span className="text-xl">📨</span><span className="text-xs font-semibold">Notificar liberação</span>
+                        </button>
+                      </>}
                     </div>
                   </div>
                 )}
@@ -1311,7 +1326,26 @@ function LoansTab() {
       )}
 
       {/* Dialog reprovar */}
-      <Dialog open={!!pixConfirmLoan} onOpenChange={(open) => { if (!open) { setPixConfirmLoan(null); setPixSendNote(""); } }}>
+      <Dialog open={!!pixDateEditLoan} onOpenChange={(open) => { if (!open) { setPixDateEditLoan(null); setPixDateEditValue(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Editar data do PIX confirmado</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Esta alteração modifica somente o texto “PIX confirmado em…”. Não altera liberação, parcelas, vencimentos, juros ou valores.</p>
+            <div className="space-y-2">
+              <Label>Data de PIX confirmado</Label>
+              <Input type="date" value={pixDateEditValue} onChange={(e) => setPixDateEditValue(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPixDateEditLoan(null); setPixDateEditValue(""); }}>Cancelar</Button>
+            <Button disabled={!pixDateEditValue || updatePixConfirmedDate.isPending} onClick={() => updatePixConfirmedDate.mutate({ id: pixDateEditLoan.id, confirmedDate: pixDateEditValue })}>
+              {updatePixConfirmedDate.isPending ? "Salvando..." : "Salvar data"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!pixConfirmLoan} onOpenChange={(open) => { if (!open) { setPixConfirmLoan(null); setPixSendNote(""); setPixConfirmedDate(""); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Confirmar PIX enviado ao cliente</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -1326,13 +1360,18 @@ function LoansTab() {
               {(pixConfirmLoan?.clientPixName || pixConfirmLoan?.clientPixBank) && <p className="text-xs text-muted-foreground">{pixConfirmLoan?.clientPixName || ""}{pixConfirmLoan?.clientPixBank ? ` · ${pixConfirmLoan.clientPixBank}` : ""}</p>}
             </div>
             <div className="space-y-2">
+              <Label>Data de PIX confirmado</Label>
+              <Input type="date" value={pixConfirmedDate} onChange={(e) => setPixConfirmedDate(e.target.value)} />
+              <p className="text-xs text-muted-foreground">Se deixar em branco, será registrada a data de hoje.</p>
+            </div>
+            <div className="space-y-2">
               <Label>Observação do PIX (opcional)</Label>
               <Textarea value={pixSendNote} onChange={(e) => setPixSendNote(e.target.value)} placeholder="Ex.: comprovante salvo no banco, identificador da transferência..." rows={3} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setPixConfirmLoan(null); setPixSendNote(""); }}>Cancelar</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700" disabled={confirmPixSent.isPending} onClick={() => confirmPixSent.mutate({ id: pixConfirmLoan.id, note: pixSendNote })}>
+            <Button variant="outline" onClick={() => { setPixConfirmLoan(null); setPixSendNote(""); setPixConfirmedDate(""); }}>Cancelar</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" disabled={confirmPixSent.isPending} onClick={() => confirmPixSent.mutate({ id: pixConfirmLoan.id, confirmedDate: pixConfirmedDate || undefined, note: pixSendNote })}>
               {confirmPixSent.isPending ? "Confirmando..." : "Confirmar PIX enviado"}
             </Button>
           </DialogFooter>
