@@ -26,7 +26,7 @@ import { loanRouter } from "./routers/loans";
 import { apkRouter } from "./routers/apk";
 import { customerPasswordRouter } from "./routers/customerPassword";
 import { syncUnifiedCustomerRegistry } from "./customerIdentity";
-import { ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions } from "./customerAccess";
+import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -1676,6 +1676,15 @@ export const appRouter = router({
 
   // === CLIENTES (CADASTRO) ===
   customers: router({
+    routeReleaseModes: adminProcedure.query(async () => listRouteReleaseModes()),
+    setRouteReleaseMode: adminProcedure
+      .input(z.object({ route: z.enum(CUSTOMER_ROUTES), mode: z.enum(['automatico', 'manual']) }))
+      .mutation(async ({ input, ctx }) => {
+        const updatedBy = (ctx as any)?.user?.name || (ctx as any)?.user?.username || 'Administrador';
+        const mode = await setRouteReleaseMode(input.route, input.mode, updatedBy);
+        return { success: true, route: input.route, mode };
+      }),
+
     checkByPhone: publicProcedure
       .input(z.object({ phone: z.string().min(1) }))
       .query(async ({ input, ctx }) => {
