@@ -13,9 +13,14 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [selectedLoanId, setSelectedLoanId] = useState<number | null>(null);
-  const sessionQ = trpc.onlineSupport.entrySession.useQuery({ token }, { enabled: !!token, retry: false });
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const sessionQ = trpc.onlineSupport.entrySession.useQuery({ token }, { enabled: !!token, retry: false, refetchInterval: token ? 10000 : false });
   const loginMut = trpc.customerPassword.login.useMutation();
   const ordersQ = trpc.onlineSupport.entryOrders.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated, retry: false });
+  const orderDetailsQ = trpc.onlineSupport.entryOrderDetails.useQuery(
+    { token, registrationId: selectedOrderId || 0 },
+    { enabled: !!token && !!selectedOrderId && !!sessionQ.data?.authenticated && !!sessionQ.data?.access && (!sessionQ.data.access.restricted || sessionQ.data.access.routes.includes('acompanhar')), retry: false }
+  );
   const loansQ = trpc.onlineSupport.entryLoans.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated, retry: false });
   const installmentsQ = trpc.onlineSupport.entryLoanInstallments.useQuery({ token, loanId: selectedLoanId || 0 }, { enabled: !!token && !!selectedLoanId && !!sessionQ.data?.authenticated, retry: false });
   const logoutMut = trpc.customerPassword.logout.useMutation();
@@ -37,6 +42,8 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
       return;
     }
     localStorage.setItem(ENTRY_TOKEN_KEY, result.token);
+    // /acompanhar usa a mesma autenticação oficial; reutiliza o token, sem pedir senha novamente.
+    localStorage.setItem('cp_token', result.token);
     setToken(result.token);
     setPassword("");
   };
@@ -44,18 +51,29 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   const logout = async () => {
     if (token) await logoutMut.mutate({ token });
     localStorage.removeItem(ENTRY_TOKEN_KEY);
+    localStorage.removeItem('cp_token');
     setToken("");
   };
 
-  const requestRoute = async (route: 'site' | 'gastos' | 'emprestimo') => {
+  const hasRouteAccess = (route: 'site' | 'acompanhar' | 'gastos' | 'emprestimo') => {
+    const access = sessionQ.data?.access;
+    return !!access && (!access.restricted || access.routes.includes(route));
+  };
+  const openRoute = (route: 'site' | 'acompanhar' | 'gastos' | 'emprestimo') => {
+    window.location.href = route === 'gastos' ? '/gastos' : route === 'emprestimo' ? '/emprestimo' : route === 'acompanhar' ? '/acompanhar' : '/';
+  };
+  const requestRoute = async (route: 'site' | 'acompanhar' | 'gastos' | 'emprestimo') => {
     try {
       setError('');
+      if (hasRouteAccess(route)) { openRoute(route); return; }
       const result = await routeMut.mutateAsync({ token, route });
       if (result.released) {
-        window.location.href = route === 'gastos' ? '/gastos' : route === 'emprestimo' ? '/emprestimo' : '/';
+        await sessionQ.refetch();
+        openRoute(route);
         return;
       }
       setError('Solicitação enviada ao administrador. Você será avisado após a liberação.');
+      await sessionQ.refetch();
     } catch (e: any) { setError(e?.message || 'Não foi possível solicitar o acesso.'); }
   };
 
@@ -86,15 +104,34 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
       <button onClick={logout} style={backStyle}><LogOut size={14} /> Sair</button>
     </div>
     <div style={cardStyle}><Package size={20} color="#60a5fa" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Meus pedidos</strong>
-      {ordersQ.isLoading ? <p style={smallStyle}>Consultando...</p> : ordersQ.data?.length ? ordersQ.data.map((o: any) => <div key={o.registrationId} style={rowStyle}>Pedido #{o.orderNumber || o.registrationId}<span>{o.status || 'Sem status'}</span></div>) : <p style={smallStyle}>Nenhum pedido encontrado.</p>}
-      <button onClick={() => requestRoute('site')} style={secondaryStyle}>Acessar / solicitar Site de Pedidos</button>
+      {ordersQ.isLoading ? <p style={smallStyle}>Consultando...</p> : ordersQ.data?.length ? ordersQ.data.map((o: any) => <button key={o.registrationId} onClick={() => setSelectedOrderId(o.registrationId)} style={{ ...rowStyle, width:'100%', border: selectedOrderId === o.registrationId ? '1px solid #60a5fa' : '1px solid transparent', cursor:'pointer', textAlign:'left' }}>Pedido #{o.orderNumber || o.registrationId}<span>{o.status || 'Sem status'}</span></button>) : <p style={smallStyle}>Nenhum pedido encontrado.</p>}
+      {selectedOrderId && <div style={{ marginTop:8 }}>
+        {!hasRouteAccess('acompanhar') ? <button onClick={() => requestRoute('acompanhar')} style={secondaryStyle}>Solicitar acesso a Acompanhar Pedido</button> : <>
+          <button onClick={() => setSelectedOrderId(null)} style={backStyle}>Fechar detalhes do pedido</button>
+          {orderDetailsQ.isLoading ? <p style={smallStyle}>Consultando pedido...</p> : orderDetailsQ.data?.current ? <OrderDetails data={orderDetailsQ.data.current} /> : <p style={smallStyle}>Não foi possível carregar os detalhes.</p>}
+        </>}
+      </div>}
+      <button onClick={() => requestRoute('acompanhar')} style={secondaryStyle}>{hasRouteAccess('acompanhar') ? 'Acessar Acompanhar Pedido' : 'Solicitar Acompanhar Pedido'}</button>
+      <button onClick={() => requestRoute('site')} style={secondaryStyle}>{hasRouteAccess('site') ? 'Acessar Site de Pedidos' : 'Solicitar Site de Pedidos'}</button>
     </div>
     <div style={cardStyle}><WalletCards size={20} color="#fbbf24" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Empréstimos</strong>
       {loansQ.isLoading ? <p style={smallStyle}>Consultando...</p> : loansQ.data?.loans?.length ? loansQ.data.loans.map((loan: any) => <button key={loan.id} onClick={() => setSelectedLoanId(loan.id)} style={{ ...rowStyle, border: selectedLoanId === loan.id ? '1px solid #fbbf24' : '1px solid transparent', cursor:'pointer', textAlign:'left' }}>Empréstimo #{loan.id}<span>{loan.status}</span></button>) : <p style={smallStyle}>Nenhum empréstimo encontrado.</p>}
       {selectedLoanId && <div style={{ marginTop:8 }}><button onClick={() => setSelectedLoanId(null)} style={backStyle}>Fechar parcelas</button>{installmentsQ.isLoading ? <p style={smallStyle}>Consultando parcelas...</p> : installmentsQ.data?.map((i: any) => <div key={i.id} style={{ ...rowStyle, display:'block' }}><div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>Parcela {i.installmentNumber} · R$ {i.amount}<span>{i.status} · {String(i.dueDate).slice(0,10)}</span></div>{['pendente','atrasado'].includes(String(i.status)) && <label style={{ ...secondaryStyle, display:'block', boxSizing:'border-box', textAlign:'center', marginTop:7 }}>Enviar comprovante<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => { const file = e.target.files?.[0]; if (file) sendProof(i.id, file); }} style={{ display:'none' }} /></label>}</div>)}</div>}
-      <button onClick={() => requestRoute('emprestimo')} style={secondaryStyle}>Acessar / solicitar Empréstimos</button>
+      <button onClick={() => requestRoute('emprestimo')} style={secondaryStyle}>{hasRouteAccess('emprestimo') ? 'Acessar Empréstimos' : 'Solicitar Empréstimos'}</button>
     </div>
-    <button onClick={() => requestRoute('gastos')} style={secondaryStyle}>Controle de Gastos</button>
+    <button onClick={() => requestRoute('gastos')} style={secondaryStyle}>{hasRouteAccess('gastos') ? 'Acessar Controle de Gastos' : 'Solicitar Controle de Gastos'}</button>
+  </div>;
+}
+
+function OrderDetails({ data }: { data: any }) {
+  const answerEntries = (() => { try { const parsed = typeof data.answers === 'string' ? JSON.parse(data.answers) : data.answers; return parsed && typeof parsed === 'object' ? Object.entries(parsed).filter(([key, value]) => key && value != null && String(value).trim() !== '') : []; } catch { return []; } })();
+  const info = [
+    ['Número do pedido', data.orderNumber], ['Serviço', data.serviceName], ['Opção', data.serviceOption], ['Status atual', data.status], ['Previsão', data.deliveryEstimate], ['Valor pago', data.pricePaid], ['Atualização', data.createdAt],
+  ].filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '');
+  return <div style={{ ...rowStyle, display:'block', marginTop:8, lineHeight:1.55 }}>
+    {info.map(([label, value]) => <div key={String(label)}><b>{label}:</b> {String(value)}</div>)}
+    {data.note && <div style={{ marginTop:6 }}><b>Informação do pedido:</b><br />{String(data.note)}</div>}
+    {answerEntries.length > 0 && <div style={{ marginTop:6 }}><b>Dados informados no pedido:</b>{answerEntries.map(([key, value]) => <div key={key}>{key}: {String(value)}</div>)}</div>}
   </div>;
 }
 

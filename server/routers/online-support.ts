@@ -5,7 +5,7 @@ import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { onlineSupportConversations } from "../../drizzle/schema";
 import { getOnlineCustomerLoans, getOnlineCustomerOrders, getOnlineLoanInstallments, getOnlineOrderDetails, requireOnlineEntrySession, submitOnlineInstallmentProof } from "../online-support/entry";
-import { CUSTOMER_ROUTES, getRouteReleaseMode, requestCustomerRouteAccess, setCustomerRoutePermissions } from "../customerAccess";
+import { CUSTOMER_ROUTES, getRouteAccess, getRouteReleaseMode, requestCustomerRouteAccess, setCustomerRoutePermissions } from "../customerAccess";
 import { cancelOnlineRegistrationDraft, findOnlineRegistrationIdentity, getOnlineRegistrationDraft, saveOnlineRegistrationDraft } from "../online-support/registration";
 import {
   clearLogs,
@@ -83,7 +83,8 @@ export const onlineSupportRouter = router({
     .query(async ({ input }) => {
       try {
         const session = await requireOnlineEntrySession(input.token);
-        return { authenticated: true, customer: session };
+        const access = await getRouteAccess(session.customerId);
+        return { authenticated: true, customer: session, access };
       } catch (error: any) {
         return { authenticated: false, message: error?.message || 'Sessão inválida.' };
       }
@@ -113,9 +114,13 @@ export const onlineSupportRouter = router({
     .input(z.object({ token: z.string().min(1), route: z.enum(CUSTOMER_ROUTES) }))
     .mutation(async ({ input }) => {
       const session = await requireOnlineEntrySession(input.token);
+      const access = await getRouteAccess(session.customerId);
+      if (!access.restricted || access.routes.includes(input.route)) {
+        return { success: true, created: false, pending: false, released: true, customerId: session.customerId };
+      }
       const releaseMode = await getRouteReleaseMode(input.route);
       if (releaseMode === 'automatico') {
-        await setCustomerRoutePermissions(session.customerId, [input.route], 'Atendimento Online');
+        await setCustomerRoutePermissions(session.customerId, [...access.routes, input.route], 'Atendimento Online');
         return { success: true, created: false, pending: false, released: true, customerId: session.customerId };
       }
       const request = await requestCustomerRouteAccess(session.customerId, input.route);

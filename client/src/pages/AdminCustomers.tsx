@@ -852,9 +852,10 @@ export default function AdminCustomers() {
           <p className="text-sm font-bold text-sky-100">Modo de liberação de acesso</p>
           <p className="text-xs text-sky-100/70">Automático libera a rota após o cadastro completo; manual envia para aprovação.</p>
         </div>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { key: 'site', label: 'Site de Pedidos' },
+            { key: 'acompanhar', label: 'Acompanhar Pedido' },
             { key: 'gastos', label: 'Controle de Gastos' },
             { key: 'emprestimo', label: 'Empréstimos' },
           ].map((route) => {

@@ -80,7 +80,7 @@ export async function getOnlineCustomerOrders(token: string) {
 }
 
 export async function getOnlineOrderDetails(token: string, registrationId: number) {
-  const session = await requireOnlineEntrySession(token);
+  const { session } = await requireOnlineRoute(token, 'acompanhar');
   const db = await getDb() as any;
   const ownership = resultRows(await db.execute(sql`SELECT id FROM accessCodePhones WHERE id=${registrationId} AND phone=${session.phone} LIMIT 1`));
   if (!ownership[0]) throw new Error('Pedido não pertence ao cliente autenticado.');

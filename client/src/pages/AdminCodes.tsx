@@ -483,7 +483,7 @@ export default function AdminCodes() {
               </div>
               <div className="space-y-3">
                 {pendingAccessQuery.data?.map((request: any) => {
-                  const routeLabel = request.route === 'gastos' ? 'Controle de Gastos' : request.route === 'emprestimo' ? 'Empréstimos' : 'Site de Pedidos';
+                  const routeLabel = request.route === 'acompanhar' ? 'Acompanhar Pedido' : request.route === 'gastos' ? 'Controle de Gastos' : request.route === 'emprestimo' ? 'Empréstimos' : 'Site de Pedidos';
                   return <div key={request.id} className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-3 space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="flex-shrink-0">

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
-export const CUSTOMER_ROUTES = ["site", "gastos", "emprestimo"] as const;
+export const CUSTOMER_ROUTES = ["site", "acompanhar", "gastos", "emprestimo"] as const;
 export type CustomerRoute = (typeof CUSTOMER_ROUTES)[number];
 
 type MainCustomer = {
@@ -120,7 +120,7 @@ export async function setRouteReleaseMode(route: CustomerRoute, mode: RouteRelea
 
 export async function listRouteReleaseModes(dbArg?: any): Promise<Record<CustomerRoute, RouteReleaseMode>> {
   const db = dbArg || await getDb() as any;
-  const defaults: Record<CustomerRoute, RouteReleaseMode> = { site: 'automatico', gastos: 'automatico', emprestimo: 'automatico' };
+  const defaults: Record<CustomerRoute, RouteReleaseMode> = { site: 'automatico', acompanhar: 'automatico', gastos: 'automatico', emprestimo: 'automatico' };
   if (!db) return defaults;
   await ensureCustomerIdentityInfrastructure(db);
   const configs = await rows(db, sql`SELECT route, releaseMode FROM customerRouteReleaseModes`);

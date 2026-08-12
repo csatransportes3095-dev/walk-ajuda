@@ -256,7 +256,7 @@ export const appRouter = router({
   // Solicitações de liberação de rota. A identidade vem sempre do cadastro principal.
   accessRequests: router({
     request: publicProcedure
-      .input(z.object({ phone: z.string().min(10), route: z.enum(['site', 'gastos', 'emprestimo']) }))
+      .input(z.object({ phone: z.string().min(10), route: z.enum(['site', 'acompanhar', 'gastos', 'emprestimo']) }))
       .mutation(async ({ input }) => {
         await ensureCustomerIdentityInfrastructure();
         const customer = await findMainCustomerByIdentity({ phone: input.phone });
@@ -1821,7 +1821,7 @@ export const appRouter = router({
         referredByPhone: z.string().regex(/^\d{10,11}$/).optional(),
         bypassCode: z.string().optional(),
         profilePhotoUrl: z.string().min(1, "Foto de perfil é obrigatória"),
-        sourceRoute: z.enum(['site', 'gastos', 'emprestimo']).optional(),
+        sourceRoute: z.enum(['site', 'acompanhar', 'gastos', 'emprestimo']).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         // O banco principal é a fonte única de identidade para todas as rotas.
