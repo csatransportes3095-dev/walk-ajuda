@@ -868,7 +868,7 @@ export function LoansTab({ token }: LoansTabProps) {
                   )}
                   {loan.status === "aprovado" && loan.pixSentAt && (
                     <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2 mb-4">
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                       <p className="text-xs text-emerald-300 font-medium">PIX liberado. Seu empréstimo está ativo e as parcelas já estão disponíveis.</p>
                     </div>
                   )}
