@@ -3,6 +3,7 @@ import { ArrowLeft, KeyRound, LogOut, Package, WalletCards } from "lucide-react"
 import { trpc } from "@/lib/trpc";
 
 const ENTRY_TOKEN_KEY = "walk_online_entry_token";
+function fileToBase64(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); }); }
 
 type Props = { onBack: () => void; onOpenCadastro: () => void };
 
@@ -19,6 +20,7 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   const installmentsQ = trpc.onlineSupport.entryLoanInstallments.useQuery({ token, loanId: selectedLoanId || 0 }, { enabled: !!token && !!selectedLoanId && !!sessionQ.data?.authenticated, retry: false });
   const logoutMut = trpc.customerPassword.logout.useMutation();
   const routeMut = trpc.onlineSupport.entryRequestRoute.useMutation();
+  const proofMut = trpc.onlineSupport.entrySubmitInstallmentProof.useMutation();
 
   useEffect(() => {
     if (sessionQ.data && !sessionQ.data.authenticated) {
@@ -50,6 +52,11 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
     catch (e: any) { setError(e?.message || 'Não foi possível solicitar o acesso.'); }
   };
 
+  const sendProof = async (installmentId: number, file: File) => {
+    try { setError(''); const fileBase64 = await fileToBase64(file); await proofMut.mutateAsync({ token, installmentId, fileBase64, fileName: file.name, mimeType: file.type || 'application/octet-stream' }); await installmentsQ.refetch(); }
+    catch (e: any) { setError(e?.message || 'Não foi possível enviar o comprovante.'); }
+  };
+
   const customer = sessionQ.data?.authenticated ? sessionQ.data.customer : null;
   if (!customer) return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <button onClick={onBack} style={backStyle}><ArrowLeft size={15} /> Voltar</button>
@@ -76,7 +83,7 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
     </div>
     <div style={cardStyle}><WalletCards size={20} color="#fbbf24" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Empréstimos</strong>
       {loansQ.isLoading ? <p style={smallStyle}>Consultando...</p> : loansQ.data?.loans?.length ? loansQ.data.loans.map((loan: any) => <button key={loan.id} onClick={() => setSelectedLoanId(loan.id)} style={{ ...rowStyle, border: selectedLoanId === loan.id ? '1px solid #fbbf24' : '1px solid transparent', cursor:'pointer', textAlign:'left' }}>Empréstimo #{loan.id}<span>{loan.status}</span></button>) : <p style={smallStyle}>Nenhum empréstimo encontrado.</p>}
-      {selectedLoanId && <div style={{ marginTop:8 }}><button onClick={() => setSelectedLoanId(null)} style={backStyle}>Fechar parcelas</button>{installmentsQ.isLoading ? <p style={smallStyle}>Consultando parcelas...</p> : installmentsQ.data?.map((i: any) => <div key={i.id} style={rowStyle}>Parcela {i.installmentNumber} · R$ {i.amount}<span>{i.status} · {String(i.dueDate).slice(0,10)}</span></div>)}</div>}
+      {selectedLoanId && <div style={{ marginTop:8 }}><button onClick={() => setSelectedLoanId(null)} style={backStyle}>Fechar parcelas</button>{installmentsQ.isLoading ? <p style={smallStyle}>Consultando parcelas...</p> : installmentsQ.data?.map((i: any) => <div key={i.id} style={{ ...rowStyle, display:'block' }}><div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>Parcela {i.installmentNumber} · R$ {i.amount}<span>{i.status} · {String(i.dueDate).slice(0,10)}</span></div>{['pendente','atrasado'].includes(String(i.status)) && <label style={{ ...secondaryStyle, display:'block', boxSizing:'border-box', textAlign:'center', marginTop:7 }}>Enviar comprovante<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => { const file = e.target.files?.[0]; if (file) sendProof(i.id, file); }} style={{ display:'none' }} /></label>}</div>)}</div>}
       <button onClick={() => requestRoute('emprestimo')} style={secondaryStyle}>Acessar / solicitar Empréstimos</button>
     </div>
     <button onClick={() => requestRoute('gastos')} style={secondaryStyle}>Controle de Gastos</button>

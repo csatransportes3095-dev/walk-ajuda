@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "../db";
+import { storagePut } from "../storage";
 import { hasRouteAccess, type CustomerRoute } from "../customerAccess";
 
 export type OnlineEntrySession = {
@@ -127,6 +128,32 @@ export async function getOnlineLoanInstallments(token: string, loanId: number) {
   `));
   if (!owned[0]) throw new Error('Empréstimo não pertence ao cliente autenticado.');
   return resultRows(await db.execute(sql`SELECT * FROM loanInstallments WHERE loanId=${loanId} ORDER BY installmentNumber ASC`));
+}
+
+export async function submitOnlineInstallmentProof(input: { token: string; installmentId: number; fileBase64: string; fileName: string; mimeType: string }) {
+  const { session } = await requireOnlineRoute(input.token, 'emprestimo');
+  const db = await getDb() as any;
+  const allowedMime = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+  if (!allowedMime.has(input.mimeType)) throw new Error('Envie imagem JPG, PNG, WEBP ou PDF.');
+  const rawBase64 = String(input.fileBase64 || '').split(',').pop() || '';
+  const buffer = Buffer.from(rawBase64, 'base64');
+  if (!buffer.length || buffer.length > 10 * 1024 * 1024) throw new Error('O comprovante deve ter até 10 MB.');
+  const rows = resultRows(await db.execute(sql`
+    SELECT li.id, li.status, li.proofSentAt, lc.id AS clientId
+    FROM loanInstallments li
+    JOIN loans l ON l.id=li.loanId
+    JOIN loanClients lc ON lc.id=l.clientId
+    WHERE li.id=${input.installmentId} AND (lc.phone=${session.phone} OR (${session.cpf || null} IS NOT NULL AND REPLACE(REPLACE(REPLACE(lc.cpf,'.',''),'-',''),' ','')=${session.cpf || null}))
+    LIMIT 1
+  `));
+  const installment = rows[0];
+  if (!installment) throw new Error('Parcela não pertence ao cliente autenticado.');
+  if (String(installment.status) === 'em_analise' || installment.proofSentAt) throw new Error('Já existe um comprovante em análise para esta parcela.');
+  const safeName = String(input.fileName || 'comprovante').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100);
+  const key = `loan-proofs/${Number(installment.clientId)}/${input.installmentId}-${Date.now()}-${safeName}`;
+  const { url } = await storagePut(key, buffer, input.mimeType);
+  await db.execute(sql`UPDATE loanInstallments SET proofUrl=${url}, proofSentAt=NOW(), status='em_analise' WHERE id=${input.installmentId}`);
+  return { success: true, url };
 }
 
 export async function requireOnlineRoute(token: string, route: CustomerRoute) {

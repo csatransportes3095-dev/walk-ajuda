@@ -4,7 +4,7 @@ import { z } from "zod";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { onlineSupportConversations } from "../../drizzle/schema";
-import { getOnlineCustomerLoans, getOnlineCustomerOrders, getOnlineLoanInstallments, getOnlineOrderDetails, requireOnlineEntrySession } from "../online-support/entry";
+import { getOnlineCustomerLoans, getOnlineCustomerOrders, getOnlineLoanInstallments, getOnlineOrderDetails, requireOnlineEntrySession, submitOnlineInstallmentProof } from "../online-support/entry";
 import { CUSTOMER_ROUTES, requestCustomerRouteAccess } from "../customerAccess";
 import { cancelOnlineRegistrationDraft, findOnlineRegistrationIdentity, getOnlineRegistrationDraft, saveOnlineRegistrationDraft } from "../online-support/registration";
 import {
@@ -104,6 +104,10 @@ export const onlineSupportRouter = router({
   entryLoanInstallments: publicProcedure
     .input(z.object({ token: z.string().min(1), loanId: z.number().int().positive() }))
     .query(async ({ input }) => getOnlineLoanInstallments(input.token, input.loanId)),
+
+  entrySubmitInstallmentProof: publicProcedure
+    .input(z.object({ token: z.string().min(1), installmentId: z.number().int().positive(), fileBase64: z.string().min(1), fileName: z.string().min(1).max(160), mimeType: z.string().min(1) }))
+    .mutation(async ({ input }) => submitOnlineInstallmentProof(input)),
 
   entryRequestRoute: publicProcedure
     .input(z.object({ token: z.string().min(1), route: z.enum(CUSTOMER_ROUTES) }))
