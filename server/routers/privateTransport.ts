@@ -150,6 +150,21 @@ export const privateTransportRouter = router({
       .mutation(async ({ input }) => (await import("../private-transport/service")).updatePrivateAppointmentStatus(await currentUser(input.token), input.appointmentId, input.status, input.cancellationReason)),
   }),
 
+  addresses: router({
+    lookupCep: publicProcedure.input(z.object({ token: z.string(), cep: z.string().min(8).max(16) })).query(async ({ input }) => {
+      await currentUser(input.token);
+      const cep = input.cep.replace(/\D/g, "");
+      if (cep.length !== 8) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um CEP com 8 dígitos." });
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        if (!response.ok) throw new Error("Falha na consulta do CEP.");
+        const address = await response.json() as { erro?: boolean; logradouro?: string; bairro?: string; localidade?: string; uf?: string; cep?: string; complemento?: string };
+        if (address.erro) throw new Error("CEP não encontrado.");
+        return { cep: address.cep || cep, street: address.logradouro || "", neighborhood: address.bairro || "", city: address.localidade || "", state: address.uf || "", complement: address.complemento || "" };
+      } catch (error: any) { throw new TRPCError({ code: "BAD_REQUEST", message: error?.message || "Não foi possível consultar este CEP." }); }
+    }),
+  }),
+
   maps: router({
     autocomplete: publicProcedure.input(z.object({ token: z.string(), input: z.string().max(300) })).query(async ({ input }) => {
       await currentUser(input.token);
