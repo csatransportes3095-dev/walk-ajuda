@@ -480,7 +480,13 @@ export function LoansTab({ token }: LoansTabProps) {
 
   const { data, isLoading, refetch } = trpc.loans.getClientLoanInfo.useQuery(
     { token },
-    { enabled: !!token, refetchInterval: 30000 }
+    {
+      enabled: !!token,
+      // Empréstimos criados pelo ADM precisam aparecer sem depender do cache anterior do cliente.
+      refetchOnMount: "always",
+      refetchOnWindowFocus: true,
+      refetchInterval: 10000,
+    }
   );
 
   const { data: instData, refetch: refetchInst } = trpc.loans.getClientInstallments.useQuery(
@@ -828,7 +834,10 @@ export function LoansTab({ token }: LoansTabProps) {
         </div>
       ) : (
         <div className="space-y-4">
-          {visibleLoans.map((loan: any) => {
+          {visibleLoans.map((loan: any, index: number) => {
+            const isHistoryLoan = ["pago", "cancelado"].includes(loan.status);
+            const isFirstHistory = isHistoryLoan && !visibleLoans.slice(0, index).some((item: any) => ["pago", "cancelado"].includes(item.status));
+            const isFirstCurrent = index === 0 && !isHistoryLoan;
             const isExpanded = expandedLoan === loan.id;
             const showSendProof = ["aprovado", "aguardando_pagamento"].includes(loan.status) && !!loan.pixSentAt;
             const paidCount = parseInt(loan.paidInstallments || 0);
@@ -836,7 +845,20 @@ export function LoansTab({ token }: LoansTabProps) {
             const totalAmt = parseFloat(loan.totalAmount || 0);
 
             return (
-              <div key={loan.id} className={`rounded-2xl border-2 overflow-hidden transition-all ${
+              <div key={loan.id} className="space-y-2">
+                {isFirstCurrent && (
+                  <div className="px-1 pt-1">
+                    <p className="text-xs font-black uppercase tracking-wider text-violet-300">Empréstimo atual</p>
+                    <p className="text-xs text-muted-foreground">Acompanhe a solicitação, liberação e parcelas em aberto.</p>
+                  </div>
+                )}
+                {isFirstHistory && (
+                  <div className="mt-6 border-t border-white/10 px-1 pt-5">
+                    <p className="text-xs font-black uppercase tracking-wider text-emerald-300">Histórico de empréstimos</p>
+                    <p className="text-xs text-muted-foreground">Empréstimos quitados ou cancelados ficam somente nesta área.</p>
+                  </div>
+                )}
+                <div className={`rounded-2xl border-2 overflow-hidden transition-all ${
                 loan.isOverdue ? "border-red-500/50 shadow-red-500/10 shadow-xl" :
                 loan.status === "pago" ? "border-emerald-500/30" :
                 loan.status === "pendente" ? "border-blue-500/30" :
@@ -968,6 +990,7 @@ export function LoansTab({ token }: LoansTabProps) {
                     </>
                   )}
                 </div>
+              </div>
               </div>
             );
           })}

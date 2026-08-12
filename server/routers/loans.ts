@@ -21,6 +21,21 @@ function getBrazilToday(): string {
   return brazilTime.toISOString().slice(0, 10);
 }
 
+// Compara CPF e telefone ignorando pontos, traços, espaços, parênteses e DDI.
+// Assim o mesmo cliente não perde acesso ao empréstimo quando os cadastros foram salvos em formatos diferentes.
+function onlyDigits(value: unknown) {
+  return String(value || '').replace(/\D/g, '');
+}
+function isSameLoanIdentity(row: any, cpf?: string | null, phone?: string | null) {
+  const cpfDigits = onlyDigits(cpf);
+  const phoneDigits = onlyDigits(phone);
+  const rowCpf = onlyDigits(row?.cpf);
+  const rowPhone = onlyDigits(row?.phone);
+  const cpfMatch = !!cpfDigits && !!rowCpf && cpfDigits === rowCpf;
+  const phoneMatch = !!phoneDigits && !!rowPhone && (phoneDigits === rowPhone || phoneDigits.endsWith(rowPhone) || rowPhone.endsWith(phoneDigits));
+  return cpfMatch || phoneMatch;
+}
+
 // ââ€â‚¬ââ€â‚¬ââ€â‚¬ Helper: gerar PDF de recibo ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
 async function generateReceiptPdf(data: {
   receiptNumber: string;
@@ -1265,10 +1280,9 @@ export const loanRouter = router({
     let clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
 
     if (!clients.length) {
-      // Verificar se já existe um loanClient com o mesmo CPF ou telefone (evitar duplicidade)
-      const existingByIdentity = session.cpf
-        ? await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE cpf=${session.cpf} LIMIT 1`)
-        : await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE phone=${session.phone} LIMIT 1`);
+      // Verificar se já existe um loanClient com o mesmo CPF ou telefone, mesmo em outro formato.
+      const allLoanClients = await qRows(db, drizzleSql`SELECT * FROM loanClients`);
+      const existingByIdentity = allLoanClients.filter((row: any) => isSameLoanIdentity(row, session.cpf, session.phone));
 
       if (existingByIdentity.length) {
         // Vincular o token ao cliente existente em vez de criar duplicata
@@ -1296,10 +1310,11 @@ export const loanRouter = router({
 
     // Um mesmo cliente pode ter sido vinculado por token, CPF ou telefone em momentos diferentes.
     // Reunimos esses vínculos para o empréstimo atual nunca ficar escondido por um cadastro antigo quitado.
-    const identityRows = session.cpf
-      ? await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR cpf=${session.cpf} OR phone=${session.phone}`)
-      : await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR phone=${session.phone}`);
-    const relatedClientIds = Array.from(new Set(identityRows.map((row: any) => Number(row.id)).filter(Boolean)));
+    const identityRows = await qRows(db, drizzleSql`SELECT id, cpf, phone FROM loanClients`);
+    const relatedClientIds = Array.from(new Set([
+      Number(client.id),
+      ...identityRows.filter((row: any) => isSameLoanIdentity(row, session.cpf, session.phone)).map((row: any) => Number(row.id)),
+    ].filter(Boolean)));
     const relatedClientIdsSql = drizzleSql.raw(relatedClientIds.join(','));
 
     const loans = await qRows(db, drizzleSql`
@@ -1395,10 +1410,11 @@ export const loanRouter = router({
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED" });
     const client = clients[0];
-    const identities = client.cpf
-      ? await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR cpf=${client.cpf} OR phone=${client.phone}`)
-      : await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR phone=${client.phone}`);
-    const clientIds = Array.from(new Set(identities.map((row: any) => Number(row.id)).filter(Boolean)));
+    const identities = await qRows(db, drizzleSql`SELECT id, cpf, phone FROM loanClients`);
+    const clientIds = Array.from(new Set([
+      Number(client.id),
+      ...identities.filter((row: any) => isSameLoanIdentity(row, client.cpf, client.phone)).map((row: any) => Number(row.id)),
+    ].filter(Boolean)));
     const loans = await qRows(db, drizzleSql`SELECT * FROM loans WHERE id=${input.loanId} AND clientId IN (${drizzleSql.raw(clientIds.join(','))})`);
     if (!loans.length) throw new TRPCError({ code: "NOT_FOUND" });
 
@@ -1422,10 +1438,11 @@ export const loanRouter = router({
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED" });
     const client = clients[0];
-    const identities = client.cpf
-      ? await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR cpf=${client.cpf} OR phone=${client.phone}`)
-      : await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE id=${client.id} OR phone=${client.phone}`);
-    const clientIds = Array.from(new Set(identities.map((row: any) => Number(row.id)).filter(Boolean)));
+    const identities = await qRows(db, drizzleSql`SELECT id, cpf, phone FROM loanClients`);
+    const clientIds = Array.from(new Set([
+      Number(client.id),
+      ...identities.filter((row: any) => isSameLoanIdentity(row, client.cpf, client.phone)).map((row: any) => Number(row.id)),
+    ].filter(Boolean)));
 
     const inst = await qRows(db, drizzleSql`
       SELECT li.* FROM loanInstallments li

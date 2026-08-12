@@ -15,6 +15,8 @@ const requiredBackend = [
   "client_pix_key=${input.pixKey || null}, client_pix_name=${input.pixName || null}",
   "pixConfirmedDate=${confirmedDate}",
   "updatePixConfirmedDate: adminProcedure",
+  "function isSameLoanIdentity",
+  "ORDER BY CASE WHEN l.status IN ('pendente','aprovado','aguardando_pagamento','em_analise') THEN 0 ELSE 1 END, l.createdAt DESC",
 ];
 for (const snippet of requiredBackend) {
   if (!backend.includes(snippet)) throw new Error(`Backend sem regra obrigatória: ${snippet}`);
@@ -58,5 +60,22 @@ if (normais.map((loan) => loan.id).join(',') !== '4') throw new Error('Emprésti
 const priority = { pendente: 0, aprovado: 1, aguardando_pagamento: 2, em_analise: 3, pago: 4, cancelado: 5 };
 const clientOrder = [...loans].sort((a, b) => (priority[a.status] ?? 9) - (priority[b.status] ?? 9) || String(b.createdAt).localeCompare(String(a.createdAt)));
 if (clientOrder[0].id !== 3 || clientOrder[1].id !== 2 || clientOrder.at(-1).id !== 1) throw new Error('Prioridade do empréstimo atual incorreta');
+
+const onlyDigits = (value) => String(value || '').replace(/\D/g, '');
+const sameIdentity = (row, cpf, phone) => {
+  const cpfDigits = onlyDigits(cpf), phoneDigits = onlyDigits(phone);
+  const rowCpf = onlyDigits(row.cpf), rowPhone = onlyDigits(row.phone);
+  return (!!cpfDigits && cpfDigits === rowCpf) || (!!phoneDigits && (phoneDigits === rowPhone || phoneDigits.endsWith(rowPhone) || rowPhone.endsWith(phoneDigits)));
+};
+if (!sameIdentity({ cpf: '346.511.558-98', phone: '(21) 99702-98382' }, '34651155898', '55219970298382')) throw new Error('Normalização de CPF/telefone não reúne o mesmo cliente');
+
+const finishedAndNew = [
+  { id: 'A', status: 'pago', createdAt: '2026-07-14' },
+  { id: 'B', status: 'aguardando_pagamento', createdAt: '2026-08-11' },
+].sort((a, b) => {
+  const order = { aguardando_pagamento: 0, pago: 1 };
+  return order[a.status] - order[b.status] || b.createdAt.localeCompare(a.createdAt);
+});
+if (finishedAndNew[0].id !== 'B' || finishedAndNew[1].id !== 'A') throw new Error('Cenário quitado + novo ativo não prioriza o novo empréstimo');
 
 console.log('OK: regras de solicitação, PIX e empréstimo atual validadas sem gerar dados reais.');
