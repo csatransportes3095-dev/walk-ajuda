@@ -726,16 +726,36 @@ export type MainCustomerProfileInput = {
   profilePhotoUrl?: string;
 };
 
+function normalizeMainCustomerPhone(value: unknown): string {
+  let phone = String(value ?? '').replace(/\D/g, '');
+  if ((phone.length === 12 || phone.length === 13) && phone.startsWith('55')) phone = phone.slice(2);
+  return phone;
+}
+
+function isValidMainCustomerCpf(value: unknown): boolean {
+  const cpf = String(value ?? '').replace(/\D/g, '');
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+  const calculate = (base: string, factor: number) => {
+    let sum = 0;
+    for (const digit of base) sum += Number(digit) * factor--;
+    const result = (sum * 10) % 11;
+    return result === 10 ? 0 : result;
+  };
+  const first = calculate(cpf.slice(0, 9), 10);
+  const second = calculate(cpf.slice(0, 9) + first, 11);
+  return first === Number(cpf[9]) && second === Number(cpf[10]);
+}
+
 /** O cadastro principal só existe quando o perfil obrigatório está completo. */
 export function validateMainCustomerProfile(data: MainCustomerProfileInput): { phone: string; cpf: string; email: string; photoUrl: string } {
-  const phone = String(data.phone || '').replace(/\D/g, '');
+  const phone = normalizeMainCustomerPhone(data.phone);
   const cpf = String(data.cpf || '').replace(/\D/g, '');
   const email = String(data.email || '').trim().toLowerCase();
   const photoUrl = String(data.profilePhotoUrl || '').trim();
   const missing: string[] = [];
   if (!String(data.name || '').trim()) missing.push('nome');
   if (!/^\d{10,11}$/.test(phone)) missing.push('telefone');
-  if (!/^\d{11}$/.test(cpf)) missing.push('CPF');
+  if (!isValidMainCustomerCpf(cpf)) missing.push('CPF válido');
   if (!/^\S+@\S+\.\S+$/.test(email)) missing.push('e-mail');
   if (!photoUrl) missing.push('foto de perfil');
   if (missing.length) throw new Error(`Cadastro principal exige: ${missing.join(', ')}.`);
@@ -761,6 +781,10 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
     referredByPhone: data.referredByPhone || null,
     profilePhotoUrl: required.photoUrl,
   });
+  // Colunas de identidade foram adicionadas de modo compatível para proteger novas criações.
+  try {
+    await db.execute(sql`UPDATE customers SET normalizedPhone=${required.phone}, normalizedCpf=${required.cpf}, normalizedEmail=${required.email} WHERE phone=${required.phone}`);
+  } catch { /* infraestrutura ainda será inicializada no startup */ }
   const result = await db.select().from(customers).where(eq(customers.phone, required.phone)).limit(1);
   return result[0];
 }
@@ -779,11 +803,11 @@ export async function updateCustomer(id: number, data: { name?: string; phone?: 
   if (!db) return null;
   const updateSet: Record<string, unknown> = {};
   if (data.name !== undefined) updateSet.name = data.name ? data.name.toUpperCase().trim() : data.name;
-  if (data.phone !== undefined) updateSet.phone = data.phone;
-  if (data.email !== undefined) updateSet.email = data.email;
+  if (data.phone !== undefined) updateSet.phone = normalizeMainCustomerPhone(data.phone);
+  if (data.email !== undefined) updateSet.email = data.email ? data.email.trim().toLowerCase() : data.email;
   if (data.city !== undefined) updateSet.city = data.city ? data.city.toUpperCase().trim() : data.city;
   if (data.uf !== undefined) updateSet.uf = data.uf ? data.uf.toUpperCase().trim() : data.uf;
-  if (data.cpf !== undefined) updateSet.cpf = data.cpf ? data.cpf.trim() : data.cpf;
+  if (data.cpf !== undefined) updateSet.cpf = data.cpf ? data.cpf.replace(/\D/g, '') : data.cpf;
   if (data.referredBy !== undefined) updateSet.referredBy = data.referredBy ? data.referredBy.toUpperCase().trim() : data.referredBy;
   if (data.referredByPhone !== undefined) updateSet.referredByPhone = data.referredByPhone;
   if (data.profilePhotoUrl !== undefined) updateSet.profilePhotoUrl = data.profilePhotoUrl;
@@ -796,7 +820,13 @@ export async function updateCustomer(id: number, data: { name?: string; phone?: 
     await db.update(customers).set(updateSet).where(eq(customers.id, id));
   }
   const result = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
-  return result.length > 0 ? result[0] : null;
+  const customer = result.length > 0 ? result[0] : null;
+  if (customer) {
+    try {
+      await db.execute(sql`UPDATE customers SET normalizedPhone=${normalizeMainCustomerPhone(customer.phone)}, normalizedCpf=${String(customer.cpf || '').replace(/\D/g, '') || null}, normalizedEmail=${String(customer.email || '').trim().toLowerCase() || null} WHERE id=${id}`);
+    } catch { /* infraestrutura ainda será inicializada no startup */ }
+  }
+  return customer;
 }
 
 export async function deleteCustomer(id: number, reason?: string): Promise<void> {

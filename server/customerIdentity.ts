@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { getDb, validateMainCustomerProfile } from './db';
+import { findMainCustomerByIdentity } from './customerAccess';
 
 type IdentityRow = {
   id: number;
@@ -33,18 +34,9 @@ export async function requireCompleteMainCustomerProfile(db: any, identity: Pick
   const phone = digits(identity.phone);
   const cpf = digits(identity.cpf);
   if (!phone && !cpf) throw new Error('Informe telefone ou CPF para localizar o cadastro principal.');
-  const candidates = await rows(db, sql`
-    SELECT id, name, phone, cpf, email, profilePhotoUrl
-    FROM customers
-    WHERE deletedAt IS NULL
-      AND (
-        (${phone || ''}!='' AND (phone=${phone || ''} OR RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 9)=RIGHT(${phone || ''}, 9)))
-        OR (${cpf || ''}!='' AND REGEXP_REPLACE(cpf, '[^0-9]', '')=${cpf || ''})
-      )
-  `);
-  const customer = candidates.find((row: any) => isSameCustomerIdentity(row, identity));
+  const customer = await findMainCustomerByIdentity({ phone, cpf }, db);
   if (!customer) throw new Error('Conclua primeiro o cadastro principal do cliente: foto, e-mail, CPF e telefone são obrigatórios.');
-  validateMainCustomerProfile(customer);
+  validateMainCustomerProfile(customer as any);
   return customer;
 }
 

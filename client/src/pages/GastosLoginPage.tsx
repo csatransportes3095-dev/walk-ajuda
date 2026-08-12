@@ -24,7 +24,8 @@ type Step =
   | 'expired'           // Senha expirada
   | 'expired_no_renew'  // Senha venceu sem renovação
   | 'blocked'           // Bloqueado
-  | 'profile_incomplete'; // Perfil principal obrigatório incompleto
+  | 'profile_incomplete' // Perfil principal obrigatório incompleto
+  | 'access_restricted'; // Cadastro reconhecido, sem permissão para esta rota
 
 // Helper: converte File para base64
 function fileToBase64(file: File): Promise<string> {
@@ -60,6 +61,9 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [passwordCreated, setPasswordCreated] = useState(false);
+  const [profileUpdateLookup, setProfileUpdateLookup] = useState<{ identifier: string; isCpf: boolean } | null>(null);
+  const [allowedRoutes, setAllowedRoutes] = useState<string[]>([]);
+  const [restrictedPhone, setRestrictedPhone] = useState('');
 
   // Campos de cadastro
   const [regName, setRegName] = useState('');
@@ -80,6 +84,8 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
   const passwordModeQuery = trpc.spreadsheet.getPasswordMode.useQuery();
   const isAutoMode = passwordModeQuery.data?.mode === 'auto';
   const registerMutation = trpc.customers.register.useMutation();
+  const completeProfileMutation = trpc.customers.completeProfile.useMutation();
+  const requestRouteAccessMutation = trpc.accessRequests.request.useMutation();
   const uploadPhotoMutation = trpc.customers.uploadProfilePhoto.useMutation();
 
   const normalizePhone = (raw: string): string => {
@@ -120,21 +126,28 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
     }
     setIsLoading(true);
     try {
-      const result = await checkPhoneMutation.mutateAsync({ identifier: cleanId, isCpf: useCpf });
+      const result = await checkPhoneMutation.mutateAsync({ identifier: cleanId, isCpf: useCpf, requestedRoute: sourceRoute || 'gastos' });
       setClientName(result.clientName || '');
       switch (result.status) {
         case 'not_found':
-          // Pré-preencher o telefone no formulário de cadastro
+          setProfileUpdateLookup(null);
+          // Pré-preencher o telefone no formulário de cadastro novo.
           setRegPhone(cleanPhone);
           setStep('register');
           break;
         case 'blocked':
           setStep('blocked');
           break;
+        case 'access_restricted':
+          setAllowedRoutes((result as any).allowedRoutes || []);
+          setRestrictedPhone((result as any).clientPhone || cleanPhone);
+          setStep('access_restricted');
+          break;
         case 'profile_incomplete':
+          setProfileUpdateLookup({ identifier: cleanId, isCpf: useCpf });
           setRegPhone(cleanPhone);
           setRegCpf(cleanCpf);
-          setError(result.message || 'Conclua foto, e-mail, CPF e telefone no cadastro principal.');
+          setError(result.message || 'Atualize obrigatoriamente foto, e-mail, CPF e telefone para continuar.');
           setStep('register');
           break;
         case 'no_password':
@@ -203,24 +216,27 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
         return;
       }
 
-      // 2. Registrar cliente
-      const result = await registerMutation.mutateAsync({
+      // 2. Perfil incompleto é atualizado no cadastro principal; cadastro novo cria uma identidade única.
+      const payload = {
         name: regName.trim(),
         phone: cleanPhone,
         email: regEmail.trim(),
         cpf: formatCpf(regCpf),
-        city: regCity.trim(),
-        uf: regUf.toUpperCase().slice(0, 2),
+        city: regCity.trim() || undefined,
+        uf: regUf.toUpperCase().slice(0, 2) || undefined,
         profilePhotoUrl: uploadResult.url,
-      });
+      };
+      const result = profileUpdateLookup
+        ? await completeProfileMutation.mutateAsync({ ...payload, lookupIdentifier: profileUpdateLookup.identifier, lookupIsCpf: profileUpdateLookup.isCpf })
+        : await registerMutation.mutateAsync({ ...payload, city: regCity.trim(), uf: regUf.toUpperCase().slice(0, 2), sourceRoute: sourceRoute || 'gastos' });
 
       if (result.blocked) {
         setError(result.message || 'Cadastro não permitido.');
         setIsLoading(false);
         return;
       }
-      if (result.duplicateCpf) {
-        setError(result.message || 'CPF já registrado no sistema.');
+      if ((result as any).alreadyExists) {
+        setError('Você já possui cadastro no sistema. Volte e entre usando o telefone ou CPF do seu cadastro original.');
         setIsLoading(false);
         return;
       }
@@ -231,19 +247,36 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
       }
 
       // 3. Cadastro OK — chamar checkPhone para criar spreadsheetClient automaticamente
-      toast.success('Cadastro realizado! Agora crie sua senha de acesso.');
+      toast.success(profileUpdateLookup ? 'Cadastro atualizado! Agora crie sua senha de acesso.' : 'Cadastro realizado! Agora crie sua senha de acesso.');
       setPhone(cleanPhone);
       setClientName(regName.trim());
       // Disparar checkPhone para garantir que spreadsheetClient seja criado
       try {
-        await checkPhoneMutation.mutateAsync({ identifier: cleanPhone, isCpf: false });
+        await checkPhoneMutation.mutateAsync({ identifier: cleanPhone, isCpf: false, requestedRoute: sourceRoute || 'gastos' });
       } catch (_) { /* ignora erro — spreadsheetClient pode já ter sido criado */ }
+      setProfileUpdateLookup(null);
       setStep('create_password');
     } catch (err: any) {
       setError(err?.message || 'Erro ao realizar cadastro. Tente novamente.');
     } finally {
       setIsLoading(false);
       setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleRequestRouteAccess = async () => {
+    if (!restrictedPhone) return;
+    try {
+      const result = await requestRouteAccessMutation.mutateAsync({ phone: restrictedPhone, route: sourceRoute || 'gastos' });
+      if (result.alreadyAllowed) {
+        toast.success('Esta rota já está liberada para o seu cadastro.');
+      } else if (result.created) {
+        toast.success('Sua solicitação foi enviada ao administrador.');
+      } else {
+        toast.info('Sua solicitação de acesso já está em análise.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Não foi possível solicitar o acesso.');
     }
   };
 
@@ -314,6 +347,9 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
     setConfirmPassword('');
     setError('');
     setPasswordCreated(false);
+    setProfileUpdateLookup(null);
+    setAllowedRoutes([]);
+    setRestrictedPhone('');
   };
 
   const UF_LIST = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
@@ -389,8 +425,8 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
           {step === 'register' && (
             <form onSubmit={handleRegister} className="space-y-3">
               <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg mb-1">
-                <p className="text-sm text-blue-300 font-medium">📋 Novo cadastro</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Preencha seus dados para criar sua conta.</p>
+                <p className="text-sm text-blue-300 font-medium">{profileUpdateLookup ? '🔒 Atualização obrigatória de cadastro' : '📋 Novo cadastro'}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{profileUpdateLookup ? 'Informe foto, e-mail, CPF e telefone válidos para continuar. Nenhum novo cadastro será criado.' : 'Preencha seus dados para criar sua conta.'}</p>
               </div>
               {error && (
                 <div className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -513,17 +549,33 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
 
               <Button
                 type="submit"
-                disabled={isLoading || !regName || !regPhoto || regPhone.replace(/\D/g,'').length < 10 || regCpf.replace(/\D/g,'').length !== 11 || !regEmail || !regCity || !regUf}
+                disabled={isLoading || !regName || !regPhoto || regPhone.replace(/\D/g,'').length < 10 || regCpf.replace(/\D/g,'').length !== 11 || !regEmail || (!profileUpdateLookup && (!regCity || !regUf))}
                 className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg mt-1"
               >
                 {isLoading
                   ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{isUploadingPhoto ? 'Enviando foto...' : 'Cadastrando...'}</>
-                  : '✅ Criar minha conta'}
+                  : profileUpdateLookup ? '✅ Atualizar meu cadastro' : '✅ Criar minha conta'}
               </Button>
               <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
                 ← Voltar
               </button>
             </form>
+          )}
+
+          {/* ACESSO RESTRITO POR ROTA */}
+          {step === 'access_restricted' && (
+            <div className="space-y-4 text-center">
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <AlertCircle className="w-7 h-7 text-amber-300 mx-auto mb-2" />
+                <p className="text-base font-semibold text-amber-200">Acesso não autorizado</p>
+                <p className="text-sm text-muted-foreground mt-2">Seu cadastro foi encontrado, mas esta área ainda não foi liberada pelo administrador.</p>
+                {allowedRoutes.length > 0 && <p className="text-xs text-green-300 mt-3">Acesso atual: {allowedRoutes.join(', ')}</p>}
+              </div>
+              <Button type="button" onClick={handleRequestRouteAccess} disabled={requestRouteAccessMutation.isPending || !restrictedPhone} className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+                {requestRouteAccessMutation.isPending ? 'Enviando solicitação...' : 'Solicitar acesso'}
+              </Button>
+              <button type="button" onClick={resetToPhone} className="w-full text-sm text-primary hover:underline">← Voltar para minha área</button>
+            </div>
           )}
 
           {/* ETAPA 2: CRIAR SENHA */}

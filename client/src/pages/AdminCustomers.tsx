@@ -397,6 +397,11 @@ export default function AdminCustomers() {
   }, [photoModal]);
 
   const customersQuery = trpc.customers.list.useQuery(undefined, {});
+  const accessRequestsQuery = trpc.accessRequests.listPending.useQuery(undefined, { refetchInterval: 30000 });
+  const decideAccessRequestMut = trpc.accessRequests.decide.useMutation({
+    onSuccess: () => { accessRequestsQuery.refetch(); toast.success('Solicitação de acesso atualizada.'); },
+    onError: (error) => toast.error(error.message || 'Não foi possível atualizar a solicitação.'),
+  });
   const updateMut = trpc.customers.update.useMutation({
     onSuccess: () => { customersQuery.refetch(); toast.success("Cliente atualizado!"); setEditingId(null); },
     onError: (error) => toast.error(error.message || "Erro ao atualizar cliente"),
@@ -841,6 +846,32 @@ export default function AdminCustomers() {
           </button>
         </div>
       } />
+
+      {(accessRequestsQuery.data || []).length > 0 && (
+        <section className="mx-3 mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 sm:mx-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-amber-200">Nova solicitação de acesso</p>
+              <p className="text-xs text-amber-100/75">Aprove ou negue sem criar outro cadastro.</p>
+            </div>
+            <span className="rounded-full bg-amber-400/20 px-2 py-1 text-xs font-bold text-amber-200">{accessRequestsQuery.data?.length}</span>
+          </div>
+          <div className="space-y-2">
+            {accessRequestsQuery.data?.map((request: any) => (
+              <div key={request.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/20 bg-background/50 p-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">#{request.customerNumber || '—'} {request.name}</p>
+                  <p className="text-xs text-muted-foreground">Solicitou: <span className="font-medium text-foreground">{request.route === 'gastos' ? 'Gastos' : request.route === 'emprestimo' ? 'Empréstimos' : 'Site Principal'}</span></p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => decideAccessRequestMut.mutate({ id: request.id, approved: true, adminName: 'Administrador' })} disabled={decideAccessRequestMut.isPending} className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50">Aprovar</button>
+                  <button onClick={() => decideAccessRequestMut.mutate({ id: request.id, approved: false, adminName: 'Administrador' })} disabled={decideAccessRequestMut.isPending} className="rounded-md bg-red-600/80 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50">Negar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {showCsvImportModal && (
         <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4">

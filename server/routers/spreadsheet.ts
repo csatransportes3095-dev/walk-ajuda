@@ -11,6 +11,7 @@ import {
 } from "../db";
 import { getDb } from "../db";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
+import { findMainCustomerByIdentity, getRouteAccess, normalizeCustomerPhone, setCustomerRoutePermissions } from "../customerAccess";
 import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 
@@ -347,6 +348,7 @@ export const spreadsheetRouter = router({
     .input(z.object({
       identifier: z.string().min(8, "Informe telefone ou CPF"),
       isCpf: z.boolean().optional(),
+      requestedRoute: z.enum(['site', 'gastos', 'emprestimo']).optional(),
     }))
     .mutation(async ({ input }) => {
       try {
@@ -360,8 +362,37 @@ export const spreadsheetRouter = router({
         const normalizedCpf = isCpf ? raw : null;
 
         let client: any = null;
+        // O perfil principal identifica o cliente em todas as rotas, mesmo se
+        // Gastos ainda tiver o telefone salvo em outro formato técnico.
+        const mainCustomer = await findMainCustomerByIdentity({
+          phone: normalizedPhone || undefined,
+          cpf: normalizedCpf || undefined,
+        }, db);
+        if (mainCustomer) {
+          try {
+            await requireCompleteMainCustomerProfile(db, { phone: mainCustomer.phone || '', cpf: mainCustomer.cpf || '' });
+          } catch (profileError: any) {
+            return { status: 'profile_incomplete' as const, clientName: mainCustomer.name, message: profileError?.message || 'Atualize foto, e-mail, CPF e telefone para continuar.' };
+          }
+          const canonicalPhone = normalizeCustomerPhone(mainCustomer.phone);
+          const existingTechnical = await db.select().from(spreadsheetClients)
+            .where(eq(spreadsheetClients.phone, canonicalPhone)).limit(1);
+          if (existingTechnical?.[0]) {
+            client = existingTechnical[0];
+          } else {
+            const insertResult = await db.insert(spreadsheetClients).values({
+              phone: canonicalPhone,
+              name: mainCustomer.name || 'CLIENTE',
+              cpf: mainCustomer.cpf || null,
+              status: 'active',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+            client = { id: (insertResult as any).insertId, phone: canonicalPhone, name: mainCustomer.name, cpf: mainCustomer.cpf || null, status: 'active' };
+          }
+        }
 
-        if (isCpf) {
+        if (isCpf && !client) {
           // Buscar por CPF em spreadsheetClients
           const byCpfResult = await db.select().from(spreadsheetClients)
             .where(eq(spreadsheetClients.cpf, normalizedCpf!)).limit(1);
@@ -408,7 +439,7 @@ export const spreadsheetRouter = router({
               };
             }
           }
-        } else {
+        } else if (!client) {
           // Buscar por telefone em spreadsheetClients
           let clientResult = await db.select().from(spreadsheetClients)
             .where(eq(spreadsheetClients.phone, normalizedPhone!)).limit(1);
@@ -467,6 +498,15 @@ export const spreadsheetRouter = router({
 
         if (client.status === 'blocked') {
           return { status: 'blocked' as const, clientName: client.name };
+        }
+
+        const accessCustomer = await findMainCustomerByIdentity({ phone: client.phone || normalizedPhone || undefined, cpf: client.cpf || normalizedCpf || undefined }, db);
+        const requestedRoute = input.requestedRoute || 'gastos';
+        if (accessCustomer) {
+          const access = await getRouteAccess(accessCustomer.id, db);
+          if (access.restricted && !access.routes.includes(requestedRoute)) {
+            return { status: 'access_restricted' as const, clientName: client.name, clientPhone: client.phone, allowedRoutes: access.routes };
+          }
         }
 
         // Verificar bloqueio na tabela customers (mesmo que spreadsheetClient exista com status 'active')
@@ -1622,15 +1662,10 @@ export const spreadsheetRouter = router({
         const db = await getDb() as any;
         if (!db) return { allowedRoutes: '' };
         try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
-        const normalizedPhone = input.phone.replace(/\D/g, '');
-        let result = await db.select().from(spreadsheetClients)
-          .where(eq(spreadsheetClients.phone, normalizedPhone)).limit(1);
-        if (!result?.[0] && normalizedPhone.length === 11) {
-          result = await db.select().from(spreadsheetClients)
-            .where(eq(spreadsheetClients.phone, normalizedPhone.slice(2))).limit(1);
-        }
-        const client = result?.[0] || null;
-        return { allowedRoutes: (client as any)?.allowedRoutes || '', clientId: client?.id || null };
+        const mainCustomer = await findMainCustomerByIdentity({ phone: input.phone }, db);
+        if (!mainCustomer) return { allowedRoutes: '', clientId: null, customerId: null };
+        const access = await getRouteAccess(mainCustomer.id, db);
+        return { allowedRoutes: access.restricted ? access.routes.join(',') : '', clientId: null, customerId: mainCustomer.id };
       } catch (_) {
         return { allowedRoutes: '', clientId: null };
       }
@@ -1647,34 +1682,10 @@ export const spreadsheetRouter = router({
         const db = await getDb() as any;
         if (!db) return { success: false };
         try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
-        const normalizedPhone = input.phone.replace(/\D/g, '');
-        let result = await db.select().from(spreadsheetClients)
-          .where(eq(spreadsheetClients.phone, normalizedPhone)).limit(1);
-        if (!result?.[0] && normalizedPhone.length === 11) {
-          result = await db.select().from(spreadsheetClients)
-            .where(eq(spreadsheetClients.phone, normalizedPhone.slice(2))).limit(1);
-        }
-        const client = result?.[0] || null;
-        if (!client) {
-          // Criar spreadsheetClient se não existir
-          const custResult = await db.select().from(customers)
-            .where(eq(customers.phone, normalizedPhone)).limit(1);
-          const customer = custResult?.[0] || null;
-          if (!customer) return { success: false, message: 'Cliente não encontrado' };
-          await db.insert(spreadsheetClients).values({
-            phone: normalizedPhone,
-            name: customer.name,
-            cpf: (customer as any).cpf || null,
-            status: 'active',
-            allowedRoutes: input.allowedRoutes || null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
-        } else {
-          await db.update(spreadsheetClients)
-            .set({ allowedRoutes: input.allowedRoutes || null, updatedAt: new Date() } as any)
-            .where(eq(spreadsheetClients.id, client.id));
-        }
+        const mainCustomer = await findMainCustomerByIdentity({ phone: input.phone }, db);
+        if (!mainCustomer) return { success: false, message: 'Cliente não encontrado' };
+        const routes = input.allowedRoutes.split(',').map((route: string) => route.trim()).filter(Boolean);
+        await setCustomerRoutePermissions(mainCustomer.id, routes, 'Administrador', db);
         return { success: true };
       } catch (error) {
         return { success: false };

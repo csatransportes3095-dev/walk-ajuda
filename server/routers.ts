@@ -26,6 +26,7 @@ import { loanRouter } from "./routers/loans";
 import { apkRouter } from "./routers/apk";
 import { customerPasswordRouter } from "./routers/customerPassword";
 import { syncUnifiedCustomerRegistry } from "./customerIdentity";
+import { ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -57,7 +58,7 @@ import {
   listProductQuestions, listOptionQuestions, createProductQuestion, updateProductQuestion, deleteProductQuestion,
   listOptionDocuments, createOptionDocument, updateOptionDocument, deleteOptionDocument, deleteOptionDocumentsByOptionId,
   getAllSettings, upsertSettings, upsertSetting, getSetting, getSettings,
-  getCustomerByPhone, getCustomerByCpf, createCustomer, listCustomers, updateCustomer, deleteCustomer, updateCustomerLastAccess,
+  getCustomerByPhone, getCustomerByCpf, createCustomer, listCustomers, updateCustomer, deleteCustomer, updateCustomerLastAccess, validateMainCustomerProfile,
   createRaffle, getAllRaffles, getRaffleById, updateRaffle, deleteRaffle, deleteRaffleEntry, updateRaffleEntryPayment,
   getRaffleEntries, createRaffleEntry, checkNumberTaken, getActiveRaffle, getLatestDrawnRaffle,
   getAdminCredential, updateAdminPassword,
@@ -249,6 +250,60 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+  }),
+
+  // Solicitações de liberação de rota. A identidade vem sempre do cadastro principal.
+  accessRequests: router({
+    request: publicProcedure
+      .input(z.object({ phone: z.string().min(10), route: z.enum(['site', 'gastos', 'emprestimo']) }))
+      .mutation(async ({ input }) => {
+        await ensureCustomerIdentityInfrastructure();
+        const customer = await findMainCustomerByIdentity({ phone: input.phone });
+        if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cadastro não encontrado.' });
+        const access = await getRouteAccess(customer.id);
+        if (!access.restricted || access.routes.includes(input.route)) {
+          return { success: true, alreadyAllowed: true, pending: false };
+        }
+        const requested = await requestCustomerRouteAccess(customer.id, input.route);
+        return { success: true, alreadyAllowed: false, ...requested };
+      }),
+
+    listPending: adminProcedure.query(async () => {
+      await ensureCustomerIdentityInfrastructure();
+      const { getDb } = await import('./db');
+      const db = await getDb() as any;
+      if (!db) return [];
+      const [rows] = await db.execute(sql`
+        SELECT r.id, r.customerId, r.route, r.status, r.createdAt, c.customerNumber, c.name, c.phone
+        FROM customerAccessRequests r
+        JOIN customers c ON c.id=r.customerId
+        WHERE r.status='pending' AND r.pendingKey=1
+        ORDER BY r.createdAt ASC
+      `);
+      return rows as any[];
+    }),
+
+    decide: adminProcedure
+      .input(z.object({ id: z.number(), approved: z.boolean(), adminName: z.string().min(1).default('Administrador') }))
+      .mutation(async ({ input }) => {
+        await ensureCustomerIdentityInfrastructure();
+        const { getDb } = await import('./db');
+        const db = await getDb() as any;
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const [rows] = await db.execute(sql`SELECT customerId, route FROM customerAccessRequests WHERE id=${input.id} AND status='pending' AND pendingKey=1 LIMIT 1`) as any;
+        const request = rows?.[0];
+        if (!request) throw new TRPCError({ code: 'NOT_FOUND', message: 'Solicitação pendente não encontrada.' });
+        if (input.approved) {
+          const access = await getRouteAccess(Number(request.customerId), db);
+          await setCustomerRoutePermissions(Number(request.customerId), [...access.routes, String(request.route)], input.adminName, db);
+        }
+        await db.execute(sql`
+          UPDATE customerAccessRequests
+          SET status=${input.approved ? 'approved' : 'denied'}, pendingKey=NULL, analyzedAt=NOW(), analyzedBy=${input.adminName}
+          WHERE id=${input.id}
+        `);
+        return { success: true };
+      }),
   }),
 
   // === SENHAS VIP ===
@@ -1695,23 +1750,75 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    // Completar o perfil de um cliente existente. Nunca cria um segundo cadastro.
+    completeProfile: publicProcedure
+      .input(z.object({
+        lookupIdentifier: z.string().min(10),
+        lookupIsCpf: z.boolean().optional(),
+        name: z.string().min(2, 'Nome obrigatório'),
+        phone: z.string().min(10),
+        email: z.string().email('E-mail obrigatório e inválido'),
+        cpf: z.string().min(11),
+        city: z.string().optional(),
+        uf: z.string().length(2).optional().or(z.literal('')),
+        profilePhotoUrl: z.string().url('Foto de perfil obrigatória').min(1),
+      }))
+      .mutation(async ({ input }) => {
+        await ensureCustomerIdentityInfrastructure();
+        const lookupPhone = input.lookupIsCpf ? '' : normalizeCustomerPhone(input.lookupIdentifier);
+        const lookupCpf = input.lookupIsCpf ? normalizeCustomerCpf(input.lookupIdentifier) : '';
+        const profile = {
+          name: input.name.trim(),
+          phone: normalizeCustomerPhone(input.phone),
+          email: normalizeCustomerEmail(input.email),
+          cpf: normalizeCustomerCpf(input.cpf),
+          city: input.city?.trim() || undefined,
+          uf: input.uf?.trim().toUpperCase() || undefined,
+          profilePhotoUrl: input.profilePhotoUrl.trim(),
+        };
+        try {
+          validateMainCustomerProfile(profile);
+        } catch (error: any) {
+          return { success: false, message: error?.message || 'Complete todos os dados obrigatórios.' };
+        }
+        const current = await findMainCustomerByIdentity({ phone: lookupPhone, cpf: lookupCpf });
+        if (!current) return { success: false, message: 'Cadastro principal não encontrado. Entre em contato com o administrador.' };
+        const conflict = await findMainCustomerByIdentity(profile);
+        if (conflict && conflict.id !== current.id) {
+          return { success: false, message: 'Os dados informados já pertencem a outro cadastro. Entre em contato com o administrador.' };
+        }
+        const updated = await updateCustomer(current.id, profile);
+        if (!updated) return { success: false, message: 'Não foi possível atualizar o cadastro.' };
+        return { success: true, customer: updated };
+      }),
+
     register: publicProcedure
       .input(z.object({
         name: z.string().min(1),
         phone: z.string().min(1),
         email: z.string().email("E-mail obrigatório e inválido").min(1, "E-mail obrigatório"),
-        cpf: z.string().min(14, "CPF inválido").max(14),
+        cpf: z.string().min(11, "CPF inválido").max(18),
         city: z.string().min(1, "Cidade é obrigatória"),
         uf: z.string().length(2, "UF deve ter 2 caracteres"),
         referredBy: z.string().optional(),
         referredByPhone: z.string().regex(/^\d{10,11}$/).optional(),
         bypassCode: z.string().optional(),
         profilePhotoUrl: z.string().min(1, "Foto de perfil é obrigatória"),
+        sourceRoute: z.enum(['site', 'gastos', 'emprestimo']).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        // SEGURANÇA: foto é obrigatória no servidor
-        if (!input.profilePhotoUrl || input.profilePhotoUrl.trim() === '') {
-          return { success: false, blocked: false, message: 'Foto de perfil é obrigatória para finalizar o cadastro.' };
+        // O banco principal é a fonte única de identidade para todas as rotas.
+        await ensureCustomerIdentityInfrastructure();
+        const normalizedInput = {
+          ...input,
+          phone: normalizeCustomerPhone(input.phone),
+          cpf: normalizeCustomerCpf(input.cpf),
+          email: normalizeCustomerEmail(input.email),
+        };
+        try {
+          validateMainCustomerProfile(normalizedInput);
+        } catch (error: any) {
+          return { success: false, blocked: false, message: error?.message || 'Complete todos os dados obrigatórios.' };
         }
         // Capturar IP do cliente
         const clientIp = (ctx.req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || ctx.req.socket?.remoteAddress || 'unknown';
@@ -1721,29 +1828,26 @@ export const appRouter = router({
           if (ipBlocked) return { success: false, blocked: true, message: 'Acesso bloqueado. Entre em contato pelo WhatsApp.' };
         }
         // Logar acesso
-        logIpAccess(clientIp, 'register', input.phone, input.name).catch(() => {});
+        logIpAccess(clientIp, 'register', normalizedInput.phone, input.name).catch(() => {});
         // Verificar blocklist antes de qualquer coisa
-        const blockCheck = await checkBlocklist(input.name, input.phone);
+        const blockCheck = await checkBlocklist(input.name, normalizedInput.phone);
         if (blockCheck.blocked) {
           return { success: false, blocked: true, message: blockCheck.reason || 'Cadastro não permitido. Entre em contato pelo WhatsApp.' };
         }
-        // Verificar se já existe
-        const existing = await getCustomerByPhone(input.phone);
-        if (existing) return { success: true, customer: existing, alreadyExists: true };
-        // Verificar se CPF já está registrado
-        const existingByCpf = await getCustomerByCpf(input.cpf);
-        if (existingByCpf) {
+        // Pesquisa global antes do INSERT: telefone, CPF e e-mail identificam o mesmo cliente.
+        const existing = await findMainCustomerByIdentity(normalizedInput);
+        if (existing) {
           return {
             success: false,
             blocked: false,
-            message: `CPF já registrado no sistema. Telefone associado: ${existingByCpf.phone}`,
-            duplicateCpf: true,
-            existingPhone: existingByCpf.phone,
+            alreadyExists: true,
+            existingCustomerNumber: existing.customerNumber || null,
+            message: 'Você já possui cadastro no sistema. Entre na sua conta para continuar.',
           };
         }
         // Validar indicador obrigatório ou código de bypass
         const { validateReferrer, validateBypassCode, useBypassCode } = await import('./db');
-        const cleanPhone = input.phone.replace(/\D/g, '');
+        const cleanPhone = normalizedInput.phone;
         const cleanRefPhone = (input.referredByPhone ?? '').replace(/\D/g, '');
         
         // Indicador agora e OPCIONAL. Se informado, validamos; se nao, o cadastro segue normalmente.
@@ -1762,11 +1866,12 @@ export const appRouter = router({
         }
         
         const safeInput = {
-          ...input,
+          ...normalizedInput,
           referredBy: cleanRefPhone && cleanRefPhone === cleanPhone ? undefined : input.referredBy,
           referredByPhone: cleanRefPhone && cleanRefPhone === cleanPhone ? undefined : input.referredByPhone,
         };
         const customer = await createCustomer(safeInput);
+        await setCustomerRoutePermissions(customer.id, [input.sourceRoute || 'site'], 'Cadastro inicial');
         
         // Registrar indicação se houver indicador
         if (safeInput.referredByPhone && safeInput.referredBy) {
@@ -2423,26 +2528,24 @@ export const appRouter = router({
         uf: z.string().length(2).optional().or(z.literal('')),
       }))
       .mutation(async ({ input }) => {
-        // Verificar se telefone já existe
-        const existing = await getCustomerByPhone(input.phone);
-        if (existing) return { success: false, message: 'Telefone já cadastrado no sistema.' };
-        // Verificar CPF duplicado se informado
-        if (input.cpf && input.cpf.trim()) {
-          const cleanCpf = input.cpf.replace(/\D/g, '');
-          if (cleanCpf.length === 11) {
-            const existingByCpf = await getCustomerByCpf(cleanCpf);
-            if (existingByCpf) return { success: false, message: `CPF já cadastrado. Telefone associado: ${existingByCpf.phone}` };
-          }
-        }
-        const customer = await createCustomer({
+        await ensureCustomerIdentityInfrastructure();
+        const profile = {
           name: input.name,
-          phone: input.phone,
-          email: input.email,
-          cpf: input.cpf,
+          phone: normalizeCustomerPhone(input.phone),
+          email: normalizeCustomerEmail(input.email),
+          cpf: normalizeCustomerCpf(input.cpf),
           profilePhotoUrl: input.profilePhotoUrl,
           city: input.city || undefined,
           uf: input.uf || undefined,
-        });
+        };
+        try {
+          validateMainCustomerProfile(profile);
+        } catch (error: any) {
+          return { success: false, message: error?.message || 'Complete os dados obrigatórios.' };
+        }
+        const existing = await findMainCustomerByIdentity(profile);
+        if (existing) return { success: false, message: 'Já existe um cadastro com estes dados. Use o cadastro principal original.' };
+        const customer = await createCustomer(profile);
         return { success: true, customer };
       }),
   }),

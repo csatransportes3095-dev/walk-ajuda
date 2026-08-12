@@ -16,6 +16,7 @@ import { serveStatic, setupVite } from "./vite";
 import { isIpBlocked, getSetting } from "../db";
 import { broadcastEmailHandler } from "../broadcastEmailHandler";
 import { sendMail } from "./mailer";
+import { ensureCustomerIdentityInfrastructure } from "../customerAccess";
 import path from "path";
 import fs from "fs";
 
@@ -52,6 +53,12 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
   // Register upload route BEFORE body parsers so multer can handle multipart streams correctly
+  // A camada de identidade deve estar pronta antes de qualquer rota aceitar cadastro ou login.
+  try {
+    await ensureCustomerIdentityInfrastructure();
+  } catch (error) {
+    console.error('[CustomerIdentity] infraestrutura não inicializada:', error);
+  }
   registerUploadRoute(app);
   registerApkDownloadRoute(app);
   ensureApkTable().catch(console.error);
