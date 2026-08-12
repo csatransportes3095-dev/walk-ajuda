@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
-import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle } from "lucide-react";
+import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, GripVertical, Settings2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { TIMEZONE_OPTIONS, DEFAULT_TIMEZONE } from "@/hooks/useTimezone";
 import AdminHeader from "@/components/AdminHeader";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,57 @@ const whiteInputStyle: React.CSSProperties = {
   padding: '10px 12px', width: '100%', outline: 'none', fontWeight: 500,
 };
 
+const ADMIN_CARD_ORDER_KEY = 'admin_dashboard_card_order';
+
+type AdminShortcut = {
+  id: string;
+  href: string;
+  label: string;
+  icon?: React.ElementType;
+  emoji?: string;
+  tone: string;
+  iconTone?: string;
+};
+
+const ADMIN_SHORTCUTS: AdminShortcut[] = [
+  { id: 'schedule', href: '/admin/schedule', label: 'Agendamentos', icon: CalendarClock, tone: 'bg-fuchsia-600/20 border-fuchsia-500/30 hover:bg-fuchsia-600/30', iconTone: 'text-fuchsia-400' },
+  { id: 'banners', href: '/admin/banners', label: 'Banners', icon: Bell, tone: 'bg-teal-600/20 border-teal-500/30 hover:bg-teal-600/30', iconTone: 'text-teal-400' },
+  { id: 'ip-block', href: '/admin/ip-block', label: 'Bloquear IP', icon: Shield, tone: 'bg-red-600/20 border-red-500/30 hover:bg-red-600/30', iconTone: 'text-red-400' },
+  { id: 'referrer-bypass', href: '/admin/referrer-bypass', label: 'Bypass Indicador', icon: KeyRound, tone: 'bg-indigo-600/20 border-indigo-500/30 hover:bg-indigo-600/30', iconTone: 'text-indigo-400' },
+  { id: 'products', href: '/admin/products', label: 'Cards', icon: Package, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },
+  { id: 'feature-cards', href: '/admin/feature-cards', label: 'Cards Início', icon: Layers, tone: 'bg-indigo-600/20 border-indigo-500/30 hover:bg-indigo-600/30', iconTone: 'text-indigo-400' },
+  { id: 'customers', href: '/admin/customers', label: 'Clientes', icon: Users, tone: 'bg-cyan-600/20 border-cyan-500/30 hover:bg-cyan-600/30', iconTone: 'text-cyan-400' },
+  { id: 'commissions', href: '/admin/commissions', label: 'Comissões', icon: TrendingUp, tone: 'bg-emerald-600/20 border-emerald-500/30 hover:bg-emerald-600/30', iconTone: 'text-emerald-400' },
+  { id: 'settings', href: '/admin/settings', label: 'Configurações', icon: Globe, tone: 'bg-orange-600/20 border-orange-500/30 hover:bg-orange-600/30', iconTone: 'text-orange-400' },
+  { id: 'cep', href: '/admin/cep', label: 'Consulta CEP', icon: MapPin, tone: 'bg-emerald-600/20 border-emerald-500/30 hover:bg-emerald-600/30', iconTone: 'text-emerald-400' },
+  { id: 'consultas', href: '/admin/consultas', label: 'Consultas', icon: FileSearch, tone: 'bg-orange-600/20 border-orange-500/30 hover:bg-orange-600/30', iconTone: 'text-orange-400' },
+  { id: 'coupons', href: '/admin/coupons', label: 'Cupons', icon: Ticket, tone: 'bg-green-600/20 border-green-500/30 hover:bg-green-600/30', iconTone: 'text-green-400' },
+  { id: 'email', href: '/admin/email', label: 'Emails', icon: Mail, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },
+  { id: 'zoho-config', href: '/admin/zoho-config', label: 'Zoho Config', icon: ShieldCheck, tone: 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30', iconTone: 'text-purple-400' },
+  { id: 'loans', href: '/admin/loans', label: 'Empréstimos', emoji: '💳', tone: 'bg-violet-600/20 border-violet-500/30 hover:bg-violet-600/30' },
+  { id: 'cartoes-users', href: '/admin/cartoes-users', label: 'Cartões', emoji: '🃏', tone: 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30' },
+  { id: 'broadcast', href: '/admin/broadcast', label: 'Envio em Massa', icon: Send, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },
+  { id: 'faq', href: '/admin/faq', label: 'FAQ/Ajuda', icon: HelpCircle, tone: 'bg-violet-600/20 border-violet-500/30 hover:bg-violet-600/30', iconTone: 'text-violet-400' },
+  { id: 'financeiro', href: '/admin/financeiro', label: 'Financeiro', icon: TrendingUp, tone: 'bg-green-600/20 border-green-500/30 hover:bg-green-600/30', iconTone: 'text-green-400' },
+  { id: 'access-filters', href: '/admin/access-filters', label: 'Filtros Acesso', icon: Users, tone: 'bg-cyan-600/20 border-cyan-500/30 hover:bg-cyan-600/30', iconTone: 'text-cyan-400' },
+  { id: 'flow-config', href: '/admin/flow-config', label: 'Fluxo', icon: Layers, tone: 'bg-sky-600/20 border-sky-500/30 hover:bg-sky-600/30', iconTone: 'text-sky-400' },
+  { id: 'protected-photo', href: '/admin/protected-photo', label: 'Foto Prot.', icon: Lock, tone: 'bg-purple-900/30 border-purple-500/30 hover:bg-purple-900/50', iconTone: 'text-purple-400' },
+  { id: 'gastos', href: '/admin/gastos', label: 'Gastos', icon: TrendingUp, tone: 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30', iconTone: 'text-purple-400' },
+  { id: 'telefone', href: '/admin/telefone', label: 'Gerar Tel.', icon: Phone, tone: 'bg-green-600/20 border-green-500/30 hover:bg-green-600/30', iconTone: 'text-green-400' },
+  { id: 'hub-central', href: '/admin/hub-central', label: 'Hub Central', icon: LayoutGrid, tone: 'bg-sky-600/20 border-sky-500/30 hover:bg-sky-600/30', iconTone: 'text-sky-400' },
+  { id: 'online-support', href: '/admin/online-support', label: 'Atendimento', icon: MessageCircle, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },
+  { id: 'orders', href: '/admin/orders', label: 'Pedidos', icon: Package, tone: 'bg-pink-600/20 border-pink-500/30 hover:bg-pink-600/30', iconTone: 'text-pink-400' },
+  { id: 'pre-cadastros', href: '/admin/pre-cadastros', label: 'Pré-Cadastros', emoji: '📋', tone: 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30' },
+  { id: 'propagandas', href: '/admin/propagandas', label: 'Propagandas', icon: Bell, tone: 'bg-cyan-600/20 border-cyan-500/30 hover:bg-cyan-600/30', iconTone: 'text-cyan-400' },
+  { id: 'resellers', href: '/admin/resellers', label: 'Revendedores', icon: ShoppingBag, tone: 'bg-amber-600/20 border-amber-500/30 hover:bg-amber-600/30', iconTone: 'text-amber-400' },
+  { id: 'codes', href: '/admin/codes', label: 'Senhas Cadastro', icon: KeyRound, tone: 'bg-purple-600/20 border-purple-500/40 hover:bg-purple-600/30', iconTone: 'text-purple-400' },
+  { id: 'raffles', href: '/admin/raffles', label: 'Sorteios', icon: Gift, tone: 'bg-yellow-600/20 border-yellow-500/30 hover:bg-yellow-600/30', iconTone: 'text-yellow-400' },
+  { id: 'status-types', href: '/admin/status-types', label: 'Status', icon: Shield, tone: 'bg-indigo-600/20 border-indigo-500/30 hover:bg-indigo-600/30', iconTone: 'text-indigo-400' },
+  { id: 'media', href: '/admin/media', label: 'Upload Mídia', icon: Upload, tone: 'bg-violet-600/20 border-violet-500/30 hover:bg-violet-600/30', iconTone: 'text-violet-400' },
+  { id: 'whatsapp-templates', href: '/admin/whatsapp-templates', label: 'Msgs WhatsApp', icon: MessageCircle, tone: 'bg-green-600/20 border-green-500/30 hover:bg-green-600/30', iconTone: 'text-green-400' },
+  { id: 'vpn', href: '/admin/vpn', label: 'VPN', icon: ShieldX, tone: 'bg-rose-600/20 border-rose-500/30 hover:bg-rose-600/30', iconTone: 'text-rose-400' },
+];
+
 export default function AdminCodes() {
   const search = useSearch();
   const urlPhone = new URLSearchParams(search).get('phone') ?? '';
@@ -27,6 +78,64 @@ export default function AdminCodes() {
     onError: () => toast.error('Erro ao salvar fuso horário'),
   });
   const trpcUtils = trpc.useUtils();
+  const [cardOrder, setCardOrder] = useState<string[]>(() => ADMIN_SHORTCUTS.map((card) => card.id));
+  const [isOrganizingCards, setIsOrganizingCards] = useState(false);
+  const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
+  const savedCardOrder = configQuery.data?.[ADMIN_CARD_ORDER_KEY];
+  const saveCardOrderMutation = trpc.config.set.useMutation({
+    onSuccess: () => {
+      trpcUtils.config.get.invalidate();
+      toast.success('Posição dos cards salva!');
+    },
+    onError: () => toast.error('Não foi possível salvar a posição dos cards.'),
+  });
+
+  useEffect(() => {
+    if (!savedCardOrder) return;
+    try {
+      const saved = JSON.parse(savedCardOrder);
+      if (!Array.isArray(saved)) return;
+      const validIds = new Set(ADMIN_SHORTCUTS.map((card) => card.id));
+      const ordered = saved.filter((id: unknown): id is string => typeof id === 'string' && validIds.has(id));
+      const missing = ADMIN_SHORTCUTS.map((card) => card.id).filter((id) => !ordered.includes(id));
+      if (ordered.length > 0) setCardOrder([...ordered, ...missing]);
+    } catch {
+      // Mantém a ordem padrão se uma configuração antiga estiver inválida.
+    }
+  }, [savedCardOrder]);
+
+  const orderedAdminShortcuts = useMemo(() => {
+    const byId = new Map(ADMIN_SHORTCUTS.map((card) => [card.id, card]));
+    const ordered = cardOrder.map((id) => byId.get(id)).filter(Boolean) as AdminShortcut[];
+    const missing = ADMIN_SHORTCUTS.filter((card) => !cardOrder.includes(card.id));
+    return [...ordered, ...missing];
+  }, [cardOrder]);
+
+  const persistCardOrder = (nextOrder: string[]) => {
+    setCardOrder(nextOrder);
+    saveCardOrderMutation.mutate({ key: ADMIN_CARD_ORDER_KEY, value: JSON.stringify(nextOrder) });
+  };
+
+  const moveCard = (id: string, direction: -1 | 1) => {
+    const currentIndex = cardOrder.indexOf(id);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= cardOrder.length) return;
+    const nextOrder = [...cardOrder];
+    [nextOrder[currentIndex], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[currentIndex]];
+    persistCardOrder(nextOrder);
+  };
+
+  const moveCardToTarget = (targetId: string) => {
+    if (!draggedCardId || draggedCardId === targetId) return;
+    const nextOrder = [...cardOrder];
+    const from = nextOrder.indexOf(draggedCardId);
+    const to = nextOrder.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    nextOrder.splice(from, 1);
+    nextOrder.splice(to, 0, draggedCardId);
+    persistCardOrder(nextOrder);
+  };
+
 
   useEffect(() => {
     if (configQuery.data?.['timezone']) {
@@ -198,166 +307,71 @@ export default function AdminCodes() {
 
       <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
 
-        {/* Navigation Links — ordem alfabética */}
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-          {/* A */}
-          <a href="/admin/schedule" className="bg-fuchsia-600/20 border border-fuchsia-500/30 rounded-xl p-3 text-center hover:bg-fuchsia-600/30 transition-all">
-            <CalendarClock className="w-5 h-5 text-fuchsia-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Agendamentos</span>
-          </a>
-          {/* B */}
-          <a href="/admin/banners" className="bg-teal-600/20 border border-teal-500/30 rounded-xl p-3 text-center hover:bg-teal-600/30 transition-all">
-            <Bell className="w-5 h-5 text-teal-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Banners</span>
-          </a>
-          <a href="/admin/ip-block" className="bg-red-600/20 border border-red-500/30 rounded-xl p-3 text-center hover:bg-red-600/30 transition-all">
-            <Shield className="w-5 h-5 text-red-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Bloquear IP</span>
-          </a>
-          <a href="/admin/referrer-bypass" className="bg-indigo-600/20 border border-indigo-500/30 rounded-xl p-3 text-center hover:bg-indigo-600/30 transition-all">
-            <KeyRound className="w-5 h-5 text-indigo-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Bypass Indicador</span>
-          </a>
-          {/* C */}
-          <a href="/admin/products" className="bg-blue-600/20 border border-blue-500/30 rounded-xl p-3 text-center hover:bg-blue-600/30 transition-all">
-            <Package className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Cards</span>
-          </a>
-          <a href="/admin/feature-cards" className="bg-indigo-600/20 border border-indigo-500/30 rounded-xl p-3 text-center hover:bg-indigo-600/30 transition-all">
-            <Layers className="w-5 h-5 text-indigo-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Cards Início</span>
-          </a>
-          <a href="/admin/customers" className="bg-cyan-600/20 border border-cyan-500/30 rounded-xl p-3 text-center hover:bg-cyan-600/30 transition-all">
-            <Users className="w-5 h-5 text-cyan-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Clientes</span>
-          </a>
-          <a href="/admin/commissions" className="bg-emerald-600/20 border border-emerald-500/30 rounded-xl p-3 text-center hover:bg-emerald-600/30 transition-all">
-            <TrendingUp className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Comissões</span>
-          </a>
-          <a href="/admin/settings" className="bg-orange-600/20 border border-orange-500/30 rounded-xl p-3 text-center hover:bg-orange-600/30 transition-all">
-            <Globe className="w-5 h-5 text-orange-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Configurações</span>
-          </a>
-          <a href="/admin/cep" className="bg-emerald-600/20 border border-emerald-500/30 rounded-xl p-3 text-center hover:bg-emerald-600/30 transition-all">
-            <MapPin className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Consulta CEP</span>
-          </a>
-          <a href="/admin/consultas" className="bg-orange-600/20 border border-orange-500/30 rounded-xl p-3 text-center hover:bg-orange-600/30 transition-all">
-            <FileSearch className="w-5 h-5 text-orange-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Consultas</span>
-          </a>
-          <a href="/admin/coupons" className="bg-green-600/20 border border-green-500/30 rounded-xl p-3 text-center hover:bg-green-600/30 transition-all">
-            <Ticket className="w-5 h-5 text-green-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Cupons</span>
-          </a>
-          {/* E */}
-          <a href="/admin/email" className="bg-blue-600/20 border border-blue-500/30 rounded-xl p-3 text-center hover:bg-blue-600/30 transition-all">
-            <Mail className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Emails</span>
-          </a>
-          <a href="/admin/zoho-config" className="bg-purple-600/20 border border-purple-500/30 rounded-xl p-3 text-center hover:bg-purple-600/30 transition-all">
-            <ShieldCheck className="w-5 h-5 text-purple-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Zoho Config</span>
-          </a>
-          <a href="/admin/loans" className="bg-violet-600/20 border border-violet-500/30 rounded-xl p-3 text-center hover:bg-violet-600/30 transition-all">
-            <span className="text-xl block mb-1">💳</span>
-            <span className="text-xs font-bold text-white">Empréstimos</span>
-          </a>
-          <a href="/admin/cartoes-users" className="bg-purple-600/20 border border-purple-500/30 rounded-xl p-3 text-center hover:bg-purple-600/30 transition-all">
-            <span className="text-xl block mb-1">🃏</span>
-            <span className="text-xs font-bold text-white">Cartões</span>
-          </a>
-          <a href="/admin/broadcast" className="bg-blue-600/20 border border-blue-500/30 rounded-xl p-3 text-center hover:bg-blue-600/30 transition-all">
-            <Send className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Envio em Massa</span>
-          </a>
-          {/* F */}
-          <a href="/admin/faq" className="bg-violet-600/20 border border-violet-500/30 rounded-xl p-3 text-center hover:bg-violet-600/30 transition-all">
-            <HelpCircle className="w-5 h-5 text-violet-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">FAQ/Ajuda</span>
-          </a>
-          <a href="/admin/financeiro" className="bg-green-600/20 border border-green-500/30 rounded-xl p-3 text-center hover:bg-green-600/30 transition-all">
-            <TrendingUp className="w-5 h-5 text-green-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Financeiro</span>
-          </a>
-          <a href="/admin/access-filters" className="bg-cyan-600/20 border border-cyan-500/30 rounded-xl p-3 text-center hover:bg-cyan-600/30 transition-all">
-            <Users className="w-5 h-5 text-cyan-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Filtros Acesso</span>
-          </a>
-          <a href="/admin/flow-config" className="bg-sky-600/20 border border-sky-500/30 rounded-xl p-3 text-center hover:bg-sky-600/30 transition-all">
-            <Layers className="w-5 h-5 text-sky-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Fluxo</span>
-          </a>
-          <a href="/admin/protected-photo" className="bg-purple-900/30 border border-purple-500/30 rounded-xl p-3 text-center hover:bg-purple-900/50 transition-all">
-            <Lock className="w-5 h-5 text-purple-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Foto Prot.</span>
-          </a>
-          {/* G */}
-          <a href="/admin/gastos" className="bg-purple-600/20 border border-purple-500/30 rounded-xl p-3 text-center hover:bg-purple-600/30 transition-all">
-            <TrendingUp className="w-5 h-5 text-purple-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Gastos</span>
-          </a>
-          <a href="/admin/telefone" className="bg-green-600/20 border border-green-500/30 rounded-xl p-3 text-center hover:bg-green-600/30 transition-all">
-            <Phone className="w-5 h-5 text-green-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Gerar Tel.</span>
-          </a>
-          {/* H */}
-          <a href="/admin/hub-central" className="bg-sky-600/20 border border-sky-500/30 rounded-xl p-3 text-center hover:bg-sky-600/30 transition-all">
-            <LayoutGrid className="w-5 h-5 text-sky-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Hub Central</span>
-          </a>
-          <a href="/admin/online-support" className="bg-blue-600/20 border border-blue-500/30 rounded-xl p-3 text-center hover:bg-blue-600/30 transition-all">
-            <MessageCircle className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Atendimento</span>
-          </a>
-          {/* P */}
-          <a href="/admin/orders" className="bg-pink-600/20 border border-pink-500/30 rounded-xl p-3 text-center hover:bg-pink-600/30 transition-all">
-            <Package className="w-5 h-5 text-pink-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Pedidos</span>
-          </a>
-          <a href="/admin/pre-cadastros" className="bg-purple-600/20 border border-purple-500/30 rounded-xl p-3 text-center hover:bg-purple-600/30 transition-all">
-            <span className="text-xl block mb-1">📋</span>
-            <span className="text-xs font-bold text-white">Pré-Cadastros</span>
-          </a>
-          <a href="/admin/propagandas" className="bg-cyan-600/20 border border-cyan-500/30 rounded-xl p-3 text-center hover:bg-cyan-600/30 transition-all">
-            <Bell className="w-5 h-5 text-cyan-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Propagandas</span>
-          </a>
-          {/* R */}
-          <a href="/admin/resellers" className="bg-amber-600/20 border border-amber-500/30 rounded-xl p-3 text-center hover:bg-amber-600/30 transition-all">
-            <ShoppingBag className="w-5 h-5 text-amber-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Revendedores</span>
-          </a>
-          {/* S */}
-          <a href="/admin/codes" className="bg-purple-600/20 border border-purple-500/40 rounded-xl p-3 text-center hover:bg-purple-600/30 transition-all">
-            <KeyRound className="w-5 h-5 text-purple-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Senhas Cadastro</span>
-          </a>
-          <a href="/admin/raffles" className="bg-yellow-600/20 border border-yellow-500/30 rounded-xl p-3 text-center hover:bg-yellow-600/30 transition-all">
-            <Gift className="w-5 h-5 text-yellow-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Sorteios</span>
-          </a>
-          <a href="/admin/status-types" className="bg-indigo-600/20 border border-indigo-500/30 rounded-xl p-3 text-center hover:bg-indigo-600/30 transition-all">
-            <Shield className="w-5 h-5 text-indigo-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Status</span>
-          </a>
-          {/* U */}
-          <a href="/admin/media" className="bg-violet-600/20 border border-violet-500/30 rounded-xl p-3 text-center hover:bg-violet-600/30 transition-all">
-            <Upload className="w-5 h-5 text-violet-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Upload Mídia</span>
-          </a>
-          {/* WA */}
-          <a href="/admin/whatsapp-templates" className="bg-green-600/20 border border-green-500/30 rounded-xl p-3 text-center hover:bg-green-600/30 transition-all">
-            <MessageCircle className="w-5 h-5 text-green-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">Msgs WhatsApp</span>
-          </a>
-          {/* V */}
-          <a href="/admin/vpn" className="bg-rose-600/20 border border-rose-500/30 rounded-xl p-3 text-center hover:bg-rose-600/30 transition-all">
-            <ShieldX className="w-5 h-5 text-rose-400 mx-auto mb-1" />
-            <span className="text-xs font-bold text-white">VPN</span>
-          </a>
-        </div>
+        {/* Atalhos administrativos — ordem configurável pelo ADM */}
+        <section className="space-y-3" aria-label="Atalhos do painel administrativo">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-extrabold text-white">
+                <LayoutGrid className="h-4 w-4 text-purple-300" />
+                Atalhos do painel
+              </h2>
+              <p className="mt-1 text-xs text-white/45">{isOrganizingCards ? 'Arraste um card ou use as setas para definir a posição desejada.' : 'Acesse rapidamente todas as áreas administrativas.'}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {isOrganizingCards && (
+                <Button type="button" variant="outline" size="sm" onClick={() => persistCardOrder(ADMIN_SHORTCUTS.map((card) => card.id))} disabled={saveCardOrderMutation.isPending} className="border-white/15 bg-white/5 text-white hover:bg-white/10">
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Padrão
+                </Button>
+              )}
+              <Button type="button" size="sm" onClick={() => setIsOrganizingCards((value) => !value)} className={isOrganizingCards ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-purple-600 text-white hover:bg-purple-500'}>
+                <Settings2 className="mr-1.5 h-3.5 w-3.5" />
+                {isOrganizingCards ? 'Concluir' : 'Organizar cards'}
+              </Button>
+            </div>
+          </div>
+
+          {isOrganizingCards && (
+            <div className="rounded-xl border border-purple-400/35 bg-purple-500/10 px-3 py-2 text-xs leading-relaxed text-purple-100">
+              No computador, segure o ícone <GripVertical className="mx-1 inline h-3.5 w-3.5" /> e arraste o card. No celular, use as setas de cada card. A posição é salva automaticamente para este painel.
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
+            {orderedAdminShortcuts.map((card, index) => {
+              const Icon = card.icon;
+              const content = <>
+                {card.emoji ? <span className="mb-1 block text-xl leading-5">{card.emoji}</span> : Icon ? <Icon className={`mx-auto mb-1 h-5 w-5 ${card.iconTone || 'text-white'}`} /> : null}
+                <span className="text-xs font-bold text-white">{card.label}</span>
+              </>;
+              return (
+                <div
+                  key={card.id}
+                  draggable={isOrganizingCards}
+                  onDragStart={() => setDraggedCardId(card.id)}
+                  onDragOver={(event) => { if (isOrganizingCards) event.preventDefault(); }}
+                  onDrop={(event) => { event.preventDefault(); moveCardToTarget(card.id); setDraggedCardId(null); }}
+                  onDragEnd={() => setDraggedCardId(null)}
+                  className={`relative min-w-0 rounded-xl border transition-all ${isOrganizingCards ? 'cursor-grab active:cursor-grabbing ring-1 ring-purple-400/35' : ''} ${draggedCardId === card.id ? 'scale-[0.97] opacity-50' : ''}`}
+                >
+                  {isOrganizingCards && (
+                    <div className="absolute inset-x-1 top-1 z-10 flex items-center justify-between gap-1">
+                      <span className="rounded-md bg-black/50 p-1 text-purple-200" title="Arraste para reposicionar"><GripVertical className="h-3.5 w-3.5" /></span>
+                      <div className="flex gap-1">
+                        <button type="button" onClick={() => moveCard(card.id, -1)} disabled={index === 0 || saveCardOrderMutation.isPending} className="rounded-md bg-black/60 p-1 text-white/90 transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Mover ${card.label} uma posição para trás`}><ChevronLeft className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => moveCard(card.id, 1)} disabled={index === orderedAdminShortcuts.length - 1 || saveCardOrderMutation.isPending} className="rounded-md bg-black/60 p-1 text-white/90 transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Mover ${card.label} uma posição para frente`}><ChevronRight className="h-3.5 w-3.5" /></button>
+                      </div>
+                    </div>
+                  )}
+                  {isOrganizingCards ? (
+                    <div className={`min-h-[76px] select-none rounded-xl p-3 pt-7 text-center ${card.tone}`}>{content}</div>
+                  ) : (
+                    <a href={card.href} className={`block min-h-[76px] rounded-xl p-3 text-center ${card.tone}`}>{content}</a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
         {/* ─── Senhas do Cadastro ─────────────────────────────────────────────── */}
         <div className="bg-black/40 backdrop-blur-md border border-purple-500/30 rounded-2xl p-4 md:p-6 space-y-6">
