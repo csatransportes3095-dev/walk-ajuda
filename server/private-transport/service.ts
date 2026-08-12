@@ -325,6 +325,32 @@ export function calculatePrivateTripPrice(input: {
   return { distanceKm, durationMinutes, waitMinutes, fuelCost, tolls, parking, otherCosts, waitCost, estimatedCost, minimumBase, marginValue, surcharges, recommendedPrice };
 }
 
+export function calculateAppointmentPriceBreakdown(input: Parameters<typeof calculatePrivateTripPrice>[0] & { tripType: "ONE_WAY" | "ROUND_TRIP" | "RETURN_LATER" }) {
+  const waitMinutes = Math.max(0, Number(input.waitMinutes || 0));
+  const outbound = calculatePrivateTripPrice({ ...input, waitMinutes: 0 });
+  const includesReturn = input.tripType === "ROUND_TRIP" || input.tripType === "RETURN_LATER";
+  const returnTrip = includesReturn ? calculatePrivateTripPrice({ ...input, waitMinutes: 0 }) : null;
+  const waitRatePerMinute = money(input.settings?.waitRatePerMinute);
+  const waitValue = money(waitMinutes * waitRatePerMinute);
+  const totalDistanceKm = money(outbound.distanceKm + (returnTrip?.distanceKm || 0));
+  const travelDurationMinutes = Math.max(0, Math.round(outbound.durationMinutes + (returnTrip?.durationMinutes || 0)));
+  const totalDurationMinutes = travelDurationMinutes + waitMinutes;
+  const estimatedCost = money(outbound.estimatedCost + (returnTrip?.estimatedCost || 0) + waitValue);
+  const recommendedPrice = money(outbound.recommendedPrice + (returnTrip?.recommendedPrice || 0) + waitValue);
+  return {
+    tripType: input.tripType,
+    outbound: { distanceKm: outbound.distanceKm, durationMinutes: outbound.durationMinutes, estimatedCost: outbound.estimatedCost, recommendedPrice: outbound.recommendedPrice },
+    returnTrip: returnTrip ? { distanceKm: returnTrip.distanceKm, durationMinutes: returnTrip.durationMinutes, estimatedCost: returnTrip.estimatedCost, recommendedPrice: returnTrip.recommendedPrice } : null,
+    wait: { minutes: waitMinutes, ratePerMinute: waitRatePerMinute, value: waitValue },
+    totalDistanceKm,
+    travelDurationMinutes,
+    totalDurationMinutes,
+    estimatedCost,
+    recommendedPrice,
+    fuelCost: money(outbound.fuelCost + (returnTrip?.fuelCost || 0)),
+  };
+}
+
 export function getPriceQuality(finalPrice: number, estimatedCost: number): { key: string; label: string; profit: number } {
   const profit = money(finalPrice - estimatedCost);
   if (profit < 0) return { key: "below_cost", label: "Preço abaixo do custo", profit };

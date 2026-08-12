@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { publicProcedure, router } from "../_core/trpc";
 import { privateClients, spreadsheetVehicleConfig } from "../../drizzle/schema";
 import {
+  calculateAppointmentPriceBreakdown,
   calculatePrivateTripPrice,
   createPrivateClient,
   getPriceQuality,
@@ -191,6 +192,19 @@ export const privateTransportRouter = router({
         user.db.select().from(spreadsheetVehicleConfig).where(eq(spreadsheetVehicleConfig.userId, user.userId)).limit(1),
       ]);
       const calculation = calculatePrivateTripPrice({ ...input, settings, vehicle: vehicleRows[0] || null });
+      const finalPrice = input.finalPrice === undefined ? calculation.recommendedPrice : input.finalPrice;
+      return { ...calculation, finalPrice, quality: getPriceQuality(finalPrice, calculation.estimatedCost) };
+    }),
+    appointmentPreview: publicProcedure.input(z.object({
+      token: z.string(), distanceKm: z.number().min(0), durationMinutes: z.number().min(0), waitMinutes: z.number().min(0).optional(),
+      tripType: z.enum(["ONE_WAY", "ROUND_TRIP", "RETURN_LATER"]), finalPrice: z.number().min(0).optional(),
+    })).query(async ({ input }) => {
+      const user = await currentUser(input.token);
+      const [settings, vehicleRows] = await Promise.all([
+        getPrivateSettings(user),
+        user.db.select().from(spreadsheetVehicleConfig).where(eq(spreadsheetVehicleConfig.userId, user.userId)).limit(1),
+      ]);
+      const calculation = calculateAppointmentPriceBreakdown({ ...input, settings, vehicle: vehicleRows[0] || null });
       const finalPrice = input.finalPrice === undefined ? calculation.recommendedPrice : input.finalPrice;
       return { ...calculation, finalPrice, quality: getPriceQuality(finalPrice, calculation.estimatedCost) };
     }),
