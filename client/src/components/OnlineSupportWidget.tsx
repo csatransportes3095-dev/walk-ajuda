@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Bot, RefreshCcw, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { OnlineEntryPanel } from "@/components/OnlineEntryPanel";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 type OpenMode = "modal" | "sidebar" | "fullscreen";
@@ -56,7 +57,7 @@ type Msg =
 // ─── Componente principal ─────────────────────────────────────────────────────
 export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openMode = "modal" }: OnlineSupportWidgetProps) {
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [phase, setPhase] = useState<"identify" | "chat">(() =>
+  const [phase, setPhase] = useState<"identify" | "chat" | "entry">(() =>
     isSessionValid() && getSavedName() && getSavedPhone() ? "chat" : "identify"
   );
   const [visitorName, setVisitorName] = useState(() => isSessionValid() ? getSavedName() : "");
@@ -233,7 +234,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
 
         {/* Header */}
         <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "linear-gradient(135deg,#1e1b4b,#0f172a)", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
-          <button onClick={phase === "chat" ? () => setPhase("identify") : (onBack || onMinimize)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: 4, borderRadius: 8 }}>
+          <button onClick={phase === "chat" || phase === "entry" ? () => setPhase("identify") : (onBack || onMinimize)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: 4, borderRadius: 8 }}>
             <ArrowLeft size={18} />
           </button>
           {botAvatar ? (
@@ -322,7 +323,14 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
           </div>
         )}
 
-        {/* FASE 2: Chat com botões */}
+        {/* FASE 2: Área autenticada do cliente */}
+        {phase === "entry" && (
+          <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+            <OnlineEntryPanel onBack={() => setPhase("chat")} onOpenCadastro={() => setPhase("chat")} />
+          </div>
+        )}
+
+        {/* FASE 3: Chat com botões */}
         {phase === "chat" && (
           <>
             <div ref={chatContainerRef} style={{ flex: 1, overflowY: "auto", padding: "16px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -440,6 +448,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
                 </div>
               ) : (
                 <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                  <button onClick={() => setPhase("entry")} style={{ flex: 1, height: 38, borderRadius: 12, background: "rgba(59,130,246,0.14)", border: "1px solid rgba(59,130,246,0.35)", color: "#bfdbfe", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>🔐 Minha área</button>
                   <button
                     onClick={() => setShowInput(true)}
                     style={{ flex: 1, height: 38, borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontSize: 13, cursor: "pointer" }}
