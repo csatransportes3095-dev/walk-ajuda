@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { getDb } from './db';
+import { getDb, validateMainCustomerProfile } from './db';
 
 type IdentityRow = {
   id: number;
@@ -22,6 +22,30 @@ export function isSameCustomerIdentity(a: Pick<IdentityRow, 'phone' | 'cpf'>, b:
   const phoneB = digits(b.phone);
   if (!phoneA || !phoneB) return false;
   return phoneA === phoneB || phoneA.endsWith(phoneB) || phoneB.endsWith(phoneA);
+}
+
+/**
+ * Todas as rotas usam esta guarda antes de criar ou liberar um cadastro técnico.
+ * Gastos e Empréstimos dependem do perfil completo do cadastro principal e não
+ * podem criar cartões parciais em customers.
+ */
+export async function requireCompleteMainCustomerProfile(db: any, identity: Pick<IdentityRow, 'phone' | 'cpf'>): Promise<any> {
+  const phone = digits(identity.phone);
+  const cpf = digits(identity.cpf);
+  if (!phone && !cpf) throw new Error('Informe telefone ou CPF para localizar o cadastro principal.');
+  const candidates = await rows(db, sql`
+    SELECT id, name, phone, cpf, email, profilePhotoUrl
+    FROM customers
+    WHERE deletedAt IS NULL
+      AND (
+        (${phone || ''}!='' AND (phone=${phone || ''} OR RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 9)=RIGHT(${phone || ''}, 9)))
+        OR (${cpf || ''}!='' AND REGEXP_REPLACE(cpf, '[^0-9]', '')=${cpf || ''})
+      )
+  `);
+  const customer = candidates.find((row: any) => isSameCustomerIdentity(row, identity));
+  if (!customer) throw new Error('Conclua primeiro o cadastro principal do cliente: foto, e-mail, CPF e telefone são obrigatórios.');
+  validateMainCustomerProfile(customer);
+  return customer;
 }
 
 async function rows(db: any, query: any): Promise<any[]> {
@@ -104,7 +128,7 @@ export async function syncUnifiedCustomerRegistry(previousIdentities: Array<Pick
   await allowPhoneReuseFromDeletedCustomers(db);
   await hideAutomaticIncompleteCustomers(db);
 
-  const customerRows = await rows(db, sql`SELECT id, name, phone, cpf FROM customers WHERE deletedAt IS NULL`);
+  const customerRows = await rows(db, sql`SELECT id, name, phone, cpf, email, profilePhotoUrl FROM customers WHERE deletedAt IS NULL`);
   const spreadsheetRows = await rows(db, sql`SELECT id, name, phone, cpf, allowedRoutes FROM spreadsheetClients`);
   const loanRows = await rows(db, sql`SELECT id, name, phone, cpf FROM loanClients`);
 
@@ -122,6 +146,19 @@ export async function syncUnifiedCustomerRegistry(previousIdentities: Array<Pick
     const mainPhone = digits(main.phone);
     const mainCpf = digits(main.cpf);
     if (!mainPhone) continue;
+
+    // Nenhuma rota técnica pode ser liberada para um perfil principal incompleto.
+    try {
+      validateMainCustomerProfile({
+        name: String(main.name || ''),
+        phone: mainPhone,
+        cpf: mainCpf,
+        email: String((main as any).email || ''),
+        profilePhotoUrl: String((main as any).profilePhotoUrl || ''),
+      });
+    } catch {
+      continue;
+    }
 
     // A identidade anterior só vale para o cliente principal que foi editado;
     // nunca pode aproximar ou atualizar outro cliente por engano.

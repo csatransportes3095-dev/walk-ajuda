@@ -364,6 +364,7 @@ export default function AdminCustomers() {
   const [createCpf, setCreateCpf] = useState('');
   const [createCity, setCreateCity] = useState('');
   const [createUf, setCreateUf] = useState('');
+  const [createPhotoUrl, setCreatePhotoUrl] = useState('');
   const [createError, setCreateError] = useState('');
 
   const [showCsvImportModal, setShowCsvImportModal] = useState(false);
@@ -379,7 +380,7 @@ export default function AdminCustomers() {
         toast.success('Cliente cadastrado com sucesso!');
         setCreateModal(false);
         setCreateName(''); setCreatePhone(''); setCreateEmail('');
-        setCreateCpf(''); setCreateCity(''); setCreateUf('');
+        setCreateCpf(''); setCreateCity(''); setCreateUf(''); setCreatePhotoUrl('');
         setCreateError('');
         customersQuery.refetch();
       } else {
@@ -589,6 +590,27 @@ export default function AdminCustomers() {
     reader.onload = () => {
       const base64 = (reader.result as string).split(',')[1];
       uploadPhotoMut.mutate({ imageBase64: base64, phone: customer.phone });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCreatePhotoUpload = (file: File) => {
+    if (!createPhone || createPhone.length < 10) { setCreateError('Informe o telefone antes de enviar a foto'); return; }
+    if (!file.type.startsWith('image/')) { setCreateError('Selecione uma imagem válida'); return; }
+    if (file.size > 5 * 1024 * 1024) { setCreateError('A foto deve ter no máximo 5MB'); return; }
+    setCreateError('');
+    setUploadingPhotoFor(-1);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64 = (reader.result as string).split(',')[1];
+        const result = await uploadPhotoMut.mutateAsync({ imageBase64: base64, phone: createPhone });
+        setCreatePhotoUrl(result.url || '');
+      } catch {
+        setCreateError('Não foi possível enviar a foto');
+      } finally {
+        setUploadingPhotoFor(null);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -1849,6 +1871,12 @@ export default function AdminCustomers() {
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Foto de perfil *</label>
+                <input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if (file) handleCreatePhotoUpload(file); }} className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary/15 file:px-3 file:py-2 file:text-primary" />
+                {uploadingPhotoFor === -1 && <p className="mt-1 text-xs text-primary">Enviando foto...</p>}
+                {createPhotoUrl && <p className="mt-1 text-xs text-green-500">✓ Foto obrigatória enviada</p>}
+              </div>
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-muted-foreground mb-1">Cidade</label>
@@ -1884,11 +1912,15 @@ export default function AdminCustomers() {
                     setCreateError('');
                     if (!createName.trim()) { setCreateError('Nome é obrigatório'); return; }
                     if (createPhone.length < 10) { setCreateError('Telefone inválido (mínimo 10 dígitos)'); return; }
+                    if (createCpf.length !== 11) { setCreateError('CPF obrigatório e inválido'); return; }
+                    if (!/^\S+@\S+\.\S+$/.test(createEmail.trim())) { setCreateError('E-mail obrigatório e inválido'); return; }
+                    if (!createPhotoUrl) { setCreateError('Foto de perfil obrigatória'); return; }
                     adminCreateMut.mutate({
                       name: createName.trim(),
                       phone: createPhone,
-                      email: createEmail.trim() || undefined,
-                      cpf: createCpf || undefined,
+                      email: createEmail.trim(),
+                      cpf: createCpf,
+                      profilePhotoUrl: createPhotoUrl,
                       city: createCity.trim() || undefined,
                       uf: createUf || undefined,
                     });

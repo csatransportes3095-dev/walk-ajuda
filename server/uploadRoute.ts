@@ -1845,16 +1845,10 @@ export function registerUploadRoute(app: Express) {
               continue;
             }
 
-            await createCustomer({
-              name: record.name || record.phone,
-              phone: record.phone,
-              email: record.email || undefined,
-              city: record.city || undefined,
-              uf: record.uf || undefined,
-              referredBy: record.referredBy || undefined,
-              referredByPhone: record.referredByPhone || undefined,
-            });
-            imported += 1;
+            // CSV não carrega foto de perfil. Não criar cadastro principal incompleto.
+            errorsCount += 1;
+            details.push(`Linha ${lineNumber}: cadastro principal exige foto, e-mail, CPF e telefone. Use o formulário de Clientes.`);
+            continue;
           } catch (err: any) {
             console.error("[UploadRoute] clients/import-csv error:", err);
             errorsCount += 1;
@@ -2016,15 +2010,9 @@ export function registerUploadRoute(app: Express) {
                 referredByPhone: row.referredByPhone || undefined,
               });
             } else {
-              await createCustomer({
-                name: row.name || row.phone,
-                phone: row.phone,
-                email: row.email || undefined,
-                city: row.city || undefined,
-                uf: row.uf || undefined,
-                referredBy: row.referredBy || undefined,
-                referredByPhone: row.referredByPhone || undefined,
-              });
+              // A importação de pedido não pode criar cadastro principal parcial.
+              // O pedido continua registrado, mas o perfil deve ser concluído em Clientes.
+              console.warn('[ImportCSV] pedido sem perfil principal completo:', row.phone);
             }
           } catch (customerErr: any) {
             console.error("[ImportCSV] customer error:", customerErr);

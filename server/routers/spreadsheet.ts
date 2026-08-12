@@ -10,7 +10,7 @@ import {
   createGoal, getGoalsByUserAndMonth, updateGoal, deleteGoal,
 } from "../db";
 import { getDb } from "../db";
-import { syncUnifiedCustomerRegistry } from "../customerIdentity";
+import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
 import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 
@@ -457,6 +457,12 @@ export const spreadsheetRouter = router({
               status: 'active',
             };
           }
+        }
+
+        try {
+          await requireCompleteMainCustomerProfile(db, { phone: client.phone || normalizedPhone || '', cpf: client.cpf || normalizedCpf || '' });
+        } catch (profileError: any) {
+          return { status: 'profile_incomplete' as const, clientName: client.name, message: profileError?.message || 'Conclua o cadastro principal antes de acessar Gastos.' };
         }
 
         if (client.status === 'blocked') {
@@ -955,8 +961,14 @@ export const spreadsheetRouter = router({
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
 
-        // Normalizar telefone
+        // Normalizar telefone e exigir o mesmo perfil completo do cadastro principal.
         const normalizedPhone = input.phone.replace(/\D/g, '');
+        let mainCustomer: any;
+        try {
+          mainCustomer = await requireCompleteMainCustomerProfile(db, { phone: normalizedPhone, cpf: '' });
+        } catch (profileError: any) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: profileError?.message || 'Conclua o cadastro principal antes de liberar Gastos.' });
+        }
 
         // Verificar se cliente já existe
         const existingClientResult = await db.select().from(spreadsheetClients)
@@ -970,8 +982,9 @@ export const spreadsheetRouter = router({
 
         // Criar cliente
         const result = await db.insert(spreadsheetClients).values({
-          phone: normalizedPhone,
-          name: input.name,
+          phone: String(mainCustomer.phone).replace(/\D/g, ''),
+          name: mainCustomer.name,
+          cpf: mainCustomer.cpf || null,
           status: "active",
           allowedRoutes: "gastos",
           createdAt: new Date(),

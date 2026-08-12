@@ -23,7 +23,8 @@ type Step =
   | 'pending_approval'  // Aguardando admin
   | 'expired'           // Senha expirada
   | 'expired_no_renew'  // Senha venceu sem renovação
-  | 'blocked';          // Bloqueado
+  | 'blocked'           // Bloqueado
+  | 'profile_incomplete'; // Perfil principal obrigatório incompleto
 
 // Helper: converte File para base64
 function fileToBase64(file: File): Promise<string> {
@@ -129,6 +130,12 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
           break;
         case 'blocked':
           setStep('blocked');
+          break;
+        case 'profile_incomplete':
+          setRegPhone(cleanPhone);
+          setRegCpf(cleanCpf);
+          setError(result.message || 'Conclua foto, e-mail, CPF e telefone no cadastro principal.');
+          setStep('register');
           break;
         case 'no_password':
           setStep('create_password');

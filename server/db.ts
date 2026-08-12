@@ -714,25 +714,54 @@ export async function getCustomerByCpf(cpf: string): Promise<Customer | null> {
   return null;
 }
 
-export async function createCustomer(data: { name: string; phone: string; email?: string; cpf?: string; city?: string; uf?: string; referredBy?: string; referredByPhone?: string; profilePhotoUrl?: string }): Promise<Customer> {
+export type MainCustomerProfileInput = {
+  name: string;
+  phone: string;
+  email?: string;
+  cpf?: string;
+  city?: string;
+  uf?: string;
+  referredBy?: string;
+  referredByPhone?: string;
+  profilePhotoUrl?: string;
+};
+
+/** O cadastro principal só existe quando o perfil obrigatório está completo. */
+export function validateMainCustomerProfile(data: MainCustomerProfileInput): { phone: string; cpf: string; email: string; photoUrl: string } {
+  const phone = String(data.phone || '').replace(/\D/g, '');
+  const cpf = String(data.cpf || '').replace(/\D/g, '');
+  const email = String(data.email || '').trim().toLowerCase();
+  const photoUrl = String(data.profilePhotoUrl || '').trim();
+  const missing: string[] = [];
+  if (!String(data.name || '').trim()) missing.push('nome');
+  if (!/^\d{10,11}$/.test(phone)) missing.push('telefone');
+  if (!/^\d{11}$/.test(cpf)) missing.push('CPF');
+  if (!/^\S+@\S+\.\S+$/.test(email)) missing.push('e-mail');
+  if (!photoUrl) missing.push('foto de perfil');
+  if (missing.length) throw new Error(`Cadastro principal exige: ${missing.join(', ')}.`);
+  return { phone, cpf, email, photoUrl };
+}
+
+export async function createCustomer(data: MainCustomerProfileInput): Promise<Customer> {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
+  const required = validateMainCustomerProfile(data);
   // Gerar número de cadastro sequencial
   const [maxRow] = await db.execute(sql`SELECT COALESCE(MAX(customerNumber), 0) + 1 AS nextNum FROM customers`) as unknown as Array<Array<{ nextNum: number }>>;
   const nextNum = maxRow[0]?.nextNum ?? 1;
   await db.insert(customers).values({
     customerNumber: nextNum,
     name: data.name ? data.name.toUpperCase().trim() : data.name,
-    phone: data.phone,
-    email: data.email || null,
+    phone: required.phone,
+    email: required.email,
     city: data.city ? data.city.toUpperCase().trim() : null,
     uf: data.uf ? data.uf.toUpperCase().trim() : null,
-    cpf: data.cpf ? data.cpf.trim() : null,
+    cpf: required.cpf,
     referredBy: data.referredBy ? data.referredBy.toUpperCase().trim() : null,
     referredByPhone: data.referredByPhone || null,
-    profilePhotoUrl: data.profilePhotoUrl || null,
+    profilePhotoUrl: required.photoUrl,
   });
-  const result = await db.select().from(customers).where(eq(customers.phone, data.phone)).limit(1);
+  const result = await db.select().from(customers).where(eq(customers.phone, required.phone)).limit(1);
   return result[0];
 }
 

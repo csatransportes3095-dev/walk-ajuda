@@ -1378,24 +1378,9 @@ export const appRouter = router({
                 // Atualizar nome, cidade e email (sobrescreve apenas se fornecido)
                 await updateCustomer(existingCustomer.id, customerData);
               } else {
-                // Criar novo cadastro de cliente
-                const newCustomer = await createCustomer({ name: input.clientName, phone: input.phone, email: input.email, city: input.city });
-                
-                // Registrar indicação se houver indicador
-                if (input.referrerPhone && input.referrerName && newCustomer?.id) {
-                  try {
-                    const { recordReferral } = await import('./db');
-                    await recordReferral({
-                      referrerPhone: input.referrerPhone,
-                      referrerName: input.referrerName,
-                      referredCustomerId: newCustomer.id,
-                      referredPhone: input.phone || '',
-                      referredName: input.clientName,
-                      orderId: outerRegId,
-                    });
-                    console.log('[Referral] Indicação registrada:', input.referrerName, '->', input.clientName);
-                  } catch (e) { console.error('[Referral] Erro ao registrar indicação:', e); }
-                }
+                // Pedido não cria cadastro principal incompleto. O perfil principal
+                // é criado somente pelo fluxo obrigatório (foto, e-mail, CPF e telefone).
+                console.warn('[Customer] Pedido recebido sem cadastro principal completo; nenhum cliente técnico foi criado.', { phone: input.phone });
               }
             } catch (e) { console.error('[Customer] Erro ao salvar dados do cliente:', e); }
           }
@@ -1714,7 +1699,7 @@ export const appRouter = router({
       .input(z.object({
         name: z.string().min(1),
         phone: z.string().min(1),
-        email: z.string().email("Email inválido").optional(),
+        email: z.string().email("E-mail obrigatório e inválido").min(1, "E-mail obrigatório"),
         cpf: z.string().min(14, "CPF inválido").max(14),
         city: z.string().min(1, "Cidade é obrigatória"),
         uf: z.string().length(2, "UF deve ter 2 caracteres"),
@@ -2431,8 +2416,9 @@ export const appRouter = router({
       .input(z.object({
         name: z.string().min(2, 'Nome obrigatório'),
         phone: z.string().regex(/^\d{10,11}$/, 'Telefone inválido (somente dígitos, 10 ou 11)'),
-        email: z.string().email('Email inválido').optional().or(z.literal('')),
-        cpf: z.string().optional(),
+        email: z.string().email('E-mail obrigatório e inválido').min(1, 'E-mail obrigatório'),
+        cpf: z.string().transform(value => value.replace(/\D/g, '')).regex(/^\d{11}$/, 'CPF obrigatório e inválido'),
+        profilePhotoUrl: z.string().url('Foto de perfil obrigatória').min(1, 'Foto de perfil obrigatória'),
         city: z.string().optional(),
         uf: z.string().length(2).optional().or(z.literal('')),
       }))
@@ -2451,8 +2437,9 @@ export const appRouter = router({
         const customer = await createCustomer({
           name: input.name,
           phone: input.phone,
-          email: input.email || undefined,
-          cpf: input.cpf ? input.cpf.replace(/\D/g, '') : undefined,
+          email: input.email,
+          cpf: input.cpf,
+          profilePhotoUrl: input.profilePhotoUrl,
           city: input.city || undefined,
           uf: input.uf || undefined,
         });
@@ -4615,16 +4602,8 @@ export const appRouter = router({
         // 1. Criar ou atualizar cliente
         let customer = await getCustomerByPhone(input.phone);
         if (!customer) {
-          customer = await createCustomer({
-            name: input.name,
-            phone: input.phone,
-            email: input.email,
-            city: input.city,
-            uf: input.uf,
-            referredBy: input.referredBy,
-            referredByPhone: input.referredByPhone,
-          });
-         } else {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cadastre primeiro o perfil completo do cliente em Clientes: foto, e-mail, CPF e telefone são obrigatórios.' });
+        } else {
           // Atualizar dados existentes — NÍÆ’O sobrescrever referredBy se cliente já existe
           // Indicação só conta para clientes novos (primeiro cadastro)
           await updateCustomer(customer.id, {
@@ -4750,15 +4729,7 @@ export const appRouter = router({
         // 1. Criar ou atualizar cliente
         let customer = await getCustomerByPhone(input.phone);
         if (!customer) {
-          customer = await createCustomer({
-            name: input.name,
-            phone: input.phone,
-            email: input.email,
-            city: input.city,
-            uf: input.uf,
-            referredBy: input.referredBy,
-            referredByPhone: input.referredByPhone,
-          });
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cadastre primeiro o perfil completo do cliente em Clientes: foto, e-mail, CPF e telefone são obrigatórios.' });
         } else {
           // NÍÆ’O sobrescrever referredBy se cliente já existe
           // Indicação só conta para clientes novos (primeiro cadastro)

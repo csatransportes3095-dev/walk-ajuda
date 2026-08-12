@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
 import { getDb, createFinancialSale } from "../db";
-import { syncUnifiedCustomerRegistry } from "../customerIdentity";
+import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
 import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
@@ -755,10 +755,16 @@ export const loanRouter = router({
       }
       return { id: input.id };
     } else {
+      let mainCustomer: any;
+      try {
+        mainCustomer = await requireCompleteMainCustomerProfile(db, { phone: input.phone, cpf: input.cpf });
+      } catch (profileError: any) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: profileError?.message || 'Conclua o cadastro principal antes de habilitar empréstimos.' });
+      }
       const result = await db.execute(drizzleSql`
         INSERT INTO loanClients (name, cpf, phone, status, profileSlug, creditLimit, interestRate,
           loanEnabled, allowedPaymentTypes, pixKey, pixKeyType, pixName, client_pix_key, client_pix_name, spreadsheetToken, notes, userId)
-        VALUES (${input.name}, ${input.cpf || null}, ${input.phone || null}, ${input.status},
+        VALUES (${mainCustomer.name}, ${mainCustomer.cpf || null}, ${mainCustomer.phone || null}, ${input.status},
           ${input.profileSlug}, ${input.creditLimit}, ${input.interestRate}, ${input.loanEnabled},
           ${resolvedAllowedTypes}, ${input.pixKey || null}, ${input.pixKeyType || null},
           ${input.pixName || null}, ${input.pixKey || null}, ${input.pixName || null}, ${input.spreadsheetToken || null}, ${input.notes || null}, 1)
@@ -1357,6 +1363,18 @@ export const loanRouter = router({
     `);
     if (!sessions.length) return { enabled: false, client: null, loans: [], pixConfig: null };
     const session = sessions[0];
+    try {
+      await requireCompleteMainCustomerProfile(db, { phone: session.phone, cpf: session.cpf });
+    } catch (profileError: any) {
+      return {
+        enabled: false,
+        profileIncomplete: true,
+        message: profileError?.message || 'Conclua foto, e-mail, CPF e telefone no cadastro principal.',
+        client: null,
+        loans: [],
+        pixConfig: null,
+      };
+    }
 
     // Buscar ou criar loanClient automaticamente
     let clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
@@ -1778,12 +1796,18 @@ export const loanRouter = router({
       const clients = await qRows(db, drizzleSql`SELECT * FROM spreadsheetClients WHERE phone=${input.phone} LIMIT 1`);
       if (!clients.length) throw new TRPCError({ code: "NOT_FOUND" });
       const sc = clients[0];
+      let mainCustomer: any;
+      try {
+        mainCustomer = await requireCompleteMainCustomerProfile(db, { phone: sc.phone, cpf: sc.cpf });
+      } catch (profileError: any) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: profileError?.message || 'Conclua o cadastro principal antes de habilitar empréstimos.' });
+      }
       const profiles = await qRows(db, drizzleSql`SELECT * FROM loanProfiles WHERE slug='bronze' AND isActive=1 LIMIT 1`);
       const profile = profiles[0];
       const paymentTypes = profile?.defaultPaymentTypes || 'diario';
       await db.execute(drizzleSql`
         INSERT INTO loanClients (userId, name, cpf, phone, status, profileSlug, creditLimit, interestRate, maxDays, loanEnabled, allowedPaymentTypes)
-        VALUES (1, ${sc.name}, ${sc.cpf || null}, ${sc.phone}, 'ativo', 'bronze', ${profile?.creditLimit || 500}, ${profile?.interestRate || 5}, ${profile?.maxDays || 30}, ${input.enabled}, ${paymentTypes})
+        VALUES (1, ${mainCustomer.name}, ${mainCustomer.cpf || null}, ${mainCustomer.phone}, 'ativo', 'bronze', ${profile?.creditLimit || 500}, ${profile?.interestRate || 5}, ${profile?.maxDays || 30}, ${input.enabled}, ${paymentTypes})
       `);
     }
     try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
@@ -2970,16 +2994,23 @@ export const loanRouter = router({
     await db.execute(drizzleSql`
       INSERT INTO loanClients (name, cpf, phone, status, profileSlug, creditLimit, interestRate, loanEnabled, allowedPaymentTypes, userId)
       SELECT 
-        sc.name,
-        REGEXP_REPLACE(sc.cpf, '[^0-9]', '') as cpf,
-        RIGHT(REGEXP_REPLACE(sc.phone, '[^0-9]', ''), 11) as phone,
+        c.name,
+        REGEXP_REPLACE(c.cpf, '[^0-9]', '') as cpf,
+        RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11) as phone,
         'ativo', 'bronze', 0.00, 40.00, 0, 'mensal', 1
       FROM spreadsheetClients sc
-      WHERE NOT EXISTS (
-        SELECT 1 FROM loanClients lc 
-        WHERE (sc.phone IS NOT NULL AND sc.phone != '' AND RIGHT(REGEXP_REPLACE(sc.phone, '[^0-9]', ''), 11) = lc.phone)
-           OR (sc.cpf IS NOT NULL AND sc.cpf != '' AND REGEXP_REPLACE(sc.cpf, '[^0-9]', '') = lc.cpf)
+      JOIN customers c ON c.deletedAt IS NULL AND (
+        RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 9) = RIGHT(REGEXP_REPLACE(sc.phone, '[^0-9]', ''), 9)
+        OR (c.cpf IS NOT NULL AND c.cpf != '' AND sc.cpf IS NOT NULL AND sc.cpf != '' AND REGEXP_REPLACE(c.cpf, '[^0-9]', '') = REGEXP_REPLACE(sc.cpf, '[^0-9]', ''))
       )
+      WHERE c.email IS NOT NULL AND c.email != ''
+        AND c.cpf IS NOT NULL AND REGEXP_REPLACE(c.cpf, '[^0-9]', '') REGEXP '^[0-9]{11}$'
+        AND c.profilePhotoUrl IS NOT NULL AND c.profilePhotoUrl != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM loanClients lc
+          WHERE (c.phone IS NOT NULL AND c.phone != '' AND RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11) = lc.phone)
+             OR (c.cpf IS NOT NULL AND c.cpf != '' AND REGEXP_REPLACE(c.cpf, '[^0-9]', '') = lc.cpf)
+        )
     `);
 
     // Contar total depois

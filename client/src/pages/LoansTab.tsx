@@ -567,14 +567,15 @@ export function LoansTab({ token }: LoansTabProps) {
   }
 
   if (!data?.enabled) {
+    const profileIncomplete = Boolean((data as any)?.profileIncomplete);
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
-        <div className="w-20 h-20 rounded-full bg-muted/20 border border-muted/30 flex items-center justify-center">
-          <Banknote className="w-10 h-10 text-muted-foreground/30" />
+        <div className={`w-20 h-20 rounded-full border flex items-center justify-center ${profileIncomplete ? 'bg-amber-500/10 border-amber-500/30' : 'bg-muted/20 border-muted/30'}`}>
+          {profileIncomplete ? <AlertTriangle className="w-10 h-10 text-amber-400" /> : <Banknote className="w-10 h-10 text-muted-foreground/30" />}
         </div>
         <div>
-          <p className="font-semibold text-muted-foreground">Empréstimos não habilitados</p>
-          <p className="text-sm text-muted-foreground/60 mt-1">Entre em contato com o administrador.</p>
+          <p className="font-semibold text-muted-foreground">{profileIncomplete ? 'Complete seu cadastro principal' : 'Empréstimos não habilitados'}</p>
+          <p className="text-sm text-muted-foreground/70 mt-1 max-w-sm">{profileIncomplete ? ((data as any)?.message || 'Foto, e-mail, CPF e telefone são obrigatórios antes de acessar empréstimos.') : 'Entre em contato com o administrador.'}</p>
         </div>
       </div>
     );
