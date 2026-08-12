@@ -1294,7 +1294,8 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <span>Analisador</span>
             </TabsTrigger>
             {/* H2 PARTICULAR */}
-            <TabsTrigger value="particular" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-cyan-400/30 text-cyan-300 font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-cyan-500 data-[state=active]:text-slate-950 data-[state=active]:border-cyan-400 active:scale-95">
+            <TabsTrigger value="particular" className="relative flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl border border-cyan-300/80 bg-gradient-to-br from-cyan-500/30 via-sky-500/20 to-indigo-500/30 text-cyan-100 font-bold text-[10px] uppercase tracking-wide shadow-[0_0_18px_rgba(34,211,238,0.32)] transition-all hover:-translate-y-0.5 hover:shadow-[0_0_25px_rgba(34,211,238,0.45)] data-[state=active]:bg-cyan-400 data-[state=active]:text-slate-950 data-[state=active]:border-cyan-200 active:scale-95">
+              <span className="absolute -right-2 -top-2 rounded-full border border-cyan-100/60 bg-cyan-300 px-1.5 py-0.5 text-[8px] font-black tracking-wider text-slate-950 shadow-lg">NOVO</span>
               <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14v-5l-2-5H7l-2 5v5Z"/><circle cx="8.5" cy="17" r="1.5"/><circle cx="15.5" cy="17" r="1.5"/><path d="M8 7V4h8v3"/></svg>
               <span>Particular</span>
             </TabsTrigger>
