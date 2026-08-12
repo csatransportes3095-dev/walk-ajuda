@@ -7876,53 +7876,53 @@ export const appRouter = router({
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         type: z.enum(['principal', 'membro']).default('membro'),
-        serverId: z.number().optional(), // ID do servidor específico onde criar
+        serverId: z.number().optional(),
       }))
       .mutation(async ({ input }) => {
+        let primaryEmailAddress = '';
+        let reservationCreated = false;
+        let remoteCreated = false;
         try {
-        // Determinar o domínio correto baseado no servidor selecionado
-        let emailDomain = 'h2colombiano.com';
-        if (input.serverId) {
-          const { listZohoOAuthConfigs: getConfigs } = await import('../server/db');
-          const allCfgs = await getConfigs();
-          const cfg = allCfgs.find((c: any) => Number(c.id) === Number(input.serverId));
-          if (cfg?.domain) emailDomain = cfg.domain;
-        }
-        const primaryEmailAddress = `${input.username.toLowerCase()}@${emailDomain}`;
-        
-        // Se serverId especificado, usar esse servidor; senão distribuição automática
-        let user;
-        if (input.serverId) {
-          const { listZohoOAuthConfigs } = await import('../server/db');
-          const allConfigs = await listZohoOAuthConfigs();
-          // Usar Number() para garantir comparação correta mesmo com BigInt do banco
-          const config = allConfigs.find((c: any) => Number(c.id) === Number(input.serverId));
-          if (!config) throw new Error(`Servidor não encontrado (id=${input.serverId}, disponíveis: ${allConfigs.map((c:any)=>c.id).join(',')})`);
-          if (Number(config.isActive) !== 1) throw new Error(`Servidor ${config.name} não está ativo (isActive=${config.isActive})`);
-          const existingUsers = await listZohoUsersForConfig(config, 10);
-          if (existingUsers.length >= 5) throw new Error(`Servidor ${config.name} está lotado (5/5 contas). Escolha outro servidor.`);
-          user = await createZohoUserInConfig(config, {
-            primaryEmailAddress,
-            displayName: input.displayName,
-            password: input.password,
-            firstName: input.firstName,
-            lastName: input.lastName,
-          });
-        } else {
-          user = await createZohoUser({
-            primaryEmailAddress,
-            displayName: input.displayName,
-            password: input.password,
-            firstName: input.firstName,
-            lastName: input.lastName,
-          });
-        }
-        
-        // Guardar tipo na base de dados
-        const { upsertEmailAccount } = await import('../server/db');
-        await upsertEmailAccount(primaryEmailAddress, input.type);
-        return { success: true, user, serverName: input.serverId ? undefined : 'auto' };
+          let emailDomain = 'h2colombiano.com';
+          if (input.serverId) {
+            const { listZohoOAuthConfigs: getConfigs } = await import('../server/db');
+            const allCfgs = await getConfigs();
+            const cfg = allCfgs.find((c: any) => Number(c.id) === Number(input.serverId));
+            if (cfg?.domain) emailDomain = cfg.domain;
+          }
+          primaryEmailAddress = `${input.username.toLowerCase()}@${emailDomain}`.trim().toLowerCase();
+          const { reserveEmailAccount, releaseEmailAccountReservation, upsertEmailAccount } = await import('../server/db');
+          const reserved = await reserveEmailAccount(primaryEmailAddress, input.type);
+          if (!reserved) throw new Error(`O e-mail ${primaryEmailAddress} já está cadastrado ou em criação. Gere outro endereço.`);
+          reservationCreated = true;
+
+          const { findZohoUserByEmail } = await import('./zoho');
+          const existingRemote = await findZohoUserByEmail(primaryEmailAddress);
+          if (existingRemote) throw new Error(`O e-mail ${primaryEmailAddress} já existe no servidor ${existingRemote.serverName}.`);
+
+          let user;
+          if (input.serverId) {
+            const { listZohoOAuthConfigs } = await import('../server/db');
+            const allConfigs = await listZohoOAuthConfigs();
+            const config = allConfigs.find((c: any) => Number(c.id) === Number(input.serverId));
+            if (!config) throw new Error(`Servidor não encontrado (id=${input.serverId})`);
+            if (Number(config.isActive) !== 1) throw new Error(`Servidor ${config.name} não está ativo.`);
+            const existingUsers = await listZohoUsersForConfig(config, 10);
+            if (existingUsers.length >= 5) throw new Error(`Servidor ${config.name} está lotado (5/5 contas). Escolha outro servidor.`);
+            user = await createZohoUserInConfig(config, { primaryEmailAddress, displayName: input.displayName, password: input.password, firstName: input.firstName, lastName: input.lastName });
+          } else {
+            user = await createZohoUser({ primaryEmailAddress, displayName: input.displayName, password: input.password, firstName: input.firstName, lastName: input.lastName });
+          }
+          remoteCreated = true;
+
+          const confirmedRemote = await findZohoUserByEmail(primaryEmailAddress);
+          if (!confirmedRemote) throw new Error(`A conta ${primaryEmailAddress} não pôde ser confirmada no servidor. Nenhum sucesso foi exibido.`);
+          await upsertEmailAccount(primaryEmailAddress, input.type);
+          return { success: true, user: confirmedRemote, serverName: confirmedRemote.serverName || (input.serverId ? undefined : 'auto') };
         } catch (err: any) {
+          if (reservationCreated && !remoteCreated && primaryEmailAddress) {
+            try { const { releaseEmailAccountReservation } = await import('../server/db'); await releaseEmailAccountReservation(primaryEmailAddress); } catch (_) {}
+          }
           const msg = err?.message || String(err);
           console.error('[email.create] Erro:', msg);
           throw new TRPCError({ code: 'BAD_REQUEST', message: `Erro ao criar conta: ${msg}` });

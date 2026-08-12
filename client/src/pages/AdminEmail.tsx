@@ -63,16 +63,22 @@ const LAST_NAMES = ["Silva","Santos","Oliveira","Souza","Lima","Pereira","Costa"
 
 function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 
-function generateFullAccount(existingEmails: string[]) {
-  const existingUsernames = new Set(existingEmails.map(e => e.split("@")[0].toLowerCase()));
+function generateFullAccount(existingEmails: string[], domain: string) {
+  const existingAddresses = new Set(existingEmails.map((email) => String(email || "").trim().toLowerCase()));
+  const normalizedDomain = String(domain || "walkajuda.com").trim().toLowerCase();
   let username = "", firstName = "", lastName = "";
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 100; i++) {
     firstName = pick(FIRST_NAMES); lastName = pick(LAST_NAMES);
     const num = Math.floor(Math.random() * 900) + 100;
     const candidate = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${num}`;
-    if (!existingUsernames.has(candidate)) { username = candidate; break; }
+    if (!existingAddresses.has(`${candidate}@${normalizedDomain}`)) { username = candidate; break; }
   }
-  if (!username) { username = `user_${Date.now().toString(36).slice(-5)}`; firstName = pick(FIRST_NAMES); lastName = pick(LAST_NAMES); }
+  if (!username) {
+    firstName = pick(FIRST_NAMES); lastName = pick(LAST_NAMES);
+    let suffix = Date.now().toString(36).slice(-6);
+    while (existingAddresses.has(`user_${suffix}@${normalizedDomain}`)) suffix = `${suffix}${Math.floor(Math.random() * 10)}`;
+    username = `user_${suffix}`;
+  }
   return { username, firstName, lastName, displayName: `${firstName} ${lastName}`, password: "Walk@@3095" };
 }
 
@@ -131,10 +137,10 @@ export default function AdminEmail() {
 
   const handleGenerateUsername = useCallback(() => {
     setIsGeneratingUsername(true);
-    const generated = generateFullAccount(allEmails);
+    const generated = generateFullAccount(allEmails, selectedDomain);
     setForm(f => ({ ...f, ...generated }));
     setTimeout(() => setIsGeneratingUsername(false), 400);
-  }, [allEmails]);
+  }, [allEmails, selectedDomain]);
 
   // Abrir modal: selecionar servidor primeiro
   function handleOpenCreate() {
@@ -163,7 +169,7 @@ export default function AdminEmail() {
 
   const createMutation = trpc.email.create.useMutation({
     onSuccess: (data) => {
-      const email = (data as any).user?.primaryEmailAddress ?? `${form.username}@walkajuda.com`;
+      const email = (data as any).user?.primaryEmailAddress ?? `${form.username}@${selectedDomain}`;
       setShowCreated({ email, password: form.password, serverName: selectedServer?.serverName ?? 'auto' });
       setModalStep(null);
       setSelectedServer(null);

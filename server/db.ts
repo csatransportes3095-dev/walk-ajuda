@@ -3771,6 +3771,28 @@ export async function upsertEmailAccount(emailAddress: string, type: 'principal'
   return await db.insert(emailAccounts).values({ emailAddress, type, createdAt: now, updatedAt: now });
 }
 
+/** Reserva o endereço com a chave única do banco antes de chamar o servidor de e-mail. */
+export async function reserveEmailAccount(emailAddress: string, type: 'principal' | 'membro' = 'membro'): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const normalized = String(emailAddress || "").trim().toLowerCase();
+  try {
+    await db.insert(emailAccounts).values({ emailAddress: normalized, type, createdAt: Date.now(), updatedAt: Date.now() });
+    return true;
+  } catch (error: any) {
+    const message = String(error?.message || "").toLowerCase();
+    if (message.includes("duplicate") || message.includes("unique")) return false;
+    throw error;
+  }
+}
+
+/** Libera uma reserva que não chegou a criar a conta no servidor. */
+export async function releaseEmailAccountReservation(emailAddress: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(emailAccounts).where(eq(emailAccounts.emailAddress, String(emailAddress || "").trim().toLowerCase()));
+}
+
 export async function getEmailAccountType(emailAddress: string): Promise<'principal' | 'membro' | null> {
   const db = await getDb();
   if (!db) return null;

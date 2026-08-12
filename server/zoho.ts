@@ -183,6 +183,14 @@ export async function listZohoUsers(limit = 50): Promise<ZohoUserWithServer[]> {
   return grouped.flatMap(g => g.users.map(u => ({ ...u, serverId: g.serverId, serverName: g.serverName })));
 }
 
+/** Busca um endereço exato em todos os servidores ativos antes de qualquer criação. */
+export async function findZohoUserByEmail(emailAddress: string): Promise<ZohoUserWithServer | null> {
+  const normalized = String(emailAddress || "").trim().toLowerCase();
+  if (!normalized) return null;
+  const users = await listZohoUsers(200);
+  return users.find((user) => String(user.primaryEmailAddress || "").trim().toLowerCase() === normalized) || null;
+}
+
 // Criar utilizador num servidor específico
 export async function createZohoUserInConfig(config: any, input: CreateUserInput): Promise<ZohoUser> {
   return zohoRequestForConfig<ZohoUser>(config, "POST", "/accounts", {
