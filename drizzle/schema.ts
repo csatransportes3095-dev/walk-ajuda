@@ -1714,6 +1714,7 @@ export const onlineSupportConfig = mysqlTable("onlineSupportConfig", {
   customStatusText: varchar("customStatusText", { length: 128 }),
   buttonIcon: varchar("buttonIcon", { length: 64 }).notNull().default("message-circle"),
   buttonColor: varchar("buttonColor", { length: 32 }).notNull().default("#2563eb"),
+  botAvatar: varchar("botAvatar", { length: 1024 }),
   openMode: varchar("openMode", { length: 32 }).notNull().default("modal"),
   disabledMessage: text("disabledMessage"),
   welcomeMessage: text("welcomeMessage"),

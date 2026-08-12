@@ -53,7 +53,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
 
       {phase === "home" && <main style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 }}>
         <div style={{ textAlign: "center", padding: "8px 8px 6px" }}>
-          <div style={{ ...avatarStyle, width: 66, height: 66, margin: "0 auto 12px" }}><Bot size={31} color="#fff" /></div>
+          {botAvatar ? <img src={botAvatar} alt={botName} style={{ width: 66, height: 66, borderRadius: "50%", objectFit: "cover", display: "block", margin: "0 auto 12px", border: "1px solid rgba(255,255,255,.18)" }} /> : <div style={{ ...avatarStyle, width: 66, height: 66, margin: "0 auto 12px" }}><Bot size={31} color="#fff" /></div>}
           <h2 style={{ color: "#fff", fontSize: 20, margin: "0 0 8px" }}>Como deseja continuar?</h2>
           <p style={{ color: "rgba(255,255,255,.62)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>Cadastre-se para a área desejada ou entre para consultar somente os seus dados.</p>
         </div>

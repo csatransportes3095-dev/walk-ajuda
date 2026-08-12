@@ -20,6 +20,20 @@ import { findFlowNodeByLabel, getNodeChildren } from "../chat-flow/service";
 
 type JsonValue = Record<string, unknown> | Array<unknown>;
 
+let onlineSupportBotAvatarColumnReady = false;
+
+async function ensureOnlineSupportBotAvatarColumn() {
+  if (onlineSupportBotAvatarColumnReady) return;
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.execute(sql.raw("ALTER TABLE onlineSupportConfig ADD COLUMN IF NOT EXISTS botAvatar VARCHAR(1024) NULL"));
+  } catch {
+    try { await db.execute(sql.raw("ALTER TABLE onlineSupportConfig ADD COLUMN botAvatar VARCHAR(1024) NULL")); } catch { /* coluna já existe */ }
+  }
+  onlineSupportBotAvatarColumnReady = true;
+}
+
 function parseJson<T>(value: unknown, fallback: T): T {
   if (!value) return fallback;
   if (typeof value !== "string") return fallback;
@@ -74,6 +88,7 @@ async function addLog(level: "info" | "warn" | "error", source: string, event: s
 export async function getOrCreateConfig() {
   const db = await getDb();
   if (!db) throw new Error("Banco indisponivel");
+  await ensureOnlineSupportBotAvatarColumn();
 
   const rows = await db.select().from(onlineSupportConfig).limit(1);
   if (rows[0]) return rows[0];
@@ -166,6 +181,7 @@ export async function getPublicState(pathname: string) {
     buttonDescription: config.buttonDescription,
     buttonIcon: config.buttonIcon,
     buttonColor: config.buttonColor,
+    botAvatar: config.botAvatar || null,
     buttonSortOrder: config.buttonSortOrder,
     customStatusText: config.customStatusText || null,
     openMode: config.openMode,

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
-import { MessageCircle, Plus, Trash2, Edit2, Check, X, Send, RefreshCw, Settings, Bot, MessageSquare, Users } from "lucide-react";
+import { MessageCircle, Plus, Trash2, Edit2, Check, X, Send, RefreshCw, Settings, Bot, MessageSquare, Users, ImagePlus } from "lucide-react";
 
 // ─── TIPOS DE AÇÃO ────────────────────────────────────────────────────────────
 const ACTION_TYPES = [
@@ -425,6 +425,8 @@ export default function AdminOnlineSupport() {
   const configMut = trpc.onlineSupport.adminConfigUpdate.useMutation({
     onSuccess: () => { configQ.refetch(); toast.success("Configurações salvas!"); }
   });
+  const uploadBotAvatarMut = trpc.uploads.uploadBotAvatar.useMutation();
+  const botAvatarInputRef = useRef<HTMLInputElement>(null);
   const cfg = configQ.data || {};
   const [cfgLabel, setCfgLabel] = useState("");
   const [cfgWelcome, setCfgWelcome] = useState("");
@@ -432,6 +434,8 @@ export default function AdminOnlineSupport() {
   const [cfgEnabled, setCfgEnabled] = useState(true);
   const [cfgStatusText, setCfgStatusText] = useState("");
   const [cfgSortOrder, setCfgSortOrder] = useState(3);
+  const [cfgBotAvatar, setCfgBotAvatar] = useState("");
+  const [isUploadingBotAvatar, setIsUploadingBotAvatar] = useState(false);
   useEffect(() => {
     if (configQ.data) {
       setCfgLabel(configQ.data.buttonLabel || "Atendimento Online");
@@ -440,8 +444,34 @@ export default function AdminOnlineSupport() {
       setCfgEnabled(configQ.data.chatEnabled === 1);
       setCfgStatusText((configQ.data as any).customStatusText || "");
       setCfgSortOrder(Number(configQ.data.buttonSortOrder) || 3);
+      setCfgBotAvatar((configQ.data as any).botAvatar || "");
     }
   }, [configQ.data]);
+
+  const handleBotAvatarSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Envie apenas imagens para a logo do bot."); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Imagem muito grande. Máximo de 5MB."); return; }
+    setIsUploadingBotAvatar(true);
+    try {
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => resolve(String(loadEvent.target?.result || "").split(",")[1] || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadBotAvatarMut.mutateAsync({ imageBase64, mimeType: file.type });
+      if (!result.url) throw new Error("Upload sem URL");
+      setCfgBotAvatar(result.url);
+      toast.success("Logo enviada. Clique em Salvar Configurações para aplicar no bot.");
+    } catch {
+      toast.error("Não foi possível enviar a logo do bot.");
+    } finally {
+      setIsUploadingBotAvatar(false);
+      if (botAvatarInputRef.current) botAvatarInputRef.current.value = "";
+    }
+  };
 
   const TABS: { id: Tab; label: string; icon: any; desc: string }[] = [
     { id: "botoes", label: "Botões do Menu", icon: MessageCircle, desc: "Configure os botões que aparecem no chat" },
@@ -796,6 +826,27 @@ export default function AdminOnlineSupport() {
                 <p className="text-[11px] text-white/35 mt-1">Define onde o botão azul aparece na tela inicial</p>
               </div>
               <div>
+                <label className="text-xs font-bold text-white/60 block mb-2">LOGO DO BOT DE ATENDIMENTO</label>
+                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                  {cfgBotAvatar ? (
+                    <img src={cfgBotAvatar} alt="Prévia da logo do bot" className="h-14 w-14 rounded-full object-cover border border-white/20 bg-white/10" />
+                  ) : (
+                    <div className="h-14 w-14 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center border border-white/20"><Bot className="w-7 h-7 text-white" /></div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-white">Logo exibida no cabeçalho e na abertura do bot</p>
+                    <p className="mt-1 text-[11px] text-white/40">PNG, JPG ou WEBP. Máximo de 5MB.</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => botAvatarInputRef.current?.click()} disabled={isUploadingBotAvatar} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-blue-500 disabled:opacity-50">
+                        <ImagePlus className="h-3.5 w-3.5" /> {isUploadingBotAvatar ? "Enviando..." : "Trocar logo"}
+                      </button>
+                      {cfgBotAvatar && <button type="button" onClick={() => setCfgBotAvatar("")} disabled={isUploadingBotAvatar} className="rounded-lg border border-red-400/35 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 transition-colors hover:bg-red-500/20 disabled:opacity-50">Remover</button>}
+                    </div>
+                  </div>
+                  <input ref={botAvatarInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handleBotAvatarSelect} className="hidden" />
+                </div>
+              </div>
+              <div>
                 <label className="text-xs font-bold text-white/60 block mb-1">COR DO BOTÃO</label>
                 <div className="flex items-center gap-3">
                   <input type="color" value={cfgColor} onChange={e => setCfgColor(e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer border-0 bg-transparent" />
@@ -815,7 +866,7 @@ export default function AdminOnlineSupport() {
                 </button>
               </div>
               <button
-                onClick={() => configMut.mutate({ buttonLabel: cfgLabel, welcomeMessage: cfgWelcome, buttonColor: cfgColor, chatEnabled: cfgEnabled, customStatusText: cfgStatusText, buttonSortOrder: cfgSortOrder } as any)}
+                onClick={() => configMut.mutate({ buttonLabel: cfgLabel, welcomeMessage: cfgWelcome, buttonColor: cfgColor, botAvatar: cfgBotAvatar || null, chatEnabled: cfgEnabled, customStatusText: cfgStatusText, buttonSortOrder: cfgSortOrder } as any)}
                 className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors"
               >
                 Salvar Configurações
