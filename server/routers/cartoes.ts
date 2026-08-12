@@ -968,5 +968,40 @@ export const cartoesRouter = router({
           })),
         };
       }),
+
+    // Auditoria administrativa somente de leitura: usa as faturas persistentes por invoiceId.
+    invoiceAudit: adminProcedure
+      .input(z.object({ userId: z.number().int() }))
+      .query(async ({ input }) => {
+        const cartoes = await ccExec(`SELECT id, nome, fechamentoDia, vencimentoDia FROM cc_cartoes WHERE userId = ${input.userId} ORDER BY id`);
+        const resultado: any[] = [];
+        for (const raw of cartoes) {
+          const card = {
+            id: Number(raw.id),
+            fechamentoDia: raw.fechamentoDia ? Number(raw.fechamentoDia) : null,
+            vencimentoDia: Number(raw.vencimentoDia),
+          };
+          const invoices = await getCardInvoices(card);
+          const current = invoices.find((invoice: any) => ["ABERTA", "A_VENCER", "VENCE_HOJE"].includes(String(invoice.status))) || invoices[0] || null;
+          const overdue = invoices.filter((invoice: any) => String(invoice.status) === "VENCIDA" && Number(invoice.remainingAmount || 0) > 0);
+          const next = current ? invoices.find((invoice: any) => String(invoice.cycleEnd) > String(current.cycleEnd)) || null : null;
+          resultado.push({
+            id: card.id,
+            nome: raw.nome,
+            fechamentoDia: card.fechamentoDia,
+            vencimentoDia: card.vencimentoDia,
+            current: current && {
+              invoiceId: Number(current.id), competencia: String(current.competencia), cycleStart: String(current.cycleStart).slice(0, 10), cycleEnd: String(current.cycleEnd).slice(0, 10),
+              closingDate: String(current.closingDate).slice(0, 10), dueDate: String(current.dueDate).slice(0, 10),
+              originalAmount: Number(current.originalAmount || 0), paidAmount: Number(current.paidAmount || 0) + Number(current.legacyPaidAmount || 0),
+              remainingAmount: Number(current.remainingAmount || 0), status: String(current.status), paidAt: current.paidAt ? String(current.paidAt) : null, requiresReview: Boolean(current.requiresReview),
+            },
+            next: next && { invoiceId: Number(next.id), competencia: String(next.competencia), cycleEnd: String(next.cycleEnd).slice(0, 10), dueDate: String(next.dueDate).slice(0, 10), status: String(next.status) },
+            overdue: overdue.map((invoice: any) => ({ invoiceId: Number(invoice.id), competencia: String(invoice.competencia), dueDate: String(invoice.dueDate).slice(0, 10), remainingAmount: Number(invoice.remainingAmount || 0), status: String(invoice.status) })),
+            invoiceCount: invoices.length,
+          });
+        }
+        return resultado;
+      }),
   }),
 });
