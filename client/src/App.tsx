@@ -84,6 +84,8 @@ import PreCadastro from "./pages/PreCadastro";
 import ConsultarCadastro from "./pages/ConsultarCadastro";
 import ClientReferralTree from "./pages/ClientReferralTree";
 import SchedulePage from "./pages/SchedulePage";
+import PublicQuotePage from "./pages/PublicQuotePage";
+import PublicReceiptPage from "./pages/PublicReceiptPage";
 import { SpreadsheetPage } from "./pages/SpreadsheetPage";
 import { GastosPage } from "./pages/GastosPage";
 import { EmprestimoPage } from "./pages/EmprestimoPage";
@@ -287,6 +289,8 @@ function Router() {
         <AdminGuard><AdminChatFlow /></AdminGuard>
       </Route>
       <Route path={"/agendar/:token"} component={SchedulePage} />
+      <Route path={"/orcamento/:publicToken"} component={PublicQuotePage} />
+      <Route path={"/recibo/:publicToken"} component={PublicReceiptPage} />
       <Route path={"/gastos"} component={GastosPage} />
       <Route path={"/emprestimo"} component={EmprestimoPage} />
       <Route path={"/cartoes"} component={CartaoPage} />

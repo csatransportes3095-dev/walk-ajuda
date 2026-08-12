@@ -42,6 +42,7 @@ import { preRegistrationsRouter } from "./routers/preRegistrations";
 import { preCadastroQuestionsRouter } from "./routers/preCadastroQuestions";
 import { cartoesRouter } from "./routers/cartoes";
 import { mercadoRouter } from "./routers/mercado";
+import { privateTransportRouter } from "./routers/privateTransport";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "./_core/sendMailDirect";
@@ -215,6 +216,7 @@ export const appRouter = router({
   resellers: resellersRouter,
   schedule: scheduleRouter,
   spreadsheet: spreadsheetRouter,
+  privateTransport: privateTransportRouter,
   loans: loanRouter,
   apk: apkRouter,
   customerPassword: customerPasswordRouter,

@@ -11,6 +11,7 @@ import { X, Shield, Clock, Trophy, Medal } from "lucide-react";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { LoansTab } from "./LoansTab";
 import { ServicosExtras } from "@/components/ServicosExtras";
+import { H2ParticularModule } from "@/components/private-transport/H2ParticularModule";
 
 const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 const DATE_COLORS = ["#ff6b6b", "#4ecdc4", "#45b7d1", "#f9ca24", "#6c5ce7", "#a29bfe", "#fd79a8", "#fdcb6e", "#6c5ce7", "#00b894"];
@@ -1292,6 +1293,11 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M20 2v4h-4"/></svg>
               <span>Analisador</span>
             </TabsTrigger>
+            {/* H2 PARTICULAR */}
+            <TabsTrigger value="particular" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-cyan-400/30 text-cyan-300 font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-cyan-500 data-[state=active]:text-slate-950 data-[state=active]:border-cyan-400 active:scale-95">
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14v-5l-2-5H7l-2 5v5Z"/><circle cx="8.5" cy="17" r="1.5"/><circle cx="15.5" cy="17" r="1.5"/><path d="M8 7V4h8v3"/></svg>
+              <span>Particular</span>
+            </TabsTrigger>
             {/* CARTÕES — atalho externo */}
             <button
               onClick={() => window.location.href = '/cartoes'}
@@ -1302,6 +1308,11 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <span>Cartões</span>
             </button>
           </TabsList>
+
+          {/* H2 PARTICULAR */}
+          <TabsContent value="particular" className="space-y-4">
+            <H2ParticularModule token={token} />
+          </TabsContent>
 
           {/* Aba Gastos */}
           <TabsContent value="gastos" className="space-y-4">
