@@ -94,6 +94,11 @@ export default function AdminCodes() {
   });
 
   const pendingQuery = trpc.customerPassword.adminListPending.useQuery(undefined, { refetchInterval: 30000 });
+  const pendingAccessQuery = trpc.customerPassword.adminListPendingAccess.useQuery(undefined, { refetchInterval: 30000 });
+  const decideAccessMutation = trpc.customerPassword.adminDecideAccess.useMutation({
+    onSuccess: () => { pendingAccessQuery.refetch(); toast.success('Acesso liberado.'); },
+    onError: (e) => toast.error(e.message || 'Erro ao atualizar acesso.'),
+  });
 
   const approveMutation = trpc.customerPassword.adminApprove.useMutation({
     onSuccess: () => { pendingQuery.refetch(); },
@@ -463,6 +468,36 @@ export default function AdminCodes() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </Card>
+          )}
+
+          {(pendingAccessQuery.data || []).length > 0 && (
+            <Card className="bg-sky-500/10 border-2 border-sky-500/50 p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <KeyRound className="w-6 h-6 text-sky-300 flex-shrink-0" />
+                <div>
+                  <h3 className="text-lg font-bold text-sky-200">{pendingAccessQuery.data?.length} liberaç{pendingAccessQuery.data?.length === 1 ? 'ão' : 'ões'} de acesso aguardando</h3>
+                  <p className="text-xs text-sky-100/70">Solicitações do Atendimento Online — use a mesma ficha de senha para liberar ou negar.</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {pendingAccessQuery.data?.map((request: any) => {
+                  const routeLabel = request.route === 'gastos' ? 'Controle de Gastos' : request.route === 'emprestimo' ? 'Empréstimos' : 'Site de Pedidos';
+                  return <div key={request.id} className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-3 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0">
+                        {request.profilePhotoUrl ? <button onClick={() => setExpandedPhoto({ url: request.profilePhotoUrl, name: request.name })} className="block relative group focus:outline-none" title="Expandir foto"><img src={request.profilePhotoUrl} alt={request.name} className="w-12 h-12 rounded-full object-cover border-2 border-sky-300/60 group-hover:scale-105 transition-all" /></button> : <div className="w-12 h-12 rounded-full bg-sky-500/30 border-2 border-sky-300/60 flex items-center justify-center text-sky-200 font-bold text-lg">{(request.name || '?').charAt(0).toUpperCase()}</div>}
+                      </div>
+                      <div className="flex-1 min-w-0"><p className="text-white font-bold text-sm truncate">{request.name}</p><p className="text-sky-100/80 text-sm font-mono">{request.phone}</p><p className="text-sky-200 text-xs mt-0.5">Solicitou: <b>{routeLabel}</b></p></div>
+                    </div>
+                    <div className="flex gap-2">
+                      <a href={`https://wa.me/55${String(request.phone || '').replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="flex-1 inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold text-sm px-3 py-2.5 rounded-lg transition-colors"><MessageCircle className="w-4 h-4" />WhatsApp</a>
+                      <button onClick={() => decideAccessMutation.mutate({ requestId: request.id, approved: true, adminName: 'Administrador' })} disabled={decideAccessMutation.isPending} className="flex-1 inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-black font-bold text-sm px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50"><CalendarClock className="w-4 h-4" />Liberar</button>
+                      <button onClick={() => decideAccessMutation.mutate({ requestId: request.id, approved: false, adminName: 'Administrador' })} disabled={decideAccessMutation.isPending} className="inline-flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold text-sm px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50">Negar</button>
+                    </div>
+                  </div>;
+                })}
               </div>
             </Card>
           )}

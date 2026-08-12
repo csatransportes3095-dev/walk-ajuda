@@ -16,6 +16,7 @@ import {
 } from "../../drizzle/schema";
 import { eq, and, sql, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { ensureCustomerIdentityInfrastructure, getRouteAccess, setCustomerRoutePermissions, type CustomerRoute } from "../customerAccess";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 
@@ -429,6 +430,55 @@ export const customerPasswordRouter = router({
       profilePhotoUrl: r.profilePhotoUrl ?? null,
     }));
   }),
+
+  // Solicitações de acesso de Site, Gastos e Empréstimos usam a mesma tela
+  // de liberação de senha: foto, telefone, WhatsApp e botão Liberar.
+  adminListPendingAccess: adminProcedure.query(async () => {
+    const db = (await getDb()) as any;
+    if (!db) return [];
+    await ensureCustomerIdentityInfrastructure(db);
+    const [rows] = await db.execute(sql`
+      SELECT r.id, r.customerId, r.route, r.createdAt, c.name, c.phone, c.profilePhotoUrl
+      FROM customerAccessRequests r
+      JOIN customers c ON c.id=r.customerId
+      WHERE r.status='pending' AND r.pendingKey=1
+      ORDER BY r.createdAt ASC
+    `) as any;
+    return (rows || []).map((row: any) => ({
+      id: Number(row.id),
+      customerId: Number(row.customerId),
+      route: String(row.route) as CustomerRoute,
+      name: row.name || row.phone,
+      phone: row.phone || '',
+      profilePhotoUrl: row.profilePhotoUrl || null,
+      createdAt: row.createdAt ? new Date(row.createdAt).getTime() : null,
+    }));
+  }),
+
+  adminDecideAccess: adminProcedure
+    .input(z.object({ requestId: z.number().int().positive(), approved: z.boolean(), adminName: z.string().min(1).default('Administrador') }))
+    .mutation(async ({ input }) => {
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+      await ensureCustomerIdentityInfrastructure(db);
+      const [rows] = await db.execute(sql`
+        SELECT customerId, route FROM customerAccessRequests
+        WHERE id=${input.requestId} AND status='pending' AND pendingKey=1 LIMIT 1
+      `) as any;
+      const request = rows?.[0];
+      if (!request) throw new TRPCError({ code: 'NOT_FOUND', message: 'Solicitação pendente não encontrada.' });
+      const route = String(request.route) as CustomerRoute;
+      if (input.approved) {
+        const access = await getRouteAccess(Number(request.customerId), db);
+        await setCustomerRoutePermissions(Number(request.customerId), [...access.routes, route], input.adminName, db);
+      }
+      await db.execute(sql`
+        UPDATE customerAccessRequests
+        SET status=${input.approved ? 'approved' : 'denied'}, pendingKey=NULL, analyzedAt=NOW(), analyzedBy=${input.adminName}
+        WHERE id=${input.requestId}
+      `);
+      return { success: true };
+    }),
 
   // â”€â”€ ADM: liberar senha pendente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
