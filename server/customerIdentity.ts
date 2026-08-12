@@ -29,6 +29,31 @@ async function rows(db: any, query: any): Promise<any[]> {
   return (result[0] || result || []) as any[];
 }
 
+let customerPhoneIndexChecked = false;
+
+/**
+ * O cadastro usa exclusão lógica (lixeira). O índice UNIQUE antigo em phone
+ * bloqueava reutilizar um telefone preso num registro excluído. A validação
+ * do sistema já impede duplicidade entre clientes ativos; por isso removemos
+ * somente esse índice legado e preservamos todos os dados da lixeira.
+ */
+async function allowPhoneReuseFromDeletedCustomers(db: any): Promise<void> {
+  if (customerPhoneIndexChecked) return;
+  try {
+    const indexes = await rows(db, sql`SHOW INDEX FROM customers WHERE Column_name = 'phone' AND Non_unique = 0`);
+    for (const index of indexes) {
+      const keyName = String(index.Key_name || '');
+      if (keyName && keyName !== 'PRIMARY' && /^[A-Za-z0-9_]+$/.test(keyName)) {
+        await db.execute(sql.raw(`ALTER TABLE customers DROP INDEX \`${keyName}\``));
+      }
+    }
+  } catch (error: any) {
+    console.warn('[customerIdentity] não foi possível ajustar índice legado de telefone:', error?.message);
+  } finally {
+    customerPhoneIndexChecked = true;
+  }
+}
+
 /**
  * Sincroniza os dados compartilhados do mesmo cliente entre as tabelas
  * customers (cadastro principal), spreadsheetClients (gastos) e loanClients
@@ -38,6 +63,8 @@ async function rows(db: any, query: any): Promise<any[]> {
 export async function syncUnifiedCustomerRegistry(previousIdentities: Array<Pick<IdentityRow, 'phone' | 'cpf'>> = []): Promise<{ customersCreated: number; spreadsheetCreated: number; synchronized: number }> {
   const db = await getDb() as any;
   if (!db) return { customersCreated: 0, spreadsheetCreated: 0, synchronized: 0 };
+
+  await allowPhoneReuseFromDeletedCustomers(db);
 
   const customerRows = await rows(db, sql`SELECT id, name, phone, cpf FROM customers WHERE deletedAt IS NULL`);
   const spreadsheetRows = await rows(db, sql`SELECT id, name, phone, cpf, allowedRoutes FROM spreadsheetClients`);

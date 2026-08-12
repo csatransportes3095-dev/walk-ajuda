@@ -2,6 +2,7 @@ const fs = require('fs');
 
 const router = fs.readFileSync('server/routers.ts', 'utf8');
 const adminCustomers = fs.readFileSync('client/src/pages/AdminCustomers.tsx', 'utf8');
+const identity = fs.readFileSync('server/customerIdentity.ts', 'utf8');
 
 const requiredRouterRules = [
   "phone: rawData.phone?.replace(/\\D/g, '') || undefined",
@@ -24,6 +25,12 @@ if (saveMain < 0 || firstPropagation < 0 || saveMain > firstPropagation) {
   throw new Error('O cadastro principal precisa ser salvo antes das sincronizações secundárias');
 }
 
+if (!identity.includes('allowPhoneReuseFromDeletedCustomers') ||
+    !identity.includes("SHOW INDEX FROM customers WHERE Column_name = 'phone' AND Non_unique = 0") ||
+    !identity.includes('ALTER TABLE customers DROP INDEX')) {
+  throw new Error('Telefone preservado na lixeira ainda bloqueia o cliente ativo');
+}
+
 if (!adminCustomers.includes('onError: (error) => toast.error(error.message || "Erro ao atualizar cliente")')) {
   throw new Error('A tela principal ainda esconde a causa real do erro de telefone');
 }
@@ -39,4 +46,4 @@ const normalize = (value) => String(value || '').replace(/\D/g, '');
 if (normalize('(11) 98979-3464') !== '11989793464') throw new Error('Normalização de telefone falhou');
 if (normalize('+55 (11) 98979-3464') !== '5511989793464') throw new Error('Normalização com DDI falhou');
 
-console.log('OK: alteração de telefone valida duplicidade, salva o cadastro principal primeiro e sincroniza vínculos sem bloquear o salvamento.');
+console.log('OK: alteração de telefone valida duplicidade ativa, reutiliza telefone da lixeira e sincroniza vínculos sem bloquear o salvamento.');
