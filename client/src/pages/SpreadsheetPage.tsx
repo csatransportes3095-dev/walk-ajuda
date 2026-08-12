@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import { trpc } from "@/lib/trpc";
-import { X, Shield, Clock, Trophy, Medal } from "lucide-react";
+import { X, Shield, Clock, Trophy, Medal, Phone, Mail, CreditCard } from "lucide-react";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { LoansTab } from "./LoansTab";
 import { ServicosExtras } from "@/components/ServicosExtras";
@@ -1045,23 +1045,32 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <span className="h-9 w-1.5 rounded-full" style={{ background: 'var(--primary)', boxShadow: '0 0 18px 2px color-mix(in oklch, var(--primary) 60%, transparent)' }} />
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight bg-gradient-to-r from-white to-primary/70 bg-clip-text text-transparent">Planilha de Gastos</h1>
             </div>
-            <div className="flex items-center gap-2 mt-2 sm:pl-[18px]">
-              {planInfo?.profilePhotoUrl ? (
-                <img
-                  src={planInfo.profilePhotoUrl}
-                  alt={clientName || 'Cliente'}
-                  className="h-8 w-8 rounded-full object-cover border-2"
-                  style={{ borderColor: 'var(--primary)' }}
-                />
-              ) : (
-                <div
-                  className="h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                  style={{ background: 'color-mix(in oklch, var(--primary) 25%, transparent)', color: 'var(--primary)', border: '2px solid color-mix(in oklch, var(--primary) 40%, transparent)' }}
-                >
-                  {(clientName || 'C').charAt(0).toUpperCase()}
+            <div className="mt-3 sm:pl-[18px]">
+              <div className="flex max-w-2xl items-center gap-3 rounded-xl border border-primary/20 bg-card/70 px-3 py-2.5 shadow-sm backdrop-blur-sm">
+                {planInfo?.profilePhotoUrl ? (
+                  <img
+                    src={planInfo.profilePhotoUrl}
+                    alt={planInfo?.clientName || clientName || 'Cliente'}
+                    className="h-12 w-12 rounded-full object-cover border-2 shrink-0"
+                    style={{ borderColor: 'var(--primary)' }}
+                  />
+                ) : (
+                  <div
+                    className="h-12 w-12 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0"
+                    style={{ background: 'color-mix(in oklch, var(--primary) 25%, transparent)', color: 'var(--primary)', border: '2px solid color-mix(in oklch, var(--primary) 40%, transparent)' }}
+                  >
+                    {(planInfo?.clientName || clientName || 'C').charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-foreground">{planInfo?.clientName || clientName || 'Cliente'}</p>
+                  <div className="mt-1 grid grid-cols-1 gap-x-3 gap-y-1 text-[11px] text-muted-foreground sm:grid-cols-3">
+                    <span className="flex min-w-0 items-center gap-1 truncate"><Phone className="h-3 w-3 text-primary shrink-0" />{planInfo?.phone || 'Telefone não informado'}</span>
+                    <span className="flex min-w-0 items-center gap-1 truncate"><CreditCard className="h-3 w-3 text-primary shrink-0" />{planInfo?.cpf || 'CPF não informado'}</span>
+                    <span className="flex min-w-0 items-center gap-1 truncate"><Mail className="h-3 w-3 text-primary shrink-0" />{planInfo?.email || 'E-mail não informado'}</span>
+                  </div>
                 </div>
-              )}
-              <p className="text-muted-foreground">{clientName || "Cliente"}</p>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">

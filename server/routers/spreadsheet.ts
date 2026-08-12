@@ -997,21 +997,22 @@ export const spreadsheetRouter = router({
           )).limit(1);
         const pw = pwResult?.[0] || null;
 
-        // Buscar foto do cadastro principal
-        let profilePhotoUrl: string | null = null;
+        // Buscar os dados completos exclusivamente do cadastro principal vinculado ao cliente logado.
+        let mainProfile: { name?: string | null; phone?: string | null; cpf?: string | null; email?: string | null; profilePhotoUrl?: string | null } | null = null;
         try {
           const cleanPhone = String(client.phone || '').replace(/\D/g, '');
-          const customerRows = await db.execute(`SELECT profilePhotoUrl FROM customers WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = '${cleanPhone}' LIMIT 1`);
-          const customerRow = (customerRows as any)[0]?.[0];
-          profilePhotoUrl = customerRow?.profilePhotoUrl || null;
+          const customerRows = await db.execute(`SELECT name, phone, cpf, email, profilePhotoUrl FROM customers WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = '${cleanPhone}' AND deletedAt IS NULL LIMIT 1`);
+          mainProfile = (customerRows as any)[0]?.[0] || null;
         } catch (_) {}
 
         return {
-          clientName: client.name,
-          phone: client.phone,
+          clientName: mainProfile?.name || client.name,
+          phone: mainProfile?.phone || client.phone,
+          cpf: mainProfile?.cpf || null,
+          email: mainProfile?.email || null,
           expiresAt: pw?.expiresAt ? new Date(pw.expiresAt).toISOString() : null,
           isActive: pw ? (pw.expiresAt ? new Date(pw.expiresAt) > new Date() : false) : false,
-          profilePhotoUrl,
+          profilePhotoUrl: mainProfile?.profilePhotoUrl || null,
         };
       } catch (error) {
         return null;
