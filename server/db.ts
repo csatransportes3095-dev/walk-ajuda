@@ -1,5 +1,6 @@
 import { eq, asc, desc, sql, and, gte, inArray, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
 import {
   InsertUser, users,
@@ -732,24 +733,12 @@ function normalizeMainCustomerPhone(value: unknown): string {
   return phone;
 }
 
-function isValidMainCustomerCpf(value: unknown): boolean {
-  const cpf = String(value ?? '').replace(/\D/g, '');
-  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
-  const calculate = (base: string, factor: number) => {
-    let sum = 0;
-    for (const digit of base) sum += Number(digit) * factor--;
-    const result = (sum * 10) % 11;
-    return result === 10 ? 0 : result;
-  };
-  const first = calculate(cpf.slice(0, 9), 10);
-  const second = calculate(cpf.slice(0, 9) + first, 11);
-  return first === Number(cpf[9]) && second === Number(cpf[10]);
-}
+const isValidMainCustomerCpf = isValidCPF;
 
 /** O cadastro principal só existe quando o perfil obrigatório está completo. */
 export function validateMainCustomerProfile(data: MainCustomerProfileInput): { phone: string; cpf: string; email: string; photoUrl: string } {
   const phone = normalizeMainCustomerPhone(data.phone);
-  const cpf = String(data.cpf || '').replace(/\D/g, '');
+  const cpf = normalizeCpf(data.cpf);
   const email = String(data.email || '').trim().toLowerCase();
   const photoUrl = String(data.profilePhotoUrl || '').trim();
   const missing: string[] = [];

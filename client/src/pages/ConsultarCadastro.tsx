@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
+import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { Link } from "wouter";
 import {
   Clock, CheckCircle2, XCircle, AlertCircle, Search, Zap, ArrowLeft
@@ -65,8 +66,8 @@ export default function ConsultarCadastro() {
     const params = new URLSearchParams(window.location.search);
     const cpfParam = params.get("cpf");
     const phoneParam = params.get("phone");
-    if (cpfParam && cpfParam.replace(/\D/g, "").length === 11) {
-      const formatted = cpfParam.replace(/\D/g, "").replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+    if (cpfParam && isValidCPF(cpfParam)) {
+      const formatted = normalizeCpf(cpfParam).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
       setSearchType("cpf");
       setInput(formatted);
       setSearchedCpf(cpfParam);
@@ -82,7 +83,8 @@ export default function ConsultarCadastro() {
 
   const cleanInput = input.replace(/\D/g, "");
   const isCpfMode = searchType === "cpf";
-  const isReady = isCpfMode ? cleanInput.length === 11 : cleanInput.length >= 10;
+  const cpfInvalid = isCpfMode && cleanInput.length === 11 && !isValidCPF(cleanInput);
+  const isReady = isCpfMode ? isValidCPF(cleanInput) : cleanInput.length >= 10;
 
   const { data, isLoading, error } = trpc.preRegistrations.checkStatus.useQuery(
     { cpf: searchedCpf || undefined, phone: searchedPhone || undefined },
@@ -100,6 +102,7 @@ export default function ConsultarCadastro() {
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!isReady) return;
+    if (isCpfMode && !isValidCPF(cleanInput)) return;
     if (isCpfMode) {
       setSearchedCpf(cleanInput);
       setSearchedPhone("");
@@ -184,8 +187,9 @@ export default function ConsultarCadastro() {
               value={input}
               onChange={(e) => { handleInputChange(e.target.value); setEnabled(false); }}
               maxLength={isCpfMode ? 14 : 15}
-              className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-purple-500/60 text-sm transition-colors"
+              className={`flex-1 px-4 py-3 rounded-xl bg-white/5 border text-white placeholder:text-gray-500 focus:outline-none text-sm transition-colors ${cpfInvalid ? 'border-red-500 focus:border-red-500' : 'border-white/10 focus:border-purple-500/60'}`}
             />
+            {cpfInvalid && <p className="absolute mt-14 text-xs font-medium text-red-400">CPF inválido. Digite um CPF válido para continuar.</p>}
             <button
               type="submit"
               disabled={!isReady || isLoading}

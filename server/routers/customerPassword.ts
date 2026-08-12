@@ -6,6 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
+import { formatCPF, isValidCPF, normalizeCpf } from "@shared/cpf";
 import {
   customerPasswords,
   customerPasswordSessions,
@@ -62,10 +63,13 @@ async function getCustomerByCleanPhone(cleanPhone: string) {
 }
 
 // Busca por telefone OU CPF (aceita ambos)
-async function getCustomerByPhoneOrCpf(input: string) {
+async function getCustomerByPhoneOrCpf(input: string, isCpf = false) {
   const db = (await getDb()) as any;
   if (!db) return null;
-  const clean = input.replace(/\D/g, "");
+  const clean = normalizeCpf(input);
+  if (isCpf && !isValidCPF(clean)) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'CPF inválido' });
+  }
   // Tenta por telefone primeiro
   const byPhone = await db
     .select()
@@ -119,9 +123,9 @@ export const customerPasswordRouter = router({
   // â”€â”€ Verificar status do cliente (para a tela de login) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   checkStatus: publicProcedure
-    .input(z.object({ phone: z.string() }))
+    .input(z.object({ phone: z.string(), isCpf: z.boolean().optional() }))
     .query(async ({ input }) => {
-      const found = await getCustomerByPhoneOrCpf(input.phone);
+      const found = await getCustomerByPhoneOrCpf(input.phone, input.isCpf === true);
       if (!found) return { status: "not_found" as const };
       const { customer: cust, resolvedPhone } = found;
       if ((cust as any).blocked === 1) return { status: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
@@ -138,9 +142,9 @@ export const customerPasswordRouter = router({
   // â”€â”€ Verificar status da senha (mutation para uso dinâmico) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   checkStatusMutation: publicProcedure
-    .input(z.object({ phone: z.string() }))
+    .input(z.object({ phone: z.string(), isCpf: z.boolean().optional() }))
     .mutation(async ({ input }) => {
-      const found = await getCustomerByPhoneOrCpf(input.phone);
+      const found = await getCustomerByPhoneOrCpf(input.phone, input.isCpf === true);
       if (!found) return { status: "not_found" as const };
       const { customer: cust, resolvedPhone } = found;
       if ((cust as any).blocked === 1) return { status: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
@@ -162,10 +166,9 @@ export const customerPasswordRouter = router({
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanPhone = input.phone.replace(/\D/g, "");
-      const cleanCpf = input.cpf.replace(/\D/g, "");
-      if (cleanCpf.length !== 11) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido" });
-      // Formatar CPF como 000.000.000-00
-      const formattedCpf = `${cleanCpf.slice(0,3)}.${cleanCpf.slice(3,6)}.${cleanCpf.slice(6,9)}-${cleanCpf.slice(9)}`;
+      const cleanCpf = normalizeCpf(input.cpf);
+      if (!isValidCPF(cleanCpf)) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido" });
+      const formattedCpf = formatCPF(cleanCpf);
       // Verificar se CPF já pertence a outro cliente
       const existing = await db.select().from(customers)
         .where(eq(customers.cpf, formattedCpf)).limit(1);

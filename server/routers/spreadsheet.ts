@@ -14,6 +14,7 @@ import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from 
 import { findMainCustomerByIdentity, getRouteAccess, normalizeCustomerPhone, setCustomerRoutePermissions } from "../customerAccess";
 import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
+import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
 // Resolve o clientId a partir do token de sessão da planilha.
 // Lança UNAUTHORIZED se o token for inválido ou expirado.
@@ -373,9 +374,12 @@ export const spreadsheetRouter = router({
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
 
-        const raw = input.identifier.replace(/\D/g, '');
-        // Usar flag explícita enviada pelo frontend; nunca inferir CPF apenas pelo comprimento
+        // Usar flag explícita enviada pelo frontend; nunca inferir CPF apenas pelo comprimento.
         const isCpf = input.isCpf === true;
+        const raw = isCpf ? normalizeCpf(input.identifier) : input.identifier.replace(/\D/g, '');
+        if (isCpf && !isValidCPF(raw)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'CPF inválido' });
+        }
         const normalizedPhone = isCpf ? null : raw;
         const normalizedCpf = isCpf ? raw : null;
 
@@ -755,9 +759,12 @@ export const spreadsheetRouter = router({
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
 
-        const raw = input.phone.replace(/\D/g, '');
-        // Usar flag explícita; nunca inferir CPF apenas pelo comprimento do número
+        // Usar flag explícita; nunca inferir CPF apenas pelo comprimento do número.
         const isCpf = input.isCpf === true;
+        const raw = isCpf ? normalizeCpf(input.phone) : input.phone.replace(/\D/g, '');
+        if (isCpf && !isValidCPF(raw)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'CPF inválido' });
+        }
         
         let client: any = null;
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { toast } from "sonner";
 import { Gift, Lock, Trophy, Users, Ticket, CheckCircle2, Star, Phone, User, RefreshCw, Hash, LogOut } from "lucide-react";
 
@@ -300,27 +301,20 @@ export default function Raffle() {
                   else if (d.length > 6) f = `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
                   else if (d.length > 3) f = `${d.slice(0,3)}.${d.slice(3)}`;
                   setCpfValue(f);
-                  setCpfError('');
+                  setCpfError(d.length === 11 && !isValidCPF(d) ? 'CPF inválido. Digite um CPF válido para continuar.' : '');
                 }}
                 placeholder="000.000.000-00"
                 className={`w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 outline-none transition-all ${
-                  cpfError ? 'border-red-500' : cpfValue.replace(/\D/g,'').length === 11 ? 'border-green-500' : 'border-gray-300'
+                  cpfError ? 'border-red-500' : isValidCPF(cpfValue) ? 'border-green-500' : 'border-gray-300'
                 }`}
               />
               {cpfError && <p className="text-red-400 text-sm mt-1">{cpfError}</p>}
             </div>
             <button
-              disabled={cpfLoading || cpfValue.replace(/\D/g,'').length !== 11}
+              disabled={cpfLoading || !isValidCPF(cpfValue)}
               onClick={async () => {
-                const d = cpfValue.replace(/\D/g,'');
-                const isValid = (c: string) => {
-                  if (/^(\d)\1{10}$/.test(c)) return false;
-                  let s = 0; for (let i = 0; i < 9; i++) s += parseInt(c[i]) * (10 - i);
-                  let r = (s * 10) % 11; if (r >= 10) r = 0; if (r !== parseInt(c[9])) return false;
-                  s = 0; for (let i = 0; i < 10; i++) s += parseInt(c[i]) * (11 - i);
-                  r = (s * 10) % 11; if (r >= 10) r = 0; return r === parseInt(c[10]);
-                };
-                if (!isValid(d)) { setCpfError('CPF inválido'); return; }
+                const d = normalizeCpf(cpfValue);
+                if (!isValidCPF(d)) { setCpfError('CPF inválido. Digite um CPF válido para continuar.'); return; }
                 setCpfLoading(true);
                 try {
                   const res = await updateCpfMutation.mutateAsync({ phone: phoneDigits || savedPhone, cpf: d });

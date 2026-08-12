@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
+import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
 export const CUSTOMER_ROUTES = ["site", "gastos", "emprestimo"] as const;
 export type CustomerRoute = (typeof CUSTOMER_ROUTES)[number];
@@ -27,8 +28,8 @@ export function normalizeCustomerPhone(value: unknown): string {
 }
 
 export function normalizeCustomerCpf(value: unknown): string {
-  const digits = String(value ?? "").replace(/\D/g, "");
-  return /^\d{11}$/.test(digits) ? digits : "";
+  const cpf = normalizeCpf(value);
+  return /^\d{11}$/.test(cpf) ? cpf : "";
 }
 
 export function normalizeCustomerEmail(value: unknown): string {
@@ -36,19 +37,7 @@ export function normalizeCustomerEmail(value: unknown): string {
   return /^\S+@\S+\.\S+$/.test(email) ? email : "";
 }
 
-export function isValidBrazilianCpf(value: unknown): boolean {
-  const cpf = normalizeCustomerCpf(value);
-  if (!cpf || /^(\d)\1{10}$/.test(cpf)) return false;
-  const digit = (base: string, factor: number) => {
-    let sum = 0;
-    for (const char of base) sum += Number(char) * factor--;
-    const remainder = (sum * 10) % 11;
-    return remainder === 10 ? 0 : remainder;
-  };
-  const first = digit(cpf.slice(0, 9), 10);
-  const second = digit(cpf.slice(0, 9) + first, 11);
-  return first === Number(cpf[9]) && second === Number(cpf[10]);
-}
+export const isValidBrazilianCpf = isValidCPF;
 
 function samePhone(a: unknown, b: unknown): boolean {
   const left = normalizeCustomerPhone(a);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { toast } from "sonner";
 import { CheckCircle2, AlertCircle, ChevronRight, Zap, RefreshCw } from "lucide-react";
 
@@ -17,21 +18,6 @@ function maskPhone(value: string) {
   if (d.length <= 2) return d;
   if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-}
-
-function validateCpf(cpf: string): boolean {
-  const c = cpf.replace(/\D/g, "");
-  if (c.length !== 11 || /^(\d)\1+$/.test(c)) return false;
-  let s = 0;
-  for (let i = 0; i < 9; i++) s += parseInt(c[i]) * (10 - i);
-  let r = (s * 10) % 11;
-  if (r === 10 || r === 11) r = 0;
-  if (r !== parseInt(c[9])) return false;
-  s = 0;
-  for (let i = 0; i < 10; i++) s += parseInt(c[i]) * (11 - i);
-  r = (s * 10) % 11;
-  if (r === 10 || r === 11) r = 0;
-  return r === parseInt(c[10]);
 }
 
 function validateEmail(e: string) {
@@ -220,24 +206,25 @@ export default function PreCadastro() {
   const [duplicateRedirect, setDuplicateRedirect] = useState<string | null>(null);
 
   // Verificar duplicado quando CPF ou telefone estiver completo
-  const cpfClean = (values.cpf ?? "").replace(/\D/g, "");
+  const cpfClean = normalizeCpf(values.cpf ?? "");
+  const cpfValid = isValidCPF(cpfClean);
   const phoneClean = (values.phone ?? "").replace(/\D/g, "");
   const { data: dupCheck } = trpc.preRegistrations.checkDuplicate.useQuery(
-    { cpf: cpfClean.length === 11 ? cpfClean : undefined, phone: phoneClean.length >= 10 ? phoneClean : undefined },
-    { enabled: cpfClean.length === 11 || phoneClean.length >= 10, staleTime: 5000 }
+    { cpf: cpfValid ? cpfClean : undefined, phone: phoneClean.length >= 10 ? phoneClean : undefined },
+    { enabled: cpfValid || phoneClean.length >= 10, staleTime: 5000 }
   );
 
   useEffect(() => {
     if (dupCheck?.exists) {
       const params = new URLSearchParams();
-      if (cpfClean.length === 11) params.set("cpf", cpfClean);
+      if (cpfValid) params.set("cpf", cpfClean);
       else if (phoneClean.length >= 10) params.set("phone", phoneClean);
       // Redirecionar automaticamente para a página de status
       window.location.href = `/consultar-cadastro?${params.toString()}`;
     } else {
       setDuplicateRedirect(null);
     }
-  }, [dupCheck?.exists, cpfClean, phoneClean]);
+  }, [dupCheck?.exists, cpfClean, cpfValid, phoneClean]);
 
   const submitMutation = trpc.preRegistrations.submitDynamic.useMutation({
     onSuccess: () => setSubmitted(true),
@@ -249,6 +236,10 @@ export default function PreCadastro() {
 
   const setValue = (key: string, val: string) => {
     setValues((prev) => ({ ...prev, [key]: val }));
+    if (key === 'cpf' && normalizeCpf(val).length === 11 && !isValidCPF(val)) {
+      setErrors((prev) => ({ ...prev, [key]: 'CPF inválido' }));
+      return;
+    }
     if (errors[key]) setErrors((prev) => { const e = { ...prev }; delete e[key]; return e; });
   };
 
@@ -296,7 +287,7 @@ export default function PreCadastro() {
       if (!val) continue;
       if (q.fieldType === "cpf") {
         if (val.replace(/\D/g, "").length !== 11) { errs[q.fieldKey] = "CPF incompleto"; continue; }
-        if (!validateCpf(val)) { errs[q.fieldKey] = "CPF inválido"; continue; }
+        if (!isValidCPF(val)) { errs[q.fieldKey] = "CPF inválido"; continue; }
       }
       if (q.fieldType === "email" && !validateEmail(val)) {
         errs[q.fieldKey] = "E-mail inválido"; continue;

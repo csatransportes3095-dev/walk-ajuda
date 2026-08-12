@@ -3,6 +3,7 @@ import { router, publicProcedure, adminProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 import { sql as drizzleSql } from "drizzle-orm";
+import { formatCPF, isValidCPF, normalizeCpf } from "@shared/cpf";
 
 async function qRows(db: any, query: any): Promise<any[]> {
   const result = await db.execute(query);
@@ -11,23 +12,6 @@ async function qRows(db: any, query: any): Promise<any[]> {
   if (Array.isArray(result)) return result;
   if (result && Array.isArray(result.rows)) return result.rows;
   return [];
-}
-
-// Validação de CPF
-function validateCpf(cpf: string): boolean {
-  const clean = cpf.replace(/\D/g, "");
-  if (clean.length !== 11) return false;
-  if (/^(\d)\1+$/.test(clean)) return false;
-  let sum = 0;
-  for (let i = 0; i < 9; i++) sum += parseInt(clean[i]) * (10 - i);
-  let rest = (sum * 10) % 11;
-  if (rest === 10 || rest === 11) rest = 0;
-  if (rest !== parseInt(clean[9])) return false;
-  sum = 0;
-  for (let i = 0; i < 10; i++) sum += parseInt(clean[i]) * (11 - i);
-  rest = (sum * 10) % 11;
-  if (rest === 10 || rest === 11) rest = 0;
-  return rest === parseInt(clean[10]);
 }
 
 export const preRegistrationsRouter = router({
@@ -51,11 +35,11 @@ export const preRegistrationsRouter = router({
     }))
     .mutation(async ({ input }) => {
       // Validar CPF
-      const cleanCpf = input.cpf.replace(/\D/g, "");
-      if (!validateCpf(cleanCpf)) {
+      const cleanCpf = normalizeCpf(input.cpf);
+      if (!isValidCPF(cleanCpf)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido" });
       }
-      const cpfFormatted = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+      const cpfFormatted = formatCPF(cleanCpf);
 
       const db = await getDb() as any;
       const now = Date.now();
@@ -157,7 +141,10 @@ export const preRegistrationsRouter = router({
 
       if (fields.fullName !== undefined) setClauses.push(drizzleSql`fullName=${fields.fullName}`);
       if (fields.email !== undefined) setClauses.push(drizzleSql`email=${fields.email}`);
-      if (fields.cpf !== undefined) setClauses.push(drizzleSql`cpf=${fields.cpf}`);
+      if (fields.cpf !== undefined) {
+        if (!isValidCPF(fields.cpf)) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido" });
+        setClauses.push(drizzleSql`cpf=${formatCPF(fields.cpf)}`);
+      }
       if (fields.fakeAccountsCount !== undefined) setClauses.push(drizzleSql`fakAccountsCount=${fields.fakeAccountsCount}`);
       if (fields.deviceType !== undefined) setClauses.push(drizzleSql`deviceType=${fields.deviceType}`);
       if (fields.acceptsGlasses !== undefined) setClauses.push(drizzleSql`acceptsGlasses=${fields.acceptsGlasses ? 1 : 0}`);
@@ -188,10 +175,10 @@ export const preRegistrationsRouter = router({
       const db = await getDb() as any;
       let rows: any[] = [];
 
-      // Busca por CPF
-      if (input.cpf && input.cpf.replace(/\D/g, "").length === 11) {
-        const clean = input.cpf.replace(/\D/g, "");
-        const formatted = clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+      // Busca por CPF somente após aprovação matemática dos dígitos verificadores.
+      if (input.cpf) {
+        if (!isValidCPF(input.cpf)) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido" });
+        const formatted = formatCPF(input.cpf);
         rows = await qRows(db, drizzleSql`SELECT id, fullName, status, rejectionReason FROM preRegistrations WHERE cpf=${formatted} ORDER BY createdAt DESC LIMIT 1`);
       }
 
@@ -214,9 +201,9 @@ export const preRegistrationsRouter = router({
       const db = await getDb() as any;
       let found = false;
 
-      if (input.cpf && input.cpf.replace(/\D/g, "").length === 11) {
-        const clean = input.cpf.replace(/\D/g, "");
-        const formatted = clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+      if (input.cpf) {
+        if (!isValidCPF(input.cpf)) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido" });
+        const formatted = formatCPF(input.cpf);
         const rows = await qRows(db, drizzleSql`SELECT id FROM preRegistrations WHERE cpf=${formatted} LIMIT 1`);
         if (rows.length) found = true;
       }
@@ -313,6 +300,10 @@ export const preRegistrationsRouter = router({
       userAgent: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
+      const cpfAnswer = input.answers.find(answer => answer.fieldKey.trim().toLowerCase() === 'cpf');
+      if (cpfAnswer && !isValidCPF(cpfAnswer.answer)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'CPF inválido' });
+      }
       const db = await getDb() as any;
       const now = Date.now();
 
@@ -349,7 +340,7 @@ export const preRegistrationsRouter = router({
 
       const fullName = answerMap['fullName'] || answerMap['nome'] || answerMap['nomeCompleto'] || '';
       const email = answerMap['email'] || '';
-      const cpf = (answerMap['cpf'] || '').replace(/\D/g, '');
+      const cpf = normalizeCpf(answerMap['cpf'] || '');
       const phone = (answerMap['phone'] || answerMap['whatsapp'] || answerMap['telefone'] || '').replace(/\D/g, '');
       const fakeCount = parseInt(answerMap['fakeAccountsCount'] || '0') || 0;
       const device = (answerMap['deviceType'] || 'android') as string;
@@ -358,9 +349,7 @@ export const preRegistrationsRouter = router({
       const referralName = answerMap['referralName'] || null;
       const referralPhone = (answerMap['referralPhone'] || '').replace(/\D/g, '') || null;
 
-      const cpfFormatted = cpf.length === 11
-        ? cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
-        : cpf;
+      const cpfFormatted = cpf ? formatCPF(cpf) : '';
 
       await db.execute(drizzleSql`
         UPDATE preRegistrations SET

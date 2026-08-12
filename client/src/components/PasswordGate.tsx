@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { ESTADOS_BR, CIDADES_POR_UF } from "@/lib/brasilData";
 import { trpc } from "@/lib/trpc";
+import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { Zap, Lock, Eye, EyeOff, Clock, Phone, Download, X, UserPlus, MessageCircle, AlertTriangle, CheckCircle2, User, Mail, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -385,7 +386,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const phoneDigits = getPhoneDigits(clientPhone);
-    const cpfDigits = clientCpf.replace(/\D/g, '');
+    const cpfDigits = normalizeCpf(clientCpf);
+    if (cpfDigits.length === 11 && !isValidCPF(cpfDigits)) {
+      toast.error('CPF inválido. Digite um CPF válido para continuar.');
+      return;
+    }
     // Usar telefone se preenchido, senão CPF
     const inputDigits = phoneDigits.length === 11 ? phoneDigits : cpfDigits;
     if (inputDigits.length !== 11) {
@@ -401,7 +406,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     setIsCheckingPhone(true);
     try {
       // Verificar status da senha (aceita telefone ou CPF)
-      const cpwdStatus = await cpwdCheckStatusMutation.mutateAsync({ phone: inputDigits });
+      const cpwdStatus = await cpwdCheckStatusMutation.mutateAsync({ phone: inputDigits, isCpf: phoneDigits.length !== 11 && cpfDigits.length === 11 });
       const status = cpwdStatus?.status;
 
       // Se o backend resolveu um telefone diferente (cliente entrou com CPF), guardar
@@ -570,21 +575,6 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     return `${digits.slice(0,5)}-${digits.slice(5)}`;
   }
 
-  function validateCpf(cpf: string): boolean {
-    const digits = cpf.replace(/\D/g, '');
-    if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return false;
-    let sum = 0;
-    for (let i = 0; i < 9; i++) sum += parseInt(digits[i]) * (10 - i);
-    let r = (sum * 10) % 11;
-    if (r === 10 || r === 11) r = 0;
-    if (r !== parseInt(digits[9])) return false;
-    sum = 0;
-    for (let i = 0; i < 10; i++) sum += parseInt(digits[i]) * (11 - i);
-    r = (sum * 10) % 11;
-    if (r === 10 || r === 11) r = 0;
-    return r === parseInt(digits[10]);
-  }
-
   function formatCpf(value: string): string {
     const digits = value.replace(/\D/g, '').slice(0, 11);
     if (digits.length <= 3) return digits;
@@ -599,7 +589,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     if (!regEmail.trim()) { toast.error("Preencha seu email"); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim())) { toast.error("Email inválido"); return; }
     if (!regCpf.trim() || regCpf.replace(/\D/g,'').length !== 11) { toast.error("Preencha o CPF"); return; }
-    if (!validateCpf(regCpf)) { toast.error("CPF inválido. Verifique os números e tente novamente."); return; }
+    if (!isValidCPF(regCpf)) { toast.error("CPF inválido. Verifique os números e tente novamente."); return; }
     if (!enteredByCpf && cpfDuplicado) { toast.error("Este CPF já está cadastrado no sistema."); return; }
     // Quando entrou pelo CPF, telefone é obrigatório
     if (enteredByCpf && getPhoneDigits(regPhone).length !== 11) { toast.error("Preencha o telefone com DDD (11 dígitos)"); return; }
@@ -1855,7 +1845,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                         setRegCpf(formatted);
                         setCpfDuplicado(false);
                         const digits = formatted.replace(/\D/g,'');
-                        if (digits.length === 11 && validateCpf(formatted)) {
+                        if (digits.length === 11 && isValidCPF(formatted)) {
                           try {
                             const res = await fetch(`/api/trpc/customers.checkCpf?input=${encodeURIComponent(JSON.stringify({ cpf: formatted }))}`)
                             const json = await res.json();
@@ -1865,11 +1855,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                       }}
                       className={`w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 outline-none transition-all ${
                         regCpf.replace(/\D/g,'').length === 11
-                          ? (cpfDuplicado || !validateCpf(regCpf)) ? 'border-red-500 focus:ring-2 focus:ring-red-400/30' : 'border-green-500 focus:ring-2 focus:ring-green-400/30'
+                          ? (cpfDuplicado || !isValidCPF(regCpf)) ? 'border-red-500 focus:ring-2 focus:ring-red-400/30' : 'border-green-500 focus:ring-2 focus:ring-green-400/30'
                           : 'border-black focus:border-primary focus:ring-2 focus:ring-primary/30'
                       }`} />
                   )}
-                  {!enteredByCpf && regCpf.replace(/\D/g,'').length === 11 && !validateCpf(regCpf) && (
+                  {!enteredByCpf && regCpf.replace(/\D/g,'').length === 11 && !isValidCPF(regCpf) && (
                     <p className="text-red-400 text-xs mt-1">CPF inválido. Verifique os números.</p>
                   )}
                   {!enteredByCpf && cpfDuplicado && (
@@ -2302,11 +2292,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     else if (digits.length > 6) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6)}`;
                     else if (digits.length > 3) formatted = `${digits.slice(0,3)}.${digits.slice(3)}`;
                     setUpdateCpfValue(formatted);
-                    setUpdateCpfError('');
+                    setUpdateCpfError(digits.length === 11 && !isValidCPF(digits) ? 'CPF inválido. Digite um CPF válido para continuar.' : '');
                   }}
                   placeholder="000.000.000-00"
                   className={`w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 outline-none transition-all ${
-                    updateCpfError ? 'border-red-500' : updateCpfValue.replace(/\D/g,'').length === 11 ? 'border-green-500' : 'border-black focus:border-primary'
+                    updateCpfError ? 'border-red-500' : isValidCPF(updateCpfValue) ? 'border-green-500' : 'border-black focus:border-primary'
                   }`}
                 />
                 {updateCpfError && <p className="text-red-400 text-sm mt-1">{updateCpfError}</p>}
@@ -2314,22 +2304,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
               <button
                 type="button"
-                disabled={updateCpfLoading || updateCpfValue.replace(/\D/g,'').length !== 11}
+                disabled={updateCpfLoading || !isValidCPF(updateCpfValue)}
                 onClick={async () => {
-                  const digits = updateCpfValue.replace(/\D/g,'');
-                  // Validação matemática do CPF
-                  const isValidCpf = (cpf: string) => {
-                    if (/^(\d)\1{10}$/.test(cpf)) return false;
-                    let sum = 0;
-                    for (let i = 0; i < 9; i++) sum += parseInt(cpf[i]) * (10 - i);
-                    let r = (sum * 10) % 11; if (r === 10 || r === 11) r = 0;
-                    if (r !== parseInt(cpf[9])) return false;
-                    sum = 0;
-                    for (let i = 0; i < 10; i++) sum += parseInt(cpf[i]) * (11 - i);
-                    r = (sum * 10) % 11; if (r === 10 || r === 11) r = 0;
-                    return r === parseInt(cpf[10]);
-                  };
-                  if (!isValidCpf(digits)) { setUpdateCpfError('CPF inválido'); return; }
+                  const digits = normalizeCpf(updateCpfValue);
+                  if (!isValidCPF(digits)) { setUpdateCpfError('CPF inválido. Digite um CPF válido para continuar.'); return; }
                   setUpdateCpfLoading(true);
                   try {
                     const res = await updateCpfMutation.mutateAsync({ phone: getPhoneDigits(clientPhone), cpf: digits });
@@ -2382,11 +2360,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     else if (digits.length > 6) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6)}`;
                     else if (digits.length > 3) formatted = `${digits.slice(0,3)}.${digits.slice(3)}`;
                     setCpwdAddCpfValue(formatted);
-                    setCpwdAddCpfError('');
+                    setCpwdAddCpfError(digits.length === 11 && !isValidCPF(digits) ? 'CPF inválido. Digite um CPF válido para continuar.' : '');
                   }}
                   placeholder="000.000.000-00"
                   className={`w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 outline-none transition-all ${
-                    cpwdAddCpfError ? 'border-red-500' : cpwdAddCpfValue.replace(/\D/g,'').length === 11 ? 'border-green-500' : 'border-black focus:border-primary'
+                    cpwdAddCpfError ? 'border-red-500' : isValidCPF(cpwdAddCpfValue) ? 'border-green-500' : 'border-black focus:border-primary'
                   }`}
                   autoFocus
                 />
@@ -2395,22 +2373,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
               <button
                 type="button"
-                disabled={cpwdAddCpfLoading || cpwdAddCpfValue.replace(/\D/g,'').length !== 11}
+                disabled={cpwdAddCpfLoading || !isValidCPF(cpwdAddCpfValue)}
                 onClick={async () => {
-                  const digits = cpwdAddCpfValue.replace(/\D/g,'');
-                  // Validação matemática do CPF
-                  const isValidCpf = (cpf: string) => {
-                    if (/^(\d)\1{10}$/.test(cpf)) return false;
-                    let sum = 0;
-                    for (let i = 0; i < 9; i++) sum += parseInt(cpf[i]) * (10 - i);
-                    let r = (sum * 10) % 11; if (r === 10 || r === 11) r = 0;
-                    if (r !== parseInt(cpf[9])) return false;
-                    sum = 0;
-                    for (let i = 0; i < 10; i++) sum += parseInt(cpf[i]) * (11 - i);
-                    r = (sum * 10) % 11; if (r === 10 || r === 11) r = 0;
-                    return r === parseInt(cpf[10]);
-                  };
-                  if (!isValidCpf(digits)) { setCpwdAddCpfError('CPF inválido. Verifique os dígitos.'); return; }
+                  const digits = normalizeCpf(cpwdAddCpfValue);
+                  if (!isValidCPF(digits)) { setCpwdAddCpfError('CPF inválido. Digite um CPF válido para continuar.'); return; }
                   setCpwdAddCpfLoading(true);
                   try {
                     await cpwdSaveCpfMutation.mutateAsync({ phone: getCanonicalPhone(), cpf: digits });

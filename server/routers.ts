@@ -30,6 +30,7 @@ import { ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRo
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
+import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { z } from "zod";
 import { chatRouter } from "./routers/chat";
 import { chatUsersRouter } from "./routers/chat-users";
@@ -1717,7 +1718,9 @@ export const appRouter = router({
     checkCpf: publicProcedure
       .input(z.object({ cpf: z.string().min(1) }))
       .query(async ({ input }) => {
-        const customer = await getCustomerByCpf(input.cpf);
+        const cpf = normalizeCpf(input.cpf);
+        if (!isValidCPF(cpf)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'CPF inválido' });
+        const customer = await getCustomerByCpf(cpf);
         // Verificar bloqueio de cadastro
         if (customer && (customer as any).blocked === 1) {
           return { exists: true, customerBlocked: true, blockReason: (customer as any).blockReason || 'Acesso bloqueado' };
@@ -1739,14 +1742,16 @@ export const appRouter = router({
       }),
 
     updateCpfByPhone: publicProcedure
-      .input(z.object({ phone: z.string().min(1), cpf: z.string().regex(/^\d{11}$/, 'CPF inválido') }))
+      .input(z.object({ phone: z.string().min(1), cpf: z.string().min(11, 'CPF inválido') }))
       .mutation(async ({ input }) => {
+        const cpf = normalizeCpf(input.cpf);
+        if (!isValidCPF(cpf)) return { success: false, message: 'CPF inválido' };
         const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
         if (!customer) return { success: false, message: 'Cliente não encontrado' };
-        // Verificar duplicidade
-        const existing = await getCustomerByCpf(input.cpf);
+        // Verificar duplicidade somente após a aprovação matemática do CPF.
+        const existing = await getCustomerByCpf(cpf);
         if (existing && existing.id !== customer.id) return { success: false, message: 'CPF já cadastrado' };
-        await updateCustomer(customer.id, { cpf: input.cpf });
+        await updateCustomer(customer.id, { cpf });
         return { success: true };
       }),
 
@@ -1767,6 +1772,9 @@ export const appRouter = router({
         await ensureCustomerIdentityInfrastructure();
         const lookupPhone = input.lookupIsCpf ? '' : normalizeCustomerPhone(input.lookupIdentifier);
         const lookupCpf = input.lookupIsCpf ? normalizeCustomerCpf(input.lookupIdentifier) : '';
+        if (input.lookupIsCpf && !isValidCPF(lookupCpf)) {
+          return { success: false, message: 'CPF inválido. Digite um CPF válido para continuar.' };
+        }
         const profile = {
           name: input.name.trim(),
           phone: normalizeCustomerPhone(input.phone),

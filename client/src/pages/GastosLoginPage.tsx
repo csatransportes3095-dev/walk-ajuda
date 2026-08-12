@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
+import { isValidCPF, normalizeCpf } from '@shared/cpf';
 
 interface GastosLoginPageProps {
   onLoginSuccess: (token: string, clientId: number, clientName: string) => void;
@@ -54,6 +55,9 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   const [phone, setPhone] = useState('');
   const [cpfInput, setCpfInput] = useState('');
   const activeField = phone.replace(/\D/g, '').length > 0 ? 'phone' : cpfInput.replace(/\D/g, '').length > 0 ? 'cpf' : null;
+  const cpfInputDigits = normalizeCpf(cpfInput);
+  const cpfInputValid = isValidCPF(cpfInputDigits);
+  const cpfInputInvalid = cpfInputDigits.length === 11 && !cpfInputValid;
   const [clientName, setClientName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -70,6 +74,9 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regCpf, setRegCpf] = useState('');
+  const regCpfDigits = normalizeCpf(regCpf);
+  const regCpfValid = isValidCPF(regCpfDigits);
+  const regCpfInvalid = regCpfDigits.length === 11 && !regCpfValid;
   const [regEmail, setRegEmail] = useState('');
   const [regCity, setRegCity] = useState('');
   const [regUf, setRegUf] = useState('');
@@ -128,7 +135,11 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
     e.preventDefault();
     setError('');
     const cleanPhone = phone.replace(/\D/g, '');
-    const cleanCpf = cpfInput.replace(/\D/g, '');
+    const cleanCpf = normalizeCpf(cpfInput);
+    if (cleanCpf.length === 11 && !isValidCPF(cleanCpf)) {
+      setError('CPF inválido. Digite um CPF válido para continuar.');
+      return;
+    }
     const useCpf = cleanCpf.length === 11;
     const cleanId = useCpf ? cleanCpf : cleanPhone;
     if (cleanId.length < 10) {
@@ -203,7 +214,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
 
     if (!regName.trim()) { setError('Informe seu nome completo'); return; }
     if (cleanPhone.length < 10) { setError('Informe um telefone válido'); return; }
-    if (cleanCpf.length !== 11) { setError('Informe um CPF válido (11 dígitos)'); return; }
+    if (!isValidCPF(cleanCpf)) { setError('CPF inválido. Digite um CPF válido para continuar.'); return; }
     if (!regEmail.trim() || !regEmail.includes('@')) { setError('Informe um e-mail válido'); return; }
     if (!regCity.trim()) { setError('Informe sua cidade'); return; }
     if (!regUf.trim() || regUf.length !== 2) { setError('Informe o estado (UF) com 2 letras'); return; }
@@ -418,13 +429,14 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
                     value={formatCpf(cpfInput)}
                     onChange={(e) => setCpfInput(e.target.value.replace(/\D/g, '').slice(0, 11))}
                     disabled={isLoading}
-                    className="h-11 bg-input border-border text-foreground placeholder:text-muted-foreground/70"
+                    className={`h-11 bg-input text-foreground placeholder:text-muted-foreground/70 ${cpfInputInvalid ? 'border-red-500 focus-visible:ring-red-500' : 'border-border'}`}
                   />
+                  {cpfInputInvalid && <p className="mt-1 text-xs font-medium text-red-400">CPF inválido. Digite um CPF válido para continuar.</p>}
                 </div>
               )}
               <Button
                 type="submit"
-                disabled={isLoading || (phone.replace(/\D/g, '').length < 10 && cpfInput.replace(/\D/g, '').length !== 11)}
+                disabled={isLoading || (phone.replace(/\D/g, '').length < 10 && !cpfInputValid)}
                 className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg"
               >
                 {isLoading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verificando...</> : gastosButtonText}
@@ -514,8 +526,9 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
                   value={formatCpf(regCpf)}
                   onChange={(e) => setRegCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
                   disabled={isLoading}
-                  className="h-10 bg-input border-border text-foreground text-sm"
+                  className={`h-10 bg-input text-foreground text-sm ${regCpfInvalid ? 'border-red-500 focus-visible:ring-red-500' : 'border-border'}`}
                 />
+                {regCpfInvalid && <p className="mt-1 text-xs font-medium text-red-400">CPF inválido. Digite um CPF válido para continuar.</p>}
               </div>
 
               {/* Email */}
@@ -560,7 +573,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
 
               <Button
                 type="submit"
-                disabled={isLoading || !regName || !regPhoto || regPhone.replace(/\D/g,'').length < 10 || regCpf.replace(/\D/g,'').length !== 11 || !regEmail || (!profileUpdateLookup && (!regCity || !regUf))}
+                disabled={isLoading || !regName || !regPhoto || regPhone.replace(/\D/g,'').length < 10 || !regCpfValid || !regEmail || (!profileUpdateLookup && (!regCity || !regUf))}
                 className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg mt-1"
               >
                 {isLoading
