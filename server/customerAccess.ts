@@ -134,6 +134,23 @@ export async function listRouteReleaseModes(dbArg?: any): Promise<Record<Custome
   return defaults;
 }
 
+async function syncLegacyLoanPermission(db: any, customerId: number, loanAllowed: boolean): Promise<void> {
+  try {
+    const customer = (await rows(db, sql`SELECT phone, cpf FROM customers WHERE id=${customerId} LIMIT 1`))[0];
+    if (!customer) return;
+    const phone = normalizeCustomerPhone(customer.phone);
+    const cpf = normalizeCustomerCpf(customer.cpf);
+    const loanClients = await rows(db, sql`SELECT id, phone, cpf FROM loanClients`);
+    const relatedIds = loanClients.filter((loanClient: any) =>
+      (phone && samePhone(loanClient.phone, phone)) ||
+      (cpf && normalizeCustomerCpf(loanClient.cpf) === cpf)
+    ).map((loanClient: any) => Number(loanClient.id)).filter(Boolean);
+    if (relatedIds.length) await db.execute(sql`UPDATE loanClients SET loanEnabled=${loanAllowed ? 1 : 0}, updatedAt=NOW() WHERE id IN (${sql.raw(relatedIds.join(','))})`);
+  } catch (error: any) {
+    console.warn('[customerAccess] espelho de Empréstimos não sincronizado:', error?.message);
+  }
+}
+
 export async function setCustomerRoutePermissions(
   customerId: number,
   routesInput: string[],
@@ -151,7 +168,24 @@ export async function setCustomerRoutePermissions(
       VALUES (${customerId}, ${route}, 'approved', ${grantedBy}, NOW(), NOW())
     `);
   }
+  await syncLegacyLoanPermission(db, customerId, routes.includes('emprestimo'));
   return routes;
+}
+
+export async function reconcileLegacyLoanPermissions(dbArg?: any): Promise<number> {
+  const db = dbArg || await getDb() as any;
+  if (!db) return 0;
+  await ensureCustomerIdentityInfrastructure(db);
+  const customers = await rows(db, sql`SELECT id FROM customers WHERE deletedAt IS NULL`);
+  let synchronized = 0;
+  for (const customer of customers) {
+    const customerId = Number(customer.id);
+    if (!customerId) continue;
+    const access = await getRouteAccess(customerId, db);
+    await syncLegacyLoanPermission(db, customerId, !access.restricted || access.routes.includes('emprestimo'));
+    synchronized++;
+  }
+  return synchronized;
 }
 
 export type CustomerRouteState = {

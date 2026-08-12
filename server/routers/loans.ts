@@ -28,6 +28,14 @@ function getBrazilToday(): string {
 function onlyDigits(value: unknown) {
   return String(value || '').replace(/\D/g, '');
 }
+async function syncLegacyLoanAccess(db: any, session: any, enabled: boolean): Promise<void> {
+  const token = String(session?.token || '').trim();
+  const loanRows = await qRows(db, drizzleSql`SELECT id, cpf, phone, spreadsheetToken FROM loanClients`);
+  const relatedIds = loanRows.filter((row: any) => String(row.spreadsheetToken || '').trim() === token || isSameLoanIdentity(row, session?.cpf, session?.phone)).map((row: any) => Number(row.id)).filter(Boolean);
+  if (!relatedIds.length) return;
+  await db.execute(drizzleSql`UPDATE loanClients SET loanEnabled=${enabled ? 1 : 0}, updatedAt=NOW() WHERE id IN (${drizzleSql.raw(relatedIds.join(','))})`);
+}
+
 async function requireLoanRouteAccess(db: any, rawToken: string): Promise<any> {
   const token = rawToken.trim();
   const sessions = await qRows(db, drizzleSql`
@@ -47,7 +55,9 @@ async function requireLoanRouteAccess(db: any, rawToken: string): Promise<any> {
   const mainCustomer = await findMainCustomerByIdentity({ phone: session.phone, cpf: session.cpf }, db);
   if (!mainCustomer) throw new TRPCError({ code: 'FORBIDDEN', message: 'Conclua o cadastro principal para continuar.' });
   const access = await getRouteAccess(mainCustomer.id, db);
-  if (access.restricted && !access.routes.includes('emprestimo')) {
+  const loanAllowed = !access.restricted || access.routes.includes('emprestimo');
+  await syncLegacyLoanAccess(db, session, loanAllowed);
+  if (!loanAllowed) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso não autorizado para a área de Empréstimos.' });
   }
   return session;
@@ -480,7 +490,7 @@ export const loanRouter = router({
     const db = await getDb() as any;
     await requireLoanRouteAccess(db, input.token);
     await ensureInstallmentPlansTable(db);
-    const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${input.token.trim()} AND loanEnabled=1`);
+    const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${input.token.trim()}`);
     if (!clients.length) throw new TRPCError({ code: 'UNAUTHORIZED' });
     const client = clients[0];
     const allowed = (client.allowedPaymentTypes || '').split(',').map((t: string) => t.trim());
@@ -537,7 +547,7 @@ export const loanRouter = router({
     const db = await getDb() as any;
     await requireLoanRouteAccess(db, input.token);
     await ensureInstallmentPlansTable(db);
-    const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${input.token.trim()} AND loanEnabled=1`);
+    const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${input.token.trim()}`);
     if (!clients.length) throw new TRPCError({ code: 'UNAUTHORIZED' });
     const client = clients[0];
     if (!client.client_pix_key || !client.client_pix_name || !client.client_pix_bank) {
@@ -1424,7 +1434,6 @@ export const loanRouter = router({
     try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
       console.warn('[loans.getClientLoanInfo] sincronização unificada não aplicada:', error?.message);
     }
-    if (!client.loanEnabled) return { enabled: false, client, loans: [], pixConfig: null };
 
     // Um mesmo cliente pode ter sido vinculado por token, CPF ou telefone em momentos diferentes.
     // Reunimos esses vínculos para o empréstimo atual nunca ficar escondido por um cadastro antigo quitado.
@@ -1589,7 +1598,7 @@ export const loanRouter = router({
     const db = await getDb() as any;
     await requireLoanRouteAccess(db, input.token);
     const token = input.token.trim();
-    const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token} AND loanEnabled=1`);
+    const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED", message: "Empréstimos não habilitados para este cliente" });
     const client = clients[0];
     if (parseFloat(client.creditLimit) < input.amount) {
@@ -1624,7 +1633,7 @@ export const loanRouter = router({
     const db = await getDb() as any;
     await requireLoanRouteAccess(db, input.token);
     const token = input.token.trim();
-    const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token} AND loanEnabled=1`);
+    const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED", message: "Empréstimos não habilitados para este cliente" });
     const client = clients[0];
 

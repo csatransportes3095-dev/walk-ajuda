@@ -16,7 +16,7 @@ import { serveStatic, setupVite } from "./vite";
 import { isIpBlocked, getSetting } from "../db";
 import { broadcastEmailHandler } from "../broadcastEmailHandler";
 import { sendMail } from "./mailer";
-import { ensureCustomerIdentityInfrastructure } from "../customerAccess";
+import { ensureCustomerIdentityInfrastructure, reconcileLegacyLoanPermissions } from "../customerAccess";
 import { bootstrapCardInvoices } from "../cardsBilling";
 import path from "path";
 import fs from "fs";
@@ -65,6 +65,12 @@ async function startServer() {
   // operação compartilhada quando necessário. Assim, uma reconciliação longa não derruba o site no deploy.
   void bootstrapCardInvoices().catch((error) => {
     console.error('[CardsBilling] infraestrutura de faturas não inicializada:', error);
+  });
+  // Reconciliador assíncrono: aplica as rotas do ADM a todos os registros legados de Empréstimos.
+  void reconcileLegacyLoanPermissions().then((total) => {
+    console.log(`[LoanAccess] permissões reconciliadas para ${total} clientes.`);
+  }).catch((error) => {
+    console.error('[LoanAccess] reconciliação de permissões não concluída:', error);
   });
   registerUploadRoute(app);
   registerApkDownloadRoute(app);
