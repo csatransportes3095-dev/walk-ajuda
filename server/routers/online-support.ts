@@ -4,7 +4,7 @@ import { z } from "zod";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { onlineSupportConversations } from "../../drizzle/schema";
-import { requireOnlineEntrySession } from "../online-support/entry";
+import { getOnlineCustomerOrders, getOnlineOrderDetails, requireOnlineEntrySession } from "../online-support/entry";
 import { CUSTOMER_ROUTES, requestCustomerRouteAccess } from "../customerAccess";
 import { cancelOnlineRegistrationDraft, findOnlineRegistrationIdentity, getOnlineRegistrationDraft, saveOnlineRegistrationDraft } from "../online-support/registration";
 import {
@@ -88,6 +88,14 @@ export const onlineSupportRouter = router({
         return { authenticated: false, message: error?.message || 'Sessão inválida.' };
       }
     }),
+
+  entryOrders: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ input }) => getOnlineCustomerOrders(input.token)),
+
+  entryOrderDetails: publicProcedure
+    .input(z.object({ token: z.string().min(1), registrationId: z.number().int().positive() }))
+    .query(async ({ input }) => getOnlineOrderDetails(input.token, input.registrationId)),
 
   entryRequestRoute: publicProcedure
     .input(z.object({ token: z.string().min(1), route: z.enum(CUSTOMER_ROUTES) }))

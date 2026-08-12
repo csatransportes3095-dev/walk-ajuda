@@ -49,6 +49,47 @@ export async function requireOnlineEntrySession(token: string): Promise<OnlineEn
   };
 }
 
+export async function getOnlineCustomerOrders(token: string) {
+  const session = await requireOnlineEntrySession(token);
+  const db = await getDb() as any;
+  const rows = resultRows(await db.execute(sql`
+    SELECT acp.id AS registrationId,
+           COALESCE(NULLIF(lastStatus.orderNumber, 0), firstStatus.orderNumber) AS orderNumber,
+           COALESCE(NULLIF(lastStatus.serviceName, 'NULL'), NULLIF(firstStatus.serviceName, 'NULL')) AS serviceName,
+           COALESCE(NULLIF(lastStatus.serviceOption, 'NULL'), NULLIF(firstStatus.serviceOption, 'NULL')) AS serviceOption,
+           lastStatus.status AS status, lastStatus.note AS note,
+           lastStatus.deliveryEstimate AS deliveryEstimate, lastStatus.createdAt AS updatedAt,
+           acp.accessedAt AS createdAt
+    FROM accessCodePhones acp
+    LEFT JOIN (SELECT registrationId, MAX(id) AS id FROM orderStatusHistory GROUP BY registrationId) latest ON latest.registrationId=acp.id
+    LEFT JOIN orderStatusHistory lastStatus ON lastStatus.id=latest.id
+    LEFT JOIN (SELECT registrationId, MIN(id) AS id FROM orderStatusHistory GROUP BY registrationId) firstRow ON firstRow.registrationId=acp.id
+    LEFT JOIN orderStatusHistory firstStatus ON firstStatus.id=firstRow.id
+    WHERE acp.phone=${session.phone} AND COALESCE(acp.archived, 0)=0
+    ORDER BY acp.accessedAt DESC
+  `));
+  return rows.map((row: any) => ({
+    registrationId: Number(row.registrationId), orderNumber: row.orderNumber == null ? null : Number(row.orderNumber),
+    serviceName: row.serviceName || null, serviceOption: row.serviceOption || null, status: row.status || null,
+    note: row.note || null, deliveryEstimate: row.deliveryEstimate == null ? null : Number(row.deliveryEstimate),
+    createdAt: row.createdAt || null, updatedAt: row.updatedAt || null,
+  }));
+}
+
+export async function getOnlineOrderDetails(token: string, registrationId: number) {
+  const session = await requireOnlineEntrySession(token);
+  const db = await getDb() as any;
+  const ownership = resultRows(await db.execute(sql`SELECT id FROM accessCodePhones WHERE id=${registrationId} AND phone=${session.phone} LIMIT 1`));
+  if (!ownership[0]) throw new Error('Pedido não pertence ao cliente autenticado.');
+  const history = resultRows(await db.execute(sql`
+    SELECT orderNumber, status, note, serviceName, serviceOption, pricePaid, answers, deliveryEstimate, createdAt
+    FROM orderStatusHistory WHERE registrationId=${registrationId} AND customerPhone=${session.phone}
+    ORDER BY createdAt ASC, id ASC
+  `));
+  if (!history.length) throw new Error('Pedido não encontrado.');
+  return { registrationId, current: history[history.length - 1], history };
+}
+
 export async function requireOnlineRoute(token: string, route: CustomerRoute) {
   const session = await requireOnlineEntrySession(token);
   const access = await hasRouteAccess(session.customerId, route);
