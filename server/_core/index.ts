@@ -61,12 +61,11 @@ async function startServer() {
     console.error('[CustomerIdentity] infraestrutura não inicializada:', error);
   }
   // A migração de cartões cria primeiro cópias de backup e só depois prepara faturas históricas.
-  // Falhas são registradas sem impedir a inicialização das demais áreas do site.
-  try {
-    await bootstrapCardInvoices();
-  } catch (error) {
+  // Ela é executada sem bloquear a abertura da API; as rotas de cartão também aguardam a mesma
+  // operação compartilhada quando necessário. Assim, uma reconciliação longa não derruba o site no deploy.
+  void bootstrapCardInvoices().catch((error) => {
     console.error('[CardsBilling] infraestrutura de faturas não inicializada:', error);
-  }
+  });
   registerUploadRoute(app);
   registerApkDownloadRoute(app);
   ensureApkTable().catch(console.error);
