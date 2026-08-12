@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, KeyRound, LogOut, Package, WalletCards } from "lucide-react";
+import { ArrowLeft, BarChart3, KeyRound, LogOut, Package, WalletCards } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 const ENTRY_TOKEN_KEY = "walk_online_entry_token";
@@ -153,7 +153,10 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
       </>}
       <button disabled={!canRequestRoute('emprestimo') || routeMut.isPending} onClick={() => requestRoute('emprestimo')} style={routeButtonStyle('emprestimo')}>{routeLabel('emprestimo', 'Acessar Empréstimos')}</button>
     </div>
-    <button disabled={!canRequestRoute('gastos') || routeMut.isPending} onClick={() => requestRoute('gastos')} style={routeButtonStyle('gastos')}>{routeLabel('gastos', 'Acessar Controle de Gastos')}</button>
+    <div style={cardStyle}><BarChart3 size={20} color="#22c55e" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Controle de Ganhos e Gastos</strong>
+      <p style={{ ...smallStyle, margin: '5px 0 0' }}>Acompanhe seus ganhos, despesas e resultados.</p>
+      <button disabled={!canRequestRoute('gastos') || routeMut.isPending} onClick={() => requestRoute('gastos')} style={routeButtonStyle('gastos')}>{routeLabel('gastos', 'Acessar Controle de Gastos')}</button>
+    </div>
   </div>;
 }
 
