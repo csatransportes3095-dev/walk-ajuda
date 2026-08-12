@@ -5,7 +5,7 @@ import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { onlineSupportConversations } from "../../drizzle/schema";
 import { getOnlineCustomerLoans, getOnlineCustomerOrders, getOnlineLoanInstallments, getOnlineOrderDetails, requireOnlineEntrySession, submitOnlineInstallmentProof } from "../online-support/entry";
-import { CUSTOMER_ROUTES, getCustomerRouteStates, getRouteAccess, getRouteReleaseMode, requestCustomerRouteAccess, setCustomerRoutePermissions } from "../customerAccess";
+import { CUSTOMER_ROUTES, findMainCustomerByIdentity, getCustomerRouteStates, getRouteAccess, getRouteReleaseMode, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions } from "../customerAccess";
 import { cancelOnlineRegistrationDraft, findOnlineRegistrationIdentity, getOnlineRegistrationDraft, saveOnlineRegistrationDraft } from "../online-support/registration";
 import {
   clearLogs,
@@ -78,6 +78,24 @@ async function ensureConversationOwnership(conversationId: number, visitorId: st
 }
 
 export const onlineSupportRouter = router({
+  entryStartByPhone: publicProcedure
+    .input(z.object({ phone: z.string().min(1), referralPhone: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const phone = normalizeCustomerPhone(input.phone);
+      if (!phone) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Informe um telefone válido com DDD.' });
+      const customer = await findMainCustomerByIdentity({ phone });
+      if (customer) {
+        if (Number(customer.blocked || 0) === 1) return { status: 'blocked' as const };
+        return { status: 'existing' as const, phone };
+      }
+      if (!input.referralPhone) return { status: 'new' as const, phone };
+      const referralPhone = normalizeCustomerPhone(input.referralPhone);
+      if (!referralPhone || referralPhone === phone) return { status: 'referral_invalid' as const, phone };
+      const referrer = await findMainCustomerByIdentity({ phone: referralPhone });
+      if (!referrer || Number(referrer.blocked || 0) === 1) return { status: 'referral_invalid' as const, phone };
+      return { status: 'referral_valid' as const, phone, referralPhone };
+    }),
+
   entrySession: publicProcedure
     .input(z.object({ token: z.string().min(1) }))
     .query(async ({ input }) => {

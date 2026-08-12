@@ -5,13 +5,13 @@ import { trpc } from "@/lib/trpc";
 const steps = ['route','name','phone','cpf','email','cep','city','uf','photo','confirm'] as const;
 type Step = typeof steps[number];
 type Route = 'site' | 'acompanhar' | 'gastos' | 'emprestimo';
-type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void };
+type Props = { conversationId: number; visitorId: string; initialPhone?: string; referredByPhone?: string; onBack: () => void; onDone: () => void };
 
 function toBase64(file: File) { return new Promise<string>((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result)); r.onerror = reject; r.readAsDataURL(file); }); }
 
-export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone }: Props) {
+export function OnlineRegistrationPanel({ conversationId, visitorId, initialPhone = '', referredByPhone = '', onBack, onDone }: Props) {
   const [index, setIndex] = useState(0); const [route, setRoute] = useState<Route>('site');
-  const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', city: '', uf: '', profilePhotoUrl: '' });
+  const [data, setData] = useState({ name: '', phone: initialPhone.replace(/\D/g, ''), cpf: '', email: '', cep: '', city: '', uf: '', profilePhotoUrl: '' });
   const [value, setValue] = useState(''); const [file, setFile] = useState<File | null>(null); const [error, setError] = useState('');
   const [existingCustomer, setExistingCustomer] = useState<{ name: string; customerNumber: number | null } | null>(null);
   const step = steps[index];
@@ -23,20 +23,20 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
 
   const advance = async () => {
     setError('');
-    if (step === 'route') { await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step, field: 'route', value: route }); setIndex(1); return; }
+    if (step === 'route') { await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step, data: { route, phone: data.phone, referredByPhone } }); setIndex(1); return; }
     if (step === 'photo') {
       if (!file) { setError('A foto é obrigatória.'); return; }
       const imageBase64 = await toBase64(file); const result = await uploadPhoto.mutateAsync({ imageBase64, phone: data.phone.replace(/\D/g,'') });
       const profilePhotoUrl = result.url; setData(old => ({ ...old, profilePhotoUrl })); await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step, field: 'profilePhotoUrl', value: profilePhotoUrl }); setIndex(index + 1); return;
     }
     if (step === 'confirm') {
-      const result = await register.mutateAsync({ ...data, phone: data.phone.replace(/\D/g,''), sourceRoute: route });
+      const result = await register.mutateAsync({ ...data, phone: data.phone.replace(/\D/g,''), referredByPhone: referredByPhone || undefined, sourceRoute: route });
       if (!result.success) { setError(result.message || 'Não foi possível concluir o cadastro.'); return; }
       await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step: 'confirm', data: { ...data, route } }); onDone(); return;
     }
     const field = step as keyof typeof data;
     // Cidade e UF preenchidas pelo CEP precisam ser salvas mesmo sem nova digitação.
-    let cleaned = (value.trim() || ((step === 'city' || step === 'uf') ? data[field] : '')).trim();
+    let cleaned = (value.trim() || ((step === 'city' || step === 'uf' || step === 'phone') ? data[field] : '')).trim();
     if (step === 'phone' || step === 'cpf' || step === 'cep') cleaned = cleaned.replace(/\D/g, '');
     if (step === 'uf') cleaned = cleaned.toUpperCase().slice(0,2);
     try {
@@ -68,7 +68,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
   return <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
     <button onClick={onBack} style={back}><ArrowLeft size={15}/> Voltar</button>
     <div style={card}><div style={{ color:'#a78bfa', fontWeight:800, fontSize:12 }}>CADASTRO GUIADO · {index + 1}/{steps.length}</div><h3 style={{ color:'#fff', margin:'8px 0 5px', fontSize:16 }}>{title}</h3>
-      {step === 'route' ? <div style={{ display:'grid', gap:8 }}>{([['site','Site de Pedidos'],['acompanhar','Acompanhar Pedido'],['gastos','Controle de Gastos'],['emprestimo','Empréstimos']] as [Route,string][]).map(([key,label]) => <button key={key} onClick={() => setRoute(key)} style={{ ...choice, borderColor: route===key ? '#818cf8' : 'rgba(255,255,255,.12)', background: route===key ? 'rgba(99,102,241,.2)' : 'rgba(255,255,255,.04)' }}>{label}</button>)}</div> : step === 'photo' ? <label style={{ ...choice, display:'block', textAlign:'center' }}><Camera size={22} style={{ marginBottom:6 }}/><div>{file ? file.name : 'Escolher foto'}</div><input type="file" accept="image/*" capture="user" onChange={e => setFile(e.target.files?.[0] || null)} style={{ display:'none' }}/></label> : step === 'confirm' ? <div style={{ fontSize:12, color:'rgba(255,255,255,.7)', lineHeight:1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>E-mail:</b> {data.email}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div></div> : <input value={value || (step === 'city' ? data.city : step === 'uf' ? data.uf : '')} onChange={e => { setValue(e.target.value); setError(''); setExistingCustomer(null); }} placeholder={step === 'cep' ? 'Opcional' : 'Digite aqui'} inputMode={['phone','cpf','cep'].includes(step) ? 'numeric' : undefined} style={input}/>}\n      {error && <p style={{ color:'#fca5a5', fontSize:12, margin:'9px 0 0' }}>{error}</p>}
+      {step === 'route' ? <div style={{ display:'grid', gap:8 }}>{([['site','Site de Pedidos'],['acompanhar','Acompanhar Pedido'],['gastos','Controle de Gastos'],['emprestimo','Empréstimos']] as [Route,string][]).map(([key,label]) => <button key={key} onClick={() => setRoute(key)} style={{ ...choice, borderColor: route===key ? '#818cf8' : 'rgba(255,255,255,.12)', background: route===key ? 'rgba(99,102,241,.2)' : 'rgba(255,255,255,.04)' }}>{label}</button>)}</div> : step === 'photo' ? <label style={{ ...choice, display:'block', textAlign:'center' }}><Camera size={22} style={{ marginBottom:6 }}/><div>{file ? file.name : 'Escolher foto'}</div><input type="file" accept="image/*" capture="user" onChange={e => setFile(e.target.files?.[0] || null)} style={{ display:'none' }}/></label> : step === 'confirm' ? <div style={{ fontSize:12, color:'rgba(255,255,255,.7)', lineHeight:1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>E-mail:</b> {data.email}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div></div> : <input value={value || (step === 'phone' ? data.phone : step === 'city' ? data.city : step === 'uf' ? data.uf : '')} onChange={e => { setValue(e.target.value); setError(''); setExistingCustomer(null); }} placeholder={step === 'cep' ? 'Opcional' : 'Digite aqui'} inputMode={['phone','cpf','cep'].includes(step) ? 'numeric' : undefined} style={input}/>}\n      {error && <p style={{ color:'#fca5a5', fontSize:12, margin:'9px 0 0' }}>{error}</p>}
       {existingCustomer && <button onClick={onDone} style={{ ...primary, marginTop:10, background:'rgba(59,130,246,.18)', border:'1px solid rgba(96,165,250,.55)', color:'#bfdbfe' }}>Entrar como cliente</button>}
       <button disabled={loading || !!existingCustomer} onClick={advance} style={{ ...primary, opacity: existingCustomer ? .45 : 1, cursor: existingCustomer ? 'not-allowed' : 'pointer' }}>{loading ? 'Processando...' : step === 'confirm' ? 'Confirmar cadastro' : 'Continuar'}</button></div>
   </div>;
