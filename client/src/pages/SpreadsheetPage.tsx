@@ -12,9 +12,22 @@ import { ChatSidebar } from "@/components/ChatSidebar";
 import { LoansTab } from "./LoansTab";
 import { ServicosExtras } from "@/components/ServicosExtras";
 import { H2ParticularModule } from "@/components/private-transport/H2ParticularModule";
+import { DashboardModuleCard, DashboardExternalModuleCard } from "@/components/DashboardModuleCard";
 
 const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 const DATE_COLORS = ["#ff6b6b", "#4ecdc4", "#45b7d1", "#f9ca24", "#6c5ce7", "#a29bfe", "#fd79a8", "#fdcb6e", "#6c5ce7", "#00b894"];
+
+const MODULE_THEMES = {
+  gastos: { base: '#4a1420', active: '#e65367', border: '#873142', icon: '#ff9aa8', glow: 'rgba(230,83,103,.33)' },
+  ganhos: { base: '#123c2c', active: '#22c77a', border: '#287455', icon: '#73e8ad', glow: 'rgba(34,199,122,.30)' },
+  operacional: { base: '#493214', active: '#d99a2b', border: '#886121', icon: '#ffd27a', glow: 'rgba(217,154,43,.30)' },
+  metas: { base: '#351c56', active: '#9d63e6', border: '#633a93', icon: '#d1b0ff', glow: 'rgba(157,99,230,.32)' },
+  graficos: { base: '#182f64', active: '#4076e6', border: '#30529a', icon: '#9cbcff', glow: 'rgba(64,118,230,.32)' },
+  emprestimos: { base: '#123f43', active: '#1bb8be', border: '#267378', icon: '#7be8e6', glow: 'rgba(27,184,190,.31)' },
+  analisador: { base: '#513017', active: '#ed8a2f', border: '#93511f', icon: '#ffc181', glow: 'rgba(237,138,47,.32)' },
+  particular: { base: '#103d56', active: '#19b9d5', border: '#287694', icon: '#89ebfb', glow: 'rgba(25,185,213,.34)' },
+  cartoes: { base: '#32205b', active: '#9861e9', border: '#60429c', icon: '#cbb0ff', glow: 'rgba(152,97,233,.34)' },
+} as const;
 
 interface Earning {
   id: string;
@@ -205,6 +218,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     return `${year}-${month}`;
   };
   const [selectedMonth, setSelectedMonth] = useState(getTodayLocal());
+  const [activeModule, setActiveModule] = useState("gastos");
   const tableRef = useRef<HTMLDivElement>(null);
 
   // ─── ESTADO DOS MODAIS DE EDIÇÃO ─────────────────────────────────────────────
@@ -1254,78 +1268,39 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
         </div>
 
         {/* Seletor de Mês */}
-        <div className="mb-6 max-w-xs">
-          <label className="block text-sm font-medium mb-2 text-muted-foreground">Selecionar Mês</label>
+        <div className="mb-4 max-w-md">
+          <label className="mb-2 flex items-center gap-2 text-sm font-bold tracking-wide text-foreground">
+            <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" /> Selecionar Mês
+          </label>
           <Input
             type="month"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="h-11 bg-input border-border text-foreground focus-visible:border-ring"
+            className="h-12 rounded-xl border-primary/30 bg-card/80 px-4 font-semibold text-foreground shadow-sm transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/35"
           />
         </div>
 
         {/* Abas */}
-        <Tabs defaultValue="gastos" className="w-full">
-          <TabsList className="grid grid-cols-3 gap-2 h-auto bg-transparent p-0 mb-4">
-            {/* GASTOS */}
-            <TabsTrigger value="gastos" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#ff6b6b] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#c0392b] data-[state=active]:text-white data-[state=active]:border-[#c0392b] active:scale-95">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-              <span>Gastos</span>
-            </TabsTrigger>
-            {/* GANHOS */}
-            <TabsTrigger value="ganhos" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#2ecc71] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#27ae60] data-[state=active]:text-white data-[state=active]:border-[#27ae60] active:scale-95">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
-              <span>Ganhos</span>
-            </TabsTrigger>
-            {/* OPERACIONAL */}
-            <TabsTrigger value="operacional" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#3498db] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#2980b9] data-[state=active]:text-white data-[state=active]:border-[#2980b9] active:scale-95">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <span>Operacional</span>
-            </TabsTrigger>
-            {/* METAS */}
-            <TabsTrigger value="metas" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#9b59b6] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#8e44ad] data-[state=active]:text-white data-[state=active]:border-[#8e44ad] active:scale-95">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-              <span>Metas</span>
-            </TabsTrigger>
-            {/* GRÁFICOS */}
-            <TabsTrigger value="graficos" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#1abc9c] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#16a085] data-[state=active]:text-white data-[state=active]:border-[#16a085] active:scale-95">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-              <span>Gráficos</span>
-            </TabsTrigger>
-            {/* EMPRÉSTIMOS */}
-            <TabsTrigger value="emprestimos" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#f39c12] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#e67e22] data-[state=active]:text-white data-[state=active]:border-[#e67e22] active:scale-95">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
-              <span>Empréstimos</span>
-            </TabsTrigger>
-            {/* ANALISADOR */}
-            <TabsTrigger value="analisador" className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#e74c3c] font-semibold text-[10px] uppercase tracking-wide transition-colors data-[state=active]:bg-[#c0392b] data-[state=active]:text-white data-[state=active]:border-[#c0392b] active:scale-95">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M20 2v4h-4"/></svg>
-              <span>Analisador</span>
-            </TabsTrigger>
-            {/* H2 PARTICULAR */}
-            <TabsTrigger value="particular" className="relative flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl border border-cyan-300/80 bg-gradient-to-br from-cyan-500/30 via-sky-500/20 to-indigo-500/30 text-cyan-100 font-bold text-[10px] uppercase tracking-wide shadow-[0_0_18px_rgba(34,211,238,0.32)] transition-all hover:-translate-y-0.5 hover:shadow-[0_0_25px_rgba(34,211,238,0.45)] data-[state=active]:bg-cyan-400 data-[state=active]:text-slate-950 data-[state=active]:border-cyan-200 active:scale-95">
-              <span className="absolute -right-2 -top-2 rounded-full border border-cyan-100/60 bg-cyan-300 px-1.5 py-0.5 text-[8px] font-black tracking-wider text-slate-950 shadow-lg">NOVO</span>
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14v-5l-2-5H7l-2 5v5Z"/><circle cx="8.5" cy="17" r="1.5"/><circle cx="15.5" cy="17" r="1.5"/><path d="M8 7V4h8v3"/></svg>
-              <span>Particular</span>
-            </TabsTrigger>
-            {/* CARTÕES — atalho externo */}
-            <button
-              onClick={() => window.location.href = '/cartoes'}
-              className="flex flex-col items-center justify-center gap-1.5 h-[72px] rounded-xl bg-[#1e1e1e] border border-[#333] text-[#a29bfe] font-semibold text-[10px] uppercase tracking-wide transition-colors hover:bg-[#2d2d2d] active:scale-95"
-              style={{ cursor: 'pointer' }}
-            >
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-              <span>Cartões</span>
-            </button>
+        <Tabs value={activeModule} onValueChange={setActiveModule} className="w-full">
+          <TabsList aria-label="Módulos da Planilha de Gastos" className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] sm:grid-cols-3 lg:grid-cols-9 gap-2 sm:gap-3 h-auto bg-transparent p-0 mb-5">
+            <DashboardModuleCard value="gastos" label="Gastos" selected={activeModule === 'gastos'} theme={MODULE_THEMES.gastos} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>} />
+            <DashboardModuleCard value="ganhos" label="Ganhos" selected={activeModule === 'ganhos'} theme={MODULE_THEMES.ganhos} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>} />
+            <DashboardModuleCard value="operacional" label="Operacional" selected={activeModule === 'operacional'} theme={MODULE_THEMES.operacional} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>} />
+            <DashboardModuleCard value="metas" label="Metas" selected={activeModule === 'metas'} theme={MODULE_THEMES.metas} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>} />
+            <DashboardModuleCard value="graficos" label="Gráficos" selected={activeModule === 'graficos'} theme={MODULE_THEMES.graficos} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>} />
+            <DashboardModuleCard value="emprestimos" label="Empréstimos" selected={activeModule === 'emprestimos'} theme={MODULE_THEMES.emprestimos} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>} />
+            <DashboardModuleCard value="analisador" label="Analisador" selected={activeModule === 'analisador'} theme={MODULE_THEMES.analisador} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M20 2v4h-4"/></svg>} />
+            <DashboardModuleCard value="particular" label="Particular" badge="NOVO" selected={activeModule === 'particular'} theme={MODULE_THEMES.particular} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14v-5l-2-5H7l-2 5v5Z"/><circle cx="8.5" cy="17" r="1.5"/><circle cx="15.5" cy="17" r="1.5"/><path d="M8 7V4h8v3"/></svg>} />
+            <DashboardExternalModuleCard label="Cartões" selected={false} theme={MODULE_THEMES.cartoes} onClick={() => window.location.href = '/cartoes'} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>} />
           </TabsList>
 
           {/* H2 PARTICULAR */}
-          <TabsContent value="particular" className="space-y-4">
+          <TabsContent value="particular" className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
             <H2ParticularModule token={token} />
           </TabsContent>
 
           {/* Aba Gastos */}
-          <TabsContent value="gastos" className="space-y-4">
+          <TabsContent value="gastos" className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
             {/* Data + botão */}
             <div className="flex gap-3">
               <Input
@@ -1494,7 +1469,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </TabsContent>
 
           {/* Aba Ganhos */}
-          <TabsContent value="ganhos" className="space-y-4">
+          <TabsContent value="ganhos" className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
             {/* Data + botão */}
             <div className="flex gap-3">
               <Input
@@ -1928,7 +1903,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               };
 
               return (
-                <div className="space-y-4">
+                <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
                   {/* ─── NOTIFICAÇÃO MOTIVACIONAL FLUTUANTE ─── */}
                   {activeMilestone && (
                     <div
@@ -2091,11 +2066,11 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
             </div>
           </TabsContent>
 
-          <TabsContent value="emprestimos" className="space-y-4">
+          <TabsContent value="emprestimos" className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
             <LoansTab token={token} />
           </TabsContent>
 
-          <TabsContent value="analisador" className="space-y-4">
+          <TabsContent value="analisador" className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
             <RideAnalyzerTab token={token} />
           </TabsContent>
         </Tabs>
@@ -2240,7 +2215,7 @@ function RideAnalyzerTab({ token }: { token: string }) {
   const todayTotal = todayEarning ? ['uber','ninetynine','indrive','particular','deliveries','tips','otherEarnings'].reduce((s, k) => s + parseFloat((todayEarning as any)[k] || '0'), 0) : 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
       {/* Resumo do dia */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-emerald-900/30 border border-emerald-500/30 rounded-xl p-3 text-center">
