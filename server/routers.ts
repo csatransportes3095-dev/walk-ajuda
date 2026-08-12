@@ -2106,11 +2106,10 @@ export const appRouter = router({
         if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
 
         if (phoneChanged) {
+          // Pedidos, arquivos e dados de login de pedido são históricos vinculados ao
+          // registrationId do pedido. Eles não podem acompanhar uma simples edição de
+          // telefone do cadastro principal, pois isso transferiria pedidos a outro cliente.
           const propagationQueries = [
-            sql`UPDATE accessCodePhones SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
-            sql`UPDATE orderStatusHistory SET customerPhone = ${newPhone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${oldPhone}`,
-            sql`UPDATE orderLoginData SET customerPhone = ${newPhone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${oldPhone}`,
-            sql`UPDATE orderFiles SET customerPhone = ${newPhone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${oldPhone}`,
             sql`UPDATE customerPasswordSessions SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
             sql`UPDATE customerPasswords SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
             sql`UPDATE customerLoginHistory SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
@@ -4379,6 +4378,44 @@ export const appRouter = router({
           LIMIT 1
         `);
         return { success: true };
+      }),
+
+    // Admin: corrigir o titular de um pedido específico sem excluir histórico,
+    // status, respostas, arquivos ou informações financeiras.
+    reassignCustomer: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive(), targetCustomerId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const db = await (await import('./db')).getDb() as any;
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
+
+        const targetRows = await db.execute(sql`
+          SELECT id, name, phone, customerNumber
+          FROM customers
+          WHERE id = ${input.targetCustomerId} AND deletedAt IS NULL
+          LIMIT 1
+        `);
+        const target = (targetRows[0] as unknown as Array<{ id: number; name: string; phone: string; customerNumber: number | null }>)[0];
+        if (!target?.phone) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente de destino não encontrado' });
+
+        const orderRows = await db.execute(sql`
+          SELECT COUNT(*) AS total
+          FROM orderStatusHistory
+          WHERE registrationId = ${input.registrationId}
+        `);
+        const total = Number((orderRows[0] as unknown as Array<{ total: number }>)[0]?.total || 0);
+        if (!total) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pedido não encontrado' });
+
+        const targetPhone = String(target.phone).replace(/\D/g, '');
+        await db.execute(sql`UPDATE accessCodePhones SET phone = ${targetPhone} WHERE id = ${input.registrationId}`);
+        await db.execute(sql`UPDATE orderStatusHistory SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`);
+        await db.execute(sql`UPDATE orderLoginData SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`);
+        await db.execute(sql`UPDATE orderFiles SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`);
+
+        return {
+          success: true,
+          registrationId: input.registrationId,
+          customer: { id: target.id, name: target.name, customerNumber: target.customerNumber, phone: targetPhone },
+        };
       }),
 
     // Admin: marcar/desmarcar pedido como urgente
