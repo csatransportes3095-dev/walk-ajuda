@@ -10,6 +10,7 @@ import {
   createGoal, getGoalsByUserAndMonth, updateGoal, deleteGoal,
 } from "../db";
 import { getDb } from "../db";
+import { syncUnifiedCustomerRegistry } from "../customerIdentity";
 import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 
@@ -972,6 +973,7 @@ export const spreadsheetRouter = router({
           phone: normalizedPhone,
           name: input.name,
           status: "active",
+          allowedRoutes: "gastos",
           createdAt: new Date(),
           updatedAt: new Date(),
         });
@@ -989,6 +991,9 @@ export const spreadsheetRouter = router({
           createdAt: new Date(),
         });
 
+        try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+          console.warn('[spreadsheet.adminCreateClient] sincronização unificada não aplicada:', error?.message);
+        }
         return {
           success: true,
           clientId,
@@ -1574,19 +1579,21 @@ export const spreadsheetRouter = router({
           expiresAt,
         });
 
-                // Limpar o vencimento preservado após uso e salvar rota de origem
+                // Limpar o vencimento preservado e registrar apenas a rota onde o cadastro foi concluído.
+        // Quando a origem não vier informada, este fluxo é da planilha e libera somente gastos.
         const updateSet: any = { preservedExpiresAt: null };
-        if (input.sourceRoute) {
-          // Adicionar a rota de origem se ainda não estiver nas rotas permitidas
-          const existingRoutes = ((client as any).allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
-          if (!existingRoutes.includes(input.sourceRoute)) {
-            existingRoutes.push(input.sourceRoute);
-          }
-          updateSet.allowedRoutes = existingRoutes.join(',');
+        const routeOrigin = input.sourceRoute || 'gastos';
+        const existingRoutes = ((client as any).allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
+        if (!existingRoutes.includes(routeOrigin)) {
+          existingRoutes.push(routeOrigin);
         }
+        updateSet.allowedRoutes = existingRoutes.join(',');
         await db.update(spreadsheetClients)
           .set(updateSet)
           .where(eq(spreadsheetClients.id, client.id));
+        try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+          console.warn('[spreadsheet.clientCreatePasswordAuto] sincronização unificada não aplicada:', error?.message);
+        }
         return { success: true, clientName: client.name, expiresAt: expiresAt.toISOString() };
       } catch (error) {
         if (error instanceof TRPCError) throw error;

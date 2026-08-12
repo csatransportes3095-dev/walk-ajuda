@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
 import { getDb, createFinancialSale } from "../db";
+import { syncUnifiedCustomerRegistry } from "../customerIdentity";
 import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
@@ -749,6 +750,9 @@ export const loanRouter = router({
           notes=${input.notes || null}, updatedAt=NOW()
         WHERE id=${input.id}
       `);
+      try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+        console.warn('[loans.saveClient] sincronização unificada não aplicada:', error?.message);
+      }
       return { id: input.id };
     } else {
       const result = await db.execute(drizzleSql`
@@ -759,6 +763,9 @@ export const loanRouter = router({
           ${resolvedAllowedTypes}, ${input.pixKey || null}, ${input.pixKeyType || null},
           ${input.pixName || null}, ${input.pixKey || null}, ${input.pixName || null}, ${input.spreadsheetToken || null}, ${input.notes || null}, 1)
       `);
+      try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+        console.warn('[loans.saveClient] sincronização unificada não aplicada:', error?.message);
+      }
       return { id: (result[0] as any).insertId };
     }
   }),
@@ -1381,6 +1388,9 @@ export const loanRouter = router({
     }
 
     const client = clients[0];
+    try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+      console.warn('[loans.getClientLoanInfo] sincronização unificada não aplicada:', error?.message);
+    }
     if (!client.loanEnabled) return { enabled: false, client, loans: [], pixConfig: null };
 
     // Um mesmo cliente pode ter sido vinculado por token, CPF ou telefone em momentos diferentes.
@@ -1770,10 +1780,14 @@ export const loanRouter = router({
       const sc = clients[0];
       const profiles = await qRows(db, drizzleSql`SELECT * FROM loanProfiles WHERE slug='bronze' AND isActive=1 LIMIT 1`);
       const profile = profiles[0];
+      const paymentTypes = profile?.defaultPaymentTypes || 'diario';
       await db.execute(drizzleSql`
         INSERT INTO loanClients (userId, name, cpf, phone, status, profileSlug, creditLimit, interestRate, maxDays, loanEnabled, allowedPaymentTypes)
-        VALUES (1, ${sc.name}, ${sc.cpf || null}, ${sc.phone}, 'ativo', 'bronze', ${profile?.creditLimit || 500}, ${profile?.interestRate || 5}, ${profile?.maxDays || 30}, ${input.enabled}, 'diario,semanal,mensal')
+        VALUES (1, ${sc.name}, ${sc.cpf || null}, ${sc.phone}, 'ativo', 'bronze', ${profile?.creditLimit || 500}, ${profile?.interestRate || 5}, ${profile?.maxDays || 30}, ${input.enabled}, ${paymentTypes})
       `);
+    }
+    try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+      console.warn('[loans.toggleLoanByPhone] sincronização unificada não aplicada:', error?.message);
     }
     return { ok: true };
   }),

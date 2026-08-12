@@ -25,6 +25,7 @@ import { spreadsheetRouter } from "./routers/spreadsheet";
 import { loanRouter } from "./routers/loans";
 import { apkRouter } from "./routers/apk";
 import { customerPasswordRouter } from "./routers/customerPassword";
+import { syncUnifiedCustomerRegistry } from "./customerIdentity";
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -1850,6 +1851,10 @@ export const appRouter = router({
       }),
 
     list: adminProcedure.query(async () => {
+      // Executa a reconciliação dos cadastros legados antes de mostrar a lista principal.
+      try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+        console.warn('[customers.list] sincronização unificada não aplicada:', error?.message);
+      }
       const db = await (await import('./db')).getDb();
       if (!db) return [];
       // Buscar clientes com flag indicando se têm pedido finalizado
@@ -2009,6 +2014,11 @@ export const appRouter = router({
               console.warn('[customers.update] sincronização de telefone não aplicada:', error?.message);
             }
           }
+        }
+        // Reúne novamente todos os cadastros com o mesmo CPF/telefone, para que
+        // /gastos e /emprestimo recebam os dados atualizados do cadastro principal.
+        try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+          console.warn('[customers.update] sincronização unificada não aplicada:', error?.message);
         }
         return updated;
       }),

@@ -1,0 +1,124 @@
+import { sql } from 'drizzle-orm';
+import { getDb } from './db';
+
+type IdentityRow = {
+  id: number;
+  name?: string | null;
+  phone?: string | null;
+  cpf?: string | null;
+  allowedRoutes?: string | null;
+};
+
+export function digits(value: unknown): string {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+export function isSameCustomerIdentity(a: Pick<IdentityRow, 'phone' | 'cpf'>, b: Pick<IdentityRow, 'phone' | 'cpf'>): boolean {
+  const cpfA = digits(a.cpf);
+  const cpfB = digits(b.cpf);
+  if (cpfA.length === 11 && cpfA === cpfB) return true;
+
+  const phoneA = digits(a.phone);
+  const phoneB = digits(b.phone);
+  if (!phoneA || !phoneB) return false;
+  return phoneA === phoneB || phoneA.endsWith(phoneB) || phoneB.endsWith(phoneA);
+}
+
+async function rows(db: any, query: any): Promise<any[]> {
+  const result = await db.execute(query);
+  return (result[0] || result || []) as any[];
+}
+
+/**
+ * Sincroniza os dados compartilhados do mesmo cliente entre as tabelas
+ * customers (cadastro principal), spreadsheetClients (gastos) e loanClients
+ * (empréstimos). Não transfere permissões nem dados financeiros: cada módulo
+ * conserva suas próprias regras e apenas nome, CPF e telefone são unificados.
+ */
+export async function syncUnifiedCustomerRegistry(): Promise<{ customersCreated: number; spreadsheetCreated: number; synchronized: number }> {
+  const db = await getDb() as any;
+  if (!db) return { customersCreated: 0, spreadsheetCreated: 0, synchronized: 0 };
+
+  const customerRows = await rows(db, sql`SELECT id, name, phone, cpf FROM customers WHERE deletedAt IS NULL`);
+  const spreadsheetRows = await rows(db, sql`SELECT id, name, phone, cpf, allowedRoutes FROM spreadsheetClients`);
+  const loanRows = await rows(db, sql`SELECT id, name, phone, cpf FROM loanClients`);
+
+  const canonicalCustomers: IdentityRow[] = [...customerRows];
+  let customersCreated = 0;
+  let spreadsheetCreated = 0;
+  let synchronized = 0;
+
+  // Cadastros antigos de gastos e empréstimos passam a aparecer no cadastro principal.
+  for (const source of [...spreadsheetRows, ...loanRows]) {
+    const sourcePhone = digits(source.phone);
+    if (!sourcePhone) continue; // customers exige telefone; não inventar dado ausente.
+    let main = canonicalCustomers.find(customer => isSameCustomerIdentity(customer, source));
+    if (!main) {
+      const insert = await db.execute(sql`
+        INSERT INTO customers (name, phone, cpf, createdAt, updatedAt)
+        VALUES (${String(source.name || 'CLIENTE').trim() || 'CLIENTE'}, ${sourcePhone}, ${digits(source.cpf) || null}, NOW(), NOW())
+      `);
+      const id = Number((insert[0] as any)?.insertId || 0);
+      main = { id, name: source.name, phone: sourcePhone, cpf: digits(source.cpf) || null };
+      canonicalCustomers.push(main);
+      customersCreated++;
+    }
+  }
+
+  // O cadastro principal é a fonte dos dados de identidade. Não altera PIX,
+  // perfil, limites, parcelas ou rotas já concedidas nos módulos.
+  for (const main of canonicalCustomers) {
+    const mainPhone = digits(main.phone);
+    const mainCpf = digits(main.cpf);
+    if (!mainPhone) continue;
+
+    const relatedSpreadsheet = spreadsheetRows.filter(row => isSameCustomerIdentity(row, main));
+    const relatedLoans = loanRows.filter(row => isSameCustomerIdentity(row, main));
+
+    for (const row of relatedSpreadsheet) {
+      const targetName = String(main.name || row.name || 'CLIENTE');
+      if (String(row.name || '') === targetName && digits(row.phone) === mainPhone && digits(row.cpf) === mainCpf) continue;
+      try {
+        await db.execute(sql`
+          UPDATE spreadsheetClients
+          SET name=${targetName}, phone=${mainPhone}, cpf=${mainCpf || null}, updatedAt=NOW()
+          WHERE id=${row.id}
+        `);
+        synchronized++;
+      } catch (error: any) {
+        console.warn('[customerIdentity] não foi possível sincronizar gastos:', error?.message);
+      }
+    }
+
+    for (const row of relatedLoans) {
+      const targetName = String(main.name || row.name || 'CLIENTE');
+      if (String(row.name || '') === targetName && digits(row.phone) === mainPhone && digits(row.cpf) === mainCpf) continue;
+      try {
+        await db.execute(sql`
+          UPDATE loanClients
+          SET name=${targetName}, phone=${mainPhone}, cpf=${mainCpf || null}, updatedAt=NOW()
+          WHERE id=${row.id}
+        `);
+        synchronized++;
+      } catch (error: any) {
+        console.warn('[customerIdentity] não foi possível sincronizar empréstimos:', error?.message);
+      }
+    }
+
+    // Um cadastro existente somente em empréstimos recebe o registro técnico da
+    // planilha para controlar rotas. A permissão automática é somente emprestimo.
+    if (relatedLoans.length && !relatedSpreadsheet.length) {
+      try {
+        await db.execute(sql`
+          INSERT INTO spreadsheetClients (phone, name, cpf, status, allowedRoutes, createdAt, updatedAt)
+          VALUES (${mainPhone}, ${String(main.name || 'CLIENTE')}, ${mainCpf || null}, 'active', 'emprestimo', NOW(), NOW())
+        `);
+        spreadsheetCreated++;
+      } catch (error: any) {
+        console.warn('[customerIdentity] não foi possível criar vínculo de rota empréstimo:', error?.message);
+      }
+    }
+  }
+
+  return { customersCreated, spreadsheetCreated, synchronized };
+}
