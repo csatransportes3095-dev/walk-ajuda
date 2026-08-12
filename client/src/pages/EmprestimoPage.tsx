@@ -48,6 +48,7 @@ export function EmprestimoPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string | null>(null);
+  const [requiredProfilePhone, setRequiredProfilePhone] = useState<string>('');
   const [savedToken] = useState<string>(() => localStorage.getItem(TOKEN_KEY) || '');
   const [isLoading, setIsLoading] = useState<boolean>(() => !!localStorage.getItem(TOKEN_KEY));
 
@@ -67,7 +68,16 @@ export function EmprestimoPage() {
   useEffect(() => {
     if (!savedToken) { setIsLoading(false); return; }
     if (verifyQuery.isLoading) return;
-    if (verifyQuery.data?.valid) {
+    if (verifyQuery.data?.valid && verifyQuery.data.profileIncomplete) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(CLIENT_ID_KEY);
+      localStorage.removeItem(CLIENT_NAME_KEY);
+      setRequiredProfilePhone(verifyQuery.data.clientPhone || '');
+      setToken(null);
+      setClientName(null);
+      setIsLoggedIn(false);
+      setIsLoading(false);
+    } else if (verifyQuery.data?.valid) {
       setToken(savedToken);
       const name = verifyQuery.data.clientName ?? localStorage.getItem(CLIENT_NAME_KEY);
       setClientName(name);
@@ -93,6 +103,7 @@ export function EmprestimoPage() {
     localStorage.setItem(TOKEN_KEY, newToken);
     localStorage.setItem(CLIENT_ID_KEY, String(newClientId));
     localStorage.setItem(CLIENT_NAME_KEY, newClientName);
+    setRequiredProfilePhone('');
     setToken(newToken);
     setClientName(newClientName);
     setIsLoggedIn(true);
@@ -104,6 +115,7 @@ export function EmprestimoPage() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(CLIENT_ID_KEY);
     localStorage.removeItem(CLIENT_NAME_KEY);
+    setRequiredProfilePhone('');
     setToken(null);
     setClientName(null);
     setIsLoggedIn(false);
@@ -121,7 +133,7 @@ export function EmprestimoPage() {
   }
 
   if (!isLoggedIn) {
-    return <GastosLoginPage onLoginSuccess={handleLoginSuccess} sourceRoute="emprestimo" />;
+    return <GastosLoginPage onLoginSuccess={handleLoginSuccess} sourceRoute="emprestimo" requiredProfilePhone={requiredProfilePhone || undefined} />;
   }
 
   // Verificar permissão de rota (null = ainda carregando, não bloquear)

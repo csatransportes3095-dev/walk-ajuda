@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 interface GastosLoginPageProps {
   onLoginSuccess: (token: string, clientId: number, clientName: string) => void;
   sourceRoute?: string; // 'gastos' ou 'emprestimo'
+  requiredProfilePhone?: string;
 }
 
 type Step =
@@ -41,7 +42,7 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPageProps) {
+export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePhone }: GastosLoginPageProps) {
   const { data: settings } = trpc.settings.getAll.useQuery();
   const gastosLogoUrl = settings?.gastos_logo_url || '';
   const gastosTitle = settings?.gastos_title || 'GASTOS WALK AJUDA';
@@ -76,6 +77,16 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
   const [regPhotoPreview, setRegPhotoPreview] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const phoneToComplete = normalizePhone(requiredProfilePhone || '');
+    if (!phoneToComplete) return;
+    setProfileUpdateLookup({ identifier: phoneToComplete, isCpf: false });
+    setPhone(phoneToComplete);
+    setRegPhone(phoneToComplete);
+    setError('Atualize obrigatoriamente foto, e-mail, CPF e telefone para continuar.');
+    setStep('register');
+  }, [requiredProfilePhone]);
 
   const checkPhoneMutation = trpc.spreadsheet.checkPhone.useMutation();
   const clientCreatePasswordMutation = trpc.spreadsheet.clientCreatePassword.useMutation();
@@ -556,9 +567,11 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute }: GastosLoginPage
                   ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{isUploadingPhoto ? 'Enviando foto...' : 'Cadastrando...'}</>
                   : profileUpdateLookup ? '✅ Atualizar meu cadastro' : '✅ Criar minha conta'}
               </Button>
-              <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
-                ← Voltar
-              </button>
+              {!requiredProfilePhone && (
+                <button type="button" onClick={resetToPhone} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">
+                  ← Voltar
+                </button>
+              )}
             </form>
           )}
 

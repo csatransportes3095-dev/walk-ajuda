@@ -915,13 +915,28 @@ export const spreadsheetRouter = router({
         const clientResult = await db.select().from(spreadsheetClients)
           .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
         
-        const client = clientResult?.[0] || null;
-
+                const client = clientResult?.[0] || null;
+        if (!client) return { valid: false };
+        try {
+          await requireCompleteMainCustomerProfile(db, { phone: client.phone || '', cpf: client.cpf || '' });
+        } catch (profileError: any) {
+          return {
+            valid: true,
+            profileIncomplete: true,
+            clientId: session.clientId,
+            clientName: client.name,
+            clientPhone: client.phone,
+            message: profileError?.message || 'Atualize foto, e-mail, CPF e telefone para continuar.',
+          };
+        }
         return {
           valid: true,
+          profileIncomplete: false,
           clientId: session.clientId,
-          clientName: client?.name,
+          clientName: client.name,
+          clientPhone: client.phone,
         };
+
       } catch (error) {
         return { valid: false };
       }
