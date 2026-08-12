@@ -13,7 +13,9 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
   const [index, setIndex] = useState(0); const [route, setRoute] = useState<Route>('site');
   const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', city: '', uf: '', profilePhotoUrl: '' });
   const [value, setValue] = useState(''); const [file, setFile] = useState<File | null>(null); const [error, setError] = useState('');
+  const [existingCustomer, setExistingCustomer] = useState<{ name: string; customerNumber: number | null } | null>(null);
   const step = steps[index];
+  const utils = trpc.useUtils();
   const saveDraft = trpc.onlineSupport.registrationDraftSave.useMutation();
   const uploadPhoto = trpc.customers.uploadProfilePhoto.useMutation();
   const register = trpc.customers.register.useMutation();
@@ -32,13 +34,33 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
       if (!result.success) { setError(result.message || 'Não foi possível concluir o cadastro.'); return; }
       await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step: 'confirm', data: { ...data, route } }); onDone(); return;
     }
-    const field = step as keyof typeof data; let cleaned = value.trim();
+    const field = step as keyof typeof data;
+    // Cidade e UF preenchidas pelo CEP precisam ser salvas mesmo sem nova digitação.
+    let cleaned = (value.trim() || ((step === 'city' || step === 'uf') ? data[field] : '')).trim();
     if (step === 'phone' || step === 'cpf' || step === 'cep') cleaned = cleaned.replace(/\D/g, '');
     if (step === 'uf') cleaned = cleaned.toUpperCase().slice(0,2);
     try {
+      // Telefone, CPF e e-mail são conferidos imediatamente no cadastro principal.
+      if (step === 'phone' || step === 'cpf' || step === 'email') {
+        const identity = await utils.onlineSupport.registrationFindExisting.fetch({ [step]: cleaned });
+        if (identity.exists) {
+          setExistingCustomer(identity.customer);
+          setError(`Cadastro já localizado para ${identity.customer.name}. Entre na sua área; não continue como novo cadastro.`);
+          return;
+        }
+      }
       await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step, field, value: cleaned });
-      const next = { ...data, [field]: cleaned }; setData(next); setValue('');
-      if (step === 'cep' && cleaned.length === 8) { const r = await fetch(`https://viacep.com.br/ws/${cleaned}/json/`); const c = await r.json(); if (!c.erro) { next.city = c.localidade || next.city; next.uf = c.uf || next.uf; setData(next); } }
+      let next = { ...data, [field]: cleaned };
+      setData(next);
+      setValue('');
+      if (step === 'cep' && cleaned.length === 8) {
+        const response = await fetch(`https://viacep.com.br/ws/${cleaned}/json/`);
+        const address = await response.json();
+        if (!address.erro) {
+          next = { ...next, city: address.localidade || next.city, uf: address.uf || next.uf };
+          setData(next);
+        }
+      }
       setIndex(index + 1);
     } catch (e: any) { setError(e?.message || 'Verifique o dado informado.'); }
   };
@@ -46,8 +68,9 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
   return <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
     <button onClick={onBack} style={back}><ArrowLeft size={15}/> Voltar</button>
     <div style={card}><div style={{ color:'#a78bfa', fontWeight:800, fontSize:12 }}>CADASTRO GUIADO · {index + 1}/{steps.length}</div><h3 style={{ color:'#fff', margin:'8px 0 5px', fontSize:16 }}>{title}</h3>
-      {step === 'route' ? <div style={{ display:'grid', gap:8 }}>{([['site','Site de Pedidos'],['gastos','Controle de Gastos'],['emprestimo','Empréstimos']] as [Route,string][]).map(([key,label]) => <button key={key} onClick={() => setRoute(key)} style={{ ...choice, borderColor: route===key ? '#818cf8' : 'rgba(255,255,255,.12)', background: route===key ? 'rgba(99,102,241,.2)' : 'rgba(255,255,255,.04)' }}>{label}</button>)}</div> : step === 'photo' ? <label style={{ ...choice, display:'block', textAlign:'center' }}><Camera size={22} style={{ marginBottom:6 }}/><div>{file ? file.name : 'Escolher foto'}</div><input type="file" accept="image/*" capture="user" onChange={e => setFile(e.target.files?.[0] || null)} style={{ display:'none' }}/></label> : step === 'confirm' ? <div style={{ fontSize:12, color:'rgba(255,255,255,.7)', lineHeight:1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>E-mail:</b> {data.email}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div></div> : <input value={value || (step === 'city' ? data.city : step === 'uf' ? data.uf : '')} onChange={e => setValue(e.target.value)} placeholder={step === 'cep' ? 'Opcional' : 'Digite aqui'} inputMode={['phone','cpf','cep'].includes(step) ? 'numeric' : undefined} style={input}/>} 
-      {error && <p style={{ color:'#fca5a5', fontSize:12, margin:'9px 0 0' }}>{error}</p>}<button disabled={loading} onClick={advance} style={primary}>{loading ? 'Processando...' : step === 'confirm' ? 'Confirmar cadastro' : 'Continuar'}</button></div>
+      {step === 'route' ? <div style={{ display:'grid', gap:8 }}>{([['site','Site de Pedidos'],['gastos','Controle de Gastos'],['emprestimo','Empréstimos']] as [Route,string][]).map(([key,label]) => <button key={key} onClick={() => setRoute(key)} style={{ ...choice, borderColor: route===key ? '#818cf8' : 'rgba(255,255,255,.12)', background: route===key ? 'rgba(99,102,241,.2)' : 'rgba(255,255,255,.04)' }}>{label}</button>)}</div> : step === 'photo' ? <label style={{ ...choice, display:'block', textAlign:'center' }}><Camera size={22} style={{ marginBottom:6 }}/><div>{file ? file.name : 'Escolher foto'}</div><input type="file" accept="image/*" capture="user" onChange={e => setFile(e.target.files?.[0] || null)} style={{ display:'none' }}/></label> : step === 'confirm' ? <div style={{ fontSize:12, color:'rgba(255,255,255,.7)', lineHeight:1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>E-mail:</b> {data.email}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div></div> : <input value={value || (step === 'city' ? data.city : step === 'uf' ? data.uf : '')} onChange={e => { setValue(e.target.value); setError(''); setExistingCustomer(null); }} placeholder={step === 'cep' ? 'Opcional' : 'Digite aqui'} inputMode={['phone','cpf','cep'].includes(step) ? 'numeric' : undefined} style={input}/>}\n      {error && <p style={{ color:'#fca5a5', fontSize:12, margin:'9px 0 0' }}>{error}</p>}
+      {existingCustomer && <button onClick={onDone} style={{ ...primary, marginTop:10, background:'rgba(59,130,246,.18)', border:'1px solid rgba(96,165,250,.55)', color:'#bfdbfe' }}>Entrar como cliente</button>}
+      <button disabled={loading || !!existingCustomer} onClick={advance} style={{ ...primary, opacity: existingCustomer ? .45 : 1, cursor: existingCustomer ? 'not-allowed' : 'pointer' }}>{loading ? 'Processando...' : step === 'confirm' ? 'Confirmar cadastro' : 'Continuar'}</button></div>
   </div>;
 }
 const card: React.CSSProperties={ background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.11)', borderRadius:14, padding:15};
