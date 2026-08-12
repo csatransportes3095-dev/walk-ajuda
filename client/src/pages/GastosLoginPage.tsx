@@ -66,7 +66,8 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [passwordCreated, setPasswordCreated] = useState(false);
-  const [profileUpdateLookup, setProfileUpdateLookup] = useState<{ identifier: string; isCpf: boolean } | null>(null);
+  const [profileUpdateLookup, setProfileUpdateLookup] = useState<{ identifier: string; isCpf: boolean; missingFields?: string[]; profile?: any } | null>(null);
+  const isMissingProfileField = (field: string) => !profileUpdateLookup || (profileUpdateLookup.missingFields || ['name', 'phone', 'cpf', 'email', 'photo']).includes(field);
   const [allowedRoutes, setAllowedRoutes] = useState<string[]>([]);
   const [restrictedPhone, setRestrictedPhone] = useState('');
 
@@ -88,7 +89,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   useEffect(() => {
     const phoneToComplete = normalizePhone(requiredProfilePhone || '');
     if (!phoneToComplete) return;
-    setProfileUpdateLookup({ identifier: phoneToComplete, isCpf: false });
+    setProfileUpdateLookup({ identifier: phoneToComplete, isCpf: false, missingFields: ['name', 'phone', 'cpf', 'email', 'photo'] });
     setPhone(phoneToComplete);
     setRegPhone(phoneToComplete);
     setError('Atualize obrigatoriamente foto, e-mail, CPF e telefone para continuar.');
@@ -165,13 +166,21 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
           setRestrictedPhone((result as any).clientPhone || cleanPhone);
           setStep('access_restricted');
           break;
-        case 'profile_incomplete':
-          setProfileUpdateLookup({ identifier: cleanId, isCpf: useCpf });
-          setRegPhone(cleanPhone);
-          setRegCpf(cleanCpf);
-          setError(result.message || 'Atualize obrigatoriamente foto, e-mail, CPF e telefone para continuar.');
+        case 'profile_incomplete': {
+          const existingProfile = (result as any).profile || {};
+          const missingFields = (result as any).missingFields || ['name', 'phone', 'cpf', 'email', 'photo'];
+          setProfileUpdateLookup({ identifier: cleanId, isCpf: useCpf, missingFields, profile: existingProfile });
+          setRegName(existingProfile.name || '');
+          setRegPhone(existingProfile.phone || cleanPhone);
+          setRegCpf(existingProfile.cpf || cleanCpf);
+          setRegEmail(existingProfile.email || '');
+          setRegCity(existingProfile.city || '');
+          setRegUf(existingProfile.uf || '');
+          setRegPhotoPreview(existingProfile.profilePhotoUrl || null);
+          setError(result.message || 'Atualize somente os dados pendentes para continuar.');
           setStep('register');
           break;
+        }
         case 'no_password':
           setStep('create_password');
           break;
@@ -216,29 +225,25 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
     if (cleanPhone.length < 10) { setError('Informe um telefone válido'); return; }
     if (!isValidCPF(cleanCpf)) { setError('CPF inválido. Digite um CPF válido para continuar.'); return; }
     if (!regEmail.trim() || !regEmail.includes('@')) { setError('Informe um e-mail válido'); return; }
-    if (!regCity.trim()) { setError('Informe sua cidade'); return; }
-    if (!regUf.trim() || regUf.length !== 2) { setError('Informe o estado (UF) com 2 letras'); return; }
-    if (!regPhoto) { setError('Selecione uma foto de perfil'); return; }
+    if (!profileUpdateLookup && !regCity.trim()) { setError('Informe sua cidade'); return; }
+    if (!profileUpdateLookup && (!regUf.trim() || regUf.length !== 2)) { setError('Informe o estado (UF) com 2 letras'); return; }
+    if (isMissingProfileField('photo') && !regPhoto) { setError('Selecione uma foto de perfil'); return; }
 
     setIsLoading(true);
-    setIsUploadingPhoto(true);
 
     try {
-      // 1. Upload da foto
-      const base64 = await fileToBase64(regPhoto);
-      const uploadResult = await uploadPhotoMutation.mutateAsync({
-        imageBase64: base64,
-        phone: cleanPhone,
-      });
-      setIsUploadingPhoto(false);
-
-      if (!uploadResult?.url) {
-        setError('Erro ao enviar foto. Tente novamente.');
-        setIsLoading(false);
-        return;
+      // Só envia foto quando ela está pendente ou foi trocada; uma atualização de CPF preserva a foto existente.
+      let profilePhotoUrl = regPhotoPreview || profileUpdateLookup?.profile?.profilePhotoUrl || '';
+      if (regPhoto) {
+        setIsUploadingPhoto(true);
+        const base64 = await fileToBase64(regPhoto);
+        const uploadResult = await uploadPhotoMutation.mutateAsync({ imageBase64: base64, phone: cleanPhone });
+        setIsUploadingPhoto(false);
+        if (!uploadResult?.url) { setError('Erro ao enviar foto. Tente novamente.'); setIsLoading(false); return; }
+        profilePhotoUrl = uploadResult.url;
       }
 
-      // 2. Perfil incompleto é atualizado no cadastro principal; cadastro novo cria uma identidade única.
+      // Perfil incompleto é atualizado no cadastro principal; cadastro novo cria uma identidade única.
       const payload = {
         name: regName.trim(),
         phone: cleanPhone,
@@ -246,7 +251,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
         cpf: formatCpf(regCpf),
         city: regCity.trim() || undefined,
         uf: regUf.toUpperCase().slice(0, 2) || undefined,
-        profilePhotoUrl: uploadResult.url,
+        profilePhotoUrl,
       };
       const result = profileUpdateLookup
         ? await completeProfileMutation.mutateAsync({ ...payload, lookupIdentifier: profileUpdateLookup.identifier, lookupIsCpf: profileUpdateLookup.isCpf })
@@ -449,7 +454,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
             <form onSubmit={handleRegister} className="space-y-3">
               <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg mb-1">
                 <p className="text-sm text-blue-300 font-medium">{profileUpdateLookup ? '🔒 Atualização obrigatória de cadastro' : '📋 Novo cadastro'}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{profileUpdateLookup ? 'Informe foto, e-mail, CPF e telefone válidos para continuar. Nenhum novo cadastro será criado.' : 'Preencha seus dados para criar sua conta.'}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{profileUpdateLookup ? `Complete somente o que falta: ${(profileUpdateLookup.missingFields || []).map((field) => ({ name: 'nome', phone: 'telefone', cpf: 'CPF', email: 'e-mail', photo: 'foto' } as Record<string, string>)[field] || field).join(', ')}. Nenhum novo cadastro será criado.` : 'Preencha seus dados para criar sua conta.'}</p>
               </div>
               {error && (
                 <div className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -459,7 +464,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
               )}
 
               {/* Foto de perfil */}
-              <div className="flex flex-col items-center gap-2">
+              {isMissingProfileField('photo') && <div className="flex flex-col items-center gap-2">
                 <div
                   className="w-20 h-20 rounded-full border-2 border-dashed border-primary/40 flex items-center justify-center cursor-pointer hover:border-primary/70 transition-colors overflow-hidden bg-card/60"
                   onClick={() => fileInputRef.current?.click()}
@@ -489,10 +494,10 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
                   className="hidden"
                   onChange={handlePhotoSelect}
                 />
-              </div>
+              </div>}
 
               {/* Nome */}
-              <div>
+              {isMissingProfileField('name') && <div>
                 <label className="block text-xs font-medium text-foreground mb-1">
                   <User className="w-3 h-3 inline mr-1 opacity-70" />Nome completo *
                 </label>
@@ -502,10 +507,10 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
                   disabled={isLoading}
                   className="h-10 bg-input border-border text-foreground text-sm"
                 />
-              </div>
+              </div>}
 
               {/* Telefone */}
-              <div>
+              {isMissingProfileField('phone') && <div>
                 <label className="block text-xs font-medium text-foreground mb-1">
                   <Phone className="w-3 h-3 inline mr-1 opacity-70" />Telefone (WhatsApp) *
                 </label>
@@ -516,10 +521,10 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
                   disabled={isLoading}
                   className="h-10 bg-input border-border text-foreground text-sm"
                 />
-              </div>
+              </div>}
 
               {/* CPF */}
-              <div>
+              {isMissingProfileField('cpf') && <div>
                 <label className="block text-xs font-medium text-foreground mb-1">CPF *</label>
                 <Input
                   type="text" inputMode="numeric" placeholder="000.000.000-00"
@@ -529,10 +534,10 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
                   className={`h-10 bg-input text-foreground text-sm ${regCpfInvalid ? 'border-red-500 focus-visible:ring-red-500' : 'border-border'}`}
                 />
                 {regCpfInvalid && <p className="mt-1 text-xs font-medium text-red-400">CPF inválido. Digite um CPF válido para continuar.</p>}
-              </div>
+              </div>}
 
               {/* Email */}
-              <div>
+              {isMissingProfileField('email') && <div>
                 <label className="block text-xs font-medium text-foreground mb-1">
                   <Mail className="w-3 h-3 inline mr-1 opacity-70" />E-mail *
                 </label>
@@ -542,10 +547,10 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
                   disabled={isLoading}
                   className="h-10 bg-input border-border text-foreground text-sm"
                 />
-              </div>
+              </div>}
 
               {/* Cidade + UF */}
-              <div className="grid grid-cols-3 gap-2">
+              {!profileUpdateLookup && <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-foreground mb-1">
                     <MapPin className="w-3 h-3 inline mr-1 opacity-70" />Cidade *
@@ -569,11 +574,11 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
                     {UF_LIST.map(uf => <option key={uf} value={uf}>{uf}</option>)}
                   </select>
                 </div>
-              </div>
+              </div>}
 
               <Button
                 type="submit"
-                disabled={isLoading || !regName || !regPhoto || regPhone.replace(/\D/g,'').length < 10 || !regCpfValid || !regEmail || (!profileUpdateLookup && (!regCity || !regUf))}
+                disabled={isLoading || !regName || (isMissingProfileField('photo') && !regPhoto) || regPhone.replace(/\D/g,'').length < 10 || !regCpfValid || !regEmail || (!profileUpdateLookup && (!regCity || !regUf))}
                 className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg mt-1"
               >
                 {isLoading

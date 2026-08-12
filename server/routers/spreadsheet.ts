@@ -394,7 +394,9 @@ export const spreadsheetRouter = router({
           try {
             await requireCompleteMainCustomerProfile(db, { phone: mainCustomer.phone || '', cpf: mainCustomer.cpf || '' });
           } catch (profileError: any) {
-            return { status: 'profile_incomplete' as const, clientName: mainCustomer.name, message: profileError?.message || 'Atualize foto, e-mail, CPF e telefone para continuar.' };
+            const profile = { name: mainCustomer.name || '', phone: mainCustomer.phone || '', cpf: mainCustomer.cpf || '', email: mainCustomer.email || '', city: mainCustomer.city || '', uf: mainCustomer.uf || '', profilePhotoUrl: mainCustomer.profilePhotoUrl || '' };
+            const missingFields = [!profile.name && 'name', !profile.phone && 'phone', !profile.cpf && 'cpf', !profile.email && 'email', !profile.profilePhotoUrl && 'photo'].filter(Boolean);
+            return { status: 'profile_incomplete' as const, clientName: mainCustomer.name, message: profileError?.message || 'Atualize os dados pendentes para continuar.', profile, missingFields };
           }
           const canonicalPhone = normalizeCustomerPhone(mainCustomer.phone);
           const existingTechnical = await db.select().from(spreadsheetClients)
@@ -515,7 +517,10 @@ export const spreadsheetRouter = router({
         try {
           await requireCompleteMainCustomerProfile(db, { phone: client.phone || normalizedPhone || '', cpf: client.cpf || normalizedCpf || '' });
         } catch (profileError: any) {
-          return { status: 'profile_incomplete' as const, clientName: client.name, message: profileError?.message || 'Conclua o cadastro principal antes de acessar Gastos.' };
+          const mainProfile = await findMainCustomerByIdentity({ phone: client.phone || normalizedPhone || undefined, cpf: client.cpf || normalizedCpf || undefined }, db);
+          const profile = { name: mainProfile?.name || client.name || '', phone: mainProfile?.phone || client.phone || normalizedPhone || '', cpf: mainProfile?.cpf || client.cpf || normalizedCpf || '', email: mainProfile?.email || '', city: mainProfile?.city || '', uf: mainProfile?.uf || '', profilePhotoUrl: mainProfile?.profilePhotoUrl || '' };
+          const missingFields = [!profile.name && 'name', !profile.phone && 'phone', !profile.cpf && 'cpf', !profile.email && 'email', !profile.profilePhotoUrl && 'photo'].filter(Boolean);
+          return { status: 'profile_incomplete' as const, clientName: profile.name, message: profileError?.message || 'Atualize os dados pendentes para continuar.', profile, missingFields };
         }
 
         if (client.status === 'blocked') {
