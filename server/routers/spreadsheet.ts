@@ -1747,6 +1747,18 @@ export const spreadsheetRouter = router({
         try {
           await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`);
         } catch (_) { /* coluna já existe */ }
+        const clientResult = await db.select().from(spreadsheetClients)
+          .where(eq(spreadsheetClients.id, input.clientId)).limit(1);
+        const client = clientResult?.[0] || null;
+        if (client) {
+          const mainCustomer = await findMainCustomerByIdentity({ phone: (client as any).phone || '', cpf: (client as any).cpf || '' }, db);
+          if (mainCustomer) {
+            const routes = input.allowedRoutes.split(',').map((route: string) => route.trim()).filter(Boolean);
+            await setCustomerRoutePermissions(mainCustomer.id, routes, 'Administrador', db);
+          }
+        }
+        // Mantém o campo histórico para a tela antiga de gestão, mas ele não é mais
+        // usado para bloquear login ou rota: a fonte real é customerRoutePermissions.
         await db.update(spreadsheetClients)
           .set({ allowedRoutes: input.allowedRoutes || null, updatedAt: new Date() } as any)
           .where(eq(spreadsheetClients.id, input.clientId));
@@ -1757,64 +1769,50 @@ export const spreadsheetRouter = router({
       }
     }),
 
-  // Verificar se cliente tem acesso a uma rota específica (por token de sessão)
+  // Verificação única de rota: usa exclusivamente customerRoutePermissions,
+  // a mesma fonte que o ADM grava e que protege Gastos/Empréstimos no backend.
   checkRouteAccess: publicProcedure
     .input(z.object({
       token: z.string(),
-      route: z.string(), // ex: "gastos" ou "emprestimo"
+      route: z.string(),
     }))
     .query(async ({ input }) => {
       try {
         const db = await getDb() as any;
-        if (!db) return { allowed: true }; // se banco indisponível, não bloquear
-        // Migração automática: garantir que a coluna allowedRoutes existe
-        try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
+        if (!db) return { allowed: true, allowedRoutes: [] };
         const cleanToken = input.token.trim();
-        if (!cleanToken) return { allowed: true };
+        if (!cleanToken) return { allowed: true, allowedRoutes: [] };
 
         let phone: string | null = null;
-
-        // 1) Tentar como cp_token (sistema de senha do site - customerPasswordSessions)
         try {
           const cpSessionResult = await db.select().from(customerPasswordSessions)
             .where(eq(customerPasswordSessions.token, cleanToken)).limit(1);
           const cpSession = cpSessionResult?.[0] || null;
           if (cpSession && new Date(cpSession.expiresAt) >= new Date()) {
-            phone = cpSession.phone ? cpSession.phone.replace(/\D/g, '') : null;
+            phone = normalizeCustomerPhone(cpSession.phone);
           }
         } catch (_) {}
 
-        // 2) Se não encontrou como cp_token, tentar como spreadsheetSession
         if (!phone) {
           const sessionResult = await db.select().from(spreadsheetSessions)
             .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
           const session = sessionResult?.[0] || null;
           if (session && new Date(session.expiresAt) >= new Date()) {
-            // Buscar telefone pelo clientId
             const clientResult = await db.select().from(spreadsheetClients)
               .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
-            const client = clientResult?.[0] || null;
-            if (client) phone = (client as any).phone ? (client as any).phone.replace(/\D/g, '') : null;
+            phone = normalizeCustomerPhone((clientResult?.[0] as any)?.phone);
           }
         }
 
-        // Se não encontrou sessão válida, não bloquear (token pode ser de outro sistema)
-        if (!phone) return { allowed: true };
-
-        // Buscar allowedRoutes pelo telefone em spreadsheetClients
-        const clientByPhone = await db.select().from(spreadsheetClients)
-          .where(eq(spreadsheetClients.phone, phone)).limit(1);
-        const client = clientByPhone?.[0] || null;
-
-        // Se não tem spreadsheetClient, não bloquear
-        if (!client) return { allowed: true };
-
-        // null = sem restrição (acesso total a todas as rotas)
-        if (!(client as any).allowedRoutes) return { allowed: true, allowedRoutes: [] };
-        const routes = ((client as any).allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
-        return { allowed: routes.includes(input.route), allowedRoutes: routes };
+        if (!phone) return { allowed: true, allowedRoutes: [] };
+        const mainCustomer = await findMainCustomerByIdentity({ phone }, db);
+        if (!mainCustomer) return { allowed: true, allowedRoutes: [] };
+        const access = await getRouteAccess(mainCustomer.id, db);
+        const allowed = !access.restricted || access.routes.includes(input.route as any);
+        return { allowed, allowedRoutes: access.restricted ? access.routes : [] };
       } catch (_) {
-        return { allowed: true }; // em caso de erro, não bloquear
+        // Erro de infraestrutura não pode virar bloqueio falso para um cliente autenticado.
+        return { allowed: true, allowedRoutes: [] };
       }
     }),
 
@@ -1826,19 +1824,16 @@ export const spreadsheetRouter = router({
     .query(async ({ input }) => {
       try {
         const db = await getDb() as any;
-        if (!db) return { allowed: true };
-        try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
-        const cleanPhone = input.phone.replace(/\D/g, '');
-        if (!cleanPhone) return { allowed: true };
-        const clientByPhone = await db.select().from(spreadsheetClients)
-          .where(eq(spreadsheetClients.phone, cleanPhone)).limit(1);
-        const client = clientByPhone?.[0] || null;
-        if (!client) return { allowed: true };
-        if (!(client as any).allowedRoutes) return { allowed: true, allowedRoutes: [] };
-        const routes = ((client as any).allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
-        return { allowed: routes.includes(input.route), allowedRoutes: routes };
+        if (!db) return { allowed: true, allowedRoutes: [] };
+        const phone = normalizeCustomerPhone(input.phone);
+        if (!phone) return { allowed: true, allowedRoutes: [] };
+        const mainCustomer = await findMainCustomerByIdentity({ phone }, db);
+        if (!mainCustomer) return { allowed: true, allowedRoutes: [] };
+        const access = await getRouteAccess(mainCustomer.id, db);
+        const allowed = !access.restricted || access.routes.includes(input.route as any);
+        return { allowed, allowedRoutes: access.restricted ? access.routes : [] };
       } catch (_) {
-        return { allowed: true };
+        return { allowed: true, allowedRoutes: [] };
       }
     }),
 
