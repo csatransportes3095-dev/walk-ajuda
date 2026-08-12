@@ -982,9 +982,11 @@ export const cartoesRouter = router({
             vencimentoDia: Number(raw.vencimentoDia),
           };
           const invoices = await getCardInvoices(card);
-          const current = invoices.find((invoice: any) => ["ABERTA", "A_VENCER", "VENCE_HOJE"].includes(String(invoice.status))) || invoices[0] || null;
-          const overdue = invoices.filter((invoice: any) => String(invoice.status) === "VENCIDA" && Number(invoice.remainingAmount || 0) > 0);
-          const next = current ? invoices.find((invoice: any) => String(invoice.cycleEnd) > String(current.cycleEnd)) || null : null;
+          // A auditoria nunca escolhe a primeira fatura ABERTA da lista: ela pode ser futura.
+          // O ciclo atual e o próximo são calculados pela data corrente e pela configuração deste cartão.
+          const current = await getCurrentInvoice(card);
+          const next = await getNextInvoice(card);
+          const overdue = await getOverdueInvoices(card.id);
           resultado.push({
             id: card.id,
             nome: raw.nome,
