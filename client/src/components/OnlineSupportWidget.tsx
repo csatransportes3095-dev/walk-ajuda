@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Bot, RefreshCcw, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { OnlineEntryPanel } from "@/components/OnlineEntryPanel";
+import { OnlineRegistrationPanel } from "@/components/OnlineRegistrationPanel";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 type OpenMode = "modal" | "sidebar" | "fullscreen";
@@ -57,7 +58,7 @@ type Msg =
 // ─── Componente principal ─────────────────────────────────────────────────────
 export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openMode = "modal" }: OnlineSupportWidgetProps) {
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [phase, setPhase] = useState<"identify" | "chat" | "entry">(() =>
+  const [phase, setPhase] = useState<"identify" | "chat" | "entry" | "register">(() =>
     isSessionValid() && getSavedName() && getSavedPhone() ? "chat" : "identify"
   );
   const [visitorName, setVisitorName] = useState(() => isSessionValid() ? getSavedName() : "");
@@ -234,7 +235,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
 
         {/* Header */}
         <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "linear-gradient(135deg,#1e1b4b,#0f172a)", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
-          <button onClick={phase === "chat" || phase === "entry" ? () => setPhase("identify") : (onBack || onMinimize)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: 4, borderRadius: 8 }}>
+          <button onClick={phase === "chat" || phase === "entry" || phase === "register" ? () => setPhase("identify") : (onBack || onMinimize)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: 4, borderRadius: 8 }}>
             <ArrowLeft size={18} />
           </button>
           {botAvatar ? (
@@ -326,11 +327,18 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
         {/* FASE 2: Área autenticada do cliente */}
         {phase === "entry" && (
           <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-            <OnlineEntryPanel onBack={() => setPhase("chat")} onOpenCadastro={() => setPhase("chat")} />
+            <OnlineEntryPanel onBack={() => setPhase("chat")} onOpenCadastro={() => conversationId ? setPhase("register") : setPhase("chat")} />
           </div>
         )}
 
-        {/* FASE 3: Chat com botões */}
+        {/* FASE 3: Cadastro guiado */}
+        {phase === "register" && conversationId && (
+          <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+            <OnlineRegistrationPanel conversationId={conversationId} visitorId={visitorId} onBack={() => setPhase("entry")} onDone={() => { setPhase("entry"); listMessagesQ.refetch(); }} />
+          </div>
+        )}
+
+        {/* FASE 4: Chat com botões */}
         {phase === "chat" && (
           <>
             <div ref={chatContainerRef} style={{ flex: 1, overflowY: "auto", padding: "16px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
