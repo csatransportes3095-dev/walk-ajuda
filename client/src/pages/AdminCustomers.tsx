@@ -98,56 +98,45 @@ function RouteAccessWidget({ phone }: { phone: string }) {
     { key: 'emprestimo', label: 'Empréstimos', icon: '💳' },
   ];
 
-  // null = sem restrição (acesso total)
-  const hasRestriction = !!(data?.allowedRoutes);
-  const routes = (data?.allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
+  // A interface reage no mesmo toque; a fonte de verdade continua sendo a rota central no servidor.
+  const [optimisticRoutes, setOptimisticRoutes] = useState<string[] | null>(null);
+  const serverHasRestriction = !!(data?.allowedRoutes);
+  const serverRoutes = (data?.allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
+  const hasRestriction = optimisticRoutes !== null || serverHasRestriction;
+  const routes = optimisticRoutes ?? serverRoutes;
 
   const handleToggle = async (routeKey: string, checked: boolean) => {
     let newRoutes: string[];
     if (!hasRestriction) {
-      // Primeira restrição: liberar todas exceto a que foi desmarcada
-      newRoutes = checked
-        ? ROUTES.map(r => r.key)
-        : ROUTES.map(r => r.key).filter(k => k !== routeKey);
+      newRoutes = checked ? ROUTES.map(r => r.key) : ROUTES.map(r => r.key).filter(k => k !== routeKey);
     } else {
-      newRoutes = checked
-        ? [...routes.filter(r => r !== routeKey), routeKey]
-        : routes.filter(r => r !== routeKey);
+      newRoutes = checked ? [...routes.filter(r => r !== routeKey), routeKey] : routes.filter(r => r !== routeKey);
     }
-    await updateRoutesMut.mutateAsync({
-      phone: phone.replace(/\D/g, ''),
-      allowedRoutes: newRoutes.join(','),
-    });
+    setOptimisticRoutes(newRoutes);
+    try {
+      await updateRoutesMut.mutateAsync({ phone: phone.replace(/\D/g, ''), allowedRoutes: newRoutes.join(',') });
+      await refetch();
+    } finally {
+      setOptimisticRoutes(null);
+    }
   };
 
   return (
-    <div className="w-full px-2.5 py-1.5 bg-gradient-to-r from-slate-700/20 to-slate-700/20 border border-slate-600/40 rounded-lg">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-xs font-semibold text-slate-300 flex items-center gap-1">
-          🔑 Rotas
-        </span>
-        {!hasRestriction && (
-          <span className="text-[9px] text-green-400 font-bold">TOTAL</span>
-        )}
+    <div className="w-full rounded-xl border border-slate-500/50 bg-gradient-to-r from-slate-700/25 to-slate-700/15 p-3 shadow-inner">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-black text-slate-100">🔑 Rotas de acesso</span>
+        {!hasRestriction && <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-black text-green-300">ACESSO TOTAL</span>}
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         {ROUTES.map(({ key, label, icon }) => {
           const isAllowed = !hasRestriction || routes.includes(key);
-          return (
-            <label key={key} className="flex items-center gap-1.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isAllowed}
-                onChange={(e) => handleToggle(key, e.target.checked)}
-                className="w-3.5 h-3.5 accent-primary"
-              />
-              <span className={`text-[10px] font-medium ${isAllowed ? 'text-green-300' : 'text-slate-500'}`}>
-                {icon} {label}
-              </span>
-            </label>
-          );
+          return <label key={key} className={`flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-all ${isAllowed ? 'border-green-400/35 bg-green-500/10' : 'border-red-400/25 bg-red-500/5'} ${updateRoutesMut.isPending ? 'cursor-wait opacity-70' : 'hover:scale-[1.01]'}`}>
+            <span className={`text-sm font-bold ${isAllowed ? 'text-green-200' : 'text-slate-400'}`}>{icon} {label}</span>
+            <span className="flex items-center gap-2"><span className={`text-xs font-black ${isAllowed ? 'text-green-300' : 'text-red-300'}`}>{isAllowed ? 'LIBERADO' : 'BLOQUEADO'}</span><input type="checkbox" checked={isAllowed} disabled={updateRoutesMut.isPending} onChange={(event) => handleToggle(key, event.target.checked)} className="h-6 w-6 cursor-pointer accent-green-500" /></span>
+          </label>;
         })}
       </div>
+      <p className="mt-2 text-[10px] font-medium text-cyan-200/80">A alteração é salva e enviada ao cliente imediatamente.</p>
     </div>
   );
 }

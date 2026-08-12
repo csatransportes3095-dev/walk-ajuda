@@ -485,7 +485,8 @@ export function LoansTab({ token }: LoansTabProps) {
       // Empréstimos criados pelo ADM precisam aparecer sem depender do cache anterior do cliente.
       refetchOnMount: "always",
       refetchOnWindowFocus: true,
-      refetchInterval: 10000,
+      // Mantém a sessão ativa sincronizada com a alteração de rotas feita pelo ADM.
+      refetchInterval: 1000,
     }
   );
 

@@ -62,7 +62,7 @@ export function EmprestimoPage() {
   // Verificar acesso à rota emprestimo
   const routeAccessQuery = trpc.spreadsheet.checkRouteAccess.useQuery(
     { token: token || '', route: 'emprestimo' },
-    { enabled: !!token && isLoggedIn, retry: false, refetchOnWindowFocus: false },
+    { enabled: !!token && isLoggedIn, retry: false, refetchOnWindowFocus: true, refetchInterval: 1000 },
   );
 
   useEffect(() => {

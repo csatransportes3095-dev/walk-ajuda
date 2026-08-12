@@ -62,7 +62,7 @@ export function GastosPage() {
   // Verificar acesso à rota gastos
   const routeAccessQuery = trpc.spreadsheet.checkRouteAccess.useQuery(
     { token: token || '', route: 'gastos' },
-    { enabled: !!token && isLoggedIn, retry: false, refetchOnWindowFocus: false },
+    { enabled: !!token && isLoggedIn, retry: false, refetchOnWindowFocus: true, refetchInterval: 1000 },
   );
 
   useEffect(() => {
