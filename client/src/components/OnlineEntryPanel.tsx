@@ -21,8 +21,8 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
     { token, registrationId: selectedOrderId || 0 },
     { enabled: !!token && !!selectedOrderId && !!sessionQ.data?.authenticated && !!sessionQ.data?.access && (!sessionQ.data.access.restricted || sessionQ.data.access.routes.includes('acompanhar')), retry: false }
   );
-  const loansQ = trpc.onlineSupport.entryLoans.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated, retry: false });
-  const installmentsQ = trpc.onlineSupport.entryLoanInstallments.useQuery({ token, loanId: selectedLoanId || 0 }, { enabled: !!token && !!selectedLoanId && !!sessionQ.data?.authenticated, retry: false });
+  const loansQ = trpc.onlineSupport.entryLoans.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated && !!sessionQ.data?.access && (!sessionQ.data.access.restricted || sessionQ.data.access.routes.includes('emprestimo')), retry: false });
+  const installmentsQ = trpc.onlineSupport.entryLoanInstallments.useQuery({ token, loanId: selectedLoanId || 0 }, { enabled: !!token && !!selectedLoanId && !!sessionQ.data?.authenticated && !!sessionQ.data?.access && (!sessionQ.data.access.restricted || sessionQ.data.access.routes.includes('emprestimo')), retry: false });
   const logoutMut = trpc.customerPassword.logout.useMutation();
   const routeMut = trpc.onlineSupport.entryRequestRoute.useMutation();
   const proofMut = trpc.onlineSupport.entrySubmitInstallmentProof.useMutation();
@@ -60,7 +60,7 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
     return !!access && (!access.restricted || access.routes.includes(route));
   };
   const openRoute = (route: 'site' | 'acompanhar' | 'gastos' | 'emprestimo') => {
-    window.location.href = route === 'gastos' ? '/gastos' : route === 'emprestimo' ? '/emprestimo' : route === 'acompanhar' ? '/acompanhar' : '/';
+    window.location.href = route === 'gastos' ? '/gastos' : route === 'emprestimo' ? '/emprestimo' : route === 'acompanhar' ? '/acompanhar' : '/login';
   };
   const requestRoute = async (route: 'site' | 'acompanhar' | 'gastos' | 'emprestimo') => {
     try {
@@ -112,14 +112,16 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
         </>}
       </div>}
       <button onClick={() => requestRoute('acompanhar')} style={secondaryStyle}>{hasRouteAccess('acompanhar') ? 'Acessar Acompanhar Pedido' : 'Solicitar Acompanhar Pedido'}</button>
-      <button onClick={() => requestRoute('site')} style={secondaryStyle}>{hasRouteAccess('site') ? 'Acessar Site de Pedidos' : 'Solicitar Site de Pedidos'}</button>
+      <button onClick={() => requestRoute('site')} style={secondaryStyle}>{hasRouteAccess('site') ? 'Fazer Pedido' : 'Fazer Pedido indisponível'}</button>
     </div>
-    <div style={cardStyle}><WalletCards size={20} color="#fbbf24" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Empréstimos</strong>
-      {loansQ.isLoading ? <p style={smallStyle}>Consultando...</p> : loansQ.data?.loans?.length ? loansQ.data.loans.map((loan: any) => <button key={loan.id} onClick={() => setSelectedLoanId(loan.id)} style={{ ...rowStyle, border: selectedLoanId === loan.id ? '1px solid #fbbf24' : '1px solid transparent', cursor:'pointer', textAlign:'left' }}>Empréstimo #{loan.id}<span>{loan.status}</span></button>) : <p style={smallStyle}>Nenhum empréstimo encontrado.</p>}
-      {selectedLoanId && <div style={{ marginTop:8 }}><button onClick={() => setSelectedLoanId(null)} style={backStyle}>Fechar parcelas</button>{installmentsQ.isLoading ? <p style={smallStyle}>Consultando parcelas...</p> : installmentsQ.data?.map((i: any) => <div key={i.id} style={{ ...rowStyle, display:'block' }}><div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>Parcela {i.installmentNumber} · R$ {i.amount}<span>{i.status} · {String(i.dueDate).slice(0,10)}</span></div>{['pendente','atrasado'].includes(String(i.status)) && <label style={{ ...secondaryStyle, display:'block', boxSizing:'border-box', textAlign:'center', marginTop:7 }}>Enviar comprovante<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => { const file = e.target.files?.[0]; if (file) sendProof(i.id, file); }} style={{ display:'none' }} /></label>}</div>)}</div>}
-      <button onClick={() => requestRoute('emprestimo')} style={secondaryStyle}>{hasRouteAccess('emprestimo') ? 'Acessar Empréstimos' : 'Solicitar Empréstimos'}</button>
+    <div style={{ ...cardStyle, opacity: hasRouteAccess('emprestimo') ? 1 : .52 }}><WalletCards size={20} color="#fbbf24" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Empréstimos</strong>
+      {hasRouteAccess('emprestimo') ? <>
+        {loansQ.isLoading ? <p style={smallStyle}>Consultando...</p> : loansQ.data?.loans?.length ? loansQ.data.loans.map((loan: any) => <button key={loan.id} onClick={() => setSelectedLoanId(loan.id)} style={{ ...rowStyle, border: selectedLoanId === loan.id ? '1px solid #fbbf24' : '1px solid transparent', cursor:'pointer', textAlign:'left' }}>Empréstimo #{loan.id}<span>{loan.status}</span></button>) : <p style={smallStyle}>Nenhum empréstimo encontrado.</p>}
+        {selectedLoanId && <div style={{ marginTop:8 }}><button onClick={() => setSelectedLoanId(null)} style={backStyle}>Fechar parcelas</button>{installmentsQ.isLoading ? <p style={smallStyle}>Consultando parcelas...</p> : installmentsQ.data?.map((i: any) => <div key={i.id} style={{ ...rowStyle, display:'block' }}><div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>Parcela {i.installmentNumber} · R$ {i.amount}<span>{i.status} · {String(i.dueDate).slice(0,10)}</span></div>{['pendente','atrasado'].includes(String(i.status)) && <label style={{ ...secondaryStyle, display:'block', boxSizing:'border-box', textAlign:'center', marginTop:7 }}>Enviar comprovante<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => { const file = e.target.files?.[0]; if (file) sendProof(i.id, file); }} style={{ display:'none' }} /></label>}</div>)}</div>}
+        <button onClick={() => requestRoute('emprestimo')} style={secondaryStyle}>Acessar Empréstimos</button>
+      </> : <button disabled style={disabledStyle}>Empréstimos desabilitados pelo administrador</button>}
     </div>
-    <button onClick={() => requestRoute('gastos')} style={secondaryStyle}>{hasRouteAccess('gastos') ? 'Acessar Controle de Gastos' : 'Solicitar Controle de Gastos'}</button>
+    {hasRouteAccess('gastos') ? <button onClick={() => requestRoute('gastos')} style={secondaryStyle}>Acessar Controle de Gastos</button> : <button disabled style={disabledStyle}>Controle de Gastos desabilitado pelo administrador</button>}
   </div>;
 }
 
@@ -139,6 +141,7 @@ const cardStyle: React.CSSProperties = { background: 'rgba(255,255,255,.06)', bo
 const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', height: 42, borderRadius: 10, border: '1px solid rgba(255,255,255,.14)', background: 'rgba(0,0,0,.25)', color: '#fff', padding: '0 11px', outline: 'none' };
 const primaryStyle: React.CSSProperties = { width: '100%', marginTop: 10, height: 42, border: 0, borderRadius: 10, color: '#fff', fontWeight: 800, background: 'linear-gradient(135deg,#7c3aed,#2563eb)', cursor: 'pointer' };
 const secondaryStyle: React.CSSProperties = { width: '100%', marginTop: 10, minHeight: 36, borderRadius: 9, color: '#c4b5fd', fontSize: 12, fontWeight: 700, background: 'rgba(124,58,237,.12)', border: '1px solid rgba(124,58,237,.35)', cursor: 'pointer' };
+const disabledStyle: React.CSSProperties = { ...secondaryStyle, color: 'rgba(255,255,255,.42)', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.10)', cursor: 'not-allowed', opacity: .8 };
 const backStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, color: 'rgba(255,255,255,.65)', background: 'transparent', border: 0, cursor: 'pointer', fontSize: 12, padding: 0 };
 const smallStyle: React.CSSProperties = { color: 'rgba(255,255,255,.55)', fontSize: 12, margin: '7px 0' };
 const rowStyle: React.CSSProperties = { marginTop: 7, padding: '8px 9px', borderRadius: 9, display: 'flex', justifyContent: 'space-between', gap: 8, background: 'rgba(0,0,0,.2)', color: '#e5e7eb', fontSize: 12 };
