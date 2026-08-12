@@ -26,7 +26,7 @@ import { loanRouter } from "./routers/loans";
 import { apkRouter } from "./routers/apk";
 import { customerPasswordRouter } from "./routers/customerPassword";
 import { syncUnifiedCustomerRegistry } from "./customerIdentity";
-import { ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions } from "./customerAccess";
+import { ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -1879,7 +1879,13 @@ export const appRouter = router({
           referredByPhone: cleanRefPhone && cleanRefPhone === cleanPhone ? undefined : input.referredByPhone,
         };
         const customer = await createCustomer(safeInput);
-        await setCustomerRoutePermissions(customer.id, [input.sourceRoute || 'site'], 'Cadastro inicial');
+        const sourceRoute = input.sourceRoute || 'site';
+        const releaseMode = await getRouteReleaseMode(sourceRoute);
+        if (releaseMode === 'automatico') {
+          await setCustomerRoutePermissions(customer.id, [sourceRoute], 'Cadastro inicial automático');
+        } else {
+          await requestCustomerRouteAccess(customer.id, sourceRoute);
+        }
         
         // Registrar indicação se houver indicador
         if (safeInput.referredByPhone && safeInput.referredBy) {
@@ -1945,7 +1951,7 @@ export const appRouter = router({
             });
           } catch (e) { console.error('Email finalização cadastro:', e); }
         })();
-        return { success: true, customer, alreadyExists: false };
+        return { success: true, customer, alreadyExists: false, releaseMode, accessGranted: releaseMode === 'automatico' };
       }),
 
     list: adminProcedure.query(async () => {

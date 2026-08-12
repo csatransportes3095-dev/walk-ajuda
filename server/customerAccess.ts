@@ -96,6 +96,43 @@ export async function hasRouteAccess(customerId: number, route: CustomerRoute, d
   return { ...access, allowed: !access.restricted || access.routes.includes(route) };
 }
 
+export type RouteReleaseMode = 'automatico' | 'manual';
+
+export async function getRouteReleaseMode(route: CustomerRoute, dbArg?: any): Promise<RouteReleaseMode> {
+  const db = dbArg || await getDb() as any;
+  if (!db) return 'automatico';
+  await ensureCustomerIdentityInfrastructure(db);
+  const config = await rows(db, sql`SELECT releaseMode FROM customerRouteReleaseModes WHERE route=${route} LIMIT 1`);
+  return config[0]?.releaseMode === 'manual' ? 'manual' : 'automatico';
+}
+
+export async function setRouteReleaseMode(route: CustomerRoute, mode: RouteReleaseMode, updatedBy = 'Administrador', dbArg?: any): Promise<RouteReleaseMode> {
+  const db = dbArg || await getDb() as any;
+  if (!db) throw new Error('Banco de dados indisponível');
+  await ensureCustomerIdentityInfrastructure(db);
+  await db.execute(sql`
+    INSERT INTO customerRouteReleaseModes (route, releaseMode, updatedBy, updatedAt)
+    VALUES (${route}, ${mode}, ${updatedBy}, NOW())
+    ON DUPLICATE KEY UPDATE releaseMode=VALUES(releaseMode), updatedBy=VALUES(updatedBy), updatedAt=NOW()
+  `);
+  return mode;
+}
+
+export async function listRouteReleaseModes(dbArg?: any): Promise<Record<CustomerRoute, RouteReleaseMode>> {
+  const db = dbArg || await getDb() as any;
+  const defaults: Record<CustomerRoute, RouteReleaseMode> = { site: 'automatico', gastos: 'automatico', emprestimo: 'automatico' };
+  if (!db) return defaults;
+  await ensureCustomerIdentityInfrastructure(db);
+  const configs = await rows(db, sql`SELECT route, releaseMode FROM customerRouteReleaseModes`);
+  for (const config of configs) {
+    const route = String(config.route || '') as CustomerRoute;
+    if ((CUSTOMER_ROUTES as readonly string[]).includes(route)) {
+      defaults[route] = config.releaseMode === 'manual' ? 'manual' : 'automatico';
+    }
+  }
+  return defaults;
+}
+
 export async function setCustomerRoutePermissions(
   customerId: number,
   routesInput: string[],
@@ -165,6 +202,20 @@ export async function ensureCustomerIdentityInfrastructure(dbArg?: any): Promise
           KEY customer_route_permission_route_status (route, status)
         )
       `));
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS customerRouteReleaseModes (
+          route VARCHAR(32) PRIMARY KEY,
+          releaseMode VARCHAR(16) NOT NULL DEFAULT 'automatico',
+          updatedBy VARCHAR(100) NULL,
+          updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `));
+      for (const route of CUSTOMER_ROUTES) {
+        await db.execute(sql`
+          INSERT IGNORE INTO customerRouteReleaseModes (route, releaseMode, updatedBy)
+          VALUES (${route}, 'automatico', 'Sistema')
+        `);
+      }
       await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS customerAccessRequests (
           id INT AUTO_INCREMENT PRIMARY KEY,
