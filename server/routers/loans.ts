@@ -678,7 +678,9 @@ export const loanRouter = router({
           creditLimit=${input.creditLimit}, interestRate=${input.interestRate},
           loanEnabled=${input.loanEnabled}, allowedPaymentTypes=${resolvedAllowedTypes},
           pixKey=${input.pixKey || null}, pixKeyType=${input.pixKeyType || null},
-          pixName=${input.pixName || null}, spreadsheetToken=${input.spreadsheetToken || null},
+          pixName=${input.pixName || null},
+          client_pix_key=${input.pixKey || null}, client_pix_name=${input.pixName || null},
+          spreadsheetToken=${input.spreadsheetToken || null},
           notes=${input.notes || null}, updatedAt=NOW()
         WHERE id=${input.id}
       `);
@@ -686,11 +688,11 @@ export const loanRouter = router({
     } else {
       const result = await db.execute(drizzleSql`
         INSERT INTO loanClients (name, cpf, phone, status, profileSlug, creditLimit, interestRate,
-          loanEnabled, allowedPaymentTypes, pixKey, pixKeyType, pixName, spreadsheetToken, notes, userId)
+          loanEnabled, allowedPaymentTypes, pixKey, pixKeyType, pixName, client_pix_key, client_pix_name, spreadsheetToken, notes, userId)
         VALUES (${input.name}, ${input.cpf || null}, ${input.phone || null}, ${input.status},
           ${input.profileSlug}, ${input.creditLimit}, ${input.interestRate}, ${input.loanEnabled},
           ${resolvedAllowedTypes}, ${input.pixKey || null}, ${input.pixKeyType || null},
-          ${input.pixName || null}, ${input.spreadsheetToken || null}, ${input.notes || null}, 1)
+          ${input.pixName || null}, ${input.pixKey || null}, ${input.pixName || null}, ${input.spreadsheetToken || null}, ${input.notes || null}, 1)
       `);
       return { id: (result[0] as any).insertId };
     }
@@ -727,7 +729,9 @@ export const loanRouter = router({
     const baseSelect = drizzleSql`
       SELECT l.*, lc.name as clientName, lc.phone as clientPhone, lc.cpf as clientCpf,
         lc.loanEnabled, lc.status as clientStatus, lc.profileSlug as clientProfile,
-        lc.client_pix_key as clientPixKey, lc.client_pix_name as clientPixName, lc.client_pix_bank as clientPixBank,
+        COALESCE(NULLIF(lc.client_pix_key, ''), NULLIF(lc.pixKey, '')) as clientPixKey,
+        COALESCE(NULLIF(lc.client_pix_name, ''), NULLIF(lc.pixName, '')) as clientPixName,
+        lc.client_pix_bank as clientPixBank,
         c.profilePhotoUrl as clientPhoto, c.cpf as customerCpf, c.email as clientEmail,
         lp.defaultPaymentTypes as profileAllowedModes,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='em_analise') as pendingProofs,
@@ -896,7 +900,8 @@ export const loanRouter = router({
     const db = await getDb() as any;
     await ensurePixDisbursementColumns(db);
     const rows = await qRows(db, drizzleSql`
-      SELECT l.id, l.status, l.pixSentAt, lc.client_pix_key as clientPixKey
+      SELECT l.id, l.status, l.pixSentAt,
+        COALESCE(NULLIF(lc.client_pix_key, ''), NULLIF(lc.pixKey, '')) as clientPixKey
       FROM loans l JOIN loanClients lc ON lc.id=l.clientId
       WHERE l.id=${input.id} LIMIT 1
     `);

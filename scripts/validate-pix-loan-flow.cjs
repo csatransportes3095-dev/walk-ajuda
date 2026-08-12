@@ -11,6 +11,8 @@ const requiredBackend = [
   "r.status === 'pendente' || (r.status === 'aprovado' && !r.pixSentAt)",
   "!['pago', 'cancelado', 'reprovado', 'pendente'].includes(r.status)",
   "WHERE l.clientId IN",
+  "COALESCE(NULLIF(lc.client_pix_key, ''), NULLIF(lc.pixKey, '')) as clientPixKey",
+  "client_pix_key=${input.pixKey || null}, client_pix_name=${input.pixName || null}",
 ];
 for (const snippet of requiredBackend) {
   if (!backend.includes(snippet)) throw new Error(`Backend sem regra obrigatória: ${snippet}`);
@@ -22,6 +24,8 @@ const requiredAdmin = [
   'falta enviar PIX ao cliente',
   'Cobrança e gestão',
   'Gestão da solicitação',
+  'utils.loans.listLoans.invalidate()',
+  'client?.pixKey || client?.client_pix_key || ""',
 ];
 for (const snippet of requiredAdmin) {
   if (!admin.includes(snippet)) throw new Error(`Painel ADM sem regra obrigatória: ${snippet}`);

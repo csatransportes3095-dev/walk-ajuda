@@ -2809,7 +2809,11 @@ function ClientsTab() {
           client={editClient}
           profiles={profiles as any[]}
           onClose={() => { setShowCreate(false); setEditClient(null); }}
-          onSuccess={() => { setShowCreate(false); setEditClient(null); utils.loans.listClients.invalidate(); }}
+          onSuccess={() => {
+            setShowCreate(false); setEditClient(null);
+            utils.loans.listClients.invalidate();
+            utils.loans.listLoans.invalidate();
+          }}
         />
       )}
     </div>
@@ -2834,9 +2838,9 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
     creditLimit: client?.creditLimit || "",
     interestRate: client?.interestRate || "",
     notes: client?.notes || "",
-    pixKey: client?.pixKey || "",
+    pixKey: client?.pixKey || client?.client_pix_key || "",
     pixKeyType: client?.pixKeyType || "cpf",
-    pixName: client?.pixName || "",
+    pixName: client?.pixName || client?.client_pix_name || "",
     spreadsheetToken: client?.spreadsheetToken || "",
   });
   const getDefaultAllowedTypes = (profileSlug?: string) => {
