@@ -1282,7 +1282,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 
         {/* Abas */}
         <Tabs value={activeModule} onValueChange={setActiveModule} className="w-full">
-          <TabsList aria-label="Módulos da Planilha de Gastos" className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] sm:grid-cols-3 lg:grid-cols-9 gap-2 sm:gap-3 h-auto bg-transparent p-0 mb-5">
+          <TabsList aria-label="Módulos da Planilha de Gastos" className="!grid !w-full grid-cols-3 md:grid-cols-5 xl:grid-cols-9 !h-auto !items-stretch gap-2.5 sm:gap-3 bg-transparent p-0 mb-5">
             <DashboardModuleCard value="gastos" label="Gastos" selected={activeModule === 'gastos'} theme={MODULE_THEMES.gastos} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>} />
             <DashboardModuleCard value="ganhos" label="Ganhos" selected={activeModule === 'ganhos'} theme={MODULE_THEMES.ganhos} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>} />
             <DashboardModuleCard value="operacional" label="Operacional" selected={activeModule === 'operacional'} theme={MODULE_THEMES.operacional} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>} />

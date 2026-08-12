@@ -34,7 +34,7 @@ export function DashboardModuleCard({ value, label, icon, theme, selected, badge
     <TabsTrigger
       value={value}
       aria-label={`Abrir módulo ${label}`}
-      className="relative min-w-0 h-[82px] sm:h-[88px] flex flex-col items-center justify-center gap-2 rounded-xl border px-2 py-2 font-bold text-[10px] sm:text-[11px] uppercase tracking-wide leading-tight transition-all duration-200 ease-out hover:-translate-y-0.5 hover:brightness-110 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:translate-y-0 active:scale-[0.98] data-[state=active]:scale-[1.02]"
+      className="relative min-w-0 h-[104px] sm:h-[108px] flex flex-col items-center justify-center gap-2 rounded-xl border px-1.5 py-2 font-bold text-[clamp(9px,2.7vw,12px)] uppercase tracking-wide leading-tight transition-all duration-200 ease-out hover:-translate-y-0.5 hover:brightness-110 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:translate-y-0 active:scale-[0.98] data-[state=active]:-translate-y-0.5"
       style={style}
     >
       {badge && (
@@ -69,7 +69,7 @@ export function DashboardExternalModuleCard({ label, icon, theme, selected, badg
       type="button"
       onClick={onClick}
       aria-label={`Abrir módulo ${label}`}
-      className="relative min-w-0 h-[82px] sm:h-[88px] flex flex-col items-center justify-center gap-2 rounded-xl border px-2 py-2 font-bold text-[10px] sm:text-[11px] uppercase tracking-wide leading-tight transition-all duration-200 ease-out hover:-translate-y-0.5 hover:brightness-110 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:translate-y-0 active:scale-[0.98]"
+      className="relative min-w-0 h-[104px] sm:h-[108px] flex flex-col items-center justify-center gap-2 rounded-xl border px-1.5 py-2 font-bold text-[clamp(9px,2.7vw,12px)] uppercase tracking-wide leading-tight transition-all duration-200 ease-out hover:-translate-y-0.5 hover:brightness-110 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:translate-y-0 active:scale-[0.98]"
       style={style}
     >
       {badge && <span className="absolute right-1.5 top-1.5 rounded-full border border-cyan-50/70 bg-cyan-300 px-1.5 py-0.5 text-[8px] font-black tracking-wider leading-none text-slate-950 shadow-[0_2px_8px_rgba(34,211,238,.4)]">{badge}</span>}
