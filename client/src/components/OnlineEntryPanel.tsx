@@ -48,8 +48,15 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   };
 
   const requestRoute = async (route: 'site' | 'gastos' | 'emprestimo') => {
-    try { await routeMut.mutateAsync({ token, route }); }
-    catch (e: any) { setError(e?.message || 'Não foi possível solicitar o acesso.'); }
+    try {
+      setError('');
+      const result = await routeMut.mutateAsync({ token, route });
+      if (result.released) {
+        window.location.href = route === 'gastos' ? '/gastos' : route === 'emprestimo' ? '/emprestimo' : '/';
+        return;
+      }
+      setError('Solicitação enviada ao administrador. Você será avisado após a liberação.');
+    } catch (e: any) { setError(e?.message || 'Não foi possível solicitar o acesso.'); }
   };
 
   const sendProof = async (installmentId: number, file: File) => {
@@ -73,6 +80,7 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   </div>;
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    {error && <p style={{ margin: 0, color: '#fcd34d', fontSize: 12 }}>{error}</p>}
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <div><strong style={{ color: '#fff', fontSize: 15 }}>Olá, {customer.name}</strong><div style={{ color: '#86efac', fontSize: 11 }}>Sessão autenticada</div></div>
       <button onClick={logout} style={backStyle}><LogOut size={14} /> Sair</button>

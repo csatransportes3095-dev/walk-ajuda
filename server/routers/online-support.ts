@@ -5,7 +5,7 @@ import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { onlineSupportConversations } from "../../drizzle/schema";
 import { getOnlineCustomerLoans, getOnlineCustomerOrders, getOnlineLoanInstallments, getOnlineOrderDetails, requireOnlineEntrySession, submitOnlineInstallmentProof } from "../online-support/entry";
-import { CUSTOMER_ROUTES, requestCustomerRouteAccess } from "../customerAccess";
+import { CUSTOMER_ROUTES, getRouteReleaseMode, requestCustomerRouteAccess, setCustomerRoutePermissions } from "../customerAccess";
 import { cancelOnlineRegistrationDraft, findOnlineRegistrationIdentity, getOnlineRegistrationDraft, saveOnlineRegistrationDraft } from "../online-support/registration";
 import {
   clearLogs,
@@ -113,8 +113,13 @@ export const onlineSupportRouter = router({
     .input(z.object({ token: z.string().min(1), route: z.enum(CUSTOMER_ROUTES) }))
     .mutation(async ({ input }) => {
       const session = await requireOnlineEntrySession(input.token);
+      const releaseMode = await getRouteReleaseMode(input.route);
+      if (releaseMode === 'automatico') {
+        await setCustomerRoutePermissions(session.customerId, [input.route], 'Atendimento Online');
+        return { success: true, created: false, pending: false, released: true, customerId: session.customerId };
+      }
       const request = await requestCustomerRouteAccess(session.customerId, input.route);
-      return { success: true, ...request, customerId: session.customerId };
+      return { success: true, ...request, released: false, customerId: session.customerId };
     }),
 
   registrationDraftGet: publicProcedure
