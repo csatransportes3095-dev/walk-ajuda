@@ -104,12 +104,11 @@ export default function AdminCodes() {
     }
   }, [savedCardOrder]);
 
-  const orderedAdminShortcuts = useMemo(() => {
-    const byId = new Map(ADMIN_SHORTCUTS.map((card) => [card.id, card]));
-    const ordered = cardOrder.map((id) => byId.get(id)).filter(Boolean) as AdminShortcut[];
-    const missing = ADMIN_SHORTCUTS.filter((card) => !cardOrder.includes(card.id));
-    return [...ordered, ...missing];
-  }, [cardOrder]);
+  const byAdminShortcutId = new Map(ADMIN_SHORTCUTS.map((card) => [card.id, card]));
+  const orderedAdminShortcuts = [
+    ...cardOrder.map((id) => byAdminShortcutId.get(id)).filter(Boolean) as AdminShortcut[],
+    ...ADMIN_SHORTCUTS.filter((card) => !cardOrder.includes(card.id)),
+  ];
 
   const persistCardOrder = (nextOrder: string[]) => {
     setCardOrder(nextOrder);
