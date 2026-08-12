@@ -1947,39 +1947,70 @@ export const appRouter = router({
         cpf: z.string().regex(/^\d{11}$/).optional(),
       }))
       .mutation(async ({ input }) => {
-        const { id, ...data } = input;
-        // Se o telefone foi alterado, atualizar também em accessCodePhones para manter consistência
-        if (data.phone) {
-          const db = await (await import('./db')).getDb();
-          if (db) {
-            // Buscar o telefone atual do cliente antes de atualizar
-            const custRows = await db.execute(sql`SELECT phone FROM customers WHERE id = ${id} LIMIT 1`);
-            const oldPhone = (custRows[0] as unknown as Array<{ phone: string }>)[0]?.phone;
-            if (oldPhone && oldPhone !== data.phone) {
-              // Atualizar acp.phone para o novo telefone
-              await db.execute(sql`UPDATE accessCodePhones SET phone = ${data.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
-              // Atualizar orderStatusHistory.customerPhone também
-              await db.execute(sql`UPDATE orderStatusHistory SET customerPhone = ${data.phone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
-              // Atualizar orderLoginData.customerPhone também
-              await db.execute(sql`UPDATE orderLoginData SET customerPhone = ${data.phone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
-              // Atualizar orderFiles.customerPhone também
-              await db.execute(sql`UPDATE orderFiles SET customerPhone = ${data.phone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
-              // Atualizar customerPasswordSessions.phone para que o cliente continue logado com o novo telefone
-              try {
-                await db.execute(sql`UPDATE customerPasswordSessions SET phone = ${data.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
-              } catch {}
-              // Atualizar customerPasswords.phone também
-              try {
-                await db.execute(sql`UPDATE customerPasswords SET phone = ${data.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
-              } catch {}
-              // Atualizar customerLoginHistory.phone também
-              try {
-                await db.execute(sql`UPDATE customerLoginHistory SET phone = ${data.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = REGEXP_REPLACE(${oldPhone}, '[^0-9]', '')`);
-              } catch {}
+        const { id, ...rawData } = input;
+        const data = {
+          ...rawData,
+          phone: rawData.phone?.replace(/\D/g, '') || undefined,
+          cpf: rawData.cpf?.replace(/\D/g, '') || undefined,
+          referredByPhone: rawData.referredByPhone?.replace(/\D/g, '') || undefined,
+        };
+        const db = await (await import('./db')).getDb() as any;
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
+
+        const custRows = await db.execute(sql`SELECT phone FROM customers WHERE id = ${id} LIMIT 1`);
+        const current = (custRows[0] as unknown as Array<{ phone: string }>)[0];
+        if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
+        const oldPhone = String(current.phone || '').replace(/\D/g, '');
+        const newPhone = data.phone || oldPhone;
+        const phoneChanged = !!data.phone && newPhone !== oldPhone;
+
+        // Verifica duplicidade antes de tocar em tabelas relacionadas. Assim não há
+        // atualização parcial nem o erro genérico ao tentar trocar para telefone de outro cliente.
+        if (phoneChanged) {
+          const duplicateRows = await db.execute(sql`
+            SELECT id, name FROM customers
+            WHERE id <> ${id} AND deletedAt IS NULL
+              AND REGEXP_REPLACE(phone, '[^0-9]', '') = ${newPhone}
+            LIMIT 1
+          `);
+          const duplicate = (duplicateRows[0] as unknown as Array<{ id: number; name: string }>)[0];
+          if (duplicate) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: `Este telefone já está cadastrado para ${duplicate.name || 'outro cliente'}.`,
+            });
+          }
+        }
+
+        // Primeiro grava o cadastro principal. As sincronizações abaixo nunca podem
+        // impedir o ADM de salvar nome/telefone/cidade no cliente principal.
+        const updated = await updateCustomer(id, data);
+        if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
+
+        if (phoneChanged) {
+          const propagationQueries = [
+            sql`UPDATE accessCodePhones SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE orderStatusHistory SET customerPhone = ${newPhone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE orderLoginData SET customerPhone = ${newPhone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE orderFiles SET customerPhone = ${newPhone} WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE customerPasswordSessions SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE customerPasswords SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE customerLoginHistory SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            // A planilha e empréstimos usam CPF como prioridade e telefone como fallback;
+            // mantém o telefone sincronizado quando existir o mesmo cadastro.
+            sql`UPDATE spreadsheetClients SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE loanClients SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+          ];
+          for (const query of propagationQueries) {
+            try {
+              await db.execute(query);
+            } catch (error: any) {
+              // Tabelas antigas ou restrições secundárias não anulam o salvamento do cadastro principal.
+              console.warn('[customers.update] sincronização de telefone não aplicada:', error?.message);
             }
           }
         }
-        return await updateCustomer(id, data);
+        return updated;
       }),
 
     clearNotes: adminProcedure

@@ -396,7 +396,7 @@ export default function AdminCustomers() {
   const customersQuery = trpc.customers.list.useQuery(undefined, {});
   const updateMut = trpc.customers.update.useMutation({
     onSuccess: () => { customersQuery.refetch(); toast.success("Cliente atualizado!"); setEditingId(null); },
-    onError: () => toast.error("Erro ao atualizar cliente"),
+    onError: (error) => toast.error(error.message || "Erro ao atualizar cliente"),
   });
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ id: number; name: string } | null>(null);
   const [deleteWithOrdersLoading, setDeleteWithOrdersLoading] = useState(false);
