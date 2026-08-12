@@ -4,6 +4,9 @@ import { z } from "zod";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { onlineSupportConversations } from "../../drizzle/schema";
+import { requireOnlineEntrySession } from "../online-support/entry";
+import { CUSTOMER_ROUTES, requestCustomerRouteAccess } from "../customerAccess";
+import { cancelOnlineRegistrationDraft, findOnlineRegistrationIdentity, getOnlineRegistrationDraft, saveOnlineRegistrationDraft } from "../online-support/registration";
 import {
   clearLogs,
   deleteAgent,
@@ -75,6 +78,49 @@ async function ensureConversationOwnership(conversationId: number, visitorId: st
 }
 
 export const onlineSupportRouter = router({
+  entrySession: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ input }) => {
+      try {
+        const session = await requireOnlineEntrySession(input.token);
+        return { authenticated: true, customer: session };
+      } catch (error: any) {
+        return { authenticated: false, message: error?.message || 'Sessão inválida.' };
+      }
+    }),
+
+  entryRequestRoute: publicProcedure
+    .input(z.object({ token: z.string().min(1), route: z.enum(CUSTOMER_ROUTES) }))
+    .mutation(async ({ input }) => {
+      const session = await requireOnlineEntrySession(input.token);
+      const request = await requestCustomerRouteAccess(session.customerId, input.route);
+      return { success: true, ...request, customerId: session.customerId };
+    }),
+
+  registrationDraftGet: publicProcedure
+    .input(z.object({ conversationId: z.number().int().positive(), visitorId: z.string().min(8) }))
+    .query(async ({ input }) => getOnlineRegistrationDraft(input.conversationId, input.visitorId)),
+
+  registrationDraftSave: publicProcedure
+    .input(z.object({
+      conversationId: z.number().int().positive(),
+      visitorId: z.string().min(8),
+      requestedRoute: z.enum(CUSTOMER_ROUTES),
+      step: z.enum(['route', 'identity', 'name', 'phone', 'cpf', 'email', 'cep', 'uf', 'city', 'referrer', 'photo', 'confirm']),
+      field: z.string().optional(),
+      value: z.string().optional(),
+      data: z.record(z.string(), z.string()).optional(),
+    }))
+    .mutation(async ({ input }) => saveOnlineRegistrationDraft(input)),
+
+  registrationFindExisting: publicProcedure
+    .input(z.object({ phone: z.string().optional(), cpf: z.string().optional(), email: z.string().optional() }))
+    .query(async ({ input }) => findOnlineRegistrationIdentity(input)),
+
+  registrationDraftCancel: publicProcedure
+    .input(z.object({ conversationId: z.number().int().positive(), visitorId: z.string().min(8) }))
+    .mutation(async ({ input }) => cancelOnlineRegistrationDraft(input.conversationId, input.visitorId)),
+
   publicState: publicProcedure
     .input(z.object({ pathname: z.string().default("/") }))
     .query(async ({ input }) => {
