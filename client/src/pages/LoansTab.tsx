@@ -836,6 +836,7 @@ export function LoansTab({ token }: LoansTabProps) {
         <div className="space-y-4">
           {visibleLoans.map((loan: any, index: number) => {
             const isHistoryLoan = ["pago", "cancelado"].includes(loan.status);
+            const isPaidLoan = loan.status === "pago";
             const isFirstHistory = isHistoryLoan && !visibleLoans.slice(0, index).some((item: any) => ["pago", "cancelado"].includes(item.status));
             const isFirstCurrent = index === 0 && !isHistoryLoan;
             const isExpanded = expandedLoan === loan.id;
@@ -860,19 +861,33 @@ export function LoansTab({ token }: LoansTabProps) {
                 )}
                 <div className={`rounded-2xl border-2 overflow-hidden transition-all ${
                 loan.isOverdue ? "border-red-500/50 shadow-red-500/10 shadow-xl" :
-                loan.status === "pago" ? "border-emerald-500/30" :
+                isPaidLoan ? "border-emerald-400/80 shadow-2xl shadow-emerald-500/20 ring-1 ring-emerald-400/30" :
                 loan.status === "pendente" ? "border-blue-500/30" :
                 "border-violet-500/30 shadow-violet-500/10 shadow-xl"
               }`}>
                 {/* Faixa de cor no topo */}
-                <div className={`h-1.5 w-full ${
+                <div className={`w-full ${isPaidLoan ? "h-2" : "h-1.5"} ${
                   loan.isOverdue ? "bg-gradient-to-r from-red-600 to-red-400" :
-                  loan.status === "pago" ? "bg-gradient-to-r from-emerald-600 to-emerald-400" :
+                  isPaidLoan ? "bg-gradient-to-r from-emerald-700 via-lime-400 to-emerald-500" :
                   loan.status === "pendente" ? "bg-gradient-to-r from-blue-600 to-blue-400" :
                   "bg-gradient-to-r from-violet-600 to-violet-400"
                 }`} />
 
-                <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/80 p-4">
+                <div className={`${isPaidLoan ? "bg-gradient-to-br from-emerald-950/80 via-teal-950/55 to-slate-900/90" : "bg-gradient-to-br from-slate-800/40 to-slate-900/80"} p-4`}>
+
+                  {/* Banner de quitação: visual exclusivo para não confundir com empréstimo ativo */}
+                  {isPaidLoan && (
+                    <div className="mb-4 flex items-center gap-3 rounded-2xl border-2 border-emerald-400/60 bg-emerald-500/15 px-4 py-3 shadow-lg shadow-emerald-500/10">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-400 text-emerald-950 shadow-lg shadow-emerald-400/40">
+                        <CheckCheck className="h-6 w-6" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-base font-black tracking-wide text-emerald-300">EMPRÉSTIMO QUITADO</p>
+                        <p className="text-xs font-medium text-emerald-100/80">Todas as parcelas foram pagas. Não há cobrança pendente.</p>
+                      </div>
+                      <span className="rounded-full border border-emerald-300/50 bg-emerald-400/20 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-200">100% pago</span>
+                    </div>
+                  )}
 
                   {/* Banner pendente */}
                   {loan.status === "pendente" && (
@@ -899,8 +914,8 @@ export function LoansTab({ token }: LoansTabProps) {
                   <div className="flex items-start justify-between gap-2 mb-4">
                     <StatusBadge status={loan.status} isOverdue={loan.isOverdue} />
                     <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Total c/ juros</p>
-                      <p className="text-xl font-black text-yellow-400">{fmt(loan.totalAmount)}</p>
+                      <p className="text-xs text-muted-foreground">{isPaidLoan ? "Total quitado" : "Total c/ juros"}</p>
+                      <p className={`text-xl font-black ${isPaidLoan ? "text-emerald-300" : "text-yellow-400"}`}>{fmt(loan.totalAmount)}</p>
                     </div>
                   </div>
 
@@ -945,12 +960,12 @@ export function LoansTab({ token }: LoansTabProps) {
                   <button
                     onClick={() => setExpandedLoan(isExpanded ? null : loan.id)}
                     className={`w-full flex items-center justify-center gap-3 py-4 rounded-xl border font-bold text-sm transition-all active:scale-95 relative overflow-hidden ${
-                      isExpanded
-                        ? "border-violet-500/60 bg-violet-500/25 text-violet-200"
-                        : "border-violet-500/40 bg-gradient-to-r from-violet-900/40 via-purple-900/30 to-violet-900/40 text-violet-200 hover:bg-violet-500/20"
+                      isPaidLoan
+                        ? (isExpanded ? "border-emerald-400/70 bg-emerald-500/25 text-emerald-100" : "border-emerald-400/50 bg-gradient-to-r from-emerald-950/80 via-teal-900/60 to-emerald-950/80 text-emerald-200 hover:bg-emerald-500/20")
+                        : (isExpanded ? "border-violet-500/60 bg-violet-500/25 text-violet-200" : "border-violet-500/40 bg-gradient-to-r from-violet-900/40 via-purple-900/30 to-violet-900/40 text-violet-200 hover:bg-violet-500/20")
                     }`}
                   >
-                    {!isExpanded && (
+                    {!isExpanded && !isPaidLoan && (
                       <span className="flex items-end gap-[3px] h-7">
                         <span className="eq-bar eq-bar-1" style={{height:"8px",background:"rgba(167,139,250,0.9)"}}></span>
                         <span className="eq-bar eq-bar-2" style={{height:"14px",background:"rgba(192,132,252,0.9)"}}></span>
@@ -963,9 +978,9 @@ export function LoansTab({ token }: LoansTabProps) {
                     )}
                     <span className="flex items-center gap-2">
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      {isExpanded ? "Ocultar parcelas" : "Ver todas as parcelas"}
+                      {isExpanded ? "Ocultar parcelas" : isPaidLoan ? "Ver parcelas quitadas" : "Ver todas as parcelas"}
                     </span>
-                    {!isExpanded && (
+                    {!isExpanded && !isPaidLoan && (
                       <span className="flex items-end gap-[3px] h-7">
                         <span className="eq-bar eq-bar-7" style={{height:"12px",background:"rgba(167,139,250,0.9)"}}></span>
                         <span className="eq-bar eq-bar-6" style={{height:"6px",background:"rgba(139,92,246,0.8)"}}></span>
