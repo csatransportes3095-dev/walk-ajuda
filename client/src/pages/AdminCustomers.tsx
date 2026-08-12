@@ -122,21 +122,22 @@ function RouteAccessWidget({ phone }: { phone: string }) {
   };
 
   return (
-    <div className="w-full rounded-xl border border-slate-500/50 bg-gradient-to-r from-slate-700/25 to-slate-700/15 p-3 shadow-inner">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-black text-slate-100">🔑 Rotas de acesso</span>
-        {!hasRestriction && <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-black text-green-300">ACESSO TOTAL</span>}
+    <div className="w-full rounded-xl border border-slate-500/45 bg-gradient-to-r from-slate-700/20 to-slate-700/10 p-2.5">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="text-xs font-black text-slate-100">🔑 Rotas de acesso</span>
+        {!hasRestriction && <span className="rounded-full bg-green-500/15 px-1.5 py-0.5 text-[8px] font-black text-green-300">TOTAL</span>}
       </div>
-      <div className="flex flex-col gap-2">
+      <div className="grid gap-1.5">
         {ROUTES.map(({ key, label, icon }) => {
           const isAllowed = !hasRestriction || routes.includes(key);
-          return <label key={key} className={`flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-all ${isAllowed ? 'border-green-400/35 bg-green-500/10' : 'border-red-400/25 bg-red-500/5'} ${updateRoutesMut.isPending ? 'cursor-wait opacity-70' : 'hover:scale-[1.01]'}`}>
-            <span className={`text-sm font-bold ${isAllowed ? 'text-green-200' : 'text-slate-400'}`}>{icon} {label}</span>
-            <span className="flex items-center gap-2"><span className={`text-xs font-black ${isAllowed ? 'text-green-300' : 'text-red-300'}`}>{isAllowed ? 'LIBERADO' : 'BLOQUEADO'}</span><input type="checkbox" checked={isAllowed} disabled={updateRoutesMut.isPending} onChange={(event) => handleToggle(key, event.target.checked)} className="h-6 w-6 cursor-pointer accent-green-500" /></span>
+          return <label key={key} className={`grid h-10 cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-lg border px-2.5 transition-colors ${isAllowed ? 'border-green-400/30 bg-green-500/10' : 'border-red-400/20 bg-red-500/5'} ${updateRoutesMut.isPending ? 'cursor-wait opacity-70' : 'hover:bg-white/5'}`}>
+            <span className={`min-w-0 truncate text-xs font-bold ${isAllowed ? 'text-green-200' : 'text-slate-400'}`}>{icon} {label}</span>
+            <span className={`whitespace-nowrap text-[10px] font-black ${isAllowed ? 'text-green-300' : 'text-red-300'}`}>{isAllowed ? 'LIBERADO' : 'BLOQUEADO'}</span>
+            <input type="checkbox" checked={isAllowed} disabled={updateRoutesMut.isPending} onChange={(event) => handleToggle(key, event.target.checked)} className="h-5 w-5 shrink-0 cursor-pointer accent-green-500" />
           </label>;
         })}
       </div>
-      <p className="mt-2 text-[10px] font-medium text-cyan-200/80">A alteração é salva e enviada ao cliente imediatamente.</p>
+      <p className="mt-1.5 text-[9px] font-medium leading-tight text-cyan-200/75">Liberação e bloqueio enviados ao cliente imediatamente.</p>
     </div>
   );
 }
