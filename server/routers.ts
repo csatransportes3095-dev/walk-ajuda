@@ -2417,7 +2417,7 @@ export const appRouter = router({
         name: z.string().min(2, 'Nome obrigatório'),
         phone: z.string().regex(/^\d{10,11}$/, 'Telefone inválido (somente dígitos, 10 ou 11)'),
         email: z.string().email('E-mail obrigatório e inválido').min(1, 'E-mail obrigatório'),
-        cpf: z.string().transform(value => value.replace(/\D/g, '')).regex(/^\d{11}$/, 'CPF obrigatório e inválido'),
+        cpf: z.string().transform(value => value.replace(/\D/g, '')).refine(value => /^\d{11}$/.test(value), 'CPF obrigatório e inválido'),
         profilePhotoUrl: z.string().url('Foto de perfil obrigatória').min(1, 'Foto de perfil obrigatória'),
         city: z.string().optional(),
         uf: z.string().length(2).optional().or(z.literal('')),
