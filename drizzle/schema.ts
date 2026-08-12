@@ -1965,6 +1965,28 @@ export const ccCartoes = mysqlTable("cc_cartoes", {
 export type CcCartao = typeof ccCartoes.$inferSelect;
 export type InsertCcCartao = typeof ccCartoes.$inferInsert;
 
+// Faturas persistentes por cartão e ciclo. As datas são congeladas na criação da fatura.
+export const ccFaturas = mysqlTable("cc_faturas", {
+  id: int("id").autoincrement().primaryKey(),
+  cartaoId: int("cartaoId").notNull().references(() => ccCartoes.id, { onDelete: "cascade" }),
+  competencia: varchar("competencia", { length: 7 }).notNull(),
+  cycleStart: timestamp("cycleStart").notNull(),
+  cycleEnd: timestamp("cycleEnd").notNull(),
+  closingDate: timestamp("closingDate").notNull(),
+  dueDate: timestamp("dueDate").notNull(),
+  originalAmount: decimal("originalAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+  paidAmount: decimal("paidAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+  legacyPaidAmount: decimal("legacyPaidAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+  remainingAmount: decimal("remainingAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+  status: varchar("status", { length: 20 }).notNull().default("ABERTA"),
+  paidAt: timestamp("paidAt"),
+  requiresReview: int("requiresReview").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CcFatura = typeof ccFaturas.$inferSelect;
+export type InsertCcFatura = typeof ccFaturas.$inferInsert;
+
 export const ccParcelamentos = mysqlTable("cc_parcelamentos", {
   id: int("id").autoincrement().primaryKey(),
   cartaoId: int("cartaoId").notNull().references(() => ccCartoes.id, { onDelete: "cascade" }),
@@ -2003,6 +2025,8 @@ export const ccGastos = mysqlTable("cc_gastos", {
   paga: int("paga").default(0).notNull(),
   responsavel: varchar("responsavel", { length: 100 }),
   categoriaId: int("categoriaId").references(() => ccCategorias.id, { onDelete: "set null" }),
+  cicloFatura: varchar("cicloFatura", { length: 7 }),
+  invoiceId: int("invoiceId").references(() => ccFaturas.id, { onDelete: "set null" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type CcGasto = typeof ccGastos.$inferSelect;
@@ -2014,6 +2038,7 @@ export const ccPagamentos = mysqlTable("cc_pagamentos", {
   valorPago: decimal("valorPago", { precision: 10, scale: 2 }).notNull(),
   dataPagamento: timestamp("dataPagamento").defaultNow().notNull(),
   observacao: varchar("observacao", { length: 200 }),
+  invoiceId: int("invoiceId").references(() => ccFaturas.id, { onDelete: "restrict" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type CcPagamento = typeof ccPagamentos.$inferSelect;

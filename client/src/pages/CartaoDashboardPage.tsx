@@ -43,17 +43,6 @@ function fmt(v: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 }
 
-function diasParaVencer(dia: number) {
-  const hoje = new Date();
-  const diaHoje = hoje.getDate();
-  let venc = new Date(hoje.getFullYear(), hoje.getMonth(), dia);
-  // Não avançar para o próximo mês se já venceu — retornar negativo para indicar atraso
-  if (dia < diaHoje) {
-    // Já passou esse mês: retornar negativo (dias de atraso)
-    return Math.ceil((venc.getTime() - hoje.getTime()) / 86400000);
-  }
-  return Math.ceil((venc.getTime() - hoje.getTime()) / 86400000);
-}
 
 export default function DashboardPage() {
   const [, navigate] = useLocation();
@@ -67,18 +56,24 @@ export default function DashboardPage() {
   });
 
   const nome = ((user as any)?.name || "Usuário").split(" ")[0];
-  // Alertas: cartões com fatura em atraso OU vencendo em até 3 dias
-  const alertas = cartoes.filter(c => {
-    const fa = (c as any).faturaEmAtraso;
-    if (fa && Number(fa.valor) > 0) return true; // fatura em atraso
-    return Number((c as any).faturaAtual ?? 0) > 0 && diasParaVencer(c.vencimentoDia) <= 3;
-  });
-  // Total considera fatura em atraso + fatura atual
-  const totalFatura = cartoes.reduce((s, c) => {
-    const fa = (c as any).faturaEmAtraso;
-    const emAtraso = fa ? Number(fa.valor ?? 0) : 0;
-    const atual = Number((c as any).faturaAtual ?? 0);
-    return s + emAtraso + atual;
+  // O frontend apenas apresenta as faturas que o backend classificou com datas reais.
+  const alertas = cartoes.flatMap((c: any) =>
+    ((c.faturasVencidas || []) as any[]).map((invoice) => ({ card: c, invoice }))
+  );
+  const totalFatura = cartoes.reduce((total: number, c: any) => {
+    const invoiceIds = new Set<number>();
+    let subtotal = 0;
+    for (const invoice of (c.faturasVencidas || []) as any[]) {
+      if (!invoiceIds.has(Number(invoice.id))) {
+        subtotal += Number(invoice.remainingAmount || 0);
+        invoiceIds.add(Number(invoice.id));
+      }
+    }
+    const current = c.faturaAtualInvoice;
+    if (current && current.status !== "PAGA" && !invoiceIds.has(Number(current.id))) {
+      subtotal += Number(current.remainingAmount || 0);
+    }
+    return total + subtotal;
   }, 0);
 
   return (
@@ -141,22 +136,19 @@ export default function DashboardPage() {
       {/* Alertas */}
       {alertas.length > 0 && (
         <div style={{ padding: "16px 20px 0" }}>
-          {alertas.map(c => {
-            const dias = diasParaVencer(c.vencimentoDia);
-            return (
-              <div key={c.id} onClick={() => navigate(`/cartoes/cartao/${c.id}`)}
-                style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 16, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
-                <div style={{ width: 38, height: 38, borderRadius: 12, background: "rgba(239,68,68,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <AlertTriangle size={18} color="#ef4444" />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#ef4444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</div>
-                  <div style={{ fontSize: 12, color: "rgba(239,68,68,0.7)" }}>{(c as any).faturaEmAtraso?.valor > 0 ? `Em atraso · ${(c as any).faturaEmAtraso.diasAtraso > 0 ? (c as any).faturaEmAtraso.diasAtraso + " dia(s)" : "vence hoje"}` : dias <= 0 ? "Fatura vencida!" : dias === 1 ? "Vence amanhã!" : `Vence em ${dias} dias`}</div>
-                </div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: "#ef4444", flexShrink: 0 }}>{fmt(Number((c as any).faturaEmAtraso?.valor ?? (c as any).faturaAtual ?? 0))}</div>
+          {alertas.map(({ card, invoice }: any) => (
+            <div key={`${card.id}-${invoice.id}`} onClick={() => navigate(`/cartoes/cartao/${card.id}`)}
+              style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 16, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
+              <div style={{ width: 38, height: 38, borderRadius: 12, background: "rgba(239,68,68,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <AlertTriangle size={18} color="#ef4444" />
               </div>
-            );
-          })}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#ef4444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{card.nome}</div>
+                <div style={{ fontSize: 12, color: "rgba(239,68,68,0.7)" }}>Fatura vencida em {new Date(String(invoice.dueDate) + "T12:00:00").toLocaleDateString("pt-BR")}</div>
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#ef4444", flexShrink: 0 }}>{fmt(Number(invoice.remainingAmount || 0))}</div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -194,7 +186,8 @@ export default function DashboardPage() {
             const limite = Number(c.limiteTotal ?? 0);
             const disponivel = Number((c as any).limiteDisponivel ?? 0);
             const pct = Number((c as any).pctLimite ?? 0);
-            const dias = diasParaVencer(c.vencimentoDia);
+            const invoiceAtual = (c as any).faturaAtualInvoice;
+            const statusAtual = invoiceAtual?.status ?? "ABERTA";
             const temAtraso = emAtraso > 0;
 
             return (
@@ -223,10 +216,10 @@ export default function DashboardPage() {
                     </div>
                     <div style={{
                       padding: "6px 12px", borderRadius: 50, fontSize: 11, fontWeight: 700,
-                      background: temAtraso ? "rgba(239,68,68,0.9)" : faturaDoMes > 0 && dias <= 0 ? "rgba(239,68,68,0.9)" : faturaDoMes > 0 && dias <= 3 ? "rgba(245,158,11,0.9)" : "rgba(255,255,255,0.15)",
+                      background: temAtraso ? "rgba(239,68,68,0.9)" : statusAtual === "VENCE_HOJE" ? "rgba(245,158,11,0.9)" : statusAtual === "A_VENCER" ? "rgba(245,158,11,0.9)" : "rgba(255,255,255,0.15)",
                       color: "#fff", backdropFilter: "blur(8px)",
                     }}>
-                      {temAtraso ? `⚠ ATRASADO` : faturaDoMes > 0 && dias <= 0 ? "⚠ VENCIDO" : faturaDoMes > 0 && dias <= 3 ? `⚠ ${dias}d` : (c as any).fechamentoDia ? `Fecha ${(c as any).fechamentoDia} · Vence ${c.vencimentoDia}` : `Dia ${c.vencimentoDia}`}
+                      {temAtraso ? "⚠ VENCIDO" : statusAtual === "PAGA" ? "✓ PAGA" : statusAtual === "VENCE_HOJE" ? "⚠ VENCE HOJE" : statusAtual === "A_VENCER" ? "A VENCER" : (c as any).fechamentoDia ? `Fecha ${(c as any).fechamentoDia} · Vence ${c.vencimentoDia}` : `Vence dia ${c.vencimentoDia}`}
                     </div>
                   </div>
 

@@ -17,6 +17,7 @@ import { isIpBlocked, getSetting } from "../db";
 import { broadcastEmailHandler } from "../broadcastEmailHandler";
 import { sendMail } from "./mailer";
 import { ensureCustomerIdentityInfrastructure } from "../customerAccess";
+import { bootstrapCardInvoices } from "../cardsBilling";
 import path from "path";
 import fs from "fs";
 
@@ -58,6 +59,13 @@ async function startServer() {
     await ensureCustomerIdentityInfrastructure();
   } catch (error) {
     console.error('[CustomerIdentity] infraestrutura não inicializada:', error);
+  }
+  // A migração de cartões cria primeiro cópias de backup e só depois prepara faturas históricas.
+  // Falhas são registradas sem impedir a inicialização das demais áreas do site.
+  try {
+    await bootstrapCardInvoices();
+  } catch (error) {
+    console.error('[CardsBilling] infraestrutura de faturas não inicializada:', error);
   }
   registerUploadRoute(app);
   registerApkDownloadRoute(app);

@@ -25,14 +25,6 @@ function fmt(v: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 }
 
-function diasParaVencer(dia: number) {
-  const hoje = new Date();
-  // Usa fim do dia (23:59:59) para não mostrar "vencida" antes de acabar o dia
-  // NÃO avança para o próximo mês — retorna negativo quando já venceu
-  const venc = new Date(hoje.getFullYear(), hoje.getMonth(), dia, 23, 59, 59);
-  return Math.ceil((venc.getTime() - hoje.getTime()) / 86400000);
-}
-
 // Card de compra parcelada — estado local de expandido
 function ParcelamentoCard({
   pid, parcelas, accent, id,
@@ -305,7 +297,8 @@ export default function CartaoDetailPage() {
   const disponivel = Number((cartao as any).limiteDisponivel ?? 0);
   const fatura = faturaDoMes;
   const pct = Number((cartao as any).pctLimite ?? (cartao as any).percentualUsado ?? 0);
-  const dias = diasParaVencer(cartao.vencimentoDia);
+  const faturaAtualInvoice = (cartao as any).faturaAtualInvoice as { id?: number; status?: string; dueDate?: string; remainingAmount?: number } | undefined;
+  const statusFaturaAtual = faturaAtualInvoice?.status ?? "ABERTA";
 
   // Fatura fechada: quando hoje > fechamentoDia, a fatura está fechada aguardando pagamento
   // Fatura em atraso: retornada diretamente pelo backend (calcCartao)
@@ -320,6 +313,7 @@ export default function CartaoDetailPage() {
   const faturaEmAtrasoVenc = faturaEmAtrasoInfo?.vencimento ? new Date(faturaEmAtrasoInfo.vencimento + 'T12:00:00') : null;
   const faturaEmAtrasoDias = Number(faturaEmAtrasoInfo?.diasAtraso ?? 0);
   const faturaEmAtrasoComp = faturaEmAtrasoInfo?.competencia ?? '';
+  const faturaEmAtrasoInvoiceId = Number((faturaEmAtrasoInfo as any)?.invoiceId ?? 0);
 
   // Compatibilidade com campo antigo faturaFechada (mantido para não quebrar)
   const faturaFechadaInfo = (cartao as any).faturaFechada as {
@@ -437,11 +431,11 @@ export default function CartaoDetailPage() {
             </div>
           )}
 
-          {fatura > 0 && dias <= 3 && dias >= 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, background: dias <= 0 ? "rgba(244,67,54,0.9)" : "rgba(255,152,0,0.9)", borderRadius: 12, padding: "8px 12px", marginBottom: 14 }}>
+          {fatura > 0 && (statusFaturaAtual === "VENCE_HOJE" || statusFaturaAtual === "A_VENCER") && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: statusFaturaAtual === "VENCE_HOJE" ? "rgba(244,67,54,0.9)" : "rgba(255,152,0,0.9)", borderRadius: 12, padding: "8px 12px", marginBottom: 14 }}>
               <AlertTriangle size={16} color="#fff" />
               <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>
-                {dias <= 0 ? "Fatura vencida! Pague agora." : dias === 1 ? "Vence amanhã!" : `Vence em ${dias} dias`}
+                {statusFaturaAtual === "VENCE_HOJE" ? "Fatura vence hoje." : `Fatura a vencer em ${faturaAtualInvoice?.dueDate ? new Date(faturaAtualInvoice.dueDate + "T12:00:00").toLocaleDateString("pt-BR") : "breve"}.`}
               </span>
             </div>
           )}
@@ -797,7 +791,7 @@ export default function CartaoDetailPage() {
 
       {/* ── Modais ── */}
       {showGasto && <GastoSheet accent={accent} cartaoId={id} onClose={() => setShowGasto(false)} onSuccess={() => { setShowGasto(false); utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Gasto adicionado!"); }} />}
-      {showPagar && <PagarSheet accent={accent} cartaoId={id} faturaAtual={isFaturaEmAtraso ? faturaEmAtrasoValor : fatura} competencia={isFaturaEmAtraso ? faturaEmAtrasoComp : (cartao as any).competenciaAtual} isFaturaEmAtraso={isFaturaEmAtraso} onClose={() => setShowPagar(false)} onSuccess={(data: any) => { setShowPagar(false); utils.cartoes.cartoes.get.invalidate({ id }); utils.cartoes.cartoes.list.invalidate(); utils.cartoes.pagamentos.list.invalidate({ cartaoId: id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); if (data?.parcelasMarcadas > 0) { toast.success(`Pagamento registrado! ${data.parcelasMarcadas} parcela(s) baixada(s) da fatura.`); } else { toast.success("Pagamento registrado!"); } }} />}
+      {showPagar && <PagarSheet accent={accent} cartaoId={id} faturaAtual={isFaturaEmAtraso ? faturaEmAtrasoValor : fatura} invoiceId={isFaturaEmAtraso ? faturaEmAtrasoInvoiceId : Number(faturaAtualInvoice?.id ?? 0)} isFaturaEmAtraso={isFaturaEmAtraso} onClose={() => setShowPagar(false)} onSuccess={(data: any) => { setShowPagar(false); utils.cartoes.cartoes.get.invalidate({ id }); utils.cartoes.cartoes.list.invalidate(); utils.cartoes.pagamentos.list.invalidate({ cartaoId: id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); if (data?.parcelasMarcadas > 0) { toast.success(`Pagamento registrado! ${data.parcelasMarcadas} parcela(s) baixada(s) da fatura.`); } else { toast.success("Pagamento registrado!"); } }} />}
       {showEdit && <EditCartaoSheet cartao={cartao} accent={accent} onClose={() => setShowEdit(false)} onSuccess={() => { setShowEdit(false); utils.cartoes.cartoes.list.invalidate({ id }); toast.success("Cartão atualizado!"); }} />}
       {editarGastoData && (
         <EditarGastoSheet
@@ -1006,7 +1000,7 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
   );
 }
 
-function PagarSheet({ accent, cartaoId, faturaAtual, competencia, isFaturaEmAtraso, onClose, onSuccess }: { accent: string; cartaoId: number; faturaAtual: number; competencia?: string; isFaturaEmAtraso?: boolean; onClose: () => void; onSuccess: (data?: any) => void }) {
+function PagarSheet({ accent, cartaoId, faturaAtual, invoiceId, isFaturaEmAtraso, onClose, onSuccess }: { accent: string; cartaoId: number; faturaAtual: number; invoiceId: number; isFaturaEmAtraso?: boolean; onClose: () => void; onSuccess: (data?: any) => void }) {
   const [valor, setValor] = useState(faturaAtual > 0 ? faturaAtual.toFixed(2).replace(".", ",") : "");
   const [data, setData] = useState(new Date().toISOString().split("T")[0]);
   const [obs, setObs] = useState("");
@@ -1015,8 +1009,8 @@ function PagarSheet({ accent, cartaoId, faturaAtual, competencia, isFaturaEmAtra
   const submit = () => {
     const v = parseFloat(valor.replace(",", "."));
     if (!v || v <= 0) return toast.error("Valor inválido");
-    // Quando há fatura em atraso, passa a competência para baixar apenas os gastos daquela fatura
-    mut.mutate({ cartaoId, valorPago: v, observacao: obs.trim() || undefined, competencia });
+    if (!invoiceId) return toast.error("Fatura ainda não foi preparada. Atualize a página e tente novamente.");
+    mut.mutate({ cartaoId, invoiceId, valorPago: v, observacao: obs.trim() || undefined });
   };
 
   return (

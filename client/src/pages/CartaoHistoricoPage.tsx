@@ -10,11 +10,11 @@ function fmt(v: number) {
 }
 
 const STATUS_CONFIG = {
-  paga:     { label: "Paga",     color: "#10b981", bg: "rgba(16,185,129,0.15)",  icon: <CheckCircle size={13} /> },
-  aberta:   { label: "Aberta",   color: "#3b82f6", bg: "rgba(59,130,246,0.15)",  icon: <Clock size={13} /> },
-  pendente: { label: "Pendente", color: "#f59e0b", bg: "rgba(245,158,11,0.15)",  icon: <AlertTriangle size={13} /> },
-  prevista: { label: "Prevista", color: "rgba(255,255,255,0.4)", bg: "rgba(255,255,255,0.06)", icon: <TrendingUp size={13} /> },
-  vazia:    { label: "Vazia",    color: "rgba(255,255,255,0.25)", bg: "rgba(255,255,255,0.04)", icon: null },
+  PAGA:       { label: "Paga",       color: "#10b981", bg: "rgba(16,185,129,0.15)",  icon: <CheckCircle size={13} /> },
+  ABERTA:     { label: "Aberta",     color: "#3b82f6", bg: "rgba(59,130,246,0.15)",  icon: <Clock size={13} /> },
+  A_VENCER:   { label: "A vencer",   color: "#f59e0b", bg: "rgba(245,158,11,0.15)", icon: <TrendingUp size={13} /> },
+  VENCE_HOJE: { label: "Vence hoje", color: "#f59e0b", bg: "rgba(245,158,11,0.15)", icon: <AlertTriangle size={13} /> },
+  VENCIDA:    { label: "Vencida",    color: "#ef4444", bg: "rgba(239,68,68,0.15)",  icon: <AlertTriangle size={13} /> },
 };
 
 export default function CartaoHistoricoPage() {
@@ -22,7 +22,7 @@ export default function CartaoHistoricoPage() {
   const fullPath = typeof window !== 'undefined' ? window.location.pathname : '';
   const idMatch = fullPath.match(/\/cartoes\/historico\/(\d+)/);
   const cartaoId = parseInt(idMatch?.[1] || "0");
-  const [expandido, setExpandido] = useState<string | null>(null);
+  const [expandido, setExpandido] = useState<number | null>(null);
 
   const { data: cartao } = trpc.cartoes.cartoes.get.useQuery({ id: cartaoId }, { enabled: !!cartaoId });
   const { data: historico = [], isLoading } = trpc.cartoes.cartoes.historico.useQuery(
@@ -67,21 +67,22 @@ export default function CartaoHistoricoPage() {
           </div>
         ) : (
           historico.map((fatura: any) => {
-            const cfg = STATUS_CONFIG[fatura.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.vazia;
-            const isOpen = expandido === fatura.mesStr;
-            const mesNome = MESES[fatura.mes - 1];
+            const cfg = STATUS_CONFIG[fatura.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.ABERTA;
+            const isOpen = expandido === fatura.invoiceId;
+            const [ano, mes] = String(fatura.competencia || "").split("-").map(Number);
+            const mesNome = MESES[(mes || 1) - 1] || "Fatura";
             return (
-              <div key={fatura.mesStr} style={{ marginBottom: 10 }}>
+              <div key={fatura.invoiceId} style={{ marginBottom: 10 }}>
                 {/* Card do mês */}
                 <div
-                  onClick={() => fatura.status !== 'vazia' && setExpandido(isOpen ? null : fatura.mesStr)}
+                  onClick={() => true && setExpandido(isOpen ? null : fatura.invoiceId)}
                   style={{
                     background: "rgba(255,255,255,0.05)",
                     border: `1px solid ${isOpen ? cfg.color + '40' : 'rgba(255,255,255,0.07)'}`,
                     borderRadius: isOpen ? "16px 16px 0 0" : 16,
                     padding: "14px 16px",
                     display: "flex", alignItems: "center", gap: 12,
-                    cursor: fatura.status !== 'vazia' ? "pointer" : "default",
+                    cursor: true ? "pointer" : "default",
                     transition: "border-color 200ms",
                   }}>
                   {/* Badge status */}
@@ -96,8 +97,8 @@ export default function CartaoHistoricoPage() {
                   </div>
                   {/* Info */}
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{mesNome} {fatura.ano}</div>
-                    {fatura.totalPago > 0 && fatura.status === 'paga' && (
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{mesNome} {ano}</div>
+                    {fatura.totalPago > 0 && fatura.status === 'PAGA' && (
                       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>
                         Pago: {fmt(fatura.totalPago)}
                       </div>
@@ -112,7 +113,7 @@ export default function CartaoHistoricoPage() {
                       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>{fatura.gastos.length} lançamento{fatura.gastos.length !== 1 ? 's' : ''}</div>
                     )}
                   </div>
-                  {fatura.status !== 'vazia' && (
+                  {true && (
                     <div style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }}>
                       {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </div>
@@ -170,6 +171,10 @@ export default function CartaoHistoricoPage() {
                       <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Total da fatura</span>
                       <span style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>{fmt(fatura.total)}</span>
                     </div>
+                    {fatura.saldo > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}><span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Saldo pendente</span><span style={{ fontSize: 14, fontWeight: 800, color: fatura.status === "VENCIDA" ? "#ef4444" : "#f59e0b" }}>{fmt(fatura.saldo)}</span></div>
+                    )}
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 8 }}>Fechamento: {new Date(String(fatura.closingDate) + "T12:00:00").toLocaleDateString("pt-BR")} · Vencimento: {new Date(String(fatura.dueDate) + "T12:00:00").toLocaleDateString("pt-BR")}</div>
                     {fatura.totalPago > 0 && (
                       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
                         <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Total pago</span>
