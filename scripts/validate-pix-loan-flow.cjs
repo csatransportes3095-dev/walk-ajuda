@@ -17,6 +17,10 @@ const requiredBackend = [
   "updatePixConfirmedDate: adminProcedure",
   "function isSameLoanIdentity",
   "ORDER BY CASE WHEN l.status IN ('pendente','aprovado','aguardando_pagamento','em_analise') THEN 0 ELSE 1 END, l.createdAt DESC",
+  "ensureClientPixFieldsSynced",
+  "function resolvePixSource",
+  "function pixKeyOf",
+  "clientPixKey: pixKeyOf(pixSource)",
 ];
 for (const snippet of requiredBackend) {
   if (!backend.includes(snippet)) throw new Error(`Backend sem regra obrigatória: ${snippet}`);
@@ -69,6 +73,29 @@ const sameIdentity = (row, cpf, phone) => {
 };
 if (!sameIdentity({ cpf: '346.511.558-98', phone: '(21) 99702-98382' }, '34651155898', '55219970298382')) throw new Error('Normalização de CPF/telefone não reúne o mesmo cliente');
 
+const pixKeyOf = (row) => String(row?.client_pix_key || row?.clientPixKey || row?.pixKey || '').trim();
+const resolvePixSource = (loan, clients) => clients
+  .filter((candidate) => Number(candidate.id) === Number(loan.clientId) || sameIdentity(candidate, loan.clientCpf, loan.clientPhone))
+  .filter((candidate) => !!pixKeyOf(candidate))
+  .sort((a, b) => {
+    const ownA = Number(a.id) === Number(loan.clientId) ? 0 : 1;
+    const ownB = Number(b.id) === Number(loan.clientId) ? 0 : 1;
+    return ownA - ownB || String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
+  })[0] || null;
+
+const loanForPix = { clientId: 20, clientCpf: '107.522.535-30', clientPhone: '11989793464' };
+const legacyPix = resolvePixSource(loanForPix, [{ id: 20, cpf: '10752253530', phone: '(11) 98979-3464', pixKey: '10752253530', updatedAt: '2026-08-01' }]);
+if (pixKeyOf(legacyPix) !== '10752253530') throw new Error('Chave PIX legada não foi reconhecida');
+
+const newPix = resolvePixSource(loanForPix, [{ id: 20, cpf: '10752253530', phone: '(11) 98979-3464', client_pix_key: 'mateus@pix', updatedAt: '2026-08-02' }]);
+if (pixKeyOf(newPix) !== 'mateus@pix') throw new Error('Chave PIX nova não foi reconhecida');
+
+const duplicatedClientPix = resolvePixSource(loanForPix, [
+  { id: 20, cpf: '10752253530', phone: '11989793464', updatedAt: '2026-08-01' },
+  { id: 21, cpf: '107.522.535-30', phone: '5511989793464', client_pix_key: '10752253530', updatedAt: '2026-08-03' },
+]);
+if (pixKeyOf(duplicatedClientPix) !== '10752253530') throw new Error('Chave PIX de cadastro equivalente não foi recuperada');
+
 const finishedAndNew = [
   { id: 'A', status: 'pago', createdAt: '2026-07-14' },
   { id: 'B', status: 'aguardando_pagamento', createdAt: '2026-08-11' },
@@ -78,4 +105,4 @@ const finishedAndNew = [
 });
 if (finishedAndNew[0].id !== 'B' || finishedAndNew[1].id !== 'A') throw new Error('Cenário quitado + novo ativo não prioriza o novo empréstimo');
 
-console.log('OK: regras de solicitação, PIX e empréstimo atual validadas sem gerar dados reais.');
+console.log('OK: regras de solicitação, PIX, chaves legadas/novas e empréstimo atual validadas sem gerar dados reais.');

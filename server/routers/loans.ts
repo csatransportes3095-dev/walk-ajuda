@@ -277,6 +277,35 @@ async function qRows(db: any, query: ReturnType<typeof drizzleSql>): Promise<any
   return (result[0] || result) as any[];
 }
 
+// ── Chave PIX do cliente ────────────────────────────────────────────────────
+// O sistema já teve dois grupos de colunas para o PIX. Estes auxiliares tratam
+// ambos e também cobrem cadastros duplicados do mesmo CPF/telefone.
+function pixKeyOf(row: any) {
+  return String(row?.client_pix_key || row?.clientPixKey || row?.pixKey || '').trim();
+}
+function pixNameOf(row: any) {
+  return String(row?.client_pix_name || row?.clientPixName || row?.pixName || '').trim();
+}
+function pixBankOf(row: any) {
+  return String(row?.client_pix_bank || row?.clientPixBank || row?.pixBank || '').trim();
+}
+function resolvePixSource(loan: any, clients: any[]) {
+  const sameClient = clients.filter((candidate: any) =>
+    Number(candidate.id) === Number(loan.clientId) ||
+    isSameLoanIdentity(candidate, loan.clientCpf || loan.customerCpf, loan.clientPhone)
+  );
+  // Primeiro preserva a chave do próprio cadastro do empréstimo; se estiver vazia,
+  // usa a chave válida mais recente de outro cadastro com o mesmo CPF/telefone.
+  return sameClient
+    .filter((candidate: any) => !!pixKeyOf(candidate))
+    .sort((a: any, b: any) => {
+      const ownA = Number(a.id) === Number(loan.clientId) ? 0 : 1;
+      const ownB = Number(b.id) === Number(loan.clientId) ? 0 : 1;
+      if (ownA !== ownB) return ownA - ownB;
+      return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
+    })[0] || null;
+}
+
 // ââ€â‚¬ââ€â‚¬ââ€â‚¬ Router ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
 
 // ── Migração automática: adicionar 'parcelado' ao ENUM paymentType ──────────
@@ -326,6 +355,26 @@ async function ensurePixDisbursementColumns(db: any) {
     if (!names.has('pixsendnote')) await db.execute(drizzleSql.raw(`ALTER TABLE loans ADD COLUMN pixSendNote TEXT NULL`));
   } catch (e: any) {
     console.warn('[loans] Não foi possível preparar os campos de PIX enviado:', e?.message);
+  }
+}
+
+// Sincroniza somente campos PIX antigos que estavam vazios no formato novo.
+// Não sobrescreve uma chave PIX já salva pelo ADM.
+let _clientPixFieldsSynced = false;
+async function ensureClientPixFieldsSynced(db: any) {
+  if (_clientPixFieldsSynced) return;
+  _clientPixFieldsSynced = true;
+  try {
+    await db.execute(drizzleSql`
+      UPDATE loanClients
+      SET client_pix_key = CASE WHEN NULLIF(TRIM(COALESCE(client_pix_key, '')), '') IS NULL THEN pixKey ELSE client_pix_key END,
+          client_pix_name = CASE WHEN NULLIF(TRIM(COALESCE(client_pix_name, '')), '') IS NULL THEN pixName ELSE client_pix_name END,
+          updatedAt = NOW()
+      WHERE (NULLIF(TRIM(COALESCE(client_pix_key, '')), '') IS NULL AND NULLIF(TRIM(COALESCE(pixKey, '')), '') IS NOT NULL)
+         OR (NULLIF(TRIM(COALESCE(client_pix_name, '')), '') IS NULL AND NULLIF(TRIM(COALESCE(pixName, '')), '') IS NOT NULL)
+    `);
+  } catch (e: any) {
+    console.warn('[loans] Não foi possível sincronizar campos PIX legados:', e?.message);
   }
 }
 
@@ -739,6 +788,7 @@ export const loanRouter = router({
   }).optional()).query(async ({ input }) => {
     const db = await getDb() as any;
     await ensurePixDisbursementColumns(db);
+    await ensureClientPixFieldsSynced(db);
     const searchVal = input?.search ? `%${input.search}%` : null;
     const clientId = input?.clientId || null;
 
@@ -780,6 +830,23 @@ export const loanRouter = router({
     } else {
       rows = await qRows(db, drizzleSql`${baseSelect} ORDER BY l.createdAt DESC`);
     }
+
+    // Garante que cada card leia a chave do próprio cadastro ou de um cadastro
+    // equivalente do mesmo CPF/telefone, inclusive para dados antigos já existentes.
+    const pixClients = await qRows(db, drizzleSql`
+      SELECT id, cpf, phone, pixKey, pixName, client_pix_key, client_pix_name, client_pix_bank, updatedAt
+      FROM loanClients
+    `);
+    rows = rows.map((loan: any) => {
+      const pixSource = resolvePixSource(loan, pixClients);
+      if (!pixSource) return loan;
+      return {
+        ...loan,
+        clientPixKey: pixKeyOf(pixSource),
+        clientPixName: pixNameOf(pixSource),
+        clientPixBank: pixBankOf(pixSource) || loan.clientPixBank || '',
+      };
+    });
 
     const today = getBrazilToday();
     // Busca parcelas que vencem hoje para cada empréstimo aprovado
@@ -917,16 +984,24 @@ export const loanRouter = router({
   })).mutation(async ({ ctx, input }) => {
     const db = await getDb() as any;
     await ensurePixDisbursementColumns(db);
+    await ensureClientPixFieldsSynced(db);
     const rows = await qRows(db, drizzleSql`
-      SELECT l.id, l.status, l.pixSentAt,
+      SELECT l.id, l.clientId, l.status, l.pixSentAt,
+        lc.cpf as clientCpf, lc.phone as clientPhone,
         COALESCE(NULLIF(lc.client_pix_key, ''), NULLIF(lc.pixKey, '')) as clientPixKey
       FROM loans l JOIN loanClients lc ON lc.id=l.clientId
       WHERE l.id=${input.id} LIMIT 1
     `);
     if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Empréstimo não encontrado' });
     const loan = rows[0];
+    const pixClients = await qRows(db, drizzleSql`
+      SELECT id, cpf, phone, pixKey, pixName, client_pix_key, client_pix_name, client_pix_bank, updatedAt
+      FROM loanClients
+    `);
+    const pixSource = resolvePixSource(loan, pixClients);
+    const clientPixKey = pixKeyOf(pixSource) || String(loan.clientPixKey || '').trim();
     if (loan.status !== 'aprovado') throw new TRPCError({ code: 'BAD_REQUEST', message: 'A liberação só pode ser confirmada após a aprovação.' });
-    if (!loan.clientPixKey) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cadastre a chave PIX do cliente antes de confirmar a liberação.' });
+    if (!clientPixKey) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cadastre a chave PIX do cliente antes de confirmar a liberação.' });
     if (loan.pixSentAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Este PIX já foi confirmado como enviado.' });
     const sentBy = ctx.user?.name || 'admin';
     const confirmedDate = input.confirmedDate || getBrazilToday();
