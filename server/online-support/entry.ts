@@ -7,6 +7,7 @@ export type OnlineEntrySession = {
   customerNumber: number | null;
   name: string;
   phone: string;
+  cpf: string | null;
   email: string | null;
   profilePhotoUrl: string | null;
 };
@@ -26,7 +27,7 @@ export async function requireOnlineEntrySession(token: string): Promise<OnlineEn
   if (!safeToken) throw new Error("Sessão inválida");
 
   const rows = resultRows(await db.execute(sql`
-    SELECT c.id, c.customerNumber, c.name, c.phone, c.email, c.profilePhotoUrl, c.blocked,
+    SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.profilePhotoUrl, c.blocked,
            s.expiresAt
     FROM customerPasswordSessions s
     INNER JOIN customers c ON c.phone = s.phone
@@ -44,6 +45,7 @@ export async function requireOnlineEntrySession(token: string): Promise<OnlineEn
     customerNumber: session.customerNumber == null ? null : Number(session.customerNumber),
     name: String(session.name || "Cliente"),
     phone: String(session.phone || ""),
+    cpf: session.cpf ? String(session.cpf).replace(/\D/g, '') : null,
     email: session.email ? String(session.email) : null,
     profilePhotoUrl: session.profilePhotoUrl ? String(session.profilePhotoUrl) : null,
   };
@@ -88,6 +90,43 @@ export async function getOnlineOrderDetails(token: string, registrationId: numbe
   `));
   if (!history.length) throw new Error('Pedido não encontrado.');
   return { registrationId, current: history[history.length - 1], history };
+}
+
+export async function getOnlineCustomerLoans(token: string) {
+  const { session } = await requireOnlineRoute(token, 'emprestimo');
+  const db = await getDb() as any;
+  const clients = resultRows(await db.execute(sql`
+    SELECT id, name, cpf, phone, status, loanEnabled FROM loanClients
+    WHERE phone=${session.phone} OR (${session.cpf || null} IS NOT NULL AND REPLACE(REPLACE(REPLACE(cpf,'.',''),'-',''),' ','')=${session.cpf || null})
+  `));
+  const clientIds = clients.map((client: any) => Number(client.id)).filter(Boolean);
+  if (!clientIds.length) return { client: null, loans: [], nextInstallment: null };
+  const ids = sql.raw(clientIds.join(','));
+  const loans = resultRows(await db.execute(sql`
+    SELECT l.*,
+      (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='pago') AS paidInstallments,
+      (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id) AS totalInstallments,
+      (SELECT COALESCE(SUM(amount),0) FROM loanInstallments WHERE loanId=l.id AND status='pago') AS totalPaid,
+      (SELECT COALESCE(SUM(amount),0) FROM loanInstallments WHERE loanId=l.id AND status!='pago') AS remainingBalance
+    FROM loans l WHERE l.clientId IN (${ids}) ORDER BY l.createdAt DESC
+  `));
+  const next = resultRows(await db.execute(sql`
+    SELECT li.*, l.id AS loanId FROM loanInstallments li JOIN loans l ON l.id=li.loanId
+    WHERE l.clientId IN (${ids}) AND li.status IN ('pendente','atrasado','em_analise')
+    ORDER BY li.dueDate ASC LIMIT 1
+  `))[0] || null;
+  return { client: clients[0] || null, loans, nextInstallment: next };
+}
+
+export async function getOnlineLoanInstallments(token: string, loanId: number) {
+  const { session } = await requireOnlineRoute(token, 'emprestimo');
+  const db = await getDb() as any;
+  const owned = resultRows(await db.execute(sql`
+    SELECT l.id FROM loans l JOIN loanClients lc ON lc.id=l.clientId
+    WHERE l.id=${loanId} AND (lc.phone=${session.phone} OR (${session.cpf || null} IS NOT NULL AND REPLACE(REPLACE(REPLACE(lc.cpf,'.',''),'-',''),' ','')=${session.cpf || null})) LIMIT 1
+  `));
+  if (!owned[0]) throw new Error('Empréstimo não pertence ao cliente autenticado.');
+  return resultRows(await db.execute(sql`SELECT * FROM loanInstallments WHERE loanId=${loanId} ORDER BY installmentNumber ASC`));
 }
 
 export async function requireOnlineRoute(token: string, route: CustomerRoute) {
