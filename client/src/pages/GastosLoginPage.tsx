@@ -406,6 +406,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
           {/* ETAPA 1: TELEFONE */}
           {step === 'phone' && (
             <form onSubmit={handleCheckPhone} className="space-y-4">
+              <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-center text-xs font-medium text-primary/90">Informe seu <strong>telefone ou CPF</strong> para localizar seu cadastro.</p>
               {error && (
                 <div className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
                   <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
@@ -414,7 +415,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
               )}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
-                  <Phone className="w-4 h-4 inline mr-1.5 opacity-70" />Telefone
+                  <Phone className="w-4 h-4 inline mr-1.5 opacity-70" />Telefone (WhatsApp)
                 </label>
                 <Input
                   type="text" inputMode="numeric" placeholder="(11) 99999-9999"
@@ -427,7 +428,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
               {activeField !== 'phone' && (
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
-                    CPF <span className="text-muted-foreground font-normal text-xs">{activeField === 'cpf' ? '' : '(opcional)'}</span>
+                    CPF
                   </label>
                   <Input
                     type="text" inputMode="numeric" placeholder="000.000.000-00"
