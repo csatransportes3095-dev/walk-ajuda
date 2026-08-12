@@ -84,14 +84,28 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
     if (state.denied && state.daysRemaining > 0) return { ...routeBaseStyle, color: '#fecaca', background: 'rgba(185,28,28,.13)', border: '1px solid rgba(248,113,113,.62)', cursor: 'not-allowed' };
     return { ...routeBaseStyle, color: '#fee2e2', background: 'rgba(185,28,28,.18)', border: '1px solid rgba(248,113,113,.72)' };
   };
-  const openRoute = (route: RouteName) => {
-    window.location.href = route === 'gastos' ? '/gastos' : route === 'emprestimo' ? '/emprestimo' : route === 'acompanhar' ? '/acompanhar' : '/login';
+  const openRoute = (route: Exclude<RouteName, 'acompanhar'>) => {
+    window.location.href = route === 'gastos' ? '/gastos' : route === 'emprestimo' ? '/emprestimo' : '/login';
+  };
+  const openOrderTrackingInBot = async () => {
+    setError('');
+    const result = await ordersQ.refetch();
+    const firstOrder = result.data?.[0];
+    if (!firstOrder?.registrationId) {
+      setError('Nenhum pedido encontrado para este cadastro.');
+      return;
+    }
+    setSelectedOrderId(Number(firstOrder.registrationId));
   };
   const requestRoute = async (route: RouteName) => {
     try {
       setError('');
       const state = routeState(route);
-      if (state.allowed) { openRoute(route); return; }
+      if (state.allowed) {
+        if (route === 'acompanhar') await openOrderTrackingInBot();
+        else openRoute(route);
+        return;
+      }
       if (state.pending) { setError('Sua solicitação já está em análise pelo administrador.'); return; }
       if (state.denied && state.daysRemaining > 0) {
         const date = state.retryAtMs ? new Date(state.retryAtMs).toLocaleDateString('pt-BR') : '';
@@ -100,7 +114,11 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
       }
       const result = await routeMut.mutateAsync({ token, route });
       await sessionQ.refetch();
-      if (result.released) { openRoute(route); return; }
+      if (result.released) {
+        if (route === 'acompanhar') await openOrderTrackingInBot();
+        else openRoute(route);
+        return;
+      }
       if (result.cooldown && result.retryAtMs) {
         setError(`Sua solicitação foi reprovada. Você poderá solicitar novamente em ${new Date(result.retryAtMs).toLocaleDateString('pt-BR')}.`);
         return;
