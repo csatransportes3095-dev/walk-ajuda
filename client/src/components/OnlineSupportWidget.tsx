@@ -3,7 +3,6 @@ import { ArrowLeft, Bot, ClipboardList, KeyRound, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { OnlineEntryPanel } from "@/components/OnlineEntryPanel";
 import { OnlineRegistrationPanel } from "@/components/OnlineRegistrationPanel";
-import { OnlinePhoneEntryPanel } from "@/components/OnlinePhoneEntryPanel";
 
 type OpenMode = "modal" | "sidebar" | "fullscreen";
 interface OnlineSupportWidgetProps {
@@ -24,9 +23,7 @@ function getEntryVisitorId() {
 }
 
 export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openMode = "modal" }: OnlineSupportWidgetProps) {
-  const [phase, setPhase] = useState<"phone" | "home" | "entry" | "register">("phone");
-  const [entryPhone, setEntryPhone] = useState("");
-  const [referralPhone, setReferralPhone] = useState("");
+  const [phase, setPhase] = useState<"home" | "entry" | "register">("home");
   const [visitorId] = useState(getEntryVisitorId);
   // Identificador técnico apenas do rascunho do novo cadastro: não cria conversa antiga.
   const [registrationDraftId] = useState(() => Math.floor(Date.now() / 1000));
@@ -40,10 +37,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
     : { position: "fixed", bottom: 80, right: 16, width: 380, maxWidth: "calc(100vw - 32px)", height: 580, zIndex: 9999, borderRadius: 20, display: "flex", flexDirection: "column", overflow: "hidden" };
   const botName = publicStateQ.data?.buttonLabel || "Atendimento Online";
   const botAvatar = (publicStateQ.data as any)?.botAvatar || null;
-  const goPhone = () => setPhase("phone");
   const goHome = () => setPhase("home");
-  const handleExistingCustomer = (phone: string) => { setEntryPhone(phone); setReferralPhone(""); setPhase("home"); };
-  const handleNewCustomerWithReferral = (phone: string, referrer: string) => { setEntryPhone(phone); setReferralPhone(referrer); setPhase("home"); };
 
   return <div
     style={isFullscreen ? {} : { position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 16 }}
@@ -51,26 +45,25 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
   >
     <div style={{ ...panelStyle, background: "#09090b", border: "1px solid rgba(255,255,255,.08)", boxShadow: "0 25px 60px rgba(0,0,0,.6)" }}>
       <header style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,.08)", background: "linear-gradient(135deg,#1e1b4b,#0f172a)", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
-        <button onClick={phase === "phone" ? (onBack || onMinimize) : phase === "home" ? goPhone : goHome} style={iconButton}><ArrowLeft size={18} /></button>
+        <button onClick={phase === "home" ? (onBack || onMinimize) : goHome} style={iconButton}><ArrowLeft size={18} /></button>
         {botAvatar ? <img src={botAvatar} alt={botName} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover" }} /> : <div style={avatarStyle}><Bot size={18} color="#fff" /></div>}
         <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 14, color: "#fff" }}>{botName}</div><div style={{ fontSize: 11, color: "#4ade80" }}>● Atendimento seguro</div></div>
         <button onClick={onClose} style={iconButton}><X size={18} /></button>
       </header>
 
-      {phase === "phone" && <main style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", alignItems: "center" }}><OnlinePhoneEntryPanel onBack={onBack || onMinimize} onExistingCustomer={handleExistingCustomer} onNewCustomerWithReferral={handleNewCustomerWithReferral} /></main>}
-
       {phase === "home" && <main style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 }}>
         <div style={{ textAlign: "center", padding: "8px 8px 6px" }}>
           <div style={{ ...avatarStyle, width: 66, height: 66, margin: "0 auto 12px" }}><Bot size={31} color="#fff" /></div>
-          <h2 style={{ color: "#fff", fontSize: 20, margin: "0 0 8px" }}>Boas-vindas</h2>
-          <p style={{ color: "rgba(255,255,255,.62)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>{referralPhone ? "Indicação validada. Complete seu cadastro para acessar o sistema." : "Seu cadastro foi localizado. Entre com sua senha para acessar somente os seus dados."}</p>
+          <h2 style={{ color: "#fff", fontSize: 20, margin: "0 0 8px" }}>Como deseja continuar?</h2>
+          <p style={{ color: "rgba(255,255,255,.62)", fontSize: 13, lineHeight: 1.55, margin: 0 }}>Cadastre-se para a área desejada ou entre para consultar somente os seus dados.</p>
         </div>
-        {referralPhone ? <button onClick={() => setPhase("register")} style={primaryButton}><ClipboardList size={19} /> Fazer cadastro</button> : <button onClick={() => setPhase("entry")} style={secondaryButton}><KeyRound size={19} /> Entrar com senha</button>}
+        <button onClick={() => setPhase("register")} style={primaryButton}><ClipboardList size={19} /> Fazer cadastro</button>
+        <button onClick={() => setPhase("entry")} style={secondaryButton}><KeyRound size={19} /> Já sou cliente</button>
         <p style={{ color: "rgba(255,255,255,.38)", fontSize: 11, lineHeight: 1.45, textAlign: "center", margin: "4px 10px 0" }}>Cadastro, pedidos, empréstimos, parcelas, comprovantes, Gastos e permissões de rota em um único acesso.</p>
       </main>}
 
-      {phase === "entry" && <main style={{ flex: 1, overflowY: "auto", padding: 16 }}><OnlineEntryPanel initialPhone={entryPhone} onBack={goHome} onOpenCadastro={goPhone} /></main>}
-      {phase === "register" && <main style={{ flex: 1, overflowY: "auto", padding: 16 }}><OnlineRegistrationPanel conversationId={registrationDraftId} visitorId={visitorId} initialPhone={entryPhone} referredByPhone={referralPhone} onBack={goHome} onDone={() => setPhase("entry")} /></main>}
+      {phase === "entry" && <main style={{ flex: 1, overflowY: "auto", padding: 16 }}><OnlineEntryPanel onBack={goHome} onOpenCadastro={() => setPhase("register")} /></main>}
+      {phase === "register" && <main style={{ flex: 1, overflowY: "auto", padding: 16 }}><OnlineRegistrationPanel conversationId={registrationDraftId} visitorId={visitorId} onBack={goHome} onDone={() => setPhase("entry")} /></main>}
     </div>
   </div>;
 }

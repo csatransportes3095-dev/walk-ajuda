@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Zap, ClipboardList, Search, ShieldX, WifiOff, RefreshCw, Trophy, Star, Gift, Ticket, Bell, Sparkles, MessageCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { OnlineSupportWidget } from "@/components/OnlineSupportWidget";
+import { HomeAccessManifest } from "@/components/HomeAccessManifest";
 
 const EXTRA_BTN_ICONS: Record<string, React.ReactNode> = {
   // legados
@@ -37,6 +38,7 @@ const WELCOME_CHOICE_KEY = "walk_welcome_choice";
 const VPN_CHECK_KEY = "walk_vpn_checked";
 const PWA_DISMISSED_KEY = "walk_home_pwa_dismissed_v2";
 const ONLINE_SUPPORT_VISITOR_KEY = "walk_online_support_visitor_id";
+const HOME_ACCESS_GRANTED_KEY = "walk_home_access_granted";
 
 function getOrCreateOnlineSupportVisitorId() {
   const stored = localStorage.getItem(ONLINE_SUPPORT_VISITOR_KEY);
@@ -175,6 +177,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const [, navigate] = useLocation();
   const [location] = useLocation();
   const [onlineSupportOpen, setOnlineSupportOpen] = useState(false);
+  const [homeAccessGranted, setHomeAccessGranted] = useState(() => sessionStorage.getItem(HOME_ACCESS_GRANTED_KEY) === "1");
   const [choiceMade, setChoiceMade] = useState(false);
   // Marca que o usuário acabou de clicar no card "Cadastro" (fluxo na própria rota "/").
   // Persiste no contexto de memória da aba via window, sobrevive a navegações internas mas
@@ -624,6 +627,14 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
         </div>
       </div>
     );
+  }
+
+  // O manifesto é exibido antes da tela principal. O Atendimento Online não participa desta etapa.
+  if (location === "/" && !homeAccessGranted) {
+    return <HomeAccessManifest onGranted={() => {
+      sessionStorage.setItem(HOME_ACCESS_GRANTED_KEY, "1");
+      setHomeAccessGranted(true);
+    }} />;
   }
 
   return (

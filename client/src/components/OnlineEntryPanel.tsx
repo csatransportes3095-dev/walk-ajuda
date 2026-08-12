@@ -5,11 +5,11 @@ import { trpc } from "@/lib/trpc";
 const ENTRY_TOKEN_KEY = "walk_online_entry_token";
 function fileToBase64(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); }); }
 
-type Props = { onBack: () => void; onOpenCadastro: () => void; initialPhone?: string };
+type Props = { onBack: () => void; onOpenCadastro: () => void };
 
-export function OnlineEntryPanel({ onBack, onOpenCadastro, initialPhone = "" }: Props) {
+export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   const [token, setToken] = useState(() => localStorage.getItem(ENTRY_TOKEN_KEY) || "");
-  const [phone, setPhone] = useState(initialPhone);
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [selectedLoanId, setSelectedLoanId] = useState<number | null>(null);
@@ -33,10 +33,6 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, initialPhone = "" }: 
       setToken("");
     }
   }, [sessionQ.data]);
-
-  useEffect(() => {
-    if (!token && initialPhone) setPhone(initialPhone);
-  }, [initialPhone, token]);
 
   const login = async () => {
     setError("");
