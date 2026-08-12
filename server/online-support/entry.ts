@@ -55,38 +55,47 @@ export async function requireOnlineEntrySession(token: string): Promise<OnlineEn
 export async function getOnlineCustomerOrders(token: string) {
   const session = await requireOnlineEntrySession(token);
   const db = await getDb() as any;
+  // A tabela técnica accessCodePhones pode conter vínculos antigos. A lista é
+  // sempre calculada pelo customerPhone do próprio histórico do pedido.
+  const phone = session.phone.replace(/\D/g, '');
   const rows = resultRows(await db.execute(sql`
-    SELECT acp.id AS registrationId,
-           COALESCE(NULLIF(lastStatus.orderNumber, 0), firstStatus.orderNumber) AS orderNumber,
-           COALESCE(NULLIF(lastStatus.serviceName, 'NULL'), NULLIF(firstStatus.serviceName, 'NULL')) AS serviceName,
-           COALESCE(NULLIF(lastStatus.serviceOption, 'NULL'), NULLIF(firstStatus.serviceOption, 'NULL')) AS serviceOption,
-           lastStatus.status AS status, lastStatus.note AS note,
-           lastStatus.deliveryEstimate AS deliveryEstimate, lastStatus.createdAt AS updatedAt,
-           acp.accessedAt AS createdAt
-    FROM accessCodePhones acp
-    LEFT JOIN (SELECT registrationId, MAX(id) AS id FROM orderStatusHistory GROUP BY registrationId) latest ON latest.registrationId=acp.id
-    LEFT JOIN orderStatusHistory lastStatus ON lastStatus.id=latest.id
-    LEFT JOIN (SELECT registrationId, MIN(id) AS id FROM orderStatusHistory GROUP BY registrationId) firstRow ON firstRow.registrationId=acp.id
-    LEFT JOIN orderStatusHistory firstStatus ON firstStatus.id=firstRow.id
-    WHERE acp.phone=${session.phone} AND COALESCE(acp.archived, 0)=0
-    ORDER BY acp.accessedAt DESC
+    SELECT currentStatus.registrationId, currentStatus.orderNumber, currentStatus.serviceName,
+           currentStatus.serviceOption, currentStatus.status, currentStatus.note,
+           currentStatus.deliveryEstimate, currentStatus.createdAt AS updatedAt
+    FROM orderStatusHistory currentStatus
+    INNER JOIN (
+      SELECT registrationId, MAX(id) AS id
+      FROM orderStatusHistory
+      WHERE REPLACE(REPLACE(REPLACE(REPLACE(customerPhone,'(',''),')',''),'-',''),' ','')=${phone}
+      GROUP BY registrationId
+    ) latest ON latest.id=currentStatus.id
+    WHERE REPLACE(REPLACE(REPLACE(REPLACE(currentStatus.customerPhone,'(',''),')',''),'-',''),' ','')=${phone}
+    ORDER BY currentStatus.createdAt DESC, currentStatus.id DESC
   `));
   return rows.map((row: any) => ({
     registrationId: Number(row.registrationId), orderNumber: row.orderNumber == null ? null : Number(row.orderNumber),
     serviceName: row.serviceName || null, serviceOption: row.serviceOption || null, status: row.status || null,
     note: row.note || null, deliveryEstimate: row.deliveryEstimate == null ? null : Number(row.deliveryEstimate),
-    createdAt: row.createdAt || null, updatedAt: row.updatedAt || null,
+    createdAt: row.updatedAt || null, updatedAt: row.updatedAt || null,
   }));
 }
 
 export async function getOnlineOrderDetails(token: string, registrationId: number) {
   const { session } = await requireOnlineRoute(token, 'acompanhar');
   const db = await getDb() as any;
-  const ownership = resultRows(await db.execute(sql`SELECT id FROM accessCodePhones WHERE id=${registrationId} AND phone=${session.phone} LIMIT 1`));
+  const phone = session.phone.replace(/\D/g, '');
+  const ownership = resultRows(await db.execute(sql`
+    SELECT id FROM orderStatusHistory
+    WHERE registrationId=${registrationId}
+      AND REPLACE(REPLACE(REPLACE(REPLACE(customerPhone,'(',''),')',''),'-',''),' ','')=${phone}
+    LIMIT 1
+  `));
   if (!ownership[0]) throw new Error('Pedido não pertence ao cliente autenticado.');
   const history = resultRows(await db.execute(sql`
     SELECT orderNumber, status, note, serviceName, serviceOption, pricePaid, answers, deliveryEstimate, createdAt
-    FROM orderStatusHistory WHERE registrationId=${registrationId} AND customerPhone=${session.phone}
+    FROM orderStatusHistory
+    WHERE registrationId=${registrationId}
+      AND REPLACE(REPLACE(REPLACE(REPLACE(customerPhone,'(',''),')',''),'-',''),' ','')=${phone}
     ORDER BY createdAt ASC, id ASC
   `));
   if (!history.length) throw new Error('Pedido não encontrado.');
