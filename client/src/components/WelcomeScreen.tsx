@@ -507,74 +507,75 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     ...extraStyle,
   });
 
-  const [robotPhraseIdx, setRobotPhraseIdx] = useState(0);
-  const robotPhrases = [
-    "Estou aqui 24h! 🤖",
-    "Tire suas dúvidas agora",
-    "Resposta imediata!",
-    "Como posso ajudar?",
-    "Fale comigo! 💬",
-  ];
-  useEffect(() => {
-    const t = setInterval(() => setRobotPhraseIdx(i => (i + 1) % robotPhrases.length), 2800);
-    return () => clearInterval(t);
-  }, []);
-
   const renderSupportButton = () => {
     if (!supportVisible) return null;
     return (
       <button
+        type="button"
+        className="online-support-entry-card"
         onClick={() => setOnlineSupportOpen(true)}
+        aria-label="Abrir Atendimento Online 24 horas"
         style={{
-          width: "100%", background: `linear-gradient(135deg, ${supportColor}f0 0%, ${supportColor}80 100%)`,
-          border: `1px solid ${supportColor}50`, borderRadius: 22,
-          boxShadow: `0 4px 24px ${supportColor}40, 0 1px 4px rgba(0,0,0,0.3)`,
-          padding: "18px 20px", cursor: "pointer", display: "flex", alignItems: "center", gap: 16,
-          fontFamily: "'DM Sans','Inter',-apple-system,sans-serif", position: "relative", overflow: "hidden",
+          width: "100%", background: `linear-gradient(135deg, ${supportColor}f4 0%, ${supportColor}a0 56%, ${supportColor}72 100%)`,
+          border: `1px solid ${supportColor}68`, borderRadius: 22,
+          boxShadow: `0 5px 26px ${supportColor}42, inset 0 1px 0 rgba(255,255,255,0.16)`,
+          padding: "17px 18px", cursor: "pointer", display: "flex", alignItems: "center", gap: 15,
+          fontFamily: "'DM Sans','Inter',-apple-system,sans-serif", position: "relative", overflow: "hidden", textAlign: "left",
         }}
       >
-        {/* Robô animado */}
-        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
-          <style>{`
-            @keyframes robotFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-            @keyframes robotEyeBlink { 0%,90%,100%{transform:scaleY(1)} 95%{transform:scaleY(0.1)} }
-            @keyframes antennaPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.4)} }
-            @keyframes phraseIn { 0%{opacity:0;transform:translateY(6px)} 20%,80%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-6px)} }
-          `}</style>
-          <div style={{ animation: "robotFloat 2.4s ease-in-out infinite", display: "flex", flexDirection: "column", alignItems: "center" }}>
-            {/* Antena */}
-            <div style={{ width: 2, height: 10, background: "rgba(255,255,255,0.7)", borderRadius: 2, marginBottom: 1 }} />
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", animation: "antennaPulse 1.2s ease-in-out infinite", marginBottom: 2, boxShadow: "0 0 8px #fff" }} />
-            {/* Cabeça */}
-            <div style={{ width: 44, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.22)", border: "2px solid rgba(255,255,255,0.5)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, position: "relative" }}>
-              {/* Olhos */}
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", animation: "robotEyeBlink 3s ease-in-out infinite" }} />
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", animation: "robotEyeBlink 3s ease-in-out infinite 0.15s" }} />
+        <style>{`
+          .online-support-entry-card { transform: translateY(0) scale(1); transition: transform 180ms cubic-bezier(0.23,1,0.32,1), box-shadow 180ms cubic-bezier(0.23,1,0.32,1), filter 180ms ease; }
+          .online-support-entry-card:hover { transform: translateY(-2px); filter: brightness(1.045); }
+          .online-support-entry-card:active { transform: scale(0.975); }
+          .online-support-entry-card:focus-visible { outline: 3px solid rgba(255,255,255,0.78); outline-offset: 3px; }
+          @keyframes onlineSupportRobotFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+          @keyframes onlineSupportEyeBlink { 0%,90%,100%{transform:scaleY(1)} 95%{transform:scaleY(0.12)} }
+          @keyframes onlineSupportAntenna { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.45;transform:scale(1.35)} }
+          @keyframes onlineSupportPulse { 0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,0.65)} 55%{box-shadow:0 0 0 6px rgba(74,222,128,0)} }
+          @media (max-width: 390px) {
+            .online-support-entry-card { padding: 14px 13px !important; gap: 11px !important; }
+            .online-support-entry-card .online-support-title { font-size: 13px !important; }
+            .online-support-entry-card .online-support-aux { font-size: 9px !important; }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .online-support-entry-card, .online-support-entry-card * { animation: none !important; transition: none !important; }
+          }
+        `}</style>
+
+        {/* Robô grande do atendimento */}
+        <div style={{ flexShrink: 0, width: 74, display: "flex", justifyContent: "center" }} aria-hidden="true">
+          <div style={{ animation: "onlineSupportRobotFloat 2.5s ease-in-out infinite", display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div style={{ width: 2, height: 9, background: "rgba(255,255,255,0.78)", borderRadius: 2, marginBottom: 1 }} />
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", animation: "onlineSupportAntenna 1.3s ease-in-out infinite", marginBottom: 3, boxShadow: "0 0 9px rgba(255,255,255,0.9)" }} />
+            <div style={{ width: 48, height: 38, borderRadius: 11, background: "rgba(255,255,255,0.22)", border: "2px solid rgba(255,255,255,0.54)", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite" }} />
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite 0.15s" }} />
             </div>
-            {/* Corpo */}
-            <div style={{ width: 40, height: 28, borderRadius: 8, background: "rgba(255,255,255,0.18)", border: "2px solid rgba(255,255,255,0.4)", marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ width: 16, height: 8, borderRadius: 4, background: "rgba(255,255,255,0.5)" }} />
-            </div>
-            {/* Braços */}
-            <div style={{ display: "flex", gap: 36, marginTop: -20, position: "relative", zIndex: -1 }}>
-              <div style={{ width: 8, height: 18, borderRadius: 4, background: "rgba(255,255,255,0.3)", transform: "rotate(-10deg)" }} />
-              <div style={{ width: 8, height: 18, borderRadius: 4, background: "rgba(255,255,255,0.3)", transform: "rotate(10deg)" }} />
+            <div style={{ width: 43, height: 29, borderRadius: 9, background: "rgba(255,255,255,0.18)", border: "2px solid rgba(255,255,255,0.42)", marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: 17, height: 8, borderRadius: 4, background: "rgba(255,255,255,0.52)" }} />
             </div>
           </div>
         </div>
-        {/* Texto */}
-        <div style={{ flex: 1, textAlign: "left" }}>
-          <p style={{ fontSize: 15, fontWeight: 700, color: "#fff", margin: "0 0 4px", letterSpacing: -0.2 }}>{supportLabelBase}</p>
-          <p key={robotPhraseIdx} style={{ fontSize: 12.5, color: "rgba(255,255,255,0.9)", margin: 0, animation: "phraseIn 2.8s ease-in-out forwards", fontWeight: 500 }}>
-            {robotPhrases[robotPhraseIdx]}
+
+        {/* Texto e status do atendimento */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
+          <p className="online-support-title" style={{ fontSize: 15.5, lineHeight: 1.15, fontWeight: 800, color: "#fff", margin: 0, letterSpacing: 0.1 }}>
+            ATENDIMENTO ONLINE 24H
           </p>
-          <p style={{ fontSize: 10.5, color: "rgba(255,255,255,0.7)", marginTop: 4 }}>
-            <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#4ade80", marginRight: 4, animation: "antennaPulse 1.5s ease-in-out infinite" }} />
-            {supportStatusText}
-            {supportUnreadCount > 0 && <span style={{ marginLeft: 8, background: "rgba(255,255,255,0.25)", borderRadius: 10, padding: "1px 7px", fontWeight: 700 }}>{supportUnreadCount} nova{supportUnreadCount > 1 ? "s" : ""}</span>}
+          <p style={{ fontSize: 13.5, lineHeight: 1.2, color: "rgba(255,255,255,0.96)", margin: 0, fontWeight: 700 }}>
+            Fale comigo agora
+          </p>
+          <p style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.8, lineHeight: 1.2, color: "rgba(255,255,255,0.87)", margin: "2px 0 0", fontWeight: 600 }}>
+            <span style={{ display: "inline-block", width: 7, height: 7, flexShrink: 0, borderRadius: "50%", background: "#4ade80", animation: "onlineSupportPulse 1.8s ease-out infinite" }} />
+            Online • Resposta imediata
+          </p>
+          <p className="online-support-aux" style={{ fontSize: 10, lineHeight: 1.25, color: "rgba(255,255,255,0.72)", margin: "2px 0 0", fontWeight: 500 }}>
+            Cadastro • Pedidos • Status • Informações
           </p>
         </div>
-        <svg style={{ width: 14, height: 14, opacity: 0.4, flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+
+        {/* Seta de acesso */}
+        <svg style={{ width: 16, height: 16, color: "#fff", opacity: 0.76, flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M9 5l7 7-7 7" /></svg>
       </button>
     );
   };
