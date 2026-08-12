@@ -1962,8 +1962,8 @@ export const appRouter = router({
         const db = await (await import('./db')).getDb() as any;
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
 
-        const custRows = await db.execute(sql`SELECT phone FROM customers WHERE id = ${id} LIMIT 1`);
-        const current = (custRows[0] as unknown as Array<{ phone: string }>)[0];
+        const custRows = await db.execute(sql`SELECT phone, cpf FROM customers WHERE id = ${id} LIMIT 1`);
+        const current = (custRows[0] as unknown as Array<{ phone: string; cpf?: string | null }>)[0];
         if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
         const oldPhone = String(current.phone || '').replace(/\D/g, '');
         const newPhone = data.phone || oldPhone;
@@ -2017,7 +2017,9 @@ export const appRouter = router({
         }
         // Reúne novamente todos os cadastros com o mesmo CPF/telefone, para que
         // /gastos e /emprestimo recebam os dados atualizados do cadastro principal.
-        try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+        try {
+          await syncUnifiedCustomerRegistry([{ phone: oldPhone, cpf: String(current.cpf || '').replace(/\D/g, '') }]);
+        } catch (error: any) {
           console.warn('[customers.update] sincronização unificada não aplicada:', error?.message);
         }
         return updated;

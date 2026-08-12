@@ -35,7 +35,7 @@ async function rows(db: any, query: any): Promise<any[]> {
  * (empréstimos). Não transfere permissões nem dados financeiros: cada módulo
  * conserva suas próprias regras e apenas nome, CPF e telefone são unificados.
  */
-export async function syncUnifiedCustomerRegistry(): Promise<{ customersCreated: number; spreadsheetCreated: number; synchronized: number }> {
+export async function syncUnifiedCustomerRegistry(previousIdentities: Array<Pick<IdentityRow, 'phone' | 'cpf'>> = []): Promise<{ customersCreated: number; spreadsheetCreated: number; synchronized: number }> {
   const db = await getDb() as any;
   if (!db) return { customersCreated: 0, spreadsheetCreated: 0, synchronized: 0 };
 
@@ -72,8 +72,12 @@ export async function syncUnifiedCustomerRegistry(): Promise<{ customersCreated:
     const mainCpf = digits(main.cpf);
     if (!mainPhone) continue;
 
-    const relatedSpreadsheet = spreadsheetRows.filter(row => isSameCustomerIdentity(row, main));
-    const relatedLoans = loanRows.filter(row => isSameCustomerIdentity(row, main));
+    // A identidade anterior só vale para o cliente principal que foi editado;
+    // nunca pode aproximar ou atualizar outro cliente por engano.
+    const usePreviousIdentity = previousIdentities.some(identity => isSameCustomerIdentity(main, identity));
+    const aliasesForMain = usePreviousIdentity ? [main, ...previousIdentities] : [main];
+    const relatedSpreadsheet = spreadsheetRows.filter(row => aliasesForMain.some(identity => isSameCustomerIdentity(row, identity)));
+    const relatedLoans = loanRows.filter(row => aliasesForMain.some(identity => isSameCustomerIdentity(row, identity)));
 
     for (const row of relatedSpreadsheet) {
       const targetName = String(main.name || row.name || 'CLIENTE');
