@@ -11,10 +11,12 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [selectedLoanId, setSelectedLoanId] = useState<number | null>(null);
   const sessionQ = trpc.onlineSupport.entrySession.useQuery({ token }, { enabled: !!token, retry: false });
   const loginMut = trpc.customerPassword.login.useMutation();
   const ordersQ = trpc.onlineSupport.entryOrders.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated, retry: false });
   const loansQ = trpc.onlineSupport.entryLoans.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated, retry: false });
+  const installmentsQ = trpc.onlineSupport.entryLoanInstallments.useQuery({ token, loanId: selectedLoanId || 0 }, { enabled: !!token && !!selectedLoanId && !!sessionQ.data?.authenticated, retry: false });
   const logoutMut = trpc.customerPassword.logout.useMutation();
   const routeMut = trpc.onlineSupport.entryRequestRoute.useMutation();
 
@@ -73,7 +75,8 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
       <button onClick={() => requestRoute('site')} style={secondaryStyle}>Acessar / solicitar Site de Pedidos</button>
     </div>
     <div style={cardStyle}><WalletCards size={20} color="#fbbf24" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Empréstimos</strong>
-      {loansQ.isLoading ? <p style={smallStyle}>Consultando...</p> : loansQ.data?.loans?.length ? loansQ.data.loans.map((loan: any) => <div key={loan.id} style={rowStyle}>Empréstimo #{loan.id}<span>{loan.status}</span></div>) : <p style={smallStyle}>Nenhum empréstimo encontrado.</p>}
+      {loansQ.isLoading ? <p style={smallStyle}>Consultando...</p> : loansQ.data?.loans?.length ? loansQ.data.loans.map((loan: any) => <button key={loan.id} onClick={() => setSelectedLoanId(loan.id)} style={{ ...rowStyle, border: selectedLoanId === loan.id ? '1px solid #fbbf24' : '1px solid transparent', cursor:'pointer', textAlign:'left' }}>Empréstimo #{loan.id}<span>{loan.status}</span></button>) : <p style={smallStyle}>Nenhum empréstimo encontrado.</p>}
+      {selectedLoanId && <div style={{ marginTop:8 }}><button onClick={() => setSelectedLoanId(null)} style={backStyle}>Fechar parcelas</button>{installmentsQ.isLoading ? <p style={smallStyle}>Consultando parcelas...</p> : installmentsQ.data?.map((i: any) => <div key={i.id} style={rowStyle}>Parcela {i.installmentNumber} · R$ {i.amount}<span>{i.status} · {String(i.dueDate).slice(0,10)}</span></div>)}</div>}
       <button onClick={() => requestRoute('emprestimo')} style={secondaryStyle}>Acessar / solicitar Empréstimos</button>
     </div>
     <button onClick={() => requestRoute('gastos')} style={secondaryStyle}>Controle de Gastos</button>
