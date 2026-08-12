@@ -38,6 +38,24 @@ async function resolveClientId(token: string): Promise<number> {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão inválida ou expirada. Faça login novamente." });
   }
 
+  // Regra de segurança no backend: um token não permite ignorar o perfil obrigatório
+  // nem uma rota removida pelo ADM através de chamadas diretas à API.
+  const clientResult = await db.select().from(spreadsheetClients)
+    .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
+  const client = clientResult?.[0] || null;
+  if (!client) throw new TRPCError({ code: "UNAUTHORIZED", message: "Cadastro de acesso não encontrado." });
+  try {
+    await requireCompleteMainCustomerProfile(db, { phone: client.phone || '', cpf: client.cpf || '' });
+  } catch {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Atualize foto, e-mail, CPF e telefone no cadastro principal para continuar." });
+  }
+  const accessCustomer = await findMainCustomerByIdentity({ phone: client.phone || '', cpf: client.cpf || '' }, db);
+  if (!accessCustomer) throw new TRPCError({ code: "FORBIDDEN", message: "Conclua o cadastro principal para continuar." });
+  const access = await getRouteAccess(accessCustomer.id, db);
+  if (access.restricted && !access.routes.includes('gastos')) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Acesso não autorizado para a área de Gastos." });
+  }
+
   // Sliding session: renova a validade a cada uso ativo (login persistente).
   // Renova no maximo 1x por dia para evitar escrita excessiva.
   try {

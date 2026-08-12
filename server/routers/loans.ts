@@ -3,6 +3,7 @@ import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
 import { getDb, createFinancialSale } from "../db";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
+import { findMainCustomerByIdentity, getRouteAccess } from "../customerAccess";
 import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
@@ -27,6 +28,31 @@ function getBrazilToday(): string {
 function onlyDigits(value: unknown) {
   return String(value || '').replace(/\D/g, '');
 }
+async function requireLoanRouteAccess(db: any, rawToken: string): Promise<any> {
+  const token = rawToken.trim();
+  const sessions = await qRows(db, drizzleSql`
+    SELECT ss.*, sc.name, sc.phone, sc.cpf
+    FROM spreadsheetSessions ss
+    JOIN spreadsheetClients sc ON sc.id=ss.clientId
+    WHERE ss.token=${token} AND ss.expiresAt > NOW()
+    LIMIT 1
+  `);
+  const session = sessions[0];
+  if (!session) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão inválida ou expirada.' });
+  try {
+    await requireCompleteMainCustomerProfile(db, { phone: session.phone, cpf: session.cpf });
+  } catch {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Atualize foto, e-mail, CPF e telefone no cadastro principal para continuar.' });
+  }
+  const mainCustomer = await findMainCustomerByIdentity({ phone: session.phone, cpf: session.cpf }, db);
+  if (!mainCustomer) throw new TRPCError({ code: 'FORBIDDEN', message: 'Conclua o cadastro principal para continuar.' });
+  const access = await getRouteAccess(mainCustomer.id, db);
+  if (access.restricted && !access.routes.includes('emprestimo')) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso não autorizado para a área de Empréstimos.' });
+  }
+  return session;
+}
+
 function isSameLoanIdentity(row: any, cpf?: string | null, phone?: string | null) {
   const cpfDigits = onlyDigits(cpf);
   const phoneDigits = onlyDigits(phone);
@@ -452,6 +478,7 @@ export const loanRouter = router({
     amount: z.number().positive(),
   })).query(async ({ input }) => {
     const db = await getDb() as any;
+    await requireLoanRouteAccess(db, input.token);
     await ensureInstallmentPlansTable(db);
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${input.token.trim()} AND loanEnabled=1`);
     if (!clients.length) throw new TRPCError({ code: 'UNAUTHORIZED' });
@@ -508,6 +535,7 @@ export const loanRouter = router({
     primeiroVencimento: z.string().optional(),
   })).mutation(async ({ input }) => {
     const db = await getDb() as any;
+    await requireLoanRouteAccess(db, input.token);
     await ensureInstallmentPlansTable(db);
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${input.token.trim()} AND loanEnabled=1`);
     if (!clients.length) throw new TRPCError({ code: 'UNAUTHORIZED' });
@@ -1352,29 +1380,16 @@ export const loanRouter = router({
   getClientLoanInfo: publicProcedure.input(z.object({ token: z.string() })).query(async ({ input }) => {
     const db = await getDb() as any;
     await ensurePixDisbursementColumns(db);
-    const token = input.token.trim();
-    // Buscar sessão da planilha para obter dados do cliente
-    const sessions = await qRows(db, drizzleSql`
-      SELECT ss.*, sc.name, sc.phone, sc.cpf
-      FROM spreadsheetSessions ss
-      JOIN spreadsheetClients sc ON sc.id = ss.clientId
-      WHERE ss.token=${token} AND ss.expiresAt > NOW()
-      LIMIT 1
-    `);
-    if (!sessions.length) return { enabled: false, client: null, loans: [], pixConfig: null };
-    const session = sessions[0];
+    let session: any;
     try {
-      await requireCompleteMainCustomerProfile(db, { phone: session.phone, cpf: session.cpf });
-    } catch (profileError: any) {
-      return {
-        enabled: false,
-        profileIncomplete: true,
-        message: profileError?.message || 'Conclua foto, e-mail, CPF e telefone no cadastro principal.',
-        client: null,
-        loans: [],
-        pixConfig: null,
-      };
+      session = await requireLoanRouteAccess(db, input.token);
+    } catch (error: any) {
+      if (error?.message?.includes('Atualize foto')) {
+        return { enabled: false, profileIncomplete: true, message: error.message, client: null, loans: [], pixConfig: null };
+      }
+      throw error;
     }
+    const token = input.token.trim();
 
     // Buscar ou criar loanClient automaticamente
     let clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
@@ -1509,6 +1524,7 @@ export const loanRouter = router({
     loanId: z.number(),
   })).query(async ({ input }) => {
     const db = await getDb() as any;
+    await requireLoanRouteAccess(db, input.token);
     const token = input.token.trim();
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -1537,6 +1553,7 @@ export const loanRouter = router({
     mimeType: z.string(),
   })).mutation(async ({ input }) => {
     const db = await getDb() as any;
+    await requireLoanRouteAccess(db, input.token);
     const token = input.token.trim();
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -1570,6 +1587,7 @@ export const loanRouter = router({
     workDays: z.enum(["seg_sab", "seg_dom"]).default("seg_sab"),
   })).query(async ({ input }) => {
     const db = await getDb() as any;
+    await requireLoanRouteAccess(db, input.token);
     const token = input.token.trim();
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token} AND loanEnabled=1`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED", message: "Empréstimos não habilitados para este cliente" });
@@ -1604,6 +1622,7 @@ export const loanRouter = router({
     notes: z.string().optional(),
   })).mutation(async ({ input }) => {
     const db = await getDb() as any;
+    await requireLoanRouteAccess(db, input.token);
     const token = input.token.trim();
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token} AND loanEnabled=1`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED", message: "Empréstimos não habilitados para este cliente" });
@@ -1668,6 +1687,7 @@ export const loanRouter = router({
     pixBank: z.string().min(2, "Nome do banco obrigatório").max(100),
   })).mutation(async ({ input }) => {
     const db = await getDb() as any;
+    await requireLoanRouteAccess(db, input.token);
     const token = input.token.trim();
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado" });
@@ -1737,6 +1757,7 @@ export const loanRouter = router({
     installmentId: z.number(),
   })).query(async ({ input }) => {
     const db = await getDb() as any;
+    await requireLoanRouteAccess(db, input.token);
     const token = input.token.trim();
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED" });
