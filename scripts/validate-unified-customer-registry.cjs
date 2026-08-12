@@ -9,6 +9,8 @@ const checks = [
   [identity, 'customers (cadastro principal), spreadsheetClients (gastos) e loanClients', 'centralização dos três cadastros'],
   [identity, "'emprestimo'", 'rota automática exclusiva para cadastro originado no empréstimo'],
   [identity, 'Não transfere permissões nem dados financeiros', 'preservação das permissões e dados de cada módulo'],
+  [identity, 'A sincronização não pode criar clientes principais', 'proibição de criar cadastro principal técnico/incompleto'],
+  [identity, 'hideAutomaticIncompleteCustomers', 'reparo seguro dos cadastros técnicos já gerados'],
   [customersRouter, 'await syncUnifiedCustomerRegistry()', 'sincronização após editar o cadastro principal'],
   [spreadsheetRouter, "const routeOrigin = input.sourceRoute || 'gastos'", 'manutenção da rota de origem no cadastro de gastos'],
   [spreadsheetRouter, 'await syncUnifiedCustomerRegistry()', 'sincronização após cadastro ou senha de gastos'],
@@ -30,8 +32,12 @@ const identityMatch = (a, b) => {
 if (!identityMatch({ cpf: '107.522.535-30', phone: '(11) 98979-3464' }, { cpf: '10752253530', phone: '11989793464' })) {
   throw new Error('CPF/telefone formatados não foram reconhecidos como o mesmo cliente');
 }
+if (identity.includes('INSERT INTO customers (name, phone, cpf, createdAt, updatedAt)')) {
+  throw new Error('A sincronização ainda cria cadastro principal sem campos obrigatórios');
+}
+
 if (identityMatch({ cpf: '10752253530', phone: '11989793464' }, { cpf: '45285267862', phone: '21925011306' })) {
   throw new Error('Clientes diferentes foram vinculados indevidamente');
 }
 
-console.log('OK: cadastro único por CPF/telefone, dados compartilhados sincronizados e acesso por rota preservado.');
+console.log('OK: sincronização preserva cadastro obrigatório, atualiza identidade e mantém acesso por rota independente.');

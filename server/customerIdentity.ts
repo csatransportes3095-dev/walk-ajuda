@@ -30,6 +30,7 @@ async function rows(db: any, query: any): Promise<any[]> {
 }
 
 let customerPhoneIndexChecked = false;
+let automaticCustomerRepairChecked = false;
 
 /**
  * O cadastro usa exclusão lógica (lixeira). O índice UNIQUE antigo em phone
@@ -55,6 +56,42 @@ async function allowPhoneReuseFromDeletedCustomers(db: any): Promise<void> {
 }
 
 /**
+ * Entre 11/08/2026 23:15 e 23:45 (horário de Brasília), uma versão defeituosa
+ * criou cards principais técnicos sem e-mail, foto, cidade ou número de cadastro.
+ * Eles não representam cadastros válidos e são movidos para a lixeira uma única vez.
+ * Não apaga nenhum registro e não toca em cadastros fora dessa janela.
+ */
+async function hideAutomaticIncompleteCustomers(db: any): Promise<void> {
+  if (automaticCustomerRepairChecked) return;
+  try {
+    const alreadyDone = await rows(db, sql`SELECT settingValue FROM siteSettings WHERE settingKey='customer_identity_incomplete_repair_20260811' LIMIT 1`);
+    if (!alreadyDone.length) {
+      await db.execute(sql`
+        UPDATE customers
+        SET deletedAt=NOW()
+        WHERE deletedAt IS NULL
+          -- Banco grava em UTC: 11/08 23:15–23:45 em Brasília = 12/08 02:15–02:45 UTC.
+          AND createdAt >= '2026-08-12 02:15:00'
+          AND createdAt < '2026-08-12 02:45:00'
+          AND (email IS NULL OR TRIM(email)='')
+          AND (city IS NULL OR TRIM(city)='')
+          AND (profilePhotoUrl IS NULL OR TRIM(profilePhotoUrl)='')
+          AND customerNumber IS NULL
+      `);
+      await db.execute(sql`
+        INSERT INTO siteSettings (settingKey, settingValue)
+        VALUES ('customer_identity_incomplete_repair_20260811', 'done')
+        ON DUPLICATE KEY UPDATE settingValue='done'
+      `);
+    }
+  } catch (error: any) {
+    console.warn('[customerIdentity] não foi possível ocultar cadastros automáticos incompletos:', error?.message);
+  } finally {
+    automaticCustomerRepairChecked = true;
+  }
+}
+
+/**
  * Sincroniza os dados compartilhados do mesmo cliente entre as tabelas
  * customers (cadastro principal), spreadsheetClients (gastos) e loanClients
  * (empréstimos). Não transfere permissões nem dados financeiros: cada módulo
@@ -65,32 +102,19 @@ export async function syncUnifiedCustomerRegistry(previousIdentities: Array<Pick
   if (!db) return { customersCreated: 0, spreadsheetCreated: 0, synchronized: 0 };
 
   await allowPhoneReuseFromDeletedCustomers(db);
+  await hideAutomaticIncompleteCustomers(db);
 
   const customerRows = await rows(db, sql`SELECT id, name, phone, cpf FROM customers WHERE deletedAt IS NULL`);
   const spreadsheetRows = await rows(db, sql`SELECT id, name, phone, cpf, allowedRoutes FROM spreadsheetClients`);
   const loanRows = await rows(db, sql`SELECT id, name, phone, cpf FROM loanClients`);
 
+  // A sincronização não pode criar clientes principais. O cadastro principal
+  // possui dados obrigatórios (foto, e-mail, documentos) e é a única porta de
+  // criação do cliente. Gastos e empréstimos apenas se vinculam a ele.
   const canonicalCustomers: IdentityRow[] = [...customerRows];
-  let customersCreated = 0;
+  const customersCreated = 0;
   let spreadsheetCreated = 0;
   let synchronized = 0;
-
-  // Cadastros antigos de gastos e empréstimos passam a aparecer no cadastro principal.
-  for (const source of [...spreadsheetRows, ...loanRows]) {
-    const sourcePhone = digits(source.phone);
-    if (!sourcePhone) continue; // customers exige telefone; não inventar dado ausente.
-    let main = canonicalCustomers.find(customer => isSameCustomerIdentity(customer, source));
-    if (!main) {
-      const insert = await db.execute(sql`
-        INSERT INTO customers (name, phone, cpf, createdAt, updatedAt)
-        VALUES (${String(source.name || 'CLIENTE').trim() || 'CLIENTE'}, ${sourcePhone}, ${digits(source.cpf) || null}, NOW(), NOW())
-      `);
-      const id = Number((insert[0] as any)?.insertId || 0);
-      main = { id, name: source.name, phone: sourcePhone, cpf: digits(source.cpf) || null };
-      canonicalCustomers.push(main);
-      customersCreated++;
-    }
-  }
 
   // O cadastro principal é a fonte dos dados de identidade. Não altera PIX,
   // perfil, limites, parcelas ou rotas já concedidas nos módulos.
