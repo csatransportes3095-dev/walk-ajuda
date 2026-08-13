@@ -613,6 +613,57 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
     }
   };
 
+  const handleAddSingleEarning = async (key: 'uber' | 'ninetynine' | 'indrive' | 'particular' | 'deliveries' | 'tips' | 'otherEarnings') => {
+    const amount = String(newEarning[key] || '').trim();
+    if (!newEarning.date || !amount || Number(amount.replace(',', '.')) <= 0) return;
+    try {
+      await createEarningMutation.mutateAsync({
+        token,
+        date: newEarning.date,
+        uber: key === 'uber' ? amount : '0',
+        ninetynine: key === 'ninetynine' ? amount : '0',
+        indrive: key === 'indrive' ? amount : '0',
+        particular: key === 'particular' ? amount : '0',
+        deliveries: key === 'deliveries' ? amount : '0',
+        tips: key === 'tips' ? amount : '0',
+        otherEarnings: key === 'otherEarnings' ? amount : '0',
+      });
+      setNewEarning((current) => ({ ...current, [key]: '' }));
+      await refetchEarnings();
+    } catch (error) {
+      console.error('Erro ao salvar ganho:', error);
+    }
+  };
+
+  const handleAddSingleExpense = async (key: 'fuel' | 'carRental' | 'maintenance' | 'oilChange' | 'washing' | 'insurance' | 'internetPhone' | 'food' | 'parking' | 'tolls' | 'financing' | 'fines' | 'accessories' | 'otherExpenses') => {
+    const amount = String(newExpense[key] || '').trim();
+    if (!newExpense.date || !amount || Number(amount.replace(',', '.')) <= 0) return;
+    try {
+      await createExpenseMutation.mutateAsync({
+        token,
+        date: newExpense.date,
+        fuel: key === 'fuel' ? amount : '0',
+        carRental: key === 'carRental' ? amount : '0',
+        maintenance: key === 'maintenance' ? amount : '0',
+        oilChange: key === 'oilChange' ? amount : '0',
+        washing: key === 'washing' ? amount : '0',
+        insurance: key === 'insurance' ? amount : '0',
+        internetPhone: key === 'internetPhone' ? amount : '0',
+        food: key === 'food' ? amount : '0',
+        parking: key === 'parking' ? amount : '0',
+        tolls: key === 'tolls' ? amount : '0',
+        financing: key === 'financing' ? amount : '0',
+        fines: key === 'fines' ? amount : '0',
+        accessories: key === 'accessories' ? amount : '0',
+        otherExpenses: key === 'otherExpenses' ? amount : '0',
+      });
+      setNewExpense((current) => ({ ...current, [key]: '' }));
+      await refetchExpenses();
+    } catch (error) {
+      console.error('Erro ao salvar gasto:', error);
+    }
+  };
+
   const handleAddOperational = async () => {
     if (!newOperational.date) return;
     const payload = {
@@ -1360,8 +1411,11 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               ].map(({ label, icon, key, val, set }) => (
 	<div key={key} className="rounded-xl px-3 py-3 transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #2d0808 0%, #180404 100%)', border: '2px solid rgba(239,68,68,0.6)', boxShadow: '0 2px 10px rgba(239,68,68,0.15)' }}>
 	                  <div className="flex items-center gap-2.5 mb-2.5">
-	                    <div className="w-9 h-9 rounded-lg bg-red-600/20 border border-red-500/30 flex items-center justify-center flex-shrink-0 text-red-400">{icon}</div>
-	                    <span className="text-sm font-bold leading-tight text-white flex-1 min-w-0 break-words">{label}</span>
+	                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+	                      <div className="w-9 h-9 rounded-lg bg-red-600/20 border border-red-500/30 flex items-center justify-center flex-shrink-0 text-red-400">{icon}</div>
+	                      <span className="text-sm font-bold leading-tight text-white min-w-0 break-words">{label}</span>
+	                    </div>
+	                    <Button type="button" onClick={() => handleAddSingleExpense(key as 'fuel' | 'carRental' | 'maintenance' | 'oilChange' | 'washing' | 'insurance' | 'internetPhone' | 'food' | 'parking' | 'tolls' | 'financing' | 'fines' | 'accessories' | 'otherExpenses')} disabled={!val || createExpenseMutation.isPending} className="h-8 px-2.5 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold shadow-none">{createExpenseMutation.isPending ? '...' : 'Adicionar'}</Button>
 	                  </div>
 	                  <div className="grid grid-cols-2 gap-2">
 	                    <Input
@@ -1369,10 +1423,10 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
 	                      placeholder="Digite o valor"
 	                      value={val}
 	                      onChange={(e) => set(e.target.value)}
-	                      className="h-10 min-w-0 bg-white/5 border-white/10 text-white placeholder:text-white/35 focus-visible:border-red-500 w-full text-center text-sm font-mono"
+	                      className="h-11 min-w-0 bg-black/30 border-red-300/35 text-white placeholder:text-white/60 focus-visible:border-red-400 w-full text-center text-base font-mono"
 	                    />
-	                    <div className="h-10 min-w-0 bg-red-600/15 border border-red-500/25 rounded-lg flex items-center justify-center px-2">
-	                      <span className="text-red-400 font-bold text-sm font-mono whitespace-nowrap">{(expensesByCategory[key as keyof typeof expensesByCategory] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+	                    <div className="h-11 min-w-0 bg-red-600/15 border border-red-400/35 rounded-lg flex items-center justify-center px-2">
+	                      <span className="text-red-300 font-bold text-base font-mono whitespace-nowrap">{(expensesByCategory[key as keyof typeof expensesByCategory] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
 	                    </div>
 	                  </div>
 	                </div>
@@ -1524,20 +1578,27 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 { label: 'Gorjetas', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>, key: 'tips', val: newEarning.tips, set: (v: string) => setNewEarning({ ...newEarning, tips: v }) },
                 { label: 'Outros Ganhos', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>, key: 'otherEarnings', val: newEarning.otherEarnings, set: (v: string) => setNewEarning({ ...newEarning, otherEarnings: v }) },
               ].map(({ label, icon, key, val, set }) => (
-<div key={key} className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)', border: '2px solid rgba(34,197,94,0.7)', boxShadow: '0 2px 10px rgba(34,197,94,0.15)' }}>
-                  <div className="w-8 h-8 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center flex-shrink-0 text-emerald-400">{icon}</div>
-                  <span className="text-xs font-semibold text-white/70 flex-1 min-w-0 truncate">{label}</span>
-                  <Input
-                    type="number"
-                    placeholder="0,00"
-                    value={val}
-                    onChange={(e) => set(e.target.value)}
-                    className="h-9 bg-white/5 border-white/10 text-white placeholder:text-white/20 focus-visible:border-emerald-500 w-24 flex-shrink-0 text-center text-sm font-mono"
-                  />
-                  <div className="h-9 w-24 flex-shrink-0 bg-emerald-600/15 border border-emerald-500/25 rounded-lg flex items-center justify-end px-2.5">
-                    <span className="text-emerald-400 font-bold text-sm font-mono">{(earningsByCategory[key as keyof typeof earningsByCategory] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                  </div>
-                </div>
+	<div key={key} className="rounded-xl px-3 py-3 transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)', border: '2px solid rgba(34,197,94,0.7)', boxShadow: '0 2px 10px rgba(34,197,94,0.15)' }}>
+	                  <div className="flex items-center gap-2.5 mb-2.5">
+	                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+	                      <div className="w-9 h-9 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center flex-shrink-0 text-emerald-400">{icon}</div>
+	                      <span className="text-sm font-bold leading-tight text-white min-w-0 break-words">{label}</span>
+	                    </div>
+	                    <Button type="button" onClick={() => handleAddSingleEarning(key as 'uber' | 'ninetynine' | 'indrive' | 'particular' | 'deliveries' | 'tips' | 'otherEarnings')} disabled={!val || createEarningMutation.isPending} className="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow-none">{createEarningMutation.isPending ? '...' : 'Adicionar'}</Button>
+	                  </div>
+	                  <div className="grid grid-cols-2 gap-2">
+	                    <Input
+	                      type="number"
+	                      placeholder="Digite o valor"
+	                      value={val}
+	                      onChange={(e) => set(e.target.value)}
+	                      className="h-11 min-w-0 bg-black/30 border-emerald-300/35 text-white placeholder:text-white/60 focus-visible:border-emerald-400 w-full text-center text-base font-mono"
+	                    />
+	                    <div className="h-11 min-w-0 bg-emerald-600/15 border border-emerald-400/35 rounded-lg flex items-center justify-center px-2">
+	                      <span className="text-emerald-300 font-bold text-base font-mono whitespace-nowrap">{(earningsByCategory[key as keyof typeof earningsByCategory] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+	                    </div>
+	                  </div>
+	                </div>
               ))}
             </div>
 
