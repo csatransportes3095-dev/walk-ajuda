@@ -44,6 +44,7 @@ import { preCadastroQuestionsRouter } from "./routers/preCadastroQuestions";
 import { cartoesRouter } from "./routers/cartoes";
 import { mercadoRouter } from "./routers/mercado";
 import { privateTransportRouter } from "./routers/privateTransport";
+import { locadoraRouter } from "./routers/locadora";
 import { h2AssistantRouter } from "./routers/h2Assistant";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
@@ -278,6 +279,7 @@ export const appRouter = router({
   schedule: scheduleRouter,
   spreadsheet: spreadsheetRouter,
   privateTransport: privateTransportRouter,
+  locadora: locadoraRouter,
   h2Assistant: h2AssistantRouter,
   loans: loanRouter,
   apk: apkRouter,

@@ -72,6 +72,8 @@ import AdminZohoConfig from "./pages/AdminZohoConfig";
 import AdminMedia from "./pages/AdminMedia";
 import AdminFeatureCards from "./pages/AdminFeatureCards";
 import AdminHubCentral from "./pages/AdminHubCentral";
+import AdminLocadora from "./pages/AdminLocadora";
+import LocadoraPortal from "./pages/LocadoraPortal";
 import AdminConsultas from "./pages/AdminConsultas";
 import AdminWhatsappTemplates from "./pages/AdminWhatsappTemplates";
 import AdminCartoesUsers from "./pages/AdminCartoesUsers";
@@ -273,6 +275,9 @@ function Router() {
       <Route path={"/admin/hub-central"}>
         <AdminGuard><AdminHubCentral /></AdminGuard>
       </Route>
+      <Route path={"/admin/locadora"}>
+        <AdminGuard><AdminLocadora /></AdminGuard>
+      </Route>
       <Route path={"/admin/consultas"}>
         <AdminGuard><AdminConsultas /></AdminGuard>
       </Route>
@@ -291,6 +296,7 @@ function Router() {
       <Route path={"/agendar/:token"} component={SchedulePage} />
       <Route path={"/orcamento/:publicToken"} component={PublicQuotePage} />
       <Route path={"/recibo/:publicToken"} component={PublicReceiptPage} />
+      <Route path={"/locadora"} component={LocadoraPortal} />
       <Route path={"/gastos"} component={GastosPage} />
       <Route path={"/emprestimo"} component={EmprestimoPage} />
       <Route path={"/cartoes"} component={CartaoPage} />

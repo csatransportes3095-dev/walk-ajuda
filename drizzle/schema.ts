@@ -2491,3 +2491,7 @@ export const h2AssistantAudit = mysqlTable("h2AssistantAudit", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type H2AssistantAudit = typeof h2AssistantAudit.$inferSelect;
+
+
+// Domínio isolado da locadora; tabelas físicas usam o prefixo locadora_.
+export * from "./locadoraSchema";

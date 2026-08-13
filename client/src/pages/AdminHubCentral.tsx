@@ -1,9 +1,11 @@
 import React from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { HomeButtonsManager } from "@/components/HomeButtonsManager";
-import { LayoutGrid } from "lucide-react";
+import { Building2, LayoutGrid } from "lucide-react";
+import { useLocation } from "wouter";
 
 export default function AdminHubCentral() {
+  const [, navigate] = useLocation();
   return (
     <div className="min-h-screen bg-[#0a0a1a]">
       <AdminHeader
@@ -24,6 +26,18 @@ export default function AdminHubCentral() {
             </p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => navigate("/admin/locadora")}
+          className="group w-full rounded-2xl border border-sky-400/25 bg-gradient-to-r from-sky-500/15 to-blue-500/10 p-4 text-left transition hover:border-sky-300/60 hover:from-sky-500/25"
+        >
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-300/25 bg-sky-400/15 text-sky-200"><Building2 className="h-6 w-6" /></div>
+            <div className="flex-1"><p className="font-black tracking-wide text-white">LOCADORA</p><p className="mt-0.5 text-xs text-sky-100/65">Clientes, veículos, contratos, cobranças e manutenção</p></div>
+            <span className="text-sky-200 transition group-hover:translate-x-1">→</span>
+          </div>
+        </button>
 
         {/* Gerenciador de botões */}
         <HomeButtonsManager />
