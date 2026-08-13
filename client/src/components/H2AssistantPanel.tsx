@@ -261,7 +261,7 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.97 }}
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className={`${placement === "client-card" ? "fixed bottom-24 right-4 sm:bottom-6 sm:right-[6.25rem]" : "mb-3"} flex h-[min(680px,calc(100vh-104px))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-[26px] border border-cyan-300/20 bg-[#071224]/[.96] shadow-[0_25px_80px_rgba(0,0,0,.52)] backdrop-blur-2xl`}
+            className={`${placement === "client-card" ? "fixed inset-x-3 bottom-3 top-3 h-auto w-auto max-w-none sm:inset-x-auto sm:top-auto sm:bottom-6 sm:right-[6.25rem] sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[min(430px,calc(100vw-2rem))] sm:max-w-[430px]" : "mb-3 h-[min(680px,calc(100dvh-104px))] w-[calc(100vw-2rem)] max-w-[430px]"} flex flex-col overflow-hidden rounded-[26px] border border-cyan-300/20 bg-[#071224]/[.98] shadow-[0_25px_80px_rgba(0,0,0,.52)] backdrop-blur-2xl`}
             aria-label="H2 Assistente"
           >
             <header className="relative overflow-hidden border-b border-white/10 px-4 py-3.5">
