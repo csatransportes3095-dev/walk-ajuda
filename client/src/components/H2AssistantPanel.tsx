@@ -166,7 +166,12 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
     };
     setMessages(previous => [...previous, message]);
     if (response?.conversationId) setActiveConversationId(response.conversationId);
-    if (response?.type === "navigation" && response?.target) onNavigate?.(response.target as H2AssistantNavigationTarget);
+    if (response?.type === "navigation" && response?.target) {
+      onNavigate?.(response.target as H2AssistantNavigationTarget);
+      // A navegação é executada imediatamente; fechar o portal revela a aba solicitada.
+      setOpen(false);
+      setMinimized(false);
+    }
     void announce(message.content, response?.audioBase64, response?.audioMimeType);
   };
 

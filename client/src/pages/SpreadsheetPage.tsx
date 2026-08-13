@@ -1091,13 +1091,21 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                   token={token}
                   placement="client-card"
                   onNavigate={(target: H2AssistantNavigationTarget) => {
-                    if (["gastos", "ganhos", "operacional", "metas", "graficos", "emprestimos", "analisador", "particular"].includes(target)) {
+                    const internalModules = new Set<H2AssistantNavigationTarget>([
+                      "gastos", "ganhos", "operacional", "metas", "graficos",
+                      "emprestimos", "analisador", "particular",
+                    ]);
+                    if (internalModules.has(target)) {
                       setActiveModule(target);
-                      window.scrollTo({ top: 0, behavior: "smooth" });
+                      // Aguarda a montagem da aba antes de levar o cliente ao conteúdo solicitado.
+                      window.requestAnimationFrame(() => {
+                        document.getElementById("planilha-modulos")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      });
                       return;
                     }
-                    const externalPath: Record<string, string> = { cartoes: "/cartoes" };
-                    if (externalPath[target]) window.location.assign(externalPath[target]);
+                    const externalPath: Partial<Record<H2AssistantNavigationTarget, string>> = { cartoes: "/cartoes" };
+                    const path = externalPath[target];
+                    if (path) window.location.assign(path);
                   }}
                   onDataChanged={() => {
                     void Promise.all([
@@ -1300,6 +1308,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
         </div>
 
         {/* Abas */}
+        <div id="planilha-modulos" className="scroll-mt-4">
         <Tabs value={activeModule} onValueChange={setActiveModule} className="w-full">
           <TabsList aria-label="Módulos da Planilha de Gastos" className="!grid !w-full grid-cols-3 md:grid-cols-5 xl:grid-cols-9 !h-auto !items-stretch gap-2.5 sm:gap-3 bg-transparent p-0 mb-5">
             <DashboardModuleCard value="gastos" label="Gastos" selected={activeModule === 'gastos'} theme={MODULE_THEMES.gastos} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>} />
@@ -2093,6 +2102,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
             <RideAnalyzerTab token={token} />
           </TabsContent>
         </Tabs>
+        </div>
 
         {/* Serviços Extras / Consultas — fim do conteúdo */}
         {phoneFromToken && (

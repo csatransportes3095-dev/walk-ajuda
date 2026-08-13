@@ -20,7 +20,7 @@ const navigationLabels: Record<AssistantNavigationTarget, { label: string; path:
   operacional: { label: "Operacional", path: "/gastos" },
   metas: { label: "Metas", path: "/gastos" },
   graficos: { label: "Gráficos", path: "/gastos" },
-  emprestimos: { label: "Empréstimos", path: "/emprestimo" },
+  emprestimos: { label: "Empréstimos", path: "/gastos" },
   analisador: { label: "Analisador", path: "/gastos" },
   particular: { label: "H2 Particular", path: "/gastos" },
   cartoes: { label: "Cartões", path: "/cartoes" },
