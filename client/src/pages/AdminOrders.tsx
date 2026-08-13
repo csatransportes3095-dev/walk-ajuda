@@ -90,11 +90,13 @@ const getIdFromKey = (key: string): number => parseInt(key.split('_')[0], 10);
 function getOperationalBucket(order: any): string {
   const status = String(order?.latestStatus || '');
   if (['entregue', 'pedido_entregue', 'cancelado'].includes(status)) return 'finalizado';
+  // Somente agendamentos ainda abertos têm prioridade operacional.
+  if (order?.scheduleStatus === 'confirmed') return 'agendamento_confirmado';
+  if (order?.scheduleStatus === 'pending') return 'agendamento';
+  // Agendamento concluído deixa de prevalecer: o pedido passa à sua etapa atual.
   if (status === 'p') return 'conta_ativa';
   if (status === 'aguardando_ficar_ativa') return 'aguardando_ativa';
   if (status === 'foto_em_analise') return 'em_analise';
-  if (order?.scheduleStatus === 'confirmed') return 'agendamento_confirmado';
-  if (order?.scheduleStatus === 'pending') return 'agendamento';
   return 'sem_status';
 }
 
