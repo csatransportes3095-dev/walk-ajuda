@@ -106,6 +106,7 @@ import {
   getViewedOrderKeys, markOrderAsViewed,
 } from "./db";
 import { storagePut } from "./storage";
+import { r2GetObjectBuffer, r2PutObject } from "./r2Storage";
 
 /**
  * Verifica se um telefone está na blocklist.
@@ -1681,6 +1682,41 @@ export const appRouter = router({
   // === CLIENTES (CADASTRO) ===
   customers: router({
     routeReleaseModes: adminProcedure.query(async () => listRouteReleaseModes()),
+
+    // Manutenção única, limitada aos três objetos auditados com prefixo inválido antes do JPEG.
+    repairKnownCorruptedProfilePhotos: adminProcedure.mutation(async () => {
+      const targets = [
+        { label: 'foto 1', key: 'profile-photos/11993425366-1786598497749.jpg' },
+        { label: 'foto 2', key: 'profile-photos/11993425394-1786594938014.jpg' },
+        { label: 'foto 3', key: 'profile-photos/11993425399-1786593788896.jpg' },
+      ] as const;
+      const jpegSignature = Buffer.from([0xff, 0xd8, 0xff]);
+      const results: Array<{ label: string; status: 'reparada' | 'ja_integra'; removedBytes?: number }> = [];
+
+      for (const target of targets) {
+        const original = await r2GetObjectBuffer(target.key);
+        if (original.subarray(0, 3).equals(jpegSignature)) {
+          results.push({ label: target.label, status: 'ja_integra' });
+          continue;
+        }
+
+        const jpegOffset = original.indexOf(jpegSignature);
+        if (jpegOffset <= 0 || jpegOffset > 64) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `${target.label}: assinatura JPEG não encontrada em posição segura.` });
+        }
+
+        const repaired = original.subarray(jpegOffset);
+        await r2PutObject(target.key, repaired, 'image/jpeg');
+        const verified = await r2GetObjectBuffer(target.key);
+        if (!verified.subarray(0, 3).equals(jpegSignature) || verified.length !== repaired.length) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `${target.label}: falha ao verificar o reparo.` });
+        }
+        results.push({ label: target.label, status: 'reparada', removedBytes: jpegOffset });
+      }
+
+      return { success: true, results };
+    }),
+
     setRouteReleaseMode: adminProcedure
       .input(z.object({ route: z.enum(CUSTOMER_ROUTES), mode: z.enum(['automatico', 'manual']) }))
       .mutation(async ({ input, ctx }) => {
@@ -2279,18 +2315,31 @@ export const appRouter = router({
         if (!input.imageBase64 || input.imageBase64.length === 0) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Imagem vazia' });
         }
+        // O Cadastro Guiado envia uma data URI completa; o storage precisa receber apenas o base64.
+        const commaIndex = input.imageBase64.indexOf(',');
+        const pureBase64 = (commaIndex >= 0 ? input.imageBase64.slice(commaIndex + 1) : input.imageBase64).trim();
+        let buffer: Buffer;
         try {
-          const buffer = Buffer.from(input.imageBase64, 'base64');
-          if (buffer.length === 0) {
-            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Imagem invalida ou corrompida' });
-          }
-        } catch (error) {
+          buffer = Buffer.from(pureBase64, 'base64');
+        } catch {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Erro ao processar imagem: formato base64 invalido' });
         }
-        const mime = 'image/jpeg';
-        const ext = 'jpg';
+        if (buffer.length === 0) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Imagem invalida ou corrompida' });
+        }
+
+        // Não confiar no prefixo declarado pela data URI: validar o arquivo real antes de persistir.
+        const isJpeg = buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+        const isPng = buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+        const isWebp = buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+        if (!isJpeg && !isPng && !isWebp) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Formato de imagem invalido' });
+        }
+
+        const mime = isJpeg ? 'image/jpeg' : isPng ? 'image/png' : 'image/webp';
+        const ext = isJpeg ? 'jpg' : isPng ? 'png' : 'webp';
         const fileKey = `profile-photos/${input.phone}-${Date.now()}.${ext}`;
-        const { url } = await storagePut(fileKey, Buffer.from(input.imageBase64, 'base64'), mime);
+        const { url } = await storagePut(fileKey, buffer, mime);
         // Salvar a URL direta do CloudFront (pública, não expira)
         const customer = await getCustomerByPhone(input.phone);
         if (customer) {

@@ -327,6 +327,8 @@ export default function AdminCustomers() {
   const [editResellerDiscountValue, setEditResellerDiscountValue] = useState<string>('0');
   const [photoModal, setPhotoModal] = useState<{ url: string; name: string } | null>(null);
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState<number | null>(null);
+  // Estado apenas de interface: nunca substitui nem remove profilePhotoUrl no banco.
+  const [failedProfilePhotoIds, setFailedProfilePhotoIds] = useState<Set<number>>(() => new Set());
   const [fixedPwdModal, setFixedPwdModal] = useState<Customer | null>(null);
   const [fixedPwdInput, setFixedPwdInput] = useState("");
   const [fixedPwdActive, setFixedPwdActive] = useState(false);
@@ -1084,11 +1086,13 @@ export default function AdminCustomers() {
                         title="Telefone na lista negra do sistema"
                       />
                     )}
-                    {c.profilePhotoUrl ? (
+                    {c.profilePhotoUrl && !failedProfilePhotoIds.has(c.id) ? (
                       <img
                         src={c.profilePhotoUrl}
-                        alt={c.name}
+                        alt=""
+                        aria-label={`Foto de ${c.name}`}
                         className={`w-16 h-16 rounded-full object-cover shadow cursor-pointer hover:opacity-90 transition-opacity ${c.isBlocked ? 'border-2 border-red-500/60' : 'border-2 border-primary/30'}`}
+                        onError={() => setFailedProfilePhotoIds((previous) => new Set(previous).add(c.id))}
                         onClick={() => setPhotoModal({ url: c.profilePhotoUrl!, name: c.name })}
                         title="Clique para ampliar a foto"
                       />
@@ -1096,7 +1100,7 @@ export default function AdminCustomers() {
                       <div className={`w-16 h-16 rounded-full bg-muted flex items-center justify-center ${c.isBlocked ? 'border-2 border-red-500/60' : 'border-2 border-border'}`}>
                         {uploadingPhotoFor === c.id
                           ? <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          : <span className="text-muted-foreground text-xl font-bold">{c.name.charAt(0).toUpperCase()}</span>
+                          : <ImageIcon className="w-6 h-6 text-muted-foreground" aria-label="Avatar padrão" />
                         }
                       </div>
                     )}
