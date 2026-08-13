@@ -244,6 +244,8 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
         {orderDetailsQ.isLoading ? <p style={smallStyle}>Consultando pedido...</p> : orderDetailsQ.data?.current ? <OrderDetails data={orderDetailsQ.data.current} /> : <p style={smallStyle}>Não foi possível carregar os detalhes.</p>}
       </div>}
       <button disabled={!canRequestRoute('acompanhar') || routeMut.isPending} onClick={() => requestRoute('acompanhar')} style={routeButtonStyle('acompanhar')}>{routeLabel('acompanhar', routeState('acompanhar').allowed ? 'Acessar Meus Pedidos' : 'Solicitar acesso aos pedidos')}</button>
+      <p style={{ ...smallStyle, margin: '12px 0 0' }}>Precisa iniciar um novo pedido de cadastro? Use a opção abaixo.</p>
+      <button onClick={() => openRoute('site')} style={{ ...routeBaseStyle, color: '#dcfce7', background: 'rgba(22,163,74,.18)', border: '1px solid rgba(34,197,94,.72)' }}>Fazer Pedido</button>
     </div>
     <div style={cardStyle}><WalletCards size={20} color="#fbbf24" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Empréstimos</strong>
       {hasRouteAccess('emprestimo') && <>
