@@ -14,6 +14,7 @@ import {
 } from "../h2-assistant/service";
 import { createNavigationResult, executeReadTool, getNavigationTarget } from "../h2-assistant/tools";
 import { processAssistantText, synthesizeAssistantSpeech, transcribeAssistantAudio } from "../h2-assistant/orchestrator";
+import { H2_DIAGNOSTIC_EVENTS, h2Diagnostic, h2DiagnosticError } from "../h2-assistant/diagnostics";
 import {
   draftCreateAppointment,
   draftCreateEarning,
@@ -41,18 +42,27 @@ const locationStopSchema = z.object({
 
 export const h2AssistantRouter = router({
   bootstrap: publicProcedure.input(z.object({ token: z.string().min(20) })).query(async ({ input }) => {
-    const ctx = await contextFromToken(input.token);
-    const [settings, health, conversations] = await Promise.all([
-      getAssistantSettings(ctx),
-      healthAssistant(ctx),
-      listAssistantConversations(ctx),
-    ]);
-    return {
-      user: { id: ctx.userId, name: ctx.client.name, phone: ctx.client.phone },
-      settings,
-      health,
-      conversations,
-    };
+    h2Diagnostic(H2_DIAGNOSTIC_EVENTS.bootstrapStart);
+    try {
+      const ctx = await contextFromToken(input.token);
+      h2Diagnostic(H2_DIAGNOSTIC_EVENTS.authOk, { flow: "bootstrap" });
+      const [settings, health, conversations] = await Promise.all([
+        getAssistantSettings(ctx),
+        healthAssistant(ctx),
+        listAssistantConversations(ctx),
+      ]);
+      h2Diagnostic(H2_DIAGNOSTIC_EVENTS.openAiKeyPresent, { present: health.openAIConfigured });
+      h2Diagnostic(H2_DIAGNOSTIC_EVENTS.bootstrapOk, { enabled: health.enabled, voiceEnabled: health.voiceEnabled, openAIConfigured: health.openAIConfigured });
+      return {
+        user: { id: ctx.userId, name: ctx.client.name, phone: ctx.client.phone },
+        settings,
+        health,
+        conversations,
+      };
+    } catch (error) {
+      h2DiagnosticError(H2_DIAGNOSTIC_EVENTS.bootstrapOk, error, { status: "error" });
+      throw error;
+    }
   }),
 
   settings: router({
@@ -108,9 +118,11 @@ export const h2AssistantRouter = router({
       conversationId: z.number().int().positive().optional(),
     })).mutation(async ({ input }) => {
       const ctx = await contextFromToken(input.token);
+      h2Diagnostic(H2_DIAGNOSTIC_EVENTS.authOk, { flow: "chat" });
       try {
         return await processAssistantText(ctx, { text: input.text, conversationId: input.conversationId });
       } catch (error: any) {
+        h2DiagnosticError(H2_DIAGNOSTIC_EVENTS.openAiError, error, { operation: "chat" });
         throw new TRPCError({ code: "BAD_REQUEST", message: error?.message || "Não foi possível processar a mensagem." });
       }
     }),
@@ -124,9 +136,12 @@ export const h2AssistantRouter = router({
       durationSeconds: z.number().positive().max(90),
     })).mutation(async ({ input }) => {
       const ctx = await contextFromToken(input.token);
+      h2Diagnostic(H2_DIAGNOSTIC_EVENTS.authOk, { flow: "transcription" });
+      h2Diagnostic(H2_DIAGNOSTIC_EVENTS.audioReceived, { mimeType: input.mimeType.split(";")[0], durationSeconds: Math.round(input.durationSeconds), encodedCharacters: input.audioBase64.length });
       try {
         return await transcribeAssistantAudio(ctx, input);
       } catch (error: any) {
+        h2DiagnosticError(H2_DIAGNOSTIC_EVENTS.transcriptionError, error, { mimeType: input.mimeType.split(";")[0] });
         throw new TRPCError({ code: "BAD_REQUEST", message: error?.message || "Não foi possível transcrever o áudio." });
       }
     }),

@@ -1,6 +1,7 @@
 import { addAssistantMessage, enforceAssistantLimits, ensureAssistantConversation, getAssistantSettings, listAssistantMessages, writeAssistantAudit, type AssistantUserContext } from "./service";
 import { createNavigationResult, executeReadTool, getNavigationTarget, type AssistantReadTool } from "./tools";
 import { draftCreateAppointment, draftCreateEarning, draftCreateExpense, draftCreateGoal, draftCreateQuote } from "./write-actions";
+import { H2_DIAGNOSTIC_EVENTS, h2Diagnostic, h2DiagnosticError, h2DiagnosticHttpError } from "./diagnostics";
 
 export type AssistantResponse = {
   type: "answer" | "navigation" | "preview" | "error";
@@ -95,10 +96,15 @@ function deterministicIntent(text: string): AssistantIntent | null {
 
 async function askOpenAI(history: Array<{ role: string; content: string }>, text: string): Promise<AssistantIntent | null> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
+  h2Diagnostic(H2_DIAGNOSTIC_EVENTS.openAiKeyPresent, { present: Boolean(apiKey) });
+  if (!apiKey) {
+    h2Diagnostic(H2_DIAGNOSTIC_EVENTS.openAiError, { operation: "chat", reason: "missing_key" });
+    return null;
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
+    h2Diagnostic(H2_DIAGNOSTIC_EVENTS.openAiRequest, { operation: "chat" });
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -125,9 +131,16 @@ Preencha argsJson com uma string JSON contendo somente os argumentos. Se não ho
         ],
       }),
     });
-    if (!response.ok) throw new Error(`OpenAI respondeu ${response.status}`);
+    if (!response.ok) {
+      h2DiagnosticHttpError(H2_DIAGNOSTIC_EVENTS.openAiError, response.status, { operation: "chat" });
+      throw new Error(`OpenAI respondeu ${response.status}`);
+    }
     const payload = await response.json() as any;
+    h2Diagnostic(H2_DIAGNOSTIC_EVENTS.openAiOk, { operation: "chat", status: response.status });
     return parseJson(payload?.choices?.[0]?.message?.content);
+  } catch (error) {
+    h2DiagnosticError(H2_DIAGNOSTIC_EVENTS.openAiError, error, { operation: "chat" });
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -201,10 +214,15 @@ export async function transcribeAssistantAudio(ctx: AssistantUserContext, input:
   const allowed = new Set(["audio/webm", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-wav", "audio/ogg"]);
   if (!allowed.has(normalizedMime)) throw new Error("Formato de áudio não permitido.");
   const binary = Buffer.from(input.audioBase64, "base64");
+  h2Diagnostic(H2_DIAGNOSTIC_EVENTS.audioBytes, { bytes: binary.length, mimeType: normalizedMime });
   if (!binary.length || binary.length > 5 * 1024 * 1024) throw new Error("O áudio deve ter no máximo 5 MB.");
   await enforceAssistantLimits(ctx, "[áudio]", Math.max(1, Math.min(90, Math.round(Number(input.durationSeconds) || 0))));
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("Voz temporariamente indisponível. Você pode continuar usando o H2 pelo texto.");
+  h2Diagnostic(H2_DIAGNOSTIC_EVENTS.openAiKeyPresent, { present: Boolean(apiKey) });
+  if (!apiKey) {
+    h2Diagnostic(H2_DIAGNOSTIC_EVENTS.transcriptionError, { reason: "missing_key" });
+    throw new Error("Voz temporariamente indisponível. Você pode continuar usando o H2 pelo texto.");
+  }
 
   const form = new FormData();
   const extension = normalizedMime === "audio/mp4" ? "m4a" : normalizedMime === "audio/mpeg" ? "mp3" : normalizedMime.includes("wav") ? "wav" : normalizedMime === "audio/ogg" ? "ogg" : "webm";
@@ -214,13 +232,21 @@ export async function transcribeAssistantAudio(ctx: AssistantUserContext, input:
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25_000);
   try {
+    h2Diagnostic(H2_DIAGNOSTIC_EVENTS.transcriptionStart, { mimeType: normalizedMime });
     const response = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form, signal: controller.signal });
-    if (!response.ok) throw new Error("Não foi possível transcrever o áudio agora.");
+    if (!response.ok) {
+      h2DiagnosticHttpError(H2_DIAGNOSTIC_EVENTS.transcriptionError, response.status, { mimeType: normalizedMime });
+      throw new Error("Não foi possível transcrever o áudio agora.");
+    }
     const payload = await response.json() as { text?: string };
     const text = firstText(payload.text, 2_000);
     if (!text) throw new Error("Não consegui compreender o áudio. Tente falar novamente ou digite.");
+    h2Diagnostic(H2_DIAGNOSTIC_EVENTS.transcriptionOk, { status: response.status, textLength: text.length });
     await writeAssistantAudit(ctx, "AUDIO_TRANSCRITO", "openai.transcription", { durationSeconds: Math.round(Number(input.durationSeconds) || 0), textLength: text.length });
     return { text };
+  } catch (error) {
+    h2DiagnosticError(H2_DIAGNOSTIC_EVENTS.transcriptionError, error, { mimeType: normalizedMime });
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
