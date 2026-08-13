@@ -15,6 +15,7 @@
     "db:migrate:online-support": "tsx scripts/apply-online-support-migration.ts",
     "db:migrate:cartoes": "tsx scripts/apply-cartao-migration.ts",
     "db:migrate:question-audio": "tsx scripts/apply-question-audio-migration.ts",
+    "db:migrate:private-authenticator-qr": "tsx scripts/apply-private-authenticator-qr-migration.ts",
     "db:restore:financeiro": "tsx scripts/restore-financeiro-backup.ts"
   },
   "dependencies": {

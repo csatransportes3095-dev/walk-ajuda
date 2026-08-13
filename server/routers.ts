@@ -5691,9 +5691,33 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) return null;
         const rows = await db.select().from(orderLoginData).where(eq(orderLoginData.registrationId, input.registrationId)).limit(1);
-        return rows[0] ?? null;
+        const row = rows[0];
+        if (!row) return null;
+        const { authenticatorQrStorageKey, authenticatorQrMimeType, authenticatorQrUpdatedAt, ...safeRow } = row;
+        return { ...safeRow, hasAuthenticatorQr: Boolean(authenticatorQrStorageKey), authenticatorQrUpdatedAt: authenticatorQrUpdatedAt ?? null };
       }),
-    // Admin salva/atualiza dados de login
+    // Admin lê a imagem cifrada apenas para prévia, ampliação e edição.
+    getAuthenticatorQrForAdmin: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderLoginData } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const rows = await db.select({ storageKey: orderLoginData.authenticatorQrStorageKey, mimeType: orderLoginData.authenticatorQrMimeType })
+          .from(orderLoginData).where(eq(orderLoginData.registrationId, input.registrationId)).limit(1);
+        const row = rows[0];
+        if (!row?.storageKey || !row.mimeType) return null;
+        const { readAuthenticatorQr } = await import('./authenticatorQr');
+        try {
+          const image = await readAuthenticatorQr(row.storageKey, row.mimeType);
+          return { mimeType: image.mimeType, data: image.buffer.toString('base64') };
+        } catch {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Não foi possível ler o QR protegido.' });
+        }
+      }),
+    // Admin salva/atualiza dados de login e, opcionalmente, o QR privado do autenticador.
     save: adminProcedure
       .input(z.object({
         registrationId: z.number().int(),
@@ -5705,6 +5729,8 @@ export const appRouter = router({
         emailLink: z.string().optional(),
         loginNotes: z.string().optional(),
         loginGroupLink: z.string().optional(),
+        authenticatorQrData: z.string().max(4_250_000).optional(),
+        authenticatorQrAction: z.enum(['keep', 'replace', 'delete']).optional(),
       }))
       .mutation(async ({ input }) => {
         const { getDb } = await import('./db');
@@ -5712,40 +5738,66 @@ export const appRouter = router({
         const { eq } = await import('drizzle-orm');
         const db = await getDb();
         if (!db) throw new Error('Database unavailable');
-        // Remover traços e espaços do código autenticador automaticamente
         const cleanAuthCode = input.authCode ? input.authCode.replace(/[-\s]/g, '') : null;
-        // Buscar o customerPhone diretamente do histórico do pedido (evita bug de telefone alterado)
         const historyRow = await db.select({ customerPhone: orderStatusHistory.customerPhone })
           .from(orderStatusHistory)
           .where(eq(orderStatusHistory.registrationId, input.registrationId))
           .limit(1);
         const canonicalPhone = historyRow.length > 0 ? historyRow[0].customerPhone : input.customerPhone;
-        const existing = await db.select({ id: orderLoginData.id }).from(orderLoginData).where(eq(orderLoginData.registrationId, input.registrationId)).limit(1);
-        if (existing.length > 0) {
-          await db.update(orderLoginData).set({
-            customerPhone: canonicalPhone,
-            loginPhone: input.loginPhone ?? null,
-            loginEmail: input.loginEmail ?? null,
-            loginPassword: input.loginPassword ?? null,
-            authCode: cleanAuthCode,
-            emailLink: input.emailLink ?? null,
-            loginNotes: input.loginNotes ?? null,
-            loginGroupLink: input.loginGroupLink ?? null,
-          }).where(eq(orderLoginData.registrationId, input.registrationId));
-        } else {
-          await db.insert(orderLoginData).values({
-            registrationId: input.registrationId,
-            customerPhone: canonicalPhone,
-            loginPhone: input.loginPhone ?? null,
-            loginEmail: input.loginEmail ?? null,
-            loginPassword: input.loginPassword ?? null,
-            authCode: cleanAuthCode,
-            emailLink: input.emailLink ?? null,
-            loginNotes: input.loginNotes ?? null,
-            loginGroupLink: input.loginGroupLink ?? null,
-          });
+        const existingRows = await db.select({ id: orderLoginData.id, authenticatorQrStorageKey: orderLoginData.authenticatorQrStorageKey })
+          .from(orderLoginData)
+          .where(eq(orderLoginData.registrationId, input.registrationId))
+          .limit(1);
+        const existing = existingRows[0];
+        const action = input.authenticatorQrData ? 'replace' : (input.authenticatorQrAction ?? 'keep');
+        if (action === 'replace' && !input.authenticatorQrData) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione uma imagem válida para o QR do autenticador.' });
         }
-        return { success: true };
+
+        let replacement: { storageKey: string; mimeType: string } | null = null;
+        if (action === 'replace' && input.authenticatorQrData) {
+          const { parseAuthenticatorQrBase64, storeAuthenticatorQr } = await import('./authenticatorQr');
+          try {
+            replacement = await storeAuthenticatorQr(parseAuthenticatorQrBase64(input.authenticatorQrData));
+          } catch (error) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: error instanceof Error ? error.message : 'Não foi possível validar o QR do autenticador.' });
+          }
+        }
+
+        const qrFields = action === 'replace'
+          ? { authenticatorQrStorageKey: replacement!.storageKey, authenticatorQrMimeType: replacement!.mimeType, authenticatorQrUpdatedAt: new Date() }
+          : action === 'delete'
+            ? { authenticatorQrStorageKey: null, authenticatorQrMimeType: null, authenticatorQrUpdatedAt: null }
+            : {};
+        try {
+          const values = {
+            customerPhone: canonicalPhone,
+            loginPhone: input.loginPhone ?? null,
+            loginEmail: input.loginEmail ?? null,
+            loginPassword: input.loginPassword ?? null,
+            authCode: cleanAuthCode,
+            emailLink: input.emailLink ?? null,
+            loginNotes: input.loginNotes ?? null,
+            loginGroupLink: input.loginGroupLink ?? null,
+            ...qrFields,
+          };
+          if (existing) {
+            await db.update(orderLoginData).set(values).where(eq(orderLoginData.registrationId, input.registrationId));
+          } else {
+            await db.insert(orderLoginData).values({ registrationId: input.registrationId, ...values });
+          }
+        } catch (error) {
+          if (replacement) {
+            const { deleteAuthenticatorQr } = await import('./authenticatorQr');
+            await deleteAuthenticatorQr(replacement.storageKey).catch(() => {});
+          }
+          throw error;
+        }
+        if ((action === 'replace' || action === 'delete') && existing?.authenticatorQrStorageKey) {
+          const { deleteAuthenticatorQr } = await import('./authenticatorQr');
+          await deleteAuthenticatorQr(existing.authenticatorQrStorageKey).catch(() => {});
+        }
+        return { success: true, hasAuthenticatorQr: action === 'replace' || (action === 'keep' && Boolean(existing?.authenticatorQrStorageKey)) };
       }),
     // Cliente busca dados de login do seu pedido (sem autenticação admin)
     getForClient: publicProcedure
@@ -5761,9 +5813,10 @@ export const appRouter = router({
         ).limit(1);
         if (!rows[0]) return null;
         const row = rows[0];
-        // Tratar string "NULL" como null (dado legado)
+        const { authenticatorQrStorageKey, authenticatorQrMimeType: _qrMime, authenticatorQrUpdatedAt: _qrUpdatedAt, ...safeRow } = row;
+        // Tratar string "NULL" como null (dado legado); nunca expor chave interna do QR.
         return {
-          ...row,
+          ...safeRow,
           loginPhone: (row.loginPhone && row.loginPhone !== 'NULL' && row.loginPhone.trim() !== '') ? row.loginPhone : null,
           authCode: (row.authCode && row.authCode !== 'NULL' && row.authCode.trim() !== '') ? row.authCode : null,
           loginEmail: (row.loginEmail && row.loginEmail !== 'NULL' && row.loginEmail.trim() !== '') ? row.loginEmail : null,
@@ -5772,6 +5825,35 @@ export const appRouter = router({
           loginNotes: (row.loginNotes && row.loginNotes !== 'NULL' && row.loginNotes.trim() !== '') ? row.loginNotes : null,
           loginGroupLink: (row.loginGroupLink && row.loginGroupLink !== 'NULL' && row.loginGroupLink.trim() !== '') ? row.loginGroupLink : null,
         };
+      }),
+    // Cliente só recebe QR após validar a sessão do acompanhamento e a titularidade do pedido.
+    getAuthenticatorQrForClient: publicProcedure
+      .input(z.object({ registrationId: z.number().int().positive(), cpToken: z.string().min(20).max(512) }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderLoginData, customerPasswordSessions } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const sessions = await db.select().from(customerPasswordSessions).where(eq(customerPasswordSessions.token, input.cpToken)).limit(1);
+        const session = sessions[0];
+        if (!session || new Date(session.expiresAt) < new Date()) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão expirada. Entre novamente para acessar o QR.' });
+        }
+        const customerPhone = String(session.phone || '').replace(/\D/g, '');
+        const rows = await db.select({ storageKey: orderLoginData.authenticatorQrStorageKey, mimeType: orderLoginData.authenticatorQrMimeType })
+          .from(orderLoginData)
+          .where(and(eq(orderLoginData.registrationId, input.registrationId), eq(orderLoginData.customerPhone, customerPhone)))
+          .limit(1);
+        const row = rows[0];
+        if (!row?.storageKey || !row.mimeType) return null;
+        const { readAuthenticatorQr } = await import('./authenticatorQr');
+        try {
+          const image = await readAuthenticatorQr(row.storageKey, row.mimeType);
+          return { mimeType: image.mimeType, data: image.buffer.toString('base64') };
+        } catch {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Não foi possível ler o QR protegido.' });
+        }
       }),
   }),
 

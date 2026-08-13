@@ -585,6 +585,10 @@ export const orderLoginData = mysqlTable("orderLoginData", {
   emailLink: varchar("emailLink", { length: 512 }),
   loginNotes: text("loginNotes"),
   loginGroupLink: varchar("loginGroupLink", { length: 1024 }),
+  // QR do autenticador: metadados somente; os bytes ficam cifrados no storage.
+  authenticatorQrStorageKey: varchar("authenticatorQrStorageKey", { length: 512 }),
+  authenticatorQrMimeType: varchar("authenticatorQrMimeType", { length: 64 }),
+  authenticatorQrUpdatedAt: timestamp("authenticatorQrUpdatedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

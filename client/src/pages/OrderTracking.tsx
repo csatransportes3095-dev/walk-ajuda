@@ -7,7 +7,7 @@ import { useDevToolsDetection } from "@/hooks/useDevToolsDetection";
 import {
   Phone, Search, Package, Clock, FileCheck, Zap, DollarSign,
   XCircle, ChevronRight, ArrowLeft, CheckCircle2, Loader2, Eye, EyeOff, Wrench,
-  Star, AlertCircle, Info, RefreshCw, Copy, Check, LogOut, Calendar,
+  Star, AlertCircle, Info, RefreshCw, Copy, Check, LogOut, Calendar, Download, Maximize2, QrCode,
 } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -482,6 +482,31 @@ export default function OrderTracking() {
     { registrationId, customerPhone: searchPhone },
     { enabled: canAccess && (latestStatus === 'entregue' || latestStatus === 'pedido_entregue') && registrationId > 0 }
   );
+  const authenticatorQrQuery = trpc.loginData.getAuthenticatorQrForClient.useQuery(
+    { registrationId, cpToken: pwdToken },
+    { enabled: canAccess && !!pwdToken && registrationId > 0 }
+  );
+  const [qrExpanded, setQrExpanded] = useState(false);
+  const downloadAuthenticatorQr = () => {
+    const qr = authenticatorQrQuery.data;
+    if (!qr) return;
+    try {
+      const binary = atob(qr.data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: qr.mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `qr-autenticador.${qr.mimeType === 'image/png' ? 'png' : qr.mimeType === 'image/webp' ? 'webp' : 'jpg'}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Não foi possível salvar o QR no aparelho.');
+    }
+  };
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const copyField = (text: string, field: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -1729,6 +1754,28 @@ export default function OrderTracking() {
                         </button>
                       </div>
                     )}
+                    {authenticatorQrQuery.data && (
+                      <div className="rounded-xl border border-lime-400/35 bg-lime-500/[0.07] p-3 space-y-2.5">
+                        <div className="flex items-start gap-2">
+                          <QrCode className="w-4 h-4 text-lime-300 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs font-bold text-lime-200">QR CODE DO AUTENTICADOR</p>
+                            <p className="text-[11px] text-lime-100/65">Use este QR somente para configurar o autenticador da sua conta.</p>
+                          </div>
+                        </div>
+                        {authenticatorQrQuery.data ? (
+                          <>
+                            <div className="rounded-lg bg-white p-2 flex justify-center">
+                              <img src={`data:${authenticatorQrQuery.data.mimeType};base64,${authenticatorQrQuery.data.data}`} alt="QR Code do autenticador" className="max-h-56 max-w-full object-contain" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button type="button" onClick={() => setQrExpanded(true)} className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10"><Maximize2 className="inline w-3.5 h-3.5 mr-1" />Ampliar</button>
+                              <button type="button" onClick={downloadAuthenticatorQr} className="rounded-lg border border-lime-400/35 bg-lime-500/15 px-3 py-2 text-xs font-semibold text-lime-100 hover:bg-lime-500/25"><Download className="inline w-3.5 h-3.5 mr-1" />Salvar imagem</button>
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    )}
                     {(loginDataQuery.data as any).emailLink && (
                       <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
@@ -1791,13 +1838,24 @@ export default function OrderTracking() {
                         <p className="text-xs text-white/80 whitespace-pre-line leading-relaxed">{(loginDataQuery.data as any).loginNotes}</p>
                       </div>
                     )}
-                    {!loginDataQuery.data.loginEmail && !loginDataQuery.data.loginPassword && !loginDataQuery.data.authCode && !(loginDataQuery.data as any).emailLink && !(loginDataQuery.data as any).loginGroupLink && !(loginDataQuery.data as any).loginNotes && (
+                    {!loginDataQuery.data.loginEmail && !loginDataQuery.data.loginPassword && !loginDataQuery.data.authCode && !(loginDataQuery.data as any).emailLink && !(loginDataQuery.data as any).loginGroupLink && !(loginDataQuery.data as any).loginNotes && !authenticatorQrQuery.data && (
                       <p className="text-xs text-white/40 text-center py-2">Aguarde — os dados serão disponibilizados em breve.</p>
                     )}
                   </div>
                 ) : (
                   <p className="text-xs text-white/40 text-center py-2">Aguarde — os dados serão disponibilizados em breve.</p>
                 )}
+              </div>
+            )}
+            {qrExpanded && authenticatorQrQuery.data && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4" onClick={() => setQrExpanded(false)}>
+                <div className="max-h-full max-w-full rounded-xl bg-white p-4 shadow-2xl" onClick={event => event.stopPropagation()}>
+                  <img src={`data:${authenticatorQrQuery.data.mimeType};base64,${authenticatorQrQuery.data.data}`} alt="QR Code do autenticador ampliado" className="max-h-[78vh] max-w-[86vw] object-contain" />
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={downloadAuthenticatorQr} className="rounded-lg bg-lime-600 px-3 py-2 text-xs font-bold text-white"><Download className="inline w-3.5 h-3.5 mr-1" />Salvar</button>
+                    <button type="button" onClick={() => setQrExpanded(false)} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white">Fechar</button>
+                  </div>
+                </div>
               </div>
             )}
 
