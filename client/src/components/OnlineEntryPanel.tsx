@@ -14,8 +14,16 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   const [error, setError] = useState("");
   const [selectedLoanId, setSelectedLoanId] = useState<number | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [passwordSetupPhone, setPasswordSetupPhone] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [passwordCreatedPending, setPasswordCreatedPending] = useState(false);
   const sessionQ = trpc.onlineSupport.entrySession.useQuery({ token }, { enabled: !!token, retry: false, refetchInterval: token ? 10000 : false });
   const loginMut = trpc.customerPassword.login.useMutation();
+  const passwordStatusMut = trpc.customerPassword.checkStatusMutation.useMutation();
+  const passwordModeQ = trpc.customerPassword.getMode.useQuery(undefined, { enabled: !!passwordSetupPhone, retry: false });
+  const createPasswordAutoMut = trpc.customerPassword.clientCreateAuto.useMutation();
+  const createPasswordManualMut = trpc.customerPassword.clientCreateManual.useMutation();
   const ordersQ = trpc.onlineSupport.entryOrders.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated, retry: false });
   const orderDetailsQ = trpc.onlineSupport.entryOrderDetails.useQuery(
     { token, registrationId: selectedOrderId || 0 },
@@ -34,11 +42,54 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
     }
   }, [sessionQ.data]);
 
+  const openPasswordSetup = (resolvedPhone?: string) => {
+    const cleanPhone = (resolvedPhone || phone).replace(/\D/g, "");
+    if (!cleanPhone) { setError('Informe seu telefone para criar uma nova senha.'); return; }
+    setPasswordSetupPhone(cleanPhone);
+    setNewPassword("");
+    setConfirmNewPassword("");
+    setPasswordCreatedPending(false);
+    setError("");
+  };
+
+  const inspectPasswordStatus = async () => {
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length < 10) return;
+    try {
+      const result = await passwordStatusMut.mutateAsync({ phone: cleanPhone });
+      if (result.status === 'no_password') openPasswordSetup(result.phone);
+    } catch { /* A validação final continua protegida pelo endpoint de login. */ }
+  };
+
+  const createNewPassword = async () => {
+    if (newPassword.length < 4) { setError('Crie uma senha com pelo menos 4 caracteres.'); return; }
+    if (newPassword !== confirmNewPassword) { setError('As senhas não coincidem.'); return; }
+    try {
+      setError("");
+      const phoneForPassword = passwordSetupPhone.replace(/\D/g, "");
+      if (passwordModeQ.data?.mode === 'auto') {
+        const result = await createPasswordAutoMut.mutateAsync({ phone: phoneForPassword, password: newPassword });
+        if (!result.success || !result.token) { setError('Não foi possível criar a nova senha.'); return; }
+        localStorage.setItem(ENTRY_TOKEN_KEY, result.token);
+        localStorage.setItem('cp_token', result.token);
+        setToken(result.token);
+        setPassword("");
+        setPasswordSetupPhone("");
+        return;
+      }
+      const result = await createPasswordManualMut.mutateAsync({ phone: phoneForPassword, password: newPassword });
+      if (!result.success) { setError('Não foi possível solicitar a nova senha.'); return; }
+      setPasswordCreatedPending(true);
+    } catch (e: any) { setError(e?.message || 'Não foi possível criar a nova senha.'); }
+  };
+
   const login = async () => {
     setError("");
     const result = await loginMut.mutateAsync({ phone: phone.replace(/\D/g, ""), password });
     if (!result.success || !result.token) {
-      setError(result.error === 'wrong_password' ? 'Senha incorreta.' : result.error === 'no_password' ? 'Você ainda não possui senha de acesso.' : 'Não foi possível entrar.');
+      if (result.error === 'no_password') { openPasswordSetup(); return; }
+      setError(result.error === 'wrong_password' ? 'Senha incorreta.' : result.error === 'pending_approval' ? 'Sua senha está aguardando liberação do administrador.' : result.error === 'expired' ? 'Sua senha venceu. Crie uma nova senha.' : 'Não foi possível entrar.');
+      if (result.error === 'expired') openPasswordSetup();
       return;
     }
     localStorage.setItem(ENTRY_TOKEN_KEY, result.token);
@@ -133,13 +184,28 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   };
 
   const customer = sessionQ.data?.authenticated ? sessionQ.data.customer : null;
+  if (!customer && passwordSetupPhone) return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <button onClick={() => { setPasswordSetupPhone(''); setError(''); }} style={backStyle}><ArrowLeft size={15} /> Voltar</button>
+    <div style={cardStyle}>
+      <KeyRound size={21} color="#a78bfa" />
+      <h3 style={{ margin: '8px 0 4px', color: '#fff', fontSize: 16 }}>Criar nova senha de acesso</h3>
+      <p style={{ margin: '0 0 14px', color: 'rgba(255,255,255,.6)', fontSize: 12, lineHeight: 1.45 }}>Seu cadastro foi localizado. Crie uma nova senha para entrar com segurança.</p>
+      {passwordCreatedPending ? <div style={{ padding: 12, borderRadius: 10, background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.42)', color: '#fef3c7', fontSize: 12, lineHeight: 1.45 }}><b>Senha solicitada com sucesso.</b><br />Aguarde a liberação do administrador para entrar.</div> : <>
+        <input value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Nova senha" type="password" style={inputStyle} />
+        <input value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && createNewPassword()} placeholder="Confirmar nova senha" type="password" style={{ ...inputStyle, marginTop: 8 }} />
+        {passwordModeQ.isLoading ? <p style={{ ...smallStyle, marginBottom: 0 }}>Preparando criação segura...</p> : <button disabled={createPasswordAutoMut.isPending || createPasswordManualMut.isPending || !newPassword || !confirmNewPassword} onClick={createNewPassword} style={primaryStyle}>{(createPasswordAutoMut.isPending || createPasswordManualMut.isPending) ? 'Criando senha...' : 'Criar nova senha'}</button>}
+      </>}
+      {error && <p style={{ margin: '8px 0 0', color: '#fca5a5', fontSize: 12 }}>{error}</p>}
+    </div>
+  </div>;
+
   if (!customer) return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <button onClick={onBack} style={backStyle}><ArrowLeft size={15} /> Voltar</button>
     <div style={cardStyle}>
       <KeyRound size={21} color="#a78bfa" />
       <h3 style={{ margin: '8px 0 4px', color: '#fff', fontSize: 16 }}>Entrar no meu atendimento</h3>
       <p style={{ margin: '0 0 14px', color: 'rgba(255,255,255,.6)', fontSize: 12, lineHeight: 1.45 }}>Informe seu telefone e sua senha. O bot nunca salva sua senha.</p>
-      <input value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ''))} placeholder="Telefone com DDD" inputMode="numeric" style={inputStyle} />
+      <input value={phone} onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setError(''); }} onBlur={inspectPasswordStatus} placeholder="Telefone com DDD" inputMode="numeric" style={inputStyle} />
       <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()} placeholder="Senha" type="password" style={{ ...inputStyle, marginTop: 8 }} />
       {error && <p style={{ margin: '8px 0 0', color: '#fca5a5', fontSize: 12 }}>{error}</p>}
       <button disabled={loginMut.isPending || !phone || !password} onClick={login} style={primaryStyle}>{loginMut.isPending ? 'Entrando...' : 'Entrar com segurança'}</button>
@@ -154,6 +220,7 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
       <button onClick={logout} style={backStyle}><LogOut size={14} /> Sair</button>
     </div>
     <div style={cardStyle}><Package size={20} color="#60a5fa" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Meus pedidos</strong>
+      <p style={{ ...smallStyle, margin: '5px 0 0' }}>Solicite acesso para acompanhar seus pedidos, status e informações pelo atendimento.</p>
       {(hasRouteAccess('site') || hasRouteAccess('acompanhar')) && <>
         {ordersQ.isLoading ? <p style={smallStyle}>Consultando...</p> : ordersQ.data?.length ? ordersQ.data.map((o: any) => <button key={o.registrationId} onClick={() => setSelectedOrderId(o.registrationId)} style={{ ...rowStyle, width:'100%', border: selectedOrderId === o.registrationId ? '1px solid #60a5fa' : '1px solid transparent', cursor:'pointer', textAlign:'left' }}>Pedido #{o.orderNumber || o.registrationId}<span>{o.status || 'Sem status'}</span></button>) : <p style={smallStyle}>Nenhum pedido encontrado.</p>}
       </>}
