@@ -14,6 +14,7 @@ import { StorefrontProductCard, type StorefrontCatalogItem, type StorefrontWarra
 import { StorefrontFilters } from "@/components/StorefrontFilters";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
+type FlowOrigin = "storefront" | "cart" | "legacy";
 
 type CartItem = {
   id: string; // unique key
@@ -274,6 +275,8 @@ export default function Home() {
   const [selectedTier, setSelectedTier] = useState<WarrantyTier | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogCategory, setCatalogCategory] = useState<string>("Todos");
+  const [flowOrigin, setFlowOrigin] = useState<FlowOrigin>("legacy");
+  const storefrontScrollRef = useRef(0);
 
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
   const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null);
@@ -451,10 +454,12 @@ export default function Home() {
       couponCode,
       carDocumentYear,
       cadastroSubStep,
+      flowOrigin,
+      storefrontScrollY: storefrontScrollRef.current,
       savedAt: Date.now(),
     };
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch {}
-  }, [step, selectedProduct, selectedOption, questionAnswers, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep]);
+  }, [step, selectedProduct, selectedOption, questionAnswers, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin]);
 
   // Verificar se há progresso salvo ao montar o componente (quando produtos estão carregados)
   useEffect(() => {
@@ -514,6 +519,8 @@ export default function Home() {
       if (saved.couponCode) setCouponCode(saved.couponCode);
       if (saved.carDocumentYear) setCarDocumentYear(saved.carDocumentYear);
       if (saved.cadastroSubStep) setCadastroSubStep(saved.cadastroSubStep);
+      if (saved.flowOrigin === 'storefront' || saved.flowOrigin === 'cart' || saved.flowOrigin === 'legacy') setFlowOrigin(saved.flowOrigin);
+      if (typeof saved.storefrontScrollY === 'number') storefrontScrollRef.current = saved.storefrontScrollY;
       setStep(saved.step || 'home');
 
       // Restaurar URLs de arquivos já uploaded ao S3 (fonte primária: localStorage)
@@ -683,6 +690,7 @@ export default function Home() {
 
   const startCartCheckout = () => {
     if (cart.length === 0) return;
+    setFlowOrigin('cart');
     // Usa o primeiro item do carrinho para iniciar o fluxo
     const first = cart[0];
     setSelectedProduct(first.product);
@@ -1642,6 +1650,8 @@ export default function Home() {
   };
 
   const startDirectOptionCheckout = (product: Product, option: ProductOption, tier: WarrantyTier | null = null) => {
+    setFlowOrigin('storefront');
+    storefrontScrollRef.current = typeof window !== 'undefined' ? window.scrollY : 0;
     setSelectedProduct(product);
     setSelectedOption(option);
     setSelectedTier(tier);
@@ -1667,6 +1677,7 @@ export default function Home() {
   };
 
   const handleServiceClick = (product: Product) => {
+    setFlowOrigin('legacy');
     setSelectedProduct(product);
     setSelectedOption(null);
     setSelectedTier(null);
@@ -1715,7 +1726,28 @@ export default function Home() {
     setPostOrderReferralSaving(false);
     setIsNewCustomerOrder(false);
     setRestoredFileUrls({ dynamicDocs: {} });
+    setFlowOrigin('legacy');
   }, []);
+
+  const returnToFlowOrigin = useCallback(() => {
+    if (flowOrigin === 'legacy') {
+      setSelectedOption(null);
+      setSelectedTier(null);
+      setStep('name-select');
+      return;
+    }
+
+    const destination = flowOrigin;
+    resetAllStates();
+    if (destination === 'cart') {
+      setShowCart(true);
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      window.setTimeout(() => window.scrollTo({ top: storefrontScrollRef.current, behavior: 'auto' }), 0);
+    });
+  }, [flowOrigin, resetAllStates]);
 
   const originalValue = getCurrentServiceValue();
   const hasResellerDiscount = getResellerDiscountAmount() > 0;
@@ -2757,10 +2789,7 @@ export default function Home() {
                 className="w-full px-4 py-3 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/80 hover:to-purple-600/80 text-white font-semibold rounded-lg transition-all duration-300 transform hover:scale-105 mt-4">
                 PRÓXIMO
               </button>
-              <button onClick={() => {
-                setSelectedOption(null); setDocFiles({}); setDocFilePreviews({}); setShowDocPhotoPreview(null); setStep("name-select");
-                setProfilePhoto(null); setCarDocument(null); setCarDocumentYear(""); setAlvaraFile(null); setCondutaxiFile(null);
-              }} className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg transition-all duration-300">
+              <button onClick={() => returnToFlowOrigin()} className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg transition-all duration-300">
                 Voltar
               </button>
             </div>
@@ -2819,7 +2848,7 @@ export default function Home() {
               }} className="w-full px-4 py-3 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/80 hover:to-purple-600/80 text-white font-semibold rounded-lg transition-all duration-300 transform hover:scale-105">
                 Próximo
               </button>
-              <button onClick={() => { setStep("name-select"); setCarDocument(null); setCarDocumentYear(""); }}
+              <button onClick={() => returnToFlowOrigin()}
                 className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg transition-all duration-300">
                 Cancelar
               </button>
@@ -3115,7 +3144,7 @@ export default function Home() {
                   const hasUpload = needsFileUpload(selectedProduct, selectedOption);
                   if (isPDF) { setStep("pdf-upload"); }
                   else if (hasUpload) { setStep("upload"); }
-                  else { setStep("name-select"); }
+                  else { returnToFlowOrigin(); }
                 }}
                   className="flex-1 px-4 py-3 font-semibold rounded-xl transition-all duration-200 active:scale-95"
                   style={{ backgroundColor: '#1E293B', color: '#94A3B8', border: '1px solid rgba(255,255,255,0.08)' }}
@@ -3248,7 +3277,18 @@ export default function Home() {
                 className="w-full px-4 py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-600/80 hover:to-blue-500/80 text-white font-bold rounded-lg transition-all duration-300 transform hover:scale-105 text-lg">
                 CONTINUAR
               </button>
-              <button onClick={() => { if (hasQuestions) { setStep("questions"); setCurrentQuestionIndex(0); } else if (isPDFOnly) { setStep("pdf-upload"); } else if (needsFileUpload(selectedProduct, selectedOption)) { setStep("upload"); } else { setStep("name-select"); } }}
+              <button onClick={() => {
+                if (hasQuestions) {
+                  setStep("questions");
+                  setCurrentQuestionIndex(0);
+                } else if (isPDFOnly) {
+                  setStep("pdf-upload");
+                } else if (needsFileUpload(selectedProduct, selectedOption)) {
+                  setStep("upload");
+                } else {
+                  returnToFlowOrigin();
+                }
+              }}
                 className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg transition-all duration-300">
                 Voltar
               </button>
