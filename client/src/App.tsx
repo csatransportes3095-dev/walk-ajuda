@@ -151,7 +151,6 @@ function Router() {
   
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
       <Route path={"/admin/login"} component={AdminLogin} />
       <Route path={"/admin/gastos"}>
         <AdminGuard><AdminGastosPage /></AdminGuard>
@@ -312,6 +311,7 @@ function Router() {
       <Route path={"/bot"} component={Home} />
       <Route path={"/app"} component={AppDownloadPage} />
       <Route path={"/app-pro"} component={AppProDownloadPage} />
+      <Route path={"/"} component={Home} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
