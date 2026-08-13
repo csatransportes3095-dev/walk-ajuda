@@ -1291,14 +1291,14 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
           <div className="grid grid-cols-3 gap-2 mb-2 px-1">
             <div className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0" />
-              <span className="text-xs font-bold text-red-400 uppercase tracking-wider">Gastos</span>
+              <span className="text-xs font-extrabold text-red-100 uppercase tracking-wider drop-shadow-sm">Gastos</span>
             </div>
             <div className="flex items-center justify-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded-full bg-yellow-400 flex-shrink-0" />
-              <span className="text-xs font-bold text-yellow-400 uppercase tracking-wider">Lucro</span>
+              <span className="text-xs font-extrabold text-yellow-100 uppercase tracking-wider drop-shadow-sm">Lucro</span>
             </div>
             <div className="flex items-center justify-end gap-1.5">
-              <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Ganhos</span>
+              <span className="text-xs font-extrabold text-emerald-100 uppercase tracking-wider drop-shadow-sm">Ganhos</span>
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0" />
             </div>
           </div>
@@ -1313,31 +1313,31 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
             <div key={label} className="grid grid-cols-3 gap-2 mb-2">
               {/* Gastos */}
 <Card className="relative overflow-hidden rounded-xl p-3" style={{ background: 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)', border: '2px solid rgba(239,68,68,0.8)', boxShadow: '0 4px 16px rgba(239,68,68,0.3)' }}>
-                <p className="text-[10px] text-red-400/70 font-semibold uppercase tracking-wider mb-0.5">{label}</p>
+                <p className="text-[10px] text-red-100 font-extrabold uppercase tracking-wider mb-0.5 drop-shadow-sm">{label}</p>
                 {(earningsLoading || expensesLoading) ? (
                   <div className="h-5 w-16 bg-red-500/20 rounded animate-pulse" />
                 ) : (
-                  <p className="text-base font-extrabold text-red-400 leading-tight">{data.expenses.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                  <p className="text-base font-extrabold text-white leading-tight drop-shadow-sm">{data.expenses.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                 )}
               </Card>
               {/* Lucro */}
 <Card className="relative overflow-hidden rounded-xl p-3" style={{ background: data.profit >= 0 ? 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)' : 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)', border: data.profit >= 0 ? '2px solid rgba(34,197,94,0.8)' : '2px solid rgba(239,68,68,0.8)', boxShadow: data.profit >= 0 ? '0 4px 16px rgba(34,197,94,0.3)' : '0 4px 16px rgba(239,68,68,0.3)' }}>
-                <p className="text-[10px] text-yellow-400/70 font-semibold uppercase tracking-wider mb-0.5 text-center">{label}</p>
+                <p className="text-[10px] text-yellow-100 font-extrabold uppercase tracking-wider mb-0.5 text-center drop-shadow-sm">{label}</p>
                 {(earningsLoading || expensesLoading) ? (
                   <div className="h-5 w-16 bg-yellow-500/20 rounded animate-pulse mx-auto" />
                 ) : (
                   <p className={`text-base font-extrabold leading-tight text-center ${
-                    data.profit >= 0 ? 'text-emerald-400' : 'text-red-400'
+                    data.profit >= 0 ? 'text-emerald-100' : 'text-red-100'
                   }`}>{data.profit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                 )}
               </Card>
               {/* Ganhos */}
 <Card className="relative overflow-hidden rounded-xl p-3" style={{ background: 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)', border: '2px solid rgba(34,197,94,0.8)', boxShadow: '0 4px 16px rgba(34,197,94,0.3)' }}>
-                <p className="text-[10px] text-emerald-400/70 font-semibold uppercase tracking-wider mb-0.5 text-right">{label}</p>
+                <p className="text-[10px] text-emerald-100 font-extrabold uppercase tracking-wider mb-0.5 text-right drop-shadow-sm">{label}</p>
                 {(earningsLoading || expensesLoading) ? (
                   <div className="h-5 w-16 bg-emerald-500/20 rounded animate-pulse ml-auto" />
                 ) : (
-                  <p className="text-base font-extrabold text-emerald-400 leading-tight text-right">{data.earnings.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                  <p className="text-base font-extrabold text-white leading-tight text-right drop-shadow-sm">{data.earnings.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                 )}
               </Card>
             </div>
@@ -1439,7 +1439,7 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
             {/* Histórico de lançamentos por data */}
             {expenses.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Histórico de Lançamentos</p>
+                <p className="text-xs font-extrabold text-white uppercase tracking-widest px-1 drop-shadow-sm">Histórico de Lançamentos</p>
                 {uniqueDates.slice().sort((a, b) => b.localeCompare(a)).map((date, idx) => {
                   const expsForDate = expenses.filter(exp => exp.date === date);
                   const isToday = date === todayLocalDate;
@@ -1462,23 +1462,23 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
                     { key: 'otherExpenses', label: 'Outros Gastos' },
                   ];
                   return (
-<div key={date} className="rounded-xl overflow-hidden shadow-md" style={{ background: 'linear-gradient(135deg, #0d0d1a 0%, #070710 100%)', border: '1.5px solid rgba(99,102,241,0.25)' }}>
+<div key={date} className="overflow-hidden rounded-2xl border border-white/15 bg-slate-950/90 shadow-[0_12px_28px_rgba(2,6,23,0.45)]" style={{ borderColor: 'rgba(248,113,113,0.45)' }}>
                       {/* Cabeçalho da data — clicavel para datas anteriores */}
                       <button
                         type="button"
                         onClick={() => !isToday && toggleExpenseDate(date)}
                         className={`w-full flex items-center justify-between px-4 py-2.5 transition-colors ${!isToday ? 'cursor-pointer hover:brightness-110 active:brightness-90' : 'cursor-default'}`}
-                        style={{ backgroundColor: DATE_COLORS[idx % DATE_COLORS.length] + '33', borderBottom: isOpen ? '1px solid ' + DATE_COLORS[idx % DATE_COLORS.length] + '44' : 'none' }}
+                        style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.98), rgba(15,23,42,0.98))', borderBottom: isOpen ? '1px solid rgba(255,255,255,0.18)' : 'none' }}
                       >
                         <div className="flex items-center gap-2">
                           {!isToday && (
                             <span className="text-xs" style={{ color: DATE_COLORS[idx % DATE_COLORS.length] }}>{isOpen ? '▼' : '►'}</span>
                           )}
-                          <span className="font-bold text-sm" style={{ color: DATE_COLORS[idx % DATE_COLORS.length] }}>
+                          <span className="font-extrabold text-sm text-white drop-shadow-sm">
                             {formatDateLocal(date)}{isToday ? ' — Hoje' : ''}
                           </span>
                         </div>
-                        <span className="font-bold text-sm text-red-400">Total: R$ {totalDate.toFixed(2)}</span>
+                        <span className="font-extrabold text-sm text-white">Total: R$ {totalDate.toFixed(2)}</span>
                       </button>
                       {/* Detalhamento agrupado por categoria — só visível quando aberto */}
                       {isOpen && (() => {
@@ -1503,20 +1503,20 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
                               // Grupos com 1 item ficam abertos por padrão; com 2+ ficam fechados
                               const isCatOpen = count === 1 || openExpenseCatGroups.has(groupKey);
                               return (
-                                <div key={catKey} className="rounded-lg overflow-hidden border border-border/30">
+                                <div key={catKey} className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/55 shadow-sm">
                                   {/* Cabeçalho do grupo de categoria */}
                                   <button
                                     type="button"
                                     onClick={() => count > 1 && toggleExpenseCatGroup(groupKey)}
-                                    className={`w-full flex items-center justify-between px-3 py-1.5 bg-muted/30 transition-colors ${count > 1 ? 'cursor-pointer hover:bg-muted/50' : 'cursor-default'}`}
+                                    className={`w-full flex items-center justify-between px-3 py-2 bg-slate-800/85 transition-colors ${count > 1 ? 'cursor-pointer hover:bg-slate-700/90' : 'cursor-default'}`}
                                   >
                                     <div className="flex items-center gap-1.5">
                                       {count > 1 && (
-                                        <span className="text-[10px] text-muted-foreground">{isCatOpen ? '▼' : '►'}</span>
+                                        <span className="text-[10px] text-slate-200">{isCatOpen ? '▼' : '►'}</span>
                                       )}
-                                      <span className="text-xs font-semibold text-foreground">{group.label}</span>
+                                      <span className="text-xs font-bold text-white">{group.label}</span>
                                       {count > 1 && (
-                                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{count}x</span>
+                                        <span className="rounded-full bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-100">{count}x</span>
                                       )}
                                     </div>
                                     <span className="text-xs font-bold text-red-400">R$ {catTotal.toFixed(2)}</span>
@@ -1530,12 +1530,12 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
                                           <div key={exp.id} className="px-3 py-1.5 flex items-center justify-between gap-2">
                                             <div className="flex items-center gap-2 flex-1">
                                               {timeStr && (
-                                                <span className="text-xs text-muted-foreground font-mono">{timeStr}</span>
+                                                <span className="text-xs text-slate-200 font-mono">{timeStr}</span>
                                               )}
-                                              <span className="text-xs font-semibold text-red-400">R$ {value.toFixed(2)}</span>
+                                              <span className="text-xs font-bold text-red-200">R$ {value.toFixed(2)}</span>
                                             </div>
                                             <div className="flex items-center gap-1 shrink-0">
-                                              <button onClick={(e) => { e.stopPropagation(); handleEditExpense(exp); }} className="text-xs font-semibold text-primary hover:bg-primary/10 rounded px-2 py-0.5 active:scale-95 transition-all">Editar</button>
+                                              <button onClick={(e) => { e.stopPropagation(); handleEditExpense(exp); }} className="rounded px-2 py-0.5 text-xs font-bold text-sky-200 hover:bg-sky-400/10 active:scale-95 transition-all">Editar</button>
                                               <button onClick={(e) => { e.stopPropagation(); handleDeleteExpense(exp.id); }} className="text-xs font-semibold text-red-400 hover:bg-red-500/10 rounded px-2 py-0.5 active:scale-95 transition-all">Deletar</button>
                                             </div>
                                           </div>
@@ -1608,7 +1608,7 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
             {/* Histórico de lançamentos por data */}
             {earnings.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Histórico de Lançamentos</p>
+                <p className="text-xs font-extrabold text-white uppercase tracking-widest px-1 drop-shadow-sm">Histórico de Lançamentos</p>
                 {Array.from(new Set(earnings.map(e => e.date))).sort((a, b) => b.localeCompare(a)).map((date, idx) => {
                   const earnsForDate = earnings.filter(e => e.date === date);
                   const isToday = date === todayLocalDate;
@@ -1624,22 +1624,22 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
                     { key: 'otherEarnings', label: 'Outros Ganhos' },
                   ];
                   return (
-<div key={date} className="rounded-xl overflow-hidden shadow-md" style={{ background: 'linear-gradient(135deg, #0d0d1a 0%, #070710 100%)', border: '1.5px solid rgba(34,197,94,0.25)' }}>
+<div key={date} className="overflow-hidden rounded-2xl border border-white/15 bg-slate-950/90 shadow-[0_12px_28px_rgba(2,6,23,0.45)]" style={{ borderColor: 'rgba(52,211,153,0.45)' }}>
                       <button
                         type="button"
                         onClick={() => !isToday && toggleEarningDate(date)}
                         className={`w-full flex items-center justify-between px-4 py-2.5 transition-colors ${!isToday ? 'cursor-pointer hover:brightness-110 active:brightness-90' : 'cursor-default'}`}
-                        style={{ backgroundColor: DATE_COLORS[idx % DATE_COLORS.length] + '33', borderBottom: isOpen ? '1px solid ' + DATE_COLORS[idx % DATE_COLORS.length] + '44' : 'none' }}
+                        style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.98), rgba(15,23,42,0.98))', borderBottom: isOpen ? '1px solid rgba(255,255,255,0.18)' : 'none' }}
                       >
                         <div className="flex items-center gap-2">
                           {!isToday && (
                             <span className="text-xs" style={{ color: DATE_COLORS[idx % DATE_COLORS.length] }}>{isOpen ? '▼' : '►'}</span>
                           )}
-                          <span className="font-bold text-sm" style={{ color: DATE_COLORS[idx % DATE_COLORS.length] }}>
+                          <span className="font-extrabold text-sm text-white drop-shadow-sm">
                             {formatDateLocal(date)}{isToday ? ' — Hoje' : ''}
                           </span>
                         </div>
-                        <span className="font-bold text-sm text-emerald-400">Total: R$ {totalDate.toFixed(2)}</span>
+                        <span className="font-extrabold text-sm text-white">Total: R$ {totalDate.toFixed(2)}</span>
                       </button>
                       {/* Detalhamento agrupado por categoria — só visível quando aberto */}
                       {isOpen && (() => {
@@ -1662,19 +1662,19 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
                               const count = group.items.length;
                               const isCatOpen = count === 1 || openEarningCatGroups.has(groupKey);
                               return (
-                                <div key={catKey} className="rounded-lg overflow-hidden border border-border/30">
+                                <div key={catKey} className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/55 shadow-sm">
                                   <button
                                     type="button"
                                     onClick={() => count > 1 && toggleEarningCatGroup(groupKey)}
-                                    className={`w-full flex items-center justify-between px-3 py-1.5 bg-muted/30 transition-colors ${count > 1 ? 'cursor-pointer hover:bg-muted/50' : 'cursor-default'}`}
+                                    className={`w-full flex items-center justify-between px-3 py-2 bg-slate-800/85 transition-colors ${count > 1 ? 'cursor-pointer hover:bg-slate-700/90' : 'cursor-default'}`}
                                   >
                                     <div className="flex items-center gap-1.5">
                                       {count > 1 && (
-                                        <span className="text-[10px] text-muted-foreground">{isCatOpen ? '▼' : '►'}</span>
+                                        <span className="text-[10px] text-slate-200">{isCatOpen ? '▼' : '►'}</span>
                                       )}
-                                      <span className="text-xs font-semibold text-foreground">{group.label}</span>
+                                      <span className="text-xs font-bold text-white">{group.label}</span>
                                       {count > 1 && (
-                                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{count}x</span>
+                                        <span className="rounded-full bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-100">{count}x</span>
                                       )}
                                     </div>
                                     <span className="text-xs font-bold text-emerald-400">R$ {catTotal.toFixed(2)}</span>
@@ -1687,12 +1687,12 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
                                           <div key={earn.id} className="px-3 py-1.5 flex items-center justify-between gap-2">
                                             <div className="flex items-center gap-2 flex-1">
                                               {timeStr && (
-                                                <span className="text-xs text-muted-foreground font-mono">{timeStr}</span>
+                                                <span className="text-xs text-slate-200 font-mono">{timeStr}</span>
                                               )}
-                                              <span className="text-xs font-semibold text-emerald-400">R$ {value.toFixed(2)}</span>
+                                              <span className="text-xs font-bold text-emerald-200">R$ {value.toFixed(2)}</span>
                                             </div>
                                             <div className="flex items-center gap-1 shrink-0">
-                                              <button onClick={(e) => { e.stopPropagation(); handleEditEarning(earn); }} className="text-xs font-semibold text-primary hover:bg-primary/10 rounded px-2 py-0.5 active:scale-95 transition-all">Editar</button>
+                                              <button onClick={(e) => { e.stopPropagation(); handleEditEarning(earn); }} className="rounded px-2 py-0.5 text-xs font-bold text-sky-200 hover:bg-sky-400/10 active:scale-95 transition-all">Editar</button>
                                               <button onClick={(e) => { e.stopPropagation(); handleDeleteEarning(earn.id); }} className="text-xs font-semibold text-red-400 hover:bg-red-500/10 rounded px-2 py-0.5 active:scale-95 transition-all">Deletar</button>
                                             </div>
                                           </div>
