@@ -296,6 +296,7 @@ function Router() {
       <Route path={"/orcamento/:publicToken"} component={PublicQuotePage} />
       <Route path={"/recibo/:publicToken"} component={PublicReceiptPage} />
       <Route path={"/locadora"} component={LocadoraPortal} />
+      <Route path={"/locadora/"} component={LocadoraPortal} />
       <Route path={"/gastos"} component={GastosPage} />
       <Route path={"/emprestimo"} component={EmprestimoPage} />
       <Route path={"/cartoes"} component={CartaoPage} />
@@ -343,22 +344,35 @@ function AppContent() {
   const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
-  const isLocadoraRoute = location === "/locadora";
+  const isLocadoraRoute = location === "/locadora" || location === "/locadora/";
+  const isLocadoraBrandRoute = location === "/locadora" || location.startsWith("/locadora/") || location.startsWith("/admin/locadora");
 
   // Proteção anti-print para rotas de cliente
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || undefined : undefined;
   const { WarningOverlay } = useAntiPrint(!isAdminRoute ? clientPhone : undefined);
 
-  // Troca o manifest dinamicamente para admin/cliente
+  // Troca a identidade instalada apenas quando o usuário está no módulo LocaCar.
   useEffect(() => {
-    const link = document.querySelector<HTMLLinkElement>("link[rel='manifest']");
-    if (!link) return;
-    if (isAdminRoute) {
-      link.href = "/manifest-admin.json";
-    } else {
-      link.href = "/manifest.json";
+    const manifest = document.querySelector<HTMLLinkElement>("link[rel='manifest']");
+    const theme = document.querySelector<HTMLMetaElement>("meta[name='theme-color']");
+    const appleIcons = document.querySelectorAll<HTMLLinkElement>("link[rel='apple-touch-icon']");
+    const favicons = document.querySelectorAll<HTMLLinkElement>("link[rel='icon'], link[rel='shortcut icon']");
+    const locadoraAppleIcon = "/locadora/assets/locacar-apple-touch-icon-v1.png";
+    const locadoraFavicon = "/locadora/assets/locacar-favicon-32-v1.png";
+    if (isLocadoraBrandRoute) {
+      if (manifest) manifest.href = "/locadora/manifest-v1.webmanifest";
+      if (theme) theme.content = "#b98a2d";
+      appleIcons.forEach((link) => { link.href = locadoraAppleIcon; });
+      favicons.forEach((link) => { link.href = locadoraFavicon; });
+      document.title = "LocaCar — Sistema de Locação";
+      return;
     }
-  }, [isAdminRoute]);
+    if (manifest) manifest.href = isAdminRoute ? "/manifest-admin.json" : "/manifest.json";
+    if (theme) theme.content = "#1a0a2e";
+    appleIcons.forEach((link) => { link.href = "/apple-touch-icon.png"; });
+    favicons.forEach((link) => { link.href = link.sizes.value === "16x16" ? "/favicon-16x16.png" : "/favicon-32x32.png"; });
+    document.title = "H2 COLOMBIANO";
+  }, [isAdminRoute, isLocadoraBrandRoute]);
 
   // Redirect de rotas com maiúsculas para minúsculas (DEVE ficar após todos os hooks)
   if (location !== location.toLowerCase() && !isAdminRoute) {

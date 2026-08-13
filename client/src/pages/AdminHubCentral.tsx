@@ -30,12 +30,12 @@ export default function AdminHubCentral() {
         <button
           type="button"
           onClick={() => navigate("/admin/locadora")}
-          className="group w-full rounded-2xl border border-sky-400/25 bg-gradient-to-r from-sky-500/15 to-blue-500/10 p-4 text-left transition hover:border-sky-300/60 hover:from-sky-500/25"
+          className="group w-full rounded-2xl border border-[#b98a2d]/35 bg-gradient-to-r from-[#b98a2d]/16 to-[#71603a]/10 p-4 text-left transition hover:border-[#d9b968]/70 hover:from-[#b98a2d]/25"
         >
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-300/25 bg-sky-400/15 text-sky-200"><Building2 className="h-6 w-6" /></div>
+            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-[#b98a2d]/35 bg-[#14110c]"><img src="/locadora/assets/locacar-icon-192-v1.png" alt="LocaCar" className="h-full w-full object-cover" /></div>
             <div className="flex-1"><p className="font-black tracking-wide text-white">LOCADORA</p><p className="mt-0.5 text-xs text-sky-100/65">Clientes, veículos, contratos, cobranças e manutenção</p></div>
-            <span className="text-sky-200 transition group-hover:translate-x-1">→</span>
+            <span className="text-[#f0d48b] transition group-hover:translate-x-1">→</span>
           </div>
         </button>
 

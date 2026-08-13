@@ -1,0 +1,17 @@
+{
+  "id": "/locadora",
+  "name": "LocaCar — Sistema de Locação",
+  "short_name": "LocaCar",
+  "description": "Gestão de veículos, contratos, clientes e cobranças.",
+  "start_url": "/locadora/",
+  "scope": "/locadora/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0c0f",
+  "theme_color": "#b98a2d",
+  "icons": [
+    { "src": "/locadora/assets/locacar-icon-192-v1.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/locadora/assets/locacar-icon-512-v1.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/locadora/assets/locacar-icon-maskable-512-v1.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
