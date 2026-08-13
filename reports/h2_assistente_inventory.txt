@@ -1,0 +1,328 @@
+=== PACOTES E PLATAFORMAS ===
+56:    "@types/pdfkit": "^0.17.6",
+58:    "axios": "^1.12.0",
+80:    "pdfkit": "^0.19.1",
+
+=== ROTAS CLIENTE ===
+152:      <Route path={"/"} component={Home} />
+153:      <Route path={"/admin/login"} component={AdminLogin} />
+154:      <Route path={"/admin/gastos"}>
+157:      <Route path={"/admin/access-filters"}>
+160:      <Route path={"/admin/codes"}>
+163:      <Route path={"/admin/coupons"}>
+166:      <Route path={"/admin/products"}>
+169:      <Route path={"/admin/settings"}>
+172:      <Route path={"/admin/customers"}>
+175:      <Route path={"/admin/customer-password"}>
+178:      <Route path={"/admin/raffles"}>
+181:      <Route path={"/admin/orders/new"}>
+184:      <Route path={"/admin/orders"}>
+187:      <Route path={"/admin/commissions"}>
+190:      <Route path={"/admin/status-types"}>
+193:      <Route path={"/admin/banners"}>
+196:      <Route path={"/admin/ip-block"}>
+199:      <Route path={"/admin/vpn"}>
+202:      <Route path={"/admin/broadcast"}>
+205:      <Route path={"/foto"} component={ProtectedPhotoPage} />
+206:      <Route path={"/sorteio"} component={Raffle} />
+207:      <Route path={"/acompanhar"} component={OrderTracking} />
+208:      <Route path={"/login"} component={Home} />
+209:      <Route path={"/revendedor"} component={ResellerLogin} />
+210:      <Route path={"/revendedor/dashboard"} component={ResellerDashboard} />
+211:      <Route path={"/admin/resellers"}>
+214:      <Route path={"/admin/financeiro"}>
+217:      <Route path={"/admin/loans"}>
+220:      <Route path={"/admin/pre-cadastros"}>
+223:      <Route path={"/admin/pre-cadastros/perguntas"}>
+226:      <Route path={"/pre-cadastro"} component={PreCadastro} />
+227:      <Route path={"/consultar-cadastro"} component={ConsultarCadastro} />
+228:      <Route path={"/admin/referrer-bypass"}>
+231:      <Route path={"/admin/referrals"}>
+234:      <Route path={"/admin/referral-tree"}>
+237:      <Route path={"/admin/protected-photo"}>
+240:      <Route path={"/admin/trash"}>
+243:      <Route path={"/admin/faq"}>
+246:      <Route path={"/admin/schedule"}>
+249:      <Route path={"/admin/flow-config"}>
+252:      <Route path={"/admin/cep"}>
+255:      <Route path={"/admin/telefone"}>
+258:      <Route path={"/admin/email"}>
+261:      <Route path={"/admin/zoho-config"}>
+264:      <Route path={"/admin/media"}>
+267:      <Route path={"/admin/feature-cards"}>
+270:      <Route path={"/admin/propagandas"}>
+273:      <Route path={"/admin/hub-central"}>
+276:      <Route path={"/admin/consultas"}>
+279:      <Route path={"/admin/whatsapp-templates"}>
+282:      <Route path={"/admin/cartoes-users"}>
+285:      <Route path={"/admin/online-support"}>
+288:      <Route path={"/admin/chat-flow"}>
+291:      <Route path={"/agendar/:token"} component={SchedulePage} />
+292:      <Route path={"/orcamento/:publicToken"} component={PublicQuotePage} />
+293:      <Route path={"/recibo/:publicToken"} component={PublicReceiptPage} />
+294:      <Route path={"/gastos"} component={GastosPage} />
+295:      <Route path={"/emprestimo"} component={EmprestimoPage} />
+296:      <Route path={"/cartoes"} component={CartaoPage} />
+297:      <Route path={"/cartoes/cartao/:id"} component={CartaoPage} />
+298:      <Route path={"/cartoes/despesas"} component={CartaoPage} />
+299:      <Route path={"/cartoes/historico/:id"} component={CartaoHistoricoPage} />
+300:      <Route path={"/cartoes/mercado"} component={CartaoMercadoPage} />
+301:      <Route path={"/gerador-chassi"} component={GeradorChassiPublico} />
+302:      <Route path={"/ajuda"} component={Ajuda} />
+303:      <Route path={"/video/tutorial"} component={VideoTutorial} />
+304:      <Route path={"/tutorial"} component={Tutorial} />
+305:      <Route path={"/r/:slug"} component={Home} />
+306:      <Route path={"/bot"} component={Home} />
+307:      <Route path={"/app"} component={AppDownloadPage} />
+308:      <Route path={"/app-pro"} component={AppProDownloadPage} />
+309:      <Route path={"/404"} component={NotFound} />
+
+=== ROTEADORES BACKEND ===
+21:import { systemRouter } from "./_core/systemRouter";
+22:import { resellersRouter } from "./routers/resellers";
+23:import { scheduleRouter } from "./routers/schedule";
+24:import { spreadsheetRouter } from "./routers/spreadsheet";
+25:import { loanRouter } from "./routers/loans";
+26:import { apkRouter } from "./routers/apk";
+27:import { customerPasswordRouter } from "./routers/customerPassword";
+30:import { adCampaignsRouter } from "./routers/adCampaigns";
+35:import { chatRouter } from "./routers/chat";
+36:import { chatUsersRouter } from "./routers/chat-users";
+37:import { onlineSupportRouter } from "./routers/online-support";
+38:import { chatFlowRouter } from "./routers/chat-flow";
+39:import { consultasRouter } from "./routers/consultas";
+40:import { whatsappTemplatesRouter } from "./routers/whatsappTemplates";
+41:import { preRegistrationsRouter } from "./routers/preRegistrations";
+42:import { preCadastroQuestionsRouter } from "./routers/preCadastroQuestions";
+43:import { cartoesRouter } from "./routers/cartoes";
+44:import { mercadoRouter } from "./routers/mercado";
+45:import { privateTransportRouter } from "./routers/privateTransport";
+
+=== SERVIÇOS PRINCIPAIS ===
+- server/_core/context.ts
+- server/_core/cookies.ts
+- server/_core/dataApi.ts
+- server/_core/env.ts
+- server/_core/heartbeat.ts
+- server/_core/imageGeneration.ts
+- server/_core/index.ts
+- server/_core/llm.ts
+- server/_core/mailer.ts
+- server/_core/map.ts
+- server/_core/notification.ts
+- server/_core/oauth.ts
+- server/_core/sdk.ts
+- server/_core/sendMailDirect.ts
+- server/_core/storageProxy.ts
+- server/_core/systemRouter.ts
+- server/_core/trpc.ts
+- server/_core/vite.ts
+- server/_core/voiceTranscription.ts
+- server/access.test.ts
+- server/admin-tabs.test.ts
+- server/admin.test.ts
+- server/adminNewOrder.test.ts
+- server/auth.logout.test.ts
+- server/broadcastEmailHandler.ts
+- server/cardsBilling.ts
+- server/cart.test.ts
+- server/chat-flow/service.ts
+- server/coupons.test.ts
+- server/customerAccess.ts
+- server/customerIdentity.ts
+- server/customers.documents.test.ts
+- server/customers.photo.test.ts
+- server/customers.register.test.ts
+- server/customers.test.ts
+- server/db-chat.ts
+- server/db.ts
+- server/email-notifications.test.ts
+- server/email.config.test.ts
+- server/email.smtp.test.ts
+- server/email.test.ts
+- server/emailTemplates.ts
+- server/entry.ts
+- server/index.ts
+- server/online-support/entry.ts
+- server/online-support/normalize.ts
+- server/online-support/registration.ts
+- server/online-support/service.ts
+- server/operationalRides.test.ts
+- server/orderFixes.test.ts
+- server/orphanOrders.test.ts
+- server/photo-compatibility.test.ts
+- server/private-transport/maps.ts
+- server/private-transport/service.ts
+- server/r2Storage.ts
+- server/routers.ts
+- server/routers/adCampaigns.ts
+- server/routers/apk.ts
+- server/routers/cartoes.ts
+- server/routers/chat-flow.ts
+- server/routers/chat-users.ts
+- server/routers/chat.ts
+- server/routers/consultas.ts
+- server/routers/customerPassword.ts
+- server/routers/loans.ts
+- server/routers/mercado.ts
+- server/routers/online-support.ts
+- server/routers/preCadastroQuestions.ts
+- server/routers/preRegistrations.ts
+- server/routers/privateTransport.ts
+- server/routers/resellers.ts
+- server/routers/schedule.ts
+- server/routers/spreadsheet.ts
+- server/routers/whatsappTemplates.ts
+- server/schedule.test.ts
+- server/spreadsheetAccumulate.test.ts
+- server/spreadsheetEarnings.test.ts
+- server/spreadsheetSession.test.ts
+- server/storage.ts
+- server/uploadRoute.ts
+- server/uploads.payment-proof.test.ts
+- server/uploads.test.ts
+- server/whatsapp.test.ts
+- server/zoho.smtp.test.ts
+- server/zoho.ts
+
+=== PWA / APK / NATIVO ===
+./client/public/manifest-admin.json
+./client/public/manifest.json
+./client/public/manifest.webmanifest
+
+=== TABELAS PRINCIPAIS ===
+3:export const users = mysqlTable("users", {
+19:export const accessCodes = mysqlTable("accessCodes", {
+40:export const accessCodePhones = mysqlTable("accessCodePhones", {
+69:export const coupons = mysqlTable("coupons", {
+87:export const products = mysqlTable("products", {
+117:export const productOptions = mysqlTable("productOptions", {
+149:export const productQuestions = mysqlTable("productQuestions", {
+168:export const optionDocuments = mysqlTable("optionDocuments", {
+184:export const customers = mysqlTable("customers", {
+217:export const orderStatusHistory = mysqlTable("orderStatusHistory", {
+242:export const orderFiles = mysqlTable("orderFiles", {
+258:export const raffles = mysqlTable("raffles", {
+276:export const raffleEntries = mysqlTable("raffleEntries", {
+290:export const siteSettings = mysqlTable("siteSettings", {
+301:export const adminCredentials = mysqlTable("adminCredentials", {
+312:export const pinBlocks = mysqlTable("pinBlocks", {
+324:export const appSettings = mysqlTable("appSettings", {
+336:export const spreadsheetLicenses = mysqlTable("spreadsheetLicenses", {
+353:export const spreadsheetEarnings = mysqlTable("spreadsheetEarnings", {
+372:export const spreadsheetExpenses = mysqlTable("spreadsheetExpenses", {
+398:export const spreadsheetOperational = mysqlTable("spreadsheetOperational", {
+420:export const spreadsheetGoals = mysqlTable("spreadsheetGoals", {
+435:export const spreadsheetVehicleConfig = mysqlTable("spreadsheetVehicleConfig", {
+450:export const customerProductAccess = mysqlTable("customerProductAccess", {
+460:export const orderStatusTypes = mysqlTable("orderStatusTypes", {
+481:export const orderCounter = mysqlTable("orderCounter", {
+488:export const infoBanners = mysqlTable("infoBanners", {
+504:export const orderNotes = mysqlTable("orderNotes", {
+516:export const hiddenSubOrders = mysqlTable("hiddenSubOrders", {
+530:export const orderLoginData = mysqlTable("orderLoginData", {
+550:export const customerPins = mysqlTable("customerPins", {
+563:export const docRequests = mysqlTable("docRequests", {
+578:export const uploadSessions = mysqlTable("uploadSessions", {
+598:export const blocklist = mysqlTable("blocklist", {
+610:export const systemConfig = mysqlTable("system_config", {
+619:export const ipBlocklist = mysqlTable("ipBlocklist", {
+630:export const ipAccessLog = mysqlTable("ipAccessLog", {
+641:export const vpnAttempts = mysqlTable("vpnAttempts", {
+656:export const broadcasts = mysqlTable("broadcasts", {
+678:export const broadcastQueue = mysqlTable("broadcastQueue", {
+692:export const blockedAccessAttempts = mysqlTable("blockedAccessAttempts", {
+703:export const pixAccounts = mysqlTable("pixAccounts", {
+719:export const resellers = mysqlTable("resellers", {
+737:export const resellerPrices = mysqlTable("resellerPrices", {
+751:export const resellerOrders = mysqlTable("resellerOrders", {
+767:export const financialSales = mysqlTable("financialSales", {
+789:export const referralLinks = mysqlTable("referralLinks", {
+806:export const referralUsages = mysqlTable("referralUsages", {
+820:export const trackingQuestions = mysqlTable("trackingQuestions", {
+833:export const trackingAnswers = mysqlTable("trackingAnswers", {
+846:export const trackingQuestionAssignments = mysqlTable("trackingQuestionAssignments", {
+861:export const protectedPhotos = mysqlTable("protectedPhotos", {
+876:export const photoAccessLogs = mysqlTable("photoAccessLogs", {
+889:export const orderProgressConfig = mysqlTable("orderProgressConfig", {
+902:export const adminLoginAttempts = mysqlTable("adminLoginAttempts", {
+916:export const faqConfig = mysqlTable("faqConfig", {
+933:export const faqItems = mysqlTable("faqItems", {
+949:export const scheduleSlots = mysqlTable("scheduleSlots", {
+967:export const scheduleAppointments = mysqlTable("scheduleAppointments", {
+995:export const scheduleConfig = mysqlTable("scheduleConfig", {
+1015:export const scheduleTemplates = mysqlTable("scheduleTemplates", {
+1033:export const customFolders = mysqlTable("customFolders", {
+1047:export const customFolderOrders = mysqlTable("customFolderOrders", {
+1058:export const fixedFolderOrders = mysqlTable("fixedFolderOrders", {
+1069:export const folderConfig = mysqlTable("folderConfig", {
+1088:export const warrantyTiers = mysqlTable("warrantyTiers", {
+1104:export const orderAttention = mysqlTable("orderAttention", {
+1115:export const homePageButtons = mysqlTable("homePageButtons", {
+1137:export const customerDocuments = mysqlTable("customerDocuments", {
+1152:export const internalStages = mysqlTable("internalStages", {
+1166:export const orderStageHistory = mysqlTable("orderStageHistory", {
+1176:export const homeButtons = mysqlTable("homeButtons", {
+1201:export const referrerBypassCodes = mysqlTable("referrerBypassCodes", {
+1218:export const referralStats = mysqlTable("referralStats", {
+1231:export const referralHistory = mysqlTable("referralHistory", {
+1252:export const referralReports = mysqlTable("referralReports", {
+1271:export const spreadsheetClients = mysqlTable("spreadsheetClients", {
+1287:export const spreadsheetPasswords = mysqlTable("spreadsheetPasswords", {
+1305:export const spreadsheetSessions = mysqlTable("spreadsheetSessions", {
+1319:export const spreadsheetLoginAudit = mysqlTable("spreadsheetLoginAudit", {
+1334:export const orderCustomGroups = mysqlTable("orderCustomGroups", {
+1346:export const orderCustomGroupMembers = mysqlTable("orderCustomGroupMembers", {
+1357:export const featureCards = mysqlTable("featureCards", {
+1379:export const adminMediaFiles = mysqlTable("adminMediaFiles", {
+1394:export const adCampaigns = mysqlTable("adCampaigns", {
+1427:export const adImpressions = mysqlTable("adImpressions", {
+1441:export const customerPasswords = mysqlTable("customerPasswords", {
+1457:export const customerPasswordSessions = mysqlTable("customerPasswordSessions", {
+1469:export const customerLoginHistory = mysqlTable("customerLoginHistory", {
+1483:export const spreadsheetChats = mysqlTable("spreadsheetChats", {
+1497:export const chatMessages = mysqlTable("chatMessages", {
+1510:export const spreadsheetOnlineStatus = mysqlTable("spreadsheetOnlineStatus", {
+1522:export const emailAccounts = mysqlTable("emailAccounts", {
+1534:export const zohoOAuthConfigs = mysqlTable("zohoOAuthConfigs", {
+1552:export const chatNotifications = mysqlTable("chatNotifications", {
+1569:export const consultaForms = mysqlTable("consultaForms", {
+1586:export const consultaRequests = mysqlTable("consultaRequests", {
+1608:export const loanProfiles = mysqlTable("loanProfiles", {
+1627:export const loanClients = mysqlTable("loanClients", {
+1649:export const loans = mysqlTable("loans", {
+1677:export const whatsappTemplates = mysqlTable("whatsappTemplates", {
+1699:export const onlineSupportConfig = mysqlTable("onlineSupportConfig", {
+1738:export const onlineSupportVisitors = mysqlTable("onlineSupportVisitors", {
+1752:export const onlineSupportConversations = mysqlTable("onlineSupportConversations", {
+1776:export const onlineSupportMessages = mysqlTable("onlineSupportMessages", {
+1793:export const onlineSupportMenuItems = mysqlTable("onlineSupportMenuItems", {
+1813:export const onlineSupportAutoReplies = mysqlTable("onlineSupportAutoReplies", {
+1834:export const onlineSupportKnowledgeBase = mysqlTable("onlineSupportKnowledgeBase", {
+1853:export const onlineSupportFileLibrary = mysqlTable("onlineSupportFileLibrary", {
+1871:export const onlineSupportBusinessHours = mysqlTable("onlineSupportBusinessHours", {
+1885:export const onlineSupportAgents = mysqlTable("onlineSupportAgents", {
+1898:export const onlineSupportNotifications = mysqlTable("onlineSupportNotifications", {
+1912:export const onlineSupportLogs = mysqlTable("onlineSupportLogs", {
+1925:export const chatFlowNodes = mysqlTable("chatFlowNodes", {
+1942:export const ccAppUsers = mysqlTable("cc_app_users", {
+1953:export const ccCartoes = mysqlTable("cc_cartoes", {
+1970:export const ccFaturas = mysqlTable("cc_faturas", {
+1991:export const ccParcelamentos = mysqlTable("cc_parcelamentos", {
+2005:export const ccCategorias = mysqlTable("cc_categorias", {
+2016:export const ccGastos = mysqlTable("cc_gastos", {
+2036:export const ccPagamentos = mysqlTable("cc_pagamentos", {
+2048:export const ccDespesas = mysqlTable("cc_despesas", {
+2062:export const ccPagamentosDespesas = mysqlTable("cc_pagamentos_despesas", {
+2076:export const ccMercadoProdutos = mysqlTable("cc_mercado_produtos", {
+2089:export const ccMercadoLista = mysqlTable("cc_mercado_lista", {
+2103:export const ccMercadoHistorico = mysqlTable("cc_mercado_historico", {
+2119:export const privateClients = mysqlTable("privateClients", {
+2151:export const privateSettings = mysqlTable("privateSettings", {
+2184:export const privateQuotes = mysqlTable("privateQuotes", {
+2225:export const privateAppointments = mysqlTable("privateAppointments", {
+2261:export const privateTrips = mysqlTable("privateTrips", {
+2295:export const privateTripStops = mysqlTable("privateTripStops", {
+2309:export const privatePayments = mysqlTable("privatePayments", {
+2325:export const privateReceipts = mysqlTable("privateReceipts", {
+2343:export const privateEvents = mysqlTable("privateEvents", {

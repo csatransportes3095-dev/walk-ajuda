@@ -18,7 +18,7 @@ import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
 // Resolve o clientId a partir do token de sessão da planilha.
 // Lança UNAUTHORIZED se o token for inválido ou expirado.
-async function resolveClientId(token: string): Promise<number> {
+export async function resolveClientId(token: string): Promise<number> {
   const db = await getDb() as any;
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
   

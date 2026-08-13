@@ -2354,3 +2354,89 @@ export const privateEvents = mysqlTable("privateEvents", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type PrivateEvent = typeof privateEvents.$inferSelect;
+
+
+// ── H2 Assistente: camada isolada de conversas, confirmações e auditoria ──
+export const h2AssistantSettings = mysqlTable("h2AssistantSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  enabled: int("enabled").notNull().default(1),
+  voiceEnabled: int("voiceEnabled").notNull().default(1),
+  speakResponses: int("speakResponses").notNull().default(0),
+  primaryProvider: varchar("primaryProvider", { length: 32 }).notNull().default("openai"),
+  dailyRequestLimit: int("dailyRequestLimit").notNull().default(80),
+  dailyAudioSecondsLimit: int("dailyAudioSecondsLimit").notNull().default(900),
+  retentionDays: int("retentionDays").notNull().default(30),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type H2AssistantSettings = typeof h2AssistantSettings.$inferSelect;
+
+export const h2AssistantConversations = mysqlTable("h2AssistantConversations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  title: varchar("title", { length: 180 }),
+  status: varchar("status", { length: 24 }).notNull().default("ATIVA"),
+  lastMessageAt: timestamp("lastMessageAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type H2AssistantConversation = typeof h2AssistantConversations.$inferSelect;
+
+export const h2AssistantMessages = mysqlTable("h2AssistantMessages", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull(),
+  userId: int("userId").notNull(),
+  role: varchar("role", { length: 24 }).notNull(),
+  content: text("content").notNull(),
+  intent: varchar("intent", { length: 96 }),
+  toolName: varchar("toolName", { length: 96 }),
+  metadataJson: text("metadataJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type H2AssistantMessage = typeof h2AssistantMessages.$inferSelect;
+
+export const h2AssistantActions = mysqlTable("h2AssistantActions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  conversationId: int("conversationId"),
+  actionType: varchar("actionType", { length: 40 }).notNull(),
+  toolName: varchar("toolName", { length: 96 }).notNull(),
+  riskLevel: varchar("riskLevel", { length: 24 }).notNull().default("NORMAL"),
+  status: varchar("status", { length: 24 }).notNull().default("PENDENTE"),
+  summary: text("summary").notNull(),
+  payloadJson: text("payloadJson").notNull(),
+  resultJson: text("resultJson"),
+  idempotencyKey: varchar("idempotencyKey", { length: 96 }).notNull().unique(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  confirmedAt: timestamp("confirmedAt"),
+  completedAt: timestamp("completedAt"),
+  cancelledAt: timestamp("cancelledAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type H2AssistantAction = typeof h2AssistantActions.$inferSelect;
+
+export const h2AssistantUsage = mysqlTable("h2AssistantUsage", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  dateKey: varchar("dateKey", { length: 10 }).notNull(),
+  requestCount: int("requestCount").notNull().default(0),
+  audioSeconds: int("audioSeconds").notNull().default(0),
+  inputCharacters: int("inputCharacters").notNull().default(0),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type H2AssistantUsage = typeof h2AssistantUsage.$inferSelect;
+
+export const h2AssistantAudit = mysqlTable("h2AssistantAudit", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  conversationId: int("conversationId"),
+  actionId: int("actionId"),
+  eventType: varchar("eventType", { length: 64 }).notNull(),
+  toolName: varchar("toolName", { length: 96 }),
+  correlationId: varchar("correlationId", { length: 96 }).notNull(),
+  detailJson: text("detailJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type H2AssistantAudit = typeof h2AssistantAudit.$inferSelect;

@@ -13,6 +13,7 @@ import { LoansTab } from "./LoansTab";
 import { ServicosExtras } from "@/components/ServicosExtras";
 import { H2ParticularModule } from "@/components/private-transport/H2ParticularModule";
 import { DashboardModuleCard, DashboardExternalModuleCard } from "@/components/DashboardModuleCard";
+import { H2AssistantPanel, type H2AssistantNavigationTarget } from "@/components/H2AssistantPanel";
 
 const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 const DATE_COLORS = ["#ff6b6b", "#4ecdc4", "#45b7d1", "#f9ca24", "#6c5ce7", "#a29bfe", "#fd79a8", "#fdcb6e", "#6c5ce7", "#00b894"];
@@ -2119,6 +2120,30 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           isSaving={updateOperationalMutation.isPending}
         />
       )}
+
+      {/* H2 Assistente: camada flutuante isolada, sem alterar os módulos existentes */}
+      <H2AssistantPanel
+        token={token}
+        onNavigate={(target: H2AssistantNavigationTarget) => {
+          if (["gastos", "ganhos", "operacional", "metas", "graficos", "emprestimos", "analisador", "particular"].includes(target)) {
+            setActiveModule(target);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            return;
+          }
+          const externalPath: Record<string, string> = { cartoes: "/cartoes" };
+          if (externalPath[target]) window.location.assign(externalPath[target]);
+        }}
+        onDataChanged={() => {
+          void Promise.all([
+            refetchEarnings(),
+            refetchExpenses(),
+            refetchYearlyEarnings(),
+            refetchYearlyExpenses(),
+            refetchOperational(),
+            refetchGoals(),
+          ]);
+        }}
+      />
 
       {/* Chat */}
       {phoneFromToken && (

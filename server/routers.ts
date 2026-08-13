@@ -43,6 +43,7 @@ import { preCadastroQuestionsRouter } from "./routers/preCadastroQuestions";
 import { cartoesRouter } from "./routers/cartoes";
 import { mercadoRouter } from "./routers/mercado";
 import { privateTransportRouter } from "./routers/privateTransport";
+import { h2AssistantRouter } from "./routers/h2Assistant";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "./_core/sendMailDirect";
@@ -217,6 +218,7 @@ export const appRouter = router({
   schedule: scheduleRouter,
   spreadsheet: spreadsheetRouter,
   privateTransport: privateTransportRouter,
+  h2Assistant: h2AssistantRouter,
   loans: loanRouter,
   apk: apkRouter,
   customerPassword: customerPasswordRouter,
