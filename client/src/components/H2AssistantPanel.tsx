@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown, CircleStop, CornerDownLeft, Loader2, MessageCircle, Mic, Minimize2, Send, Sparkles, Volume2, VolumeX, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -69,6 +70,8 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
   const chunksRef = useRef<Blob[]>([]);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endAnchorRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionRef = useRef(0);
+  const [visualViewportHeight, setVisualViewportHeight] = useState(0);
 
   const bootstrap = trpc.h2Assistant.bootstrap.useQuery({ token }, { enabled: Boolean(token), staleTime: 60_000, retry: 1 });
   const transcriptMutation = trpc.h2Assistant.voice.transcribe.useMutation();
@@ -90,6 +93,28 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
     if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     streamRef.current?.getTracks().forEach(track => track.stop());
   }, []);
+
+  useEffect(() => {
+    if (!open || minimized || typeof window === "undefined") return;
+    scrollPositionRef.current = window.scrollY;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    const updateViewport = () => setVisualViewportHeight(Math.round(window.visualViewport?.height || window.innerHeight));
+    updateViewport();
+    window.visualViewport?.addEventListener("resize", updateViewport);
+    window.visualViewport?.addEventListener("scroll", updateViewport);
+    window.addEventListener("resize", updateViewport);
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      window.visualViewport?.removeEventListener("resize", updateViewport);
+      window.visualViewport?.removeEventListener("scroll", updateViewport);
+      window.removeEventListener("resize", updateViewport);
+      window.scrollTo(0, scrollPositionRef.current);
+    };
+  }, [open, minimized]);
 
   const canUseMic = useMemo(() => typeof window !== "undefined" && typeof (navigator as any).mediaDevices?.getUserMedia === "function" && typeof (window as any).MediaRecorder !== "undefined", []);
 
@@ -252,18 +277,28 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
 
   if (!token) return null;
 
-  return (
-    <div className={placement === "client-card" ? "absolute right-2 top-2 z-[120]" : "fixed bottom-24 right-4 z-[120] flex flex-col items-end sm:bottom-6 sm:right-[6.25rem]"}>
-      <AnimatePresence>
+  const assistantDialog = (
+    <AnimatePresence>
         {open && !minimized && (
-          <motion.section
-            initial={{ opacity: 0, y: 18, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 14, scale: 0.97 }}
-            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className={`${placement === "client-card" ? "fixed inset-x-3 bottom-3 top-3 h-auto w-auto max-w-none sm:inset-x-auto sm:top-auto sm:bottom-6 sm:right-[6.25rem] sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[min(430px,calc(100vw-2rem))] sm:max-w-[430px]" : "mb-3 h-[min(680px,calc(100dvh-104px))] w-[calc(100vw-2rem)] max-w-[430px]"} flex flex-col overflow-hidden rounded-[26px] border border-cyan-300/20 bg-[#071224]/[.98] shadow-[0_25px_80px_rgba(0,0,0,.52)] backdrop-blur-2xl`}
-            aria-label="H2 Assistente"
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-[1000] flex items-end justify-center bg-[#020611]/72 p-0 backdrop-blur-[3px] sm:items-stretch sm:justify-end sm:p-4"
+            aria-label="Fechar H2 Assistente"
           >
+            <motion.section
+              initial={{ opacity: 0, y: 46, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 38, scale: 0.98 }}
+              transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+              onClick={(event) => event.stopPropagation()}
+              style={visualViewportHeight && typeof window !== "undefined" && window.innerWidth < 640 ? { height: `${Math.max(320, Math.floor(visualViewportHeight * 0.92))}px` } : undefined}
+              className="relative flex h-[92dvh] max-h-[calc(100dvh-0.75rem)] w-full max-w-none flex-col overflow-hidden rounded-t-[28px] border border-cyan-300/25 bg-[#071224]/[.98] pb-[env(safe-area-inset-bottom)] shadow-[0_-16px_70px_rgba(0,0,0,.5)] backdrop-blur-2xl sm:h-[calc(100dvh-2rem)] sm:max-h-none sm:w-[min(460px,calc(100vw-2rem))] sm:rounded-[26px] sm:border-cyan-300/20 sm:shadow-[0_25px_80px_rgba(0,0,0,.52)]"
+              aria-label="H2 Assistente"
+            >
             <header className="relative overflow-hidden border-b border-white/10 px-4 py-3.5">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(34,211,238,.22),transparent_43%),radial-gradient(circle_at_94%_20%,rgba(124,58,237,.25),transparent_43%)]" />
               <div className="relative flex items-center gap-3">
@@ -339,10 +374,16 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
               </div>
               <p className="mt-2 text-center text-[9px] leading-relaxed text-slate-500">Consultas são imediatas. Qualquer alteração exige sua confirmação.</p>
             </div>
-          </motion.section>
+            </motion.section>
+          </motion.div>
         )}
       </AnimatePresence>
+  );
 
+  return (
+    <>
+      {typeof document !== "undefined" ? createPortal(assistantDialog, document.body) : null}
+      <div className={placement === "client-card" ? "absolute right-2 top-2 z-[120]" : "fixed bottom-24 right-4 z-[120] flex flex-col items-end sm:bottom-6 sm:right-[6.25rem]"}>
       <motion.button
         type="button"
         onClick={() => { setOpen(true); setMinimized(false); }}
@@ -362,6 +403,7 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
           {!open && <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-[#071224] bg-emerald-400" />}
         </span>
       </motion.button>
-    </div>
+      </div>
+    </>
   );
 }

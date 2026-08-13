@@ -384,10 +384,18 @@
 /* ── Planilha de Gastos: sistema visual premium ─────────────────────────── */
 @layer components {
   .spreadsheet-premium {
-    --sheet-surface: rgba(7, 14, 32, 0.82);
-    --sheet-surface-deep: rgba(3, 8, 22, 0.92);
+    --glass-bg: rgba(12, 22, 49, 0.58);
+    --glass-bg-strong: rgba(4, 11, 28, 0.91);
+    --glass-bg-inner: rgba(5, 13, 31, 0.74);
+    --glass-border: rgba(184, 211, 255, 0.16);
+    --glass-highlight: rgba(239, 248, 255, 0.16);
+    --glass-shadow: 0 16px 40px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+    --glass-blur: 14px;
+    --glass-saturation: 130%;
+    --sheet-surface: var(--glass-bg);
+    --sheet-surface-deep: var(--glass-bg-strong);
     --sheet-line: rgba(128, 166, 255, 0.22);
-    --sheet-highlight: rgba(210, 230, 255, 0.18);
+    --sheet-highlight: var(--glass-highlight);
   }
 
   .spreadsheet-premium .spreadsheet-content {
@@ -422,7 +430,8 @@
       0 13px 34px rgba(0, 0, 0, 0.27),
       inset 0 1px 0 rgba(255, 255, 255, 0.14),
       inset 0 -18px 28px rgba(0, 0, 0, 0.17);
-    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   }
 
   .spreadsheet-premium .premium-plan-card {
@@ -472,7 +481,8 @@
       0 16px 36px rgba(0, 0, 0, 0.26),
       inset 0 1px 0 rgba(255, 255, 255, 0.12),
       inset 0 -22px 34px rgba(0, 0, 0, 0.16);
-    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   }
 
   .spreadsheet-premium .spreadsheet-workspace > .flex:first-child {
@@ -522,6 +532,15 @@
 
   .spreadsheet-premium .spreadsheet-workspace .text-muted-foreground {
     color: rgba(202, 218, 246, 0.7);
+  }
+
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .spreadsheet-premium .premium-client-card,
+    .spreadsheet-premium .premium-plan-card,
+    .spreadsheet-premium .premium-live-card,
+    .spreadsheet-premium .spreadsheet-workspace {
+      background: var(--glass-bg-strong) !important;
+    }
   }
 
   @media (prefers-reduced-motion: no-preference) {
