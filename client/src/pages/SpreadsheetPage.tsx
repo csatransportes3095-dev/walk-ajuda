@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import { trpc } from "@/lib/trpc";
-import { X, Shield, Clock, Trophy, Medal, Phone, Mail, CreditCard } from "lucide-react";
+import { X, Shield, Clock, Trophy, Medal, Phone, Mail, CreditCard, CalendarDays } from "lucide-react";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { LoansTab } from "./LoansTab";
 import { ServicosExtras } from "@/components/ServicosExtras";
@@ -892,7 +892,9 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#070a16] via-[#0a0f22] to-[#070a16] text-foreground p-4 pb-40 sm:p-6 sm:pb-8">
+    <div className="relative min-h-screen overflow-x-hidden bg-[#050914] text-foreground p-4 pb-40 sm:p-6 sm:pb-8" style={{ backgroundImage: "radial-gradient(circle at 82% 10%, rgba(36, 86, 163, 0.17), transparent 30%), radial-gradient(circle at 14% 52%, rgba(81, 39, 122, 0.12), transparent 34%), linear-gradient(145deg, #050914 0%, #091126 48%, #070912 100%)" }}>
+      <div aria-hidden="true" className="pointer-events-none absolute -right-28 top-64 h-80 w-80 rounded-full bg-cyan-500/[.045] blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute -left-24 bottom-24 h-72 w-72 rounded-full bg-violet-600/[.045] blur-3xl" />
       {/* MODAL DE CONFIRMAÇÃO: APAGAR TODOS OS DADOS */}
       {showDeleteAllModal && (
         <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -1051,7 +1053,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </div>
         </div>
       )}
-      <div className="max-w-7xl mx-auto">
+      <div className="relative max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
           <div>
@@ -1268,16 +1270,20 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
         </div>
 
         {/* Seletor de Mês */}
-        <div className="mb-4 max-w-md">
-          <label className="mb-2 flex items-center gap-2 text-sm font-bold tracking-wide text-foreground">
-            <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" /> Selecionar Mês
+        <div className="mb-5 max-w-md">
+          <label className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-300">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg border border-blue-300/20 bg-blue-400/10 text-blue-200 shadow-[inset_0_1px_0_rgba(255,255,255,.12)]"><CalendarDays className="h-3.5 w-3.5" /></span>
+            Competência da planilha
           </label>
-          <Input
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="h-12 rounded-xl border-primary/30 bg-card/80 px-4 font-semibold text-foreground shadow-sm transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/35"
-          />
+          <div className="relative overflow-hidden rounded-xl border border-blue-400/25 bg-slate-950/55 p-1 shadow-[0_10px_24px_rgba(2,8,23,.28),inset_0_1px_0_rgba(255,255,255,.09)] backdrop-blur-xl">
+            <span aria-hidden="true" className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-blue-200/45 to-transparent" />
+            <Input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="h-11 border-0 bg-transparent px-3 font-semibold text-foreground shadow-none focus-visible:ring-2 focus-visible:ring-blue-400/45"
+            />
+          </div>
         </div>
 
         {/* Abas */}
