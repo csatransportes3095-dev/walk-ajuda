@@ -1358,20 +1358,24 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                 { label: 'Acessórios', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>, key: 'accessories', val: newExpense.accessories, set: (v: string) => setNewExpense({ ...newExpense, accessories: v }) },
                 { label: 'Outros Gastos', icon: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>, key: 'otherExpenses', val: newExpense.otherExpenses, set: (v: string) => setNewExpense({ ...newExpense, otherExpenses: v }) },
               ].map(({ label, icon, key, val, set }) => (
-<div key={key} className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #2d0808 0%, #180404 100%)', border: '2px solid rgba(239,68,68,0.6)', boxShadow: '0 2px 10px rgba(239,68,68,0.15)' }}>
-                  <div className="w-8 h-8 rounded-lg bg-red-600/20 border border-red-500/30 flex items-center justify-center flex-shrink-0 text-red-400">{icon}</div>
-                  <span className="text-xs font-semibold text-white/70 flex-1 min-w-0 truncate">{label}</span>
-                  <Input
-                    type="number"
-                    placeholder="0,00"
-                    value={val}
-                    onChange={(e) => set(e.target.value)}
-                    className="h-9 bg-white/5 border-white/10 text-white placeholder:text-white/20 focus-visible:border-red-500 w-24 flex-shrink-0 text-center text-sm font-mono"
-                  />
-                  <div className="h-9 w-24 flex-shrink-0 bg-red-600/15 border border-red-500/25 rounded-lg flex items-center justify-end px-2.5">
-                    <span className="text-red-400 font-bold text-sm font-mono">{(expensesByCategory[key as keyof typeof expensesByCategory] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                  </div>
-                </div>
+	<div key={key} className="rounded-xl px-3 py-3 transition-all active:scale-[0.98]" style={{ background: 'linear-gradient(135deg, #2d0808 0%, #180404 100%)', border: '2px solid rgba(239,68,68,0.6)', boxShadow: '0 2px 10px rgba(239,68,68,0.15)' }}>
+	                  <div className="flex items-center gap-2.5 mb-2.5">
+	                    <div className="w-9 h-9 rounded-lg bg-red-600/20 border border-red-500/30 flex items-center justify-center flex-shrink-0 text-red-400">{icon}</div>
+	                    <span className="text-sm font-bold leading-tight text-white flex-1 min-w-0 break-words">{label}</span>
+	                  </div>
+	                  <div className="grid grid-cols-2 gap-2">
+	                    <Input
+	                      type="number"
+	                      placeholder="Digite o valor"
+	                      value={val}
+	                      onChange={(e) => set(e.target.value)}
+	                      className="h-10 min-w-0 bg-white/5 border-white/10 text-white placeholder:text-white/35 focus-visible:border-red-500 w-full text-center text-sm font-mono"
+	                    />
+	                    <div className="h-10 min-w-0 bg-red-600/15 border border-red-500/25 rounded-lg flex items-center justify-center px-2">
+	                      <span className="text-red-400 font-bold text-sm font-mono whitespace-nowrap">{(expensesByCategory[key as keyof typeof expensesByCategory] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+	                    </div>
+	                  </div>
+	                </div>
               ))}
             </div>
 
