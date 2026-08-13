@@ -68,6 +68,12 @@ interface Props {
   botWelcome?: string;
 }
 
+function createAudioFlowId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const hex = () => Math.floor(Math.random() * 16).toString(16);
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char => char === 'x' ? hex() : ((Math.floor(Math.random() * 4) + 8).toString(16)));
+}
+
 // ── Componente ───────────────────────────────────────────────────────────────────────────
 
 export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelectOption, onOrderComplete, botName, botAvatar, botWelcome }: Props) {
@@ -112,7 +118,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     pixProofMime: string;
     couponCode: string;
     couponDiscount: { type: string; value: number } | null;
-  }>({ product: null, option: null, answers: {}, audioAnswers: {}, audioFlowId: crypto.randomUUID(), docFiles: {}, clientName: '', clientPhone: '', pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null });
+  }>({ product: null, option: null, answers: {}, audioAnswers: {}, audioFlowId: createAudioFlowId(), docFiles: {}, clientName: '', clientPhone: '', pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null });
 
   const [pixCopied, setPixCopied] = useState(false);
   const [uploadingPix, setUploadingPix] = useState(false);
