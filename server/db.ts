@@ -9,6 +9,8 @@ import {
   products, Product,
   productOptions, ProductOption,
   productQuestions, ProductQuestion,
+  questionAudioDrafts, QuestionAudioDraft,
+  orderQuestionAudioAnswers, OrderQuestionAudioAnswer,
   optionDocuments, OptionDocument,
   siteSettings, SiteSetting,
   accessCodePhones, AccessCodePhone,
@@ -560,13 +562,27 @@ export async function listOptionQuestions(optionId: number): Promise<ProductQues
   return await db.select().from(productQuestions).where(eq(productQuestions.optionId, optionId)).orderBy(asc(productQuestions.sortOrder));
 }
 
-export async function createProductQuestion(data: { productId: number; optionId?: number; question: string; fieldType?: 'text' | 'select' | 'textarea'; options?: string; isRequired?: boolean; sortOrder?: number; parentQuestionId?: number | null; triggerOption?: string | null }): Promise<ProductQuestion> {
+export type ProductQuestionFieldType = 'text' | 'select' | 'textarea' | 'audio';
+export type ProductQuestionAudioSettings = {
+  helpText?: string | null;
+  audioMinDurationSeconds?: number;
+  audioMaxDurationSeconds?: number;
+  allowAudioRerecord?: number;
+  allowAudioFileUpload?: number;
+};
+
+export async function createProductQuestion(data: { productId: number; optionId?: number; question: string; fieldType?: ProductQuestionFieldType; options?: string; isRequired?: boolean; sortOrder?: number; parentQuestionId?: number | null; triggerOption?: string | null } & ProductQuestionAudioSettings): Promise<ProductQuestion> {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
   const result = await db.insert(productQuestions).values({
     productId: data.productId, optionId: data.optionId || null, question: data.question,
     fieldType: data.fieldType || 'text', options: data.options || null,
     isRequired: data.isRequired !== false ? 1 : 0, sortOrder: data.sortOrder || 0,
+    helpText: data.helpText || null,
+    audioMinDurationSeconds: data.audioMinDurationSeconds ?? 1,
+    audioMaxDurationSeconds: data.audioMaxDurationSeconds ?? 120,
+    allowAudioRerecord: data.allowAudioRerecord ?? 1,
+    allowAudioFileUpload: data.allowAudioFileUpload ?? 1,
     parentQuestionId: data.parentQuestionId || null,
     triggerOption: data.triggerOption || null,
   });
@@ -574,7 +590,7 @@ export async function createProductQuestion(data: { productId: number; optionId?
   return inserted[0];
 }
 
-export async function updateProductQuestion(id: number, data: Partial<{ question: string; fieldType: 'text' | 'select' | 'textarea'; options: string | null; isRequired: number; sortOrder: number; parentQuestionId: number | null; triggerOption: string | null }>): Promise<void> {
+export async function updateProductQuestion(id: number, data: Partial<{ question: string; fieldType: ProductQuestionFieldType; options: string | null; isRequired: number; sortOrder: number; parentQuestionId: number | null; triggerOption: string | null } & ProductQuestionAudioSettings>): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.update(productQuestions).set(data).where(eq(productQuestions.id, id));
@@ -584,6 +600,64 @@ export async function deleteProductQuestion(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.delete(productQuestions).where(eq(productQuestions.id, id));
+}
+
+// ========== QUESTION AUDIO ANSWERS ==========
+
+export async function getProductQuestionById(id: number): Promise<ProductQuestion | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [question] = await db.select().from(productQuestions).where(eq(productQuestions.id, id)).limit(1);
+  return question || null;
+}
+
+export async function replaceQuestionAudioDraft(data: Omit<QuestionAudioDraft, 'createdAt'>): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error('Database not available');
+  await db.delete(questionAudioDrafts).where(and(
+    eq(questionAudioDrafts.flowId, data.flowId),
+    eq(questionAudioDrafts.questionId, data.questionId),
+  ));
+  await db.insert(questionAudioDrafts).values(data);
+}
+
+export async function getQuestionAudioDraftByFlowQuestion(flowId: string, questionId: number): Promise<QuestionAudioDraft | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [draft] = await db.select().from(questionAudioDrafts).where(and(
+    eq(questionAudioDrafts.flowId, flowId),
+    eq(questionAudioDrafts.questionId, questionId),
+  )).limit(1);
+  return draft || null;
+}
+
+export async function getQuestionAudioDraftsByIds(ids: string[]): Promise<QuestionAudioDraft[]> {
+  if (ids.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(questionAudioDrafts).where(inArray(questionAudioDrafts.id, ids));
+}
+
+export async function deleteQuestionAudioDrafts(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(questionAudioDrafts).where(inArray(questionAudioDrafts.id, ids));
+}
+
+export async function createOrderQuestionAudioAnswers(rows: Array<Omit<OrderQuestionAudioAnswer, 'id' | 'createdAt'>>): Promise<void> {
+  if (rows.length === 0) return;
+  const db = await getDb();
+  if (!db) throw new Error('Database not available');
+  await db.insert(orderQuestionAudioAnswers).values(rows);
+}
+
+export async function getOrderQuestionAudioAnswers(orderStatusId: number): Promise<OrderQuestionAudioAnswer[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(orderQuestionAudioAnswers)
+    .where(eq(orderQuestionAudioAnswers.orderStatusId, orderStatusId))
+    .orderBy(asc(orderQuestionAudioAnswers.id));
 }
 
 // ========== OPTION DOCUMENTS (DOCUMENTOS DINÂMICOS) ==========
@@ -1056,8 +1130,11 @@ export async function addOrderStatus(data: { registrationId: number; customerPho
     pricePaid: data.pricePaid || null,
     answers: data.answers || null,
   });
+  const whereClause = data.orderNumber != null && data.orderNumber > 0
+    ? and(eq(orderStatusHistory.registrationId, data.registrationId), eq(orderStatusHistory.orderNumber, data.orderNumber))
+    : eq(orderStatusHistory.customerPhone, data.customerPhone);
   const [row] = await db.select().from(orderStatusHistory)
-    .where(eq(orderStatusHistory.customerPhone, data.customerPhone))
+    .where(whereClause)
     .orderBy(sql`${orderStatusHistory.createdAt} DESC`)
     .limit(1);
   return row;

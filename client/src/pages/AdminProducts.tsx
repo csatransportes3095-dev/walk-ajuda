@@ -19,6 +19,8 @@ type DocumentType = {
 type QuestionType = {
   id: number; productId: number; optionId: number | null; question: string;
   fieldType: string; options: string | null; isRequired: number; sortOrder: number;
+  helpText: string | null; audioMinDurationSeconds: number; audioMaxDurationSeconds: number;
+  allowAudioRerecord: number; allowAudioFileUpload: number;
   parentQuestionId: number | null; triggerOption: string | null;
 };
 
@@ -191,9 +193,14 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
 
   // Question form state
   const [newQText, setNewQText] = useState("");
-  const [newQType, setNewQType] = useState<"text" | "select" | "textarea">("text");
+  const [newQType, setNewQType] = useState<"text" | "select" | "textarea" | "audio">("text");
   const [newQOptions, setNewQOptions] = useState("");
   const [newQRequired, setNewQRequired] = useState(true);
+  const [newQHelpText, setNewQHelpText] = useState("");
+  const [newQAudioMin, setNewQAudioMin] = useState("1");
+  const [newQAudioMax, setNewQAudioMax] = useState("120");
+  const [newQAllowRerecord, setNewQAllowRerecord] = useState(true);
+  const [newQAllowFileUpload, setNewQAllowFileUpload] = useState(true);
   // Pergunta condicional
   const [newQParentId, setNewQParentId] = useState<number | null>(null);
   const [newQTriggerOption, setNewQTriggerOption] = useState("");
@@ -228,7 +235,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
     onSuccess: () => { utils.products.list.invalidate(); toast.success("Foto exemplo removida!"); },
   });
   const createQMut = trpc.productQuestions.create.useMutation({
-    onSuccess: () => { utils.products.list.invalidate(); setNewQText(""); setNewQOptions(""); toast.success("Pergunta criada!"); }
+    onSuccess: () => { utils.products.list.invalidate(); setNewQText(""); setNewQOptions(""); setNewQHelpText(""); setNewQAudioMin("1"); setNewQAudioMax("120"); setNewQAllowRerecord(true); setNewQAllowFileUpload(true); toast.success("Pergunta criada!"); }
   });
   const deleteQMut = trpc.productQuestions.delete.useMutation({
     onSuccess: () => { utils.products.list.invalidate(); toast.success("Pergunta excluída!"); }
@@ -237,9 +244,14 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
   // Edição de pergunta existente
   const [editingQId, setEditingQId] = useState<number | null>(null);
   const [editQText, setEditQText] = useState("");
-  const [editQType, setEditQType] = useState<"text" | "select" | "textarea">("text");
+  const [editQType, setEditQType] = useState<"text" | "select" | "textarea" | "audio">("text");
   const [editQOptions, setEditQOptions] = useState("");
   const [editQRequired, setEditQRequired] = useState(true);
+  const [editQHelpText, setEditQHelpText] = useState("");
+  const [editQAudioMin, setEditQAudioMin] = useState("1");
+  const [editQAudioMax, setEditQAudioMax] = useState("120");
+  const [editQAllowRerecord, setEditQAllowRerecord] = useState(true);
+  const [editQAllowFileUpload, setEditQAllowFileUpload] = useState(true);
   const [editQParentId, setEditQParentId] = useState<number | null>(null);
   const [editQTriggerOption, setEditQTriggerOption] = useState("");
   const updateQMut = trpc.productQuestions.update.useMutation({
@@ -806,6 +818,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                               <option value="text">Texto</option>
                               <option value="select">Seleção</option>
                               <option value="textarea">Área Texto</option>
+                              <option value="audio">Áudio</option>
                             </select>
                           </div>
                           <label className="flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap pb-1">
@@ -816,6 +829,14 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                           <div>
                             <label className="text-[10px] text-gray-400 block mb-1">Opções (separadas por vírgula)</label>
                             <input value={editQOptions} onChange={e => setEditQOptions(e.target.value)} placeholder="Sim, Não" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
+                          </div>
+                        )}
+                        {editQType === 'audio' && (
+                          <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 space-y-2">
+                            <p className="text-[10px] font-bold text-sky-300">Configuração da resposta em áudio</p>
+                            <input value={editQHelpText} onChange={e => setEditQHelpText(e.target.value)} placeholder="Instrução opcional para o cliente" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
+                            <div className="grid grid-cols-2 gap-2"><input type="number" min="1" max="300" value={editQAudioMin} onChange={e => setEditQAudioMin(e.target.value)} placeholder="Mín. seg." style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} /><input type="number" min="1" max="300" value={editQAudioMax} onChange={e => setEditQAudioMax(e.target.value)} placeholder="Máx. seg." style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} /></div>
+                            <div className="flex gap-3 text-[10px] text-gray-200"><label className="flex items-center gap-1"><input type="checkbox" checked={editQAllowRerecord} onChange={e => setEditQAllowRerecord(e.target.checked)} /> Permitir regravação</label><label className="flex items-center gap-1"><input type="checkbox" checked={editQAllowFileUpload} onChange={e => setEditQAllowFileUpload(e.target.checked)} /> Permitir enviar arquivo</label></div>
                           </div>
                         )}
                         {/* Indicador de condicional na edição (somente leitura) */}
@@ -836,6 +857,11 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                               isRequired: editQRequired ? 1 : 0,
                               parentQuestionId: editQParentId || null,
                               triggerOption: editQTriggerOption.trim() || null,
+                              helpText: editQType === 'audio' ? (editQHelpText.trim() || null) : null,
+                              audioMinDurationSeconds: editQType === 'audio' ? Math.max(1, Math.min(300, parseInt(editQAudioMin) || 1)) : undefined,
+                              audioMaxDurationSeconds: editQType === 'audio' ? Math.max(1, Math.min(300, parseInt(editQAudioMax) || 120)) : undefined,
+                              allowAudioRerecord: editQType === 'audio' ? (editQAllowRerecord ? 1 : 0) : undefined,
+                              allowAudioFileUpload: editQType === 'audio' ? (editQAllowFileUpload ? 1 : 0) : undefined,
                             })}
                             disabled={!editQText.trim() || updateQMut.isPending}
                             className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded text-xs font-semibold"
@@ -905,6 +931,11 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                           setEditQType(q.fieldType as any);
                           setEditQOptions((() => { try { const p = JSON.parse(q.options || '[]'); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label).join(', ') : q.options || ''; } catch { return q.options || ''; } })());
                           setEditQRequired(q.isRequired === 1);
+                          setEditQHelpText(q.helpText || '');
+                          setEditQAudioMin(String(q.audioMinDurationSeconds || 1));
+                          setEditQAudioMax(String(q.audioMaxDurationSeconds || 120));
+                          setEditQAllowRerecord(q.allowAudioRerecord !== 0);
+                          setEditQAllowFileUpload(q.allowAudioFileUpload !== 0);
                           setEditQParentId(q.parentQuestionId);
                           setEditQTriggerOption(q.triggerOption || "");
                         }}
@@ -948,7 +979,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                             <span className="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">{sq.fieldType}</span>
                             {sq.isRequired === 1 && <span className="text-[10px] text-red-400">*</span>}
                             <button
-                              onClick={() => { setEditingQId(sq.id); setEditQText(sq.question); setEditQType(sq.fieldType as any); setEditQOptions((() => { try { const p = JSON.parse(sq.options || '[]'); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label).join(', ') : sq.options || ''; } catch { return sq.options || ''; } })()); setEditQRequired(sq.isRequired === 1); setEditQParentId(sq.parentQuestionId); setEditQTriggerOption(sq.triggerOption || ''); }}
+                              onClick={() => { setEditingQId(sq.id); setEditQText(sq.question); setEditQType(sq.fieldType as any); setEditQOptions((() => { try { const p = JSON.parse(sq.options || '[]'); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label).join(', ') : sq.options || ''; } catch { return sq.options || ''; } })());                           setEditQRequired(sq.isRequired === 1); setEditQHelpText(sq.helpText || ''); setEditQAudioMin(String(sq.audioMinDurationSeconds || 1)); setEditQAudioMax(String(sq.audioMaxDurationSeconds || 120)); setEditQAllowRerecord(sq.allowAudioRerecord !== 0); setEditQAllowFileUpload(sq.allowAudioFileUpload !== 0); setEditQParentId(sq.parentQuestionId); setEditQTriggerOption(sq.triggerOption || ''); }}
                               className="p-1 text-blue-400/70 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
                               title="Editar sub-pergunta"
                             >
@@ -979,7 +1010,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                               <span className="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">{ssq.fieldType}</span>
                               {ssq.isRequired === 1 && <span className="text-[10px] text-red-400">*</span>}
                               <button
-                                onClick={() => { setEditingQId(ssq.id); setEditQText(ssq.question); setEditQType(ssq.fieldType as any); setEditQOptions((() => { try { const p = JSON.parse(ssq.options || '[]'); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label).join(', ') : ssq.options || ''; } catch { return ssq.options || ''; } })()); setEditQRequired(ssq.isRequired === 1); setEditQParentId(ssq.parentQuestionId); setEditQTriggerOption(ssq.triggerOption || ''); }}
+                                onClick={() => { setEditingQId(ssq.id); setEditQText(ssq.question); setEditQType(ssq.fieldType as any); setEditQOptions((() => { try { const p = JSON.parse(ssq.options || '[]'); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label).join(', ') : ssq.options || ''; } catch { return ssq.options || ''; } })()); setEditQRequired(ssq.isRequired === 1); setEditQHelpText(ssq.helpText || ''); setEditQAudioMin(String(ssq.audioMinDurationSeconds || 1)); setEditQAudioMax(String(ssq.audioMaxDurationSeconds || 120)); setEditQAllowRerecord(ssq.allowAudioRerecord !== 0); setEditQAllowFileUpload(ssq.allowAudioFileUpload !== 0); setEditQParentId(ssq.parentQuestionId); setEditQTriggerOption(ssq.triggerOption || ''); }}
                                 className="p-1 text-blue-400/70 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
                                 title="Editar sub-sub-pergunta"
                               >
@@ -1035,6 +1066,11 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                     sortOrder: totalQuestions,
                     parentQuestionId: newQParentId || null,
                     triggerOption: newQTriggerOption.trim() || null,
+                    helpText: newQType === 'audio' ? (newQHelpText.trim() || null) : null,
+                    audioMinDurationSeconds: newQType === 'audio' ? Math.max(1, Math.min(300, parseInt(newQAudioMin) || 1)) : undefined,
+                    audioMaxDurationSeconds: newQType === 'audio' ? Math.max(1, Math.min(300, parseInt(newQAudioMax) || 120)) : undefined,
+                    allowAudioRerecord: newQType === 'audio' ? (newQAllowRerecord ? 1 : 0) : undefined,
+                    allowAudioFileUpload: newQType === 'audio' ? (newQAllowFileUpload ? 1 : 0) : undefined,
                   });
                   setOptionColors({});
                   setBlockingOptions({});
@@ -1049,6 +1085,14 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                 <div className="flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/30 rounded px-2 py-1">
                   <span className="text-[10px] text-cyan-400">🔗 Sub-pergunta de: <strong>{opt.questions.find(q => q.id === newQParentId)?.question?.slice(0, 30)}...</strong> quando resposta = <strong>{newQTriggerOption || 'qualquer'}</strong></span>
                   <button onClick={() => { setNewQParentId(null); setNewQTriggerOption(''); }} className="ml-auto text-[10px] text-red-400 hover:text-red-300">✕ Cancelar</button>
+                </div>
+              )}
+              {newQType === 'audio' && (
+                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 space-y-2">
+                  <p className="text-[10px] font-bold text-sky-300">Configuração da resposta em áudio</p>
+                  <input value={newQHelpText} onChange={e => setNewQHelpText(e.target.value)} placeholder="Instrução opcional para o cliente" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
+                  <div className="grid grid-cols-2 gap-2"><input type="number" min="1" max="300" value={newQAudioMin} onChange={e => setNewQAudioMin(e.target.value)} placeholder="Mín. segundos" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} /><input type="number" min="1" max="300" value={newQAudioMax} onChange={e => setNewQAudioMax(e.target.value)} placeholder="Máx. segundos" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} /></div>
+                  <div className="flex flex-wrap gap-3 text-[10px] text-gray-200"><label className="flex items-center gap-1"><input type="checkbox" checked={newQAllowRerecord} onChange={e => setNewQAllowRerecord(e.target.checked)} /> Permitir regravação</label><label className="flex items-center gap-1"><input type="checkbox" checked={newQAllowFileUpload} onChange={e => setNewQAllowFileUpload(e.target.checked)} /> Permitir enviar arquivo</label></div>
                 </div>
               )}
               {newQType === 'select' && (

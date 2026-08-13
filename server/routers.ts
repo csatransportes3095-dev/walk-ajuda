@@ -16,6 +16,7 @@ import {
 } from "./zoho";
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -59,6 +60,8 @@ import {
   listHomeButtons, listActiveHomeButtons, createHomeButton, updateHomeButton, deleteHomeButton, reorderHomeButtons,
   listProductOptions, createProductOption, updateProductOption, deleteProductOption,
   listProductQuestions, listOptionQuestions, createProductQuestion, updateProductQuestion, deleteProductQuestion,
+  getProductQuestionById, getQuestionAudioDraftByFlowQuestion, replaceQuestionAudioDraft,
+  getQuestionAudioDraftsByIds, deleteQuestionAudioDrafts, createOrderQuestionAudioAnswers, getOrderQuestionAudioAnswers,
   listOptionDocuments, createOptionDocument, updateOptionDocument, deleteOptionDocument, deleteOptionDocumentsByOptionId,
   getAllSettings, upsertSettings, upsertSetting, getSetting, getSettings,
   getCustomerByPhone, getCustomerByCpf, createCustomer, listCustomers, updateCustomer, deleteCustomer, updateCustomerLastAccess, validateMainCustomerProfile,
@@ -106,6 +109,7 @@ import {
   getViewedOrderKeys, markOrderAsViewed,
 } from "./db";
 import { storagePut } from "./storage";
+import { r2DeleteObjects } from "./r2Storage";
 
 /**
  * Verifica se um telefone está na blocklist.
@@ -146,6 +150,62 @@ function resolveFileExt(mime: string | undefined | null): { ext: string; content
   if (m === 'video/x-msvideo') return { ext: 'avi', contentType: 'video/x-msvideo' };
   if (m.startsWith('video/')) return { ext: 'mp4', contentType: m };
   return { ext: 'pdf', contentType: 'application/pdf' };
+}
+
+const QUESTION_AUDIO_MIME_TYPES = new Set(['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg']);
+
+function inspectQuestionAudio(buffer: Buffer, declaredMime: string): { mimeType: string; ext: string } | null {
+  if (buffer.length < 4) return null;
+  const isWebm = buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+  const isOgg = buffer.subarray(0, 4).toString('ascii') === 'OggS';
+  const isMp4 = buffer.length >= 12 && buffer.subarray(4, 8).toString('ascii') === 'ftyp';
+  const isMp3 = buffer.subarray(0, 3).toString('ascii') === 'ID3' || (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0);
+  if (isWebm && (declaredMime === 'audio/webm' || declaredMime === '')) return { mimeType: 'audio/webm', ext: 'webm' };
+  if (isOgg && (declaredMime === 'audio/ogg' || declaredMime === '')) return { mimeType: 'audio/ogg', ext: 'ogg' };
+  if (isMp4 && (declaredMime === 'audio/mp4' || declaredMime === '')) return { mimeType: 'audio/mp4', ext: 'm4a' };
+  if (isMp3 && (declaredMime === 'audio/mpeg' || declaredMime === '')) return { mimeType: 'audio/mpeg', ext: 'mp3' };
+  return null;
+}
+
+async function validateQuestionAudioAccess(input: { phone?: string; accessCode?: string; cpToken?: string }): Promise<{ phone: string }> {
+  if (input.cpToken?.trim()) {
+    const dbInst = await (await import('./db')).getDb();
+    const { eq: eqDrizzle } = await import('drizzle-orm');
+    const { customerPasswordSessions: cpSessions } = await import('../drizzle/schema');
+    const sessions = await (dbInst as any).select().from(cpSessions).where(eqDrizzle(cpSessions.token, input.cpToken.trim())).limit(1);
+    const session = sessions?.[0];
+    if (!session || new Date(session.expiresAt) < new Date()) {
+      throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão expirada. Faça login novamente.' });
+    }
+    const sessionPhone = String(session.phone || '').replace(/\D/g, '');
+    const requestedPhone = String(input.phone || '').replace(/\D/g, '');
+    if (!sessionPhone || (requestedPhone && requestedPhone !== sessionPhone)) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'A sessão não autoriza este cliente.' });
+    }
+    return { phone: sessionPhone };
+  }
+
+  const phone = String(input.phone || '').replace(/\D/g, '');
+  if (!phone || !input.accessCode?.trim()) {
+    throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão expirada. Faça login novamente.' });
+  }
+  const access = await checkAccessCodeCanSubmit(input.accessCode.trim(), phone);
+  if (!access.canSubmit) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: access.reason || 'Esta sessão não pode enviar áudio.' });
+  }
+  return { phone };
+}
+
+function normalizeQuestionAudioBase64(value: string): Buffer {
+  const base64 = value.includes(',') ? value.slice(value.indexOf(',') + 1) : value;
+  if (!base64 || base64.length > 16 * 1024 * 1024) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo de áudio inválido ou muito grande.' });
+  }
+  const buffer = Buffer.from(base64, 'base64');
+  if (buffer.length === 0 || buffer.length > 12 * 1024 * 1024) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo de áudio vazio ou acima do limite permitido.' });
+  }
+  return buffer;
 }
 
 function normalizeDomainValue(raw: string | null | undefined): string {
@@ -771,9 +831,14 @@ export const appRouter = router({
     create: adminProcedure
       .input(z.object({
         productId: z.number(), optionId: z.number().optional(), question: z.string().min(1),
-        fieldType: z.enum(['text', 'select', 'textarea']).optional(),
+        fieldType: z.enum(['text', 'select', 'textarea', 'audio']).optional(),
         options: z.string().optional(), isRequired: z.boolean().optional(),
         sortOrder: z.number().optional(),
+        helpText: z.string().max(1000).nullable().optional(),
+        audioMinDurationSeconds: z.number().int().min(1).max(300).optional(),
+        audioMaxDurationSeconds: z.number().int().min(1).max(300).optional(),
+        allowAudioRerecord: z.number().int().min(0).max(1).optional(),
+        allowAudioFileUpload: z.number().int().min(0).max(1).optional(),
         parentQuestionId: z.number().nullable().optional(),
         triggerOption: z.string().nullable().optional(),
       }))
@@ -789,9 +854,14 @@ export const appRouter = router({
     update: adminProcedure
       .input(z.object({
         id: z.number(), question: z.string().optional(),
-        fieldType: z.enum(['text', 'select', 'textarea']).optional(),
+        fieldType: z.enum(['text', 'select', 'textarea', 'audio']).optional(),
         options: z.string().nullable().optional(),
         isRequired: z.number().optional(), sortOrder: z.number().optional(),
+        helpText: z.string().max(1000).nullable().optional(),
+        audioMinDurationSeconds: z.number().int().min(1).max(300).optional(),
+        audioMaxDurationSeconds: z.number().int().min(1).max(300).optional(),
+        allowAudioRerecord: z.number().int().min(0).max(1).optional(),
+        allowAudioFileUpload: z.number().int().min(0).max(1).optional(),
         parentQuestionId: z.number().nullable().optional(),
         triggerOption: z.string().nullable().optional(),
       }))
@@ -837,6 +907,11 @@ export const appRouter = router({
             sortOrder: q.sortOrder,
             parentQuestionId: null,
             triggerOption: null,
+            helpText: q.helpText,
+            audioMinDurationSeconds: q.audioMinDurationSeconds,
+            audioMaxDurationSeconds: q.audioMaxDurationSeconds,
+            allowAudioRerecord: q.allowAudioRerecord,
+            allowAudioFileUpload: q.allowAudioFileUpload,
           });
           idMap[q.id] = created.id;
         }
@@ -854,10 +929,90 @@ export const appRouter = router({
             sortOrder: q.sortOrder,
             parentQuestionId: newParentId,
             triggerOption: q.triggerOption ?? null,
+            helpText: q.helpText,
+            audioMinDurationSeconds: q.audioMinDurationSeconds,
+            audioMaxDurationSeconds: q.audioMaxDurationSeconds,
+            allowAudioRerecord: q.allowAudioRerecord,
+            allowAudioFileUpload: q.allowAudioFileUpload,
           });
           idMap[q.id] = created.id;
         }
         return { success: true, count: sourceQuestions.length };
+      }),
+  }),
+
+  // === RESPOSTAS EM ÁUDIO DAS PERGUNTAS ===
+  questionAudio: router({
+    uploadDraft: publicProcedure
+      .input(z.object({
+        flowId: z.string().uuid(),
+        productId: z.number().int().positive(),
+        optionId: z.number().int().positive(),
+        questionId: z.number().int().positive(),
+        phone: z.string().optional(),
+        accessCode: z.string().optional(),
+        cpToken: z.string().optional(),
+        source: z.enum(['recording', 'file']),
+        mimeType: z.string().max(128),
+        durationSeconds: z.number().finite().min(0).max(300),
+        data: z.string().min(1),
+      }))
+      .mutation(async ({ input }) => {
+        const access = await validateQuestionAudioAccess(input);
+        const question = await getProductQuestionById(input.questionId);
+        if (!question || question.fieldType !== 'audio' || question.productId !== input.productId || question.optionId !== input.optionId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta pergunta de áudio não pertence ao produto ou opção informados.' });
+        }
+        if (input.source === 'file' && question.allowAudioFileUpload !== 1) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'O envio de arquivo de áudio não está habilitado nesta pergunta.' });
+        }
+        const minDuration = Math.max(1, question.audioMinDurationSeconds || 1);
+        const maxDuration = Math.min(300, Math.max(minDuration, question.audioMaxDurationSeconds || 120));
+        if (input.durationSeconds < minDuration || input.durationSeconds > maxDuration) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `O áudio deve ter entre ${minDuration} e ${maxDuration} segundos.` });
+        }
+        const declaredMime = input.mimeType.trim().toLowerCase();
+        if (!QUESTION_AUDIO_MIME_TYPES.has(declaredMime)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Formato de áudio não permitido.' });
+        }
+        const buffer = normalizeQuestionAudioBase64(input.data);
+        const inspected = inspectQuestionAudio(buffer, declaredMime);
+        if (!inspected) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'O conteúdo do arquivo não corresponde a um áudio válido.' });
+        }
+        const previous = await getQuestionAudioDraftByFlowQuestion(input.flowId, input.questionId);
+        if (previous && previous.customerPhone !== access.phone) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'O rascunho não pertence ao cliente autenticado.' });
+        }
+        if (previous && question.allowAudioRerecord !== 1) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Esta pergunta não permite substituir o áudio.' });
+        }
+        const draftId = randomUUID();
+        const storageKey = `question-audio/${input.flowId}/${randomUUID()}.${inspected.ext}`;
+        const { url } = await storagePut(storageKey, buffer, inspected.mimeType);
+        try {
+          await replaceQuestionAudioDraft({
+            id: draftId,
+            flowId: input.flowId,
+            customerPhone: access.phone,
+            productId: input.productId,
+            optionId: input.optionId,
+            questionId: input.questionId,
+            storageKey,
+            audioUrl: url,
+            mimeType: inspected.mimeType,
+            fileSize: buffer.length,
+            durationSeconds: Math.round(input.durationSeconds),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          });
+        } catch (error) {
+          await r2DeleteObjects([storageKey]).catch(() => {});
+          throw error;
+        }
+        if (previous?.storageKey) {
+          await r2DeleteObjects([previous.storageKey]).catch(() => {});
+        }
+        return { id: draftId, audioUrl: url, mimeType: inspected.mimeType, durationSeconds: Math.round(input.durationSeconds) };
       }),
   }),
 
@@ -932,6 +1087,11 @@ export const appRouter = router({
         paymentProofUrl: z.string().optional(),    // URL já enviada via /api/upload/client-file
         paymentProofMime: z.string().optional(),
         answers: z.string().optional(),
+        // Referências aditivas de respostas em áudio: usadas somente pelo novo tipo de pergunta.
+        productId: z.number().int().positive().optional(),
+        optionId: z.number().int().positive().optional(),
+        questionAudioFlowId: z.string().uuid().optional(),
+        audioDraftIds: z.array(z.string().uuid()).max(20).optional(),
         docNameMode: z.string().optional(),
         docCustomName: z.string().optional(),
         price: z.string().optional(), // valor pago pelo cliente (ex: "R$ 350,00")
@@ -1048,12 +1208,51 @@ export const appRouter = router({
             }
           }
 
-          // Parse answers (structured for email template)
-          let parsedAnswers: { question: string; answer: string }[] = [];
+          // Parse e normaliza respostas. Áudios nunca recebem URL confiada do navegador:
+          // a referência é construída a partir dos rascunhos validados no banco.
+          let parsedAnswers: Array<{ question: string; answer: string; questionId?: number; answerType?: string; depth?: number; optionsMeta?: string; audioUrl?: string; durationSeconds?: number }> = [];
           if (input.answers) {
-            try {
-              parsedAnswers = JSON.parse(input.answers) as { question: string; answer: string }[];
-            } catch { /* ignore */ }
+            try { parsedAnswers = JSON.parse(input.answers); } catch { /* ignore */ }
+          }
+          let audioDraftsForOrder: Awaited<ReturnType<typeof getQuestionAudioDraftsByIds>> = [];
+          if (input.productId || input.optionId || input.questionAudioFlowId || input.audioDraftIds?.length) {
+            if (!input.productId || !input.optionId || !input.questionAudioFlowId) {
+              return { success: false, message: 'Dados incompletos para validar a resposta em áudio.' };
+            }
+            const audioAccess = await validateQuestionAudioAccess({ phone: input.phone, accessCode: input.accessCode, cpToken: input.cpToken });
+            audioDraftsForOrder = await getQuestionAudioDraftsByIds(input.audioDraftIds || []);
+            const uniqueDraftIds = Array.from(new Set(input.audioDraftIds || []));
+            if (audioDraftsForOrder.length !== uniqueDraftIds.length) {
+              return { success: false, message: 'Uma resposta de áudio não foi encontrada ou expirou. Grave novamente.' };
+            }
+            const questions = await listOptionQuestions(input.optionId);
+            const answersByQuestion = new Map(parsedAnswers.filter(a => a?.questionId).map(a => [a.questionId!, String(a.answer || '')]));
+            const draftByQuestion = new Map(audioDraftsForOrder.map(d => [d.questionId, d]));
+            for (const draft of audioDraftsForOrder) {
+              const question = questions.find(q => q.id === draft.questionId);
+              if (!question || question.fieldType !== 'audio' || question.productId !== input.productId || draft.flowId !== input.questionAudioFlowId || draft.customerPhone !== audioAccess.phone || draft.productId !== input.productId || draft.optionId !== input.optionId || new Date(draft.expiresAt) < new Date()) {
+                return { success: false, message: 'A resposta em áudio não corresponde ao pedido atual.' };
+              }
+            }
+            for (const question of questions.filter(q => q.fieldType === 'audio' && q.isRequired === 1)) {
+              const parentAnswer = question.parentQuestionId ? (answersByQuestion.get(question.parentQuestionId) || '') : '';
+              const visible = !question.parentQuestionId || (!question.triggerOption ? !!parentAnswer : parentAnswer === question.triggerOption);
+              if (visible && !draftByQuestion.has(question.id)) {
+                return { success: false, message: `Grave o áudio obrigatório: ${question.question}` };
+              }
+            }
+            const audioByQuestion = new Map(audioDraftsForOrder.map(d => [d.questionId, d]));
+            parsedAnswers = parsedAnswers.map(answer => {
+              const draft = answer.questionId ? audioByQuestion.get(answer.questionId) : undefined;
+              return draft ? { ...answer, answer: 'Áudio anexado', answerType: 'audio', audioUrl: draft.audioUrl, durationSeconds: draft.durationSeconds } : answer;
+            });
+            for (const draft of audioDraftsForOrder) {
+              if (!parsedAnswers.some(a => a.questionId === draft.questionId)) {
+                const question = questions.find(q => q.id === draft.questionId);
+                if (question) parsedAnswers.push({ question: question.question, questionId: question.id, answer: 'Áudio anexado', answerType: 'audio', audioUrl: draft.audioUrl, durationSeconds: draft.durationSeconds, depth: 0 });
+              }
+            }
+            input.answers = parsedAnswers.length > 0 ? JSON.stringify(parsedAnswers) : undefined;
           }
 
           // Gerar prefixo do nome do documento baseado no docNameMode
@@ -1383,7 +1582,7 @@ export const appRouter = router({
                 let orderNum: number | undefined;
                 try { orderNum = await generateOrderNumber(); } catch (e) { console.error('[OrderNumber] Erro:', e); }
                 console.log('[OrderStatus] Salvando status inicial:', initialStatus, 'regId:', regId, 'orderNum:', orderNum);
-                await addOrderStatus({
+                const createdOrderStatus = await addOrderStatus({
                   registrationId: regId,
                   orderNumber: orderNum,
                   customerPhone: phoneDigits,
@@ -1394,6 +1593,22 @@ export const appRouter = router({
                   pricePaid: input.price || null,
                   answers: input.answers,
                 });
+                if (audioDraftsForOrder.length > 0) {
+                  await createOrderQuestionAudioAnswers(audioDraftsForOrder.map(draft => ({
+                    registrationId: regId,
+                    orderStatusId: createdOrderStatus.id,
+                    customerPhone: phoneDigits,
+                    productId: draft.productId,
+                    optionId: draft.optionId,
+                    questionId: draft.questionId,
+                    storageKey: draft.storageKey,
+                    audioUrl: draft.audioUrl,
+                    mimeType: draft.mimeType,
+                    fileSize: draft.fileSize,
+                    durationSeconds: draft.durationSeconds,
+                  })));
+                  await deleteQuestionAudioDrafts(audioDraftsForOrder.map(draft => draft.id));
+                }
                 outerRegId = regId;
                 // Corrigir registrationId dos documentos salvos antes da criação do pedido
                 // Inclui docRegId = 0 (quando telefone não encontrado em accessCodePhones)

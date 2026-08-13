@@ -7203,7 +7203,7 @@ export default function AdminOrders() {
 
                                 {order.answers && (() => {
                                   try {
-                                    const parsed = JSON.parse(order.answers) as Array<{ question: string; answer: string; optionsMeta?: string }>;
+                                    const parsed = JSON.parse(order.answers) as Array<{ question: string; answer: string; optionsMeta?: string; answerType?: string; audioUrl?: string; durationSeconds?: number }>;
                                     if (parsed.length > 0) return (
                                       <div className="space-y-2">
                                         <p className="text-xs font-semibold text-purple-400/80 flex items-center gap-1">
@@ -7223,7 +7223,12 @@ export default function AdminOrders() {
                                           return (
                                             <div key={i} className="bg-black/30 border border-white/5 rounded-xl px-3 py-2.5">
                                               <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1.5">{item.question}</p>
-                                              {answerColor ? (
+                                              {item.answerType === 'audio' && item.audioUrl ? (
+                                                <div className="space-y-1.5">
+                                                  <p className="text-xs font-bold text-sky-300">Áudio · {String(Math.floor((item.durationSeconds || 0) / 60)).padStart(2, '0')}:{String(Math.round((item.durationSeconds || 0) % 60)).padStart(2, '0')}</p>
+                                                  <audio controls preload="metadata" className="w-full h-9" src={item.audioUrl}>Seu navegador não suporta reprodução de áudio.</audio>
+                                                </div>
+                                              ) : answerColor ? (
                                                 <span
                                                   className="inline-block px-3 py-1 rounded-full text-xs font-bold"
                                                   style={{ backgroundColor: answerColor + '25', color: answerColor, border: `1.5px solid ${answerColor}60` }}

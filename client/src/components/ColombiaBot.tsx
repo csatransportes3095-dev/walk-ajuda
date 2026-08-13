@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Bot, X, Camera, ChevronRight, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,8 @@ type ProductOption = {
 type ProductQuestion = {
   id: number; question: string; fieldType: string; options: string | null;
   isRequired: number; sortOrder: number;
+  helpText?: string | null; audioMinDurationSeconds?: number; audioMaxDurationSeconds?: number;
+  allowAudioRerecord?: number; allowAudioFileUpload?: number;
   parentQuestionId: number | null; triggerOption: string | null;
 };
 type ProductDocument = {
@@ -34,6 +37,7 @@ type ChatMsg =
   | { type: "user"; id: string; text: string }
   | { type: "options"; id: string; options: string[]; answered: boolean }
   | { type: "input"; id: string; multiline: boolean; answered: boolean }
+  | { type: "audio-input"; id: string; question: ProductQuestion; answered: boolean }
   | { type: "doc-upload"; id: string; docId: number; label: string; required: boolean; uploaded: boolean }
   | { type: "pix-payment"; id: string; pixKey: string; pixName: string; pixBank: string; price: string; uploaded: boolean }
   | { type: "action"; id: string; label: string; done: boolean };
@@ -42,7 +46,7 @@ type ChatMsg =
 
 export type BotOrderData = {
   cartItems: Array<{ service: string; nameOption: string; price: string }>;
-  answers: Array<{ question: string; answer: string }>;
+  answers: Array<{ question: string; answer: string; questionId?: number; answerType?: string; audioUrl?: string; durationSeconds?: number }>;
   docs: Array<{ label: string; url: string }>;
   totalValue: string;
   referrerName: string;
@@ -99,6 +103,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     product: Product | null;
     option: ProductOption | null;
     answers: Record<number, string>;
+    audioAnswers: Record<number, AudioDraft>;
+    audioFlowId: string;
     docFiles: Record<number, { file: File; url?: string; fileKey?: string; mime?: string }>;
     clientName: string;
     clientPhone: string;
@@ -106,7 +112,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     pixProofMime: string;
     couponCode: string;
     couponDiscount: { type: string; value: number } | null;
-  }>({ product: null, option: null, answers: {}, docFiles: {}, clientName: '', clientPhone: '', pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null });
+  }>({ product: null, option: null, answers: {}, audioAnswers: {}, audioFlowId: crypto.randomUUID(), docFiles: {}, clientName: '', clientPhone: '', pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null });
 
   const [pixCopied, setPixCopied] = useState(false);
   const [uploadingPix, setUploadingPix] = useState(false);
@@ -153,6 +159,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           acc[qId] = ans;
           return acc;
         }, {} as Record<string, string>),
+        questionAudioAnswers: fs.audioAnswers,
+        questionAudioFlowId: fs.audioFlowId,
         clientName: fs.clientName || '',
         clientPhone: fs.clientPhone || '',
         clientCity: '',
@@ -199,7 +207,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   const markAnswered = useCallback((id: string) => {
     setMessages(prev => prev.map(m =>
-      (m.type === "options" || m.type === "input") && m.id === id
+      (m.type === "options" || m.type === "input" || m.type === "audio-input") && m.id === id
         ? { ...m, answered: true }
         : m
     ));
@@ -344,7 +352,21 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     saveSnapshot();
     const msgId = uid();
 
-    if (nextQ.fieldType === "select" && nextQ.options) {
+    if (nextQ.fieldType === "audio") {
+      callbacks.current[msgId] = (audio: AudioDraft) => {
+        markAnswered(msgId);
+        addMsgs({ type: "user", id: uid(), text: `Áudio anexado · ${String(Math.floor(audio.durationSeconds / 60)).padStart(2, '0')}:${String(Math.round(audio.durationSeconds % 60)).padStart(2, '0')}` });
+        const newAnswers = { ...currentAnswers, [nextQ.id]: "Áudio anexado" };
+        flowState.current.answers = newAnswers;
+        flowState.current.audioAnswers = { ...flowState.current.audioAnswers, [nextQ.id]: audio };
+        saveBotProgress('questions', 'dados');
+        setTimeout(() => askQuestions(product, option, newAnswers), 200);
+      };
+      addMsgs(
+        { type: "bot", id: uid(), text: nextQ.question },
+        { type: "audio-input", id: msgId, question: nextQ, answered: false }
+      );
+    } else if (nextQ.fieldType === "select" && nextQ.options) {
       const opts = parseOptions(nextQ.options);
       callbacks.current[msgId] = (val: string) => {
         markAnswered(msgId);
@@ -559,13 +581,13 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       setIsSubmitting(true);
 
       // Montar answers array
-      const answersArray: Array<{ question: string; answer: string }> = [];
+      const answersArray: Array<{ question: string; answer: string; questionId?: number; answerType?: string; audioUrl?: string; durationSeconds?: number }> = [];
       if (option) {
         const visible = getVisibleQuestions(option.questions, flowState.current.answers);
         visible.forEach(q => {
-          if (flowState.current.answers[q.id]) {
-            answersArray.push({ question: q.question, answer: flowState.current.answers[q.id] });
-          }
+          const audio = flowState.current.audioAnswers[q.id];
+          if (audio) answersArray.push({ question: q.question, questionId: q.id, answer: 'Áudio anexado', answerType: 'audio', audioUrl: audio.audioUrl, durationSeconds: audio.durationSeconds });
+          else if (flowState.current.answers[q.id]) answersArray.push({ question: q.question, questionId: q.id, answer: flowState.current.answers[q.id] });
         });
       }
 
@@ -600,6 +622,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           email: profileQuery.data?.email || undefined,
           cpToken: cpToken || undefined,
           answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
+          productId: product.id,
+          optionId: option?.id,
+          questionAudioFlowId: Object.keys(flowState.current.audioAnswers).length > 0 ? flowState.current.audioFlowId : undefined,
+          audioDraftIds: Object.values(flowState.current.audioAnswers).map(audio => audio.id),
           couponCode: flowState.current.couponCode || undefined,
           price: (() => {
             const rawPrice = option?.price;
@@ -732,6 +758,29 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             >
               Confirmar
             </button>
+          </div>
+        );
+
+      case "audio-input":
+        if (msg.answered) return null;
+        if (!flowState.current.product || !flowState.current.option) return null;
+        return (
+          <div key={idx} className="ml-10 mb-3">
+            <QuestionAudioRecorder
+              questionId={msg.question.id}
+              productId={flowState.current.product.id}
+              optionId={flowState.current.option.id}
+              flowId={flowState.current.audioFlowId}
+              phone={flowState.current.clientPhone || localStorage.getItem('walk_client_phone') || undefined}
+              minDurationSeconds={msg.question.audioMinDurationSeconds || 1}
+              maxDurationSeconds={msg.question.audioMaxDurationSeconds || 120}
+              allowRerecord={msg.question.allowAudioRerecord !== 0}
+              allowFileUpload={msg.question.allowAudioFileUpload !== 0}
+              helpText={msg.question.helpText}
+              value={flowState.current.audioAnswers[msg.question.id]}
+              onConfirmed={audio => callbacks.current[msg.id]?.(audio)}
+              onClear={() => { delete flowState.current.audioAnswers[msg.question.id]; delete flowState.current.answers[msg.question.id]; }}
+            />
           </div>
         );
 
@@ -886,7 +935,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               setUploadingDocId(null);
               setPixCopied(false);
               setUploadingPix(false);
-              flowState.current = { product: null, option: null, answers: {}, docFiles: {}, clientName: flowState.current.clientName, clientPhone: flowState.current.clientPhone, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
+              flowState.current = { product: null, option: null, answers: {}, audioAnswers: {}, audioFlowId: crypto.randomUUID(), docFiles: {}, clientName: flowState.current.clientName, clientPhone: flowState.current.clientPhone, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
               callbacks.current = {};
               pendingUpload.current = null;
               pendingPixMsgId.current = '';

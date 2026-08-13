@@ -1,4 +1,4 @@
-import { bigint, decimal, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, decimal, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -151,10 +151,16 @@ export const productQuestions = mysqlTable("productQuestions", {
   productId: int("productId").notNull(), // mantido para compatibilidade
   optionId: int("optionId"),  // nova FK - pergunta vinculada Ã  opÃ§Ã£o
   question: varchar("question", { length: 256 }).notNull(),
-  fieldType: mysqlEnum("fieldType", ["text", "select", "textarea"]).notNull().default("text"),
+  fieldType: mysqlEnum("fieldType", ["text", "select", "textarea", "audio"]).notNull().default("text"),
   options: text("options"), // JSON array para select: ["OpÃ§Ã£o 1", "OpÃ§Ã£o 2"]
   isRequired: int("isRequired").notNull().default(1),
   sortOrder: int("sortOrder").notNull().default(0),
+  // Configurações aplicadas exclusivamente quando fieldType = audio
+  helpText: text("helpText"),
+  audioMinDurationSeconds: int("audioMinDurationSeconds").notNull().default(1),
+  audioMaxDurationSeconds: int("audioMaxDurationSeconds").notNull().default(120),
+  allowAudioRerecord: int("allowAudioRerecord").notNull().default(1),
+  allowAudioFileUpload: int("allowAudioFileUpload").notNull().default(1),
   // Pergunta condicional: sÃ³ aparece quando a pergunta pai tem a resposta triggerOption
   parentQuestionId: int("parentQuestionId"), // ID da pergunta pai (null = sempre exibida)
   triggerOption: varchar("triggerOption", { length: 256 }), // Resposta que ativa esta pergunta
@@ -253,6 +259,47 @@ export const orderFiles = mysqlTable("orderFiles", {
 
 export type OrderFile = typeof orderFiles.$inferSelect;
 export type InsertOrderFile = typeof orderFiles.$inferInsert;
+
+// Rascunhos protegidos de respostas em áudio, criados antes do pedido existir.
+// O arquivo só passa a ser resposta definitiva após a finalização do pedido.
+export const questionAudioDrafts = mysqlTable("questionAudioDrafts", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  flowId: varchar("flowId", { length: 64 }).notNull(),
+  customerPhone: varchar("customerPhone", { length: 32 }).notNull(),
+  productId: int("productId").notNull(),
+  optionId: int("optionId").notNull(),
+  questionId: int("questionId").notNull(),
+  storageKey: varchar("storageKey", { length: 512 }).notNull(),
+  audioUrl: text("audioUrl").notNull(),
+  mimeType: varchar("mimeType", { length: 128 }).notNull(),
+  fileSize: int("fileSize").notNull(),
+  durationSeconds: int("durationSeconds").notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type QuestionAudioDraft = typeof questionAudioDrafts.$inferSelect;
+
+// Resposta definitiva de áudio vinculada à pergunta e ao registro de pedido exato.
+export const orderQuestionAudioAnswers = mysqlTable("orderQuestionAudioAnswers", {
+  id: int("id").autoincrement().primaryKey(),
+  registrationId: int("registrationId").notNull(),
+  orderStatusId: int("orderStatusId").notNull(),
+  customerPhone: varchar("customerPhone", { length: 32 }).notNull(),
+  productId: int("productId").notNull(),
+  optionId: int("optionId").notNull(),
+  questionId: int("questionId").notNull(),
+  storageKey: varchar("storageKey", { length: 512 }).notNull(),
+  audioUrl: text("audioUrl").notNull(),
+  mimeType: varchar("mimeType", { length: 128 }).notNull(),
+  fileSize: int("fileSize").notNull(),
+  durationSeconds: int("durationSeconds").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  orderQuestionUnique: uniqueIndex("uq_order_question_audio").on(table.orderStatusId, table.questionId),
+}));
+
+export type OrderQuestionAudioAnswer = typeof orderQuestionAudioAnswers.$inferSelect;
 
 // Sorteios
 export const raffles = mysqlTable("raffles", {

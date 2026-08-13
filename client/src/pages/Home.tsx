@@ -12,6 +12,7 @@ import PaymentTutorial from "@/components/PaymentTutorial";
 import { ColombiaBot } from "@/components/ColombiaBot";
 import { StorefrontProductCard, type StorefrontCatalogItem, type StorefrontWarrantyTier } from "@/components/StorefrontProductCard";
 import { StorefrontFilters } from "@/components/StorefrontFilters";
+import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
 type FlowOrigin = "storefront" | "cart" | "legacy";
@@ -22,7 +23,7 @@ type CartItem = {
   option: ProductOption | null;
 };
 
-type ProductQuestion = { id: number; question: string; fieldType: string; options: string | null; isRequired: number; sortOrder: number; parentQuestionId: number | null; triggerOption: string | null };
+type ProductQuestion = { id: number; question: string; fieldType: string; options: string | null; isRequired: number; sortOrder: number; helpText?: string | null; audioMinDurationSeconds?: number; audioMaxDurationSeconds?: number; allowAudioRerecord?: number; allowAudioFileUpload?: number; parentQuestionId: number | null; triggerOption: string | null };
 type OptionDocument = { id: number; optionId: number; label: string; exampleImageUrl: string | null; inputSource?: string; sortOrder: number; instruction?: string | null; exampleText?: string | null };
 type WarrantyTier = { id: number; optionId: number; warrantyType: string; warrantyValue: number; warrantyLabel: string | null; price: string; originalPrice: string | null; sortOrder: number; isActive: number; };
 type ProductOption = {
@@ -311,6 +312,12 @@ export default function Home() {
   const [pixCopied, setPixCopied] = useState(false);
   const [showExamplePhoto, setShowExamplePhoto] = useState(false);
   const [questionAnswers, setQuestionAnswers] = useState<Record<number, string>>({});
+  const [questionAudioAnswers, setQuestionAudioAnswers] = useState<Record<number, AudioDraft>>({});
+  const [questionAudioFlowId, setQuestionAudioFlowId] = useState(() => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    const hex = () => Math.floor(Math.random() * 16).toString(16);
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char => char === 'x' ? hex() : ((Math.floor(Math.random() * 4) + 8).toString(16)));
+  });
   const [blockedByQuestion, setBlockedByQuestion] = useState<{ question: string; answer: string } | null>(null);
   const submitLockRef = useRef(false);
   const [trackingPinFromServer, setTrackingPinFromServer] = useState<string | null>(null);
@@ -447,6 +454,8 @@ export default function Home() {
       productId: selectedProduct.id,
       optionId: selectedOption?.id ?? null,
       questionAnswers,
+      questionAudioAnswers,
+      questionAudioFlowId,
       clientName,
       clientPhone,
       clientCity,
@@ -459,7 +468,7 @@ export default function Home() {
       savedAt: Date.now(),
     };
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch {}
-  }, [step, selectedProduct, selectedOption, questionAnswers, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin]);
+  }, [step, selectedProduct, selectedOption, questionAnswers, questionAudioAnswers, questionAudioFlowId, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin]);
 
   // Verificar se há progresso salvo ao montar o componente (quando produtos estão carregados)
   useEffect(() => {
@@ -512,6 +521,8 @@ export default function Home() {
         if (opt) setSelectedOption(opt);
       }
       if (saved.questionAnswers) setQuestionAnswers(saved.questionAnswers);
+      if (saved.questionAudioAnswers) setQuestionAudioAnswers(saved.questionAudioAnswers);
+      if (saved.questionAudioFlowId) setQuestionAudioFlowId(saved.questionAudioFlowId);
       if (saved.clientName) setClientName(saved.clientName);
       if (saved.clientPhone) setClientPhone(saved.clientPhone);
       if (saved.clientCity) setClientCity(saved.clientCity);
@@ -1222,7 +1233,8 @@ export default function Home() {
           const isVisible = !q.triggerOption || parentAnswer === q.triggerOption;
           if (!isVisible) continue;
         }
-        if (q.isRequired === 1 && !questionAnswers[q.id]?.trim()) {
+        const hasAudio = q.fieldType === 'audio' && !!questionAudioAnswers[q.id];
+        if (q.isRequired === 1 && !(hasAudio || questionAnswers[q.id]?.trim())) {
           toast.error(`Responda: ${q.question}`);
           submitLockRef.current = false;
           return;
@@ -1373,10 +1385,13 @@ export default function Home() {
       };
       // Construir answersArray com ordenação hierárquica (pai → sub → sub-sub) e depth
       const allQs = selectedOption?.questions || [];
-      const orderedAnswers: { question: string; answer: string; depth: number; optionsMeta?: string }[] = [];
+      const orderedAnswers: Array<{ question: string; questionId: number; answer: string; answerType?: string; depth: number; optionsMeta?: string; audioUrl?: string; durationSeconds?: number }> = [];
       const addWithDepth = (q: ProductQuestion, depth: number) => {
-        if (!isQVisibleFinal(q) || !questionAnswers[q.id]?.trim()) return;
-        const base: { question: string; answer: string; depth: number; optionsMeta?: string } = { question: q.question, answer: questionAnswers[q.id], depth };
+        const audio = questionAudioAnswers[q.id];
+        if (!isQVisibleFinal(q) || (!audio && !questionAnswers[q.id]?.trim())) return;
+        const base: { question: string; questionId: number; answer: string; answerType?: string; depth: number; optionsMeta?: string; audioUrl?: string; durationSeconds?: number } = audio
+          ? { question: q.question, questionId: q.id, answer: 'Áudio anexado', answerType: 'audio', audioUrl: audio.audioUrl, durationSeconds: audio.durationSeconds, depth }
+          : { question: q.question, questionId: q.id, answer: questionAnswers[q.id], depth };
         if (q.fieldType === 'select' && q.options) {
           try { const parsed = JSON.parse(q.options); if (Array.isArray(parsed) && parsed[0]?.label !== undefined) base.optionsMeta = q.options; } catch {}
         }
@@ -1388,6 +1403,8 @@ export default function Home() {
       allQs.filter(q => !q.parentQuestionId).sort((a, b) => a.sortOrder - b.sortOrder)
         .forEach(root => addWithDepth(root, 0));
       const answersArray = orderedAnswers;
+      const optionHasAudioQuestions = allQs.some(q => q.fieldType === 'audio');
+      const audioDraftIdsForSubmit = Object.values(questionAudioAnswers).map(audio => audio.id);
 
       // Se carrinho tem múltiplos itens, criar um pedido para cada item
       const cartItems = cart.length > 1 ? cart : null;
@@ -1448,6 +1465,10 @@ export default function Home() {
               paymentProofUrl: i === 0 ? paymentProofUploadedUrl : undefined,
               paymentProofMime: i === 0 ? getProofMime(paymentProof) : undefined,
               answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
+              productId: optionHasAudioQuestions ? selectedProduct?.id : undefined,
+              optionId: optionHasAudioQuestions ? selectedOption?.id : undefined,
+              questionAudioFlowId: optionHasAudioQuestions ? questionAudioFlowId : undefined,
+              audioDraftIds: optionHasAudioQuestions ? audioDraftIdsForSubmit : undefined,
               docNameMode: item.option?.docNameMode || 'none',
               docCustomName: item.option?.docCustomName || '',
               price: itemRawPrice,
@@ -1526,6 +1547,10 @@ export default function Home() {
         paymentProofUrl: paymentProofUploadedUrl,
         paymentProofMime: getProofMime(paymentProof),
         answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
+        productId: optionHasAudioQuestions ? selectedProduct?.id : undefined,
+        optionId: optionHasAudioQuestions ? selectedOption?.id : undefined,
+        questionAudioFlowId: optionHasAudioQuestions ? questionAudioFlowId : undefined,
+        audioDraftIds: optionHasAudioQuestions ? audioDraftIdsForSubmit : undefined,
         docNameMode: selectedOption?.docNameMode || 'none',
         docCustomName: selectedOption?.docCustomName || '',
         price: (() => {
@@ -2155,7 +2180,23 @@ export default function Home() {
                     })()}
                   </select>
                 );
-              })() : q.fieldType === 'textarea' ? (
+              })() : q.fieldType === 'audio' ? (
+                selectedProduct && selectedOption ? <QuestionAudioRecorder
+                  questionId={q.id}
+                  productId={selectedProduct.id}
+                  optionId={selectedOption.id}
+                  flowId={questionAudioFlowId}
+                  phone={clientPhone || localStorage.getItem('walk_client_phone') || undefined}
+                  minDurationSeconds={q.audioMinDurationSeconds || 1}
+                  maxDurationSeconds={q.audioMaxDurationSeconds || 120}
+                  allowRerecord={q.allowAudioRerecord !== 0}
+                  allowFileUpload={q.allowAudioFileUpload !== 0}
+                  helpText={q.helpText}
+                  value={questionAudioAnswers[q.id]}
+                  onConfirmed={audio => { setQuestionAudioAnswers(prev => ({ ...prev, [q.id]: audio })); setQuestionAnswers(prev => ({ ...prev, [q.id]: 'Áudio anexado' })); }}
+                  onClear={() => { setQuestionAudioAnswers(prev => { const next = { ...prev }; delete next[q.id]; return next; }); setQuestionAnswers(prev => { const next = { ...prev }; delete next[q.id]; return next; }); }}
+                /> : null
+              ) : q.fieldType === 'textarea' ? (
                 <textarea
                   value={questionAnswers[q.id] || ""}
                   onChange={(e) => setQuestionAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
@@ -2909,7 +2950,7 @@ export default function Home() {
 
         const goToNext = () => {
           if (!currentQ) return;
-          if (currentQ.isRequired === 1 && !questionAnswers[currentQ.id]?.trim()) {
+          if (currentQ.isRequired === 1 && !(currentQ.fieldType === 'audio' ? questionAudioAnswers[currentQ.id] : questionAnswers[currentQ.id]?.trim())) {
             toast.error(`Preencha: ${currentQ.question}`);
             return;
           }
@@ -2918,7 +2959,7 @@ export default function Home() {
               toast.error('Não é possível continuar. Você selecionou uma opção que impede o pedido.');
               return;
             }
-            const missing = visibleQs.find(q => q.isRequired === 1 && !questionAnswers[q.id]?.trim());
+            const missing = visibleQs.find(q => q.isRequired === 1 && !(q.fieldType === 'audio' ? questionAudioAnswers[q.id] : questionAnswers[q.id]?.trim()));
             if (missing) { toast.error(`Preencha: ${missing.question}`); return; }
             setStep("cadastro"); setCadastroSubStep('dados');
           } else {
@@ -3065,6 +3106,24 @@ export default function Home() {
                 })}
               </div>
             );
+          }
+          if (q.fieldType === 'audio') {
+            if (!selectedProduct || !selectedOption) return null;
+            return <QuestionAudioRecorder
+              questionId={q.id}
+              productId={selectedProduct.id}
+              optionId={selectedOption.id}
+              flowId={questionAudioFlowId}
+              phone={clientPhone || localStorage.getItem('walk_client_phone') || undefined}
+              minDurationSeconds={q.audioMinDurationSeconds || 1}
+              maxDurationSeconds={q.audioMaxDurationSeconds || 120}
+              allowRerecord={q.allowAudioRerecord !== 0}
+              allowFileUpload={q.allowAudioFileUpload !== 0}
+              helpText={q.helpText}
+              value={questionAudioAnswers[q.id]}
+              onConfirmed={audio => { setQuestionAudioAnswers(prev => ({ ...prev, [q.id]: audio })); setQuestionAnswers(prev => ({ ...prev, [q.id]: 'Áudio anexado' })); }}
+              onClear={() => { setQuestionAudioAnswers(prev => { const next = { ...prev }; delete next[q.id]; return next; }); setQuestionAnswers(prev => { const next = { ...prev }; delete next[q.id]; return next; }); }}
+            />;
           }
           if (q.fieldType === 'textarea') {
             return (
