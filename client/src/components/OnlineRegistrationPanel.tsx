@@ -45,7 +45,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
     phone: 'Informe seu telefone com DDD',
     cpf: 'Informe seu CPF',
     email: 'Informe seu e-mail',
-    cep: 'Informe seu CEP (opcional)',
+    cep: 'Informe seu CEP',
     city: 'Qual é sua cidade?',
     uf: 'Selecione seu estado',
     photo: 'Envie sua foto de perfil',
@@ -106,6 +106,10 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
     let cleaned = (value.trim() || ((step === 'city' || step === 'uf') ? data[field] : '')).trim();
     if (step === 'phone' || step === 'cpf' || step === 'cep') cleaned = cleaned.replace(/\D/g, '');
     if (step === 'uf') cleaned = cleaned.toUpperCase().slice(0, 2);
+    if (step === 'cep' && cleaned.length !== 8) {
+      setError('Informe um CEP válido com 8 dígitos.');
+      return;
+    }
     try {
       if (step === 'phone' || step === 'cpf' || step === 'email') {
         const identity = await utils.onlineSupport.registrationFindExisting.fetch({ [step]: cleaned });
@@ -149,7 +153,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
       ) : step === 'photo' ? (
         <label style={{ ...choice, display: 'block', textAlign: 'center' }}><Camera size={22} style={{ marginBottom: 6 }} /><div>{file ? file.name : 'Escolher foto'}</div><input type="file" accept="image/*" capture="user" onChange={e => setFile(e.target.files?.[0] || null)} style={{ display: 'none' }} /></label>
       ) : step === 'confirm' ? (
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>E-mail:</b> {data.email}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div></div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>CPF:</b> {data.cpf}</div><div><b>E-mail:</b> {data.email}</div><div><b>CEP:</b> {data.cep}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div></div>
       ) : step === 'password' ? (
         passwordCompleted ? (
           <div style={{ marginTop: 8, padding: 12, borderRadius: 10, background: 'rgba(34,197,94,.12)', border: '1px solid rgba(74,222,128,.45)', color: '#dcfce7', fontSize: 13, lineHeight: 1.5 }}>
@@ -165,7 +169,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
           </div>
         )
       ) : (
-        <input value={value || (step === 'city' ? data.city : step === 'uf' ? data.uf : '')} onChange={e => { setValue(e.target.value); setError(''); setExistingCustomer(null); }} placeholder={step === 'cep' ? 'Opcional' : 'Digite aqui'} inputMode={['phone', 'cpf', 'cep'].includes(step) ? 'numeric' : undefined} style={input} />
+        <input value={value || (step === 'city' ? data.city : step === 'uf' ? data.uf : '')} onChange={e => { setValue(e.target.value); setError(''); setExistingCustomer(null); }} placeholder={step === 'cep' ? 'CEP com 8 dígitos' : 'Digite aqui'} inputMode={['phone', 'cpf', 'cep'].includes(step) ? 'numeric' : undefined} style={input} />
       )}
 
       {error && <p style={{ color: '#fca5a5', fontSize: 12, margin: '9px 0 0' }}>{error}</p>}
