@@ -65,11 +65,14 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
   const [speakEnabled, setSpeakEnabled] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<number | undefined>();
   const [recordingElapsed, setRecordingElapsed] = useState(0);
+  const [voiceState, setVoiceState] = useState<"ready" | "listening" | "processing" | "responding" | "error">("ready");
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const speechRecognitionRef = useRef<any>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endAnchorRef = useRef<HTMLDivElement | null>(null);
+  const discardRecordingRef = useRef(false);
   const scrollPositionRef = useRef(0);
   const [visualViewportHeight, setVisualViewportHeight] = useState(0);
 
@@ -129,22 +132,25 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
 
   const announce = async (content: string, audioBase64?: string | null, audioMimeType?: string | null) => {
     if (!speakEnabled || !content) return;
-    if (audioBase64) {
-      const audio = new Audio(`data:${audioMimeType || "audio/mpeg"};base64,${audioBase64}`);
-      void audio.play().catch(() => playBrowserFallback(content));
-      return;
-    }
+    setVoiceState("responding");
     try {
+      if (audioBase64) {
+        const audio = new Audio(`data:${audioMimeType || "audio/mpeg"};base64,${audioBase64}`);
+        await audio.play().catch(() => playBrowserFallback(content));
+        return;
+      }
       const audio = await speechMutation.mutateAsync({ token, text: content.slice(0, 1000) });
       if (audio.audioBase64) {
         const player = new Audio(`data:${audio.audioMimeType || "audio/mpeg"};base64,${audio.audioBase64}`);
         await player.play();
         return;
       }
+      playBrowserFallback(content);
     } catch {
-      // O navegador fala somente como conveniência quando o provider não estiver disponível.
+      playBrowserFallback(content);
+    } finally {
+      setVoiceState("ready");
     }
-    playBrowserFallback(content);
   };
 
   const appendAssistantResult = (result: any) => {
@@ -182,8 +188,22 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
     elapsedTimerRef.current = null;
     streamRef.current?.getTracks().forEach(track => track.stop());
     streamRef.current = null;
+    speechRecognitionRef.current = null;
     setIsListening(false);
     setRecordingElapsed(0);
+  };
+
+  const friendlyVoiceUnavailable = "Voz temporariamente indisponível. Você pode continuar usando o H2 pelo texto.";
+  const voiceStatusLabel = voiceState === "listening" ? "Ouvindo…" : voiceState === "processing" ? "Processando…" : voiceState === "responding" ? "Respondendo…" : voiceState === "error" ? "Voz indisponível" : "Pronto para ouvir";
+
+  const closeAssistant = () => {
+    discardRecordingRef.current = true;
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    else speechRecognitionRef.current?.stop?.();
+    releaseMicrophone();
+    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+    setOpen(false);
+    setMinimized(false);
   };
 
   const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
@@ -196,26 +216,31 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
   const startBrowserSpeechFallback = () => {
     const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!Recognition) {
-      setMessages(previous => [...previous, { id: `mic-error-${Date.now()}`, role: "assistant", type: "error", content: "Seu navegador não disponibilizou gravação ou reconhecimento de voz. Você pode continuar digitando." }]);
+      setVoiceState("error");
+      setMessages(previous => [...previous, { id: `mic-error-${Date.now()}`, role: "assistant", type: "error", content: friendlyVoiceUnavailable }]);
       return;
     }
     const recognition = new Recognition();
+    speechRecognitionRef.current = recognition;
     recognition.lang = "pt-BR";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     setIsListening(true);
+    setVoiceState("listening");
     recognition.onresult = (event: any) => {
       setText(String(event.results?.[0]?.[0]?.transcript || ""));
       setIsListening(false);
+      setVoiceState("ready");
     };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => { speechRecognitionRef.current = null; setIsListening(false); setVoiceState("error"); };
+    recognition.onend = () => { speechRecognitionRef.current = null; setIsListening(false); setVoiceState(previous => previous === "error" ? "error" : "ready"); };
     recognition.start();
   };
 
   const startRecording = async () => {
     if (isListening || isProcessingVoice) return;
     if (!canUseMic) return startBrowserSpeechFallback();
+    discardRecordingRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, MediaRecorder.isTypeSupported("audio/webm") ? { mimeType: "audio/webm" } : undefined);
@@ -225,22 +250,27 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
       recorder.ondataavailable = event => { if (event.data.size) chunksRef.current.push(event.data); };
       recorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const shouldDiscard = discardRecordingRef.current;
         releaseMicrophone();
-        if (!blob.size) return;
+        if (shouldDiscard || !blob.size) { setVoiceState("ready"); return; }
         setIsProcessingVoice(true);
+        setVoiceState("processing");
         try {
           const audioBase64 = await blobToBase64(blob);
           const transcription = await transcriptMutation.mutateAsync({ token, audioBase64, mimeType: blob.type || "audio/webm", durationSeconds: Math.min(90, Math.max(1, recordingElapsed)) });
           const transcript = String(transcription?.text || "").trim();
           if (transcript) await submit(transcript);
-        } catch (error: any) {
-          setMessages(previous => [...previous, { id: `voice-error-${Date.now()}`, role: "assistant", type: "error", content: error?.message || "Não consegui entender o áudio. Você pode falar novamente ou digitar." }]);
+        } catch {
+          setVoiceState("error");
+          setMessages(previous => [...previous, { id: `voice-error-${Date.now()}`, role: "assistant", type: "error", content: friendlyVoiceUnavailable }]);
         } finally {
           setIsProcessingVoice(false);
+          setVoiceState(previous => previous === "error" ? "error" : "ready");
         }
       };
       recorder.start();
       setIsListening(true);
+      setVoiceState("listening");
       setRecordingElapsed(0);
       elapsedTimerRef.current = setInterval(() => setRecordingElapsed(value => {
         const next = value + 1;
@@ -254,6 +284,11 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
 
   const stopRecording = () => {
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    else {
+      speechRecognitionRef.current?.stop?.();
+      releaseMicrophone();
+      setVoiceState("ready");
+    }
   };
 
   const confirmAction = async (actionId: number) => {
@@ -285,7 +320,7 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            onClick={() => setOpen(false)}
+            onClick={closeAssistant}
             className="fixed inset-0 z-[1000] flex items-end justify-center bg-[#020611]/72 p-0 backdrop-blur-[3px] sm:items-stretch sm:justify-end sm:p-4"
             aria-label="Fechar H2 Assistente"
           >
@@ -319,14 +354,22 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
                   }} className="grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white" aria-label={speakEnabled ? "Desativar resposta falada" : "Ativar resposta falada"}>
                     {speakEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
                   </button>
-                  <button type="button" onClick={() => setMinimized(true)} className="grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white" aria-label="Minimizar assistente"><Minimize2 className="h-4 w-4" /></button>
-                  <button type="button" onClick={() => setOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:bg-red-400/15 hover:text-red-200" aria-label="Fechar assistente"><X className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => { discardRecordingRef.current = true; if (recorderRef.current?.state === "recording") recorderRef.current.stop(); else releaseMicrophone(); setMinimized(true); }} className="grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white" aria-label="Minimizar assistente"><Minimize2 className="h-4 w-4" /></button>
+                  <button type="button" onClick={closeAssistant} className="grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:bg-red-400/15 hover:text-red-200" aria-label="Fechar assistente"><X className="h-4 w-4" /></button>
                 </div>
               </div>
             </header>
 
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3.5 py-4">
               {bootstrap.isLoading && <div className="flex items-center gap-2 px-2 text-xs text-slate-400"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparando seu assistente…</div>}
+              {messages.length === 1 && !bootstrap.isLoading && (
+                <div className="mx-1 rounded-2xl border border-cyan-200/12 bg-cyan-300/[.045] p-3.5">
+                  <p className="text-[10px] font-black uppercase tracking-[.14em] text-cyan-200/70">Experimente perguntar</p>
+                  <div className="mt-2.5 grid gap-1.5">
+                    {["Quanto ganhei hoje?", "Como estão minhas metas?", "Quanto gastei este mês?", "Quem tenho agendado amanhã?"].map(suggestion => <button key={suggestion} type="button" onClick={() => void submit(suggestion)} className="rounded-xl border border-white/8 bg-slate-950/25 px-3 py-2 text-left text-xs font-medium text-slate-200 transition hover:border-cyan-300/25 hover:bg-cyan-300/[.07] active:scale-[.99]">“{suggestion}”</button>)}
+                  </div>
+                </div>
+              )}
               {messages.map(message => {
                 const cards = responseCards(message.data);
                 return (
@@ -354,7 +397,7 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
                   </div>
                 );
               })}
-              {(sendMutation.isPending || isProcessingVoice) && <div className="flex items-center gap-2 px-2 text-xs text-cyan-100"><span className="flex gap-1"><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-300 [animation-delay:-.2s]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-300 [animation-delay:-.1s]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-300" /></span>{isProcessingVoice ? "Transcrevendo sua voz…" : "Entendendo e consultando…"}</div>}
+              {(sendMutation.isPending || isProcessingVoice) && <div className="flex items-center gap-2 px-2 text-xs text-cyan-100"><span className="flex gap-1"><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-300 [animation-delay:-.2s]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-300 [animation-delay:-.1s]" /><i className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-300" /></span>{isProcessingVoice ? "Processando sua voz…" : "Entendendo e consultando…"}</div>}
               <div ref={endAnchorRef} />
             </div>
 
@@ -363,11 +406,11 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement =
                 {["Como foi hoje?", "Minhas metas", "Agenda de amanhã", "Abrir gastos"].map(shortcut => <button key={shortcut} type="button" disabled={sendMutation.isPending} onClick={() => void submit(shortcut)} className="shrink-0 rounded-full border border-white/10 bg-white/[.055] px-2.5 py-1 text-[10px] font-semibold text-slate-200 transition hover:border-cyan-300/30 hover:bg-cyan-300/10 active:scale-95 disabled:opacity-50">{shortcut}</button>)}
               </div>
               <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-slate-900/80 p-1.5 shadow-inner">
-                <button type="button" onClick={isListening ? stopRecording : startRecording} disabled={isProcessingVoice} className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl transition active:scale-95 disabled:opacity-50 ${isListening ? "bg-red-400 text-red-950 shadow-[0_0_20px_rgba(248,113,113,.42)]" : "bg-cyan-300/12 text-cyan-200 hover:bg-cyan-300/20"}`} aria-label={isListening ? "Parar gravação" : "Falar com o assistente"}>
+                <button type="button" onClick={isListening ? stopRecording : startRecording} disabled={isProcessingVoice} className={`relative grid h-10 w-10 shrink-0 place-items-center rounded-xl transition active:scale-95 disabled:opacity-50 ${isListening ? "bg-cyan-300 text-slate-950 shadow-[0_0_22px_rgba(34,211,238,.48)] animate-pulse" : voiceState === "error" ? "border border-amber-300/35 bg-amber-300/10 text-amber-100" : "border border-cyan-200/20 bg-cyan-300/12 text-cyan-200 hover:bg-cyan-300/20"}`} aria-label={isListening ? "Parar gravação" : "Falar com o assistente"}>
                   {isListening ? <CircleStop className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                 </button>
                 <div className="min-w-0 flex-1">
-                  {isListening && <p className="mb-1 px-1 text-[10px] font-bold text-red-200">Ouvindo… {String(Math.floor(recordingElapsed / 60)).padStart(2, "0")}:{String(recordingElapsed % 60).padStart(2, "0")}</p>}
+                  <p className={`mb-1 px-1 text-[10px] font-bold ${voiceState === "error" ? "text-amber-200" : voiceState === "listening" ? "text-cyan-200" : "text-slate-400"}`}>{isListening ? `Ouvindo… ${String(Math.floor(recordingElapsed / 60)).padStart(2, "0")}:${String(recordingElapsed % 60).padStart(2, "0")}` : voiceStatusLabel}</p>
                   <textarea value={text} onChange={event => setText(event.target.value.slice(0, 2000))} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} rows={1} maxLength={2000} placeholder={isListening ? "Fale e toque para parar" : "Digite ou fale com o H2…"} className="block max-h-28 min-h-10 w-full resize-none bg-transparent px-2 py-2 text-sm text-white outline-none placeholder:text-slate-500" />
                 </div>
                 <button type="button" onClick={() => void submit()} disabled={!text.trim() || sendMutation.isPending || isListening} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-cyan-300 to-blue-600 text-slate-950 shadow-[0_0_18px_rgba(34,211,238,.25)] transition hover:brightness-110 active:scale-95 disabled:opacity-35" aria-label="Enviar mensagem"><Send className="h-4 w-4" /></button>

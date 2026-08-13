@@ -179,7 +179,7 @@ export async function processAssistantText(ctx: AssistantUserContext, input: { t
       await writeAssistantAudit(ctx, "OPENAI_FALHOU", "orchestrator", { reason: firstText(error?.message, 180) }, { conversationId });
     }
   }
-  if (!intent) intent = { kind: "answer", tool: null, args: {}, message: process.env.OPENAI_API_KEY ? "Não entendi totalmente. Você pode pedir um resumo, abrir um módulo ou informar o lançamento que deseja preparar." : "O assistente está pronto para consultas e navegação. Para linguagem natural completa, o administrador precisa configurar a chave OpenAI no servidor." };
+  if (!intent) intent = { kind: "answer", tool: null, args: {}, message: process.env.OPENAI_API_KEY ? "Não entendi totalmente. Você pode pedir um resumo, abrir um módulo ou informar o lançamento que deseja preparar." : "Posso atender consultas diretas e abrir módulos. Para pedidos mais detalhados, tente explicar com outras palavras ou continue pelo texto." };
 
   let response: Omit<AssistantResponse, "conversationId">;
   try {
@@ -196,7 +196,7 @@ export async function processAssistantText(ctx: AssistantUserContext, input: { t
 
 export async function transcribeAssistantAudio(ctx: AssistantUserContext, input: { audioBase64: string; mimeType: string; durationSeconds: number }) {
   const settings = await getAssistantSettings(ctx);
-  if (!Number(settings.voiceEnabled)) throw new Error("A voz está desativada nas configurações do H2 Assistente.");
+  if (!Number(settings.voiceEnabled)) throw new Error("Voz temporariamente indisponível. Você pode continuar usando o H2 pelo texto.");
   const normalizedMime = String(input.mimeType || "audio/webm").toLowerCase().split(";")[0];
   const allowed = new Set(["audio/webm", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-wav", "audio/ogg"]);
   if (!allowed.has(normalizedMime)) throw new Error("Formato de áudio não permitido.");
@@ -204,7 +204,7 @@ export async function transcribeAssistantAudio(ctx: AssistantUserContext, input:
   if (!binary.length || binary.length > 5 * 1024 * 1024) throw new Error("O áudio deve ter no máximo 5 MB.");
   await enforceAssistantLimits(ctx, "[áudio]", Math.max(1, Math.min(90, Math.round(Number(input.durationSeconds) || 0))));
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("A transcrição por voz ainda não está configurada no servidor.");
+  if (!apiKey) throw new Error("Voz temporariamente indisponível. Você pode continuar usando o H2 pelo texto.");
 
   const form = new FormData();
   const extension = normalizedMime === "audio/mp4" ? "m4a" : normalizedMime === "audio/mpeg" ? "mp3" : normalizedMime.includes("wav") ? "wav" : normalizedMime === "audio/ogg" ? "ogg" : "webm";
@@ -228,7 +228,7 @@ export async function transcribeAssistantAudio(ctx: AssistantUserContext, input:
 
 export async function synthesizeAssistantSpeech(ctx: AssistantUserContext, text: string) {
   const settings = await getAssistantSettings(ctx);
-  if (!Number(settings.voiceEnabled)) throw new Error("A voz está desativada nas configurações do H2 Assistente.");
+  if (!Number(settings.voiceEnabled)) throw new Error("Voz temporariamente indisponível. Você pode continuar usando o H2 pelo texto.");
   const content = firstText(text, 1_000);
   if (!content) throw new Error("Não há texto para transformar em voz.");
   const apiKey = process.env.OPENAI_API_KEY;
