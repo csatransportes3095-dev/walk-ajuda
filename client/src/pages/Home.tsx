@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import PaymentTutorial from "@/components/PaymentTutorial";
 import { ColombiaBot } from "@/components/ColombiaBot";
+import { StorefrontProductCard, type StorefrontCatalogItem, type StorefrontWarrantyTier } from "@/components/StorefrontProductCard";
+import { StorefrontFilters } from "@/components/StorefrontFilters";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
 
@@ -39,8 +41,19 @@ type Product = {
   requireCondutaxi: number; requireVehicle2016: number; isPdfOnly: number; showYearField: number;
   cardColor: string | null; cardBgColor: string | null; cardTextColor: string | null; cardBtnColor: string | null;
   resellerDiscount?: string | null; // % de desconto para revendedores por produto
+  deliveryDays?: string | null;
   options: ProductOption[];
 };
+
+const CATALOG_CATEGORIES = ["Todos", "Uber", "Táxi", "Documentos", "99"] as const;
+
+function getCatalogCategory(product: Product): string {
+  const value = `${product.name} ${product.description || ""}`.toLowerCase();
+  if (value.includes("crlv") || value.includes("doc") || value.includes("veiculo")) return "Documentos";
+  if (value.includes("99")) return "99";
+  if (value.includes("taxi")) return "Táxi";
+  return "Uber";
+}
 
 // ── Componente PromoCard com cronômetro decrescente ────────────────────────
 function useCountdown(endsAt: number | null | undefined) {
@@ -259,6 +272,8 @@ export default function Home() {
   const [selectedOption, setSelectedOption] = useState<ProductOption | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedTier, setSelectedTier] = useState<WarrantyTier | null>(null);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogCategory, setCatalogCategory] = useState<string>("Todos");
 
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
   const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null);
@@ -1623,6 +1638,31 @@ export default function Home() {
       setStep("questions"); setCurrentQuestionIndex(0);
     } else {
       setStep("cadastro"); setCadastroSubStep('dados');
+    }
+  };
+
+  const startDirectOptionCheckout = (product: Product, option: ProductOption, tier: WarrantyTier | null = null) => {
+    setSelectedProduct(product);
+    setSelectedOption(option);
+    setSelectedTier(tier);
+    setDocFiles({});
+    setProfilePhoto(null); setProfilePhotoPreview(null);
+    setCarDocument(null); setCarDocumentYear('');
+    setAlvaraFile(null); setCondutaxiFile(null);
+    setQuestionAnswers({});
+    setRestoredFileUrls({ dynamicDocs: {} });
+    localStorage.removeItem(UPLOADED_FILES_KEY);
+    const optType = option.type?.toLowerCase();
+    if (optType === 'pdf-only' || optType === 'pdf' || option.isPdfOnly === 1) {
+      setStep("pdf-upload");
+    } else if (needsFileUpload(product, option)) {
+      setStep("upload");
+    } else if (option.questions && option.questions.length > 0) {
+      setStep("questions");
+      setCurrentQuestionIndex(0);
+    } else {
+      setStep("cadastro");
+      setCadastroSubStep('dados');
     }
   };
 
@@ -4147,7 +4187,77 @@ export default function Home() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {(() => {
+            const visibleProducts = (products || []).filter((product: Product) => {
+              const vipAllowedRaw = localStorage.getItem('vip_allowed_products');
+              if (vipAllowedRaw) {
+                try {
+                  const vipIds: number[] = JSON.parse(vipAllowedRaw);
+                  if (vipIds.length > 0 && !vipIds.includes(product.id)) return false;
+                } catch { /* manter comportamento atual quando o armazenamento estiver inválido */ }
+              }
+              if (allowedProductsQuery.data?.restricted && allowedProductsQuery.data.productIds.length > 0) {
+                return allowedProductsQuery.data.productIds.includes(product.id);
+              }
+              return true;
+            });
+            const catalogItems = visibleProducts.flatMap((product: Product) =>
+              product.options.filter((option) => option.isActive === 1).map((option) => ({
+                product,
+                option,
+                category: getCatalogCategory(product),
+              }))
+            );
+            const normalizedSearch = catalogSearch.trim().toLocaleLowerCase('pt-BR');
+            const filteredCatalogItems = catalogItems.filter((item) => {
+              const categoryMatches = catalogCategory === 'Todos' || item.category === catalogCategory;
+              if (!categoryMatches) return false;
+              if (!normalizedSearch) return true;
+              const searchable = [
+                item.product.name,
+                item.product.description || '',
+                item.option.label,
+                (item.option as any).description || '',
+                ...(item.option.documents || []).map((document) => document.label),
+              ].join(' ').toLocaleLowerCase('pt-BR');
+              return searchable.includes(normalizedSearch);
+            });
+
+            return (
+              <div>
+                <StorefrontFilters
+                  search={catalogSearch}
+                  onSearchChange={setCatalogSearch}
+                  categories={[...CATALOG_CATEGORIES]}
+                  activeCategory={catalogCategory}
+                  onCategoryChange={setCatalogCategory}
+                  resultCount={filteredCatalogItems.length}
+                />
+                {filteredCatalogItems.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {filteredCatalogItems.map((item) => (
+                      <StorefrontProductCard
+                        key={`${item.product.id}-${item.option.id}`}
+                        item={item as StorefrontCatalogItem}
+                        onBuy={(tier) => startDirectOptionCheckout(item.product, item.option, tier as unknown as WarrantyTier | null)}
+                        onAddToCart={() => addToCart(item.product, item.option)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-3xl border border-white/10 bg-slate-950/70 px-6 py-14 text-center">
+                    <h3 className="text-lg font-black text-white">Nenhum produto encontrado para sua busca.</h3>
+                    <p className="mt-2 text-sm text-white/60">Tente outro nome, documento ou categoria.</p>
+                    <button type="button" onClick={() => { setCatalogSearch(''); setCatalogCategory('Todos'); }} className="mt-5 rounded-xl border border-violet-400/40 bg-violet-500/15 px-4 py-2.5 text-sm font-black text-violet-100">
+                      Limpar filtros
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <div className="hidden">
             {(products || []).filter((product: Product) => {
               // Filtro 1: restrição por senha VIP (salvo no sessionStorage ao logar)
               const vipAllowedRaw = localStorage.getItem('vip_allowed_products');
