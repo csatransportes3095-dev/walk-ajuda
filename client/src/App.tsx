@@ -343,6 +343,7 @@ function AppContent() {
   const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
+  const isLocadoraRoute = location === "/locadora";
 
   // Proteção anti-print para rotas de cliente
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || undefined : undefined;
@@ -435,6 +436,10 @@ function AppContent() {
   }
   // Rota /consultar-cadastro é pública — consulta de status por CPF
   if (isConsultarCadastroRoute) {
+    return <Router />;
+  }
+  // Rota /locadora é o portal isolado do módulo; o próprio portal exige ADM para dados operacionais.
+  if (isLocadoraRoute) {
     return <Router />;
   }
 
