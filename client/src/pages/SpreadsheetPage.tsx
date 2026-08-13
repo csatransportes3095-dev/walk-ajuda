@@ -18,6 +18,9 @@ import { H2AssistantPanel, type H2AssistantNavigationTarget } from "@/components
 const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 const DATE_COLORS = ["#ff6b6b", "#4ecdc4", "#45b7d1", "#f9ca24", "#6c5ce7", "#a29bfe", "#fd79a8", "#fdcb6e", "#6c5ce7", "#00b894"];
 
+// Mantém o chat e o WhatsApp preservados no código; altere para true caso precise reativá-los futuramente.
+const SHOW_SPREADSHEET_LIVE_CHAT = false;
+
 const MODULE_THEMES = {
   gastos: { base: '#4a1420', active: '#e65367', border: '#873142', icon: '#ff9aa8', glow: 'rgba(230,83,103,.33)' },
   ganhos: { base: '#123c2c', active: '#22c77a', border: '#287455', icon: '#73e8ad', glow: 'rgba(34,199,122,.30)' },
@@ -240,9 +243,9 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
   // Estado do chat
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
   // Buscar phone real do usuário a partir do token de sessão
-  const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
+const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
     { token },
-    { enabled: !!token, staleTime: Infinity }
+    { enabled: SHOW_SPREADSHEET_LIVE_CHAT && !!token }
   );
   const phoneFromToken = chatUserData?.phone || '';
 
@@ -1174,7 +1177,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">
             {/* Ícone de chat em destaque no topo */}
-            {phoneFromToken && (
+            {SHOW_SPREADSHEET_LIVE_CHAT && phoneFromToken && (
               <button
                 onClick={() => {
                   // Disparar clique no botão flutuante do chat
@@ -2220,7 +2223,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
       )}
 
       {/* Chat */}
-      {phoneFromToken && (
+      {SHOW_SPREADSHEET_LIVE_CHAT && phoneFromToken && (
         <ChatSidebar
           phone={phoneFromToken}
           onChatSelect={setSelectedChatId}
