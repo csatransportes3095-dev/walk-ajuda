@@ -106,7 +106,6 @@ import {
   getViewedOrderKeys, markOrderAsViewed,
 } from "./db";
 import { storagePut } from "./storage";
-import { r2GetObjectBuffer, r2PutObject } from "./r2Storage";
 
 /**
  * Verifica se um telefone está na blocklist.
@@ -1682,40 +1681,6 @@ export const appRouter = router({
   // === CLIENTES (CADASTRO) ===
   customers: router({
     routeReleaseModes: adminProcedure.query(async () => listRouteReleaseModes()),
-
-    // Manutenção única, limitada aos três objetos auditados com prefixo inválido antes do JPEG.
-    repairKnownCorruptedProfilePhotos: adminProcedure.mutation(async () => {
-      const targets = [
-        { label: 'foto 1', key: 'profile-photos/11993425366-1786598497749.jpg' },
-        { label: 'foto 2', key: 'profile-photos/11993425394-1786594938014.jpg' },
-        { label: 'foto 3', key: 'profile-photos/11993425399-1786593788896.jpg' },
-      ] as const;
-      const jpegSignature = Buffer.from([0xff, 0xd8, 0xff]);
-      const results: Array<{ label: string; status: 'reparada' | 'ja_integra'; removedBytes?: number }> = [];
-
-      for (const target of targets) {
-        const original = await r2GetObjectBuffer(target.key);
-        if (original.subarray(0, 3).equals(jpegSignature)) {
-          results.push({ label: target.label, status: 'ja_integra' });
-          continue;
-        }
-
-        const jpegOffset = original.indexOf(jpegSignature);
-        if (jpegOffset <= 0 || jpegOffset > 64) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: `${target.label}: assinatura JPEG não encontrada em posição segura.` });
-        }
-
-        const repaired = original.subarray(jpegOffset);
-        await r2PutObject(target.key, repaired, 'image/jpeg');
-        const verified = await r2GetObjectBuffer(target.key);
-        if (!verified.subarray(0, 3).equals(jpegSignature) || verified.length !== repaired.length) {
-          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: `${target.label}: falha ao verificar o reparo.` });
-        }
-        results.push({ label: target.label, status: 'reparada', removedBytes: jpegOffset });
-      }
-
-      return { success: true, results };
-    }),
 
     setRouteReleaseMode: adminProcedure
       .input(z.object({ route: z.enum(CUSTOMER_ROUTES), mode: z.enum(['automatico', 'manual']) }))
