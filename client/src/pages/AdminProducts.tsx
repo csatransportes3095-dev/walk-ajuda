@@ -1041,6 +1041,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                     <option value="text">Texto</option>
                     <option value="select">Seleção</option>
                     <option value="textarea">Área Texto</option>
+                    <option value="audio">Áudio</option>
                   </select>
                 </div>
                 <label className="flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap pb-1">
