@@ -4064,21 +4064,6 @@ export default function Home() {
 
 
 
-      {/* Serviços Extras / Consultas — TOPO */}
-      {clientPhoneFromSession && (
-        <section className="px-4 pt-4 pb-2">
-          <div className="container max-w-2xl">
-            <ServicosExtras
-              customerPhone={clientPhoneFromSession}
-              customerName={clientName}
-              customerEmail={clientEmail}
-              customerPhoto={customerCheck.data?.customer?.profilePhotoUrl || ""}
-              prominent
-            />
-          </div>
-        </section>
-      )}
-
       {/* Banner de Promoções em Destaque */}
       {(() => {
         const now = Date.now();
@@ -4655,6 +4640,21 @@ export default function Home() {
                 <p className="text-white/50">{raffleResult.winnerPhone?.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')}</p>
               </div>
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* Serviços Extras / Consultas — fim do conteúdo */}
+      {clientPhoneFromSession && (
+        <section className="px-4 pt-5 pb-6">
+          <div className="container max-w-2xl">
+            <ServicosExtras
+              customerPhone={clientPhoneFromSession}
+              customerName={clientName}
+              customerEmail={clientEmail}
+              customerPhoto={customerCheck.data?.customer?.profilePhotoUrl || ""}
+              prominent
+            />
           </div>
         </section>
       )}

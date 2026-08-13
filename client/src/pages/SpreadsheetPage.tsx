@@ -1119,17 +1119,6 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </div>
         </div>
 
-        {/* Serviços Extras / Consultas — TOPO */}
-        {phoneFromToken && (
-          <div className="mb-6">
-            <ServicosExtras
-              customerPhone={phoneFromToken}
-              customerName={clientName || ""}
-              prominent
-            />
-          </div>
-        )}
-
         {/* Card Plano Walk Ajuda */}
         {planInfo?.expiresAt && (() => {
           const expDate = new Date(planInfo.expiresAt);
@@ -2080,6 +2069,17 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
             <RideAnalyzerTab token={token} />
           </TabsContent>
         </Tabs>
+
+        {/* Serviços Extras / Consultas — fim do conteúdo */}
+        {phoneFromToken && (
+          <div className="mt-8 mb-4">
+            <ServicosExtras
+              customerPhone={phoneFromToken}
+              customerName={clientName || ""}
+              prominent
+            />
+          </div>
+        )}
       </div>
 
       {/* ─── MODAIS DE EDIÇÃO ──────────────────────────────────────────────────── */}
