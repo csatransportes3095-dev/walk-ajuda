@@ -1,0 +1,1437 @@
+[
+  {
+    "productId": 60001,
+    "produto": "UBER APP",
+    "ativo": true,
+    "precoNoProduto": null,
+    "descricao": "CONTA UBER SOB ENCOMENDA\n\nPRAZO: 3 A 5 DIAS ÚTEIS\n\nProcesso realizado com qualidade, segurança e garantia.\n\nIMPORTANTE\nApós o início do procedimento, não há devolução de valores.\nAo comprar, o cliente declara estar de acordo com as regras.",
+    "opcoes": [
+      {
+        "optionId": 3090001,
+        "opcao": "NOME ALEATÓRIO ",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "400,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 3150001,
+            "pergunta": "ACEITA FAZER AS OPÇÕES ABAIXO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3120001,
+            "pergunta": "QUAL CATEGORIA ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3120002,
+            "pergunta": "VOCÊ JÁ TEVE ALGUMA CONTA FAKE ANTES?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3120003,
+            "pergunta": "QUAL APARELHO DE CELULAR VOCÊ PRETENDE UTILIZAR PARA TRABALHAR?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3120005,
+            "pergunta": "FOTO DE PERFIL SERÁ FEITA  COM HORÁRIO AGENDADO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3120007,
+            "pergunta": "NO ANDROID, SE MAIS DE DUAS CONTAS JÁ TIVEREM SIDO BLOQUEADAS, SERÁ NECESSÁRIO UTILIZAR UM APARELHO NOVO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3120008,
+            "pergunta": "NO IPHONE, É NECESSÁRIO UTILIZAR O MODELO 8 OU SUPERIOR E REALIZAR A RESTAURAÇÃO PELO PROGRAMA INFORMADO PELO ADM. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3180001,
+            "pergunta": "SE NAO  TIVER BARBA PASSAR BASE",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3120009,
+            "pergunta": "OCULOS DE SOL SEM AS LENTES ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3240001,
+            "pergunta": "NÃO E POSSIVEL FAZER SUA CONTA ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3210001,
+            "pergunta": "ACEITA USAR OCULOS INFORMADO MODELO PELA EQUIPE?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3270002,
+            "pergunta": "CELULAR NAO SERÁ APOSSIVEL USAR PARA USO PARTICULAR SOMENTE PARA O TRAMPO ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3270003,
+            "pergunta": "OBRIGATORIO OCULOS DE SOL SEM AS LENTES ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3120011,
+            "pergunta": "QUANTAS ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3300001,
+            "pergunta": "TEVE ORIGINAL?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3390001,
+            "pergunta": "NAO E POSSIVEL FAZER SEM ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420001,
+            "pergunta": "VOCÊ É CLIENTE NOVO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420002,
+            "pergunta": "QUAL TELEFONE DE QUEM INDICOU ?",
+            "obrigatoria": true,
+            "tipo": "text"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 3270001,
+            "documento": "FITO SELFIE",
+            "origem": "both"
+          },
+          {
+            "documentId": 3270002,
+            "documento": "DOC CARRO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      },
+      {
+        "optionId": 120001,
+        "opcao": "UBER 1º / NOME",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "500,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 3420003,
+            "pergunta": "ACEITA FAZER AS OPÇÕES ABAIXO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420004,
+            "pergunta": "QUAL CATEGORIA ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420005,
+            "pergunta": "VOCÊ JÁ TEVE ALGUMA CONTA FAKE ANTES?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420006,
+            "pergunta": "QUAL APARELHO DE CELULAR VOCÊ PRETENDE UTILIZAR PARA TRABALHAR?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420007,
+            "pergunta": "FOTO DE PERFIL SERÁ FEITA  COM HORÁRIO AGENDADO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420009,
+            "pergunta": "NO ANDROID, SE MAIS DE DUAS CONTAS JÁ TIVEREM SIDO BLOQUEADAS, SERÁ NECESSÁRIO UTILIZAR UM APARELHO NOVO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420010,
+            "pergunta": "NO IPHONE, É NECESSÁRIO UTILIZAR O MODELO 8 OU SUPERIOR E REALIZAR A RESTAURAÇÃO PELO PROGRAMA INFORMADO PELO ADM. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420011,
+            "pergunta": "SE NAO  TIVER BARBA PASSAR BASE",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420012,
+            "pergunta": "OCULOS DE SOL SEM AS LENTES ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420013,
+            "pergunta": "NÃO E POSSIVEL FAZER SUA CONTA ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3420014,
+            "pergunta": "ACEITA USAR OCULOS INFORMADO MODELO PELA EQUIPE?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420015,
+            "pergunta": "CELULAR NAO SERÁ APOSSIVEL USAR PARA USO PARTICULAR SOMENTE PARA O TRAMPO ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3420016,
+            "pergunta": "OBRIGATORIO OCULOS DE SOL SEM AS LENTES ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420017,
+            "pergunta": "QUANTAS ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420018,
+            "pergunta": "TEVE ORIGINAL?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420019,
+            "pergunta": "NAO E POSSIVEL FAZER SEM ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420008,
+            "pergunta": "VOCÊ É CLIENTE NOVO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420020,
+            "pergunta": "QUAL TELEFONE DE QUEM INDICOU ?",
+            "obrigatoria": true,
+            "tipo": "text"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 2880001,
+            "documento": "FOTO SELFIE",
+            "origem": "both"
+          },
+          {
+            "documentId": 2880002,
+            "documento": "DOC CARRO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      },
+      {
+        "optionId": 2670001,
+        "opcao": "UBER NOME / COMPLETO",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "600,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 3420021,
+            "pergunta": "ACEITA FAZER AS OPÇÕES ABAIXO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420022,
+            "pergunta": "QUAL CATEGORIA ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420023,
+            "pergunta": "VOCÊ JÁ TEVE ALGUMA CONTA FAKE ANTES?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420024,
+            "pergunta": "QUAL APARELHO DE CELULAR VOCÊ PRETENDE UTILIZAR PARA TRABALHAR?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420025,
+            "pergunta": "FOTO DE PERFIL SERÁ FEITA  COM HORÁRIO AGENDADO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420027,
+            "pergunta": "NO ANDROID, SE MAIS DE DUAS CONTAS JÁ TIVEREM SIDO BLOQUEADAS, SERÁ NECESSÁRIO UTILIZAR UM APARELHO NOVO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420028,
+            "pergunta": "NO IPHONE, É NECESSÁRIO UTILIZAR O MODELO 8 OU SUPERIOR E REALIZAR A RESTAURAÇÃO PELO PROGRAMA INFORMADO PELO ADM. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420029,
+            "pergunta": "SE NAO  TIVER BARBA PASSAR BASE",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420030,
+            "pergunta": "OCULOS DE SOL SEM AS LENTES ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420031,
+            "pergunta": "NÃO E POSSIVEL FAZER SUA CONTA ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3420032,
+            "pergunta": "ACEITA USAR OCULOS INFORMADO MODELO PELA EQUIPE?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420033,
+            "pergunta": "CELULAR NAO SERÁ APOSSIVEL USAR PARA USO PARTICULAR SOMENTE PARA O TRAMPO ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3420034,
+            "pergunta": "OBRIGATORIO OCULOS DE SOL SEM AS LENTES ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420035,
+            "pergunta": "QUANTAS ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420036,
+            "pergunta": "TEVE ORIGINAL?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420037,
+            "pergunta": "NAO E POSSIVEL FAZER SEM ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420026,
+            "pergunta": "VOCÊ É CLIENTE NOVO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420038,
+            "pergunta": "QUAL TELEFONE DE QUEM INDICOU ?",
+            "obrigatoria": true,
+            "tipo": "text"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 2550001,
+            "documento": "FOTO SELFIE",
+            "origem": "both"
+          },
+          {
+            "documentId": 2550002,
+            "documento": "DOC CARRO PDF OU FOTO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      }
+    ]
+  },
+  {
+    "productId": 360001,
+    "produto": "UBER TAXI",
+    "ativo": true,
+    "precoNoProduto": null,
+    "descricao": "CONTA UBER SOB ENCOMENDA\n\nPRAZO: 3 A 5 DIAS ÚTEIS\n\nProcesso realizado com qualidade, segurança e garantia.\n\nIMPORTANTE\nApós o início do procedimento, não há devolução de valores.\nAo comprar, o cliente declara estar de acordo com as regras.",
+    "opcoes": [
+      {
+        "optionId": 300003,
+        "opcao": "UBER TAXI N/ ALEATORIO",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "400,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 3420039,
+            "pergunta": "ACEITA FAZER AS OPÇÕES ABAIXO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420040,
+            "pergunta": "QUAL CATEGORIA ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420041,
+            "pergunta": "VOCÊ JÁ TEVE ALGUMA CONTA FAKE ANTES?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420042,
+            "pergunta": "QUAL APARELHO DE CELULAR VOCÊ PRETENDE UTILIZAR PARA TRABALHAR?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420043,
+            "pergunta": "FOTO DE PERFIL SERÁ FEITA  COM HORÁRIO AGENDADO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420045,
+            "pergunta": "NO ANDROID, SE MAIS DE DUAS CONTAS JÁ TIVEREM SIDO BLOQUEADAS, SERÁ NECESSÁRIO UTILIZAR UM APARELHO NOVO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420046,
+            "pergunta": "NO IPHONE, É NECESSÁRIO UTILIZAR O MODELO 8 OU SUPERIOR E REALIZAR A RESTAURAÇÃO PELO PROGRAMA INFORMADO PELO ADM. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420047,
+            "pergunta": "SE NAO  TIVER BARBA PASSAR BASE",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420048,
+            "pergunta": "OCULOS DE SOL SEM AS LENTES ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420049,
+            "pergunta": "NÃO E POSSIVEL FAZER SUA CONTA ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3420050,
+            "pergunta": "ACEITA USAR OCULOS INFORMADO MODELO PELA EQUIPE?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420051,
+            "pergunta": "CELULAR NAO SERÁ APOSSIVEL USAR PARA USO PARTICULAR SOMENTE PARA O TRAMPO ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3420052,
+            "pergunta": "OBRIGATORIO OCULOS DE SOL SEM AS LENTES ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420053,
+            "pergunta": "QUANTAS ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420054,
+            "pergunta": "TEVE ORIGINAL?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420055,
+            "pergunta": "NAO E POSSIVEL FAZER SEM ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420044,
+            "pergunta": "VOCÊ É CLIENTE NOVO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420056,
+            "pergunta": "QUAL TELEFONE DE QUEM INDICOU ?",
+            "obrigatoria": true,
+            "tipo": "text"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 330001,
+            "documento": "ALVARÁ PDF OU FOTO",
+            "origem": "both"
+          },
+          {
+            "documentId": 330002,
+            "documento": "CONDUTAXI PDF OU FOTO",
+            "origem": "both"
+          },
+          {
+            "documentId": 2820001,
+            "documento": "FOTO SELFIE",
+            "origem": "both"
+          },
+          {
+            "documentId": 1710008,
+            "documento": "DOC CARRO PDF OU FOTO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      },
+      {
+        "optionId": 300004,
+        "opcao": "UBER TAXI 1º / Nome ",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "500,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 3420057,
+            "pergunta": "ACEITA FAZER AS OPÇÕES ABAIXO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420058,
+            "pergunta": "QUAL CATEGORIA ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420059,
+            "pergunta": "VOCÊ JÁ TEVE ALGUMA CONTA FAKE ANTES?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420060,
+            "pergunta": "QUAL APARELHO DE CELULAR VOCÊ PRETENDE UTILIZAR PARA TRABALHAR?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420061,
+            "pergunta": "FOTO DE PERFIL SERÁ FEITA  COM HORÁRIO AGENDADO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420063,
+            "pergunta": "NO ANDROID, SE MAIS DE DUAS CONTAS JÁ TIVEREM SIDO BLOQUEADAS, SERÁ NECESSÁRIO UTILIZAR UM APARELHO NOVO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420064,
+            "pergunta": "NO IPHONE, É NECESSÁRIO UTILIZAR O MODELO 8 OU SUPERIOR E REALIZAR A RESTAURAÇÃO PELO PROGRAMA INFORMADO PELO ADM. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420065,
+            "pergunta": "SE NAO  TIVER BARBA PASSAR BASE",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420066,
+            "pergunta": "OCULOS DE SOL SEM AS LENTES ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420067,
+            "pergunta": "NÃO E POSSIVEL FAZER SUA CONTA ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3420068,
+            "pergunta": "ACEITA USAR OCULOS INFORMADO MODELO PELA EQUIPE?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420069,
+            "pergunta": "CELULAR NAO SERÁ APOSSIVEL USAR PARA USO PARTICULAR SOMENTE PARA O TRAMPO ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3420070,
+            "pergunta": "OBRIGATORIO OCULOS DE SOL SEM AS LENTES ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420071,
+            "pergunta": "QUANTAS ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420072,
+            "pergunta": "TEVE ORIGINAL?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420073,
+            "pergunta": "NAO E POSSIVEL FAZER SEM ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420062,
+            "pergunta": "VOCÊ É CLIENTE NOVO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420074,
+            "pergunta": "QUAL TELEFONE DE QUEM INDICOU ?",
+            "obrigatoria": true,
+            "tipo": "text"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 330003,
+            "documento": "FOTO SELFIE",
+            "origem": "both"
+          },
+          {
+            "documentId": 330004,
+            "documento": "CONDUTAXI PDF OU FOTO",
+            "origem": "both"
+          },
+          {
+            "documentId": 2850001,
+            "documento": "ALVARA DO VEICULO",
+            "origem": "both"
+          },
+          {
+            "documentId": 1710009,
+            "documento": "DOC CARRO PDF OU FOTO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      },
+      {
+        "optionId": 2850001,
+        "opcao": "NOME COMPLETO",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "650,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 3420075,
+            "pergunta": "ACEITA FAZER AS OPÇÕES ABAIXO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420076,
+            "pergunta": "QUAL CATEGORIA ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420077,
+            "pergunta": "VOCÊ JÁ TEVE ALGUMA CONTA FAKE ANTES?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420078,
+            "pergunta": "QUAL APARELHO DE CELULAR VOCÊ PRETENDE UTILIZAR PARA TRABALHAR?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420079,
+            "pergunta": "FOTO DE PERFIL SERÁ FEITA  COM HORÁRIO AGENDADO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420081,
+            "pergunta": "NO ANDROID, SE MAIS DE DUAS CONTAS JÁ TIVEREM SIDO BLOQUEADAS, SERÁ NECESSÁRIO UTILIZAR UM APARELHO NOVO. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420082,
+            "pergunta": "NO IPHONE, É NECESSÁRIO UTILIZAR O MODELO 8 OU SUPERIOR E REALIZAR A RESTAURAÇÃO PELO PROGRAMA INFORMADO PELO ADM. VOCÊ ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420083,
+            "pergunta": "SE NAO  TIVER BARBA PASSAR BASE",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420084,
+            "pergunta": "OCULOS DE SOL SEM AS LENTES ACEITA?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420085,
+            "pergunta": "NÃO E POSSIVEL FAZER SUA CONTA ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3420086,
+            "pergunta": "ACEITA USAR OCULOS INFORMADO MODELO PELA EQUIPE?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420087,
+            "pergunta": "CELULAR NAO SERÁ APOSSIVEL USAR PARA USO PARTICULAR SOMENTE PARA O TRAMPO ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3420088,
+            "pergunta": "OBRIGATORIO OCULOS DE SOL SEM AS LENTES ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420089,
+            "pergunta": "QUANTAS ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420090,
+            "pergunta": "TEVE ORIGINAL?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420091,
+            "pergunta": "NAO E POSSIVEL FAZER SEM ",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420080,
+            "pergunta": "VOCÊ É CLIENTE NOVO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3420092,
+            "pergunta": "QUAL TELEFONE DE QUEM INDICOU ?",
+            "obrigatoria": true,
+            "tipo": "text"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 2700001,
+            "documento": "FOTO SELFIE",
+            "origem": "both"
+          },
+          {
+            "documentId": 2700002,
+            "documento": "DOC CARRO PDF OU FOTO",
+            "origem": "both"
+          },
+          {
+            "documentId": 2730001,
+            "documento": "AVARÁ PDF OU FOTO",
+            "origem": "both"
+          },
+          {
+            "documentId": 2730002,
+            "documento": "CONDUTAXI PDF OU FOTO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      }
+    ]
+  },
+  {
+    "productId": 960001,
+    "produto": "EDIÇÃO DOC VEICUILO",
+    "ativo": true,
+    "precoNoProduto": null,
+    "descricao": "   Entrega Rápida: de 3 a 4h..\n✅ Atendimento rápido\n✅ Processo simplificado\n✅ Suporte durante o serviço\n✅ Todos os testes realizados \n✅  Rigorosamente antes da entrega\n✅ Serviço conferido e validado antes da conclusão\n",
+    "opcoes": [
+      {
+        "optionId": 990001,
+        "opcao": "SÓ PARA UBER.",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "180,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 2310001,
+            "pergunta": "QUAL A MARCA",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2340001,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2370001,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2370002,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2370003,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2400001,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2430001,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2430003,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2430004,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2460001,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2460002,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2460003,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2460004,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2490001,
+            "pergunta": "QUAL É A COR DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2520002,
+            "pergunta": "QUAL É O ANO DO VEÍCULO QUE VOCÊ SUBIR?",
+            "obrigatoria": true,
+            "tipo": "select"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 2970001,
+            "documento": "DOC / VEICULO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      },
+      {
+        "optionId": 2730001,
+        "opcao": "SÓ PARA 99.",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "150,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 2550001,
+            "pergunta": "QUAL A MARCA",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550004,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550005,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550006,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550007,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550008,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550009,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550010,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550011,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550012,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550013,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550014,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550015,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550002,
+            "pergunta": "QUAL É A COR DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550003,
+            "pergunta": "QUAL É O ANO DO VEÍCULO QUE VOCÊ SUBIR?",
+            "obrigatoria": true,
+            "tipo": "select"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 3000001,
+            "documento": "DOC / VEICULO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      },
+      {
+        "optionId": 2790001,
+        "opcao": "PARA UBER E 99.",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "300,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 2550016,
+            "pergunta": "QUAL A MARCA",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550019,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550020,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550021,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550022,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550023,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550024,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550025,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550026,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550027,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550028,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550029,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550030,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550017,
+            "pergunta": "QUAL É A COR DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550018,
+            "pergunta": "QUAL É O ANO DO VEÍCULO QUE VOCÊ SUBIR?",
+            "obrigatoria": true,
+            "tipo": "select"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 3000002,
+            "documento": "DOC / VEICULO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      },
+      {
+        "optionId": 2820001,
+        "opcao": "TAXI PARA UBER X OU 99 POP",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "350,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 2550031,
+            "pergunta": "QUAL A MARCA",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550034,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550035,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550036,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550037,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550038,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550039,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550040,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550041,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550042,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550043,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550044,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550045,
+            "pergunta": "QUAL É O MODELO DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550032,
+            "pergunta": "QUAL É A COR DO VEÍCULO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2550033,
+            "pergunta": "QUAL É O ANO DO VEÍCULO QUE VOCÊ SUBIR?",
+            "obrigatoria": true,
+            "tipo": "select"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 3000003,
+            "documento": "DOC / VEICULO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      }
+    ]
+  },
+  {
+    "productId": 2610001,
+    "produto": "CRLV ORIGINAL ",
+    "ativo": true,
+    "precoNoProduto": null,
+    "descricao": "*CRLV – DADOS ORIGINAIS*\n\nOs dados apresentados *não são editados nem alterados*.\n\nTodas as informações são\n*originais e correspondem aos dados do veículo* \nconforme a *placa enviada para consulta*.\n",
+    "opcoes": [
+      {
+        "optionId": 3120001,
+        "opcao": "CRLV",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "60,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 3450001,
+            "pergunta": "QUAL A PLACA QUE DESEJA GERAR O CRLV COM DADOS ORIGINAIS ",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3450002,
+            "pergunta": "MODELO ?",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3450003,
+            "pergunta": "COR?",
+            "obrigatoria": true,
+            "tipo": "text"
+          },
+          {
+            "questionId": 3480001,
+            "pergunta": "ESTA CIENTE QUE ESTA COMPRA O DOCUMENTO ORIGINAL NAO E EDIÇÃO?",
+            "obrigatoria": true,
+            "tipo": "select"
+          }
+        ],
+        "documentos": [],
+        "garantias": []
+      }
+    ]
+  },
+  {
+    "productId": 360002,
+    "produto": "99 APP PARA MOTORISTA",
+    "ativo": true,
+    "precoNoProduto": null,
+    "descricao": "🚗 CONTA 99 POP SOB ENCOMENDA\n\n⏳ PRAZO DE ENTREGA\n• 24H A 48H após a confirmação do pagamento.\n• Pode variar conforme o sistema.",
+    "opcoes": [
+      {
+        "optionId": 300005,
+        "opcao": "NOME ALEATORIO ",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "350,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 1950001,
+            "pergunta": "QUAL A CATEGORIA ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 2970001,
+            "pergunta": "99 POP VOCÊ JA TEVE CONTA COM SUA FOTO ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 1980001,
+            "pergunta": "FOTO É MODIFICADA ACEITA?",
+            "obrigatoria": false,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3000001,
+            "pergunta": "NÃO DURA MAIS DE 3 DIAS, ENTÃO NÃO COMPENSA FAZER.",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3030001,
+            "pergunta": "CONTA SERA FEITA EM 24H ACEITA ? ",
+            "obrigatoria": true,
+            "tipo": "select"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 60010,
+            "documento": "FOTO SELF",
+            "origem": "both"
+          },
+          {
+            "documentId": 60011,
+            "documento": "DOC CARRO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      },
+      {
+        "optionId": 300006,
+        "opcao": "PRIMEIRO NOME",
+        "tipo": "standard",
+        "ativo": true,
+        "preco": "450,00",
+        "precoOriginal": null,
+        "perguntas": [
+          {
+            "questionId": 3030003,
+            "pergunta": "QUAL A CATEGORIA ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3030002,
+            "pergunta": "99 POP VOCÊ JA TEVE CONTA COM SUA FOTO ?",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3030004,
+            "pergunta": "FOTO É MODIFICADA ACEITA?",
+            "obrigatoria": false,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3030005,
+            "pergunta": "NÃO DURA MAIS DE 3 DIAS, ENTÃO NÃO COMPENSA FAZER.",
+            "obrigatoria": true,
+            "tipo": "select"
+          },
+          {
+            "questionId": 3030006,
+            "pergunta": "CONTA SERA FEITA EM 24H ACEITA ? ",
+            "obrigatoria": true,
+            "tipo": "select"
+          }
+        ],
+        "documentos": [
+          {
+            "documentId": 60012,
+            "documento": "FOTO SILFIE",
+            "origem": "both"
+          },
+          {
+            "documentId": 60013,
+            "documento": "DOC / CARRO",
+            "origem": "both"
+          }
+        ],
+        "garantias": []
+      }
+    ]
+  }
+]
