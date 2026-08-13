@@ -893,7 +893,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
   }
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#050914] text-foreground p-4 pb-40 sm:p-6 sm:pb-8" style={{ backgroundImage: "radial-gradient(circle at 82% 10%, rgba(36, 86, 163, 0.17), transparent 30%), radial-gradient(circle at 14% 52%, rgba(81, 39, 122, 0.12), transparent 34%), linear-gradient(145deg, #050914 0%, #091126 48%, #070912 100%)" }}>
+    <div className="spreadsheet-premium relative min-h-screen overflow-x-hidden bg-[#050914] text-foreground p-4 pb-40 sm:p-6 sm:pb-8" style={{ backgroundImage: "radial-gradient(circle at 82% 10%, rgba(36, 86, 163, 0.17), transparent 30%), radial-gradient(circle at 14% 52%, rgba(81, 39, 122, 0.12), transparent 34%), linear-gradient(145deg, #050914 0%, #091126 48%, #070912 100%)" }}>
       <div aria-hidden="true" className="pointer-events-none absolute -right-28 top-64 h-80 w-80 rounded-full bg-cyan-500/[.045] blur-3xl" />
       <div aria-hidden="true" className="pointer-events-none absolute -left-24 bottom-24 h-72 w-72 rounded-full bg-violet-600/[.045] blur-3xl" />
       {/* MODAL DE CONFIRMAÇÃO: APAGAR TODOS OS DADOS */}
@@ -1054,16 +1054,16 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </div>
         </div>
       )}
-      <div className="relative max-w-7xl mx-auto">
+      <div className="spreadsheet-content relative max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
+        <div className="premium-header flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
           <div>
             <div className="flex items-center gap-3">
               <span className="h-9 w-1.5 rounded-full" style={{ background: 'var(--primary)', boxShadow: '0 0 18px 2px color-mix(in oklch, var(--primary) 60%, transparent)' }} />
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight bg-gradient-to-r from-white to-primary/70 bg-clip-text text-transparent">Planilha de Gastos</h1>
             </div>
             <div className="mt-3 sm:pl-[18px]">
-              <div className="relative flex max-w-2xl items-center gap-3 rounded-xl border border-primary/20 bg-card/70 px-3 py-2.5 pr-[82px] shadow-sm backdrop-blur-sm">
+              <div className="premium-client-card relative flex max-w-2xl items-center gap-3 rounded-xl border border-primary/20 bg-card/70 px-3 py-2.5 pr-[82px] shadow-sm backdrop-blur-sm">
                 {planInfo?.profilePhotoUrl ? (
                   <img
                     src={planInfo.profilePhotoUrl}
@@ -1152,7 +1152,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           const isExpiringSoon = diffDays <= 3 && diffDays > 0;
           const isExpired = diffMs < 0;
           return (
-            <div className={`mb-6 flex items-center gap-3 px-4 py-3 rounded-xl border ${
+            <div className={`premium-plan-card mb-6 flex items-center gap-3 px-4 py-3 rounded-xl border ${
               isExpired
                 ? 'bg-red-500/10 border-red-500/40'
                 : isExpiringSoon
@@ -1204,7 +1204,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
         {/* Banner ao vivo do Chat */}
         {phoneFromToken && (
           <div
-            className="mb-6 rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-all"
+            className="premium-live-card mb-6 rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-all"
             style={{ background: 'linear-gradient(135deg, rgba(7,94,84,0.4), rgba(18,140,126,0.3))', border: '1px solid rgba(37,211,102,0.3)', boxShadow: '0 0 20px rgba(37,211,102,0.1)' }}
             onClick={() => {
               const chatBtn = document.getElementById('chat-floating-btn');
@@ -1224,7 +1224,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
         )}
 
         {/* Resumo por periodo */}
-        <div className="mb-8">
+        <div className="premium-summary mb-8">
           {/* Cabecalho das colunas */}
           <div className="grid grid-cols-3 gap-2 mb-2 px-1">
             <div className="flex items-center gap-1.5">
@@ -1283,7 +1283,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
         </div>
 
         {/* Seletor de Mês */}
-        <div className="mb-5 max-w-md">
+        <div className="premium-month-control mb-5 max-w-md">
           <label className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-300">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg border border-blue-300/20 bg-blue-400/10 text-blue-200 shadow-[inset_0_1px_0_rgba(255,255,255,.12)]"><CalendarDays className="h-3.5 w-3.5" /></span>
             Competência da planilha
@@ -1319,7 +1319,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </TabsContent>
 
           {/* Aba Gastos */}
-          <TabsContent value="gastos" className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
+          <TabsContent value="gastos" className="spreadsheet-workspace space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
             {/* Data + botão */}
             <div className="flex gap-3">
               <Input
@@ -1488,7 +1488,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </TabsContent>
 
           {/* Aba Ganhos */}
-          <TabsContent value="ganhos" className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
+          <TabsContent value="ganhos" className="spreadsheet-workspace space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
             {/* Data + botão */}
             <div className="flex gap-3">
               <Input
@@ -1637,7 +1637,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </TabsContent>
 
           {/* Aba Operacional */}
-          <TabsContent value="operacional" className="space-y-6">
+          <TabsContent value="operacional" className="spreadsheet-workspace space-y-6">
             <div className="flex gap-4">
               <Input
                 type="date"
@@ -1779,7 +1779,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </TabsContent>
 
           {/* Aba Metas */}
-          <TabsContent value="metas" className="space-y-5">
+          <TabsContent value="metas" className="spreadsheet-workspace space-y-5">
             {/* Formulário de metas */}
             <Card className="bg-card/80 backdrop-blur border border-border/50 rounded-2xl p-5">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">🎯 Definir Metas</h3>
@@ -2028,7 +2028,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           </TabsContent>
 
           {/* Aba Gráficos */}
-          <TabsContent value="graficos" className="space-y-6">
+          <TabsContent value="graficos" className="spreadsheet-workspace space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="bg-card/80 backdrop-blur border border-primary/20 rounded-2xl p-6 shadow-lg shadow-primary/10">
                 <h3 className="text-lg font-bold mb-4">Ganhos vs Gastos</h3>
@@ -2085,11 +2085,11 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
             </div>
           </TabsContent>
 
-          <TabsContent value="emprestimos" className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
+          <TabsContent value="emprestimos" className="spreadsheet-workspace space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
             <LoansTab token={token} />
           </TabsContent>
 
-          <TabsContent value="analisador" className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
+          <TabsContent value="analisador" className="spreadsheet-workspace space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
             <RideAnalyzerTab token={token} />
           </TabsContent>
         </Tabs>

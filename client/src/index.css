@@ -380,3 +380,156 @@
 .eq-bar-5 { animation: eq-bar-5 0.95s ease-in-out infinite; animation-delay: 0.15s; }
 .eq-bar-6 { animation: eq-bar-1 1.0s ease-in-out infinite; animation-delay: 0.3s; }
 .eq-bar-7 { animation: eq-bar-2 0.8s ease-in-out infinite; animation-delay: 0.25s; }
+
+/* ── Planilha de Gastos: sistema visual premium ─────────────────────────── */
+@layer components {
+  .spreadsheet-premium {
+    --sheet-surface: rgba(7, 14, 32, 0.82);
+    --sheet-surface-deep: rgba(3, 8, 22, 0.92);
+    --sheet-line: rgba(128, 166, 255, 0.22);
+    --sheet-highlight: rgba(210, 230, 255, 0.18);
+  }
+
+  .spreadsheet-premium .spreadsheet-content {
+    isolation: isolate;
+  }
+
+  .spreadsheet-premium .premium-header::after,
+  .spreadsheet-premium .premium-client-card::before,
+  .spreadsheet-premium .premium-plan-card::before,
+  .spreadsheet-premium .premium-live-card::before,
+  .spreadsheet-premium .spreadsheet-workspace::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset-inline: 1rem;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(224, 240, 255, 0.64), transparent);
+    opacity: 0.72;
+  }
+
+  .spreadsheet-premium .premium-client-card,
+  .spreadsheet-premium .premium-plan-card,
+  .spreadsheet-premium .premium-live-card {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 12% -42%, rgba(110, 168, 255, 0.24), transparent 50%),
+      linear-gradient(145deg, rgba(18, 35, 70, 0.86), rgba(5, 11, 28, 0.94));
+    border-color: rgba(115, 159, 255, 0.32) !important;
+    box-shadow:
+      0 13px 34px rgba(0, 0, 0, 0.27),
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 -18px 28px rgba(0, 0, 0, 0.17);
+    backdrop-filter: blur(14px);
+  }
+
+  .spreadsheet-premium .premium-plan-card {
+    background:
+      radial-gradient(circle at 86% -38%, rgba(75, 160, 255, 0.22), transparent 48%),
+      linear-gradient(145deg, rgba(16, 37, 78, 0.88), rgba(5, 11, 29, 0.94));
+  }
+
+  .spreadsheet-premium .premium-live-card {
+    background:
+      radial-gradient(circle at 92% -42%, rgba(50, 226, 168, 0.21), transparent 50%),
+      linear-gradient(145deg, rgba(7, 79, 72, 0.83), rgba(4, 25, 40, 0.93)) !important;
+    border-color: rgba(54, 230, 176, 0.35) !important;
+    box-shadow:
+      0 13px 34px rgba(0, 0, 0, 0.25),
+      0 0 24px rgba(23, 211, 151, 0.09),
+      inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+
+  .spreadsheet-premium .premium-summary > .grid > [data-slot="card"] {
+    overflow: hidden;
+    border-radius: 16px;
+  }
+
+  .spreadsheet-premium .premium-month-control > div {
+    border-color: rgba(112, 159, 255, 0.42) !important;
+    background:
+      radial-gradient(circle at 14% -60%, rgba(113, 177, 255, 0.19), transparent 55%),
+      linear-gradient(145deg, rgba(14, 30, 62, 0.9), rgba(5, 11, 28, 0.95)) !important;
+    box-shadow:
+      0 11px 26px rgba(0, 0, 0, 0.26),
+      inset 0 1px 0 rgba(255, 255, 255, 0.13),
+      inset 0 -14px 24px rgba(0, 0, 0, 0.16) !important;
+  }
+
+  .spreadsheet-premium .spreadsheet-workspace {
+    position: relative;
+    overflow: hidden;
+    padding: clamp(0.75rem, 2.1vw, 1.25rem);
+    border: 1px solid var(--sheet-line);
+    border-radius: 22px;
+    background:
+      radial-gradient(circle at 7% -15%, rgba(92, 143, 255, 0.16), transparent 43%),
+      radial-gradient(circle at 95% 0%, rgba(41, 214, 194, 0.09), transparent 34%),
+      linear-gradient(145deg, var(--sheet-surface), var(--sheet-surface-deep));
+    box-shadow:
+      0 16px 36px rgba(0, 0, 0, 0.26),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -22px 34px rgba(0, 0, 0, 0.16);
+    backdrop-filter: blur(14px);
+  }
+
+  .spreadsheet-premium .spreadsheet-workspace > .flex:first-child {
+    position: relative;
+    padding: 0.45rem;
+    border: 1px solid rgba(130, 171, 255, 0.24);
+    border-radius: 16px;
+    background: linear-gradient(145deg, rgba(14, 29, 60, 0.68), rgba(4, 10, 25, 0.76));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 7px 18px rgba(0, 0, 0, 0.16);
+  }
+
+  .spreadsheet-premium .spreadsheet-workspace > .flex:first-child > input {
+    border-color: rgba(139, 179, 255, 0.24);
+    background: rgba(2, 8, 23, 0.58);
+  }
+
+  .spreadsheet-premium .spreadsheet-workspace > .flex:first-child > button {
+    border: 1px solid rgba(159, 180, 255, 0.42);
+    background: linear-gradient(135deg, #6472ff, #4756e7) !important;
+    box-shadow: 0 8px 20px rgba(82, 89, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  }
+
+  .spreadsheet-premium .spreadsheet-workspace [data-slot="card"] {
+    border-color: rgba(118, 160, 255, 0.24);
+    background:
+      radial-gradient(circle at 12% -22%, rgba(93, 140, 255, 0.16), transparent 48%),
+      linear-gradient(145deg, rgba(15, 31, 65, 0.83), rgba(4, 10, 25, 0.94));
+    box-shadow:
+      0 12px 28px rgba(0, 0, 0, 0.23),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -18px 28px rgba(0, 0, 0, 0.14);
+  }
+
+  .spreadsheet-premium .spreadsheet-workspace input:not([type="checkbox"]),
+  .spreadsheet-premium .spreadsheet-workspace select,
+  .spreadsheet-premium .spreadsheet-workspace textarea {
+    border-color: rgba(126, 165, 245, 0.26);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .spreadsheet-premium .spreadsheet-workspace input:not([type="checkbox"]):focus,
+  .spreadsheet-premium .spreadsheet-workspace select:focus,
+  .spreadsheet-premium .spreadsheet-workspace textarea:focus {
+    border-color: rgba(110, 192, 255, 0.78);
+    box-shadow: 0 0 0 3px rgba(76, 149, 255, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .spreadsheet-premium .spreadsheet-workspace .text-muted-foreground {
+    color: rgba(202, 218, 246, 0.7);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .spreadsheet-premium .premium-client-card,
+    .spreadsheet-premium .premium-plan-card,
+    .spreadsheet-premium .premium-live-card,
+    .spreadsheet-premium .spreadsheet-workspace {
+      transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1), border-color 180ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+  }
+}
