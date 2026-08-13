@@ -134,12 +134,17 @@ export const onlineSupportRouter = router({
     .mutation(async ({ input }) => {
       const session = await requireOnlineEntrySession(input.token);
       const access = await getRouteAccess(session.customerId);
-      if (!access.restricted || access.routes.includes(input.route)) {
+      const isOrdersRoute = input.route === 'site' || input.route === 'acompanhar';
+      const hasOrdersAccess = !access.restricted || access.routes.includes('site') || access.routes.includes('acompanhar');
+      if ((!access.restricted || access.routes.includes(input.route)) || (isOrdersRoute && hasOrdersAccess)) {
         return { success: true, created: false, pending: false, released: true, customerId: session.customerId };
       }
       const releaseMode = await getRouteReleaseMode(input.route);
       if (releaseMode === 'automatico') {
-        await setCustomerRoutePermissions(session.customerId, [...access.routes, input.route], 'Atendimento Online');
+        const routesToGrant = isOrdersRoute
+          ? [...new Set([...access.routes, 'site', 'acompanhar'])]
+          : [...access.routes, input.route];
+        await setCustomerRoutePermissions(session.customerId, routesToGrant, 'Atendimento Online');
         return { success: true, created: false, pending: false, released: true, customerId: session.customerId };
       }
       const request = await requestCustomerRouteAccess(session.customerId, input.route);

@@ -5,6 +5,7 @@ interface Props {
   registrationId: number;
   subOrderIndex: number;
   customerPhone?: string | null;
+  orderStatus?: string | null;
 }
 
 function formatDate(d: string): string {
@@ -24,7 +25,7 @@ function formatDate(d: string): string {
  *  - AGUARDANDO AGENDAMENTO: link criado, cliente notificado mas ainda não agendou (amarelo)
  *  - SEM AGENDAMENTO: nenhum link/notificação criado (cinza/vermelho)
  */
-export default function ScheduleStatusBadge({ registrationId, subOrderIndex, customerPhone }: Props) {
+export default function ScheduleStatusBadge({ registrationId, subOrderIndex, customerPhone, orderStatus }: Props) {
   const utils = trpc.useUtils();
   const apptQuery = trpc.schedule.getForOrder.useQuery(
     { registrationId, subOrderIndex, customerPhone: customerPhone ?? undefined },
@@ -48,6 +49,11 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
       </div>
     );
   }
+
+  // Quando o agendamento ou o pedido já foi concluído, o card mostra somente o status atual do pedido.
+  // O histórico de agendamento continua preservado, mas não é trabalho operacional aberto.
+  const finalOrder = ['entregue', 'pedido_entregue', 'cancelado'].includes(String(orderStatus || ''));
+  if (appt?.status === "completed" || finalOrder) return null;
 
   // CONFIRMADO — cliente escolheu dia e hora
   if (appt && appt.status === "confirmed" && appt.slotDate) {

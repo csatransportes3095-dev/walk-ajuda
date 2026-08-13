@@ -109,10 +109,25 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   type RouteName = 'site' | 'acompanhar' | 'gastos' | 'emprestimo';
   const hasRouteAccess = (route: RouteName) => {
     const access = sessionQ.data?.access;
-    return !!access && (!access.restricted || access.routes.includes(route));
+    if (!access) return false;
+    if (!access.restricted) return true;
+    if (route === 'site' || route === 'acompanhar') {
+      return access.routes.includes('site') || access.routes.includes('acompanhar');
+    }
+    return access.routes.includes(route);
   };
-  const routeState = (route: RouteName) => sessionQ.data?.routeStates?.[route] || {
-    allowed: hasRouteAccess(route), pending: false, denied: false, retryAtMs: null, daysRemaining: 0,
+  const routeState = (route: RouteName) => {
+    const isOrdersRoute = route === 'site' || route === 'acompanhar';
+    const direct = sessionQ.data?.routeStates?.[route];
+    const linked = isOrdersRoute ? sessionQ.data?.routeStates?.[route === 'site' ? 'acompanhar' : 'site'] : undefined;
+    const allowed = hasRouteAccess(route);
+    return {
+      allowed,
+      pending: Boolean(direct?.pending || linked?.pending),
+      denied: Boolean(direct?.denied && linked?.denied),
+      retryAtMs: direct?.retryAtMs ?? linked?.retryAtMs ?? null,
+      daysRemaining: Math.max(Number(direct?.daysRemaining || 0), Number(linked?.daysRemaining || 0)),
+    };
   };
   const routeLabel = (route: RouteName, allowedLabel: string) => {
     const state = routeState(route);
@@ -228,8 +243,7 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
         <button onClick={() => setSelectedOrderId(null)} style={backStyle}>Fechar detalhes do pedido</button>
         {orderDetailsQ.isLoading ? <p style={smallStyle}>Consultando pedido...</p> : orderDetailsQ.data?.current ? <OrderDetails data={orderDetailsQ.data.current} /> : <p style={smallStyle}>Não foi possível carregar os detalhes.</p>}
       </div>}
-      <button disabled={!canRequestRoute('acompanhar') || routeMut.isPending} onClick={() => requestRoute('acompanhar')} style={routeButtonStyle('acompanhar')}>{routeLabel('acompanhar', 'Acessar Acompanhar Pedido')}</button>
-      <button disabled={!canRequestRoute('site') || routeMut.isPending} onClick={() => requestRoute('site')} style={routeButtonStyle('site')}>{routeLabel('site', 'Fazer Pedido')}</button>
+      <button disabled={!canRequestRoute('acompanhar') || routeMut.isPending} onClick={() => requestRoute('acompanhar')} style={routeButtonStyle('acompanhar')}>{routeLabel('acompanhar', routeState('acompanhar').allowed ? 'Acessar Meus Pedidos' : 'Solicitar acesso aos pedidos')}</button>
     </div>
     <div style={cardStyle}><WalletCards size={20} color="#fbbf24" /><strong style={{ color: '#fff', display: 'block', marginTop: 6 }}>Empréstimos</strong>
       {hasRouteAccess('emprestimo') && <>

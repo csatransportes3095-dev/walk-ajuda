@@ -3250,8 +3250,9 @@ export const appRouter = router({
         }
       } catch (e) { /* ignora erro */ }
 
-      // Fallback por telefone: agendamentos criados com registrationId diferente (re-cadastro)
-      // Para pedidos sem scheduleStatus, buscar pelo telefone do cliente
+      // Fallback por telefone: agendamentos criados com registrationId diferente (re-cadastro).
+      // Um reagendamento por telefone pertence SOMENTE ao pedido operacional mais recente
+      // daquele cliente; nunca deve reaparecer em pedidos antigos ou já concluídos.
       try {
         const ordersWithoutSchedule = finalOrders.filter((o: any) => !scheduleStatusMap.has(`${o.id}_${o.subOrderIndex}`));
         if (ordersWithoutSchedule.length > 0) {
@@ -3259,26 +3260,28 @@ export const appRouter = router({
           if (phones.length > 0) {
             const phonesStr = phones.map((p: string) => `'${p}'`).join(',');
             const fallbackResult = await db.execute(
-              sql.raw(`SELECT customerPhone, status, slotDate, slotTime, confirmedAt FROM scheduleAppointments WHERE customerPhone IN (${phonesStr}) AND status != 'cancelled' ORDER BY FIELD(status,'confirmed','pending'), createdAt DESC`)
+              sql.raw(`SELECT customerPhone, status, slotDate, slotTime, confirmedAt FROM scheduleAppointments WHERE customerPhone IN (${phonesStr}) AND status NOT IN ('cancelled','completed') ORDER BY createdAt DESC`)
             );
             const fallbackRows = (fallbackResult as any)[0] as any[];
-            // Mapa de telefone -> status + slot mais prioritário (confirmed > pending)
+            // Mapa de telefone -> agendamento operacional mais recente.
             const phoneStatusMap = new Map<string, string>();
             const phoneSlotMap = new Map<string, { slotDate: string | null; slotTime: string | null; confirmedAt: string | null }>();
             for (const fr of (fallbackRows || [])) {
               const phone = (fr.customerPhone || '').replace(/\D/g, '');
+              if (!phone || phoneStatusMap.has(phone)) continue;
               const confirmedAtStr = fr.confirmedAt ? new Date(fr.confirmedAt).toISOString() : null;
-              if (!phoneStatusMap.has(phone)) {
-                phoneStatusMap.set(phone, fr.status);
-                phoneSlotMap.set(phone, { slotDate: fr.slotDate ?? null, slotTime: fr.slotTime ?? null, confirmedAt: confirmedAtStr });
-              } else if (fr.status === 'confirmed') {
-                phoneStatusMap.set(phone, 'confirmed'); // confirmed tem prioridade
-                phoneSlotMap.set(phone, { slotDate: fr.slotDate ?? null, slotTime: fr.slotTime ?? null, confirmedAt: confirmedAtStr });
-              }
+              phoneStatusMap.set(phone, fr.status);
+              phoneSlotMap.set(phone, { slotDate: fr.slotDate ?? null, slotTime: fr.slotTime ?? null, confirmedAt: confirmedAtStr });
             }
-            // Aplicar fallback para pedidos sem scheduleStatus
+            // Somente o pedido mais recente sem vínculo direto recebe o fallback por telefone.
+            const latestFallbackKeyByPhone = new Map<string, string>();
+            for (const o of [...ordersWithoutSchedule].sort((a: any, b: any) => Number(b.latestStatusAt || b.submittedAt || b.accessedAt || 0) - Number(a.latestStatusAt || a.submittedAt || a.accessedAt || 0))) {
+              const phone = (o.customerPhone || '').replace(/\D/g, '');
+              if (phone && !latestFallbackKeyByPhone.has(phone)) latestFallbackKeyByPhone.set(phone, `${o.id}_${o.subOrderIndex}`);
+            }
             for (const o of ordersWithoutSchedule) {
               const phone = (o.customerPhone || '').replace(/\D/g, '');
+              if (latestFallbackKeyByPhone.get(phone) !== `${o.id}_${o.subOrderIndex}`) continue;
               const fallbackStatus = phoneStatusMap.get(phone);
               if (fallbackStatus) {
                 scheduleStatusMap.set(`${o.id}_${o.subOrderIndex}`, fallbackStatus);

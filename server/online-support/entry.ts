@@ -168,8 +168,12 @@ export async function submitOnlineInstallmentProof(input: { token: string; insta
 export async function requireOnlineRoute(token: string, route: CustomerRoute) {
   const session = await requireOnlineEntrySession(token);
   const access = await hasRouteAccess(session.customerId, route);
-  if (!access.allowed) {
+  const isOrdersRoute = route === 'site' || route === 'acompanhar';
+  const linkedOrdersAccess = isOrdersRoute && !access.allowed
+    ? await hasRouteAccess(session.customerId, route === 'site' ? 'acompanhar' : 'site')
+    : null;
+  if (!access.allowed && !linkedOrdersAccess?.allowed) {
     throw new Error(`Acesso não autorizado para ${route}. Solicite a liberação ao administrador.`);
   }
-  return { session, access };
+  return { session, access: access.allowed ? access : linkedOrdersAccess! };
 }
