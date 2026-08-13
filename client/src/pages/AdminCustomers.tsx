@@ -31,6 +31,19 @@ type Customer = {
   blockedAt?: number | Date | null;
 };
 
+// Apenas os objetos R2 recuperados precisam ignorar a cópia antiga marcada como imutável no navegador.
+// A URL persistida em profilePhotoUrl nunca é alterada.
+const REPAIRED_PROFILE_PHOTO_URLS = new Set([
+  'https://midia.h2colombiano.com/profile-photos/11993425366-1786598497749.jpg',
+  'https://midia.h2colombiano.com/profile-photos/11993425394-1786594938014.jpg',
+  'https://midia.h2colombiano.com/profile-photos/11993425399-1786593788896.jpg',
+]);
+
+function getProfilePhotoDisplayUrl(profilePhotoUrl: string): string {
+  if (!REPAIRED_PROFILE_PHOTO_URLS.has(profilePhotoUrl)) return profilePhotoUrl;
+  return `${profilePhotoUrl}?repair=20260813`;
+}
+
 // formatDateBR agora usa useTimezone — ver abaixo no componente
 
 // Mapa de status para label e cor
@@ -1088,12 +1101,12 @@ export default function AdminCustomers() {
                     )}
                     {c.profilePhotoUrl && !failedProfilePhotoIds.has(c.id) ? (
                       <img
-                        src={c.profilePhotoUrl}
+                        src={getProfilePhotoDisplayUrl(c.profilePhotoUrl)}
                         alt=""
                         aria-label={`Foto de ${c.name}`}
                         className={`w-16 h-16 rounded-full object-cover shadow cursor-pointer hover:opacity-90 transition-opacity ${c.isBlocked ? 'border-2 border-red-500/60' : 'border-2 border-primary/30'}`}
                         onError={() => setFailedProfilePhotoIds((previous) => new Set(previous).add(c.id))}
-                        onClick={() => setPhotoModal({ url: c.profilePhotoUrl!, name: c.name })}
+                        onClick={() => setPhotoModal({ url: getProfilePhotoDisplayUrl(c.profilePhotoUrl!), name: c.name })}
                         title="Clique para ampliar a foto"
                       />
                     ) : (
