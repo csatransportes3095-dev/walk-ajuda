@@ -19,6 +19,7 @@ type H2AssistantPanelProps = {
   token: string;
   onNavigate?: (target: H2AssistantNavigationTarget) => void;
   onDataChanged?: () => void;
+  placement?: "floating" | "client-card";
 };
 
 const WELCOME: AssistantMessage = {
@@ -53,7 +54,7 @@ function responseCards(data: any) {
   return allowed.filter(([, value]) => value !== undefined && value !== null && value !== "");
 }
 
-export function H2AssistantPanel({ token, onNavigate, onDataChanged }: H2AssistantPanelProps) {
+export function H2AssistantPanel({ token, onNavigate, onDataChanged, placement = "floating" }: H2AssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [text, setText] = useState("");
@@ -252,7 +253,7 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged }: H2Assista
   if (!token) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[120] sm:bottom-6 sm:right-6">
+    <div className={placement === "client-card" ? "absolute right-2 top-2 z-[120]" : "fixed bottom-24 right-4 z-[120] flex flex-col items-end sm:bottom-6 sm:right-[6.25rem]"}>
       <AnimatePresence>
         {open && !minimized && (
           <motion.section
@@ -260,7 +261,7 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged }: H2Assista
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.97 }}
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className="mb-3 flex h-[min(680px,calc(100vh-104px))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-[26px] border border-cyan-300/20 bg-[#071224]/[.96] shadow-[0_25px_80px_rgba(0,0,0,.52)] backdrop-blur-2xl"
+            className={`${placement === "client-card" ? "fixed bottom-24 right-4 sm:bottom-6 sm:right-[6.25rem]" : "mb-3"} flex h-[min(680px,calc(100vh-104px))] w-[calc(100vw-2rem)] max-w-[430px] flex-col overflow-hidden rounded-[26px] border border-cyan-300/20 bg-[#071224]/[.96] shadow-[0_25px_80px_rgba(0,0,0,.52)] backdrop-blur-2xl`}
             aria-label="H2 Assistente"
           >
             <header className="relative overflow-hidden border-b border-white/10 px-4 py-3.5">
@@ -345,13 +346,21 @@ export function H2AssistantPanel({ token, onNavigate, onDataChanged }: H2Assista
       <motion.button
         type="button"
         onClick={() => { setOpen(true); setMinimized(false); }}
-        whileTap={{ scale: 0.95 }}
-        className="relative ml-auto grid h-[58px] w-[58px] place-items-center rounded-[20px] border border-cyan-200/35 bg-gradient-to-br from-cyan-300 via-blue-500 to-violet-600 text-slate-950 shadow-[0_12px_34px_rgba(34,211,238,.28)] transition hover:brightness-110"
-        aria-label="Abrir H2 Assistente"
+        whileTap={{ scale: 0.97 }}
+        className="group relative ml-auto flex items-center gap-2 text-left"
+        aria-label="Abrir H2 Assistente: fale, tire dúvidas e registre ganhos ou gastos na Planilha"
       >
-        <span aria-hidden="true" className="absolute inset-0 rounded-[20px] border border-cyan-100/45 animate-ping opacity-25 [animation-duration:2.8s]" />
-        {open && minimized ? <ChevronDown className="relative h-6 w-6" /> : <div className="relative flex items-center gap-0.5 font-black"><Sparkles className="h-4 w-4" /><span className="text-sm">H2</span></div>}
-        {!open && <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-[#071224] bg-emerald-400" />}
+        {placement !== "client-card" && !open && (
+          <span className="max-w-[158px] rounded-2xl border border-cyan-200/20 bg-[#09172d]/95 px-3 py-2 shadow-[0_10px_25px_rgba(0,0,0,.32)] backdrop-blur-xl transition group-hover:border-cyan-200/40">
+            <span className="block text-[10px] font-black uppercase tracking-[.12em] text-cyan-200">Assistente H2</span>
+            <span className="mt-0.5 block text-[10px] font-medium leading-tight text-slate-200">Fale, tire dúvidas e lance na Planilha</span>
+          </span>
+        )}
+        <span className={`relative grid shrink-0 place-items-center border border-cyan-200/35 bg-gradient-to-br from-cyan-300 via-blue-500 to-violet-600 text-slate-950 shadow-[0_12px_34px_rgba(34,211,238,.28)] transition group-hover:brightness-110 ${placement === "client-card" ? "h-[54px] w-[68px] rounded-2xl" : "h-[58px] w-[58px] rounded-[20px]"}`}>
+          <span aria-hidden="true" className={`${placement === "client-card" ? "rounded-2xl" : "rounded-[20px]"} absolute inset-0 border border-cyan-100/45 animate-ping opacity-25 [animation-duration:2.8s]`} />
+          {open && minimized ? <ChevronDown className="relative h-5 w-5" /> : <span className={`relative flex font-black ${placement === "client-card" ? "flex-col items-center leading-none" : "items-center gap-0.5"}`}><span className="flex items-center gap-0.5"><Sparkles className="h-3.5 w-3.5" /><span className="text-sm">H2</span></span>{placement === "client-card" && <span className="mt-1 text-[8px] font-black uppercase tracking-[.06em]">Assistente</span>}</span>}
+          {!open && <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-[#071224] bg-emerald-400" />}
+        </span>
       </motion.button>
     </div>
   );

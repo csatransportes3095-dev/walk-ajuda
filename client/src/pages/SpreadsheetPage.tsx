@@ -1063,7 +1063,7 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight bg-gradient-to-r from-white to-primary/70 bg-clip-text text-transparent">Planilha de Gastos</h1>
             </div>
             <div className="mt-3 sm:pl-[18px]">
-              <div className="flex max-w-2xl items-center gap-3 rounded-xl border border-primary/20 bg-card/70 px-3 py-2.5 shadow-sm backdrop-blur-sm">
+              <div className="relative flex max-w-2xl items-center gap-3 rounded-xl border border-primary/20 bg-card/70 px-3 py-2.5 pr-[82px] shadow-sm backdrop-blur-sm">
                 {planInfo?.profilePhotoUrl ? (
                   <img
                     src={planInfo.profilePhotoUrl}
@@ -1087,6 +1087,29 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
                     <span className="flex min-w-0 items-center gap-1 truncate"><Mail className="h-3 w-3 text-primary shrink-0" />{planInfo?.email || 'E-mail não informado'}</span>
                   </div>
                 </div>
+                <H2AssistantPanel
+                  token={token}
+                  placement="client-card"
+                  onNavigate={(target: H2AssistantNavigationTarget) => {
+                    if (["gastos", "ganhos", "operacional", "metas", "graficos", "emprestimos", "analisador", "particular"].includes(target)) {
+                      setActiveModule(target);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                      return;
+                    }
+                    const externalPath: Record<string, string> = { cartoes: "/cartoes" };
+                    if (externalPath[target]) window.location.assign(externalPath[target]);
+                  }}
+                  onDataChanged={() => {
+                    void Promise.all([
+                      refetchEarnings(),
+                      refetchExpenses(),
+                      refetchYearlyEarnings(),
+                      refetchYearlyExpenses(),
+                      refetchOperational(),
+                      refetchGoals(),
+                    ]);
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -2120,30 +2143,6 @@ export function SpreadsheetPage({ clientName, token: tokenProp, onLogout }: Spre
           isSaving={updateOperationalMutation.isPending}
         />
       )}
-
-      {/* H2 Assistente: camada flutuante isolada, sem alterar os módulos existentes */}
-      <H2AssistantPanel
-        token={token}
-        onNavigate={(target: H2AssistantNavigationTarget) => {
-          if (["gastos", "ganhos", "operacional", "metas", "graficos", "emprestimos", "analisador", "particular"].includes(target)) {
-            setActiveModule(target);
-            window.scrollTo({ top: 0, behavior: "smooth" });
-            return;
-          }
-          const externalPath: Record<string, string> = { cartoes: "/cartoes" };
-          if (externalPath[target]) window.location.assign(externalPath[target]);
-        }}
-        onDataChanged={() => {
-          void Promise.all([
-            refetchEarnings(),
-            refetchExpenses(),
-            refetchYearlyEarnings(),
-            refetchYearlyExpenses(),
-            refetchOperational(),
-            refetchGoals(),
-          ]);
-        }}
-      />
 
       {/* Chat */}
       {phoneFromToken && (
