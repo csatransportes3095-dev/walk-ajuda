@@ -44,7 +44,6 @@ export type StorefrontProduct = {
   cardBgColor: string | null;
   cardTextColor: string | null;
   cardBtnColor: string | null;
-  cardAccentColor: string | null;
   deliveryDays?: string | null;
 };
 
@@ -63,13 +62,6 @@ function asMoney(value: string | null | undefined) {
 function asNumber(value: string | null | undefined) {
   return Number(String(value || "0").replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
 }
-
-const CATEGORY_DEFAULT_COLORS: Record<string, string> = {
-  Uber: '#7c3aed',
-  'Táxi': '#dc2626',
-  Documentos: '#dc2626',
-  '99': '#dc2626',
-};
 
 function shortText(value: string | null | undefined, limit = 172) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
@@ -97,14 +89,7 @@ export function StorefrontProductCard({
     const price = asNumber(effectivePrice);
     return original > price && price > 0 ? Math.round(((original - price) / original) * 100) : 0;
   }, [effectiveOriginalPrice, effectivePrice]);
-  // Prioridade visual: produto personalizado → categoria → padrão geral.
-  const categoryColor = CATEGORY_DEFAULT_COLORS[item.category] || '#7c3aed';
-  const borderColor = item.product.cardColor || categoryColor;
-  const accentColor = item.product.cardAccentColor || borderColor;
-  const cardBackground = item.product.cardBgColor || 'rgba(2, 6, 23, 0.9)';
-  const textColor = item.product.cardTextColor || '#ffffff';
-  const textMutedColor = item.product.cardTextColor ? `${item.product.cardTextColor}cc` : 'rgba(255,255,255,0.75)';
-  const cartButtonColor = item.product.cardBtnColor || accentColor;
+  const productColor = item.product.cardColor || "#7c3aed";
   const description = item.option.description || item.product.description;
   const warrantyLabel = selectedTier?.warrantyLabel || (selectedTier ? `${selectedTier.warrantyValue} ${selectedTier.warrantyType}` : item.option.warranty);
   const detailsId = `product-details-${item.product.id}-${item.option.id}`;
@@ -112,9 +97,9 @@ export function StorefrontProductCard({
   return (
     <article
       className="group relative flex h-full flex-col overflow-hidden rounded-3xl border bg-slate-950/90 shadow-[0_18px_55px_rgba(0,0,0,0.34)] transition-transform duration-200 hover:-translate-y-1"
-      style={{ borderColor: `${borderColor}99`, background: cardBackground }}
+      style={{ borderColor: `${productColor}99` }}
     >
-      <div className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)` }} />
+      <div className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, transparent, ${productColor}, transparent)` }} />
       {discount > 0 && (
         <div className="absolute right-4 top-4 z-10 rounded-full bg-rose-600 px-2.5 py-1 text-xs font-black text-white shadow-lg">
           -{discount}% OFF
@@ -127,19 +112,19 @@ export function StorefrontProductCard({
             {item.product.iconUrl ? (
               <img src={item.product.iconUrl} alt="" loading="lazy" className="h-9 w-9 object-contain" />
             ) : (
-              <Tag className="h-5 w-5" style={{ color: accentColor }} />
+              <Tag className="h-5 w-5" style={{ color: productColor }} />
             )}
           </div>
           <div className="min-w-0">
-            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: accentColor }}>
+            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: productColor }}>
               {item.category}
             </p>
-            <h3 className="text-lg font-black leading-tight" style={{ color: textColor }}>{item.option.label.trim()}</h3>
-            <p className="mt-1 text-xs font-semibold" style={{ color: textMutedColor }}>{item.product.name}</p>
+            <h3 className="text-lg font-black leading-tight text-white">{item.option.label.trim()}</h3>
+            <p className="mt-1 text-xs font-semibold text-white/55">{item.product.name}</p>
           </div>
         </div>
 
-        <p className="min-h-[43px] text-sm leading-relaxed" style={{ color: textMutedColor }}>{shortText(description)}</p>
+        <p className="min-h-[43px] text-sm leading-relaxed text-white/75">{shortText(description)}</p>
 
         {tiers.length > 0 && (
           <label className="mt-4 block">
@@ -161,7 +146,7 @@ export function StorefrontProductCard({
         <div className="mt-5 flex items-end justify-between gap-3">
           <div>
             {effectiveOriginalPrice && <p className="mb-0.5 text-xs font-semibold text-white/40 line-through">{asMoney(effectiveOriginalPrice)}</p>}
-            <p className="text-2xl font-black" style={{ color: textColor }}>{asMoney(effectivePrice)}</p>
+            <p className="text-2xl font-black text-white">{asMoney(effectivePrice)}</p>
             {discount > 0 && <p className="mt-0.5 text-xs font-bold text-emerald-300">Economize {discount}%</p>}
           </div>
           {item.product.deliveryDays && <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-right text-[11px] font-bold text-white/65">Prazo: {item.product.deliveryDays}</span>}
@@ -187,7 +172,7 @@ export function StorefrontProductCard({
             type="button"
             onClick={() => onAddToCart(selectedTier)}
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-black text-white transition-transform active:scale-[0.98]"
-            style={{ background: `${cartButtonColor}28`, borderColor: `${cartButtonColor}aa`, color: textColor, boxShadow: `0 4px 14px ${cartButtonColor}35` }}
+            style={{ background: `${productColor}28`, borderColor: `${productColor}aa` }}
           >
             <ShoppingCart className="h-4 w-4" /> Carrinho
           </button>

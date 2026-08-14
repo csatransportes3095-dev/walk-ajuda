@@ -544,7 +544,6 @@ export const appRouter = router({
         cardBgColor: z.string().optional(),
         cardTextColor: z.string().optional(),
         cardBtnColor: z.string().optional(),
-        cardAccentColor: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         try {
@@ -567,7 +566,6 @@ export const appRouter = router({
         cardBgColor: z.string().nullable().optional(),
         cardTextColor: z.string().nullable().optional(),
         cardBtnColor: z.string().nullable().optional(),
-        cardAccentColor: z.string().nullable().optional(),
         isActive: z.number().optional(), sortOrder: z.number().optional(),
         resellerDiscount: z.number().nullable().optional(), // % de desconto por produto para revendedores
         deliveryDays: z.string().nullable().optional(), // Ex: "2 a 5 dias úteis"
