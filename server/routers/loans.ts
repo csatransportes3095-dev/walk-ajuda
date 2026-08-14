@@ -2998,7 +2998,11 @@ export const loanRouter = router({
       await db.execute(drizzleSql`UPDATE loanInstallments SET dueDate=${expected.dueDate} WHERE id=${row.id}`);
     }
 
-    await db.execute(drizzleSql`DELETE FROM loanInstallments WHERE loanId=${input.loanId} AND status='pendente'`);
+    // Remove qualquer parcela não protegida, inclusive duplicatas já marcadas como atrasadas.
+    await db.execute(drizzleSql`
+      DELETE FROM loanInstallments
+      WHERE loanId=${input.loanId} AND status NOT IN ('pago', 'em_analise')
+    `);
     for (const expected of schedule) {
       if (protectedNumbers.has(expected.installmentNumber)) continue;
       await db.execute(drizzleSql`
