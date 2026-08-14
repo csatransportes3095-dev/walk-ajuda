@@ -639,6 +639,11 @@ export const appRouter = router({
         showYearField: z.boolean().optional(),
         docNameMode: z.string().optional(),
         docCustomName: z.string().optional(),
+        cardBorderColor: z.string().nullable().optional(),
+        cardBgColor: z.string().nullable().optional(),
+        cardTextColor: z.string().nullable().optional(),
+        cardButtonColor: z.string().nullable().optional(),
+        cardAccentColor: z.string().nullable().optional(),
       }))
       .mutation(async ({ input }) => {
         try {
@@ -668,6 +673,11 @@ export const appRouter = router({
         commissionValue: z.number().int().min(0).optional(), // valor em centavos
         description: z.string().optional(),
         promoEndsAt: z.number().nullable().optional(), // timestamp ms UTC
+        cardBorderColor: z.string().nullable().optional(),
+        cardBgColor: z.string().nullable().optional(),
+        cardTextColor: z.string().nullable().optional(),
+        cardButtonColor: z.string().nullable().optional(),
+        cardAccentColor: z.string().nullable().optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;

@@ -39,6 +39,8 @@ type OptionType = {
   questions: QuestionType[];
   documents: DocumentType[];
   warrantyTiers?: WarrantyTierType[];
+  cardBorderColor?: string | null; cardBgColor?: string | null; cardTextColor?: string | null;
+  cardButtonColor?: string | null; cardAccentColor?: string | null;
 };
 
 type ProductWithRelations = {
@@ -162,6 +164,11 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
   const [warranty, setWarranty] = useState((opt as any).warranty || '');
   const [commissionValue, setCommissionValue] = useState(String(Math.round(((opt as any).commissionValue || 0) / 100)));
   const [description, setDescription] = useState((opt as any).description || '');
+  const [cardBorderColor, setCardBorderColor] = useState((opt as any).cardBorderColor || '');
+  const [cardBgColor, setCardBgColor] = useState((opt as any).cardBgColor || '');
+  const [cardTextColor, setCardTextColor] = useState((opt as any).cardTextColor || '');
+  const [cardButtonColor, setCardButtonColor] = useState((opt as any).cardButtonColor || '');
+  const [cardAccentColor, setCardAccentColor] = useState((opt as any).cardAccentColor || '');
   const [dirty, setDirty] = useState(false);
 
   // Tiers de garantia
@@ -306,6 +313,11 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
       warranty,
       commissionValue: isNaN(commissionCents) ? 0 : commissionCents,
       description,
+      cardBorderColor: cardBorderColor || null,
+      cardBgColor: cardBgColor || null,
+      cardTextColor: cardTextColor || null,
+      cardButtonColor: cardButtonColor || null,
+      cardAccentColor: cardAccentColor || null,
     });
     setDirty(false);
   };
@@ -415,6 +427,34 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                 style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px', borderColor: description ? '#06b6d4' : '#555', resize: 'vertical' }}
               />
               {description && <p className="text-[10px] text-cyan-300 mt-1">Preview: {description.slice(0, 80)}{description.length > 80 ? '...' : ''}</p>}
+            </div>
+
+            {/* Aparência exclusiva desta opção na vitrine */}
+            <div className="rounded-lg border border-purple-500/30 bg-purple-950/20 p-3 space-y-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold text-purple-300 flex items-center gap-1"><Palette className="w-3 h-3" /> Aparência deste card na vitrine</p>
+                  <p className="text-[10px] text-gray-400">Vazio = mantém exatamente a aparência atual herdada do produto.</p>
+                </div>
+                <button type="button" onClick={() => { setCardBorderColor(''); setCardBgColor(''); setCardTextColor(''); setCardButtonColor(''); setCardAccentColor(''); markDirty(); }} className="text-[10px] font-bold text-gray-300 hover:text-white underline">
+                  Restaurar padrão
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <ColorPicker label="Borda" value={cardBorderColor} onChange={v => { setCardBorderColor(v); markDirty(); }} defaultDisplay="Produto" />
+                <ColorPicker label="Fundo" value={cardBgColor} onChange={v => { setCardBgColor(v); markDirty(); }} defaultDisplay="Produto" />
+                <ColorPicker label="Texto" value={cardTextColor} onChange={v => { setCardTextColor(v); markDirty(); }} defaultDisplay="Produto" />
+                <ColorPicker label="Botão Carrinho" value={cardButtonColor} onChange={v => { setCardButtonColor(v); markDirty(); }} defaultDisplay="Produto" />
+                <ColorPicker label="Destaque" value={cardAccentColor} onChange={v => { setCardAccentColor(v); markDirty(); }} defaultDisplay="Produto" />
+              </div>
+              <div className="overflow-hidden rounded-lg border" style={{ borderColor: cardBorderColor || '#ffffff22', background: cardBgColor || '#0b1020' }}>
+                <div className="h-1" style={{ background: cardAccentColor || cardBorderColor || '#7c3aed' }} />
+                <div className="p-2">
+                  <p className="text-[9px] font-black uppercase tracking-wider" style={{ color: cardAccentColor || '#a855f7' }}>Prévia da opção</p>
+                  <p className="mt-1 text-xs font-black" style={{ color: cardTextColor || '#ffffff' }}>{label || 'Nome da opção'}</p>
+                  <div className="mt-2 inline-flex rounded px-2 py-1 text-[9px] font-black" style={{ background: cardButtonColor || '#ffffff', color: cardTextColor || '#000000' }}>Carrinho</div>
+                </div>
+              </div>
             </div>
 
             {/* Garantia */}

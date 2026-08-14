@@ -33,6 +33,11 @@ export type StorefrontOption = {
   questions: StorefrontQuestion[];
   documents: StorefrontDocument[];
   warrantyTiers?: StorefrontWarrantyTier[];
+  cardBorderColor?: string | null;
+  cardBgColor?: string | null;
+  cardTextColor?: string | null;
+  cardButtonColor?: string | null;
+  cardAccentColor?: string | null;
 };
 
 export type StorefrontProduct = {
@@ -89,7 +94,15 @@ export function StorefrontProductCard({
     const price = asNumber(effectivePrice);
     return original > price && price > 0 ? Math.round(((original - price) / original) * 100) : 0;
   }, [effectiveOriginalPrice, effectivePrice]);
+  // A opção só substitui a aparência quando o ADM salvar uma cor; sem isso, o card mantém o visual atual do produto.
   const productColor = item.product.cardColor || "#7c3aed";
+  const borderColor = item.option.cardBorderColor || productColor;
+  const accentColor = item.option.cardAccentColor || borderColor;
+  // Fundo e texto do produto pai não eram aplicados pelo card individual anterior.
+  // Portanto, só a configuração explícita da opção muda esses pontos e o padrão visual fica idêntico quando estiver vazio.
+  const cardBackground = item.option.cardBgColor || undefined;
+  const textColor = item.option.cardTextColor || undefined;
+  const cartButtonColor = item.option.cardButtonColor || productColor;
   const description = item.option.description || item.product.description;
   const warrantyLabel = selectedTier?.warrantyLabel || (selectedTier ? `${selectedTier.warrantyValue} ${selectedTier.warrantyType}` : item.option.warranty);
   const detailsId = `product-details-${item.product.id}-${item.option.id}`;
@@ -97,9 +110,9 @@ export function StorefrontProductCard({
   return (
     <article
       className="group relative flex h-full flex-col overflow-hidden rounded-3xl border bg-slate-950/90 shadow-[0_18px_55px_rgba(0,0,0,0.34)] transition-transform duration-200 hover:-translate-y-1"
-      style={{ borderColor: `${productColor}99` }}
+      style={{ borderColor: `${borderColor}99`, ...(cardBackground ? { background: cardBackground } : {}) }}
     >
-      <div className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, transparent, ${productColor}, transparent)` }} />
+      <div className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)` }} />
       {discount > 0 && (
         <div className="absolute right-4 top-4 z-10 rounded-full bg-rose-600 px-2.5 py-1 text-xs font-black text-white shadow-lg">
           -{discount}% OFF
@@ -112,19 +125,19 @@ export function StorefrontProductCard({
             {item.product.iconUrl ? (
               <img src={item.product.iconUrl} alt="" loading="lazy" className="h-9 w-9 object-contain" />
             ) : (
-              <Tag className="h-5 w-5" style={{ color: productColor }} />
+              <Tag className="h-5 w-5" style={{ color: accentColor }} />
             )}
           </div>
           <div className="min-w-0">
-            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: productColor }}>
+            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: accentColor }}>
               {item.category}
             </p>
-            <h3 className="text-lg font-black leading-tight text-white">{item.option.label.trim()}</h3>
-            <p className="mt-1 text-xs font-semibold text-white/55">{item.product.name}</p>
+            <h3 className="text-lg font-black leading-tight text-white" style={textColor ? { color: textColor } : undefined}>{item.option.label.trim()}</h3>
+            <p className="mt-1 text-xs font-semibold text-white/55" style={textColor ? { color: `${textColor}bb` } : undefined}>{item.product.name}</p>
           </div>
         </div>
 
-        <p className="min-h-[43px] text-sm leading-relaxed text-white/75">{shortText(description)}</p>
+        <p className="min-h-[43px] text-sm leading-relaxed text-white/75" style={textColor ? { color: `${textColor}cc` } : undefined}>{shortText(description)}</p>
 
         {tiers.length > 0 && (
           <label className="mt-4 block">
@@ -146,7 +159,7 @@ export function StorefrontProductCard({
         <div className="mt-5 flex items-end justify-between gap-3">
           <div>
             {effectiveOriginalPrice && <p className="mb-0.5 text-xs font-semibold text-white/40 line-through">{asMoney(effectiveOriginalPrice)}</p>}
-            <p className="text-2xl font-black text-white">{asMoney(effectivePrice)}</p>
+            <p className="text-2xl font-black text-white" style={textColor ? { color: textColor } : undefined}>{asMoney(effectivePrice)}</p>
             {discount > 0 && <p className="mt-0.5 text-xs font-bold text-emerald-300">Economize {discount}%</p>}
           </div>
           {item.product.deliveryDays && <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-right text-[11px] font-bold text-white/65">Prazo: {item.product.deliveryDays}</span>}
@@ -172,7 +185,7 @@ export function StorefrontProductCard({
             type="button"
             onClick={() => onAddToCart(selectedTier)}
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-black text-white transition-transform active:scale-[0.98]"
-            style={{ background: `${productColor}28`, borderColor: `${productColor}aa` }}
+            style={{ background: `${cartButtonColor}28`, borderColor: `${cartButtonColor}aa` }}
           >
             <ShoppingCart className="h-4 w-4" /> Carrinho
           </button>

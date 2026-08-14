@@ -35,6 +35,8 @@ type ProductOption = {
   documents: OptionDocument[];
   warrantyTiers?: WarrantyTier[];
   promoEndsAt?: number | null;
+  cardBorderColor?: string | null; cardBgColor?: string | null; cardTextColor?: string | null;
+  cardButtonColor?: string | null; cardAccentColor?: string | null;
 };
 type Product = {
   id: number; name: string; description: string | null; iconUrl: string | null;

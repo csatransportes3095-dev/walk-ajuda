@@ -139,6 +139,12 @@ export const productOptions = mysqlTable("productOptions", {
   description: text("description").default(""), // especificaÃ§Ã£o/descriÃ§Ã£o da opÃ§Ã£o exibida ao cliente
   resellerDiscount: decimal("resellerDiscount", { precision: 5, scale: 2 }), // % de desconto para revendedores nesta opÃ§Ã£o (prioridade sobre % global)
   promoEndsAt: bigint("promoEndsAt", { mode: "number" }), // timestamp ms UTC â€” quando a promoÃ§Ã£o expira (null = sem prazo)
+  // Aparência opcional da opção na vitrine; vazia = herda o produto pai.
+  cardBorderColor: varchar("cardBorderColor", { length: 32 }),
+  cardBgColor: varchar("cardBgColor", { length: 32 }),
+  cardTextColor: varchar("cardTextColor", { length: 32 }),
+  cardButtonColor: varchar("cardButtonColor", { length: 32 }),
+  cardAccentColor: varchar("cardAccentColor", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
