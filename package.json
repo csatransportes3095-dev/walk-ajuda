@@ -17,6 +17,7 @@
     "db:migrate:question-audio": "tsx scripts/apply-question-audio-migration.ts",
     "db:migrate:private-authenticator-qr": "tsx scripts/apply-private-authenticator-qr-migration.ts",
     "db:migrate:locadora": "tsx scripts/apply-locadora-migration.ts",
+    "db:migrate:product-card-appearance": "tsx scripts/apply-product-card-appearance-migration.ts",
     "db:restore:financeiro": "tsx scripts/restore-financeiro-backup.ts"
   },
   "dependencies": {

@@ -41,7 +41,7 @@ type Product = {
   buttonText: string; isActive: number; sortOrder: number;
   requireProfilePhoto: number; requireCarDocument: number; requireAlvara: number;
   requireCondutaxi: number; requireVehicle2016: number; isPdfOnly: number; showYearField: number;
-  cardColor: string | null; cardBgColor: string | null; cardTextColor: string | null; cardBtnColor: string | null;
+  cardColor: string | null; cardBgColor: string | null; cardTextColor: string | null; cardBtnColor: string | null; cardAccentColor: string | null;
   resellerDiscount?: string | null; // % de desconto para revendedores por produto
   deliveryDays?: string | null;
   options: ProductOption[];

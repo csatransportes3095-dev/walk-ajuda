@@ -46,7 +46,7 @@ type ProductWithRelations = {
   buttonText: string; requireProfilePhoto: number; requireCarDocument: number;
   requireAlvara: number; requireCondutaxi: number; requireVehicle2016: number;
   isPdfOnly: number; showYearField: number; cardColor: string | null;
-  cardBgColor: string | null; cardTextColor: string | null; cardBtnColor: string | null;
+  cardBgColor: string | null; cardTextColor: string | null; cardBtnColor: string | null; cardAccentColor: string | null;
   isActive: number; sortOrder: number;
   options: OptionType[];
 };
@@ -1171,6 +1171,7 @@ export default function AdminProducts() {
   const [newCardBgColor, setNewCardBgColor] = useState("");
   const [newCardTextColor, setNewCardTextColor] = useState("");
   const [newCardBtnColor, setNewCardBtnColor] = useState("");
+  const [newCardAccentColor, setNewCardAccentColor] = useState("");
 
   // Edit product form
   const [editName, setEditName] = useState("");
@@ -1180,6 +1181,7 @@ export default function AdminProducts() {
   const [editCardBgColor, setEditCardBgColor] = useState("");
   const [editCardTextColor, setEditCardTextColor] = useState("");
   const [editCardBtnColor, setEditCardBtnColor] = useState("");
+  const [editCardAccentColor, setEditCardAccentColor] = useState("");
   const [editResellerDiscount, setEditResellerDiscount] = useState<string>("");
   const [editDeliveryDays, setEditDeliveryDays] = useState<string>("");
 
@@ -1246,7 +1248,7 @@ export default function AdminProducts() {
   const deleteOptMut = trpc.productOptions.delete.useMutation({ onSuccess: () => { utils.products.list.invalidate(); toast.success("Opção excluída!"); } });
   const reorderOptMut = trpc.productOptions.reorder.useMutation({ onSuccess: () => utils.products.list.invalidate() });
 
-  const resetCreateForm = () => { setNewName(""); setNewDesc(""); setNewButtonText("COMPRAR"); setNewCardColor(""); setNewCardBgColor(""); setNewCardTextColor(""); setNewCardBtnColor(""); };
+  const resetCreateForm = () => { setNewName(""); setNewDesc(""); setNewButtonText("COMPRAR"); setNewCardColor(""); setNewCardBgColor(""); setNewCardTextColor(""); setNewCardBtnColor(""); setNewCardAccentColor(""); };
   const resetOptForm = () => {
     setNewOptLabel(""); setNewOptPrice(""); setNewOptType("standard");
     setNewOptDocNameMode("none"); setNewOptDocCustomName("");
@@ -1256,7 +1258,7 @@ export default function AdminProducts() {
     setEditingProduct(p.id); setEditName(p.name); setEditDesc(p.description || "");
     setEditButtonText(p.buttonText || "COMPRAR"); setEditCardColor(p.cardColor || "");
     setEditCardBgColor(p.cardBgColor || ""); setEditCardTextColor(p.cardTextColor || "");
-    setEditCardBtnColor(p.cardBtnColor || "");
+    setEditCardBtnColor(p.cardBtnColor || ""); setEditCardAccentColor(p.cardAccentColor || "");
     setEditResellerDiscount((p as any).resellerDiscount != null ? String((p as any).resellerDiscount) : "");
     setEditDeliveryDays((p as any).deliveryDays || "");
   };
@@ -1293,22 +1295,24 @@ export default function AdminProducts() {
               <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Descrição do serviço..." style={{ ...whiteInputStyle, minHeight: '70px' }} rows={3} />
             </div>
             <div className="bg-black/30 rounded-lg border border-purple-500/20 p-4 space-y-3">
-              <p className="text-sm font-bold text-purple-400 flex items-center gap-1"><Palette className="w-4 h-4" /> Cores do Card</p>
+              <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold text-purple-400 flex items-center gap-1"><Palette className="w-4 h-4" /> APARÊNCIA DO CARD</p><button type="button" onClick={() => { setNewCardColor(''); setNewCardBgColor(''); setNewCardTextColor(''); setNewCardBtnColor(''); setNewCardAccentColor(''); }} className="text-[10px] text-gray-300 border border-gray-600 rounded px-2 py-1 hover:bg-white/10">Restaurar padrão</button></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <ColorPicker label="Cor da Borda" value={newCardColor} onChange={setNewCardColor} />
-                <ColorPicker label="Cor de Fundo" value={newCardBgColor} onChange={setNewCardBgColor} />
-                <ColorPicker label="Cor do Texto" value={newCardTextColor} onChange={setNewCardTextColor} />
-                <ColorPicker label="Cor do Botão" value={newCardBtnColor} onChange={setNewCardBtnColor} />
+                <ColorPicker label="Cor da borda" value={newCardColor} onChange={setNewCardColor} />
+                <ColorPicker label="Cor principal (fundo)" value={newCardBgColor} onChange={setNewCardBgColor} />
+                <ColorPicker label="Cor dos textos" value={newCardTextColor} onChange={setNewCardTextColor} />
+                <ColorPicker label="Cor do botão Carrinho" value={newCardBtnColor} onChange={setNewCardBtnColor} />
+                <ColorPicker label="Cor de destaque" value={newCardAccentColor} onChange={setNewCardAccentColor} />
               </div>
               {/* Preview mini card */}
-              <div className="mt-2 p-3 rounded-lg border" style={{ borderColor: newCardColor || '#7c3aed33', backgroundColor: newCardBgColor || '#1e1b4b' }}>
-                <p className="text-xs font-bold mb-1" style={{ color: newCardTextColor || '#ffffff' }}>Preview do Card</p>
+              <div className="mt-2 overflow-hidden rounded-lg border" style={{ borderColor: newCardColor || '#7c3aed33', backgroundColor: newCardBgColor || '#1e1b4b' }}>
+                <div className="h-1" style={{ backgroundColor: newCardAccentColor || newCardColor || '#7c3aed' }} />
+                <div className="p-3"><p className="text-xs font-bold mb-1" style={{ color: newCardTextColor || '#ffffff' }}>Preview do Card</p>
                 <p className="text-[10px] mb-2" style={{ color: newCardTextColor ? newCardTextColor + 'cc' : '#ffffffcc' }}>Descrição do serviço</p>
-                <div className="text-[10px] font-bold text-center py-1 rounded" style={{ backgroundColor: newCardBtnColor || '#f3f4f6', color: newCardBtnColor ? '#000000' : '#000000' }}>BOTÃO</div>
+                <div className="text-[10px] font-bold text-center py-1 rounded" style={{ backgroundColor: newCardBtnColor || '#f3f4f6', color: newCardBtnColor ? '#000000' : '#000000' }}>BOTÃO</div></div>
               </div>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => { if (!newName.trim()) { toast.error("Nome obrigatório"); return; } createMut.mutate({ name: newName, description: newDesc || undefined, buttonText: newButtonText, cardColor: newCardColor || undefined, cardBgColor: newCardBgColor || undefined, cardTextColor: newCardTextColor || undefined, cardBtnColor: newCardBtnColor || undefined }); }} disabled={createMut.isPending} className="bg-green-600 hover:bg-green-700 text-white">
+              <Button onClick={() => { if (!newName.trim()) { toast.error("Nome obrigatório"); return; } createMut.mutate({ name: newName, description: newDesc || undefined, buttonText: newButtonText, cardColor: newCardColor || undefined, cardBgColor: newCardBgColor || undefined, cardTextColor: newCardTextColor || undefined, cardBtnColor: newCardBtnColor || undefined, cardAccentColor: newCardAccentColor || undefined }); }} disabled={createMut.isPending} className="bg-green-600 hover:bg-green-700 text-white">
                 {createMut.isPending ? "Criando..." : "Criar Card"}
               </Button>
               <Button onClick={() => { setShowCreateForm(false); resetCreateForm(); }} variant="outline" className="text-white border-gray-600 hover:bg-white/10">Cancelar</Button>
@@ -1376,17 +1380,19 @@ export default function AdminProducts() {
                     </div>
                     <div><label className="text-xs text-gray-400 block mb-1">Descrição</label><textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} style={{ ...whiteInputStyle, minHeight: '80px' }} rows={4} /></div>
                     <div className="bg-black/30 rounded-lg border border-purple-500/20 p-3 space-y-3">
-                      <p className="text-xs font-bold text-purple-400 flex items-center gap-1"><Palette className="w-3 h-3" /> Cores do Card</p>
+                      <div className="flex items-center justify-between gap-3"><p className="text-xs font-bold text-purple-400 flex items-center gap-1"><Palette className="w-3 h-3" /> APARÊNCIA DO CARD</p><button type="button" onClick={() => { setEditCardColor(''); setEditCardBgColor(''); setEditCardTextColor(''); setEditCardBtnColor(''); setEditCardAccentColor(''); }} className="text-[10px] text-gray-300 border border-gray-600 rounded px-2 py-1 hover:bg-white/10">Restaurar padrão</button></div>
                       <div className="grid grid-cols-2 gap-3">
                         <ColorPicker label="Borda" value={editCardColor} onChange={setEditCardColor} />
-                        <ColorPicker label="Fundo" value={editCardBgColor} onChange={setEditCardBgColor} />
-                        <ColorPicker label="Texto" value={editCardTextColor} onChange={setEditCardTextColor} />
-                        <ColorPicker label="Botão" value={editCardBtnColor} onChange={setEditCardBtnColor} />
+                        <ColorPicker label="Principal" value={editCardBgColor} onChange={setEditCardBgColor} />
+                        <ColorPicker label="Textos" value={editCardTextColor} onChange={setEditCardTextColor} />
+                        <ColorPicker label="Botão Carrinho" value={editCardBtnColor} onChange={setEditCardBtnColor} />
+                        <ColorPicker label="Destaque" value={editCardAccentColor} onChange={setEditCardAccentColor} />
                       </div>
                       {/* Preview mini card */}
-                      <div className="p-2 rounded-lg border" style={{ borderColor: editCardColor || '#7c3aed33', backgroundColor: editCardBgColor || '#1e1b4b' }}>
-                        <p className="text-[10px] font-bold" style={{ color: editCardTextColor || '#ffffff' }}>Preview</p>
-                        <div className="text-[9px] font-bold text-center py-0.5 rounded mt-1" style={{ backgroundColor: editCardBtnColor || '#f3f4f6', color: '#000' }}>BOTÃO</div>
+                      <div className="overflow-hidden rounded-lg border" style={{ borderColor: editCardColor || '#7c3aed33', backgroundColor: editCardBgColor || '#1e1b4b' }}>
+                        <div className="h-1" style={{ backgroundColor: editCardAccentColor || editCardColor || '#7c3aed' }} />
+                        <div className="p-2"><p className="text-[10px] font-bold" style={{ color: editCardTextColor || '#ffffff' }}>Preview</p>
+                        <div className="text-[9px] font-bold text-center py-0.5 rounded mt-1" style={{ backgroundColor: editCardBtnColor || '#f3f4f6', color: '#000' }}>BOTÃO</div></div>
                       </div>
                     </div>
                     {/* Desconto Revendedor por produto */}
@@ -1420,7 +1426,7 @@ export default function AdminProducts() {
                     <div className="flex gap-2">
                       <Button onClick={() => {
                         const discountVal = editResellerDiscount.trim() !== '' ? parseFloat(editResellerDiscount) : null;
-                        updateMut.mutate({ id: product.id, name: editName, description: editDesc || null, buttonText: editButtonText, cardColor: editCardColor || null, cardBgColor: editCardBgColor || null, cardTextColor: editCardTextColor || null, cardBtnColor: editCardBtnColor || null, resellerDiscount: discountVal !== null && !isNaN(discountVal) ? discountVal : null, deliveryDays: editDeliveryDays.trim() || null } as any);
+                        updateMut.mutate({ id: product.id, name: editName, description: editDesc || null, buttonText: editButtonText, cardColor: editCardColor || null, cardBgColor: editCardBgColor || null, cardTextColor: editCardTextColor || null, cardBtnColor: editCardBtnColor || null, cardAccentColor: editCardAccentColor || null, resellerDiscount: discountVal !== null && !isNaN(discountVal) ? discountVal : null, deliveryDays: editDeliveryDays.trim() || null } as any);
                       }} className="bg-green-600 hover:bg-green-700 text-white text-sm"><Save className="w-3 h-3 mr-1" /> Salvar Card</Button>
                       <Button onClick={() => setEditingProduct(null)} variant="outline" className="text-white border-gray-600 hover:bg-white/10 text-sm"><X className="w-3 h-3 mr-1" /> Cancelar</Button>
                     </div>
