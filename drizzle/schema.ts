@@ -1340,6 +1340,25 @@ export const spreadsheetClients = mysqlTable("spreadsheetClients", {
 export type SpreadsheetClient = typeof spreadsheetClients.$inferSelect;
 export type InsertSpreadsheetClient = typeof spreadsheetClients.$inferInsert;
 
+// Manifesto de indicação preenchido após o login em cada rota da planilha.
+// Um único registro por cliente e rota preserva a resposta, sem duplicar o cadastro principal.
+export const spreadsheetReferralDeclarations = mysqlTable("spreadsheetReferralDeclarations", {
+  id: int("id").autoincrement().primaryKey(),
+  clientId: int("clientId").notNull().references(() => spreadsheetClients.id, { onDelete: "cascade" }),
+  route: mysqlEnum("route", ["gastos", "emprestimo"]).notNull(),
+  answer: mysqlEnum("answer", ["yes", "no"]).notNull(),
+  referrerName: varchar("referrerName", { length: 128 }),
+  referrerPhone: varchar("referrerPhone", { length: 32 }),
+  referrerCustomerId: int("referrerCustomerId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  clientRouteUnique: uniqueIndex("uq_spreadsheet_referral_declaration_client_route").on(table.clientId, table.route),
+}));
+
+export type SpreadsheetReferralDeclaration = typeof spreadsheetReferralDeclarations.$inferSelect;
+export type InsertSpreadsheetReferralDeclaration = typeof spreadsheetReferralDeclarations.$inferInsert;
+
 // Tabela de senhas geradas pelo admin
 export const spreadsheetPasswords = mysqlTable("spreadsheetPasswords", {
   id: int("id").autoincrement().primaryKey(),

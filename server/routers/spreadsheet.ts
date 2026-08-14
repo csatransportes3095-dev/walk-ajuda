@@ -12,7 +12,7 @@ import {
 import { getDb } from "../db";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
 import { findMainCustomerByIdentity, getRouteAccess, normalizeCustomerPhone, setCustomerRoutePermissions } from "../customerAccess";
-import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
+import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, spreadsheetReferralDeclarations, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
@@ -74,6 +74,36 @@ export async function resolveClientId(token: string): Promise<number> {
   }
 
   return session.clientId as number;
+}
+
+// Resolve o cliente autenticado para o manifesto de indicação da rota informada.
+// A validação é isolada e não altera o login, a sessão ou as permissões existentes.
+async function resolveReferralManifestClient(token: string, route: 'gastos' | 'emprestimo') {
+  const db = await getDb() as any;
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco de dados indisponível' });
+
+  const cleanToken = token.trim();
+  const sessionResult = await db.select().from(spreadsheetSessions)
+    .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
+  const session = sessionResult?.[0] || null;
+  if (!session || new Date(session.expiresAt) < new Date()) {
+    throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão inválida ou expirada. Faça login novamente.' });
+  }
+
+  const clientResult = await db.select().from(spreadsheetClients)
+    .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
+  const client = clientResult?.[0] || null;
+  if (!client) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Cadastro de acesso não encontrado.' });
+
+  const mainCustomer = await findMainCustomerByIdentity({ phone: client.phone || '', cpf: client.cpf || '' }, db);
+  if (mainCustomer) {
+    const access = await getRouteAccess(mainCustomer.id, db);
+    if (access.restricted && !access.routes.includes(route)) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso não autorizado para esta área.' });
+    }
+  }
+
+  return { db, client };
 }
 
 // Duracao da sessao do Gestor de Gastos: 90 dias (login persistente)
@@ -1424,6 +1454,13 @@ export const spreadsheetRouter = router({
         try { await db.execute(`ALTER TABLE spreadsheetClients ADD COLUMN allowedRoutes VARCHAR(255) NULL`); } catch (_) {}
 
         const clients = await db.select().from(spreadsheetClients);
+        const declarations = await db.select().from(spreadsheetReferralDeclarations);
+        const declarationsByClientId = new Map<number, any[]>();
+        for (const declaration of declarations) {
+          const current = declarationsByClientId.get(declaration.clientId) || [];
+          current.push(declaration);
+          declarationsByClientId.set(declaration.clientId, current);
+        }
         const now = new Date();
         const result = [] as any[];
 
@@ -1514,6 +1551,13 @@ export const spreadsheetRouter = router({
             hasEverCreatedPassword,
             profilePhotoUrl,
             allowedRoutes: (client as any).allowedRoutes || '',
+            referralDeclarations: (declarationsByClientId.get(client.id) || []).map((declaration) => ({
+              route: declaration.route,
+              answer: declaration.answer,
+              referrerName: declaration.referrerName || '',
+              referrerPhone: declaration.referrerPhone || '',
+              createdAt: declaration.createdAt,
+            })),
           });
         }
 
@@ -1772,6 +1816,75 @@ export const spreadsheetRouter = router({
       } catch (error) {
         if (error instanceof TRPCError) throw error;
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao atualizar rotas' });
+      }
+    }),
+
+  // Manifesto exibido uma única vez após o login, separado do cadastro e da autenticação.
+  getReferralDeclaration: publicProcedure
+    .input(z.object({ token: z.string(), route: z.enum(['gastos', 'emprestimo']) }))
+    .query(async ({ input }) => {
+      const { db, client } = await resolveReferralManifestClient(input.token, input.route);
+      const rows = await db.select().from(spreadsheetReferralDeclarations)
+        .where(and(
+          eq(spreadsheetReferralDeclarations.clientId, client.id),
+          eq(spreadsheetReferralDeclarations.route, input.route),
+        )).limit(1);
+      const declaration = rows?.[0] || null;
+      return {
+        answered: !!declaration,
+        declaration: declaration ? {
+          answer: declaration.answer,
+          referrerName: declaration.referrerName || '',
+          referrerPhone: declaration.referrerPhone || '',
+          createdAt: declaration.createdAt,
+        } : null,
+      };
+    }),
+
+  submitReferralDeclaration: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      route: z.enum(['gastos', 'emprestimo']),
+      answer: z.enum(['yes', 'no']),
+      referrerName: z.string().trim().max(128).optional(),
+      referrerPhone: z.string().trim().max(32).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { db, client } = await resolveReferralManifestClient(input.token, input.route);
+      const existingRows = await db.select().from(spreadsheetReferralDeclarations)
+        .where(and(
+          eq(spreadsheetReferralDeclarations.clientId, client.id),
+          eq(spreadsheetReferralDeclarations.route, input.route),
+        )).limit(1);
+      if (existingRows?.[0]) return { success: true, alreadyAnswered: true };
+
+      const referrerName = input.answer === 'yes' ? String(input.referrerName || '').trim() : '';
+      const referrerPhone = input.answer === 'yes' ? String(input.referrerPhone || '').trim() : '';
+      if (input.answer === 'yes' && (!referrerName || !referrerPhone)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Informe o nome e o telefone de quem indicou você.' });
+      }
+
+      const normalizedReferrerPhone = referrerPhone.replace(/\D/g, '');
+      let referrerCustomerId: number | null = null;
+      if (normalizedReferrerPhone) {
+        const matchRows = await db.select({ id: customers.id }).from(customers)
+          .where(eq(customers.phone, normalizedReferrerPhone)).limit(1);
+        referrerCustomerId = matchRows?.[0]?.id ?? null;
+      }
+
+      try {
+        await db.insert(spreadsheetReferralDeclarations).values({
+          clientId: client.id,
+          route: input.route,
+          answer: input.answer,
+          referrerName: referrerName || null,
+          referrerPhone: referrerPhone || null,
+          referrerCustomerId,
+        });
+        return { success: true, alreadyAnswered: false };
+      } catch (error: any) {
+        if (String(error?.code || '').includes('ER_DUP_ENTRY')) return { success: true, alreadyAnswered: true };
+        throw error;
       }
     }),
 

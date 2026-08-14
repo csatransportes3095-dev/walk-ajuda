@@ -484,7 +484,7 @@ export default function AdminGastosPage() {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <Input
               type="text"
-              placeholder="Filtrar por nome ou telefone..."
+              placeholder="Filtrar por cliente, telefone, indicador ou rota..."
               value={listFilter}
               onChange={(e) => setListFilter(e.target.value)}
               className="bg-slate-600 border-slate-500 text-white pl-9"
@@ -521,7 +521,13 @@ export default function AdminGastosPage() {
                 .filter((c: any) => {
                   const f = listFilter.trim().toLowerCase();
                   if (!f) return true;
-                  return (c.name || '').toLowerCase().includes(f) || (c.phone || '').includes(f.replace(/\D/g, ''));
+                  const referralMatch = (c.referralDeclarations || []).some((declaration: any) =>
+                    (declaration.referrerName || '').toLowerCase().includes(f) ||
+                    (declaration.referrerPhone || '').replace(/\D/g, '').includes(f.replace(/\D/g, '')) ||
+                    (declaration.route || '').toLowerCase().includes(f) ||
+                    (declaration.answer === 'yes' ? 'sim indicado indicação' : 'nao não').includes(f),
+                  );
+                  return (c.name || '').toLowerCase().includes(f) || (c.phone || '').includes(f.replace(/\D/g, '')) || referralMatch;
                 })
                 .map((c: any) => {
                   const isPending = c.passwordStatus === 'pending';
@@ -585,6 +591,28 @@ export default function AdminGastosPage() {
                           </span>
                         </div>
                       </div>
+                      {Array.isArray(c.referralDeclarations) && c.referralDeclarations.length > 0 && (
+                        <div className="mt-3 rounded-xl border border-violet-400/25 bg-violet-500/10 p-3">
+                          <p className="mb-2 text-xs font-black uppercase tracking-wide text-violet-200">Indicação</p>
+                          <div className="space-y-2">
+                            {c.referralDeclarations.map((declaration: any) => {
+                              const routeLabel = declaration.route === 'emprestimo' ? 'Empréstimos' : 'Gastos';
+                              const indicated = declaration.answer === 'yes';
+                              return (
+                                <div key={`${declaration.route}-${declaration.createdAt}`} className="text-xs text-slate-300">
+                                  <span className={`mr-2 inline-flex rounded-full px-2 py-0.5 font-bold ${indicated ? 'bg-emerald-500/20 text-emerald-200' : 'bg-slate-500/20 text-slate-300'}`}>
+                                    {routeLabel}: {indicated ? 'SIM' : 'NÃO'}
+                                  </span>
+                                  {indicated ? <>
+                                    <strong className="text-white">{declaration.referrerName}</strong>{declaration.referrerPhone ? ` · ${declaration.referrerPhone}` : ''}
+                                  </> : 'Não informado'}
+                                  {declaration.createdAt && <span className="ml-2 text-slate-500">{new Date(declaration.createdAt).toLocaleDateString('pt-BR')}</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-2 mt-3">
                         {isPending && (
                           <Button

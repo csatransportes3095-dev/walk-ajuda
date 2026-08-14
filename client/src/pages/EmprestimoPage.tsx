@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { LoansTab } from './LoansTab';
 import { GastosLoginPage } from './GastosLoginPage';
 import { trpc } from '@/lib/trpc';
+import { PostLoginReferralManifest } from '@/components/PostLoginReferralManifest';
 
 const TOKEN_KEY = 'gastos_token';
 const CLIENT_ID_KEY = 'gastos_clientId';
@@ -49,6 +50,7 @@ export function EmprestimoPage() {
   const [token, setToken] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string | null>(null);
   const [requiredProfilePhone, setRequiredProfilePhone] = useState<string>('');
+  const [manifestCompleted, setManifestCompleted] = useState(false);
   const [savedToken] = useState<string>(() => localStorage.getItem(TOKEN_KEY) || '');
   const [isLoading, setIsLoading] = useState<boolean>(() => !!localStorage.getItem(TOKEN_KEY));
 
@@ -106,6 +108,7 @@ export function EmprestimoPage() {
     setRequiredProfilePhone('');
     setToken(newToken);
     setClientName(newClientName);
+    setManifestCompleted(false);
     setIsLoggedIn(true);
   };
 
@@ -118,6 +121,7 @@ export function EmprestimoPage() {
     setRequiredProfilePhone('');
     setToken(null);
     setClientName(null);
+    setManifestCompleted(false);
     setIsLoggedIn(false);
   };
 
@@ -139,6 +143,10 @@ export function EmprestimoPage() {
   // Verificar permissão de rota (null = ainda carregando, não bloquear)
   if (routeAccessQuery.data && !routeAccessQuery.data.allowed) {
     return <AcessoNegado routeLabel="Empréstimos" onLogout={handleLogout} />;
+  }
+
+  if (!manifestCompleted) {
+    return <PostLoginReferralManifest token={token || ''} route="emprestimo" onComplete={() => setManifestCompleted(true)} />;
   }
 
   return (

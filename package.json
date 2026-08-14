@@ -18,6 +18,7 @@
     "db:migrate:private-authenticator-qr": "tsx scripts/apply-private-authenticator-qr-migration.ts",
     "db:migrate:option-card-appearance": "tsx scripts/apply-option-card-appearance-migration.ts",
     "db:migrate:locadora": "tsx scripts/apply-locadora-migration.ts",
+    "db:migrate:spreadsheet-referral-declaration": "tsx scripts/apply-spreadsheet-referral-declaration-migration.ts",
     "db:restore:financeiro": "tsx scripts/restore-financeiro-backup.ts"
   },
   "dependencies": {
