@@ -1167,9 +1167,9 @@ function LoansTab() {
                               ) : null}
                             </div>
                           )}
-                          {/* Parcela em análise: cards Confirmar e Recusar */}
+                          {/* Comprovante em análise não equivale a pagamento: o ADM ainda pode aplicar ou remover taxa. */}
                           {inst.status === "em_analise" && (
-                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/30">
+                            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-border/30">
                               <button
                                 className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all text-xs font-semibold active:scale-95"
                                 onClick={() => {
@@ -1181,6 +1181,22 @@ function LoansTab() {
                                 <CheckCircle className="w-4 h-4" />
                                 Confirmar
                               </button>
+                              {inst.feeApplied != null ? (
+                                <button
+                                  className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-orange-500/10 border border-orange-500/30 text-orange-400 hover:bg-orange-500/20 transition-all text-xs font-semibold active:scale-95"
+                                  onClick={() => { if (confirm(`Remover taxa de atraso de R$ ${parseFloat(inst.feeApplied).toFixed(2).replace('.',',')} da parcela #${inst.installmentNumber}?`)) removeLateFee.mutate({ installmentId: inst.id }); }}
+                                  disabled={removeLateFee.isPending}>
+                                  <AlertTriangle className="w-4 h-4" />
+                                  -Taxa
+                                </button>
+                              ) : (
+                                <button
+                                  className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
+                                  onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}>
+                                  <AlertTriangle className="w-4 h-4" />
+                                  +Taxa
+                                </button>
+                              )}
                               <button
                                 className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all text-xs font-semibold active:scale-95"
                                 onClick={() => refusePayment.mutate({ installmentId: inst.id, reason: "Comprovante inválido" })}>
@@ -2343,9 +2359,16 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
             />
             {selectedClient && !clientSearch && (
               <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{selectedClient.name}</p>
-                  <p className="break-all text-xs text-muted-foreground">{selectedClient.cpf ? `CPF ${selectedClient.cpf}` : "CPF não informado"}{selectedClient.phone ? ` · ${selectedClient.phone}` : ""}</p>
+                <div className="flex min-w-0 items-center gap-3">
+                  {selectedClient.profilePhotoUrl ? (
+                    <img src={selectedClient.profilePhotoUrl} alt={`Foto de ${selectedClient.name}`} className="h-11 w-11 shrink-0 rounded-full border border-primary/40 object-cover" />
+                  ) : (
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-sm font-bold text-primary">{String(selectedClient.name || '?').charAt(0).toUpperCase()}</div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">{selectedClient.name}</p>
+                    <p className="break-all text-xs text-muted-foreground">{selectedClient.cpf ? `CPF ${selectedClient.cpf}` : "CPF não informado"}{selectedClient.phone ? ` · ${selectedClient.phone}` : ""}</p>
+                  </div>
                 </div>
                 <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => setClientId("")}>Trocar</Button>
               </div>
@@ -2359,8 +2382,17 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                     onClick={() => { setClientId(String(c.id)); setClientSearch(""); }}
                     className="w-full rounded-md px-3 py-2 text-left transition-colors hover:bg-muted focus:bg-muted"
                   >
-                    <p className="truncate text-sm font-medium">{c.name}</p>
-                    <p className="break-all text-xs text-muted-foreground">{c.cpf ? `CPF ${c.cpf}` : "CPF não informado"}{c.phone ? ` · ${c.phone}` : ""}</p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      {c.profilePhotoUrl ? (
+                        <img src={c.profilePhotoUrl} alt={`Foto de ${c.name}`} className="h-9 w-9 shrink-0 rounded-full border border-border object-cover" />
+                      ) : (
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">{String(c.name || '?').charAt(0).toUpperCase()}</div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{c.name}</p>
+                        <p className="break-all text-xs text-muted-foreground">{c.cpf ? `CPF ${c.cpf}` : "CPF não informado"}{c.phone ? ` · ${c.phone}` : ""}</p>
+                      </div>
+                    </div>
                   </button>
                 )) : <p className="px-3 py-2 text-sm text-muted-foreground">Nenhum cliente encontrado.</p>}
               </div>

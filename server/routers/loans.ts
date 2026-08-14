@@ -693,6 +693,7 @@ export const loanRouter = router({
       rows = await qRows(db, drizzleSql`
         SELECT lc.id, lc.userId, lc.name, lc.phone, lc.status, lc.profileSlug, lc.creditLimit, lc.interestRate, lc.maxDays, lc.maxDaysSemanal, lc.maxDaysQuinzenal, lc.maxDaysMensal, lc.notes, lc.loanEnabled, lc.pixKey, lc.pixKeyType, lc.pixName, lc.spreadsheetToken, lc.allowedPaymentTypes, lc.late_fee_disabled, lc.client_pix_key, lc.client_pix_name, lc.client_pix_bank, lc.createdAt, lc.updatedAt,
           COALESCE(lc.cpf, MAX(c.cpf)) as cpf,
+          MAX(c.profilePhotoUrl) as profilePhotoUrl,
           COUNT(DISTINCT l.id) as totalLoans,
           COALESCE(SUM(CASE WHEN l.status NOT IN ('pago','cancelado','reprovado') THEN l.totalAmount ELSE 0 END),0) as openAmount
         FROM loanClients lc
@@ -706,6 +707,7 @@ export const loanRouter = router({
       rows = await qRows(db, drizzleSql`
         SELECT lc.id, lc.userId, lc.name, lc.phone, lc.status, lc.profileSlug, lc.creditLimit, lc.interestRate, lc.maxDays, lc.maxDaysSemanal, lc.maxDaysQuinzenal, lc.maxDaysMensal, lc.notes, lc.loanEnabled, lc.pixKey, lc.pixKeyType, lc.pixName, lc.spreadsheetToken, lc.allowedPaymentTypes, lc.late_fee_disabled, lc.client_pix_key, lc.client_pix_name, lc.client_pix_bank, lc.createdAt, lc.updatedAt,
           COALESCE(lc.cpf, MAX(c.cpf)) as cpf,
+          MAX(c.profilePhotoUrl) as profilePhotoUrl,
           COUNT(DISTINCT l.id) as totalLoans,
           COALESCE(SUM(CASE WHEN l.status NOT IN ('pago','cancelado','reprovado') THEN l.totalAmount ELSE 0 END),0) as openAmount
         FROM loanClients lc
@@ -718,6 +720,7 @@ export const loanRouter = router({
       rows = await qRows(db, drizzleSql`
         SELECT lc.id, lc.userId, lc.name, lc.phone, lc.status, lc.profileSlug, lc.creditLimit, lc.interestRate, lc.maxDays, lc.maxDaysSemanal, lc.maxDaysQuinzenal, lc.maxDaysMensal, lc.notes, lc.loanEnabled, lc.pixKey, lc.pixKeyType, lc.pixName, lc.spreadsheetToken, lc.allowedPaymentTypes, lc.late_fee_disabled, lc.client_pix_key, lc.client_pix_name, lc.client_pix_bank, lc.createdAt, lc.updatedAt,
           COALESCE(lc.cpf, MAX(c.cpf)) as cpf,
+          MAX(c.profilePhotoUrl) as profilePhotoUrl,
           COUNT(DISTINCT l.id) as totalLoans,
           COALESCE(SUM(CASE WHEN l.status NOT IN ('pago','cancelado','reprovado') THEN l.totalAmount ELSE 0 END),0) as openAmount
         FROM loanClients lc
@@ -730,6 +733,7 @@ export const loanRouter = router({
       rows = await qRows(db, drizzleSql`
         SELECT lc.id, lc.userId, lc.name, lc.phone, lc.status, lc.profileSlug, lc.creditLimit, lc.interestRate, lc.maxDays, lc.maxDaysSemanal, lc.maxDaysQuinzenal, lc.maxDaysMensal, lc.notes, lc.loanEnabled, lc.pixKey, lc.pixKeyType, lc.pixName, lc.spreadsheetToken, lc.allowedPaymentTypes, lc.late_fee_disabled, lc.client_pix_key, lc.client_pix_name, lc.client_pix_bank, lc.createdAt, lc.updatedAt,
           COALESCE(lc.cpf, MAX(c.cpf)) as cpf,
+          MAX(c.profilePhotoUrl) as profilePhotoUrl,
           COUNT(DISTINCT l.id) as totalLoans,
           COALESCE(SUM(CASE WHEN l.status NOT IN ('pago','cancelado','reprovado') THEN l.totalAmount ELSE 0 END),0) as openAmount
         FROM loanClients lc
@@ -1584,8 +1588,45 @@ export const loanRouter = router({
     const key = `loan-proofs/${client.id}/${input.installmentId}-${Date.now()}-${input.fileName}`;
     const { url } = await storagePut(key, buffer, input.mimeType);
 
-    await db.execute(drizzleSql`UPDATE loanInstallments SET proofUrl=${url}, proofSentAt=NOW(), status='em_analise' WHERE id=${input.installmentId}`);
-    return { ok: true, url };
+    // O comprovante apenas entra em análise: ele não confirma o pagamento nem elimina a taxa.
+    // Se a parcela já venceu, aplica a regra global vigente uma única vez antes de mudar o status.
+    const today = getBrazilToday();
+    const dueDateValue = inst[0].dueDate;
+    const dueDate = typeof dueDateValue === 'string'
+      ? dueDateValue.slice(0, 10)
+      : new Date(dueDateValue).toISOString().slice(0, 10);
+    const hasExistingFee = inst[0].originalAmount != null;
+    let appliedFee = 0;
+    if (!hasExistingFee && !client.late_fee_disabled && dueDate <= today) {
+      const configRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+      const config = configRows[0];
+      if (config?.enabled) {
+        const nowHour = new Date().getHours();
+        const originalAmount = parseFloat(inst[0].amount || 0);
+        if (dueDate < today && parseFloat(config.fee_after_midnight_pct || '0') > 0) {
+          appliedFee = Math.round(originalAmount * (parseFloat(config.fee_after_midnight_pct) / 100) * 100) / 100;
+        } else if (nowHour >= 20) {
+          appliedFee = parseFloat(config.fee_after_18h || '0') + parseFloat(config.fee_after_20h || '0');
+        } else if (nowHour >= 18) {
+          appliedFee = parseFloat(config.fee_after_18h || '0');
+        }
+        if (appliedFee > 0) {
+          const updatedAmount = Math.round((originalAmount + appliedFee) * 100) / 100;
+          const note = `Taxa de atraso automática: +R$ ${appliedFee.toFixed(2).replace('.', ',')} aplicada no envio do comprovante em ${new Date().toLocaleDateString('pt-BR')}`;
+          await db.execute(drizzleSql`
+            UPDATE loanInstallments
+            SET amount=${updatedAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)},
+                feeApplied=${appliedFee.toFixed(2)}, notes=${note}, proofUrl=${url}, proofSentAt=NOW(), status='em_analise'
+            WHERE id=${input.installmentId}
+          `);
+        }
+      }
+    }
+
+    if (appliedFee <= 0) {
+      await db.execute(drizzleSql`UPDATE loanInstallments SET proofUrl=${url}, proofSentAt=NOW(), status='em_analise' WHERE id=${input.installmentId}`);
+    }
+    return { ok: true, url, appliedFee };
   }),
 
   // Simulação de parcelas (preview antes de confirmar) ââ‚¬â€ não cria no banco
