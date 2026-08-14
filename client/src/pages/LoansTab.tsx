@@ -298,6 +298,9 @@ function InstallmentTimeline({
             const isNext = !isPaid && !isAnalysis && installments.slice(0, idx).every((i) => i.status === "pago" || i.status === "em_analise");
             const canSendProof = ["pendente", "atrasado"].includes(inst.status) && showSendProof;
             const canResend = isRecused && showSendProof;
+            const feeAmount = Number(inst.feeApplied || 0);
+            const originalAmount = inst.originalAmount != null ? Number(inst.originalAmount) : null;
+            const hasLateFee = originalAmount !== null && feeAmount > 0;
 
             // Cor do círculo
             const circleClass = isPaid
@@ -364,6 +367,13 @@ function InstallmentTimeline({
                           </span>
                         )}
                       </div>
+                      {hasLateFee && (
+                        <div className="mt-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-2 text-xs space-y-1">
+                          <div className="flex items-center justify-between gap-3 text-muted-foreground"><span>Parcela</span><span>{fmt(originalAmount)}</span></div>
+                          <div className="flex items-center justify-between gap-3 text-amber-300"><span>Taxa de atraso</span><span>+ {fmt(feeAmount)}</span></div>
+                          <div className="flex items-center justify-between gap-3 border-t border-amber-400/20 pt-1 font-black text-foreground"><span>Total a pagar</span><span>{fmt(inst.amount)}</span></div>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1 mt-1">
                         <CalendarDays className="w-3 h-3 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">
@@ -391,7 +401,7 @@ function InstallmentTimeline({
                       {isAnalysis && (
                         <div className="flex items-center gap-1 mt-1">
                           <Timer className="w-3 h-3 text-purple-400 animate-spin" />
-                          <span className="text-xs text-purple-400 font-medium">Comprovante em análise...</span>
+                          <span className="text-xs text-purple-400 font-medium">Comprovante em análise{hasLateFee ? " — valor atualizado acima" : "..."}</span>
                         </div>
                       )}
                       {isRecused && (
