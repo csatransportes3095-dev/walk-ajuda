@@ -40,7 +40,7 @@ async function run() {
     `CREATE TABLE IF NOT EXISTS locadora_vehicles (
       id INT AUTO_INCREMENT PRIMARY KEY, tenantId INT NOT NULL, brand VARCHAR(100) NOT NULL, model VARCHAR(100) NOT NULL, year INT NULL,
       color VARCHAR(50) NULL, plate VARCHAR(10) NOT NULL, renavam VARCHAR(20) NULL, chassis VARCHAR(30) NULL, mileage INT NOT NULL DEFAULT 0,
-      weeklyPrice DECIMAL(10,2) NULL, biweeklyPrice DECIMAL(10,2) NULL, monthlyPrice DECIMAL(10,2) NULL,
+      dailyPrice DECIMAL(10,2) NULL, weeklyPrice DECIMAL(10,2) NULL, biweeklyPrice DECIMAL(10,2) NULL, monthlyPrice DECIMAL(10,2) NULL,
       licensingDate DATE NULL, insuranceExpiry DATE NULL, insuranceCompany VARCHAR(100) NULL, insurancePolicyNumber VARCHAR(50) NULL,
       nextMaintenanceDate DATE NULL, nextMaintenanceMileage INT NULL, status VARCHAR(32) NOT NULL DEFAULT 'available', notes TEXT NULL,
       photoKeys TEXT NULL, documentKey TEXT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -116,6 +116,13 @@ async function run() {
   try {
     console.log("[locadora-migrate] Verificando tabelas isoladas da locadora...");
     for (const statement of statements) await connection.query(statement);
+    const [dailyPriceColumn] = await connection.query<any[]>(`SHOW COLUMNS FROM locadora_vehicles LIKE 'dailyPrice'`);
+    if (!dailyPriceColumn.length) {
+      await connection.query(`ALTER TABLE locadora_vehicles ADD COLUMN dailyPrice DECIMAL(10,2) NULL AFTER mileage`);
+      console.log("[locadora-migrate] Coluna diária adicionada aos veículos.");
+    } else {
+      console.log("[locadora-migrate] Coluna diária dos veículos já existe.");
+    }
     console.log(`[locadora-migrate] ${statements.length} tabelas verificadas com sucesso.`);
   } catch (error) {
     console.error("[locadora-migrate] Erro:", error instanceof Error ? error.message : String(error));
