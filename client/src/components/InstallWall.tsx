@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc";
 
 const APP_NAME = "Walk Ajuda";
 const APP_SHORT_NAME = "Walk Ajuda";
-const FALLBACK_LOGO = "/icon-192.png";
+const FALLBACK_LOGO = "/h2-brand-192.png";
 
 interface InstallStep {
   icon: React.ReactNode;

@@ -351,7 +351,7 @@ function AppContent() {
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || undefined : undefined;
   const { WarningOverlay } = useAntiPrint(!isAdminRoute ? clientPhone : undefined);
 
-  // Troca a identidade instalada apenas quando o usuário está no módulo LocaCar.
+  // Mantém identidades instaláveis isoladas por módulo e usa o emblema H2 nas rotas gerais.
   useEffect(() => {
     const manifest = document.querySelector<HTMLLinkElement>("link[rel='manifest']");
     const theme = document.querySelector<HTMLMetaElement>("meta[name='theme-color']");
@@ -359,6 +359,9 @@ function AppContent() {
     const favicons = document.querySelectorAll<HTMLLinkElement>("link[rel='icon'], link[rel='shortcut icon']");
     const locadoraAppleIcon = "/locadora/assets/locacar-apple-touch-icon-v1.png";
     const locadoraFavicon = "/locadora/assets/locacar-favicon-32-v1.png";
+    const h2AppleIcon = "/h2-brand-180.png";
+    const h2Favicon16 = "/h2-brand-16.png";
+    const h2Favicon32 = "/h2-brand-32.png";
     if (isLocadoraBrandRoute) {
       if (manifest) manifest.href = "/locadora/manifest-v1.webmanifest";
       if (theme) theme.content = "#b98a2d";
@@ -367,12 +370,20 @@ function AppContent() {
       document.title = "LocaCar — Sistema de Locação";
       return;
     }
+    if (isCartoesRoute) {
+      if (manifest) manifest.href = "/manifest.webmanifest";
+      if (theme) theme.content = "#1a0a2e";
+      appleIcons.forEach((link) => { link.href = "/apple-touch-icon.png"; });
+      favicons.forEach((link) => { link.href = link.sizes.value === "16x16" ? "/favicon-16x16.png" : "/favicon-32x32.png"; });
+      document.title = "Meus Cartões";
+      return;
+    }
     if (manifest) manifest.href = isAdminRoute ? "/manifest-admin.json" : "/manifest.json";
     if (theme) theme.content = "#1a0a2e";
-    appleIcons.forEach((link) => { link.href = "/apple-touch-icon.png"; });
-    favicons.forEach((link) => { link.href = link.sizes.value === "16x16" ? "/favicon-16x16.png" : "/favicon-32x32.png"; });
+    appleIcons.forEach((link) => { link.href = h2AppleIcon; });
+    favicons.forEach((link) => { link.href = link.sizes.value === "16x16" ? h2Favicon16 : h2Favicon32; });
     document.title = "H2 COLOMBIANO";
-  }, [isAdminRoute, isLocadoraBrandRoute]);
+  }, [isAdminRoute, isCartoesRoute, isLocadoraBrandRoute]);
 
   // Redirect de rotas com maiúsculas para minúsculas (DEVE ficar após todos os hooks)
   if (location !== location.toLowerCase() && !isAdminRoute) {

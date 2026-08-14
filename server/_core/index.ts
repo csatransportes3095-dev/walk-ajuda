@@ -430,9 +430,9 @@ async function startServer() {
   app.get("/manifest.json", async (_req, res) => {
     try {
       const loginImageUrl = await getSetting("login_image_url");
-      // Usa a imagem do ADM se disponível, senão usa os ícones estáticos
-      const iconUrl = loginImageUrl || "/icon-192.png";
-      const iconUrl512 = loginImageUrl || "/icon-512.png";
+      // Usa a imagem configurada do H2 quando disponível; o fallback é o emblema H2 estático.
+      const iconUrl = loginImageUrl || "/h2-brand-192.png";
+      const iconUrl512 = loginImageUrl || "/h2-brand-512.png";
       const appName = (await getSetting("login_title")) || "H2 COLOMBIANO";
       const manifest = {
         id: "/",

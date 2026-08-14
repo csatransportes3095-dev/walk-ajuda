@@ -1,5 +1,5 @@
-// Service Worker v104 — PWA com suporte a /cartoes
-const CACHE_NAME = 'walk-ajuda-v104';
+// Service Worker v105 — ícones H2 renovados, com PWA de Cartões preservado
+const CACHE_NAME = 'walk-ajuda-v105-h2brand';
 const CARTOES_CACHE = 'meus-cartoes-v1';
 
 self.addEventListener('install', (event) => {
@@ -11,7 +11,15 @@ self.addEventListener('install', (event) => {
       return cache.addAll([
         '/',
         '/cartoes',
+        '/manifest.json',
+        '/manifest-admin.json',
         '/manifest.webmanifest',
+        '/h2-brand-16.png',
+        '/h2-brand-32.png',
+        '/h2-brand-150.png',
+        '/h2-brand-180.png',
+        '/h2-brand-192.png',
+        '/h2-brand-512.png',
         '/icon-192x192.png',
         '/icon-512x512.png',
         '/apple-touch-icon.png',
@@ -29,7 +37,7 @@ self.addEventListener('activate', (event) => {
       const cacheNames = await caches.keys();
       await Promise.all(
         cacheNames
-          .filter(name => name !== CACHE_NAME)
+          .filter(name => name !== CACHE_NAME && name !== CARTOES_CACHE)
           .map(name => caches.delete(name))
       );
       await self.clients.claim();
@@ -53,6 +61,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (
     url.pathname.endsWith('.webmanifest') ||
+    url.pathname === '/manifest.json' ||
+    url.pathname === '/manifest-admin.json' ||
+    url.pathname.startsWith('/h2-brand-') ||
     url.pathname.match(/\/icon-\d+x\d+\.png$/) ||
     url.pathname === '/apple-touch-icon.png' ||
     url.pathname === '/favicon-32x32.png' ||
