@@ -2048,9 +2048,13 @@ export const loanRouter = router({
     const simPaymentType = (input.paymentType === 'parcelado' ? 'mensal' : input.paymentType) as 'diario' | 'semanal' | 'mensal' | 'quinzenal';
     const sim = simulateLoan(input.amount, input.interestRate, simPaymentType, input.days, input.workDays, effectiveReleaseDate, input.customInstallments);
 
-    // Descobre quantas parcelas já foram pagas
-    const paidRows = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanInstallments WHERE loanId=${input.id} AND status='pago'`);
-    const paidCount = parseInt(paidRows[0]?.cnt || 0);
+    // Reserva parcelas já pagas ou com comprovante em análise. Elas não podem ser
+    // recriadas durante uma edição, pois isso duplicaria o mesmo número de parcela.
+    const reservedRows = await qRows(db, drizzleSql`
+      SELECT installmentNumber FROM loanInstallments
+      WHERE loanId=${input.id} AND status IN ('pago', 'em_analise')
+    `);
+    const reservedInstallmentNumbers = new Set(reservedRows.map((row: any) => Number(row.installmentNumber)));
 
     // Status a aplicar (usa o atual se não fornecido)
     const newStatus = input.status || loan.status;
@@ -2083,7 +2087,7 @@ export const loanRouter = router({
     let pendingNum = 0;
     if (!['reprovado', 'cancelado'].includes(newStatus)) {
       for (const inst of sim.schedule) {
-        if (inst.installmentNumber > paidCount) {
+        if (!reservedInstallmentNumbers.has(inst.installmentNumber)) {
           await db.execute(drizzleSql`
             INSERT INTO loanInstallments (loanId, installmentNumber, dueDate, amount)
             VALUES (${input.id}, ${inst.installmentNumber}, ${inst.dueDate}, ${inst.amount})
@@ -2956,6 +2960,55 @@ export const loanRouter = router({
     const waMsg = input.customMessage ? `${input.customMessage}\n\nProposta: ${url}` : defaultMsg;
     const whatsappUrl = `https://wa.me/55${rawPhone}?text=${encodeURIComponent(waMsg)}`;
     return { ok: true, pdfUrl: url, whatsappUrl, clientName, installmentValue, totalAmount, installments, interestRate };
+  }),
+
+  // Reconstrói a grade diária sem carência, preservando pagamentos e comprovantes em análise.
+  // Uso administrativo para registros que sofreram duplicação antes da proteção de edição.
+  rebuildDailySchedule: adminProcedure.input(z.object({
+    loanId: z.number().int().positive(),
+  })).mutation(async ({ input }) => {
+    const db = await getDb() as any;
+    const loanRows = await qRows(db, drizzleSql`SELECT * FROM loans WHERE id=${input.loanId} LIMIT 1`);
+    if (!loanRows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Empréstimo não encontrado' });
+    const loan = loanRows[0];
+    if (loan.paymentType !== 'diario') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Reconstrução disponível apenas para empréstimos diários' });
+
+    const schedule = generateInstallments(
+      String(loan.releaseDate).slice(0, 10),
+      'diario',
+      Number(loan.installments),
+      Number(loan.totalAmount),
+      loan.workDays === 'seg_dom' ? 'seg_dom' : loan.workDays === 'custom' ? 'custom' : 'seg_sab'
+    );
+    const expectedByNumber = new Map(schedule.map((item) => [item.installmentNumber, item]));
+    const rows = await qRows(db, drizzleSql`
+      SELECT * FROM loanInstallments WHERE loanId=${input.loanId}
+      ORDER BY installmentNumber ASC, id ASC
+    `);
+    const protectedRows = rows.filter((row: any) => ['pago', 'em_analise'].includes(String(row.status)));
+    const protectedNumbers = new Set<number>();
+    for (const row of protectedRows) {
+      const number = Number(row.installmentNumber);
+      if (protectedNumbers.has(number)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Há mais de uma parcela protegida de número ${number}; corrija manualmente antes de reconstruir.` });
+      }
+      const expected = expectedByNumber.get(number);
+      if (!expected) throw new TRPCError({ code: 'BAD_REQUEST', message: `Parcela protegida ${number} fora da grade do empréstimo.` });
+      protectedNumbers.add(number);
+      await db.execute(drizzleSql`UPDATE loanInstallments SET dueDate=${expected.dueDate} WHERE id=${row.id}`);
+    }
+
+    await db.execute(drizzleSql`DELETE FROM loanInstallments WHERE loanId=${input.loanId} AND status='pendente'`);
+    for (const expected of schedule) {
+      if (protectedNumbers.has(expected.installmentNumber)) continue;
+      await db.execute(drizzleSql`
+        INSERT INTO loanInstallments (loanId, installmentNumber, dueDate, amount)
+        VALUES (${input.loanId}, ${expected.installmentNumber}, ${expected.dueDate}, ${expected.amount})
+      `);
+    }
+    const finalDueDate = schedule[schedule.length - 1]?.dueDate;
+    await db.execute(drizzleSql`UPDATE loans SET dueDate=${finalDueDate} WHERE id=${input.loanId}`);
+    return { ok: true, loanId: input.loanId, protectedInstallments: [...protectedNumbers], dueDate: finalDueDate };
   }),
 
   // Reagenda parcelas pendentes de um empréstimo diário para novo regime (seg_sab ou seg_dom)
