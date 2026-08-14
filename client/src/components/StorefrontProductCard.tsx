@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronUp, ClipboardList, FileText, ShieldCheck, ShoppingCart, Tag } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, ShieldCheck, ShoppingCart, Tag } from "lucide-react";
 import { useMemo, useState } from "react";
 
 export type StorefrontQuestion = {
@@ -165,11 +165,11 @@ export function StorefrontProductCard({
           {item.product.deliveryDays && <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-right text-[11px] font-bold text-white/65">Prazo: {item.product.deliveryDays}</span>}
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {item.option.documents.length > 0 && <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-bold text-cyan-100"><FileText className="h-3.5 w-3.5" />{item.option.documents.length} documento{item.option.documents.length > 1 ? "s" : ""}</span>}
-          {item.option.questions.length > 0 && <span className="inline-flex items-center gap-1 rounded-full border border-violet-400/25 bg-violet-400/10 px-2.5 py-1 text-[11px] font-bold text-violet-100"><ClipboardList className="h-3.5 w-3.5" />{item.option.questions.length} pergunta{item.option.questions.length > 1 ? "s" : ""}</span>}
-          {warrantyLabel && <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-bold text-emerald-100"><ShieldCheck className="h-3.5 w-3.5" />Garantia</span>}
-        </div>
+        {warrantyLabel && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-bold text-emerald-100"><ShieldCheck className="h-3.5 w-3.5" />Garantia</span>
+          </div>
+        )}
       </div>
 
       <div className="mt-auto border-t border-white/10 bg-black/20 p-4">
