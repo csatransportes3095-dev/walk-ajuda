@@ -17,10 +17,28 @@ import * as os from "os";
 import { execSync } from "child_process";
 
 // ââ€â‚¬ââ€â‚¬ââ€â‚¬ Helper: obter data de hoje em UTC-3 (Brasil) ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
+function getBrazilClock(now = new Date()): { date: string; hour: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const valueOf = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "0";
+  return {
+    date: `${valueOf("year")}-${valueOf("month")}-${valueOf("day")}`,
+    hour: Number(valueOf("hour")),
+  };
+}
+
 function getBrazilToday(): string {
-  const now = new Date();
-  const brazilTime = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-  return brazilTime.toISOString().slice(0, 10);
+  return getBrazilClock().date;
+}
+
+function getBrazilHour(): number {
+  return getBrazilClock().hour;
 }
 
 // Compara CPF e telefone ignorando pontos, traços, espaços, parênteses e DDI.
@@ -1601,7 +1619,7 @@ export const loanRouter = router({
       const configRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
       const config = configRows[0];
       if (config?.enabled) {
-        const nowHour = new Date().getHours();
+        const nowHour = getBrazilHour();
         const originalAmount = parseFloat(inst[0].amount || 0);
         if (dueDate < today && parseFloat(config.fee_after_midnight_pct || '0') > 0) {
           appliedFee = Math.round(originalAmount * (parseFloat(config.fee_after_midnight_pct) / 100) * 100) / 100;
@@ -1832,7 +1850,7 @@ export const loanRouter = router({
     const today = getBrazilToday();
     if (installment.status === "pago" || installment.dueDate > today) return { lateFee: 0, breakdown: null };
 
-    const nowHour = new Date().getHours();
+    const nowHour = getBrazilHour();
     const amount = parseFloat(installment.amount);
     let lateFee = 0;
     let breakdown: string[] = [];
@@ -3176,7 +3194,7 @@ export const loanRouter = router({
       AND (lc.late_fee_disabled IS NULL OR lc.late_fee_disabled = 0)
     `);
     let applied = 0;
-    const nowHour = new Date().getHours();
+    const nowHour = getBrazilHour();
     // Determinar valor da taxa baseado no horário
     let feeAmount = 0;
     if (nowHour >= 20) feeAmount = parseFloat(cfg.fee_after_20h || '0');
