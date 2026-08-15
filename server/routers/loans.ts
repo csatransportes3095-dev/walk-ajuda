@@ -1621,10 +1621,12 @@ export const loanRouter = router({
       if (config?.enabled) {
         const nowHour = getBrazilHour();
         const originalAmount = parseFloat(inst[0].amount || 0);
-        if (dueDate < today && parseFloat(config.fee_after_midnight_pct || '0') > 0) {
-          appliedFee = Math.round(originalAmount * (parseFloat(config.fee_after_midnight_pct) / 100) * 100) / 100;
+        const fixedFeeAfter20 = parseFloat(config.fee_after_18h || '0') + parseFloat(config.fee_after_20h || '0');
+        if (dueDate < today) {
+          const overnightFee = Math.round(originalAmount * (parseFloat(config.fee_after_midnight_pct || '0') / 100) * 100) / 100;
+          appliedFee = Math.max(fixedFeeAfter20, overnightFee);
         } else if (nowHour >= 20) {
-          appliedFee = parseFloat(config.fee_after_18h || '0') + parseFloat(config.fee_after_20h || '0');
+          appliedFee = fixedFeeAfter20;
         } else if (nowHour >= 18) {
           appliedFee = parseFloat(config.fee_after_18h || '0');
         }
@@ -1852,20 +1854,20 @@ export const loanRouter = router({
 
     const nowHour = getBrazilHour();
     const amount = parseFloat(installment.amount);
+    const fixedFeeAfter20 = parseFloat(cfg.fee_after_18h || '0') + parseFloat(cfg.fee_after_20h || '0');
     let lateFee = 0;
     let breakdown: string[] = [];
 
-    if (nowHour >= 18 && nowHour < 20) {
-      lateFee = parseFloat(cfg.fee_after_18h);
+    if (installment.dueDate < today) {
+      const overnightFee = Math.round(amount * (parseFloat(cfg.fee_after_midnight_pct || '0') / 100) * 100) / 100;
+      lateFee = Math.max(fixedFeeAfter20, overnightFee);
+      breakdown = [`Após 23:59: será cobrado o maior valor entre a taxa fixa de R$ ${fixedFeeAfter20.toFixed(2)} e o valor da parcela (taxa aplicada: R$ ${lateFee.toFixed(2)})`];
+    } else if (nowHour >= 20) {
+      lateFee = fixedFeeAfter20;
+      breakdown = [`Após 20h: taxa fixa acumulada de R$ ${lateFee.toFixed(2)}`];
+    } else if (nowHour >= 18) {
+      lateFee = parseFloat(cfg.fee_after_18h || '0');
       breakdown = [`Após 18h: +R$ ${lateFee.toFixed(2)}`];
-    } else if (nowHour >= 20 && nowHour < 24) {
-      lateFee = parseFloat(cfg.fee_after_18h) + parseFloat(cfg.fee_after_20h);
-      breakdown = [`Após 18h: +R$ ${parseFloat(cfg.fee_after_18h).toFixed(2)}`, `Após 20h: +R$ ${parseFloat(cfg.fee_after_20h).toFixed(2)}`];
-    } else if (nowHour >= 0 && installment.dueDate < today) {
-      // Passou da meia-noite ââ‚¬â€ 100% da parcela
-      const pct = parseFloat(cfg.fee_after_midnight_pct) / 100;
-      lateFee = Math.round(amount * pct * 100) / 100;
-      breakdown = [`Após 23:59: +${cfg.fee_after_midnight_pct}% da parcela (R$ ${lateFee.toFixed(2)})`];
     }
 
     return { lateFee, totalWithFee: amount + lateFee, breakdown };
@@ -3194,22 +3196,11 @@ export const loanRouter = router({
       AND (lc.late_fee_disabled IS NULL OR lc.late_fee_disabled = 0)
     `);
     let applied = 0;
-    const nowHour = getBrazilHour();
-    // Determinar valor da taxa baseado no horário
-    let feeAmount = 0;
-    if (nowHour >= 20) feeAmount = parseFloat(cfg.fee_after_20h || '0');
-    else if (nowHour >= 18) feeAmount = parseFloat(cfg.fee_after_18h || '0');
-    else {
-      // Passou da meia-noite = dia seguinte ao vencimento
-      // Aplica percentual sobre o valor original
-      feeAmount = 0; // será calculado por parcela
-    }
+    const fixedFeeAfter20 = parseFloat(cfg.fee_after_18h || '0') + parseFloat(cfg.fee_after_20h || '0');
     for (const inst of overdueInsts) {
       const originalAmount = parseFloat(inst.amount);
-      let fee = feeAmount;
-      if (fee === 0 && cfg.fee_after_midnight_pct > 0) {
-        fee = Math.round(originalAmount * (parseFloat(cfg.fee_after_midnight_pct) / 100) * 100) / 100;
-      }
+      const overnightFee = Math.round(originalAmount * (parseFloat(cfg.fee_after_midnight_pct || '0') / 100) * 100) / 100;
+      const fee = Math.max(fixedFeeAfter20, overnightFee);
       if (fee <= 0) continue;
       const newAmount = Math.round((originalAmount + fee) * 100) / 100;
       const note = `Taxa de atraso automática: +R$ ${fee.toFixed(2).replace('.', ',')} aplicada em ${new Date().toLocaleDateString('pt-BR')}`;

@@ -2043,15 +2043,18 @@ function ApprovalNotifyModal({ loan, lateFeeConfig, onClose }: { loan: any; late
 
   const amount = parseFloat(loan.amount || 0);
   const totalAmount = parseFloat(loan.totalAmount || 0);
-  const interestRate = parseFloat(loan.interestRate || 0);
   const installments = loan.totalInstallments || loan.installments || '?';
   const installmentAmt = installments > 0 ? (totalAmount / installments) : 0;
   const dueDate = loan.dueDate ? (() => { const s = String(loan.dueDate).slice(0,10); const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; })() : '—';
 
   const fee18h = lateFeeConfig?.fee_after_18h ?? 10;
   const fee20h = lateFeeConfig?.fee_after_20h ?? 10;
-  const feeMidnight = lateFeeConfig?.fee_after_midnight_pct ?? 100;
-  const rulesText = lateFeeConfig?.rules_text || '';
+  const fixedFeeAfter20 = fee18h + fee20h;
+  const lateFeeCustomerText =
+    `- Pague sua parcela diária até as 18h para evitar taxas adicionais.\n` +
+    `- Das 18:00 até 19:59: taxa fixa de R$ ${fee18h.toFixed(2).replace('.', ',')}.\n` +
+    `- A partir das 20:00: taxa fixa acumulada de R$ ${fixedFeeAfter20.toFixed(2).replace('.', ',')}.\n` +
+    `- Após 23:59: será cobrado somente o maior valor entre a taxa fixa de R$ ${fixedFeeAfter20.toFixed(2).replace('.', ',')} e o valor da parcela.`;
 
   const pixKey = loan.clientPixKey || loan.pixKey || '';
   const pixName = loan.clientPixName || loan.pixName || '';
@@ -2062,14 +2065,10 @@ function ApprovalNotifyModal({ loan, lateFeeConfig, onClose }: { loan: any; late
     `Em breve estara disponivel em sua conta.\n\n` +
     `*Valor liberado:* R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
     `*Seu pagamento e:* ${paymentFull}\n` +
-    `*Taxa de juros:* ${interestRate.toFixed(0)}%\n` +
     `*Total a pagar:* R$ ${totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em ${installments}x de R$ ${installmentAmt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
     `*Vencimento final:* ${dueDate}\n\n` +
     `*NORMAS E TAXAS DE ATRASO:*\n` +
-    (rulesText ? rulesText + '\n' :
-      `- Apos 18h: taxa adicional de R$ ${fee18h.toFixed(2).replace('.',',')}\n` +
-      `- Apos 20h: taxa adicional de mais R$ ${fee20h.toFixed(2).replace('.',',')}\n` +
-      `- Apos meia-noite: ${feeMidnight}% do valor da parcela\n`) +
+    lateFeeCustomerText + '\n' +
     `\nQualquer duvida, estamos a disposicao!`;
 
   const [msg, setMsg] = useState(defaultMsg);

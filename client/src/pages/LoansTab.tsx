@@ -208,8 +208,11 @@ function ProgressPanel({ paidCount, totalCount, totalAmount }: { paidCount: numb
 function LateFeePanel({ config, installmentAmount }: { config: any; installmentAmount?: number }) {
   if (!config?.enabled) return null;
   const amt = installmentAmount || 0;
-  const ex18 = amt > 0 ? amt + parseFloat(config.fee_after_18h || 0) : null;
-  const exMid = amt > 0 ? amt + (amt * parseFloat(config.fee_after_midnight_pct || 0) / 100) : null;
+  const fee18 = parseFloat(config.fee_after_18h || 0);
+  const fixedFeeAfter20 = fee18 + parseFloat(config.fee_after_20h || 0);
+  const ex18 = amt > 0 ? amt + fee18 : null;
+  const ex20 = amt > 0 ? amt + fixedFeeAfter20 : null;
+  const exMid = amt > 0 ? amt + Math.max(fixedFeeAfter20, amt * parseFloat(config.fee_after_midnight_pct || 0) / 100) : null;
 
   return (
     <div className="rounded-2xl overflow-hidden border-2 border-red-500/40 bg-gradient-to-br from-red-950/60 to-slate-900/80 mb-3">
@@ -218,44 +221,39 @@ function LateFeePanel({ config, installmentAmount }: { config: any; installmentA
         <span className="text-xs font-black text-red-300 uppercase tracking-wider">⚠️ Regras de Atraso e Taxas</span>
       </div>
       <div className="p-4 space-y-3">
-        {config.rules_text ? (
-          <pre className="text-sm text-red-200 whitespace-pre-wrap font-sans leading-relaxed">{config.rules_text}</pre>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-red-200 font-semibold">Pague no prazo para evitar taxas extras:</p>
-            <div className="space-y-1.5">
-              {config.fee_after_18h > 0 && (
-                <div className="flex items-center gap-2 bg-red-500/10 rounded-lg px-3 py-2">
-                  <span className="text-lg">🕕</span>
-                  <div>
-                    <span className="text-xs font-bold text-red-300">Após 18h:</span>
-                    <span className="text-xs text-red-200 ml-1">+ R$ {parseFloat(config.fee_after_18h).toFixed(2)} de taxa</span>
-                    {ex18 && <span className="text-xs text-muted-foreground ml-1">(parcela vira {fmt(ex18)})</span>}
-                  </div>
+        <div className="space-y-2">
+          <p className="text-sm text-red-200 font-semibold">Pague no prazo para evitar taxas extras:</p>
+          <div className="space-y-1.5">
+            {fee18 > 0 && (
+              <div className="flex items-center gap-2 bg-red-500/10 rounded-lg px-3 py-2">
+                <span className="text-lg">🕕</span>
+                <div>
+                  <span className="text-xs font-bold text-red-300">Das 18h até 19:59:</span>
+                  <span className="text-xs text-red-200 ml-1">taxa fixa de R$ {fee18.toFixed(2)}</span>
+                  {ex18 && <span className="text-xs text-muted-foreground ml-1">(parcela vira {fmt(ex18)})</span>}
                 </div>
-              )}
-              {config.fee_after_20h > 0 && (
-                <div className="flex items-center gap-2 bg-red-500/10 rounded-lg px-3 py-2">
-                  <span className="text-lg">🕗</span>
-                  <div>
-                    <span className="text-xs font-bold text-red-300">Após 20h:</span>
-                    <span className="text-xs text-red-200 ml-1">+ R$ {parseFloat(config.fee_after_20h).toFixed(2)} de taxa</span>
-                  </div>
+              </div>
+            )}
+            {fixedFeeAfter20 > 0 && (
+              <div className="flex items-center gap-2 bg-red-500/10 rounded-lg px-3 py-2">
+                <span className="text-lg">🕗</span>
+                <div>
+                  <span className="text-xs font-bold text-red-300">A partir das 20h:</span>
+                  <span className="text-xs text-red-200 ml-1">taxa fixa acumulada de R$ {fixedFeeAfter20.toFixed(2)}</span>
+                  {ex20 && <span className="text-xs text-muted-foreground ml-1">(parcela vira {fmt(ex20)})</span>}
                 </div>
-              )}
-              {config.fee_after_midnight_pct > 0 && (
-                <div className="flex items-center gap-2 bg-red-700/20 rounded-lg px-3 py-2 border border-red-600/30">
-                  <span className="text-lg">🌙</span>
-                  <div>
-                    <span className="text-xs font-black text-red-300">Após meia-noite:</span>
-                    <span className="text-xs text-red-200 ml-1">+{config.fee_after_midnight_pct}% sobre o valor</span>
-                    {exMid && <span className="text-xs text-red-300 font-bold ml-1">(vira {fmt(exMid)})</span>}
-                  </div>
-                </div>
-              )}
+              </div>
+            )}
+            <div className="flex items-center gap-2 bg-red-700/20 rounded-lg px-3 py-2 border border-red-600/30">
+              <span className="text-lg">🌙</span>
+              <div>
+                <span className="text-xs font-black text-red-300">Após 23:59:</span>
+                <span className="text-xs text-red-200 ml-1">será cobrado somente o maior valor entre R$ {fixedFeeAfter20.toFixed(2)} e o valor da parcela</span>
+                {exMid && <span className="text-xs text-red-300 font-bold ml-1">(parcela vira {fmt(exMid)})</span>}
+              </div>
             </div>
           </div>
-        )}
+        </div>
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 flex items-center gap-2">
           <span className="text-base">💡</span>
           <p className="text-xs text-amber-300 font-medium">Pague cedo para evitar cobranças adicionais!</p>
