@@ -1638,6 +1638,34 @@ export default function AdminOrders() {
     }
   };
 
+  // Recebe uma imagem copiada (print) e reutiliza exatamente o upload já usado pelos documentos do pedido.
+  const handlePasteDoc = async (order: Order) => {
+    const label = newDocLabel[getOrderKey(order)]?.trim();
+    if (!label) { toast.error('Informe o nome do documento antes de colar o print'); return; }
+    if (!navigator.clipboard?.read) {
+      toast.error('Seu navegador não permite ler prints copiados. Use Selecionar arquivo.');
+      return;
+    }
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      const imageItem = clipboardItems.find((item) => item.types.some((type) => type.startsWith('image/')));
+      const imageType = imageItem?.types.find((type) => type.startsWith('image/'));
+      if (!imageItem || !imageType) {
+        toast.error('Copie um print ou uma imagem e toque em Colar print novamente.');
+        return;
+      }
+
+      const blob = await imageItem.getType(imageType);
+      const extension = imageType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+      const printFile = new File([blob], `print-${Date.now()}.${extension}`, { type: imageType });
+      await handleDocUpload(order, printFile);
+    } catch (error) {
+      console.warn('[Pedido] Não foi possível colar print:', error);
+      toast.error('Não foi possível acessar o print copiado. Copie a imagem e permita o acesso quando o navegador solicitar.');
+    }
+  };
+
   const handleAdminDocUpload = async (order: Order, file: File) => {
     const label = newAdminDocLabel[getOrderKey(order)]?.trim();
     if (!label) { toast.error('Informe o nome do documento'); return; }
@@ -7505,24 +7533,37 @@ export default function AdminOrders() {
                             onChange={e => setNewDocLabel(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
                             className="w-full text-xs bg-background border border-border rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                           />
-                          <label className={`flex items-center justify-center gap-2 w-full py-2 rounded-lg border-2 border-dashed cursor-pointer transition-colors ${
-                            uploadingDocFor === getOrderKey(order)
-                              ? 'border-primary/30 text-muted-foreground cursor-not-allowed'
-                              : 'border-primary/40 text-primary hover:bg-primary/5'
-                          }`}>
-                            {uploadingDocFor === getOrderKey(order) ? (
-                              <><div className="animate-spin rounded-full h-3.5 w-3.5 border-t-2 border-primary" /><span className="text-xs">Enviando...</span></>
-                            ) : (
-                              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg><span className="text-xs font-medium">Selecionar arquivo (imagem, PDF ou vídeo)</span></>
-                            )}
-                            <input
-                              type="file"
-                              accept="image/*,application/pdf,video/*"
-                              className="hidden"
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <label className={`flex items-center justify-center gap-2 w-full py-2 rounded-lg border-2 border-dashed cursor-pointer transition-colors ${
+                              uploadingDocFor === getOrderKey(order)
+                                ? 'border-primary/30 text-muted-foreground cursor-not-allowed'
+                                : 'border-primary/40 text-primary hover:bg-primary/5'
+                            }`}>
+                              {uploadingDocFor === getOrderKey(order) ? (
+                                <><div className="animate-spin rounded-full h-3.5 w-3.5 border-t-2 border-primary" /><span className="text-xs">Enviando...</span></>
+                              ) : (
+                                <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg><span className="text-xs font-medium">Selecionar arquivo (imagem, PDF ou vídeo)</span></>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf,video/*"
+                                className="hidden"
+                                disabled={uploadingDocFor === getOrderKey(order)}
+                                onChange={e => { const f = e.target.files?.[0]; if (f) handleDocUpload(order, f); e.target.value = ''; }}
+                              />
+                            </label>
+                            <button
+                              type="button"
                               disabled={uploadingDocFor === getOrderKey(order)}
-                              onChange={e => { const f = e.target.files?.[0]; if (f) handleDocUpload(order, f); e.target.value = ''; }}
-                            />
-                          </label>
+                              onClick={() => { void handlePasteDoc(order); }}
+                              className="flex items-center justify-center gap-2 w-full py-2 rounded-lg border-2 border-dashed border-cyan-400/45 text-cyan-300 hover:bg-cyan-400/10 disabled:border-primary/30 disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
+                              title="Cole um print ou imagem e toque aqui"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v11a2 2 0 002 2h9a2 2 0 002-2v-2M15 4h5m0 0v5m0-5L9 15" /></svg>
+                              <span className="text-xs font-medium">Colar print</span>
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">Copie um print, informe o nome do documento e toque em <strong className="text-cyan-300">Colar print</strong>.</p>
                         </div>
                       )}
 
