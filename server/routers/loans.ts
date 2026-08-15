@@ -2971,6 +2971,40 @@ export const loanRouter = router({
     return { ok: true, restoredAmount: originalAmount };
   }),
 
+  // Corrige taxas históricas previamente auditadas, preservando comprovantes, recibos, datas e status.
+  correctHistoricalLateFees: adminProcedure.input(z.object({
+    corrections: z.array(z.object({
+      installmentId: z.number(),
+      feeAmount: z.number().min(0),
+      reason: z.string().min(1).max(500),
+    })).min(1).max(50),
+  })).mutation(async ({ input }) => {
+    const db = await getDb() as any;
+    const corrected: Array<{ installmentId: number; originalAmount: number; feeAmount: number; newAmount: number; status: string }> = [];
+
+    for (const correction of input.corrections) {
+      const rows = await qRows(db, drizzleSql`SELECT * FROM loanInstallments WHERE id=${correction.installmentId}`);
+      if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: `Parcela ${correction.installmentId} não encontrada` });
+      const current = rows[0];
+      if (!current.proofSentAt) throw new TRPCError({ code: 'BAD_REQUEST', message: `Parcela ${correction.installmentId} não possui comprovante enviado` });
+      if (!['pago', 'em_analise'].includes(current.status)) throw new TRPCError({ code: 'BAD_REQUEST', message: `Status não elegível para correção histórica: ${current.status}` });
+      if (current.originalAmount != null || current.feeApplied != null) throw new TRPCError({ code: 'BAD_REQUEST', message: `Parcela ${correction.installmentId} já possui taxa registrada` });
+
+      const originalAmount = parseFloat(current.amount);
+      const newAmount = Math.round((originalAmount + correction.feeAmount) * 100) / 100;
+      const note = `Correção histórica de taxa: +R$ ${correction.feeAmount.toFixed(2).replace('.', ',')}. ${correction.reason}`;
+      await db.execute(drizzleSql`
+        UPDATE loanInstallments
+        SET amount=${newAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)},
+            feeApplied=${correction.feeAmount.toFixed(2)}, notes=${note}
+        WHERE id=${correction.installmentId}
+      `);
+      corrected.push({ installmentId: correction.installmentId, originalAmount, feeAmount: correction.feeAmount, newAmount, status: current.status });
+    }
+
+    return { ok: true, corrected };
+  }),
+
   // Gerar PDF de oferta de empréstimo pré-aprovado e retornar link WhatsApp
   generateLoanOffer: adminProcedure.input(z.object({
     clientPhone: z.string(),
