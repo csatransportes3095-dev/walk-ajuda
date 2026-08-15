@@ -7448,12 +7448,12 @@ export default function AdminOrders() {
                           const isImg = f.mimeType.startsWith('image/');
                           const isVid = f.mimeType.startsWith('video/');
                           return (
-                            <div key={f.id} className="flex items-center justify-between gap-2 p-2.5 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
+                            <div key={f.id} className="flex items-center justify-between gap-2 rounded-lg border border-red-400/35 bg-red-500/10 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm">
                               <div className="flex items-center gap-2 flex-1 min-w-0">
                                 <span className="text-base flex-shrink-0">{isPdf ? '📄' : isImg ? '🖼️' : isVid ? '🎬' : '📎'}</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-medium text-foreground truncate">{f.label}</p>
-                                  <p className="text-xs text-emerald-400/70">{isPdf ? 'PDF' : isImg ? 'Imagem' : isVid ? 'Vídeo' : 'Arquivo'} • Visível ao cliente</p>
+                                  <p className="text-xs font-medium text-red-300/90">{isPdf ? 'PDF' : isImg ? 'Imagem' : isVid ? 'Vídeo' : 'Arquivo'} • Enviado pelo ADM • Visível ao cliente</p>
                                 </div>
                               </div>
                               <div className="flex gap-1 flex-shrink-0">
@@ -7484,12 +7484,12 @@ export default function AdminOrders() {
                                 const isImg = f.mimeType.startsWith('image/');
                                 const isVid = f.mimeType.startsWith('video/');
                                 return (
-                                  <div key={f.id} className="flex items-center justify-between gap-2 p-2.5 bg-orange-500/5 rounded-lg border border-orange-500/30">
+                                  <div key={f.id} className="flex items-center justify-between gap-2 rounded-lg border border-red-400/35 bg-red-500/10 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm">
                                     <div className="flex items-center gap-2 flex-1 min-w-0">
                                       <span className="text-base flex-shrink-0">{isPdf ? '📄' : isImg ? '🖼️' : isVid ? '🎬' : '📎'}</span>
                                       <div className="flex-1 min-w-0">
                                         <p className="text-xs font-medium text-foreground truncate">{f.label}</p>
-                                        <p className="text-xs text-orange-400/80">{isPdf ? 'PDF' : isImg ? 'Imagem' : isVid ? 'Vídeo' : 'Arquivo'} • De outro pedido (#{f.registrationId}){f.createdAt && <span className="ml-1.5 text-[10px] text-amber-400/80">📅 {new Date(f.createdAt instanceof Date ? f.createdAt.getTime() : f.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}</p>
+                                        <p className="text-xs font-medium text-red-300/90">{isPdf ? 'PDF' : isImg ? 'Imagem' : isVid ? 'Vídeo' : 'Arquivo'} • Enviado pelo ADM em outro pedido (#{f.registrationId}){f.createdAt && <span className="ml-1.5 text-[10px] text-amber-300/90">📅 {new Date(f.createdAt instanceof Date ? f.createdAt.getTime() : f.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}</p>
                                       </div>
                                     </div>
                                     <div className="flex gap-1 flex-shrink-0">
