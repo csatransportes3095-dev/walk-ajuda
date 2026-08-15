@@ -2252,12 +2252,10 @@ export const appRouter = router({
       }),
 
     list: adminProcedure.query(async () => {
-      // Executa a reconciliação dos cadastros legados antes de mostrar a lista principal.
-      try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
-        console.warn('[customers.list] sincronização unificada não aplicada:', error?.message);
-      }
+      // Esta é uma consulta de leitura. Nunca deve sincronizar, mover ou ocultar cadastros
+      // enquanto o ADM apenas carrega a lista principal.
       const db = await (await import('./db')).getDb();
-      if (!db) return [];
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível ao carregar clientes. A lista existente foi preservada.' });
       // Buscar clientes com flag indicando se têm pedido finalizado
       const rows = await db.execute(`
         SELECT c.*,

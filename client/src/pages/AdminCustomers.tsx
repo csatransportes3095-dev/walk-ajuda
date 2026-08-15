@@ -435,8 +435,18 @@ export default function AdminCustomers() {
     return () => document.removeEventListener("keydown", handleKey);
   }, [photoModal]);
 
-  const customersQuery = trpc.customers.list.useQuery(undefined, {});
-  const h2DirectoryQuery = trpc.customers.getH2ScoreDirectory.useQuery(undefined, { staleTime: 0 });
+  // A lista principal é a fonte visual do ADM. Mantemos o último resultado válido enquanto
+  // dados complementares do H2 Score são carregados separadamente.
+  const customersQuery = trpc.customers.list.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
+  const h2DirectoryQuery = trpc.customers.getH2ScoreDirectory.useQuery(undefined, {
+    enabled: customersQuery.isSuccess && (customersQuery.data?.length || 0) > 0,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
   const h2ScoreDetailQuery = trpc.customers.getCustomerH2Score.useQuery(
     { customerId: h2ScoreModalCustomer?.id || 0 },
     { enabled: !!h2ScoreModalCustomer, staleTime: 0 }
