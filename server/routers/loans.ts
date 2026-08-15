@@ -7,6 +7,7 @@ import { findMainCustomerByIdentity, getRouteAccess } from "../customerAccess";
 import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
+import { approveH2ScoreSubmission, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
 import PDFDocument from "pdfkit";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
@@ -978,6 +979,28 @@ export const loanRouter = router({
     return result;
   }),
 
+  getH2ScoreConfig: adminProcedure.query(async () => {
+    const db = await getDb() as any;
+    return await getLoanH2ScoreConfig(db);
+  }),
+
+  saveH2ScoreConfig: adminProcedure.input(z.object({
+    onTimePoints: z.number().int().min(-100).max(100),
+    eveningPoints: z.number().int().min(-100).max(100),
+    nightPoints: z.number().int().min(-100).max(100),
+    afterDuePoints: z.number().int().min(-100).max(100),
+  })).mutation(async ({ input }) => {
+    const db = await getDb() as any;
+    await getLoanH2ScoreConfig(db);
+    await db.execute(drizzleSql`
+      UPDATE loanH2ScoreConfig
+      SET onTimePoints=${input.onTimePoints}, eveningPoints=${input.eveningPoints},
+          nightPoints=${input.nightPoints}, afterDuePoints=${input.afterDuePoints}
+      WHERE id=1
+    `);
+    return await getLoanH2ScoreConfig(db);
+  }),
+
   getLoan: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
     const db = await getDb() as any;
     const rows = await qRows(db, drizzleSql`
@@ -986,8 +1009,11 @@ export const loanRouter = router({
     `);
     if (!rows.length) throw new TRPCError({ code: "NOT_FOUND" });
     const today = getBrazilToday();
-    const instRows = (await qRows(db, drizzleSql`SELECT * FROM loanInstallments WHERE loanId=${input.id} ORDER BY installmentNumber ASC`)).map((i: any) => ({
+    const rawInstallments = await qRows(db, drizzleSql`SELECT * FROM loanInstallments WHERE loanId=${input.id} ORDER BY installmentNumber ASC`);
+    const scoreByInstallment = await getH2ScoreSubmissionMap(db, rawInstallments.map((i: any) => Number(i.id)));
+    const instRows = rawInstallments.map((i: any) => ({
       ...i,
+      h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
       isOverdue: !['pago', 'cancelado', 'reprovado', 'em_analise'].includes(i.status) && i.dueDate < today,
     }));
     return { ...rows[0], installments: instRows };
@@ -1182,6 +1208,7 @@ export const loanRouter = router({
     const db = await getDb() as any;
     const paidBy = ctx.user?.name || "admin";
     await db.execute(drizzleSql`UPDATE loanInstallments SET status='pago', paidAt=NOW(), paidBy=${paidBy} WHERE id=${input.installmentId}`);
+    const h2ScoreApproval = await approveH2ScoreSubmission(db, input.installmentId, paidBy);
     const inst = await qRows(db, drizzleSql`SELECT loanId FROM loanInstallments WHERE id=${input.installmentId}`);
     if (inst.length) {
       const loanId = inst[0].loanId;
@@ -1201,14 +1228,16 @@ export const loanRouter = router({
         }
       }
     }
-    return { ok: true };
+    return { ok: true, h2ScoreApproval };
   }),
 
   refuseInstallmentPayment: adminProcedure.input(z.object({
     installmentId: z.number(),
     reason: z.string().optional(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ ctx, input }) => {
     const db = await getDb() as any;
+    const refusedBy = ctx.user?.name || 'admin';
+    await refuseH2ScoreSubmission(db, input.installmentId, refusedBy);
     await db.execute(drizzleSql`UPDATE loanInstallments SET status='pendente', proofUrl=NULL, proofSentAt=NULL WHERE id=${input.installmentId}`);
     return { ok: true };
   }),
@@ -1601,7 +1630,11 @@ export const loanRouter = router({
       WHERE li.id=${input.installmentId} AND l.clientId IN (${drizzleSql.raw(clientIds.join(','))})
     `);
     if (!inst.length) throw new TRPCError({ code: "NOT_FOUND" });
+    if (inst[0].status === 'em_analise' || inst[0].proofSentAt) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Já existe um comprovante em análise para esta parcela." });
+    }
 
+    const receivedAt = new Date();
     const buffer = Buffer.from(input.fileBase64, "base64");
     const key = `loan-proofs/${client.id}/${input.installmentId}-${Date.now()}-${input.fileName}`;
     const { url } = await storagePut(key, buffer, input.mimeType);
@@ -1636,7 +1669,7 @@ export const loanRouter = router({
           await db.execute(drizzleSql`
             UPDATE loanInstallments
             SET amount=${updatedAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)},
-                feeApplied=${appliedFee.toFixed(2)}, notes=${note}, proofUrl=${url}, proofSentAt=NOW(), status='em_analise'
+                feeApplied=${appliedFee.toFixed(2)}, notes=${note}, proofUrl=${url}, proofSentAt=${receivedAt}, status='em_analise'
             WHERE id=${input.installmentId}
           `);
         }
@@ -1644,9 +1677,17 @@ export const loanRouter = router({
     }
 
     if (appliedFee <= 0) {
-      await db.execute(drizzleSql`UPDATE loanInstallments SET proofUrl=${url}, proofSentAt=NOW(), status='em_analise' WHERE id=${input.installmentId}`);
+      await db.execute(drizzleSql`UPDATE loanInstallments SET proofUrl=${url}, proofSentAt=${receivedAt}, status='em_analise' WHERE id=${input.installmentId}`);
     }
-    return { ok: true, url, appliedFee };
+    const h2ScoreSubmission = await registerH2ScoreSubmission(db, {
+      installmentId: input.installmentId,
+      loanId: Number(inst[0].loanId),
+      clientId: Number(client.id),
+      dueDate,
+      proofUrl: url,
+      submittedAt: receivedAt,
+    });
+    return { ok: true, url, appliedFee, h2ScoreSubmission };
   }),
 
   // Simulação de parcelas (preview antes de confirmar) ââ‚¬â€ não cria no banco
@@ -2392,6 +2433,7 @@ export const loanRouter = router({
       paidAtDate = new Date(input.paidAt + 'T15:00:00Z'); // meio-dia BRT para datas passadas
     }
     await db.execute(drizzleSql`UPDATE loanInstallments SET status='pago', paidAt=${paidAtDate}, paidBy=${paidBy} WHERE id=${input.installmentId}`);
+    const h2ScoreApproval = await approveH2ScoreSubmission(db, input.installmentId, paidBy);
     await db.execute(drizzleSql`
       INSERT INTO installmentProofs
         (installmentId, loanId, clientId, installmentNumber, amountPaid, paidAt, paidBy, observation, originalFileName, fileKey, fileUrl, fileMimeType, fileSizeBytes, hasProof)
@@ -2411,7 +2453,7 @@ export const loanRouter = router({
     } else {
       await db.execute(drizzleSql`UPDATE loans SET status='aprovado' WHERE id=${loanId} AND status='aguardando_pagamento'`);
     }
-    return { ok: true, hasProof: !!hasProof, fileUrl };
+    return { ok: true, hasProof: !!hasProof, fileUrl, h2ScoreApproval };
   }),
 
   // Buscar comprovantes de um empréstimo (batch por loanId)

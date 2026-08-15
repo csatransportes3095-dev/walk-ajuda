@@ -84,7 +84,7 @@ const INST_STATUS_COLORS: Record<string, string> = {
   pago_juros:  "bg-orange-500/20 text-orange-300 border-orange-400/50",
 };
 
-type TabId = "dashboard" | "loans" | "clients" | "profiles" | "pix" | "access" | "latefee" | "financeiro" | "proofhistory" | "parcelamento";
+type TabId = "dashboard" | "loans" | "clients" | "profiles" | "pix" | "access" | "latefee" | "h2score" | "financeiro" | "proofhistory" | "parcelamento";
 
 export default function AdminLoans() {
   const [tab, setTab] = useState<TabId>("dashboard");
@@ -102,6 +102,7 @@ export default function AdminLoans() {
             ["profiles",  "⭐ Perfis"],
             ["pix",       "🏦 PIX"],
             ["latefee",   "⚠️ Taxas & Regras"],
+            ["h2score", "⭐ H2 Score"],
             ["financeiro", "📈 Análise Financeira"],
             ["proofhistory", "📎 Comprovantes"],
             ["parcelamento", "📊 Parcelamento"],
@@ -121,6 +122,7 @@ export default function AdminLoans() {
         {tab === "profiles"  && <ProfilesTab />}
         {tab === "pix"       && <PixTab />}
         {tab === "latefee"  && <LateFeeTab />}
+        {tab === "h2score" && <H2ScoreTab />}
         {tab === "financeiro" && <FinanceiroTab />}
         {tab === "proofhistory" && <ProofHistoryTab />}
         {tab === "parcelamento" && <InstallmentPlansTab />}
@@ -1103,8 +1105,14 @@ function LoansTab() {
                                   <ExternalLink className="w-3 h-3" />{inst.status === "pago" ? "Ver comprovante cliente" : "Ver comprovante enviado"}
                                 </a>
                               )}
-                              {inst.proofSentAt && !inst.paidAt && (
+                              {inst.proofSentAt && (
                                 <p className="text-xs text-muted-foreground">Comprovante enviado: {fmtDateTime(inst.proofSentAt)}</p>
+                              )}
+                              {inst.h2ScoreSubmission && (
+                                <div className="mt-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-xs">
+                                  <p className="font-semibold text-violet-200">Faixa H2 Score: {inst.h2ScoreSubmission.proposedPoints >= 0 ? "+" : ""}{inst.h2ScoreSubmission.proposedPoints} pontos</p>
+                                  <p className="text-violet-200/80">{inst.h2ScoreSubmission.status === "aprovado" ? `Aprovação: ${fmtDateTime(inst.h2ScoreSubmission.approvedAt)}` : inst.h2ScoreSubmission.status === "recusado" ? "Comprovante recusado — sem pontos" : "Aguardando aprovação — pontos ainda não efetivados"}</p>
+                                </div>
                               )}
                               {inst.status === "pago_juros" && (
                                 <p className="text-xs text-orange-400 mt-0.5">⚠️ Só juros pagos — principal rolado para nova parcela</p>
@@ -4076,6 +4084,80 @@ function InstallmentPlansTab() {
           </DialogContent>
         </Dialog>
       )}
+    </div>
+  );
+}
+
+
+// ─── Configuração H2 Score ───────────────────────────────────────────────────
+function H2ScoreTab() {
+  const { data, isLoading } = trpc.loans.getH2ScoreConfig.useQuery();
+  const utils = trpc.useUtils();
+  const [form, setForm] = useState({ onTimePoints: 4, eveningPoints: 1, nightPoints: 0, afterDuePoints: -5 });
+
+  useEffect(() => {
+    if (data) {
+      setForm({
+        onTimePoints: Number(data.onTimePoints),
+        eveningPoints: Number(data.eveningPoints),
+        nightPoints: Number(data.nightPoints),
+        afterDuePoints: Number(data.afterDuePoints),
+      });
+    }
+  }, [data]);
+
+  const save = trpc.loans.saveH2ScoreConfig.useMutation({
+    onSuccess: () => {
+      toast.success("Configuração do H2 Score salva.");
+      utils.loans.getH2ScoreConfig.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const rows = [
+    { key: "onTimePoints" as const, label: "Comprovante enviado até 18h", description: "Pontos efetivados somente quando o ADM aprovar." },
+    { key: "eveningPoints" as const, label: "Enviado após 18h e antes das 20h", description: "Usa o horário congelado do envio pelo cliente." },
+    { key: "nightPoints" as const, label: "Enviado das 20h até 23:59", description: "A aprovação tardia não muda esta faixa." },
+    { key: "afterDuePoints" as const, label: "Enviado depois do dia do vencimento", description: "Prevalece sobre a faixa horária." },
+  ];
+
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground"><RefreshCw className="w-6 h-6 animate-spin mx-auto" /></div>;
+
+  return (
+    <div className="space-y-5">
+      <Card className="border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-violet-200"><TrendingUp className="w-5 h-5" /> H2 Score por comprovante</CardTitle>
+          <p className="text-sm text-muted-foreground">O horário válido é registrado pelo servidor em America/Sao_Paulo quando o cliente envia o comprovante. Os pontos só entram após aprovação do ADM.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {rows.map((row) => (
+            <div key={row.key} className="rounded-xl border border-border/60 bg-background/40 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold">{row.label}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{row.description}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    className="w-24 text-center"
+                    value={form[row.key]}
+                    onChange={(event) => setForm((current) => ({ ...current, [row.key]: Number(event.target.value) }))}
+                  />
+                  <span className="text-sm text-muted-foreground">pontos</span>
+                </div>
+              </div>
+            </div>
+          ))}
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+            Comprovante recusado não gera pontos. Um novo envio cria uma nova análise e usa um novo horário do servidor. A mesma aprovação não pontua duas vezes.
+          </div>
+          <Button className="w-full" onClick={() => save.mutate(form)} disabled={save.isPending}>
+            {save.isPending ? "Salvando..." : "Salvar regras do H2 Score"}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { storagePut } from "../storage";
+import { registerH2ScoreSubmission } from "../loans/h2Score";
 import { hasRouteAccess, type CustomerRoute } from "../customerAccess";
 
 export type OnlineEntrySession = {
@@ -148,7 +149,7 @@ export async function submitOnlineInstallmentProof(input: { token: string; insta
   const buffer = Buffer.from(rawBase64, 'base64');
   if (!buffer.length || buffer.length > 10 * 1024 * 1024) throw new Error('O comprovante deve ter até 10 MB.');
   const rows = resultRows(await db.execute(sql`
-    SELECT li.id, li.status, li.proofSentAt, lc.id AS clientId
+    SELECT li.id, li.loanId, li.dueDate, li.status, li.proofSentAt, lc.id AS clientId
     FROM loanInstallments li
     JOIN loans l ON l.id=li.loanId
     JOIN loanClients lc ON lc.id=l.clientId
@@ -158,11 +159,20 @@ export async function submitOnlineInstallmentProof(input: { token: string; insta
   const installment = rows[0];
   if (!installment) throw new Error('Parcela não pertence ao cliente autenticado.');
   if (String(installment.status) === 'em_analise' || installment.proofSentAt) throw new Error('Já existe um comprovante em análise para esta parcela.');
+  const receivedAt = new Date();
   const safeName = String(input.fileName || 'comprovante').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100);
   const key = `loan-proofs/${Number(installment.clientId)}/${input.installmentId}-${Date.now()}-${safeName}`;
   const { url } = await storagePut(key, buffer, input.mimeType);
-  await db.execute(sql`UPDATE loanInstallments SET proofUrl=${url}, proofSentAt=NOW(), status='em_analise' WHERE id=${input.installmentId}`);
-  return { success: true, url };
+  await db.execute(sql`UPDATE loanInstallments SET proofUrl=${url}, proofSentAt=${receivedAt}, status='em_analise' WHERE id=${input.installmentId}`);
+  const h2ScoreSubmission = await registerH2ScoreSubmission(db, {
+    installmentId: input.installmentId,
+    loanId: Number(installment.loanId),
+    clientId: Number(installment.clientId),
+    dueDate: installment.dueDate,
+    proofUrl: url,
+    submittedAt: receivedAt,
+  });
+  return { success: true, url, h2ScoreSubmission };
 }
 
 export async function requireOnlineRoute(token: string, route: CustomerRoute) {
