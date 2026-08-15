@@ -25,6 +25,11 @@ import {
 function fmt(val: any) {
   return parseFloat(val || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+// Valores DECIMAL do banco podem chegar como texto. A interface sempre converte antes de usar toFixed.
+function asFiniteNumber(value: unknown, fallback = 0): number {
+  const parsed = typeof value === 'number' ? value : Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 function fmtDate(d: string | null | undefined) {
   if (!d) return "—";
   const s = String(d).slice(0, 10);
@@ -2052,14 +2057,15 @@ function ApprovalNotifyModal({ loan, lateFeeConfig, onClose }: { loan: any; late
     : '';
   const paymentFull = workDaysLabel ? `${paymentLabel} — ${workDaysLabel}` : paymentLabel;
 
-  const amount = parseFloat(loan.amount || 0);
-  const totalAmount = parseFloat(loan.totalAmount || 0);
+  const amount = asFiniteNumber(loan.amount);
+  const totalAmount = asFiniteNumber(loan.totalAmount);
+  const interestRate = asFiniteNumber(loan.interestRate);
   const installments = loan.totalInstallments || loan.installments || '?';
   const installmentAmt = installments > 0 ? (totalAmount / installments) : 0;
   const dueDate = loan.dueDate ? (() => { const s = String(loan.dueDate).slice(0,10); const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; })() : '—';
 
-  const fee18h = lateFeeConfig?.fee_after_18h ?? 10;
-  const fee20h = lateFeeConfig?.fee_after_20h ?? 10;
+  const fee18h = asFiniteNumber(lateFeeConfig?.fee_after_18h, 10);
+  const fee20h = asFiniteNumber(lateFeeConfig?.fee_after_20h, 10);
   const fixedFeeAfter20 = fee18h + fee20h;
   const lateFeeCustomerText =
     `- Pague sua parcela diária até as 18h para evitar taxas adicionais.\n` +
@@ -2172,9 +2178,9 @@ function InstallmentNotifyModal({ loan, inst, lateFeeConfig, onClose }: { loan: 
   const amount = parseFloat(inst.amount || 0);
   const dueDate = inst.dueDate ? (() => { const s = String(inst.dueDate).slice(0,10); const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; })() : '?';
 
-  const fee18h = lateFeeConfig?.fee_after_18h ?? 10;
-  const fee20h = lateFeeConfig?.fee_after_20h ?? 10;
-  const feeMidnight = lateFeeConfig?.fee_after_midnight_pct ?? 100;
+  const fee18h = asFiniteNumber(lateFeeConfig?.fee_after_18h, 10);
+  const fee20h = asFiniteNumber(lateFeeConfig?.fee_after_20h, 10);
+  const feeMidnight = asFiniteNumber(lateFeeConfig?.fee_after_midnight_pct, 100);
   const rulesText = lateFeeConfig?.rules_text || '';
 
   // Regras de atraso conforme tipo de pagamento
