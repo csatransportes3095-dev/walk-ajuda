@@ -595,9 +595,17 @@ export function LoansTab({ token }: LoansTabProps) {
   const h2TotalPoints = Number(h2Score.account?.totalPoints ?? h2Score.totalPoints ?? 0);
   const h2Level = h2Score.level || { slug: 'bronze', label: 'Bronze', icon: '🥉', nextLevel: 'Prata', pointsToNext: Math.max(0, 60 - h2TotalPoints) };
   const h2Config = h2Score.config || { bronzeMin: 0, prataMin: 60, ouroMin: 90, diamanteMin: 100 };
+  const h2ScoreProfiles: any[] = Array.isArray((data as any).h2ScoreProfiles) ? (data as any).h2ScoreProfiles : [];
+  const h2CurrentProfile = h2ScoreProfiles.find((profile) => profile.slug === h2Level.slug) || {
+    name: client.profileSlug || h2Level.label,
+    interestRate: Number(client.interestRate || 0),
+    creditLimit: Number(client.creditLimit || 0),
+  };
+  const h2NextProfile = h2Level.nextLevel
+    ? h2ScoreProfiles.find((profile) => profile.slug === String(h2Level.nextLevel).toLowerCase()) || null
+    : null;
+  const h2NearPromotion = Boolean(h2Level.nextLevel && Number(h2Level.pointsToNext || 0) > 0 && Number(h2Level.pointsToNext || 0) <= 5);
   const nextInstallment = (data as any).nextInstallment;
-  const futureLimit = (data as any).futureLimit;
-  const futureProfileName = (data as any).futureProfileName;
   const allowedTypes: string[] = (client.allowedPaymentTypes || "diario")
     .split(",").map((t: string) => t.trim())
     .filter((t: string) => ["diario", "semanal", "mensal", "parcelado"].includes(t));
@@ -684,6 +692,32 @@ export function LoansTab({ token }: LoansTabProps) {
             <div className="h-3 overflow-hidden rounded-full bg-slate-950/80"><div className="h-full rounded-full bg-gradient-to-r from-amber-600 via-yellow-300 to-cyan-300 transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, h2TotalPoints))}%` }} /></div>
             <div className="grid grid-cols-4 gap-1 text-center text-[9px] font-bold text-slate-400"><span className={h2Level.slug === 'bronze' ? 'text-amber-200' : ''}>🥉 0–{h2Config.prataMin - 1}</span><span className={h2Level.slug === 'prata' ? 'text-slate-100' : ''}>🥈 {h2Config.prataMin}–{h2Config.ouroMin - 1}</span><span className={h2Level.slug === 'ouro' ? 'text-yellow-200' : ''}>🥇 {h2Config.ouroMin}–{h2Config.diamanteMin - 1}</span><span className={h2Level.slug === 'diamante' ? 'text-cyan-200' : ''}>💎 {h2Config.diamanteMin}</span></div>
 
+            <div className="grid gap-2 sm:grid-cols-2">
+              <section className="rounded-xl border border-cyan-300/20 bg-slate-950/30 p-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-cyan-200">{h2Level.icon} Seu nível</p>
+                <p className="mt-1 text-sm font-black text-slate-50">{h2Level.label}</p>
+                <p className="mt-2 text-[11px] text-slate-300">Taxa do próximo empréstimo <strong className="text-cyan-100">{Number(h2CurrentProfile.interestRate || 0)}%</strong></p>
+                <p className="text-[11px] text-slate-300">Limite disponível <strong className="text-cyan-100">{fmt(h2CurrentProfile.creditLimit)}</strong></p>
+              </section>
+              <section className={`rounded-xl border p-3 ${h2NextProfile ? 'border-violet-300/30 bg-violet-500/10' : 'border-cyan-300/35 bg-cyan-400/10'}`}>
+                {h2NextProfile ? <>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-violet-200">🔓 Próxima conquista</p>
+                  <p className="mt-1 text-sm font-black text-white">{h2Level.nextLevel}</p>
+                  <p className="mt-1 text-[11px] font-bold text-violet-100">Faltam {h2Level.pointsToNext} ponto(s)</p>
+                  <p className="mt-2 text-[11px] text-slate-300">Taxa <strong className="text-violet-100">{Number(h2CurrentProfile.interestRate || 0)}% → {Number(h2NextProfile.interestRate || 0)}%</strong></p>
+                  <p className="text-[11px] text-slate-300">Limite <strong className="text-violet-100">{fmt(h2NextProfile.creditLimit)}</strong></p>
+                </> : <>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-100">💎 Nível máximo</p>
+                  <p className="mt-1 text-sm font-black text-white">Diamante</p>
+                  <p className="mt-2 text-[11px] text-cyan-50/85">Você desbloqueou as melhores condições disponíveis para o seu perfil.</p>
+                  <p className="mt-2 text-[11px] text-slate-200">Taxa <strong className="text-cyan-100">{Number(h2CurrentProfile.interestRate || 0)}%</strong> · Limite <strong className="text-cyan-100">{fmt(h2CurrentProfile.creditLimit)}</strong></p>
+                </>}
+              </section>
+            </div>
+
+            {h2NearPromotion && <div className="rounded-xl border border-amber-300/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-50"><strong>🔥 FALTAM APENAS {h2Level.pointsToNext} PONTOS!</strong><p className="mt-0.5 text-amber-100/85">Você está perto de alcançar {h2Level.nextLevel} e melhorar as condições do seu próximo empréstimo.</p></div>}
+            <div className="rounded-xl border border-emerald-400/25 bg-emerald-500/8 px-3 py-3"><p className="text-xs font-black text-emerald-100">🎯 SUBA DE NÍVEL E PAGUE MENOS</p><p className="mt-1 text-[11px] leading-relaxed text-emerald-50/80">Seus pagamentos constroem seu H2 Score. Envie seus comprovantes dentro do prazo, acumule pontos e desbloqueie melhores condições nos próximos empréstimos.</p></div>
+
             {/* Próxima parcela */}
             {nextInstallment && (() => {
               const days = daysUntil(nextInstallment.dueDate);
@@ -717,26 +751,13 @@ export function LoansTab({ token }: LoansTabProps) {
               );
             })()}
 
-            {/* Limite futuro */}
-            {futureLimit && !hasActive && (
-              <div className="rounded-xl p-3 bg-emerald-500/8 border border-emerald-500/20 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Limite ao quitar tudo</p>
-                    {futureProfileName && <p className="text-xs text-emerald-400 font-semibold">{futureProfileName}</p>}
-                  </div>
-                </div>
-                <p className="text-base font-black text-emerald-400">{fmt(futureLimit)}</p>
-              </div>
-            )}
           </div>
       </div>
 
       {hasActive && h2Score.promotionEvent && (
         <div className="flex items-start gap-3 rounded-2xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-3">
           <span className="text-xl">{h2Score.promotionEvent.level?.icon || h2Level.icon}</span>
-          <div><p className="text-sm font-black text-emerald-200">Parabéns! Você conquistou o nível {h2Score.promotionEvent.level?.label || h2Level.label}.</p><p className="mt-0.5 text-xs text-emerald-100/80">Sua nova condição estará disponível no próximo empréstimo.</p></div>
+          <div><p className="text-sm font-black text-emerald-200">🎉 NOVO NÍVEL DESBLOQUEADO</p><p className="mt-0.5 text-xs font-bold text-emerald-100">Parabéns! Você alcançou o nível {h2Score.promotionEvent.level?.label || h2Level.label}.</p><p className="mt-0.5 text-xs text-emerald-100/80">Suas novas condições serão consideradas no próximo empréstimo. O seu contrato atual não será alterado.</p></div>
         </div>
       )}
 

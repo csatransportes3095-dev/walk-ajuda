@@ -1589,6 +1589,16 @@ export const loanRouter = router({
     const nextProfile = profiles.find((p: any) => p.sortOrder > (currentProfile?.sortOrder || 0)) || null;
     const futureLimit = nextProfile ? nextProfile.creditLimit : (currentProfile?.creditLimit || client.creditLimit);
     const futureProfileName = nextProfile ? nextProfile.name : null;
+    // Dados exclusivamente de leitura para explicar ao cliente as condições dos níveis H2 Score.
+    // A tabela loanProfiles permanece como fonte única de taxa, limite e prazo.
+    const h2ScoreProfiles = profiles
+      .filter((profile: any) => ['bronze', 'prata', 'ouro', 'diamante'].includes(String(profile.slug || '').toLowerCase()))
+      .map((profile: any) => ({
+        slug: String(profile.slug).toLowerCase(),
+        name: profile.name,
+        interestRate: Number(profile.interestRate || 0),
+        creditLimit: Number(profile.creditLimit || 0),
+      }));
 
     const mainCustomer = await findMainCustomerByIdentity({ phone: session.phone, cpf: session.cpf }, db);
     // O saldo é do cadastro principal do cliente; os IDs técnicos de empréstimo não criam outra conta de Score.
@@ -1603,6 +1613,7 @@ export const loanRouter = router({
       nextInstallment,
       futureLimit,
       futureProfileName,
+      h2ScoreProfiles,
     };
   }),
 
