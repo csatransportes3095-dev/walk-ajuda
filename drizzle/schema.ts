@@ -260,6 +260,7 @@ export const orderFiles = mysqlTable("orderFiles", {
   fileKey: varchar("fileKey", { length: 512 }).notNull(),
   mimeType: varchar("mimeType", { length: 128 }).notNull().default("image/jpeg"),
   fromAdmin: int("fromAdmin").notNull().default(0), // 1 = enviado pelo admin para o cliente
+  addedByAdmin: int("addedByAdmin").notNull().default(0), // 1 = anexado pelo ADM na área de documentos do pedido
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

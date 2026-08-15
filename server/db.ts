@@ -1249,15 +1249,38 @@ export async function getOrderStatusHistoryByPhone(phone: string): Promise<Order
 }
 
 // ── Order Files ──────────────────────────────────────────────────────────────
+// Mantém a origem "anexado pelo ADM" separada de "enviado ao cliente".
+// A alteração é idempotente para bancos já existentes e preserva todos os arquivos.
+let orderFilesAdminOriginColumnPromise: Promise<void> | null = null;
+async function ensureOrderFilesAdminOriginColumn(db: any): Promise<void> {
+  if (!orderFilesAdminOriginColumnPromise) {
+    orderFilesAdminOriginColumnPromise = (async () => {
+      try {
+        await db.execute(sql.raw("ALTER TABLE `orderFiles` ADD COLUMN IF NOT EXISTS `addedByAdmin` TINYINT NOT NULL DEFAULT 0"));
+      } catch {
+        try { await db.execute(sql.raw("ALTER TABLE `orderFiles` ADD COLUMN `addedByAdmin` TINYINT NOT NULL DEFAULT 0")); } catch { /* coluna já existe */ }
+      }
+      // O anexo já confirmado pelo ADM nesta correção mantém sua origem visual correta.
+      await db.execute(sql.raw("UPDATE `orderFiles` SET `addedByAdmin` = 1 WHERE `addedByAdmin` = 0 AND `fromAdmin` = 0 AND `label` = 'FOTO BUCSA'"));
+    })().catch((error) => {
+      orderFilesAdminOriginColumnPromise = null;
+      throw error;
+    });
+  }
+  await orderFilesAdminOriginColumnPromise;
+}
+
 export async function addOrderFile(data: InsertOrderFile): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  await ensureOrderFilesAdminOriginColumn(db);
   await db.insert(orderFiles).values(data);
 }
 
 export async function getOrderFiles(registrationId: number): Promise<OrderFile[]> {
   const db = await getDb();
   if (!db) return [];
+  await ensureOrderFilesAdminOriginColumn(db);
   return await db.select().from(orderFiles)
     .where(eq(orderFiles.registrationId, registrationId))
     .orderBy(sql`${orderFiles.createdAt} ASC`);
@@ -1266,6 +1289,7 @@ export async function getOrderFiles(registrationId: number): Promise<OrderFile[]
 export async function deleteOrderFile(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  await ensureOrderFilesAdminOriginColumn(db);
   await db.delete(orderFiles).where(eq(orderFiles.id, id));
 }
 
@@ -1356,6 +1380,7 @@ export async function deleteInfoBanner(id: number): Promise<void> {
 export async function getOrderFilesByPhone(phone: string): Promise<OrderFile[]> {
   const db = await getDb();
   if (!db) return [];
+  await ensureOrderFilesAdminOriginColumn(db);
   const phoneDigits = phone.replace(/\D/g, '');
   return await db.select().from(orderFiles)
     .where(sql`REGEXP_REPLACE(${orderFiles.customerPhone}, '[^0-9]', '') = ${phoneDigits}`)
@@ -1373,6 +1398,7 @@ export type OrderFileGrouped = {
 export async function getOrderFilesByPhoneGrouped(phone: string): Promise<OrderFileGrouped[]> {
   const db = await getDb();
   if (!db) return [];
+  await ensureOrderFilesAdminOriginColumn(db);
   const phoneDigits = phone.replace(/\D/g, '');
 
   // Buscar todos os arquivos do cliente

@@ -1756,7 +1756,7 @@ export function registerUploadRoute(app: Express) {
           res.status(400).json({ error: "No file provided" });
           return;
         }
-        const { registrationId, customerPhone, label, fromAdmin } = req.body;
+        const { registrationId, customerPhone, label, fromAdmin, addedByAdmin } = req.body;
         if (!registrationId || !customerPhone || !label) {
           res.status(400).json({ error: "Missing required fields" });
           return;
@@ -1775,6 +1775,7 @@ export function registerUploadRoute(app: Express) {
           fileKey,
           mimeType: r.contentType,
           fromAdmin: fromAdmin === "1" || fromAdmin === 1 ? 1 : 0,
+          addedByAdmin: addedByAdmin === "1" || addedByAdmin === 1 ? 1 : 0,
         });
         res.json({ success: true, fileUrl: url });
       } catch (err: any) {

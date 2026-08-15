@@ -1621,6 +1621,7 @@ export default function AdminOrders() {
         formData.append('customerPhone', order.phone);
         formData.append('label', label);
         formData.append('fromAdmin', '0');
+        formData.append('addedByAdmin', '1');
         const resp = await fetch('/api/upload/admin-file', { method: 'POST', body: formData, credentials: 'include' });
         if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.error || 'Erro ao enviar arquivo'); }
         toast.success('Arquivo enviado com sucesso!');
@@ -7578,14 +7579,15 @@ export default function AdminOrders() {
                       {filesQuery.data && filesQuery.data.filter(f => Number(f.fromAdmin) !== 1).map(f => {
                         const isPdf = f.mimeType.includes('pdf');
                         const isImg = f.mimeType.startsWith('image/');
+                        const wasAddedByAdmin = Number((f as any).addedByAdmin) === 1;
                         const uploadDate = f.createdAt ? new Date(f.createdAt instanceof Date ? f.createdAt.getTime() : f.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
                         return (
-                          <div key={f.id} className="flex items-center justify-between gap-2 p-2.5 bg-card rounded-lg border border-border">
+                          <div key={f.id} className={`flex items-center justify-between gap-2 rounded-lg p-2.5 ${wasAddedByAdmin ? 'border border-red-400/35 bg-red-500/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm' : 'border border-border bg-card'}`}>
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               <span className="text-lg flex-shrink-0">{isPdf ? '📄' : isImg ? '🖼️' : '📎'}</span>
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium text-foreground truncate">{f.label}</p>
-                                <p className="text-xs text-muted-foreground">{isPdf ? 'PDF' : isImg ? 'Imagem' : 'Arquivo'}{uploadDate && <span className="ml-1.5 text-[10px] text-amber-400/80">📅 {uploadDate}</span>}</p>
+                                <p className={`text-xs ${wasAddedByAdmin ? 'font-medium text-red-300/90' : 'text-muted-foreground'}`}>{isPdf ? 'PDF' : isImg ? 'Imagem' : 'Arquivo'}{wasAddedByAdmin && <span> • Anexado pelo ADM</span>}{uploadDate && <span className="ml-1.5 text-[10px] text-amber-400/80">📅 {uploadDate}</span>}</p>
                               </div>
                             </div>
                             <div className="flex gap-1 flex-shrink-0">
