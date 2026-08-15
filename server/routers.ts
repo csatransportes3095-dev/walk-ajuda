@@ -27,6 +27,7 @@ import { loanRouter } from "./routers/loans";
 import { apkRouter } from "./routers/apk";
 import { customerPasswordRouter } from "./routers/customerPassword";
 import { syncUnifiedCustomerRegistry } from "./customerIdentity";
+import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, setCustomerCommercialProfileMode } from "./loans/h2Score";
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
@@ -1915,6 +1916,61 @@ export const appRouter = router({
         const updatedBy = (ctx as any)?.user?.name || (ctx as any)?.user?.username || 'Administrador';
         const mode = await setRouteReleaseMode(input.route, input.mode, updatedBy);
         return { success: true, route: input.route, mode };
+      }),
+
+    // O H2 Score pertence ao customerId do cadastro principal. Nenhum cadastro paralelo é criado aqui.
+    getH2ScoreDirectory: adminProcedure.query(async () => {
+      const db = await (await import('./db')).getDb() as any;
+      return await getH2ScoreCustomerDirectory(db);
+    }),
+
+    getCustomerH2Score: adminProcedure
+      .input(z.object({ customerId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const db = await (await import('./db')).getDb() as any;
+        const directory = await getH2ScoreCustomerDirectory(db);
+        const customer = directory.find((row: any) => Number(row.customerId) === input.customerId);
+        if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado.' });
+        return await getCustomerH2ScoreSummary(db, input.customerId, customer.loanClientId ? Number(customer.loanClientId) : null);
+      }),
+
+    adjustCustomerH2Score: adminProcedure
+      .input(z.object({
+        customerId: z.number().int().positive(),
+        operation: z.enum(['adicionar', 'remover']),
+        quantity: z.number().int().min(1).max(100),
+        reason: z.string().trim().min(5, 'Informe o motivo do ajuste.').max(1000),
+        confirmed: z.literal(true),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await (await import('./db')).getDb() as any;
+        const directory = await getH2ScoreCustomerDirectory(db);
+        const customer = directory.find((row: any) => Number(row.customerId) === input.customerId);
+        if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado.' });
+        const adminName = (ctx as any)?.user?.name || (ctx as any)?.user?.username || 'Administrador';
+        return await adjustCustomerH2Score(db, {
+          customerId: input.customerId,
+          loanClientId: customer.loanClientId ? Number(customer.loanClientId) : null,
+          operation: input.operation,
+          quantity: input.quantity,
+          reason: input.reason,
+          adminName,
+        });
+      }),
+
+    setCustomerCommercialMode: adminProcedure
+      .input(z.object({
+        customerId: z.number().int().positive(),
+        isCustom: z.boolean(),
+        profileSlug: z.string().trim().min(1).max(64).optional(),
+        confirmed: z.literal(true),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await (await import('./db')).getDb() as any;
+        const summary = await getCustomerH2ScoreSummary(db, input.customerId);
+        const profileSlug = input.isCustom ? (input.profileSlug || 'personalizado') : summary.level.slug;
+        await setCustomerCommercialProfileMode(db, input.customerId, profileSlug, input.isCustom);
+        return await getCustomerH2ScoreSummary(db, input.customerId);
       }),
 
     checkByPhone: publicProcedure

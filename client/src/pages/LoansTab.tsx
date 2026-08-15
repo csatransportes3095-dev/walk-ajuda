@@ -591,8 +591,10 @@ export function LoansTab({ token }: LoansTabProps) {
   }
 
   const { client, loans, pixConfig } = data;
-  const clientScore = (data as any).clientScore;
-  const h2Score = (data as any).h2Score || { totalPoints: 0, recentEvents: [] };
+  const h2Score: any = (data as any).h2Score || {};
+  const h2TotalPoints = Number(h2Score.account?.totalPoints ?? h2Score.totalPoints ?? 0);
+  const h2Level = h2Score.level || { slug: 'bronze', label: 'Bronze', icon: '🥉', nextLevel: 'Prata', pointsToNext: Math.max(0, 60 - h2TotalPoints) };
+  const h2Config = h2Score.config || { bronzeMin: 0, prataMin: 60, ouroMin: 90, diamanteMin: 100 };
   const nextInstallment = (data as any).nextInstallment;
   const futureLimit = (data as any).futureLimit;
   const futureProfileName = (data as any).futureProfileName;
@@ -662,44 +664,25 @@ export function LoansTab({ token }: LoansTabProps) {
         )}
       </div>
 
-      {/* ─── Score + Próxima Parcela + Limite Futuro ─────────────────────── */}
-      {clientScore && (
-        <div className="rounded-2xl overflow-hidden border border-white/8 bg-gradient-to-br from-slate-800/60 to-slate-900/80">
-          <div className="px-4 py-2.5 bg-white/5 border-b border-white/5 flex items-center gap-2">
-            <span className="text-xs font-bold text-violet-300 uppercase tracking-wider">📊 Seu Perfil de Crédito</span>
+      {/* ─── H2 SCORE PERMANENTE DO CLIENTE ─────────────────────────────── */}
+      <div className="rounded-2xl overflow-hidden border border-cyan-500/30 bg-gradient-to-br from-cyan-950/45 to-slate-900/80">
+          <div className="px-4 py-2.5 bg-cyan-500/10 border-b border-cyan-500/20 flex items-center justify-between gap-3">
+            <span className="text-xs font-black text-cyan-100 uppercase tracking-wider">H2 SCORE — SEU NÍVEL</span>
+            <span className="text-xs font-bold text-cyan-200">Condição para o próximo empréstimo</span>
           </div>
           <div className="p-4 space-y-3">
 
-            {/* Score badge */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-14 h-14 rounded-2xl flex flex-col items-center justify-center shadow-lg"
-                  style={{ background: clientScore.scoreColor + '22', border: `2px solid ${clientScore.scoreColor}55` }}
-                >
-                  <span className="text-2xl font-black" style={{ color: clientScore.scoreColor }}>{clientScore.score}</span>
-                  <span className="text-xs font-bold" style={{ color: clientScore.scoreColor }}>{clientScore.scorePct}%</span>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-14 h-14 rounded-2xl flex flex-col items-center justify-center shadow-lg bg-cyan-400/10 border-2 border-cyan-300/45 shrink-0">
+                  <span className="text-2xl">{h2Level.icon}</span>
+                  <span className="text-[10px] font-black text-cyan-200">{h2TotalPoints} PTS</span>
                 </div>
-                <div>
-                  <p className="font-black text-base text-foreground">{clientScore.scoreLabel}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {clientScore.score === 'A' && 'Todas as parcelas em dia'}
-                    {clientScore.score === 'B' && 'Bom histórico, pequenos atrasos'}
-                    {clientScore.score === 'C' && 'Parcelas com atrasos recorrentes'}
-                    {clientScore.score === 'D' && 'Conta desativada ou inadimplente'}
-                  </p>
-                </div>
-              </div>
-              {/* Barra de score */}
-              <div className="flex flex-col items-end gap-1">
-                {(['A','B','C','D'] as const).map(s => (
-                  <div key={s} className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold w-3" style={{ color: clientScore.score === s ? clientScore.scoreColor : 'rgba(255,255,255,0.2)' }}>{s}</span>
-                    <div className="w-16 h-2 rounded-full" style={{ background: clientScore.score === s ? clientScore.scoreColor : 'rgba(255,255,255,0.08)' }} />
-                  </div>
-                ))}
+                <div className="min-w-0"><p className="font-black text-base text-cyan-100">Nível {h2Level.label}</p><p className="text-xs text-cyan-100/70 mt-0.5">{h2Level.nextLevel ? `Faltam ${h2Level.pointsToNext} ponto(s) para ${h2Level.nextLevel}.` : 'Você alcançou o nível máximo.'}</p></div>
               </div>
             </div>
+            <div className="h-3 overflow-hidden rounded-full bg-slate-950/80"><div className="h-full rounded-full bg-gradient-to-r from-amber-600 via-yellow-300 to-cyan-300 transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, h2TotalPoints))}%` }} /></div>
+            <div className="grid grid-cols-4 gap-1 text-center text-[9px] font-bold text-slate-400"><span className={h2Level.slug === 'bronze' ? 'text-amber-200' : ''}>🥉 0–{h2Config.prataMin - 1}</span><span className={h2Level.slug === 'prata' ? 'text-slate-100' : ''}>🥈 {h2Config.prataMin}–{h2Config.ouroMin - 1}</span><span className={h2Level.slug === 'ouro' ? 'text-yellow-200' : ''}>🥇 {h2Config.ouroMin}–{h2Config.diamanteMin - 1}</span><span className={h2Level.slug === 'diamante' ? 'text-cyan-200' : ''}>💎 {h2Config.diamanteMin}</span></div>
 
             {/* Próxima parcela */}
             {nextInstallment && (() => {
@@ -748,45 +731,14 @@ export function LoansTab({ token }: LoansTabProps) {
               </div>
             )}
           </div>
+      </div>
+
+      {hasActive && h2Score.promotionEvent && (
+        <div className="flex items-start gap-3 rounded-2xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-3">
+          <span className="text-xl">{h2Score.promotionEvent.level?.icon || h2Level.icon}</span>
+          <div><p className="text-sm font-black text-emerald-200">Parabéns! Você conquistou o nível {h2Score.promotionEvent.level?.label || h2Level.label}.</p><p className="mt-0.5 text-xs text-emerald-100/80">Sua nova condição estará disponível no próximo empréstimo.</p></div>
         </div>
       )}
-
-      {/* H2 Score — pontos efetivados pelos comprovantes aprovados */}
-      <div className="rounded-2xl overflow-hidden border border-cyan-500/30 bg-gradient-to-br from-cyan-950/45 to-slate-900/80">
-        <div className="px-4 py-2.5 bg-cyan-500/10 border-b border-cyan-500/20 flex items-center justify-between gap-3">
-          <span className="text-xs font-black text-cyan-200 uppercase tracking-wider">⚡ Seu H2 Score</span>
-          <span className="rounded-full bg-cyan-400/15 border border-cyan-400/30 px-2.5 py-1 text-xs font-black text-cyan-300">
-            {Number(h2Score.totalPoints || 0) >= 0 ? "+" : ""}{Number(h2Score.totalPoints || 0)} pontos
-          </span>
-        </div>
-        <div className="p-4">
-          <p className="text-xs text-muted-foreground">
-            Seus pontos entram somente quando o comprovante é aprovado. O horário considerado é o momento em que você enviou o comprovante.
-          </p>
-          {Array.isArray(h2Score.recentEvents) && h2Score.recentEvents.length > 0 ? (
-            <div className="mt-3 space-y-2">
-              {h2Score.recentEvents.slice(0, 3).map((event: any) => {
-                const points = event.status === "aprovado" ? Number(event.proposedPoints || 0) : 0;
-                const statusText = event.status === "aprovado" ? "Pontos efetivados" : event.status === "em_analise" ? "Comprovante em análise" : "Comprovante recusado";
-                const statusClass = event.status === "aprovado" ? "text-emerald-300" : event.status === "em_analise" ? "text-amber-300" : "text-red-300";
-                return (
-                  <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-foreground">Parcela #{event.installmentNumber || "—"} · {statusText}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Enviado em {event.submittedAt ? new Date(event.submittedAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</p>
-                    </div>
-                    <span className={`text-sm font-black whitespace-nowrap ${statusClass}`}>{event.status === "aprovado" ? `${points >= 0 ? "+" : ""}${points} pts` : event.status === "em_analise" ? `previsto ${Number(event.proposedPoints || 0) >= 0 ? "+" : ""}${Number(event.proposedPoints || 0)}` : "0 pts"}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="mt-3 rounded-xl border border-cyan-500/15 bg-cyan-500/5 px-3 py-3 text-xs text-cyan-100/80">
-              Ainda não há comprovantes aprovados com H2 Score. Envie seu comprovante no prazo e aguarde a aprovação do ADM.
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Chave PIX do cliente */}
       {(() => {

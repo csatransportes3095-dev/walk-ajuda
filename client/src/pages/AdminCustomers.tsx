@@ -31,6 +31,18 @@ type Customer = {
   blockedAt?: number | Date | null;
 };
 
+type H2DirectoryEntry = {
+  customerId: number;
+  loanClientId?: number | null;
+  totalPoints: number;
+  level: { slug: 'bronze' | 'prata' | 'ouro' | 'diamante'; label: string; icon: string; pointsToNext: number; nextLevel: string | null };
+  commercialProfileSlug: string;
+  isCommercialCustom: boolean;
+  creditLimit?: number | string | null;
+  interestRate?: number | string | null;
+  loanSituation: 'ativo' | 'quitado' | 'sem_emprestimo';
+};
+
 // Apenas os objetos R2 recuperados precisam ignorar a cópia antiga marcada como imutável no navegador.
 // A URL persistida em profilePhotoUrl nunca é alterada.
 const REPAIRED_PROFILE_PHOTO_URLS = new Set([
@@ -279,6 +291,21 @@ function ManualReferralForm({
 }
 
 // Componente de histórico de logins do cliente
+function H2ScoreMiniCard({ entry, onOpen }: { entry?: H2DirectoryEntry; onOpen: () => void }) {
+  if (!entry) return <div className="rounded-lg border border-slate-500/30 bg-slate-950/20 px-2 py-1.5 text-[10px] text-slate-300">H2 Score carregando…</div>;
+  const palette: Record<string, string> = {
+    bronze: 'border-amber-700/60 bg-amber-950/30 text-amber-100',
+    prata: 'border-slate-300/40 bg-slate-200/10 text-slate-100',
+    ouro: 'border-yellow-400/50 bg-yellow-500/10 text-yellow-100',
+    diamante: 'border-cyan-300/50 bg-cyan-400/10 text-cyan-100',
+  };
+  const situation = entry.loanSituation === 'ativo' ? 'Empréstimo ativo' : entry.loanSituation === 'quitado' ? 'Empréstimo quitado' : 'Sem empréstimo';
+  return <button type="button" onClick={onOpen} className={`w-full rounded-lg border px-2.5 py-2 text-left transition-transform duration-150 hover:-translate-y-0.5 active:scale-[0.98] ${palette[entry.level.slug]}`} title="Abrir ficha completa do H2 Score">
+    <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-black">{entry.level.icon} H2 SCORE · {entry.level.label.toUpperCase()}</span><span className="rounded bg-black/20 px-1.5 py-0.5 text-xs font-black">{entry.totalPoints} pts</span></div>
+    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] opacity-90"><span>{situation}</span><span>Limite: R$ {Number(entry.creditLimit || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>{entry.isCommercialCustom && <span className="font-black text-fuchsia-200">Personalizado</span>}</div>
+  </button>;
+}
+
 function LoginHistoryColumn({ phone, formatDate }: { phone: string; formatDate: (ts: number) => string }) {
   const cleanPhone = phone.replace(/\D/g, '');
   const { data, isLoading } = trpc.customerPassword.adminGetLoginHistory.useQuery(
@@ -358,6 +385,13 @@ export default function AdminCustomers() {
   const [showOnlyOrders, setShowOnlyOrders] = useState(false);
   const [showOnlyBlocked, setShowOnlyBlocked] = useState(false);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name">("newest");
+  const [h2Filter, setH2Filter] = useState<'todos' | 'bronze' | 'prata' | 'ouro' | 'diamante' | 'personalizado' | 'ativo' | 'sem_ativo'>('todos');
+  const [h2ScoreModalCustomer, setH2ScoreModalCustomer] = useState<Customer | null>(null);
+  const [scoreOperation, setScoreOperation] = useState<'adicionar' | 'remover'>('adicionar');
+  const [scoreQuantity, setScoreQuantity] = useState('');
+  const [scoreReason, setScoreReason] = useState('');
+  const [adjustmentPreview, setAdjustmentPreview] = useState<{ before: number; after: number; operation: 'adicionar' | 'remover'; quantity: number; reason: string } | null>(null);
+  const [commercialModePreview, setCommercialModePreview] = useState<boolean | null>(null);
   const { fmt: formatDateBR } = useTimezone();
   const [, setLocation] = useLocation();
 
@@ -402,6 +436,11 @@ export default function AdminCustomers() {
   }, [photoModal]);
 
   const customersQuery = trpc.customers.list.useQuery(undefined, {});
+  const h2DirectoryQuery = trpc.customers.getH2ScoreDirectory.useQuery(undefined, { staleTime: 0 });
+  const h2ScoreDetailQuery = trpc.customers.getCustomerH2Score.useQuery(
+    { customerId: h2ScoreModalCustomer?.id || 0 },
+    { enabled: !!h2ScoreModalCustomer, staleTime: 0 }
+  );
   const routeReleaseModesQuery = trpc.customers.routeReleaseModes.useQuery();
   const setRouteReleaseModeMut = trpc.customers.setRouteReleaseMode.useMutation({
     onSuccess: () => { routeReleaseModesQuery.refetch(); toast.success('Modo de liberação atualizado.'); },
@@ -410,6 +449,22 @@ export default function AdminCustomers() {
   const updateMut = trpc.customers.update.useMutation({
     onSuccess: () => { customersQuery.refetch(); toast.success("Cliente atualizado!"); setEditingId(null); },
     onError: (error) => toast.error(error.message || "Erro ao atualizar cliente"),
+  });
+  const adjustH2ScoreMut = trpc.customers.adjustCustomerH2Score.useMutation({
+    onSuccess: async (result) => {
+      setAdjustmentPreview(null); setScoreQuantity(''); setScoreReason('');
+      await Promise.all([h2DirectoryQuery.refetch(), h2ScoreDetailQuery.refetch()]);
+      toast.success(`H2 Score atualizado: ${result.before} → ${result.after} pontos.`);
+    },
+    onError: (error) => toast.error(error.message || 'Não foi possível ajustar o H2 Score.'),
+  });
+  const setCommercialModeMut = trpc.customers.setCustomerCommercialMode.useMutation({
+    onSuccess: async () => {
+      setCommercialModePreview(null);
+      await Promise.all([h2DirectoryQuery.refetch(), h2ScoreDetailQuery.refetch()]);
+      toast.success('Modo comercial atualizado para os próximos empréstimos.');
+    },
+    onError: (error) => toast.error(error.message || 'Não foi possível atualizar o modo comercial.'),
   });
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ id: number; name: string } | null>(null);
   const [deleteWithOrdersLoading, setDeleteWithOrdersLoading] = useState(false);
@@ -626,6 +681,7 @@ export default function AdminCustomers() {
   };
 
   const customers: Customer[] = (customersQuery.data || []) as unknown as Customer[];
+  const h2ByCustomerId = new Map<number, H2DirectoryEntry>(((h2DirectoryQuery.data || []) as H2DirectoryEntry[]).map((entry) => [Number(entry.customerId), entry]));
 
   const sortedCustomers = [...customers].sort((a, b) => {
     if (sortOrder === "name") return a.name.localeCompare(b.name, 'pt-BR');
@@ -671,9 +727,15 @@ export default function AdminCustomers() {
         (c.referredBy || "").toLowerCase().includes(term) ||
         (c.referredByPhone || "").includes(term);
     }
-    if (showOnlyOrders) return matchSearch && !!c.hasOrder;
-    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
-    return matchSearch;
+    if (!matchSearch) return false;
+    const h2 = h2ByCustomerId.get(c.id);
+    if (h2Filter === 'bronze' || h2Filter === 'prata' || h2Filter === 'ouro' || h2Filter === 'diamante') return h2?.level.slug === h2Filter;
+    if (h2Filter === 'personalizado') return !!h2?.isCommercialCustom;
+    if (h2Filter === 'ativo') return h2?.loanSituation === 'ativo';
+    if (h2Filter === 'sem_ativo') return h2?.loanSituation !== 'ativo';
+    if (showOnlyOrders) return !!c.hasOrder;
+    if (showOnlyBlocked) return c.blocked === 1;
+    return true;
   });
 
   const startEdit = (c: Customer) => {
@@ -991,6 +1053,13 @@ export default function AdminCustomers() {
           <option value="oldest">Mais antigos</option>
           <option value="name">Nome A-Z</option>
         </select>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-2" aria-label="Filtros H2 Score">
+          {([
+            ['todos', 'Todos'], ['bronze', '🥉 Bronze'], ['prata', '🥈 Prata'], ['ouro', '🥇 Ouro'], ['diamante', '💎 Diamante'],
+            ['personalizado', 'Personalizado'], ['ativo', 'Com ativo'], ['sem_ativo', 'Sem ativo'],
+          ] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setH2Filter(key)} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors ${h2Filter === key ? 'bg-cyan-600 text-white shadow-sm' : 'bg-background/50 text-cyan-100/80 hover:bg-cyan-500/15'}`}>{label}</button>)}
         </div>
 
         {/* Barra de Seleção em Massa */}
@@ -1345,6 +1414,7 @@ export default function AdminCustomers() {
                   )}
                   <ReferralCountButton phone={c.phone} name={c.name} />
                   <RouteAccessWidget phone={c.phone} />
+                  <H2ScoreMiniCard entry={h2ByCustomerId.get(c.id)} onOpen={() => { setH2ScoreModalCustomer(c); setScoreQuantity(''); setScoreReason(''); setAdjustmentPreview(null); setCommercialModePreview(null); }} />
                   {!c.email && (
                     <p className="text-xs text-amber-400/80 flex items-center gap-1.5">
                       <span>⚠️</span> Sem email cadastrado
@@ -1968,6 +2038,43 @@ export default function AdminCustomers() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {h2ScoreModalCustomer && (
+        <div className="fixed inset-0 z-[10000] flex items-end bg-slate-950/75 p-0 backdrop-blur-sm sm:items-center sm:justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="Ficha do H2 Score">
+          <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-cyan-400/30 bg-slate-950 text-slate-100 shadow-2xl sm:max-w-3xl sm:rounded-3xl">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/10 bg-slate-950/95 px-5 py-4 backdrop-blur">
+              <div><p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">Ficha H2 Score</p><h2 className="mt-1 text-lg font-black">{h2ScoreModalCustomer.name}</h2><p className="text-xs text-slate-400">O Score é permanente por cliente. Contratos ativos não são alterados.</p></div>
+              <button type="button" onClick={() => setH2ScoreModalCustomer(null)} className="rounded-xl bg-white/10 p-2 text-slate-200 transition hover:bg-white/20" title="Fechar"><X className="h-5 w-5" /></button>
+            </div>
+            {h2ScoreDetailQuery.isLoading ? <div className="p-8 text-center text-slate-300">Carregando ficha H2 Score…</div> : h2ScoreDetailQuery.data ? (() => {
+              const detail: any = h2ScoreDetailQuery.data;
+              const level = detail.level;
+              const score = Number(detail.account?.totalPoints || 0);
+              const custom = Number(detail.account?.isCommercialCustom || 0) === 1;
+              const situation = h2ByCustomerId.get(h2ScoreModalCustomer.id)?.loanSituation || 'sem_emprestimo';
+              return <div className="space-y-5 p-5">
+                <section className="rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/15 via-slate-900 to-slate-950 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-black text-cyan-100">{level.icon} H2 SCORE — NÍVEL {String(level.label).toUpperCase()}</p><p className="mt-1 text-xs text-cyan-100/70">Condição comercial: <strong>{custom ? 'Personalizado' : level.label}</strong> · aplicada somente em novo empréstimo.</p></div><div className="rounded-2xl bg-cyan-400/15 px-4 py-2 text-right"><p className="text-2xl font-black text-cyan-100">{score}</p><p className="text-[10px] font-bold uppercase tracking-wide text-cyan-200/80">pontos</p></div></div>
+                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-950/80"><div className="h-full rounded-full bg-gradient-to-r from-amber-500 via-yellow-300 to-cyan-300 transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, score))}%` }} /></div>
+                  <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] text-cyan-100/75"><span>🥉 Bronze 0–59</span><span>🥈 Prata 60–89</span><span>🥇 Ouro 90–99</span><span>💎 Diamante 100</span></div>
+                  <p className="mt-3 text-sm font-medium text-white">{level.nextLevel ? `Faltam ${level.pointsToNext} ponto(s) para o nível ${level.nextLevel}.` : 'Nível máximo Diamante conquistado.'}</p>
+                  <p className="mt-1 text-xs text-slate-300">Situação: <strong>{situation === 'ativo' ? 'Empréstimo ativo' : situation === 'quitado' ? 'Empréstimo quitado' : 'Sem empréstimo'}</strong>{situation === 'ativo' && ' — nenhuma taxa, parcela ou condição do contrato atual será modificada.'}</p>
+                </section>
+
+                <section className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"><div className="flex items-center justify-between gap-2"><h3 className="text-sm font-black">Condição comercial</h3><span className={`rounded-full px-2 py-1 text-[10px] font-black ${custom ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-emerald-500/20 text-emerald-200'}`}>{custom ? 'PERSONALIZADO' : 'AUTOMÁTICO'}</span></div><p className="mt-2 text-xs leading-relaxed text-slate-300">{custom ? 'A condição personalizada não é sobrescrita automaticamente pelo H2 Score.' : 'O nível conquistado define a condição disponível no próximo empréstimo.'}</p><button type="button" onClick={() => setCommercialModePreview(!custom)} className="mt-3 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-100 transition hover:bg-cyan-500/20">{custom ? 'Voltar ao automático' : 'Definir como personalizado'}</button></div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"><h3 className="text-sm font-black">Ajuste manual auditável</h3><p className="mt-1 text-xs text-slate-400">Informe quantidade e motivo. O sistema mostrará a prévia antes de confirmar.</p><div className="mt-3 grid grid-cols-2 gap-2"><select value={scoreOperation} onChange={(e) => setScoreOperation(e.target.value as 'adicionar' | 'remover')} className="rounded-xl border border-white/15 bg-slate-900 px-3 py-2 text-xs"><option value="adicionar">Adicionar pontos</option><option value="remover">Remover pontos</option></select><input type="number" min="1" max="100" value={scoreQuantity} onChange={(e) => setScoreQuantity(e.target.value)} placeholder="Pontos" className="rounded-xl border border-white/15 bg-slate-900 px-3 py-2 text-xs" /></div><textarea value={scoreReason} onChange={(e) => setScoreReason(e.target.value)} placeholder="Motivo obrigatório do ajuste" className="mt-2 min-h-20 w-full rounded-xl border border-white/15 bg-slate-900 px-3 py-2 text-xs" /><button type="button" onClick={() => { const quantity = Number(scoreQuantity); if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) return toast.error('Informe de 1 a 100 pontos.'); if (scoreReason.trim().length < 5) return toast.error('Informe um motivo com pelo menos 5 caracteres.'); setAdjustmentPreview({ before: score, after: Math.max(0, Math.min(100, score + (scoreOperation === 'adicionar' ? quantity : -quantity))), operation: scoreOperation, quantity, reason: scoreReason.trim() }); }} className="mt-2 w-full rounded-xl bg-amber-500 px-3 py-2 text-xs font-black text-slate-950 transition hover:bg-amber-400">VER PRÉVIA</button></div>
+                </section>
+
+                {commercialModePreview !== null && <section className="rounded-2xl border border-fuchsia-400/40 bg-fuchsia-500/10 p-4"><p className="text-sm font-black text-fuchsia-100">Prévia: {commercialModePreview ? 'definir Perfil Personalizado' : 'retornar ao modo Automático'}</p><p className="mt-1 text-xs text-fuchsia-100/80">Esta escolha nunca altera empréstimo ativo. Ela só controla a condição de novos empréstimos.</p><div className="mt-3 flex gap-2"><button type="button" onClick={() => setCommercialModeMut.mutate({ customerId: h2ScoreModalCustomer.id, isCustom: commercialModePreview, confirmed: true })} disabled={setCommercialModeMut.isPending} className="rounded-xl bg-fuchsia-500 px-3 py-2 text-xs font-black text-white disabled:opacity-50">CONFIRMAR</button><button type="button" onClick={() => setCommercialModePreview(null)} className="rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-slate-100">CORRIGIR</button><button type="button" onClick={() => { setCommercialModePreview(null); setH2ScoreModalCustomer(null); }} className="rounded-xl bg-white/5 px-3 py-2 text-xs font-bold text-slate-300">CANCELAR</button></div></section>}
+                {adjustmentPreview && <section className="rounded-2xl border border-amber-300/50 bg-amber-400/10 p-4"><p className="text-sm font-black text-amber-100">Prévia do ajuste: {adjustmentPreview.before} → {adjustmentPreview.after} pontos</p><p className="mt-1 text-xs text-amber-100/80">{adjustmentPreview.operation === 'adicionar' ? '+' : '-'}{adjustmentPreview.quantity} pontos · Motivo: {adjustmentPreview.reason}</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => adjustH2ScoreMut.mutate({ customerId: h2ScoreModalCustomer.id, operation: adjustmentPreview.operation, quantity: adjustmentPreview.quantity, reason: adjustmentPreview.reason, confirmed: true })} disabled={adjustH2ScoreMut.isPending} className="rounded-xl bg-amber-400 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-50">CONFIRMAR</button><button type="button" onClick={() => setAdjustmentPreview(null)} className="rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-slate-100">CORRIGIR</button><button type="button" onClick={() => { setAdjustmentPreview(null); setH2ScoreModalCustomer(null); }} className="rounded-xl bg-white/5 px-3 py-2 text-xs font-bold text-slate-300">CANCELAR</button></div></section>}
+
+                <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"><h3 className="text-sm font-black">Histórico auditável</h3><div className="mt-3 space-y-2">{detail.events?.length ? detail.events.map((event: any) => <div key={event.id} className="rounded-xl border border-white/10 bg-slate-900/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-bold text-white">{event.eventType === 'ajuste_manual' ? 'Ajuste manual' : event.eventType === 'pagamento_aprovado' ? 'Comprovante aprovado' : event.eventType === 'migracao' ? 'Evento preservado' : 'Pontuação inicial'}</p><span className={`rounded-full px-2 py-1 text-[10px] font-black ${Number(event.pointsChange) >= 0 ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200'}`}>{Number(event.pointsChange) >= 0 ? '+' : ''}{event.pointsChange} pts</span></div><p className="mt-1 text-[11px] text-slate-300">{event.pointsBefore} → {event.pointsAfter} · {event.reason}</p><p className="mt-1 text-[10px] text-slate-500">{event.createdBy || 'Sistema'} · {formatDateBR(event.createdAt, true)}</p></div>) : <p className="text-sm text-slate-400">Nenhum evento registrado.</p>}</div></section>
+              </div>;
+            })() : <div className="p-8 text-center text-red-300">Não foi possível carregar a ficha H2 Score.</div>}
           </div>
         </div>
       )}

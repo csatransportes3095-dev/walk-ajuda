@@ -4096,7 +4096,7 @@ function InstallmentPlansTab() {
 function H2ScoreTab() {
   const { data, isLoading } = trpc.loans.getH2ScoreConfig.useQuery();
   const utils = trpc.useUtils();
-  const [form, setForm] = useState({ onTimePoints: 4, eveningPoints: 1, nightPoints: 0, afterDuePoints: -5 });
+  const [form, setForm] = useState({ onTimePoints: 4, eveningPoints: 1, nightPoints: 0, afterDuePoints: -5, initialPoints: 40, bronzeMin: 0, prataMin: 60, ouroMin: 90, diamanteMin: 100 });
 
   useEffect(() => {
     if (data) {
@@ -4105,6 +4105,11 @@ function H2ScoreTab() {
         eveningPoints: Number(data.eveningPoints),
         nightPoints: Number(data.nightPoints),
         afterDuePoints: Number(data.afterDuePoints),
+        initialPoints: Number(data.initialPoints ?? 40),
+        bronzeMin: Number(data.bronzeMin ?? 0),
+        prataMin: Number(data.prataMin ?? 60),
+        ouroMin: Number(data.ouroMin ?? 90),
+        diamanteMin: Number(data.diamanteMin ?? 100),
       });
     }
   }, [data]);
@@ -4153,10 +4158,25 @@ function H2ScoreTab() {
               </div>
             </div>
           ))}
+          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-semibold text-cyan-100">Saldo inicial e níveis do cliente</p><p className="mt-1 text-xs text-muted-foreground">As faixas definem o nível conquistado. Perfis continuam sendo a fonte de taxa, limite e prazo.</p></div><div className="flex items-center gap-2"><Label className="text-xs text-cyan-100">Pontuação inicial</Label><Input type="number" min="0" max="100" className="w-20 text-center" value={form.initialPoints} onChange={(event) => setForm((current) => ({ ...current, initialPoints: Number(event.target.value) }))} /></div></div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-4">
+              {([
+                ['bronzeMin', '🥉 Bronze', '0–59'], ['prataMin', '🥈 Prata', '60–89'], ['ouroMin', '🥇 Ouro', '90–99'], ['diamanteMin', '💎 Diamante', '100'],
+              ] as const).map(([key, label, standard]) => <label key={key} className="rounded-xl border border-white/10 bg-background/50 p-3"><span className="block text-xs font-bold">{label}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">Padrão: {standard}</span><Input type="number" min="0" max="100" className="mt-2 h-8 text-center" value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: Number(event.target.value) }))} /></label>)}
+            </div>
+            <p className="mt-3 text-[11px] text-cyan-100/80">A ordem obrigatória é Bronze &lt; Prata &lt; Ouro &lt; Diamante. A alteração nunca modifica contratos já ativos.</p>
+          </div>
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
             Comprovante recusado não gera pontos. Um novo envio cria uma nova análise e usa um novo horário do servidor. A mesma aprovação não pontua duas vezes.
           </div>
-          <Button className="w-full" onClick={() => save.mutate(form)} disabled={save.isPending}>
+          <Button className="w-full" onClick={() => {
+            if (!(form.bronzeMin < form.prataMin && form.prataMin < form.ouroMin && form.ouroMin < form.diamanteMin)) {
+              toast.error('As faixas devem seguir Bronze < Prata < Ouro < Diamante.');
+              return;
+            }
+            if (window.confirm('Confirmar a atualização das regras do H2 Score? Isso não alterará contratos ativos.')) save.mutate(form);
+          }} disabled={save.isPending}>
             {save.isPending ? "Salvando..." : "Salvar regras do H2 Score"}
           </Button>
         </CardContent>

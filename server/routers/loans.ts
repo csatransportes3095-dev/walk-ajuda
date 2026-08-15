@@ -7,7 +7,7 @@ import { findMainCustomerByIdentity, getRouteAccess } from "../customerAccess";
 import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
-import { approveH2ScoreSubmission, getClientH2ScoreSummary, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
+import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
 import PDFDocument from "pdfkit";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
@@ -983,6 +983,7 @@ export const loanRouter = router({
 
   getH2ScoreConfig: adminProcedure.query(async () => {
     const db = await getDb() as any;
+    await backfillLegacyH2ScoreEvents(db);
     return await getLoanH2ScoreConfig(db);
   }),
 
@@ -991,16 +992,31 @@ export const loanRouter = router({
     eveningPoints: z.number().int().min(-100).max(100),
     nightPoints: z.number().int().min(-100).max(100),
     afterDuePoints: z.number().int().min(-100).max(100),
+    initialPoints: z.number().int().min(0).max(100),
+    bronzeMin: z.number().int().min(0).max(100),
+    prataMin: z.number().int().min(0).max(100),
+    ouroMin: z.number().int().min(0).max(100),
+    diamanteMin: z.number().int().min(0).max(100),
+  }).refine((values) => values.bronzeMin < values.prataMin && values.prataMin < values.ouroMin && values.ouroMin < values.diamanteMin, {
+    message: 'As faixas devem seguir Bronze < Prata < Ouro < Diamante.',
   })).mutation(async ({ input }) => {
     const db = await getDb() as any;
     await getLoanH2ScoreConfig(db);
     await db.execute(drizzleSql`
       UPDATE loanH2ScoreConfig
       SET onTimePoints=${input.onTimePoints}, eveningPoints=${input.eveningPoints},
-          nightPoints=${input.nightPoints}, afterDuePoints=${input.afterDuePoints}
+          nightPoints=${input.nightPoints}, afterDuePoints=${input.afterDuePoints},
+          initialPoints=${input.initialPoints}, bronzeMin=${input.bronzeMin}, prataMin=${input.prataMin},
+          ouroMin=${input.ouroMin}, diamanteMin=${input.diamanteMin}
       WHERE id=1
     `);
     return await getLoanH2ScoreConfig(db);
+  }),
+
+  getH2ScoreCustomerDirectory: adminProcedure.query(async () => {
+    const db = await getDb() as any;
+    await backfillLegacyH2ScoreEvents(db);
+    return await getH2ScoreCustomerDirectory(db);
   }),
 
   getLoan: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
@@ -1212,6 +1228,7 @@ export const loanRouter = router({
     const paidBy = ctx.user?.name || "admin";
     await db.execute(drizzleSql`UPDATE loanInstallments SET status='pago', paidAt=NOW(), paidBy=${paidBy} WHERE id=${input.installmentId}`);
     const h2ScoreApproval = await approveH2ScoreSubmission(db, input.installmentId, paidBy);
+    const permanentH2Score = h2ScoreApproval ? await applyH2ScoreEventFromSubmission(db, input.installmentId) : null;
     const inst = await qRows(db, drizzleSql`SELECT loanId FROM loanInstallments WHERE id=${input.installmentId}`);
     if (inst.length) {
       const loanId = inst[0].loanId;
@@ -1231,7 +1248,7 @@ export const loanRouter = router({
         }
       }
     }
-    return { ok: true, h2ScoreApproval };
+    return { ok: true, h2ScoreApproval, permanentH2Score };
   }),
 
   refuseInstallmentPayment: adminProcedure.input(z.object({
@@ -1573,7 +1590,11 @@ export const loanRouter = router({
     const futureLimit = nextProfile ? nextProfile.creditLimit : (currentProfile?.creditLimit || client.creditLimit);
     const futureProfileName = nextProfile ? nextProfile.name : null;
 
-    const h2Score = await getClientH2ScoreSummary(db, relatedClientIds);
+    const mainCustomer = await findMainCustomerByIdentity({ phone: session.phone, cpf: session.cpf }, db);
+    // O saldo é do cadastro principal do cliente; os IDs técnicos de empréstimo não criam outra conta de Score.
+    const h2Score = mainCustomer
+      ? await getCustomerH2ScoreSummary(db, Number(mainCustomer.id), Number(client.id))
+      : await getClientH2ScoreSummary(db, relatedClientIds);
 
     return {
       enabled: true, client, loans: loansWithStatus, pixConfig,
@@ -2443,6 +2464,7 @@ export const loanRouter = router({
     }
     await db.execute(drizzleSql`UPDATE loanInstallments SET status='pago', paidAt=${paidAtDate}, paidBy=${paidBy} WHERE id=${input.installmentId}`);
     const h2ScoreApproval = await approveH2ScoreSubmission(db, input.installmentId, paidBy);
+    const permanentH2Score = h2ScoreApproval ? await applyH2ScoreEventFromSubmission(db, input.installmentId) : null;
     await db.execute(drizzleSql`
       INSERT INTO installmentProofs
         (installmentId, loanId, clientId, installmentNumber, amountPaid, paidAt, paidBy, observation, originalFileName, fileKey, fileUrl, fileMimeType, fileSizeBytes, hasProof)
@@ -2462,7 +2484,7 @@ export const loanRouter = router({
     } else {
       await db.execute(drizzleSql`UPDATE loans SET status='aprovado' WHERE id=${loanId} AND status='aguardando_pagamento'`);
     }
-    return { ok: true, hasProof: !!hasProof, fileUrl, h2ScoreApproval };
+    return { ok: true, hasProof: !!hasProof, fileUrl, h2ScoreApproval, permanentH2Score };
   }),
 
   // Buscar comprovantes de um empréstimo (batch por loanId)
