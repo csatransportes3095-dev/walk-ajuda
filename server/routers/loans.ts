@@ -7,7 +7,7 @@ import { findMainCustomerByIdentity, getRouteAccess } from "../customerAccess";
 import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
-import { approveH2ScoreSubmission, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
+import { approveH2ScoreSubmission, getClientH2ScoreSummary, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
 import PDFDocument from "pdfkit";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
@@ -863,6 +863,7 @@ export const loanRouter = router({
     const db = await getDb() as any;
     await ensurePixDisbursementColumns(db);
     await ensureClientPixFieldsSynced(db);
+    await getLoanH2ScoreConfig(db);
     const searchVal = input?.search ? `%${input.search}%` : null;
     const clientId = input?.clientId || null;
 
@@ -880,7 +881,8 @@ export const loanRouter = router({
         (SELECT COALESCE(SUM(amount), 0) FROM loanInstallments WHERE loanId=l.id AND status='pendente' AND dueDate < CURDATE()) as overdueAmount,
         (SELECT COALESCE(SUM(COALESCE(feeApplied, 0)), 0) FROM loanInstallments WHERE loanId=l.id AND status='pendente' AND dueDate < CURDATE()) as overdueFees,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='pendente' AND dueDate < CURDATE()) as overdueCount,
-        (SELECT COALESCE(SUM(paidAmount), 0) FROM loanInstallments WHERE loanId=l.id AND status='pago_juros') as interestOnlyPaidTotal
+        (SELECT COALESCE(SUM(paidAmount), 0) FROM loanInstallments WHERE loanId=l.id AND status='pago_juros') as interestOnlyPaidTotal,
+        (SELECT COALESCE(SUM(points), 0) FROM loanH2ScoreLedger WHERE clientId=l.clientId) as h2ScoreTotal
       FROM loans l
       JOIN loanClients lc ON lc.id = l.clientId
       LEFT JOIN customers c ON c.phone = lc.phone
@@ -1016,7 +1018,8 @@ export const loanRouter = router({
       h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
       isOverdue: !['pago', 'cancelado', 'reprovado', 'em_analise'].includes(i.status) && i.dueDate < today,
     }));
-    return { ...rows[0], installments: instRows };
+    const h2Score = await getClientH2ScoreSummary(db, [Number(rows[0].clientId)]);
+    return { ...rows[0], installments: instRows, h2Score };
   }),
 
   createLoan: adminProcedure.input(z.object({
@@ -1570,9 +1573,12 @@ export const loanRouter = router({
     const futureLimit = nextProfile ? nextProfile.creditLimit : (currentProfile?.creditLimit || client.creditLimit);
     const futureProfileName = nextProfile ? nextProfile.name : null;
 
+    const h2Score = await getClientH2ScoreSummary(db, relatedClientIds);
+
     return {
       enabled: true, client, loans: loansWithStatus, pixConfig,
       clientScore: { score, scorePct, scoreLabel, scoreColor },
+      h2Score,
       nextInstallment,
       futureLimit,
       futureProfileName,
@@ -1598,8 +1604,11 @@ export const loanRouter = router({
     if (!loans.length) throw new TRPCError({ code: "NOT_FOUND" });
 
     const today = getBrazilToday();
-    const installments = (await qRows(db, drizzleSql`SELECT * FROM loanInstallments WHERE loanId=${input.loanId} ORDER BY installmentNumber ASC`)).map((i: any) => ({
+    const rawInstallments = await qRows(db, drizzleSql`SELECT * FROM loanInstallments WHERE loanId=${input.loanId} ORDER BY installmentNumber ASC`);
+    const scoreByInstallment = await getH2ScoreSubmissionMap(db, rawInstallments.map((i: any) => Number(i.id)));
+    const installments = rawInstallments.map((i: any) => ({
       ...i,
+      h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
       isOverdue: !["pago"].includes(i.status) && i.dueDate < today,
     }));
     return { loan: loans[0], installments };

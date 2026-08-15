@@ -809,6 +809,9 @@ function LoansTab() {
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="font-bold text-base">{loan.clientName}</span>
                       <Badge variant="outline" className={`text-xs ${st}`}>{stLabel}</Badge>
+                      <Badge variant="outline" className="text-xs border-cyan-500/40 bg-cyan-500/10 text-cyan-200">
+                        ⚡ H2 Score {Number(loan.h2ScoreTotal || 0) >= 0 ? "+" : ""}{Number(loan.h2ScoreTotal || 0)}
+                      </Badge>
                       {loan.isOverdue && (
                         <Badge variant="outline" className="text-xs bg-red-500/20 text-red-300 border-red-500/30 gap-1">
                           <AlertTriangle className="w-3 h-3" />Atrasado

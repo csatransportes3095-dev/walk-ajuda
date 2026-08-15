@@ -173,6 +173,32 @@ export async function getH2ScoreSubmissionMap(db: any, installmentIds: number[])
   return new Map(submissions.map((submission: any) => [Number(submission.installmentId), submission]));
 }
 
+export async function getClientH2ScoreSummary(db: any, clientIds: number[]) {
+  await ensureLoanH2ScoreTables(db);
+  const ids = clientIds.map(Number).filter(Boolean).join(',');
+  if (!ids) return { totalPoints: 0, approvedEvents: [], pendingEvents: [] };
+  const total = rows(await db.execute(sql`
+    SELECT COALESCE(SUM(points), 0) AS totalPoints
+    FROM loanH2ScoreLedger
+    WHERE clientId IN (${sql.raw(ids)})
+  `))[0];
+  const events = rows(await db.execute(sql`
+    SELECT s.id, s.installmentId, s.loanId, s.submittedAt, s.timezone, s.scoreBand, s.proposedPoints,
+      s.status, s.approvedAt, s.refusedAt, li.installmentNumber
+    FROM loanH2ScoreSubmissions s
+    LEFT JOIN loanInstallments li ON li.id=s.installmentId
+    WHERE s.clientId IN (${sql.raw(ids)})
+    ORDER BY s.createdAt DESC
+    LIMIT 8
+  `));
+  return {
+    totalPoints: Number(total?.totalPoints || 0),
+    approvedEvents: events.filter((event: any) => event.status === 'aprovado'),
+    pendingEvents: events.filter((event: any) => event.status === 'em_analise'),
+    recentEvents: events,
+  };
+}
+
 export function h2ScoreBandLabel(scoreBand: string, points: number) {
   const pointsText = `${points >= 0 ? "+" : ""}${points} pontos`;
   if (scoreBand === "ate_18h") return `Envio até 18h: ${pointsText}`;

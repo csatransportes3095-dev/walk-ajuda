@@ -592,6 +592,7 @@ export function LoansTab({ token }: LoansTabProps) {
 
   const { client, loans, pixConfig } = data;
   const clientScore = (data as any).clientScore;
+  const h2Score = (data as any).h2Score || { totalPoints: 0, recentEvents: [] };
   const nextInstallment = (data as any).nextInstallment;
   const futureLimit = (data as any).futureLimit;
   const futureProfileName = (data as any).futureProfileName;
@@ -749,6 +750,43 @@ export function LoansTab({ token }: LoansTabProps) {
           </div>
         </div>
       )}
+
+      {/* H2 Score — pontos efetivados pelos comprovantes aprovados */}
+      <div className="rounded-2xl overflow-hidden border border-cyan-500/30 bg-gradient-to-br from-cyan-950/45 to-slate-900/80">
+        <div className="px-4 py-2.5 bg-cyan-500/10 border-b border-cyan-500/20 flex items-center justify-between gap-3">
+          <span className="text-xs font-black text-cyan-200 uppercase tracking-wider">⚡ Seu H2 Score</span>
+          <span className="rounded-full bg-cyan-400/15 border border-cyan-400/30 px-2.5 py-1 text-xs font-black text-cyan-300">
+            {Number(h2Score.totalPoints || 0) >= 0 ? "+" : ""}{Number(h2Score.totalPoints || 0)} pontos
+          </span>
+        </div>
+        <div className="p-4">
+          <p className="text-xs text-muted-foreground">
+            Seus pontos entram somente quando o comprovante é aprovado. O horário considerado é o momento em que você enviou o comprovante.
+          </p>
+          {Array.isArray(h2Score.recentEvents) && h2Score.recentEvents.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {h2Score.recentEvents.slice(0, 3).map((event: any) => {
+                const points = event.status === "aprovado" ? Number(event.proposedPoints || 0) : 0;
+                const statusText = event.status === "aprovado" ? "Pontos efetivados" : event.status === "em_analise" ? "Comprovante em análise" : "Comprovante recusado";
+                const statusClass = event.status === "aprovado" ? "text-emerald-300" : event.status === "em_analise" ? "text-amber-300" : "text-red-300";
+                return (
+                  <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground">Parcela #{event.installmentNumber || "—"} · {statusText}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Enviado em {event.submittedAt ? new Date(event.submittedAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</p>
+                    </div>
+                    <span className={`text-sm font-black whitespace-nowrap ${statusClass}`}>{event.status === "aprovado" ? `${points >= 0 ? "+" : ""}${points} pts` : event.status === "em_analise" ? `previsto ${Number(event.proposedPoints || 0) >= 0 ? "+" : ""}${Number(event.proposedPoints || 0)}` : "0 pts"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-xl border border-cyan-500/15 bg-cyan-500/5 px-3 py-3 text-xs text-cyan-100/80">
+              Ainda não há comprovantes aprovados com H2 Score. Envie seu comprovante no prazo e aguarde a aprovação do ADM.
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Chave PIX do cliente */}
       {(() => {
