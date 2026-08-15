@@ -605,6 +605,20 @@ export function LoansTab({ token }: LoansTabProps) {
     ? h2ScoreProfiles.find((profile) => profile.slug === String(h2Level.nextLevel).toLowerCase()) || null
     : null;
   const h2NearPromotion = Boolean(h2Level.nextLevel && Number(h2Level.pointsToNext || 0) > 0 && Number(h2Level.pointsToNext || 0) <= 5);
+  const h2LevelRank: Record<string, number> = { bronze: 1, prata: 2, ouro: 3, diamante: 4 };
+  const h2ToneByLevel: Record<string, { border: string; background: string; text: string }> = {
+    bronze: { border: 'border-amber-600/45', background: 'bg-amber-500/10', text: 'text-amber-200' },
+    prata: { border: 'border-slate-300/45', background: 'bg-slate-200/10', text: 'text-slate-100' },
+    ouro: { border: 'border-yellow-400/50', background: 'bg-yellow-500/10', text: 'text-yellow-200' },
+    diamante: { border: 'border-cyan-300/55', background: 'bg-cyan-400/10', text: 'text-cyan-100' },
+  };
+  const h2CurrentTone = h2ToneByLevel[h2Level.slug] || h2ToneByLevel.bronze;
+  const h2ProgressLevels = [
+    { slug: 'bronze', icon: '🥉', label: 'Bronze', benefit: `${Number(h2ScoreProfiles.find((profile) => profile.slug === 'bronze')?.interestRate || 0)}%` },
+    { slug: 'prata', icon: '🥈', label: 'Prata', benefit: `${Number(h2ScoreProfiles.find((profile) => profile.slug === 'prata')?.interestRate || 0)}%` },
+    { slug: 'ouro', icon: '🥇', label: 'Ouro', benefit: `${Number(h2ScoreProfiles.find((profile) => profile.slug === 'ouro')?.interestRate || 0)}%` },
+    { slug: 'diamante', icon: '💎', label: 'Diamante', benefit: 'Pagamento semanal' },
+  ];
   const nextInstallment = (data as any).nextInstallment;
   const allowedTypes: string[] = (client.allowedPaymentTypes || "diario")
     .split(",").map((t: string) => t.trim())
@@ -676,47 +690,51 @@ export function LoansTab({ token }: LoansTabProps) {
       <div className="rounded-2xl overflow-hidden border border-cyan-500/30 bg-gradient-to-br from-cyan-950/45 to-slate-900/80">
           <div className="px-4 py-2.5 bg-cyan-500/10 border-b border-cyan-500/20 flex items-center justify-between gap-3">
             <span className="text-xs font-black text-cyan-100 uppercase tracking-wider">H2 SCORE — SEU NÍVEL</span>
-            <span className="text-xs font-bold text-cyan-200">Condição para o próximo empréstimo</span>
+            <span className="text-xs font-bold text-cyan-200">Benefícios no próximo empréstimo</span>
           </div>
           <div className="p-4 space-y-3">
 
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-14 h-14 rounded-2xl flex flex-col items-center justify-center shadow-lg bg-cyan-400/10 border-2 border-cyan-300/45 shrink-0">
+                <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center shadow-lg border-2 shrink-0 ${h2CurrentTone.background} ${h2CurrentTone.border}`}>
                   <span className="text-2xl">{h2Level.icon}</span>
-                  <span className="text-[10px] font-black text-cyan-200">{h2TotalPoints} PTS</span>
+                  <span className={`text-[10px] font-black ${h2CurrentTone.text}`}>{h2TotalPoints} PONTOS</span>
                 </div>
-                <div className="min-w-0"><p className="font-black text-base text-cyan-100">Nível {h2Level.label}</p><p className="text-xs text-cyan-100/70 mt-0.5">{h2Level.nextLevel ? `Faltam ${h2Level.pointsToNext} ponto(s) para ${h2Level.nextLevel}.` : 'Você alcançou o nível máximo.'}</p></div>
+                <div className="min-w-0"><p className={`font-black text-base ${h2CurrentTone.text}`}>NÍVEL {h2Level.label.toUpperCase()}</p><p className="text-xs text-cyan-100/70 mt-0.5">{h2Level.nextLevel ? `Faltam ${h2Level.pointsToNext} pontos para ${String(h2Level.nextLevel).toUpperCase()}.` : 'Você alcançou o nível máximo.'}</p></div>
               </div>
             </div>
             <div className="h-3 overflow-hidden rounded-full bg-slate-950/80"><div className="h-full rounded-full bg-gradient-to-r from-amber-600 via-yellow-300 to-cyan-300 transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, h2TotalPoints))}%` }} /></div>
-            <div className="grid grid-cols-4 gap-1 text-center text-[9px] font-bold text-slate-400"><span className={h2Level.slug === 'bronze' ? 'text-amber-200' : ''}>🥉 0–{h2Config.prataMin - 1}</span><span className={h2Level.slug === 'prata' ? 'text-slate-100' : ''}>🥈 {h2Config.prataMin}–{h2Config.ouroMin - 1}</span><span className={h2Level.slug === 'ouro' ? 'text-yellow-200' : ''}>🥇 {h2Config.ouroMin}–{h2Config.diamanteMin - 1}</span><span className={h2Level.slug === 'diamante' ? 'text-cyan-200' : ''}>💎 {h2Config.diamanteMin}</span></div>
+            <div className="grid grid-cols-4 gap-1 text-center">
+              {h2ProgressLevels.map((level) => {
+                const achieved = h2LevelRank[h2Level.slug] >= h2LevelRank[level.slug];
+                const tone = h2ToneByLevel[level.slug];
+                return <div key={level.slug} className={`rounded-lg border px-1 py-1.5 transition-opacity ${achieved ? `${tone.border} ${tone.background} ${tone.text}` : 'border-white/10 bg-white/[0.02] text-slate-500 opacity-55'}`}><p className="text-sm leading-none">{level.icon}</p><p className="mt-1 text-[8px] font-black uppercase">{level.label}</p><p className="mt-0.5 text-[9px] font-bold leading-tight">{level.benefit}</p></div>;
+              })}
+            </div>
 
             <div className="grid gap-2 sm:grid-cols-2">
-              <section className="rounded-xl border border-cyan-300/20 bg-slate-950/30 p-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-cyan-200">{h2Level.icon} Seu nível</p>
-                <p className="mt-1 text-sm font-black text-slate-50">{h2Level.label}</p>
-                <p className="mt-2 text-[11px] text-slate-300">Taxa do próximo empréstimo <strong className="text-cyan-100">{Number(h2CurrentProfile.interestRate || 0)}%</strong></p>
-                <p className="text-[11px] text-slate-300">Limite disponível <strong className="text-cyan-100">{fmt(h2CurrentProfile.creditLimit)}</strong></p>
+              <section className={`rounded-xl border p-3 ${h2CurrentTone.border} ${h2CurrentTone.background}`}>
+                <p className={`text-[10px] font-black uppercase tracking-wider ${h2CurrentTone.text}`}>{h2Level.icon} Seu benefício atual</p>
+                <p className={`mt-1 text-sm font-black ${h2CurrentTone.text}`}>{h2Level.label.toUpperCase()}</p>
+                {h2Level.slug === 'diamante' ? <p className="mt-2 text-[12px] font-black text-cyan-50">PAGAMENTO SEMANAL <span className="text-cyan-200">DESBLOQUEADO</span></p> : <p className="mt-2 text-[11px] text-slate-200">Taxa <strong className={`ml-1 text-2xl leading-none ${h2CurrentTone.text}`}>{Number(h2CurrentProfile.interestRate || 0)}%</strong></p>}
               </section>
-              <section className={`rounded-xl border p-3 ${h2NextProfile ? 'border-violet-300/30 bg-violet-500/10' : 'border-cyan-300/35 bg-cyan-400/10'}`}>
+              <section className={`rounded-xl border p-3 ${h2NextProfile ? 'border-violet-300/30 bg-violet-500/10' : 'border-cyan-300/45 bg-cyan-400/10'}`}>
                 {h2NextProfile ? <>
                   <p className="text-[10px] font-black uppercase tracking-wider text-violet-200">🔓 Próxima conquista</p>
-                  <p className="mt-1 text-sm font-black text-white">{h2Level.nextLevel}</p>
-                  <p className="mt-1 text-[11px] font-bold text-violet-100">Faltam {h2Level.pointsToNext} ponto(s)</p>
-                  <p className="mt-2 text-[11px] text-slate-300">Taxa <strong className="text-violet-100">{Number(h2CurrentProfile.interestRate || 0)}% → {Number(h2NextProfile.interestRate || 0)}%</strong></p>
-                  <p className="text-[11px] text-slate-300">Limite <strong className="text-violet-100">{fmt(h2NextProfile.creditLimit)}</strong></p>
+                  <p className="mt-1 text-sm font-black text-white">{String(h2Level.nextLevel).toUpperCase()}</p>
+                  <p className="mt-1 text-[11px] font-bold text-violet-100">Faltam {h2Level.pointsToNext} pontos</p>
+                  {h2NextProfile.slug === 'diamante' ? <><p className="mt-2 text-[10px] font-black uppercase tracking-wider text-cyan-100">Benefício máximo</p><p className="mt-1 text-sm font-black text-cyan-50">PAGAMENTO SEMANAL</p></> : <><p className="mt-2 text-[10px] font-black uppercase tracking-wider text-violet-200">Reduza sua taxa</p><p className="mt-1 text-[12px] text-slate-100"><span className="font-black text-slate-300">{Number(h2CurrentProfile.interestRate || 0)}%</span><span className="mx-2 text-violet-300">→</span><strong className="text-2xl leading-none text-violet-100">{Number(h2NextProfile.interestRate || 0)}%</strong></p></>}
+                  <p className="mt-2 text-[10px] text-violet-100/80">Continue pagando no prazo para desbloquear.</p>
                 </> : <>
-                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-100">💎 Nível máximo</p>
-                  <p className="mt-1 text-sm font-black text-white">Diamante</p>
-                  <p className="mt-2 text-[11px] text-cyan-50/85">Você desbloqueou as melhores condições disponíveis para o seu perfil.</p>
-                  <p className="mt-2 text-[11px] text-slate-200">Taxa <strong className="text-cyan-100">{Number(h2CurrentProfile.interestRate || 0)}%</strong> · Limite <strong className="text-cyan-100">{fmt(h2CurrentProfile.creditLimit)}</strong></p>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-100">💎 Diamante</p>
+                  <p className="mt-1 text-sm font-black text-cyan-50">NÍVEL MÁXIMO</p>
+                  <p className="mt-2 text-sm font-black text-cyan-100">PAGAMENTO SEMANAL DESBLOQUEADO</p>
                 </>}
               </section>
             </div>
 
             {h2NearPromotion && <div className="rounded-xl border border-amber-300/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-50"><strong>🔥 FALTAM APENAS {h2Level.pointsToNext} PONTOS!</strong><p className="mt-0.5 text-amber-100/85">Você está perto de alcançar {h2Level.nextLevel} e melhorar as condições do seu próximo empréstimo.</p></div>}
-            <div className="rounded-xl border border-emerald-400/25 bg-emerald-500/8 px-3 py-3"><p className="text-xs font-black text-emerald-100">🎯 SUBA DE NÍVEL E PAGUE MENOS</p><p className="mt-1 text-[11px] leading-relaxed text-emerald-50/80">Seus pagamentos constroem seu H2 Score. Envie seus comprovantes dentro do prazo, acumule pontos e desbloqueie melhores condições nos próximos empréstimos.</p></div>
+            <div className="rounded-xl border border-emerald-400/25 bg-emerald-500/8 px-3 py-3"><p className="text-xs font-black text-emerald-100">🎯 PAGUE EM DIA E PAGUE MENOS</p><p className="mt-1 text-[11px] leading-relaxed text-emerald-50/80">Envie seus comprovantes dentro do prazo, acumule pontos e conquiste taxas menores no próximo empréstimo.</p></div>
 
             {/* Próxima parcela */}
             {nextInstallment && (() => {
