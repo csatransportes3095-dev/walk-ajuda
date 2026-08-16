@@ -696,11 +696,13 @@ export function LoansTab({ token }: LoansTabProps) {
 
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center shadow-lg border-2 shrink-0 ${h2CurrentTone.background} ${h2CurrentTone.border}`}>
-                  <span className="text-2xl">{h2Level.icon}</span>
-                  <span className={`text-[10px] font-black ${h2CurrentTone.text}`}>{h2TotalPoints} PONTOS</span>
+                <div className={`relative w-20 h-20 sm:w-24 sm:h-24 rounded-[1.35rem] flex flex-col items-center justify-center shadow-xl border-2 shrink-0 overflow-hidden ${h2CurrentTone.background} ${h2CurrentTone.border}`} aria-label={`${h2TotalPoints} pontos H2 Score`}>
+                  <span className={`absolute inset-2 rounded-2xl border opacity-30 animate-ping ${h2CurrentTone.border}`} aria-hidden="true" />
+                  <span className="absolute top-1.5 right-2 text-base leading-none drop-shadow" aria-hidden="true">{h2Level.icon}</span>
+                  <span className={`relative text-3xl sm:text-4xl leading-none font-black tracking-tight animate-pulse ${h2CurrentTone.text}`}>{h2TotalPoints}</span>
+                  <span className={`relative mt-1 text-[10px] sm:text-[11px] leading-none font-black tracking-[0.12em] ${h2CurrentTone.text}`}>PONTOS</span>
                 </div>
-                <div className="min-w-0"><p className={`font-black text-base ${h2CurrentTone.text}`}>NÍVEL {h2Level.label.toUpperCase()}</p><p className="text-xs text-cyan-100/70 mt-0.5">{h2Level.nextLevel ? `Faltam ${h2Level.pointsToNext} pontos para ${String(h2Level.nextLevel).toUpperCase()}.` : 'Você alcançou o nível máximo.'}</p></div>
+                <div className="min-w-0"><p className={`font-black text-base sm:text-lg ${h2CurrentTone.text}`}>NÍVEL {h2Level.label.toUpperCase()}</p><p className="text-xs text-cyan-100/70 mt-0.5">{h2Level.nextLevel ? `Faltam ${h2Level.pointsToNext} pontos para ${String(h2Level.nextLevel).toUpperCase()}.` : 'Você alcançou o nível máximo.'}</p></div>
               </div>
             </div>
             <div className="h-3 overflow-hidden rounded-full bg-slate-950/80"><div className="h-full rounded-full bg-gradient-to-r from-amber-600 via-yellow-300 to-cyan-300 transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, h2TotalPoints))}%` }} /></div>
