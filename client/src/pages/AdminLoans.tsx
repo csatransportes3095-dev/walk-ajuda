@@ -375,6 +375,7 @@ function LoansTab() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [showCreate, setShowCreate] = useState(false);
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
+  const [expandedH2ScoreLoan, setExpandedH2ScoreLoan] = useState<number | null>(null);
   const [rejectDialog, setRejectDialog] = useState<{ id: number; clientName: string; clientPhone?: string; clientEmail?: string } | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectEmailInput, setRejectEmailInput] = useState("");
@@ -778,6 +779,16 @@ function LoansTab() {
           const isPixSent = loan.status === "aprovado" && !!loan.pixSentAt;
           const pixConfirmedDisplay = loan.pixConfirmedDate ? fmtDate(loan.pixConfirmedDate) : fmtDateTime(loan.pixSentAt);
           const isPreRelease = loan.status === "pendente" || isPixPending;
+          const h2Detail = loan.h2ScoreDetail as any | null;
+          const h2TotalPoints = Number(h2Detail?.totalPoints ?? loan.h2ScoreTotal ?? 0);
+          const h2Level = h2Detail?.level as { slug?: string; label?: string; icon?: string; minPoints?: number; nextLevel?: string | null; pointsToNext?: number } | undefined;
+          const h2IsExpanded = expandedH2ScoreLoan === loan.id;
+          const h2NextTarget = h2Level?.nextLevel ? h2TotalPoints + Number(h2Level.pointsToNext || 0) : h2TotalPoints;
+          const h2Range = Math.max(1, h2NextTarget - Number(h2Level?.minPoints || 0));
+          const h2Progress = h2Level?.nextLevel ? Math.max(0, Math.min(100, ((h2TotalPoints - Number(h2Level.minPoints || 0)) / h2Range) * 100)) : 100;
+          const h2Color = h2Level?.slug === 'diamante' ? 'cyan' : h2Level?.slug === 'ouro' ? 'amber' : h2Level?.slug === 'prata' ? 'slate' : 'orange';
+          const h2ColorClass = h2Color === 'cyan' ? 'border-cyan-400/35 bg-cyan-500/10' : h2Color === 'amber' ? 'border-amber-400/35 bg-amber-500/10' : h2Color === 'slate' ? 'border-slate-300/35 bg-slate-400/10' : 'border-orange-400/35 bg-orange-500/10';
+          const h2BarClass = h2Color === 'cyan' ? 'bg-cyan-400' : h2Color === 'amber' ? 'bg-amber-400' : h2Color === 'slate' ? 'bg-slate-300' : 'bg-orange-400';
 
           return (
             <Card key={loan.id} className={`border ${loan.isOverdue ? "border-red-500/40" : loan.status === "pendente" ? "border-yellow-500/40" : "border-border/60"} bg-card/60 overflow-hidden`}>
@@ -814,9 +825,15 @@ function LoansTab() {
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="font-bold text-base">{loan.clientName}</span>
                       <Badge variant="outline" className={`text-xs ${st}`}>{stLabel}</Badge>
-                      <Badge variant="outline" className="text-xs border-cyan-500/40 bg-cyan-500/10 text-cyan-200">
-                        ⚡ H2 Score {Number(loan.h2ScoreTotal || 0) >= 0 ? "+" : ""}{Number(loan.h2ScoreTotal || 0)}
-                      </Badge>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedH2ScoreLoan(h2IsExpanded ? null : loan.id)}
+                        className="inline-flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-200 transition-colors hover:bg-cyan-500/20"
+                        title="Ver detalhamento do H2 Score"
+                      >
+                        ⚡ H2 Score: {h2TotalPoints} pontos {h2Level?.label ? `· ${h2Level.icon || ''} ${h2Level.label}` : ''}
+                        {h2IsExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </button>
                       {loan.isOverdue && (
                         <Badge variant="outline" className="text-xs bg-red-500/20 text-red-300 border-red-500/30 gap-1">
                           <AlertTriangle className="w-3 h-3" />Atrasado
@@ -841,6 +858,53 @@ function LoansTab() {
                         <span className="text-amber-400">⚠️ Sem chave PIX cadastrada</span>
                       )}
                     </div>
+
+                    {/* H2 Score permanente do cliente — somente leitura; não altera este contrato */}
+                    <section className={`mb-3 rounded-xl border p-3 ${h2ColorClass}`}>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-100">⚡ H2 Score do cliente</p>
+                          <p className="mt-0.5 text-sm font-semibold text-foreground">
+                            {h2TotalPoints} pontos · {h2Level?.icon || '🥉'} {h2Level?.label || 'Bronze'}
+                          </p>
+                        </div>
+                        <button type="button" onClick={() => setExpandedH2ScoreLoan(h2IsExpanded ? null : loan.id)} className="text-xs font-semibold text-cyan-200 hover:text-cyan-100 underline-offset-2 hover:underline">
+                          {h2IsExpanded ? 'Ocultar histórico' : 'Ver histórico detalhado'}
+                        </button>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/25">
+                        <div className={`h-full rounded-full transition-all ${h2BarClass}`} style={{ width: `${h2Progress}%` }} />
+                      </div>
+                      <div className="mt-1 flex flex-wrap justify-between gap-1 text-[11px] text-muted-foreground">
+                        <span>Nível atual: {h2Level?.label || 'Bronze'}</span>
+                        {h2Level?.nextLevel ? <span>Faltam {h2Level.pointsToNext} ponto(s) para {h2Level.nextLevel}</span> : <span className="text-cyan-200">Nível máximo conquistado</span>}
+                      </div>
+                      {h2Detail?.events?.[0] && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Último lançamento: <span className={Number(h2Detail.events[0].pointsChange) >= 0 ? 'text-emerald-300' : 'text-red-300'}>{Number(h2Detail.events[0].pointsChange) >= 0 ? '+' : ''}{h2Detail.events[0].pointsChange} ponto(s)</span> · {h2Detail.events[0].reason || 'H2 Score atualizado'}
+                        </p>
+                      )}
+                      {h2IsExpanded && (
+                        <div className="mt-3 space-y-1.5 border-t border-white/10 pt-2">
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Últimos lançamentos auditáveis</p>
+                          {(h2Detail?.events || []).length === 0 ? (
+                            <p className="text-xs text-muted-foreground">Ainda não há lançamentos além da pontuação inicial.</p>
+                          ) : (h2Detail.events as any[]).map((event: any) => (
+                            <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-black/15 px-2 py-1.5 text-xs">
+                              <div className="min-w-0">
+                                <span className={Number(event.pointsChange) >= 0 ? 'font-bold text-emerald-300' : 'font-bold text-red-300'}>{Number(event.pointsChange) >= 0 ? '+' : ''}{event.pointsChange} ponto(s)</span>
+                                <span className="ml-1 text-muted-foreground">{event.reason || event.eventType}</span>
+                                {event.installmentNumber && <span className="ml-1 text-muted-foreground/80">· Parcela #{event.installmentNumber}</span>}
+                              </div>
+                              <div className="text-right text-[10px] text-muted-foreground">
+                                <p>{event.pointsBefore} → {event.pointsAfter} pontos</p>
+                                <p>{fmtDateTime(event.createdAt)}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
 
                     {/* Etapa de solicitação e liberação — separada da cobrança */}
                     {(loan.status === "pendente" || isPixPending || isPixSent) && (

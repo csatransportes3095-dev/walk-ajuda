@@ -873,7 +873,7 @@ export const loanRouter = router({
         COALESCE(NULLIF(lc.client_pix_key, ''), NULLIF(lc.pixKey, '')) as clientPixKey,
         COALESCE(NULLIF(lc.client_pix_name, ''), NULLIF(lc.pixName, '')) as clientPixName,
         lc.client_pix_bank as clientPixBank,
-        c.profilePhotoUrl as clientPhoto, c.cpf as customerCpf, c.email as clientEmail,
+        c.id as customerId, c.profilePhotoUrl as clientPhoto, c.cpf as customerCpf, c.email as clientEmail,
         lp.defaultPaymentTypes as profileAllowedModes,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='em_analise') as pendingProofs,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='pago') as paidInstallments,
@@ -923,6 +923,40 @@ export const loanRouter = router({
         clientPixBank: pixBankOf(pixSource) || loan.clientPixBank || '',
       };
     });
+
+    // O H2 Score pertence ao cadastro principal. Cada card recebe o mesmo resumo permanente,
+    // inclusive saldo, nível, próximo nível e últimos lançamentos auditáveis.
+    const h2Summaries = new Map<number, any>();
+    for (const loan of rows) {
+      const customerIdForScore = Number(loan.customerId || 0);
+      if (!customerIdForScore || h2Summaries.has(customerIdForScore)) continue;
+      try {
+        const summary = await getCustomerH2ScoreSummary(db, customerIdForScore, Number(loan.clientId || 0) || null);
+        h2Summaries.set(customerIdForScore, {
+          totalPoints: Number(summary.account?.totalPoints || 0),
+          level: summary.level,
+          currentCommercialProfile: summary.currentCommercialProfile,
+          events: (summary.events || []).slice(0, 5).map((event: any) => ({
+            id: event.id,
+            eventType: event.eventType,
+            scoreBand: event.scoreBand,
+            pointsBefore: Number(event.pointsBefore || 0),
+            pointsChange: Number(event.pointsChange || 0),
+            pointsAfter: Number(event.pointsAfter || 0),
+            reason: event.reason,
+            createdBy: event.createdBy,
+            createdAt: event.createdAt,
+            installmentNumber: event.installmentNumber,
+          })),
+        });
+      } catch (error) {
+        console.error('[Loans] Failed to load permanent H2 Score summary', { loanId: loan.id, customerId: customerIdForScore, error });
+      }
+    }
+    rows = rows.map((loan: any) => ({
+      ...loan,
+      h2ScoreDetail: h2Summaries.get(Number(loan.customerId || 0)) || null,
+    }));
 
     const today = getBrazilToday();
     // Busca parcelas que vencem hoje para cada empréstimo aprovado
