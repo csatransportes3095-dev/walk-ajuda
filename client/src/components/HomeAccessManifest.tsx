@@ -41,6 +41,8 @@ export function HomeAccessManifest({ onGranted }: { onGranted: () => void }) {
       setMessage("");
       const result = await start.mutateAsync({ phone: normalized });
       if (result.status === "existing") {
+        // O telefone já foi validado no manifesto: a tela de senha o reutiliza sem pedir de novo.
+        sessionStorage.setItem("walk_home_existing_phone", normalizeBrazilPhone((result as any).phone || normalized));
         onGranted();
         return;
       }

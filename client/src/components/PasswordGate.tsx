@@ -76,6 +76,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const [blockedRoutes, setBlockedRoutes] = useState<string[]>([]);
   const [clientPhone, setClientPhone] = useState("");
   const [clientCpf, setClientCpf] = useState("");
+  const manifestPhoneHandled = useRef(false);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -393,9 +394,9 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const getCanonicalPhone = () => resolvedPhone || getPhoneDigits(clientPhone);
 
   // Step 1: Verificar telefone ou CPF
-  const handlePhoneSubmit = async (e: React.FormEvent) => {
+  const handlePhoneSubmit = async (e: React.FormEvent, recognizedPhone?: string) => {
     e.preventDefault();
-    const phoneDigits = getPhoneDigits(clientPhone);
+    const phoneDigits = recognizedPhone ? getPhoneDigits(recognizedPhone) : getPhoneDigits(clientPhone);
     const cpfDigits = normalizeCpf(clientCpf);
     if (cpfDigits.length === 11 && !isValidCPF(cpfDigits)) {
       toast.error('CPF inválido. Digite um CPF válido para continuar.');
@@ -539,6 +540,20 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       setIsCheckingPhone(false);
     }
   };
+
+  // O manifesto já confirmou este telefone. Reaproveitamos a confirmação e seguimos direto
+  // para senha, criação de senha ou foto pendente, sem exibir novamente o campo de telefone.
+  useEffect(() => {
+    const storedPhone = sessionStorage.getItem('walk_home_existing_phone');
+    if (!storedPhone || manifestPhoneHandled.current || accessGranted) return;
+    manifestPhoneHandled.current = true;
+    sessionStorage.removeItem('walk_home_existing_phone');
+    const normalizedPhone = getPhoneDigits(storedPhone);
+    if (normalizedPhone.length !== 11) return;
+    setClientPhone(normalizedPhone);
+    setClientCpf('');
+    void handlePhoneSubmit({ preventDefault: () => undefined } as React.FormEvent, normalizedPhone);
+  }, []);
 
   // Step 2: Cadastro
   // Validação de CPF
