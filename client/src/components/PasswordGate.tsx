@@ -224,16 +224,26 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }).catch(() => setHasCameraDevice(false));
   }, [photoMode]);
 
+  // Aceita colagem com +55/DDDnúmero sem confundir o código do Brasil com o DDD.
+  function normalizeBrazilPhone(value: string) {
+    const raw = value.replace(/\D/g, '');
+    const withoutCountryCode = raw.startsWith('55') && (raw.length === 12 || raw.length === 13)
+      ? raw.slice(2)
+      : raw;
+    return withoutCountryCode.slice(0, 11);
+  }
+
   // Máscara de telefone: (XX) XXXXX-XXXX
   function formatPhone(value: string) {
-    const digits = value.replace(/\D/g, '').slice(0, 11);
+    const digits = normalizeBrazilPhone(value);
     if (digits.length <= 2) return digits;
-    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   }
 
   function getPhoneDigits(value: string) {
-    return value.replace(/\D/g, '');
+    return normalizeBrazilPhone(value);
   }
 
   // Capturar ?ref= da URL ao carregar
@@ -2222,7 +2232,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </div>
                   <div>
                     <label className="text-white mb-2 block text-sm font-medium">Telefone de quem indicou</label>
-                    <input type="tel" placeholder="(11) 99999-9999" value={formatPhone(regReferredByPhone)} onChange={(e) => setRegReferredByPhone(e.target.value.replace(/\D/g, ''))}
+                    <input type="tel" placeholder="(11) 99999-9999" value={formatPhone(regReferredByPhone)} onChange={(e) => setRegReferredByPhone(normalizeBrazilPhone(e.target.value))}
                       className="w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 border-black focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all" />
                     {getPhoneDigits(regReferredByPhone).length > 0 && getPhoneDigits(regReferredByPhone).length !== 11 && (
                       <p className="text-red-400 text-sm mt-1">Telefone deve ter 11 dígitos (DDD + número)</p>

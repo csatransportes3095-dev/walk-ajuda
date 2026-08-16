@@ -3780,8 +3780,11 @@ export default function Home() {
                     placeholder="(11) 99999-9999"
                     value={postOrderReferralPhone.replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3').replace(/^(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3').replace(/^(\d{2})(\d+)$/, '($1) $2').replace(/^(\d{1,2})$/, '($1')}
                     onChange={(e) => {
-                      const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
-                      setPostOrderReferralPhone(digits);
+                      const rawDigits = e.target.value.replace(/\D/g, '');
+                      const digits = rawDigits.startsWith('55') && (rawDigits.length === 12 || rawDigits.length === 13)
+                        ? rawDigits.slice(2)
+                        : rawDigits.slice(0, 11);
+                      setPostOrderReferralPhone(digits.slice(0, 11));
                       setPostOrderReferralError('');
                     }}
                     className="w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 border-black focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/30 outline-none transition-all"

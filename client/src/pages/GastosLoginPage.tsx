@@ -114,7 +114,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   };
 
   const formatPhone = (raw: string) => {
-    const d = raw.replace(/\D/g, '').slice(0, 11);
+    const d = normalizePhone(raw);
     if (d.length === 0) return '';
     if (d.length <= 2) return `(${d}`;
     if (d.length <= 6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
@@ -135,7 +135,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   const handleCheckPhone = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanPhone = normalizePhone(phone);
     const cleanCpf = normalizeCpf(cpfInput);
     if (cleanCpf.length === 11 && !isValidCPF(cleanCpf)) {
       setError('CPF inválido. Digite um CPF válido para continuar.');

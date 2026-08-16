@@ -6,8 +6,16 @@ import { trpc } from '@/lib/trpc';
 
 type Route = 'gastos' | 'emprestimo';
 
+function normalizeBrazilPhone(raw: string) {
+  const digits = raw.replace(/\D/g, '');
+  const withoutCountryCode = digits.startsWith('55') && (digits.length === 12 || digits.length === 13)
+    ? digits.slice(2)
+    : digits;
+  return withoutCountryCode.slice(0, 11);
+}
+
 function formatPhone(raw: string) {
-  const digits = raw.replace(/\D/g, '').slice(0, 11);
+  const digits = normalizeBrazilPhone(raw);
   if (!digits) return '';
   if (digits.length <= 2) return `(${digits}`;
   if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
@@ -127,7 +135,7 @@ export function PostLoginReferralManifest({ token, route, onComplete }: {
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-foreground"><Phone className="mr-1.5 inline h-4 w-4 opacity-70" />Telefone/WhatsApp de quem indicou</label>
-                  <Input value={formatPhone(referrerPhone)} onChange={(event) => setReferrerPhone(event.target.value.replace(/\D/g, '').slice(0, 11))} inputMode="numeric" placeholder="(11) 99999-9999" disabled={submitMutation.isPending} className="h-12 bg-input text-base" />
+                  <Input value={formatPhone(referrerPhone)} onChange={(event) => setReferrerPhone(normalizeBrazilPhone(event.target.value))} inputMode="numeric" placeholder="(11) 99999-9999" disabled={submitMutation.isPending} className="h-12 bg-input text-base" />
                 </div>
               </div>
               <div className="mt-6 grid gap-3 sm:grid-cols-2">

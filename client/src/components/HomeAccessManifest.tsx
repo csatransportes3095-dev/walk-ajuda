@@ -5,10 +5,22 @@ import { trpc } from "@/lib/trpc";
 type Screen = "phone" | "referral" | "blocked";
 
 const digits = (value: string) => value.replace(/\D/g, "");
+
+// Ao colar +55/DDDnúmero, remove somente o código internacional.
+// Um telefone brasileiro com DDD 55 tem 10 ou 11 dígitos e nunca perde o próprio DDD.
+const normalizeBrazilPhone = (value: string) => {
+  const clean = digits(value);
+  const withoutCountryCode = clean.startsWith("55") && (clean.length === 12 || clean.length === 13)
+    ? clean.slice(2)
+    : clean;
+  return withoutCountryCode.slice(0, 11);
+};
+
 const formatPhone = (value: string) => {
-  const clean = digits(value).slice(0, 11);
+  const clean = normalizeBrazilPhone(value);
   if (clean.length <= 2) return clean;
-  if (clean.length <= 7) return `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
+  if (clean.length <= 6) return `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
+  if (clean.length <= 10) return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
   return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
 };
 
@@ -95,7 +107,7 @@ export function HomeAccessManifest({ onGranted }: { onGranted: () => void }) {
       <div className={`rounded-2xl border p-5 shadow-2xl ${screen === "blocked" ? "bg-red-950/25 border-red-400/35" : "bg-white/[0.045] border-white/10"}`}>
         {screen === "phone" && <>
           <label className="text-white/80 text-sm font-bold">Seu telefone</label>
-          <input value={formatPhone(phone)} onChange={event => { setPhone(digits(event.target.value)); setMessage(""); }} inputMode="numeric" placeholder="(00) 00000-0000" className="mt-2 w-full rounded-xl bg-black/25 border border-white/15 px-4 py-3.5 text-white outline-none focus:border-violet-400" />
+          <input value={formatPhone(phone)} onChange={event => { setPhone(normalizeBrazilPhone(event.target.value)); setMessage(""); }} inputMode="numeric" placeholder="(00) 00000-0000" className="mt-2 w-full rounded-xl bg-black/25 border border-white/15 px-4 py-3.5 text-white outline-none focus:border-violet-400" />
           {message && <p className="text-red-300 text-xs mt-2">{message}</p>}
           <button onClick={validatePhone} disabled={pending} className="mt-4 w-full rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 py-3.5 text-white font-black disabled:opacity-60">{pending ? "Verificando..." : "Continuar"}</button>
         </>}
@@ -103,7 +115,7 @@ export function HomeAccessManifest({ onGranted }: { onGranted: () => void }) {
         {screen === "referral" && <>
           <button onClick={() => { setScreen("phone"); setMessage(""); }} className="mb-4 text-white/60 text-sm flex items-center gap-1"><ArrowLeft size={15} /> Alterar telefone</button>
           <label className="text-white/80 text-sm font-bold">Telefone de quem indicou</label>
-          <input value={formatPhone(referralPhone)} onChange={event => { setReferralPhone(digits(event.target.value)); setMessage(""); }} inputMode="numeric" placeholder="(00) 00000-0000" className="mt-2 w-full rounded-xl bg-black/25 border border-white/15 px-4 py-3.5 text-white outline-none focus:border-violet-400" />
+          <input value={formatPhone(referralPhone)} onChange={event => { setReferralPhone(normalizeBrazilPhone(event.target.value)); setMessage(""); }} inputMode="numeric" placeholder="(00) 00000-0000" className="mt-2 w-full rounded-xl bg-black/25 border border-white/15 px-4 py-3.5 text-white outline-none focus:border-violet-400" />
           {message && <p className="text-red-300 text-xs mt-2">{message}</p>}
           <button onClick={validateReferral} disabled={pending} className="mt-4 w-full rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 py-3.5 text-white font-black disabled:opacity-60">{pending ? "Verificando..." : "Continuar"}</button>
         </>}
