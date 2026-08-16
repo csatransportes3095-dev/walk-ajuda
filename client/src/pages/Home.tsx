@@ -240,7 +240,15 @@ export default function Home() {
   }, [resellerPrices]);
 
   // Buscar dados dinâmicos
-  const { data: products } = trpc.products.listActive.useQuery();
+  // A vitrine consulta atualizações em segundo plano para refletir imediatamente as edições
+  // salvas no ADM (preço, texto, aparência, documentos e perguntas), sem exigir F5.
+  const { data: products } = trpc.products.listActive.useQuery(undefined, {
+    staleTime: 0,
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
   const { data: settings } = trpc.settings.getAll.useQuery();
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: faqData } = trpc.faq.getPublic.useQuery();
