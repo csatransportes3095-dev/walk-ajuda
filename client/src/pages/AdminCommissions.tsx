@@ -34,7 +34,7 @@ const STATUS_MAP_FALLBACK: Record<string, { label: string; color: string; bg: st
 export default function AdminCommissions() {
   useAdminAuth();
   const [, navigate] = useLocation();
-  const [filterPaid, setFilterPaid] = useState<"all" | "pending" | "paid">("all");
+  const [filterPaid, setFilterPaid] = useState<"all" | "pending" | "paid" | "invalid">("all");
 
   const commissionsQuery = trpc.orderStatus.listCommissions.useQuery();
   const statusTypesQuery = trpc.statusTypes.list.useQuery();
@@ -95,11 +95,13 @@ export default function AdminCommissions() {
   const all = commissionsQuery.data ?? [];
 
   // Filtrar por status de pagamento
-  const filtered = all.filter(c =>
-    filterPaid === "all" ? true :
-    filterPaid === "paid" ? c.commissionPaid === 1 :
-    c.commissionPaid !== 1
-  );
+  const filtered = all.filter(c => {
+    const invalid = Boolean((c as any).referralInvalid);
+    if (filterPaid === "all") return true;
+    if (filterPaid === "paid") return c.commissionPaid === 1 && !invalid;
+    if (filterPaid === "invalid") return invalid;
+    return c.commissionPaid !== 1 && !invalid;
+  });
 
   // Agrupar por indicador (nome + telefone)
   const grouped = filtered.reduce<Record<string, typeof filtered>>((acc, c) => {
@@ -111,20 +113,21 @@ export default function AdminCommissions() {
 
   // Ordenar grupos: indicadores com mais pendentes primeiro
   const sortedGroups = Object.entries(grouped).sort(([, a], [, b]) => {
-    const aPending = a.filter(x => x.commissionPaid !== 1).length;
-    const bPending = b.filter(x => x.commissionPaid !== 1).length;
+    const aPending = a.filter(x => x.commissionPaid !== 1 && !(x as any).referralInvalid).length;
+    const bPending = b.filter(x => x.commissionPaid !== 1 && !(x as any).referralInvalid).length;
     return bPending - aPending;
   });
 
-  const totalPending = all.filter(c => c.commissionPaid !== 1).length;
-  const totalPaid = all.filter(c => c.commissionPaid === 1).length;
+  const totalPending = all.filter(c => c.commissionPaid !== 1 && !(c as any).referralInvalid).length;
+  const totalPaid = all.filter(c => c.commissionPaid === 1 && !(c as any).referralInvalid).length;
+  const totalInvalid = all.filter(c => Boolean((c as any).referralInvalid)).length;
 
   // Contar indicadores únicos
   const uniqueReferrers = new Set(all.map(c => c.referredByPhone ?? c.referredBy)).size;
 
   // Totais financeiros
-  const totalValuePending = all.filter(c => c.commissionPaid !== 1).reduce((sum, c) => sum + ((c as any).commissionValue ?? 0), 0);
-  const totalValuePaid = all.filter(c => c.commissionPaid === 1).reduce((sum, c) => sum + ((c as any).commissionValue ?? 0), 0);
+  const totalValuePending = all.filter(c => c.commissionPaid !== 1 && !(c as any).referralInvalid).reduce((sum, c) => sum + ((c as any).commissionValue ?? 0), 0);
+  const totalValuePaid = all.filter(c => c.commissionPaid === 1 && !(c as any).referralInvalid).reduce((sum, c) => sum + ((c as any).commissionValue ?? 0), 0);
 
   function formatMoney(cents: number) {
     if (!cents) return "—";
@@ -170,7 +173,7 @@ export default function AdminCommissions() {
       <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
 
         {/* Resumo em cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className="bg-card border border-border rounded-xl p-3 text-center">
             <p className="text-2xl font-bold text-foreground">{all.length}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Total</p>
@@ -191,6 +194,10 @@ export default function AdminCommissions() {
             {totalValuePaid > 0 && <p className="text-[10px] text-green-300/80 font-mono">{formatMoney(totalValuePaid)}</p>}
             <p className="text-xs text-muted-foreground mt-0.5">Pagas</p>
           </div>
+          <div className="bg-card border border-zinc-500/30 rounded-xl p-3 text-center cursor-pointer" onClick={() => setFilterPaid(filterPaid === "invalid" ? "all" : "invalid")}>
+            <p className="text-2xl font-bold text-zinc-300">{totalInvalid}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Não válidas</p>
+          </div>
           <div className="bg-card border border-amber-500/30 rounded-xl p-3 text-center">
             <p className="text-2xl font-bold text-amber-400">{uniqueReferrers}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Indicadores</p>
@@ -203,6 +210,7 @@ export default function AdminCommissions() {
             { value: "all",     label: "Todas",       count: all.length },
             { value: "pending", label: "💰 Pendentes", count: totalPending },
             { value: "paid",    label: "✅ Pagas",     count: totalPaid },
+            { value: "invalid", label: "⛔ Não válidas", count: totalInvalid },
           ] as const).map(f => (
             <button
               key={f.value}
@@ -226,10 +234,12 @@ export default function AdminCommissions() {
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border ${
             filterPaid === "pending"
               ? "bg-red-500/10 border-red-500/30 text-red-400"
-              : "bg-green-500/10 border-green-500/30 text-green-400"
+              : filterPaid === "invalid"
+                ? "bg-zinc-500/10 border-zinc-500/30 text-zinc-300"
+                : "bg-green-500/10 border-green-500/30 text-green-400"
           }`}>
             <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-            Mostrando apenas comissões {filterPaid === "pending" ? "pendentes" : "pagas"} — clique no card acima ou no filtro "Todas" para ver tudo
+            Mostrando apenas indicações {filterPaid === "pending" ? "pendentes" : filterPaid === "invalid" ? "não válidas" : "pagas"} — clique no card acima ou no filtro "Todas" para ver tudo
           </div>
         )}
 
@@ -243,13 +253,14 @@ export default function AdminCommissions() {
           </div>
         ) : (
           sortedGroups.map(([key, pedidos]) => {
-            const pendentes = pedidos.filter(p => p.commissionPaid !== 1).length;
-            const pagas = pedidos.filter(p => p.commissionPaid === 1).length;
+            const pendentes = pedidos.filter(p => p.commissionPaid !== 1 && !(p as any).referralInvalid).length;
+            const pagas = pedidos.filter(p => p.commissionPaid === 1 && !(p as any).referralInvalid).length;
+            const invalidas = pedidos.filter(p => Boolean((p as any).referralInvalid)).length;
             const indicadorNome = pedidos[0]?.referredBy ?? "—";
             const indicadorPhone = pedidos[0]?.referredByPhone;
             const totalIndicacoes = pedidos[0]?.totalReferrals ?? pedidos.length;
-            const totalPendenteValor = pedidos.filter(p => p.commissionPaid !== 1).reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
-            const totalPagoValor = pedidos.filter(p => p.commissionPaid === 1).reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
+            const totalPendenteValor = pedidos.filter(p => p.commissionPaid !== 1 && !(p as any).referralInvalid).reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
+            const totalPagoValor = pedidos.filter(p => p.commissionPaid === 1 && !(p as any).referralInvalid).reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
 
             return (
               <div key={key} className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
@@ -303,11 +314,16 @@ export default function AdminCommissions() {
                         {pendentes} pendente{pendentes > 1 ? "s" : ""}
                       </span>
                     )}
-                    {pagas > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/40 text-green-400 text-xs font-bold">
-                        {pagas} paga{pagas > 1 ? "s" : ""}
-                      </span>
-                    )}
+                      {pagas > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/40 text-green-400 text-xs font-bold">
+                          {pagas} paga{pagas > 1 ? "s" : ""}
+                        </span>
+                      )}
+                      {invalidas > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-zinc-500/20 border border-zinc-400/40 text-zinc-300 text-xs font-bold">
+                          {invalidas} não válida{invalidas > 1 ? "s" : ""}
+                        </span>
+                      )}
                   </div>
                 </div>
 
