@@ -274,6 +274,23 @@ function hasMailChannel(): boolean {
   return !!(process.env.RESEND_API_KEY || process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD);
 }
 
+async function ensureCommissionReferralStatusColumns(db: any): Promise<void> {
+  const columns = [
+    ['referralInvalid', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['referralInvalidReason', 'VARCHAR(512) NULL'],
+    ['referralInvalidAt', 'DATETIME NULL'],
+  ] as const;
+  for (const [name, definition] of columns) {
+    try {
+      await db.execute(sql.raw(`ALTER TABLE orderStatusHistory ADD COLUMN ${name} ${definition}`));
+    } catch (error: any) {
+      if (!/duplicate column|exists/i.test(String(error?.message || ''))) {
+        console.warn(`[commissions] não foi possível criar ${name}:`, error?.message);
+      }
+    }
+  }
+}
+
 export const appRouter = router({
   system: systemRouter,
   resellers: resellersRouter,
@@ -4808,12 +4825,23 @@ export const appRouter = router({
       .input(z.object({ registrationId: z.number(), paid: z.boolean() }))
       .mutation(async ({ input }) => {
         const db = await (await import('./db')).getDb();
-        if (!db) return { success: false };
-        await db.execute(sql`
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível ao atualizar a comissão.' });
+        await ensureCommissionReferralStatusColumns(db);
+        const stateRows = await db.execute(sql`
+          SELECT COALESCE(MAX(referralInvalid), 0) AS referralInvalid
+          FROM orderStatusHistory WHERE registrationId = ${input.registrationId}
+        `);
+        const referralInvalid = Number((stateRows[0] as unknown as Array<{ referralInvalid?: number }>)[0]?.referralInvalid || 0) === 1;
+        if (input.paid && referralInvalid) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Esta indicação está marcada como não válida. Revalide-a antes de marcar como paga.' });
+        }
+        const update = await db.execute(sql`
           UPDATE orderStatusHistory
           SET commissionPaid = ${input.paid ? 1 : 0}
           WHERE registrationId = ${input.registrationId}
         `);
+        const affected = Number((update[0] as unknown as { affectedRows?: number })?.affectedRows || 0);
+        if (!affected) throw new TRPCError({ code: 'NOT_FOUND', message: 'Indicação não encontrada.' });
 
         // Se está marcando como PAGO, buscar dados do indicador e enviar e-mail
         if (input.paid) {
@@ -4940,6 +4968,7 @@ export const appRouter = router({
     listCommissions: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) return [];
+      await ensureCommissionReferralStatusColumns(db);
       const rows = await db.execute(`
         SELECT
           acp.id as registrationId,
@@ -4971,6 +5000,15 @@ export const appRouter = router({
             SELECT MAX(osh.commissionPaid) FROM orderStatusHistory osh
             WHERE osh.registrationId = acp.id
           ), 0) as commissionPaid,
+          COALESCE((
+            SELECT MAX(osh.referralInvalid) FROM orderStatusHistory osh
+            WHERE osh.registrationId = acp.id
+          ), 0) as referralInvalid,
+          (
+            SELECT osh.referralInvalidReason FROM orderStatusHistory osh
+            WHERE osh.registrationId = acp.id AND osh.referralInvalid = 1
+            ORDER BY osh.createdAt DESC LIMIT 1
+          ) as referralInvalidReason,
           COALESCE((
             SELECT po.commissionValue
             FROM orderStatusHistory osh2
@@ -5022,12 +5060,49 @@ export const appRouter = router({
         serviceOption: r.serviceOption as string | null,
         submittedAt: r.submittedAt ? Number(r.submittedAt) : null,
         commissionPaid: Number(r.commissionPaid),
+        referralInvalid: Number(r.referralInvalid || 0) === 1,
+        referralInvalidReason: r.referralInvalidReason ? String(r.referralInvalidReason) : null,
         commissionValue: Number(r.commissionValue ?? 0),
         orderNumber: r.orderNumber ? Number(r.orderNumber) : null,
         totalReferrals: Number(r.totalReferrals ?? 0),
         referrerPhotoUrl: r.referrerPhotoUrl as string | null,
       }));
     }),
+
+    // Admin: invalidar ou revalidar indicação sem apagar o pedido, cliente ou histórico
+    setCommissionReferralValidity: adminProcedure
+      .input(z.object({
+        registrationId: z.number(),
+        invalid: z.boolean(),
+        reason: z.string().trim().max(512).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await (await import('./db')).getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível ao atualizar a indicação.' });
+        await ensureCommissionReferralStatusColumns(db);
+        if (input.invalid && !input.reason) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Informe o motivo da indicação não válida.' });
+        }
+        const result = input.invalid
+          ? await db.execute(sql`
+              UPDATE orderStatusHistory
+              SET referralInvalid = 1,
+                  referralInvalidReason = ${input.reason!.trim()},
+                  referralInvalidAt = NOW(),
+                  commissionPaid = 0
+              WHERE registrationId = ${input.registrationId}
+            `)
+          : await db.execute(sql`
+              UPDATE orderStatusHistory
+              SET referralInvalid = 0,
+                  referralInvalidReason = NULL,
+                  referralInvalidAt = NULL
+              WHERE registrationId = ${input.registrationId}
+            `);
+        const affected = Number((result[0] as unknown as { affectedRows?: number })?.affectedRows || 0);
+        if (!affected) throw new TRPCError({ code: 'NOT_FOUND', message: 'Indicação não encontrada.' });
+        return { success: true, invalid: input.invalid };
+      }),
 
     // Admin: deletar indicação (remove referredBy do cliente e o histórico de pedido)
     deleteCommission: adminProcedure

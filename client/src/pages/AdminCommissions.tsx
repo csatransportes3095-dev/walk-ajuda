@@ -67,7 +67,20 @@ export default function AdminCommissions() {
     onError: () => toast.error("Erro ao remover indicação"),
   });
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [confirmPayment, setConfirmPayment] = useState<number | null>(null);
+  const [referralAction, setReferralAction] = useState<{ registrationId: number; mode: 'invalidate' | 'revalidate' } | null>(null);
+  const [invalidReason, setInvalidReason] = useState('');
   const [resendingEmail, setResendingEmail] = useState<number | null>(null);
+
+  const setReferralValidityMutation = trpc.orderStatus.setCommissionReferralValidity.useMutation({
+    onSuccess: (data) => {
+      commissionsQuery.refetch();
+      setReferralAction(null);
+      setInvalidReason('');
+      toast.success((data as any).invalid ? 'Indicação marcada como não válida.' : 'Indicação revalidada.');
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const resendReferralEmailMutation = trpc.orderStatus.resendReferralEmail.useMutation({
     onSuccess: (data, variables) => {
@@ -303,6 +316,8 @@ export default function AdminCommissions() {
                   {pedidos.map(c => {
                     const statusCfg = c.latestStatus ? STATUS_MAP[c.latestStatus] : null;
                     const isPaid = c.commissionPaid === 1;
+                    const isInvalid = Boolean((c as any).referralInvalid);
+                    const isReferralAction = referralAction?.registrationId === c.registrationId;
                     return (
                       <div key={c.registrationId} className={`px-4 py-3 flex items-start gap-3 ${isPaid ? "opacity-70" : ""}`}>
                         {/* Info do cliente indicado */}
@@ -362,32 +377,46 @@ export default function AdminCommissions() {
                               </span>
                             )}
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                              isPaid
-                                ? 'bg-green-500/20 border-green-500/40 text-green-400'
-                                : 'bg-red-500/20 border-red-500/40 text-red-400'
+                              isInvalid
+                                ? 'bg-zinc-500/20 border-zinc-400/40 text-zinc-300'
+                                : isPaid
+                                  ? 'bg-green-500/20 border-green-500/40 text-green-400'
+                                  : 'bg-red-500/20 border-red-500/40 text-red-400'
                             }`}>
-                              💰 {(c as any).commissionValue > 0 ? formatMoney((c as any).commissionValue) : 'Valor não definido'}
+                              {isInvalid ? '⛔ Indicação não válida' : <>💰 {(c as any).commissionValue > 0 ? formatMoney((c as any).commissionValue) : 'Valor não definido'}</>}
                             </span>
+                            {isInvalid && (c as any).referralInvalidReason && (
+                              <span className="text-[10px] text-zinc-400">Motivo: {(c as any).referralInvalidReason}</span>
+                            )}
                           </div>
                         </div>
 
                         {/* Botões de ação */}
                         <div className="flex-shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
-                          <button
-                            onClick={() => toggleCommissionPaidMutation.mutate({ registrationId: c.registrationId, paid: !isPaid })}
-                            disabled={toggleCommissionPaidMutation.isPending}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                              isPaid
-                                ? "bg-green-500/20 border-green-500/40 text-green-400 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400"
-                                : "bg-red-500/20 border-red-500/40 text-red-400 hover:bg-green-500/10 hover:border-green-500/30 hover:text-green-400"
-                            }`}
-                            title={isPaid ? "Clique para desfazer" : "Marcar como paga"}
-                          >
-                            {isPaid
-                              ? <><CheckCircle className="w-3.5 h-3.5" /> Paga</>
-                              : <><Clock className="w-3.5 h-3.5" /> Pagar</>
-                            }
-                          </button>
+                          {confirmPayment === c.registrationId ? (
+                            <div className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-2 space-y-1.5">
+                              <p className="text-[10px] font-semibold text-emerald-300">Confirmar pagamento da comissão?</p>
+                              <div className="flex gap-1.5">
+                                <button onClick={() => toggleCommissionPaidMutation.mutate({ registrationId: c.registrationId, paid: true })} disabled={toggleCommissionPaidMutation.isPending} className="flex-1 rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50">Confirmar</button>
+                                <button onClick={() => setConfirmPayment(null)} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground">Cancelar</button>
+                              </div>
+                            </div>
+                          ) : isPaid ? (
+                            <button onClick={() => toggleCommissionPaidMutation.mutate({ registrationId: c.registrationId, paid: false })} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-green-500/20 border-green-500/40 text-green-400 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 disabled:opacity-50" title="Clique para desfazer"><CheckCircle className="w-3.5 h-3.5" /> Paga</button>
+                          ) : !isInvalid ? (
+                            <button onClick={() => setConfirmPayment(c.registrationId)} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-red-500/20 border-red-500/40 text-red-400 hover:bg-green-500/10 hover:border-green-500/30 hover:text-green-400 disabled:opacity-50" title="Marcar como paga"><Clock className="w-3.5 h-3.5" /> Pagar</button>
+                          ) : null}
+                          {isReferralAction ? (
+                            <div className="w-full rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 space-y-1.5">
+                              {referralAction?.mode === 'invalidate' ? <input value={invalidReason} onChange={e => setInvalidReason(e.target.value)} placeholder="Motivo obrigatório" className="w-full rounded-md border border-amber-500/30 bg-background px-2 py-1 text-[10px] text-foreground" autoFocus /> : <p className="text-[10px] font-semibold text-emerald-300">Revalidar esta indicação?</p>}
+                              <div className="flex gap-1.5">
+                                <button onClick={() => setReferralValidityMutation.mutate({ registrationId: c.registrationId, invalid: referralAction?.mode === 'invalidate', reason: referralAction?.mode === 'invalidate' ? invalidReason : undefined })} disabled={setReferralValidityMutation.isPending || (referralAction?.mode === 'invalidate' && !invalidReason.trim())} className="flex-1 rounded-md bg-amber-600 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50">Confirmar</button>
+                                <button onClick={() => { setReferralAction(null); setInvalidReason(''); }} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground">Cancelar</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => setReferralAction({ registrationId: c.registrationId, mode: isInvalid ? 'revalidate' : 'invalidate' })} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${isInvalid ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-zinc-500/40 bg-zinc-500/10 text-zinc-300 hover:bg-amber-500/10 hover:border-amber-500/40 hover:text-amber-300'}`} title={isInvalid ? 'Revalidar indicação' : 'Marcar como indicação não válida'}>{isInvalid ? '↺ Revalidar' : '⛔ Não válida'}</button>
+                          )}
                           {/* Botão WhatsApp para o indicador */}
                           {indicadorPhone && (() => {
                             const waPhone = `55${indicadorPhone.replace(/\D/g, '')}`;
