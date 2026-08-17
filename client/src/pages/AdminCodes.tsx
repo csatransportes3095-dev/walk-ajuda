@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
-import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, GripVertical, Settings2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
+import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, Settings2, RotateCcw, Save, ListOrdered } from "lucide-react";
 import { TIMEZONE_OPTIONS, DEFAULT_TIMEZONE } from "@/hooks/useTimezone";
 import AdminHeader from "@/components/AdminHeader";
 import { Button } from "@/components/ui/button";
@@ -80,7 +80,7 @@ export default function AdminCodes() {
   const trpcUtils = trpc.useUtils();
   const [cardOrder, setCardOrder] = useState<string[]>(() => ADMIN_SHORTCUTS.map((card) => card.id));
   const [isOrganizingCards, setIsOrganizingCards] = useState(false);
-  const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
+  const [cardOrderDirty, setCardOrderDirty] = useState(false);
   const savedCardOrder = configQuery.data?.[ADMIN_CARD_ORDER_KEY];
   const saveCardOrderMutation = trpc.config.set.useMutation({
     onSuccess: () => {
@@ -98,7 +98,10 @@ export default function AdminCodes() {
       const validIds = new Set(ADMIN_SHORTCUTS.map((card) => card.id));
       const ordered = saved.filter((id: unknown): id is string => typeof id === 'string' && validIds.has(id));
       const missing = ADMIN_SHORTCUTS.map((card) => card.id).filter((id) => !ordered.includes(id));
-      if (ordered.length > 0) setCardOrder([...ordered, ...missing]);
+      if (ordered.length > 0) {
+        setCardOrder([...ordered, ...missing]);
+        setCardOrderDirty(false);
+      }
     } catch {
       // Mantém a ordem padrão se uma configuração antiga estiver inválida.
     }
@@ -110,29 +113,27 @@ export default function AdminCodes() {
     ...ADMIN_SHORTCUTS.filter((card) => !cardOrder.includes(card.id)),
   ];
 
-  const persistCardOrder = (nextOrder: string[]) => {
-    setCardOrder(nextOrder);
-    saveCardOrderMutation.mutate({ key: ADMIN_CARD_ORDER_KEY, value: JSON.stringify(nextOrder) });
+  const saveCardOrder = () => {
+    saveCardOrderMutation.mutate(
+      { key: ADMIN_CARD_ORDER_KEY, value: JSON.stringify(cardOrder) },
+      { onSuccess: () => setCardOrderDirty(false) },
+    );
   };
 
-  const moveCard = (id: string, direction: -1 | 1) => {
+  const setCardPosition = (id: string, targetPosition: number) => {
     const currentIndex = cardOrder.indexOf(id);
-    const nextIndex = currentIndex + direction;
-    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= cardOrder.length) return;
+    const targetIndex = targetPosition - 1;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= cardOrder.length || currentIndex === targetIndex) return;
     const nextOrder = [...cardOrder];
-    [nextOrder[currentIndex], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[currentIndex]];
-    persistCardOrder(nextOrder);
+    nextOrder.splice(currentIndex, 1);
+    nextOrder.splice(targetIndex, 0, id);
+    setCardOrder(nextOrder);
+    setCardOrderDirty(true);
   };
 
-  const moveCardToTarget = (targetId: string) => {
-    if (!draggedCardId || draggedCardId === targetId) return;
-    const nextOrder = [...cardOrder];
-    const from = nextOrder.indexOf(draggedCardId);
-    const to = nextOrder.indexOf(targetId);
-    if (from < 0 || to < 0) return;
-    nextOrder.splice(from, 1);
-    nextOrder.splice(to, 0, draggedCardId);
-    persistCardOrder(nextOrder);
+  const restoreDefaultCardOrder = () => {
+    setCardOrder(ADMIN_SHORTCUTS.map((card) => card.id));
+    setCardOrderDirty(true);
   };
 
 
@@ -314,13 +315,18 @@ export default function AdminCodes() {
                 <LayoutGrid className="h-4 w-4 text-purple-300" />
                 Atalhos do painel
               </h2>
-              <p className="mt-1 text-xs text-white/45">{isOrganizingCards ? 'Arraste um card ou use as setas para definir a posição desejada.' : 'Acesse rapidamente todas as áreas administrativas.'}</p>
+              <p className="mt-1 text-xs text-white/45">{isOrganizingCards ? 'Escolha a posição exata de cada card e salve quando terminar.' : 'Acesse rapidamente todas as áreas administrativas.'}</p>
             </div>
             <div className="flex items-center gap-2">
               {isOrganizingCards && (
-                <Button type="button" variant="outline" size="sm" onClick={() => persistCardOrder(ADMIN_SHORTCUTS.map((card) => card.id))} disabled={saveCardOrderMutation.isPending} className="border-white/15 bg-white/5 text-white hover:bg-white/10">
-                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Padrão
-                </Button>
+                <>
+                  <Button type="button" variant="outline" size="sm" onClick={restoreDefaultCardOrder} disabled={saveCardOrderMutation.isPending} className="border-white/15 bg-white/5 text-white hover:bg-white/10">
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Padrão
+                  </Button>
+                  <Button type="button" size="sm" onClick={saveCardOrder} disabled={!cardOrderDirty || saveCardOrderMutation.isPending} className="bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-45">
+                    <Save className="mr-1.5 h-3.5 w-3.5" /> Salvar ordem
+                  </Button>
+                </>
               )}
               <Button type="button" size="sm" onClick={() => setIsOrganizingCards((value) => !value)} className={isOrganizingCards ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-purple-600 text-white hover:bg-purple-500'}>
                 <Settings2 className="mr-1.5 h-3.5 w-3.5" />
@@ -331,7 +337,7 @@ export default function AdminCodes() {
 
           {isOrganizingCards && (
             <div className="rounded-xl border border-purple-400/35 bg-purple-500/10 px-3 py-2 text-xs leading-relaxed text-purple-100">
-              No computador, segure o ícone <GripVertical className="mx-1 inline h-3.5 w-3.5" /> e arraste o card. No celular, use as setas de cada card. A posição é salva automaticamente para este painel.
+              Escolha a <strong>posição exata</strong> em cada card. A prévia se reorganiza na hora, mas só fica salva quando você tocar em <strong>Salvar ordem</strong>.
             </div>
           )}
 
@@ -345,24 +351,22 @@ export default function AdminCodes() {
               return (
                 <div
                   key={card.id}
-                  draggable={isOrganizingCards}
-                  onDragStart={() => setDraggedCardId(card.id)}
-                  onDragOver={(event) => { if (isOrganizingCards) event.preventDefault(); }}
-                  onDrop={(event) => { event.preventDefault(); moveCardToTarget(card.id); setDraggedCardId(null); }}
-                  onDragEnd={() => setDraggedCardId(null)}
-                  className={`relative min-w-0 rounded-xl border transition-all ${isOrganizingCards ? 'cursor-grab active:cursor-grabbing ring-1 ring-purple-400/35' : ''} ${draggedCardId === card.id ? 'scale-[0.97] opacity-50' : ''}`}
+                  className={`relative min-w-0 rounded-xl border transition-all ${isOrganizingCards ? 'ring-1 ring-purple-400/35' : ''}`}
                 >
                   {isOrganizingCards && (
                     <div className="absolute inset-x-1 top-1 z-10 flex items-center justify-between gap-1">
-                      <span className="rounded-md bg-black/50 p-1 text-purple-200" title="Arraste para reposicionar"><GripVertical className="h-3.5 w-3.5" /></span>
-                      <div className="flex gap-1">
-                        <button type="button" onClick={() => moveCard(card.id, -1)} disabled={index === 0 || saveCardOrderMutation.isPending} className="rounded-md bg-black/60 p-1 text-white/90 transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Mover ${card.label} uma posição para trás`}><ChevronLeft className="h-3.5 w-3.5" /></button>
-                        <button type="button" onClick={() => moveCard(card.id, 1)} disabled={index === orderedAdminShortcuts.length - 1 || saveCardOrderMutation.isPending} className="rounded-md bg-black/60 p-1 text-white/90 transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Mover ${card.label} uma posição para frente`}><ChevronRight className="h-3.5 w-3.5" /></button>
-                      </div>
+                      <span className="rounded-md bg-black/55 px-1.5 py-1 text-[10px] font-black text-purple-100" title="Posição atual">#{String(index + 1).padStart(2, '0')}</span>
+                      <label className="flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white/85">
+                        <ListOrdered className="h-3 w-3 text-purple-200" />
+                        <span className="sr-only">Posição de {card.label}</span>
+                        <select value={index + 1} onChange={(event) => setCardPosition(card.id, Number(event.target.value))} disabled={saveCardOrderMutation.isPending} className="max-w-[48px] bg-transparent text-[10px] font-black text-white outline-none">
+                          {orderedAdminShortcuts.map((_, position) => <option key={position + 1} value={position + 1} className="bg-slate-950 text-white">{position + 1}</option>)}
+                        </select>
+                      </label>
                     </div>
                   )}
                   {isOrganizingCards ? (
-                    <div className={`min-h-[76px] select-none rounded-xl p-3 pt-7 text-center ${card.tone}`}>{content}</div>
+                    <div className={`min-h-[76px] select-none rounded-xl p-3 pt-8 text-center ${card.tone}`}>{content}</div>
                   ) : (
                     <a href={card.href} className={`block min-h-[76px] rounded-xl p-3 text-center ${card.tone}`}>{content}</a>
                   )}
