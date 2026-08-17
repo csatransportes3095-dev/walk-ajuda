@@ -516,11 +516,10 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
         onClick={() => setOnlineSupportOpen(true)}
         aria-label="Abrir Atendimento Online 24 horas"
         style={{
-          width: "100%", background: `linear-gradient(135deg, ${supportColor}f4 0%, ${supportColor}a0 56%, ${supportColor}72 100%)`,
-          border: `1px solid ${supportColor}78`, borderRadius: "34px 22px 22px 34px",
-          boxShadow: `0 7px 30px ${supportColor}52, inset 0 1px 0 rgba(255,255,255,0.2)`,
-          padding: "10px 18px 10px 9px", cursor: "pointer", display: "flex", alignItems: "center", gap: 13,
-          fontFamily: "'DM Sans','Inter',-apple-system,sans-serif", position: "relative", overflow: "hidden", textAlign: "left",
+          width: "min(100%, 292px)", margin: "0 auto", background: "transparent",
+          border: "none", borderRadius: 0, boxShadow: "none",
+          padding: "0 0 4px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 0,
+          fontFamily: "'DM Sans','Inter',-apple-system,sans-serif", position: "relative", overflow: "visible", textAlign: "center",
         }}
       >
         <style>{`
@@ -547,17 +546,17 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
         `}</style>
 
         {/* O robô é a própria entrada visual do atendimento, não apenas um ícone decorativo. */}
-        <div style={{ flexShrink: 0, width: 102, height: 96, position: "relative", display: "flex", justifyContent: "center", alignItems: "flex-end", borderRadius: 26, background: "linear-gradient(145deg, rgba(15,7,0,0.28), rgba(255,255,255,0.1))", border: "1px solid rgba(255,255,255,0.26)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.2), 0 5px 16px rgba(0,0,0,0.18)" }} aria-hidden="true">
-          <span style={{ position: "absolute", top: 5, right: 4, zIndex: 4, borderRadius: 10, background: "#fff", color: supportColor, padding: "4px 7px", fontSize: 9, lineHeight: 1, fontWeight: 900, letterSpacing: 0.3, animation: "onlineSupportBubble 1.7s ease-in-out infinite", boxShadow: "0 3px 10px rgba(0,0,0,0.18)" }}>PRECISA DE AJUDA?</span>
-          <span style={{ position: "absolute", width: 75, height: 75, bottom: 7, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.62)", animation: "onlineSupportSignal 1.8s ease-out infinite" }} />
+        <div style={{ flexShrink: 0, width: 152, height: 130, position: "relative", display: "flex", justifyContent: "center", alignItems: "flex-end", borderRadius: "48px 48px 28px 28px", background: `linear-gradient(145deg, ${supportColor}f8, ${supportColor}92)`, border: `2px solid ${supportColor}cc`, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.3), 0 8px 22px ${supportColor}65` }} aria-hidden="true">
+          <span style={{ position: "absolute", top: -10, right: -28, zIndex: 4, borderRadius: 12, background: "#fff", color: supportColor, padding: "5px 8px", fontSize: 9, lineHeight: 1, fontWeight: 900, letterSpacing: 0.3, animation: "onlineSupportBubble 1.7s ease-in-out infinite", boxShadow: "0 3px 10px rgba(0,0,0,0.18)" }}>AJUDA?</span>
+          <span style={{ position: "absolute", width: 104, height: 104, bottom: 8, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.62)", animation: "onlineSupportSignal 1.8s ease-out infinite" }} />
           <div style={{ position: "relative", zIndex: 2, animation: "onlineSupportRobotFloat 2.2s ease-in-out infinite, onlineSupportRobotWiggle 2.2s ease-in-out infinite", display: "flex", flexDirection: "column", alignItems: "center" }}>
             <div style={{ width: 2, height: 8, background: "rgba(255,255,255,0.9)", borderRadius: 2, marginBottom: 1 }} />
             <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", animation: "onlineSupportAntenna 1.25s ease-in-out infinite", marginBottom: 3, boxShadow: "0 0 13px rgba(255,255,255,0.95)" }} />
-            <div style={{ width: 68, height: 50, borderRadius: 18, background: "linear-gradient(145deg, rgba(255,255,255,0.52), rgba(255,255,255,0.18))", border: "2px solid rgba(255,255,255,0.82)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.52), 0 5px 15px rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", gap: 13 }}>
+            <div style={{ width: 86, height: 60, borderRadius: 22, background: "linear-gradient(145deg, rgba(255,255,255,0.52), rgba(255,255,255,0.18))", border: "2px solid rgba(255,255,255,0.82)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.52), 0 5px 15px rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", gap: 17 }}>
               <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#fff", boxShadow: "0 0 10px rgba(255,255,255,0.9)", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite" }} />
               <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#fff", boxShadow: "0 0 10px rgba(255,255,255,0.9)", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite 0.15s" }} />
             </div>
-            <div style={{ position: "relative", width: 60, height: 34, borderRadius: 12, background: "linear-gradient(145deg, rgba(255,255,255,0.38), rgba(255,255,255,0.14))", border: "2px solid rgba(255,255,255,0.62)", marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ position: "relative", width: 76, height: 40, borderRadius: 14, background: "linear-gradient(145deg, rgba(255,255,255,0.38), rgba(255,255,255,0.14))", border: "2px solid rgba(255,255,255,0.62)", marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <span style={{ position: "absolute", left: -15, top: 3, width: 18, height: 10, borderRadius: 6, background: "rgba(255,255,255,0.68)", transformOrigin: "right center" }} />
               <span style={{ position: "absolute", right: -15, top: 3, width: 18, height: 10, borderRadius: 6, background: "#fff", boxShadow: "0 0 8px rgba(255,255,255,0.56)", transformOrigin: "left center", animation: "onlineSupportWave 1.25s ease-in-out infinite" }} />
               <div style={{ width: 25, height: 9, borderRadius: 5, background: "rgba(255,255,255,0.72)", boxShadow: "0 0 9px rgba(255,255,255,0.5)" }} />
@@ -566,14 +565,14 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
         </div>
 
         {/* Texto e status do atendimento */}
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
+        <div style={{ width: "100%", minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, marginTop: -4, padding: "14px 18px 13px", borderRadius: "24px 24px 34px 34px", background: `linear-gradient(135deg, ${supportColor}ed 0%, ${supportColor}9a 100%)`, border: `1px solid ${supportColor}78`, boxShadow: `0 7px 24px ${supportColor}42, inset 0 1px 0 rgba(255,255,255,0.17)` }}>
           <p className="online-support-title" style={{ fontSize: 15.5, lineHeight: 1.15, fontWeight: 800, color: "#fff", margin: 0, letterSpacing: 0.1 }}>
             ATENDIMENTO ONLINE 24H
           </p>
           <p style={{ fontSize: 13.5, lineHeight: 1.2, color: "rgba(255,255,255,0.96)", margin: 0, fontWeight: 700 }}>
             Fale comigo agora
           </p>
-          <p style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.8, lineHeight: 1.2, color: "rgba(255,255,255,0.87)", margin: "2px 0 0", fontWeight: 600 }}>
+          <p style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, fontSize: 10.8, lineHeight: 1.2, color: "rgba(255,255,255,0.87)", margin: "2px 0 0", fontWeight: 600 }}>
             <span style={{ display: "inline-block", width: 7, height: 7, flexShrink: 0, borderRadius: "50%", background: "#4ade80", animation: "onlineSupportPulse 1.8s ease-out infinite" }} />
             Online • Resposta imediata
           </p>
@@ -583,7 +582,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
         </div>
 
         {/* Seta de acesso */}
-        <svg style={{ width: 16, height: 16, color: "#fff", opacity: 0.76, flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M9 5l7 7-7 7" /></svg>
+        <span style={{ marginTop: 8, color: "rgba(255,255,255,0.95)", fontSize: 11, fontWeight: 900, letterSpacing: 0.3 }}>TOQUE PARA FALAR COMIGO</span>
       </button>
     );
   };
