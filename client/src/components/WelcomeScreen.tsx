@@ -528,9 +528,13 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
           .online-support-entry-card:hover { transform: translateY(-2px); filter: brightness(1.045); }
           .online-support-entry-card:active { transform: scale(0.975); }
           .online-support-entry-card:focus-visible { outline: 3px solid rgba(255,255,255,0.78); outline-offset: 3px; }
-          @keyframes onlineSupportRobotFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+          @keyframes onlineSupportRobotFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+          @keyframes onlineSupportRobotWiggle { 0%,100%{rotate:-2deg} 50%{rotate:2deg} }
           @keyframes onlineSupportEyeBlink { 0%,90%,100%{transform:scaleY(1)} 95%{transform:scaleY(0.12)} }
           @keyframes onlineSupportAntenna { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.45;transform:scale(1.35)} }
+          @keyframes onlineSupportWave { 0%,100%{transform:rotate(-18deg)} 50%{transform:rotate(32deg)} }
+          @keyframes onlineSupportSignal { 0%{transform:scale(.65);opacity:.9} 75%,100%{transform:scale(1.45);opacity:0} }
+          @keyframes onlineSupportBubble { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-3px) scale(1.04)} }
           @keyframes onlineSupportPulse { 0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,0.65)} 55%{box-shadow:0 0 0 6px rgba(74,222,128,0)} }
           @media (max-width: 390px) {
             .online-support-entry-card { padding: 14px 13px !important; gap: 11px !important; }
@@ -542,17 +546,21 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
           }
         `}</style>
 
-        {/* Robô grande do atendimento */}
-        <div style={{ flexShrink: 0, width: 74, display: "flex", justifyContent: "center" }} aria-hidden="true">
-          <div style={{ animation: "onlineSupportRobotFloat 2.5s ease-in-out infinite", display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <div style={{ width: 2, height: 9, background: "rgba(255,255,255,0.78)", borderRadius: 2, marginBottom: 1 }} />
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", animation: "onlineSupportAntenna 1.3s ease-in-out infinite", marginBottom: 3, boxShadow: "0 0 9px rgba(255,255,255,0.9)" }} />
-            <div style={{ width: 48, height: 38, borderRadius: 11, background: "rgba(255,255,255,0.22)", border: "2px solid rgba(255,255,255,0.54)", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite" }} />
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite 0.15s" }} />
+        {/* Robô de atendimento: chama atenção sem cobrir o texto ou mudar o clique do card */}
+        <div style={{ flexShrink: 0, width: 84, height: 82, position: "relative", display: "flex", justifyContent: "center", alignItems: "flex-end" }} aria-hidden="true">
+          <span style={{ position: "absolute", top: -1, right: -5, zIndex: 3, borderRadius: 8, background: "#fff", color: supportColor, padding: "3px 6px", fontSize: 8, lineHeight: 1, fontWeight: 900, letterSpacing: 0.2, animation: "onlineSupportBubble 1.7s ease-in-out infinite", boxShadow: "0 3px 10px rgba(0,0,0,0.18)" }}>OI!</span>
+          <span style={{ position: "absolute", width: 57, height: 57, bottom: 6, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.58)", animation: "onlineSupportSignal 1.8s ease-out infinite" }} />
+          <div style={{ position: "relative", zIndex: 2, animation: "onlineSupportRobotFloat 2.2s ease-in-out infinite, onlineSupportRobotWiggle 2.2s ease-in-out infinite", display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div style={{ width: 2, height: 8, background: "rgba(255,255,255,0.82)", borderRadius: 2, marginBottom: 1 }} />
+            <div style={{ width: 9, height: 9, borderRadius: "50%", background: "#fff", animation: "onlineSupportAntenna 1.25s ease-in-out infinite", marginBottom: 3, boxShadow: "0 0 11px rgba(255,255,255,0.95)" }} />
+            <div style={{ width: 52, height: 40, borderRadius: 13, background: "linear-gradient(145deg, rgba(255,255,255,0.37), rgba(255,255,255,0.16))", border: "2px solid rgba(255,255,255,0.7)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 12px rgba(0,0,0,0.15)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", boxShadow: "0 0 8px rgba(255,255,255,0.7)", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite" }} />
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", boxShadow: "0 0 8px rgba(255,255,255,0.7)", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite 0.15s" }} />
             </div>
-            <div style={{ width: 43, height: 29, borderRadius: 9, background: "rgba(255,255,255,0.18)", border: "2px solid rgba(255,255,255,0.42)", marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ width: 17, height: 8, borderRadius: 4, background: "rgba(255,255,255,0.52)" }} />
+            <div style={{ position: "relative", width: 46, height: 30, borderRadius: 10, background: "linear-gradient(145deg, rgba(255,255,255,0.29), rgba(255,255,255,0.12))", border: "2px solid rgba(255,255,255,0.52)", marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ position: "absolute", left: -10, top: 3, width: 13, height: 8, borderRadius: 5, background: "rgba(255,255,255,0.62)", transformOrigin: "right center" }} />
+              <span style={{ position: "absolute", right: -10, top: 3, width: 13, height: 8, borderRadius: 5, background: "rgba(255,255,255,0.82)", transformOrigin: "left center", animation: "onlineSupportWave 1.25s ease-in-out infinite" }} />
+              <div style={{ width: 19, height: 8, borderRadius: 4, background: "rgba(255,255,255,0.68)", boxShadow: "0 0 8px rgba(255,255,255,0.45)" }} />
             </div>
           </div>
         </div>
