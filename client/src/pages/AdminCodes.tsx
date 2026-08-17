@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
-import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, Settings2, RotateCcw, Save, ListOrdered } from "lucide-react";
+import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, Settings2, RotateCcw, Save, ArrowLeftRight } from "lucide-react";
 import { TIMEZONE_OPTIONS, DEFAULT_TIMEZONE } from "@/hooks/useTimezone";
 import AdminHeader from "@/components/AdminHeader";
 import { Button } from "@/components/ui/button";
@@ -81,6 +81,7 @@ export default function AdminCodes() {
   const [cardOrder, setCardOrder] = useState<string[]>(() => ADMIN_SHORTCUTS.map((card) => card.id));
   const [isOrganizingCards, setIsOrganizingCards] = useState(false);
   const [cardOrderDirty, setCardOrderDirty] = useState(false);
+  const [selectedCardForSwap, setSelectedCardForSwap] = useState<string | null>(null);
   const savedCardOrder = configQuery.data?.[ADMIN_CARD_ORDER_KEY];
   const saveCardOrderMutation = trpc.config.set.useMutation({
     onSuccess: () => {
@@ -120,20 +121,29 @@ export default function AdminCodes() {
     );
   };
 
-  const setCardPosition = (id: string, targetPosition: number) => {
-    const currentIndex = cardOrder.indexOf(id);
-    const targetIndex = targetPosition - 1;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= cardOrder.length || currentIndex === targetIndex) return;
+  const swapCards = (cardId: string) => {
+    if (!selectedCardForSwap) {
+      setSelectedCardForSwap(cardId);
+      return;
+    }
+    if (selectedCardForSwap === cardId) {
+      setSelectedCardForSwap(null);
+      return;
+    }
+    const firstIndex = cardOrder.indexOf(selectedCardForSwap);
+    const secondIndex = cardOrder.indexOf(cardId);
+    if (firstIndex < 0 || secondIndex < 0) return;
     const nextOrder = [...cardOrder];
-    nextOrder.splice(currentIndex, 1);
-    nextOrder.splice(targetIndex, 0, id);
+    [nextOrder[firstIndex], nextOrder[secondIndex]] = [nextOrder[secondIndex], nextOrder[firstIndex]];
     setCardOrder(nextOrder);
     setCardOrderDirty(true);
+    setSelectedCardForSwap(null);
   };
 
   const restoreDefaultCardOrder = () => {
     setCardOrder(ADMIN_SHORTCUTS.map((card) => card.id));
     setCardOrderDirty(true);
+    setSelectedCardForSwap(null);
   };
 
 
@@ -315,7 +325,7 @@ export default function AdminCodes() {
                 <LayoutGrid className="h-4 w-4 text-purple-300" />
                 Atalhos do painel
               </h2>
-              <p className="mt-1 text-xs text-white/45">{isOrganizingCards ? 'Escolha a posição exata de cada card e salve quando terminar.' : 'Acesse rapidamente todas as áreas administrativas.'}</p>
+              <p className="mt-1 text-xs text-white/45">{isOrganizingCards ? 'Toque em dois cards para trocar apenas as posições deles.' : 'Acesse rapidamente todas as áreas administrativas.'}</p>
             </div>
             <div className="flex items-center gap-2">
               {isOrganizingCards && (
@@ -328,7 +338,7 @@ export default function AdminCodes() {
                   </Button>
                 </>
               )}
-              <Button type="button" size="sm" onClick={() => setIsOrganizingCards((value) => !value)} className={isOrganizingCards ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-purple-600 text-white hover:bg-purple-500'}>
+              <Button type="button" size="sm" onClick={() => { setIsOrganizingCards((value) => !value); setSelectedCardForSwap(null); }} className={isOrganizingCards ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-purple-600 text-white hover:bg-purple-500'}>
                 <Settings2 className="mr-1.5 h-3.5 w-3.5" />
                 {isOrganizingCards ? 'Concluir' : 'Organizar cards'}
               </Button>
@@ -337,7 +347,7 @@ export default function AdminCodes() {
 
           {isOrganizingCards && (
             <div className="rounded-xl border border-purple-400/35 bg-purple-500/10 px-3 py-2 text-xs leading-relaxed text-purple-100">
-              Escolha a <strong>posição exata</strong> em cada card. A prévia se reorganiza na hora, mas só fica salva quando você tocar em <strong>Salvar ordem</strong>.
+              Toque no <strong>primeiro card</strong> e depois no <strong>segundo card</strong>. Somente esses dois cards trocam de lugar; todos os outros ficam parados. Quando terminar, toque em <strong>Salvar ordem</strong>.
             </div>
           )}
 
@@ -351,18 +361,17 @@ export default function AdminCodes() {
               return (
                 <div
                   key={card.id}
-                  className={`relative min-w-0 rounded-xl border transition-all ${isOrganizingCards ? 'ring-1 ring-purple-400/35' : ''}`}
+                  onClick={() => { if (isOrganizingCards) swapCards(card.id); }}
+                  className={`relative min-w-0 rounded-xl border transition-all ${isOrganizingCards ? 'cursor-pointer ring-1 ring-purple-400/35 hover:scale-[1.02]' : ''} ${selectedCardForSwap === card.id ? 'ring-2 ring-cyan-300 bg-cyan-300/10 shadow-[0_0_22px_rgba(103,232,249,.28)]' : ''}`}
                 >
                   {isOrganizingCards && (
-                    <div className="absolute inset-x-1 top-1 z-10 flex items-center justify-between gap-1">
+                    <div className="pointer-events-none absolute inset-x-1 top-1 z-10 flex items-center justify-between gap-1">
                       <span className="rounded-md bg-black/55 px-1.5 py-1 text-[10px] font-black text-purple-100" title="Posição atual">#{String(index + 1).padStart(2, '0')}</span>
-                      <label className="flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white/85">
-                        <ListOrdered className="h-3 w-3 text-purple-200" />
-                        <span className="sr-only">Posição de {card.label}</span>
-                        <select value={index + 1} onChange={(event) => setCardPosition(card.id, Number(event.target.value))} disabled={saveCardOrderMutation.isPending} className="max-w-[48px] bg-transparent text-[10px] font-black text-white outline-none">
-                          {orderedAdminShortcuts.map((_, position) => <option key={position + 1} value={position + 1} className="bg-slate-950 text-white">{position + 1}</option>)}
-                        </select>
-                      </label>
+                      {selectedCardForSwap === card.id ? (
+                        <span className="rounded-md bg-cyan-300 px-1.5 py-1 text-[10px] font-black text-slate-950">1º escolhido</span>
+                      ) : (
+                        <span className="rounded-md bg-black/55 p-1 text-purple-200"><ArrowLeftRight className="h-3.5 w-3.5" /></span>
+                      )}
                     </div>
                   )}
                   {isOrganizingCards ? (
