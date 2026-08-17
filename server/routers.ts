@@ -2392,24 +2392,53 @@ export const appRouter = router({
         if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
 
         if (phoneChanged) {
-          // Pedidos, arquivos e dados de login de pedido são históricos vinculados ao
-          // registrationId do pedido. Eles não podem acompanhar uma simples edição de
-          // telefone do cadastro principal, pois isso transferiria pedidos a outro cliente.
+          // O pedido é identificado permanentemente pelo registrationId, porém algumas
+          // telas ainda exibem/buscam pelo telefone. Portanto, quando o cadastro principal
+          // muda de número, todos os registros desse mesmo pedido acompanham a alteração.
+          // Isso não muda status, respostas, documentos nem o titular do pedido.
+          const registrationRows = await db.execute(sql`
+            SELECT id FROM accessCodePhones
+            WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}
+          `);
+          const registrationIds = (registrationRows[0] as unknown as Array<{ id: number }>)
+            .map(row => Number(row.id))
+            .filter(id => Number.isFinite(id) && id > 0);
+
           const propagationQueries = [
             sql`UPDATE customerPasswordSessions SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
             sql`UPDATE customerPasswords SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
             sql`UPDATE customerLoginHistory SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
-            // A planilha e empréstimos usam CPF como prioridade e telefone como fallback;
-            // mantém o telefone sincronizado quando existir o mesmo cadastro.
+            sql`UPDATE customerPins SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
             sql`UPDATE spreadsheetClients SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
             sql`UPDATE loanClients SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE accessCodes SET accessedByPhone = ${newPhone} WHERE REGEXP_REPLACE(accessedByPhone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE accessCodePhones SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
           ];
           for (const query of propagationQueries) {
             try {
               await db.execute(query);
             } catch (error: any) {
-              // Tabelas antigas ou restrições secundárias não anulam o salvamento do cadastro principal.
               console.warn('[customers.update] sincronização de telefone não aplicada:', error?.message);
+            }
+          }
+
+          if (registrationIds.length) {
+            const registrationList = sql.join(registrationIds.map(registrationId => sql`${registrationId}`), sql`, `);
+            const orderQueries = [
+              sql`UPDATE orderStatusHistory SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE orderFiles SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE orderLoginData SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE scheduleAppointments SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE docRequests SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE uploadSessions SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE hiddenSubOrders SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+            ];
+            for (const query of orderQueries) {
+              try {
+                await db.execute(query);
+              } catch (error: any) {
+                console.warn('[customers.update] sincronização do pedido não aplicada:', error?.message);
+              }
             }
           }
         }
@@ -4707,11 +4736,29 @@ export const appRouter = router({
         const total = Number((orderRows[0] as unknown as Array<{ total: number }>)[0]?.total || 0);
         if (!total) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pedido não encontrado' });
 
+        const sourcePhoneRows = await db.execute(sql`SELECT phone FROM accessCodePhones WHERE id = ${input.registrationId} LIMIT 1`);
+        const sourcePhone = String((sourcePhoneRows[0] as unknown as Array<{ phone?: string }>)[0]?.phone || '').replace(/\D/g, '');
         const targetPhone = String(target.phone).replace(/\D/g, '');
         await db.execute(sql`UPDATE accessCodePhones SET phone = ${targetPhone} WHERE id = ${input.registrationId}`);
-        await db.execute(sql`UPDATE orderStatusHistory SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`);
-        await db.execute(sql`UPDATE orderLoginData SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`);
-        await db.execute(sql`UPDATE orderFiles SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`);
+        // Todas estas tabelas compartilham o registrationId do pedido. A troca corrige
+        // somente o telefone de exibição/acesso, mantendo status, arquivos e histórico.
+        const orderPhoneQueries = [
+          sql`UPDATE orderStatusHistory SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`,
+          sql`UPDATE orderLoginData SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`,
+          sql`UPDATE orderFiles SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`,
+          sql`UPDATE scheduleAppointments SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`,
+          sql`UPDATE docRequests SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`,
+          sql`UPDATE uploadSessions SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`,
+          sql`UPDATE hiddenSubOrders SET customerPhone = ${targetPhone} WHERE registrationId = ${input.registrationId}`,
+          ...(sourcePhone ? [sql`UPDATE customerPins SET phone = ${targetPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${sourcePhone}`] : []),
+        ];
+        for (const query of orderPhoneQueries) {
+          try {
+            await db.execute(query);
+          } catch (error: any) {
+            console.warn('[orderStatus.reassignCustomer] sincronização auxiliar não aplicada:', error?.message);
+          }
+        }
 
         return {
           success: true,
