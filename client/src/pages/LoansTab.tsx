@@ -532,6 +532,7 @@ export function LoansTab({ token }: LoansTabProps) {
 
   const requestMutation = trpc.loans.requestLoan.useMutation({
     onSuccess: () => {
+      toast.success("Solicitação enviada! Aguarde a análise.");
       setSubmitted(true); setRequestOpen(false); setRequestAmount(""); setRequestNotes(""); setSimEnabled(false); refetch();
     },
     onError: (e) => toast.error(e.message || "Erro ao solicitar empréstimo"),
@@ -559,6 +560,14 @@ export function LoansTab({ token }: LoansTabProps) {
   const handleRequest = () => {
     const v = parseFloat(requestAmount);
     if (!v || v <= 0) { toast.error("Informe um valor válido"); return; }
+    if (v > Number(client?.creditLimit || 0)) { toast.error("O valor solicitado excede o seu limite disponível."); return; }
+    const pixComplete = Boolean(client?.client_pix_key && client?.client_pix_name && (client as any)?.client_pix_bank);
+    if (!pixComplete) {
+      toast.error("Complete sua chave PIX para recebimento antes de solicitar.");
+      setRequestOpen(false);
+      setEditingPix(true);
+      return;
+    }
     requestMutation.mutate({ token, amount: v, paymentType, workDays, notes: requestNotes });
   };
 
@@ -881,7 +890,7 @@ export function LoansTab({ token }: LoansTabProps) {
             const isFirstHistory = isHistoryLoan && !visibleLoans.slice(0, index).some((item: any) => ["pago", "cancelado"].includes(item.status));
             const isFirstCurrent = index === 0 && !isHistoryLoan;
             const isExpanded = expandedLoan === loan.id;
-            const showSendProof = ["aprovado", "aguardando_pagamento"].includes(loan.status) && !!loan.pixSentAt;
+            const showSendProof = !["pago", "cancelado", "reprovado"].includes(loan.status) && !!loan.pixSentAt;
             const paidCount = parseInt(loan.paidInstallments || 0);
             const totalCount = parseInt(loan.totalInstallments || 1);
             const totalAmt = parseFloat(loan.totalAmount || 0);
@@ -1221,8 +1230,8 @@ export function LoansTab({ token }: LoansTabProps) {
 
       {/* Dialog: Comprovante */}
       <Dialog open={!!uploadInstallmentId} onOpenChange={(o) => { if (!o) { setUploadInstallmentId(null); setUploadFile(null); } }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
+        <DialogContent className="max-w-sm max-h-[calc(100dvh-1rem)] overflow-y-auto p-0 gap-0">
+          <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-violet-500/20 flex items-center justify-center">
                 <Upload className="w-4 h-4 text-violet-400" />
@@ -1230,7 +1239,7 @@ export function LoansTab({ token }: LoansTabProps) {
               Enviar Comprovante
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 px-5 pb-5">
             <p className="text-sm text-muted-foreground">Envie a foto ou arquivo do comprovante de pagamento.</p>
             <div className="border-2 border-dashed border-border/50 rounded-2xl p-8 text-center cursor-pointer hover:border-violet-500/50 hover:bg-violet-500/5 transition-all"
               onClick={() => fileRef.current?.click()}>
@@ -1256,9 +1265,9 @@ export function LoansTab({ token }: LoansTabProps) {
             <input ref={fileRef} type="file" className="hidden" accept="image/*,application/pdf"
               onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setUploadInstallmentId(null); setUploadFile(null); }}>Cancelar</Button>
-            <Button onClick={handleSendProof} disabled={!uploadFile || proofMutation.isPending} className="bg-violet-600 hover:bg-violet-700">
+          <DialogFooter className="sticky bottom-0 z-30 flex-row gap-2 border-t border-violet-500/25 bg-[#0b0a16]/98 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+5rem)] sm:pb-3 backdrop-blur-md">
+            <Button variant="outline" onClick={() => { setUploadInstallmentId(null); setUploadFile(null); }} className="h-12 flex-1">Cancelar</Button>
+            <Button onClick={handleSendProof} disabled={!uploadFile || proofMutation.isPending} className="h-12 flex-1 bg-violet-600 hover:bg-violet-700">
               {proofMutation.isPending ? "Enviando..." : <><Send className="w-4 h-4 mr-1" /> Enviar</>}
             </Button>
           </DialogFooter>

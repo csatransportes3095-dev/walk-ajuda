@@ -1535,7 +1535,15 @@ export const loanRouter = router({
       }
     }
 
-    const client = clients[0];
+    const storedClient = clients[0];
+    // Mantém a compatibilidade dos clientes antigos que já possuíam chave PIX
+    // antes dos campos específicos de recebimento. Não altera registros aqui.
+    const client = {
+      ...storedClient,
+      client_pix_key: String(storedClient.client_pix_key || storedClient.pixKey || '').trim(),
+      client_pix_name: String(storedClient.client_pix_name || storedClient.pixName || '').trim(),
+      client_pix_bank: String(storedClient.client_pix_bank || '').trim(),
+    };
     try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
       console.warn('[loans.getClientLoanInfo] sincronização unificada não aplicada:', error?.message);
     }
@@ -1818,9 +1826,13 @@ export const loanRouter = router({
       throw new TRPCError({ code: "BAD_REQUEST", message: `Valor solicitado excede seu limite de R$ ${parseFloat(client.creditLimit).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` });
     }
 
-    // Valida se o cliente tem chave PIX cadastrada
-    if (!client.client_pix_key || !client.client_pix_name || !client.client_pix_bank) {
-      throw new TRPCError({ code: "BAD_REQUEST", message: "Você precisa cadastrar sua chave PIX completa (chave, nome do titular e banco) antes de solicitar um empréstimo." });
+    // Aceita os dados PIX já cadastrados nos campos antigos ou atuais, mas mantém
+    // a exigência de chave, titular e banco para que a liberação seja segura.
+    const pixKey = String(client.client_pix_key || client.pixKey || '').trim();
+    const pixName = String(client.client_pix_name || client.pixName || '').trim();
+    const pixBank = String(client.client_pix_bank || '').trim();
+    if (!pixKey || !pixName || !pixBank) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Complete sua chave PIX para recebimento (chave, nome do titular e banco) antes de solicitar o empréstimo." });
     }
 
     // Valida se o tipo de pagamento está liberado para este cliente
