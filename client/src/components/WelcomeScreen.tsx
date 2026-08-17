@@ -517,9 +517,9 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
         aria-label="Abrir Atendimento Online 24 horas"
         style={{
           width: "100%", background: `linear-gradient(135deg, ${supportColor}f4 0%, ${supportColor}a0 56%, ${supportColor}72 100%)`,
-          border: `1px solid ${supportColor}68`, borderRadius: 22,
-          boxShadow: `0 5px 26px ${supportColor}42, inset 0 1px 0 rgba(255,255,255,0.16)`,
-          padding: "17px 18px", cursor: "pointer", display: "flex", alignItems: "center", gap: 15,
+          border: `1px solid ${supportColor}78`, borderRadius: "34px 22px 22px 34px",
+          boxShadow: `0 7px 30px ${supportColor}52, inset 0 1px 0 rgba(255,255,255,0.2)`,
+          padding: "10px 18px 10px 9px", cursor: "pointer", display: "flex", alignItems: "center", gap: 13,
           fontFamily: "'DM Sans','Inter',-apple-system,sans-serif", position: "relative", overflow: "hidden", textAlign: "left",
         }}
       >
@@ -546,21 +546,21 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
           }
         `}</style>
 
-        {/* Robô de atendimento: chama atenção sem cobrir o texto ou mudar o clique do card */}
-        <div style={{ flexShrink: 0, width: 84, height: 82, position: "relative", display: "flex", justifyContent: "center", alignItems: "flex-end" }} aria-hidden="true">
-          <span style={{ position: "absolute", top: -1, right: -5, zIndex: 3, borderRadius: 8, background: "#fff", color: supportColor, padding: "3px 6px", fontSize: 8, lineHeight: 1, fontWeight: 900, letterSpacing: 0.2, animation: "onlineSupportBubble 1.7s ease-in-out infinite", boxShadow: "0 3px 10px rgba(0,0,0,0.18)" }}>OI!</span>
-          <span style={{ position: "absolute", width: 57, height: 57, bottom: 6, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.58)", animation: "onlineSupportSignal 1.8s ease-out infinite" }} />
+        {/* O robô é a própria entrada visual do atendimento, não apenas um ícone decorativo. */}
+        <div style={{ flexShrink: 0, width: 102, height: 96, position: "relative", display: "flex", justifyContent: "center", alignItems: "flex-end", borderRadius: 26, background: "linear-gradient(145deg, rgba(15,7,0,0.28), rgba(255,255,255,0.1))", border: "1px solid rgba(255,255,255,0.26)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.2), 0 5px 16px rgba(0,0,0,0.18)" }} aria-hidden="true">
+          <span style={{ position: "absolute", top: 5, right: 4, zIndex: 4, borderRadius: 10, background: "#fff", color: supportColor, padding: "4px 7px", fontSize: 9, lineHeight: 1, fontWeight: 900, letterSpacing: 0.3, animation: "onlineSupportBubble 1.7s ease-in-out infinite", boxShadow: "0 3px 10px rgba(0,0,0,0.18)" }}>PRECISA DE AJUDA?</span>
+          <span style={{ position: "absolute", width: 75, height: 75, bottom: 7, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.62)", animation: "onlineSupportSignal 1.8s ease-out infinite" }} />
           <div style={{ position: "relative", zIndex: 2, animation: "onlineSupportRobotFloat 2.2s ease-in-out infinite, onlineSupportRobotWiggle 2.2s ease-in-out infinite", display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <div style={{ width: 2, height: 8, background: "rgba(255,255,255,0.82)", borderRadius: 2, marginBottom: 1 }} />
-            <div style={{ width: 9, height: 9, borderRadius: "50%", background: "#fff", animation: "onlineSupportAntenna 1.25s ease-in-out infinite", marginBottom: 3, boxShadow: "0 0 11px rgba(255,255,255,0.95)" }} />
-            <div style={{ width: 52, height: 40, borderRadius: 13, background: "linear-gradient(145deg, rgba(255,255,255,0.37), rgba(255,255,255,0.16))", border: "2px solid rgba(255,255,255,0.7)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 12px rgba(0,0,0,0.15)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", boxShadow: "0 0 8px rgba(255,255,255,0.7)", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite" }} />
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", boxShadow: "0 0 8px rgba(255,255,255,0.7)", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite 0.15s" }} />
+            <div style={{ width: 2, height: 8, background: "rgba(255,255,255,0.9)", borderRadius: 2, marginBottom: 1 }} />
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", animation: "onlineSupportAntenna 1.25s ease-in-out infinite", marginBottom: 3, boxShadow: "0 0 13px rgba(255,255,255,0.95)" }} />
+            <div style={{ width: 68, height: 50, borderRadius: 18, background: "linear-gradient(145deg, rgba(255,255,255,0.52), rgba(255,255,255,0.18))", border: "2px solid rgba(255,255,255,0.82)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.52), 0 5px 15px rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", gap: 13 }}>
+              <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#fff", boxShadow: "0 0 10px rgba(255,255,255,0.9)", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite" }} />
+              <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#fff", boxShadow: "0 0 10px rgba(255,255,255,0.9)", animation: "onlineSupportEyeBlink 3.2s ease-in-out infinite 0.15s" }} />
             </div>
-            <div style={{ position: "relative", width: 46, height: 30, borderRadius: 10, background: "linear-gradient(145deg, rgba(255,255,255,0.29), rgba(255,255,255,0.12))", border: "2px solid rgba(255,255,255,0.52)", marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ position: "absolute", left: -10, top: 3, width: 13, height: 8, borderRadius: 5, background: "rgba(255,255,255,0.62)", transformOrigin: "right center" }} />
-              <span style={{ position: "absolute", right: -10, top: 3, width: 13, height: 8, borderRadius: 5, background: "rgba(255,255,255,0.82)", transformOrigin: "left center", animation: "onlineSupportWave 1.25s ease-in-out infinite" }} />
-              <div style={{ width: 19, height: 8, borderRadius: 4, background: "rgba(255,255,255,0.68)", boxShadow: "0 0 8px rgba(255,255,255,0.45)" }} />
+            <div style={{ position: "relative", width: 60, height: 34, borderRadius: 12, background: "linear-gradient(145deg, rgba(255,255,255,0.38), rgba(255,255,255,0.14))", border: "2px solid rgba(255,255,255,0.62)", marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ position: "absolute", left: -15, top: 3, width: 18, height: 10, borderRadius: 6, background: "rgba(255,255,255,0.68)", transformOrigin: "right center" }} />
+              <span style={{ position: "absolute", right: -15, top: 3, width: 18, height: 10, borderRadius: 6, background: "#fff", boxShadow: "0 0 8px rgba(255,255,255,0.56)", transformOrigin: "left center", animation: "onlineSupportWave 1.25s ease-in-out infinite" }} />
+              <div style={{ width: 25, height: 9, borderRadius: 5, background: "rgba(255,255,255,0.72)", boxShadow: "0 0 9px rgba(255,255,255,0.5)" }} />
             </div>
           </div>
         </div>
