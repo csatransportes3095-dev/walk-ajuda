@@ -1055,8 +1055,8 @@ export function LoansTab({ token }: LoansTabProps) {
 
       {/* Dialog: Solicitar */}
       <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
+        <DialogContent className="max-w-sm max-h-[calc(100dvh-1rem)] overflow-y-auto p-0 gap-0">
+          <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-violet-500/20 flex items-center justify-center">
                 <Banknote className="w-4 h-4 text-violet-400" />
@@ -1064,7 +1064,7 @@ export function LoansTab({ token }: LoansTabProps) {
               Solicitar Empréstimo
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 px-5 pb-5">
             <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/30 rounded-xl px-3 py-2">
               <Clock className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
               <p className="text-xs text-blue-300">Após enviar, sua solicitação passará por análise. Você será informado se aprovada.</p>
@@ -1207,11 +1207,11 @@ export function LoansTab({ token }: LoansTabProps) {
               <Textarea placeholder="Motivo do empréstimo..." value={requestNotes} onChange={(e) => setRequestNotes(e.target.value)} rows={2} />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestOpen(false)}>Cancelar</Button>
+          <DialogFooter className="sticky bottom-0 z-30 flex-row gap-2 border-t border-violet-500/25 bg-[#0b0a16]/98 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+5rem)] sm:pb-3 backdrop-blur-md">
+            <Button variant="outline" onClick={() => setRequestOpen(false)} className="h-12 flex-1">Cancelar</Button>
             {paymentType !== 'parcelado' && (
               <Button onClick={handleRequest} disabled={!requestAmount || parseFloat(requestAmount) <= 0 || requestMutation.isPending}
-                className="bg-violet-600 hover:bg-violet-700">
+                className="h-12 flex-1 bg-violet-600 hover:bg-violet-700">
                 {requestMutation.isPending ? "Enviando..." : <><Send className="w-4 h-4 mr-1" /> Solicitar</>}
               </Button>
             )}
