@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { toast } from "sonner";
-import { CheckCircle2, AlertCircle, ChevronRight, Zap, RefreshCw } from "lucide-react";
+import { CheckCircle2, AlertCircle, ChevronRight, Zap, RefreshCw, Camera, ImagePlus, X } from "lucide-react";
 
 // ── Máscaras e validações ──────────────────────────────────────────────────
 function maskCpf(value: string) {
@@ -204,6 +204,11 @@ export default function PreCadastro() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [duplicateRedirect, setDuplicateRedirect] = useState<string | null>(null);
+  const [profilePhoto, setProfilePhoto] = useState<{ data: string; mimeType: string; preview: string } | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [isPhotoUploading, setIsPhotoUploading] = useState(false);
+  const galleryPhotoInputRef = useRef<HTMLInputElement>(null);
+  const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
 
   // Verificar duplicado quando CPF ou telefone estiver completo
   const cpfClean = normalizeCpf(values.cpf ?? "");
@@ -300,10 +305,34 @@ export default function PreCadastro() {
     return Object.keys(errs).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  function handlePhotoSelection(file: File | undefined) {
+    if (!file) return;
+    const acceptedTypes = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+    if (!acceptedTypes.includes(file.type.toLowerCase())) {
+      setPhotoError("Escolha uma imagem JPG, PNG, WEBP ou HEIC.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError("A foto deve ter no máximo 5 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => setPhotoError("Não foi possível ler esta foto. Tente outra imagem.");
+    reader.onload = () => {
+      setProfilePhoto({ data: String(reader.result || ""), mimeType: file.type.toLowerCase(), preview: URL.createObjectURL(file) });
+      setPhotoError(null);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!validate()) return;
     if (!questions) return;
+    if (!profilePhoto) {
+      setPhotoError("A foto de perfil é obrigatória.");
+      return;
+    }
 
     // Montar array de respostas dinâmicas com todas as perguntas visíveis (exceto informativos)
     const answers = questions
@@ -314,10 +343,23 @@ export default function PreCadastro() {
         answer: (values[q.fieldKey] ?? "").trim(),
       }));
 
-    submitMutation.mutate({
-      answers,
-      userAgent: navigator.userAgent,
-    });
+    try {
+      setIsPhotoUploading(true);
+      const response = await fetch("/api/upload/pre-registration-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: profilePhoto.data, mimeType: profilePhoto.mimeType }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.photoUrl) {
+        throw new Error(result?.error || "Não foi possível enviar a foto de perfil.");
+      }
+      setIsPhotoUploading(false);
+      submitMutation.mutate({ answers, profilePhotoUrl: result.photoUrl, userAgent: navigator.userAgent });
+    } catch (error: any) {
+      setIsPhotoUploading(false);
+      setPhotoError(error?.message || "Não foi possível enviar a foto de perfil.");
+    }
   }
 
   // ── Tela de sucesso ──
@@ -525,6 +567,42 @@ export default function PreCadastro() {
           );
         })}
 
+        <div className="bg-black/40 backdrop-blur-sm border border-white/10 rounded-2xl p-5 shadow-lg">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <p className="text-gray-200 text-sm font-semibold">Foto de perfil <span className="text-purple-400">*</span></p>
+              <p className="text-xs text-gray-500 mt-1">Envie uma foto nítida do seu rosto. Obrigatória para continuar.</p>
+            </div>
+            {profilePhoto && (
+              <button type="button" onClick={() => { URL.revokeObjectURL(profilePhoto.preview); setProfilePhoto(null); setPhotoError(null); }} className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20" title="Remover foto">
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <input ref={cameraPhotoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="user" className="hidden" onChange={e => handlePhotoSelection(e.target.files?.[0])} />
+          <input ref={galleryPhotoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="hidden" onChange={e => handlePhotoSelection(e.target.files?.[0])} />
+          {profilePhoto ? (
+            <div className="flex items-center gap-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <img src={profilePhoto.preview} alt="Prévia da foto de perfil" className="w-20 h-20 rounded-full object-cover border-2 border-emerald-400/70 bg-black/30" onError={e => { e.currentTarget.style.display = "none"; }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-emerald-300">Foto selecionada</p>
+                <p className="text-xs text-gray-400 mt-1">Será enviada junto com o pré-cadastro.</p>
+                <button type="button" onClick={() => galleryPhotoInputRef.current?.click()} className="mt-2 text-xs font-semibold text-purple-300 hover:text-purple-200">Trocar foto</button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button type="button" onClick={() => cameraPhotoInputRef.current?.click()} className="flex items-center justify-center gap-2 min-h-14 rounded-xl border border-purple-500/40 bg-purple-500/10 text-purple-200 font-semibold text-sm hover:bg-purple-500/20 active:scale-[0.98] transition-all">
+                <Camera size={18} /> Tirar foto
+              </button>
+              <button type="button" onClick={() => galleryPhotoInputRef.current?.click()} className="flex items-center justify-center gap-2 min-h-14 rounded-xl border border-white/15 bg-white/5 text-gray-200 font-semibold text-sm hover:bg-white/10 active:scale-[0.98] transition-all">
+                <ImagePlus size={18} /> Escolher da galeria
+              </button>
+            </div>
+          )}
+          {photoError && <p className="mt-3 text-xs text-red-400 flex items-center gap-1"><AlertCircle className="w-3 h-3 flex-shrink-0" /> {photoError}</p>}
+        </div>
+
         {errors._global && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm flex items-center gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" /> {errors._global}
@@ -533,13 +611,13 @@ export default function PreCadastro() {
 
         <button
           type="submit"
-          disabled={submitMutation.isPending}
+          disabled={submitMutation.isPending || isPhotoUploading}
           className="w-full h-14 text-base font-bold bg-gradient-to-r from-purple-600 to-violet-700 hover:from-purple-500 hover:to-violet-600 text-white shadow-xl shadow-purple-500/30 rounded-2xl border-0 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {submitMutation.isPending ? (
+          {submitMutation.isPending || isPhotoUploading ? (
             <>
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Enviando...
+              {isPhotoUploading ? "Enviando foto..." : "Enviando..."}
             </>
           ) : (
             <>

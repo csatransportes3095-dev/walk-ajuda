@@ -149,6 +149,15 @@ export default function AdminPreRegistrations() {
     } catch (e: any) { toast.error("Erro ao exportar: " + e.message); }
   };
 
+  const copyPhotoUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("URL da foto copiada!");
+    } catch {
+      toast.error("Não foi possível copiar a URL.");
+    }
+  };
+
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -220,14 +229,23 @@ export default function AdminPreRegistrations() {
               <div key={row.id} className="bg-[#12122a] border border-white/10 rounded-xl p-4 hover:border-purple-500/30 transition-colors">
                 {/* Linha 1: nome + status */}
                 <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-gray-500 font-mono">#{row.id}</span>
-                      <h3 className="font-semibold text-white text-sm truncate">{row.fullName}</h3>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      {row.email && <span className="text-xs text-gray-400 flex items-center gap-1"><Mail size={10} />{row.email}</span>}
-                      {row.cpf && <span className="text-xs text-gray-400 flex items-center gap-1"><Hash size={10} />{row.cpf}</span>}
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    {row.profilePhotoUrl ? (
+                      <a href={row.profilePhotoUrl} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Abrir foto de perfil">
+                        <img src={row.profilePhotoUrl} alt={`Foto de ${row.fullName || "perfil"}`} className="w-11 h-11 rounded-full object-cover border-2 border-purple-400/60 bg-black/30" />
+                      </a>
+                    ) : (
+                      <div className="w-11 h-11 rounded-full border border-dashed border-white/15 bg-white/5 flex items-center justify-center shrink-0 text-gray-600" title="Foto não enviada"><User size={18} /></div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-gray-500 font-mono">#{row.id}</span>
+                        <h3 className="font-semibold text-white text-sm truncate">{row.fullName}</h3>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 flex-wrap">
+                        {row.email && <span className="text-xs text-gray-400 flex items-center gap-1"><Mail size={10} />{row.email}</span>}
+                        {row.cpf && <span className="text-xs text-gray-400 flex items-center gap-1"><Hash size={10} />{row.cpf}</span>}
+                      </div>
                     </div>
                   </div>
                   <StatusBadge status={row.status} />
@@ -329,9 +347,18 @@ export default function AdminPreRegistrations() {
             {/* Cabeçalho: nome grande + número + data */}
             <div className="px-6 pt-6 pb-4 border-b border-white/10 relative">
               <button onClick={() => setViewModal(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">×</button>
-              <h2 className="text-2xl font-black text-white uppercase leading-tight pr-8">{viewModal.fullName}</h2>
-              <p className="text-xs text-gray-400 mt-1">#{viewModal.id} · {fmtDate(viewModal.createdAt)}</p>
-              <div className="mt-3"><StatusBadge status={viewModal.status} /></div>
+              <div className="flex items-start gap-4 pr-8">
+                {viewModal.profilePhotoUrl ? (
+                  <a href={viewModal.profilePhotoUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                    <img src={viewModal.profilePhotoUrl} alt={`Foto de ${viewModal.fullName || "perfil"}`} className="w-20 h-20 rounded-full object-cover border-2 border-purple-400/70 bg-black/30" />
+                  </a>
+                ) : <div className="w-20 h-20 rounded-full border border-dashed border-white/15 bg-white/5 flex items-center justify-center shrink-0 text-gray-600"><User size={28} /></div>}
+                <div className="min-w-0">
+                  <h2 className="text-2xl font-black text-white uppercase leading-tight">{viewModal.fullName}</h2>
+                  <p className="text-xs text-gray-400 mt-1">#{viewModal.id} · {fmtDate(viewModal.createdAt)}</p>
+                  <div className="mt-3"><StatusBadge status={viewModal.status} /></div>
+                </div>
+              </div>
             </div>
             {/* Todas as respostas do formulário — APENAS as criadas pelo admin, na ordem, com subperguntas junto ao pai */}
             <div className="px-5 pb-4">
@@ -403,6 +430,12 @@ export default function AdminPreRegistrations() {
               })() : <p className="text-xs text-gray-500 py-3">Nenhuma resposta registrada.</p>}
             </div>
             <div className="px-5 pb-1 divide-y divide-white/5">
+              <InfoRow icon={<Camera size={14} />} label="Foto de perfil" value={viewModal.profilePhotoUrl ? (
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <a href={viewModal.profilePhotoUrl} target="_blank" rel="noopener noreferrer" className="text-purple-300 hover:text-purple-200 underline underline-offset-2">Abrir foto</a>
+                  <button type="button" onClick={() => copyPhotoUrl(viewModal.profilePhotoUrl)} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:bg-purple-500/20 text-xs"><Copy size={12} /> Copiar URL</button>
+                </span>
+              ) : "Foto não enviada"} />
               {viewModal.ipAddress && <InfoRow icon={<span className="text-xs">IP</span>} label="IP" value={viewModal.ipAddress} />}
               {viewModal.userAgent && <InfoRow icon={<span className="text-xs">UA</span>} label="Dispositivo" value={viewModal.userAgent} />}
             </div>

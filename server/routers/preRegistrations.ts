@@ -4,6 +4,33 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 import { sql as drizzleSql } from "drizzle-orm";
 import { formatCPF, isValidCPF, normalizeCpf } from "@shared/cpf";
+import { ENV } from "../_core/env";
+
+let preRegistrationPhotoColumnReady = false;
+
+async function ensurePreRegistrationPhotoColumn(db: any) {
+  if (preRegistrationPhotoColumnReady) return;
+  try {
+    await db.execute(drizzleSql.raw("ALTER TABLE preRegistrations ADD COLUMN IF NOT EXISTS profilePhotoUrl VARCHAR(2048) NULL"));
+  } catch {
+    try { await db.execute(drizzleSql.raw("ALTER TABLE preRegistrations ADD COLUMN profilePhotoUrl VARCHAR(2048) NULL")); } catch { /* coluna já existe */ }
+  }
+  preRegistrationPhotoColumnReady = true;
+}
+
+function isValidPreRegistrationPhotoUrl(value: string) {
+  try {
+    const photoUrl = new URL(value);
+    const publicBase = new URL(ENV.r2PublicUrl.trim());
+    const basePath = publicBase.pathname.replace(/\/+$/, "");
+    const expectedPrefix = `${basePath}/pre-cadastros/perfis/`.replace(/\/\/+/, "/");
+    return photoUrl.protocol === publicBase.protocol
+      && photoUrl.host === publicBase.host
+      && photoUrl.pathname.startsWith(expectedPrefix);
+  } catch {
+    return false;
+  }
+}
 
 async function qRows(db: any, query: any): Promise<any[]> {
   const result = await db.execute(query);
@@ -297,6 +324,7 @@ export const preRegistrationsRouter = router({
         fieldKey: z.string(),
         answer: z.string(),
       })),
+      profilePhotoUrl: z.string().url("Foto de perfil inválida"),
       userAgent: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
@@ -305,14 +333,18 @@ export const preRegistrationsRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'CPF inválido' });
       }
       const db = await getDb() as any;
+      await ensurePreRegistrationPhotoColumn(db);
+      if (!isValidPreRegistrationPhotoUrl(input.profilePhotoUrl)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Envie uma foto de perfil válida." });
+      }
       const now = Date.now();
 
       // Criar registro base na tabela preRegistrations
       const result = await db.execute(drizzleSql`
         INSERT INTO preRegistrations
-          (fullName, email, phone, cpf, fakAccountsCount, deviceType, acceptsGlasses, acceptsScheduledPhoto, status, userAgent, createdAt, updatedAt)
+          (fullName, email, phone, cpf, fakAccountsCount, deviceType, acceptsGlasses, acceptsScheduledPhoto, profilePhotoUrl, status, userAgent, createdAt, updatedAt)
         VALUES
-          ('', '', NULL, '', 0, 'android', 0, 0, 'pendente', ${input.userAgent || null}, ${now}, ${now})
+          ('', '', NULL, '', 0, 'android', 0, 0, ${input.profilePhotoUrl}, 'pendente', ${input.userAgent || null}, ${now}, ${now})
       `);
 
       // Pegar o ID inserido
@@ -363,6 +395,7 @@ export const preRegistrationsRouter = router({
           acceptsScheduledPhoto=${photo ? 1 : 0},
           referralName=${referralName},
           referralPhone=${referralPhone},
+          profilePhotoUrl=${input.profilePhotoUrl},
           updatedAt=${now}
         WHERE id=${preRegistrationId}
       `);

@@ -2348,6 +2348,63 @@ export function registerUploadRoute(app: Express) {
     }
   });
 
+  // ─── FOTO DE PERFIL DO PRÉ-CADASTRO (público, restrito) ───────────────────
+  // O pré-cadastro ainda não possui sessão de cliente. Por isso esta rota aceita
+  // somente uma imagem de perfil pequena, valida sua assinatura e limita abusos
+  // por IP. A URL retornada só pode ser persistida pelo submitDynamic.
+  const preRegistrationPhotoRate = new Map<string, { count: number; resetAt: number }>();
+  const PRE_REGISTRATION_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+  const PRE_REGISTRATION_PHOTO_WINDOW_MS = 15 * 60 * 1000;
+  const PRE_REGISTRATION_PHOTO_MAX_UPLOADS = 6;
+
+  function detectPreRegistrationPhoto(buffer: Buffer, declaredMime: string) {
+    const isJpeg = buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    const isPng = buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const isWebp = buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+    const heicBrand = buffer.length >= 16 ? buffer.subarray(4, 16).toString("ascii").toLowerCase() : "";
+    const isHeic = /ftyp(?:heic|heix|hevc|hevx|mif1|msf1)/.test(heicBrand) && ["image/heic", "image/heif"].includes(String(declaredMime || "").toLowerCase());
+
+    if (isJpeg) return { ext: "jpg", contentType: "image/jpeg" };
+    if (isPng) return { ext: "png", contentType: "image/png" };
+    if (isWebp) return { ext: "webp", contentType: "image/webp" };
+    if (isHeic) return { ext: "heic", contentType: String(declaredMime).toLowerCase() };
+    return null;
+  }
+
+  app.post("/api/upload/pre-registration-photo", jsonParserBig, async (req: Request, res: Response) => {
+    try {
+      const clientIp = String(req.ip || req.socket.remoteAddress || "unknown").slice(0, 128);
+      const now = Date.now();
+      const current = preRegistrationPhotoRate.get(clientIp);
+      const rate = !current || current.resetAt <= now ? { count: 0, resetAt: now + PRE_REGISTRATION_PHOTO_WINDOW_MS } : current;
+      if (rate.count >= PRE_REGISTRATION_PHOTO_MAX_UPLOADS) {
+        res.status(429).json({ error: "Muitas tentativas. Aguarde alguns minutos para enviar outra foto." });
+        return;
+      }
+
+      const { data, mimeType } = req.body || {};
+      if (!data || typeof data !== "string") { res.status(400).json({ error: "Selecione uma foto de perfil." }); return; }
+      const base64 = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
+      if (!/^[A-Za-z0-9+/=\s]+$/.test(base64)) { res.status(400).json({ error: "Arquivo de foto inválido." }); return; }
+      const buffer = Buffer.from(base64, "base64");
+      if (buffer.length === 0) { res.status(400).json({ error: "Arquivo de foto vazio." }); return; }
+      if (buffer.length > PRE_REGISTRATION_PHOTO_MAX_BYTES) { res.status(400).json({ error: "A foto deve ter no máximo 5 MB." }); return; }
+
+      const detected = detectPreRegistrationPhoto(buffer, String(mimeType || ""));
+      if (!detected) { res.status(400).json({ error: "Envie uma foto JPEG, PNG, WEBP ou HEIC válida." }); return; }
+
+      rate.count += 1;
+      preRegistrationPhotoRate.set(clientIp, rate);
+      const randomSuffix = Math.random().toString(36).slice(2, 12);
+      const fileKey = `pre-cadastros/perfis/${Date.now()}-${randomSuffix}.${detected.ext}`;
+      const { url } = await r2PutObject(fileKey, buffer, detected.contentType);
+      res.json({ success: true, photoUrl: url, fileKey, mimeType: detected.contentType });
+    } catch (err: any) {
+      console.error("[UploadRoute] pre-registration-photo error:", err?.message || err);
+      res.status(500).json({ error: "Não foi possível enviar a foto. Tente novamente." });
+    }
+  });
+
   // ─── ORDER UPLOAD via JSON base64 (cliente autenticado) ─────────────────────
   // Usado pela vitrine e pelo Bot Carminha após o login por senha do cliente.
   // A identidade vem exclusivamente da sessão; o telefone do corpo é apenas
