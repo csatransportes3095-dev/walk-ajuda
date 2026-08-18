@@ -2752,6 +2752,27 @@ export async function completeAppointment(id: number): Promise<void> {
   await db.update(scheduleAppointments).set({ status: 'completed', slotId: null, slotDate: null, slotTime: null }).where(eq(scheduleAppointments.id, id));
 }
 
+/**
+ * Encerra apenas agendamentos ainda confirmados para o pedido/subpedido informado.
+ * É idempotente: agendamentos cancelados, pendentes ou já concluídos são preservados.
+ */
+export async function completeConfirmedAppointmentsForOrder(registrationId: number, subOrderIndex: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const appointments = await db.select()
+    .from(scheduleAppointments)
+    .where(and(
+      eq(scheduleAppointments.registrationId, registrationId),
+      eq(scheduleAppointments.subOrderIndex, subOrderIndex),
+      eq(scheduleAppointments.status, 'confirmed'),
+    ));
+
+  for (const appointment of appointments) {
+    await completeAppointment(appointment.id);
+  }
+  return appointments.length;
+}
+
 // CONFIRMAÇÃO ATÔMICA: reserva o slot de forma exclusiva.
 // Usa UPDATE condicional (bookedCount < capacity) para garantir que dois clientes
 // não peguem o mesmo slot simultaneamente.
