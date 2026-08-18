@@ -32,4 +32,21 @@ describe("sincronização de agenda após foto em análise", () => {
     expect(source).toContain("const SCHEDULE_COMPLETION_STATUSES = ['foto_em_analise']");
     expect(source).toContain("await completeConfirmedAppointmentsForOrder(input.registrationId, input.subOrderIndex)");
   });
+
+  it("usa o último estado de agenda antes de classificar o filtro", async () => {
+    const source = await routerSource();
+    const start = source.indexOf("// Buscar o último estado de agenda de cada pedido");
+    const block = source.slice(start, source.indexOf("// Fallback por telefone", start));
+
+    expect(block).toContain("ORDER BY id DESC");
+    expect(block).not.toContain("status != 'cancelled'");
+    expect(block).toContain("const resolvedScheduleKeys = new Set<string>()");
+    expect(block).toContain("if (sr.status === 'cancelled' || sr.status === 'completed') continue");
+  });
+
+  it("não usa fallback por telefone quando o pedido já possui agenda encerrada", async () => {
+    const source = await routerSource();
+    expect(source).toContain("!resolvedScheduleKeys.has(`${o.id}_${o.subOrderIndex}`)");
+    expect(source).toContain("fallbackStatus !== 'cancelled' && fallbackStatus !== 'completed'");
+  });
 });

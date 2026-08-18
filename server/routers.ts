@@ -3571,23 +3571,29 @@ export const appRouter = router({
         for (const r of aqRows) answeredAssignmentIds.add(Number(r.orderId));
       } catch (e) { /* ignora erro */ }
 
-      // Buscar scheduleStatus de cada pedido (pending = aguardando, confirmed = confirmado, null = sem agendamento)
+      // Buscar o último estado de agenda de cada pedido. É essencial escolher o
+      // registro mais recente ANTES de decidir se ele é ativo: caso contrário,
+      // uma confirmação antiga volta a aparecer depois de um cancelamento.
       const scheduleStatusMap = new Map<string, string>();
       const scheduleSlotMap = new Map<string, { slotDate: string | null; slotTime: string | null; confirmedAt: string | null }>();
+      const resolvedScheduleKeys = new Set<string>();
       try {
         const schedResult = await db.execute(
-          sql.raw(`SELECT registrationId, subOrderIndex, status, slotDate, slotTime, confirmedAt FROM scheduleAppointments WHERE registrationId IN (${idsList}) AND status != 'cancelled' ORDER BY createdAt DESC`)
+          sql.raw(`SELECT registrationId, subOrderIndex, status, slotDate, slotTime, confirmedAt FROM scheduleAppointments WHERE registrationId IN (${idsList}) ORDER BY id DESC`)
         );
         const schedRows = (schedResult as any)[0] as any[];
-        // Pegar o status mais recente por (registrationId, subOrderIndex)
         for (const sr of (schedRows || [])) {
           const key = `${sr.registrationId}_${sr.subOrderIndex}`;
-          if (!scheduleStatusMap.has(key)) {
-            scheduleStatusMap.set(key, sr.status);
-            // confirmedAt como ISO string para fallback de ordenação
-            const confirmedAtStr = sr.confirmedAt ? new Date(sr.confirmedAt).toISOString() : null;
-            scheduleSlotMap.set(key, { slotDate: sr.slotDate ?? null, slotTime: sr.slotTime ?? null, confirmedAt: confirmedAtStr });
-          }
+          if (resolvedScheduleKeys.has(key)) continue;
+          resolvedScheduleKeys.add(key);
+
+          // Cancelado ou concluído é o último estado; não há agendamento ativo
+          // e não pode haver fallback que recupere uma confirmação antiga.
+          if (sr.status === 'cancelled' || sr.status === 'completed') continue;
+
+          scheduleStatusMap.set(key, sr.status);
+          const confirmedAtStr = sr.confirmedAt ? new Date(sr.confirmedAt).toISOString() : null;
+          scheduleSlotMap.set(key, { slotDate: sr.slotDate ?? null, slotTime: sr.slotTime ?? null, confirmedAt: confirmedAtStr });
         }
       } catch (e) { /* ignora erro */ }
 
@@ -3595,23 +3601,23 @@ export const appRouter = router({
       // Um reagendamento por telefone pertence SOMENTE ao pedido operacional mais recente
       // daquele cliente; nunca deve reaparecer em pedidos antigos ou já concluídos.
       try {
-        const ordersWithoutSchedule = finalOrders.filter((o: any) => !scheduleStatusMap.has(`${o.id}_${o.subOrderIndex}`));
+        const ordersWithoutSchedule = finalOrders.filter((o: any) => !resolvedScheduleKeys.has(`${o.id}_${o.subOrderIndex}`));
         if (ordersWithoutSchedule.length > 0) {
           const phones = [...new Set(ordersWithoutSchedule.map((o: any) => (o.customerPhone || '').replace(/\D/g, '')).filter((p: string) => p.length >= 8))];
           if (phones.length > 0) {
             const phonesStr = phones.map((p: string) => `'${p}'`).join(',');
             const fallbackResult = await db.execute(
-              sql.raw(`SELECT customerPhone, status, slotDate, slotTime, confirmedAt FROM scheduleAppointments WHERE customerPhone IN (${phonesStr}) AND status NOT IN ('cancelled','completed') ORDER BY createdAt DESC`)
+              sql.raw(`SELECT customerPhone, status, slotDate, slotTime, confirmedAt FROM scheduleAppointments WHERE customerPhone IN (${phonesStr}) ORDER BY id DESC`)
             );
             const fallbackRows = (fallbackResult as any)[0] as any[];
-            // Mapa de telefone -> agendamento operacional mais recente.
+            // Mapa de telefone -> último estado de agenda, inclusive cancelado.
             const phoneStatusMap = new Map<string, string>();
             const phoneSlotMap = new Map<string, { slotDate: string | null; slotTime: string | null; confirmedAt: string | null }>();
             for (const fr of (fallbackRows || [])) {
               const phone = (fr.customerPhone || '').replace(/\D/g, '');
               if (!phone || phoneStatusMap.has(phone)) continue;
-              const confirmedAtStr = fr.confirmedAt ? new Date(fr.confirmedAt).toISOString() : null;
               phoneStatusMap.set(phone, fr.status);
+              const confirmedAtStr = fr.confirmedAt ? new Date(fr.confirmedAt).toISOString() : null;
               phoneSlotMap.set(phone, { slotDate: fr.slotDate ?? null, slotTime: fr.slotTime ?? null, confirmedAt: confirmedAtStr });
             }
             // Somente o pedido mais recente sem vínculo direto recebe o fallback por telefone.
@@ -3624,7 +3630,7 @@ export const appRouter = router({
               const phone = (o.customerPhone || '').replace(/\D/g, '');
               if (latestFallbackKeyByPhone.get(phone) !== `${o.id}_${o.subOrderIndex}`) continue;
               const fallbackStatus = phoneStatusMap.get(phone);
-              if (fallbackStatus) {
+              if (fallbackStatus && fallbackStatus !== 'cancelled' && fallbackStatus !== 'completed') {
                 scheduleStatusMap.set(`${o.id}_${o.subOrderIndex}`, fallbackStatus);
                 const slotInfo = phoneSlotMap.get(phone);
                 if (slotInfo) scheduleSlotMap.set(`${o.id}_${o.subOrderIndex}`, slotInfo);
