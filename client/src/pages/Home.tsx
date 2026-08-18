@@ -4996,6 +4996,10 @@ export default function Home() {
             handleOptionSelection(option, null);
           }}
           onOrderComplete={(data: any) => {
+            // Defesa complementar ao Bot: pedido confirmado não pode ficar salvo como pendente.
+            localStorage.removeItem(PROGRESS_KEY);
+            localStorage.removeItem(UPLOADED_FILES_KEY);
+            setShowResumeModal(false);
             setShowColombiaBot(false);
             setSubmittedOrderData({
               cartItems: data.cartItems,

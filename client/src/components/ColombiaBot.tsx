@@ -189,6 +189,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     } catch {}
   }, []);
 
+  // Pedido aceito não pode ser tratado como rascunho ao recarregar a vitrine.
+  const clearCompletedBotProgress = useCallback(() => {
+    try {
+      localStorage.removeItem('walk_order_progress');
+      localStorage.removeItem('walk_uploaded_files');
+    } catch {}
+  }, []);
+
   // Salvar snapshot do estado atual antes de uma nova pergunta (para o botão Voltar)
   const saveSnapshot = useCallback(() => {
     setMessages(prev => {
@@ -685,6 +693,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         });
 
         if (result.success) {
+          // Limpar antes de fechar o Bot: evita que a vitrine recupere um pedido já concluído.
+          clearCompletedBotProgress();
           addMsgs({ type: "bot", id: uid(), text: "Pedido enviado com sucesso! \u2705\n\nO admin j\u00e1 recebeu e entrar\u00e1 em contato em breve." });
           onOrderComplete({
             cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: option?.price || '' }],
