@@ -1274,45 +1274,57 @@ export default function OrderTracking() {
               return (
                 <div className="bg-[#12122a] rounded-2xl border border-white/10 p-4 space-y-3">
                   <p className="text-xs text-white/40 font-semibold uppercase tracking-wider">Progresso do Pedido</p>
-                  {/* Barra de progresso visual */}
-                  <div className="relative flex items-center gap-0">
-                    {progressSteps.map((step: any, idx: number) => {
-                      const isDone = idx < currentIdx;
-                      const isCurrent = idx === currentIdx;
-                      const stepCfg = getStatusCfg(step.key);
-                      return (
-                        <React.Fragment key={step.id}>
-                          {/* Nó */}
-                          <div className="flex flex-col items-center gap-1 z-10" style={{ minWidth: 0 }}>
-                            <div
-                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                                isCurrent
-                                  ? `border-current ${stepCfg.color} ${stepCfg.bg} ring-2 ring-offset-1 ring-offset-[#12122a]`
-                                  : isDone
-                                  ? 'border-green-500 bg-green-500/20'
-                                  : 'border-white/15 bg-white/5'
-                              }`}
-                              style={isCurrent ? { outline: `2px solid ${stepCfg.pulseColor ?? 'transparent'}`, outlineOffset: '1px' } : {}}
-                            >
-                              {isDone ? (
-                                <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                              ) : isCurrent ? (
-                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: stepCfg.pulseColor ?? '#fff' }} />
-                              ) : (
-                                <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
-                              )}
+                  {/* Duas linhas sequenciais de progresso: até seis etapas configuradas pelo ADM */}
+                  {(() => {
+                    const visibleSteps = progressSteps.slice(0, 6);
+                    const rows = [visibleSteps.slice(0, 3), visibleSteps.slice(3, 6)].filter(row => row.length > 0);
+                    return (
+                      <div className="space-y-4" aria-label="Seis etapas do progresso do pedido">
+                        {rows.map((row, rowIndex) => (
+                          <div key={`progress-row-${rowIndex}`} className="relative">
+                            {rowIndex === 1 && <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-white/25">Continuação do progresso</p>}
+                            <div className="flex items-center gap-0">
+                              {row.map((step: any, localIdx: number) => {
+                                const idx = rowIndex * 3 + localIdx;
+                                const isDone = idx < currentIdx;
+                                const isCurrent = idx === currentIdx;
+                                const stepCfg = getStatusCfg(step.key);
+                                return (
+                                  <React.Fragment key={step.id}>
+                                    <div className="flex flex-col items-center gap-1 z-10" style={{ minWidth: 0 }}>
+                                      <div
+                                        className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                                          isCurrent
+                                            ? `border-current ${stepCfg.color} ${stepCfg.bg} ring-2 ring-offset-1 ring-offset-[#12122a]`
+                                            : isDone
+                                            ? 'border-green-500 bg-green-500/20'
+                                            : 'border-white/15 bg-white/5'
+                                        }`}
+                                        style={isCurrent ? { outline: `2px solid ${stepCfg.pulseColor ?? 'transparent'}`, outlineOffset: '1px' } : {}}
+                                        title={`${idx + 1}. ${stepCfg.label}`}
+                                      >
+                                        {isDone ? (
+                                          <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                        ) : isCurrent ? (
+                                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: stepCfg.pulseColor ?? '#fff' }} />
+                                        ) : (
+                                          <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
+                                        )}
+                                      </div>
+                                      <span className={`max-w-[74px] text-center text-[9px] leading-tight line-clamp-2 ${isCurrent ? stepCfg.color : isDone ? 'text-green-400/70' : 'text-white/30'}`}>{stepCfg.label}</span>
+                                    </div>
+                                    {localIdx < row.length - 1 && (
+                                      <div className={`flex-1 h-0.5 ${idx < currentIdx ? 'bg-green-500/60' : 'bg-white/10'}`} />
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
                             </div>
                           </div>
-                          {/* Linha conectora */}
-                          {idx < progressSteps.length - 1 && (
-                            <div className={`flex-1 h-0.5 ${
-                              idx < currentIdx ? 'bg-green-500/60' : 'bg-white/10'
-                            }`} />
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   {/* Cards anterior / atual / próximo */}
                   <div className="grid gap-2" style={{ gridTemplateColumns: [prevStep, currStep, nextStep].filter(Boolean).length === 1 ? '1fr' : [prevStep, currStep, nextStep].filter(Boolean).length === 2 ? '1fr 1fr' : '1fr 1fr 1fr' }}>
                     {prevStep && (() => {
