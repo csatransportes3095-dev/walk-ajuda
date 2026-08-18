@@ -22,6 +22,8 @@ import { addOrderFile, createCustomer, getCustomerByPhone, getDb, updateCustomer
 import { accessCodePhones, accessCodes, uploadSessions } from "../drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { ENV } from "./_core/env";
+import { getAdminJwtSecret } from "./adminJwt";
+import { getCustomerSessionTokenFromRequest, requireCustomerSession } from "./customerSession";
 
 const jsonParser = express.json({ limit: "2mb" });
 // Limite maior para upload base64 (imagem comprimida ~base64 cresce ~33%)
@@ -48,7 +50,8 @@ function isAdminRequest(req: Request): boolean {
     const cookies = parseCookieHeader(cookieHeader);
     const token = cookies.admin_token;
     if (!token) return false;
-    const secret = process.env.JWT_SECRET || "admin-secret-fallback";
+    const secret = getAdminJwtSecret();
+    if (!secret) return false;
     const payload = jwt.verify(token, secret) as { sub: string; role: string };
     return payload.role === "admin";
   } catch {
@@ -2342,6 +2345,34 @@ export function registerUploadRoute(app: Express) {
     } catch (err: any) {
       console.error("[UploadRoute] client-file-base64 error:", err);
       res.status(500).json({ error: err?.message ?? "Upload failed" });
+    }
+  });
+
+  // ─── ORDER UPLOAD via JSON base64 (cliente autenticado) ─────────────────────
+  // Usado pela vitrine e pelo Bot Carminha após o login por senha do cliente.
+  // A identidade vem exclusivamente da sessão; o telefone do corpo é apenas
+  // conferido para impedir que um token envie arquivo para outro cadastro.
+  app.post("/api/upload/order-file-base64", jsonParserBig, async (req: Request, res: Response) => {
+    try {
+      const { label, phone, data, mimeType, filename } = req.body || {};
+      if (!label) { res.status(400).json({ error: "Missing label" }); return; }
+      if (!data || typeof data !== "string") { res.status(400).json({ error: "No file data" }); return; }
+
+      const identity = await requireCustomerSession(getCustomerSessionTokenFromRequest(req), phone);
+      const base64 = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
+      const buffer = Buffer.from(base64, "base64");
+      if (buffer.length === 0) { res.status(400).json({ error: "Empty file" }); return; }
+      if (buffer.length > 20 * 1024 * 1024) { res.status(400).json({ error: "Arquivo muito grande. Máximo 20MB." }); return; }
+
+      const r = resolveFileExt(mimeType || "image/jpeg", filename);
+      const safeLabel = makeSafeLabel(label);
+      const randomSuffix = Math.random().toString(36).substring(2, 10);
+      const fileKey = `order-docs/${identity.phone}-${safeLabel}-${randomSuffix}.${r.ext}`;
+      const { url } = await r2PutObject(fileKey, buffer, r.contentType);
+      res.json({ success: true, fileUrl: url, fileKey, mimeType: r.contentType });
+    } catch (err: any) {
+      const status = err?.code === "UNAUTHORIZED" ? 401 : err?.code === "FORBIDDEN" ? 403 : 500;
+      res.status(status).json({ error: err?.message || "Upload failed" });
     }
   });
 

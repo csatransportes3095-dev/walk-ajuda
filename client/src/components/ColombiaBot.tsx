@@ -440,12 +440,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   // Upload via base64 — mesmo endpoint que o pedido manual usa
   const uploadFileBase64 = async (file: File, label: string): Promise<{ url: string; fileKey: string; mimeType: string } | null> => {
     const phone = flowState.current.clientPhone || localStorage.getItem('walk_client_phone')?.replace(/\D/g, '') || '';
+    const cpToken = localStorage.getItem('cp_token') || '';
+    if (!cpToken) return null;
     try {
       const base64 = await fileToBase64(file);
       if (!base64) return null;
-      const res = await fetch('/api/upload/client-file-base64', {
+      const res = await fetch('/api/upload/order-file-base64', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-customer-session': cpToken },
         body: JSON.stringify({
           label,
           phone,
@@ -477,23 +479,22 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         setUploadingDocId(doc.id);
         try {
           const uploaded = await uploadFileBase64(file, doc.label);
-          if (uploaded) {
-            flowState.current.docFiles[doc.id] = { file, url: uploaded.url, fileKey: uploaded.fileKey, mime: uploaded.mimeType };
-          } else {
-            // Fallback: salvar só o file (sem URL)
-            flowState.current.docFiles[doc.id] = { file };
+          if (!uploaded) {
+            addMsgs({ type: "bot", id: uid(), text: `Não consegui enviar ${doc.label}. Verifique sua conexão e tente novamente.` });
+            return;
           }
-        } catch {
-          flowState.current.docFiles[doc.id] = { file };
-        } finally {
-          setUploadingDocId(null);
+          flowState.current.docFiles[doc.id] = { file, url: uploaded.url, fileKey: uploaded.fileKey, mime: uploaded.mimeType };
           markDocUploaded(msgId);
           addMsgs({ type: "user", id: uid(), text: `\u2705 ${doc.label} enviado` });
           const required = docs.filter(d => d.isRequired === undefined ? true : d.isRequired === 1);
-          const allDone = required.every(d => flowState.current.docFiles[d.id]);
+          const allDone = required.every(d => flowState.current.docFiles[d.id]?.url);
           if (allDone) {
             setTimeout(() => askCoupon(product, option), 400);
           }
+        } catch {
+          addMsgs({ type: "bot", id: uid(), text: `Não consegui enviar ${doc.label}. Verifique sua conexão e tente novamente.` });
+        } finally {
+          setUploadingDocId(null);
         }
       };
       return { type: "doc-upload" as const, id: msgId, docId: doc.id, label: doc.label, required: isRequired, uploaded: false };
@@ -573,21 +574,21 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       setUploadingPix(true);
       try {
         const uploaded = await uploadFileBase64(file, 'comprovante-pix');
-        if (uploaded) {
-          flowState.current.pixProofUrl = uploaded.url;
-          flowState.current.pixProofMime = uploaded.mimeType || file.type || 'image/jpeg';
-        } else {
-          flowState.current.pixProofUrl = '';
+        if (!uploaded) {
+          addMsgs({ type: 'bot', id: uid(), text: 'Não consegui enviar o comprovante. Verifique sua conexão e tente novamente.' });
+          return;
         }
-      } catch {
-        flowState.current.pixProofUrl = '';
-      } finally {
-        setUploadingPix(false);
+        flowState.current.pixProofUrl = uploaded.url;
+        flowState.current.pixProofMime = uploaded.mimeType || file.type || 'image/jpeg';
         setMessages(prev => prev.map(m =>
           m.type === 'pix-payment' && m.id === msgId ? { ...m, uploaded: true } : m
         ));
         addMsgs({ type: 'user', id: uid(), text: '\u2705 Comprovante enviado' });
         setTimeout(() => finishWithProduct(product, option), 400);
+      } catch {
+        addMsgs({ type: 'bot', id: uid(), text: 'Não consegui enviar o comprovante. Verifique sua conexão e tente novamente.' });
+      } finally {
+        setUploadingPix(false);
       }
     };
 
@@ -631,7 +632,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       }
 
       // Montar documents array — mesmo formato que o Home.tsx usa
-      const docsArray: Array<{ label: string; url?: string; fileKey?: string; mime?: string }> = [];
+      const docsArray: Array<{ label: string; url: string; fileKey?: string; mime?: string }> = [];
       if (option) {
         option.documents.forEach(d => {
           const df = flowState.current.docFiles[d.id];

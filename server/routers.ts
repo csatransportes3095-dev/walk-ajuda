@@ -112,6 +112,8 @@ import {
 } from "./db";
 import { storagePut } from "./storage";
 import { r2DeleteObjects } from "./r2Storage";
+import { getAdminJwtSecret } from "./adminJwt";
+import { requireCustomerSession } from "./customerSession";
 
 /**
  * Verifica se um telefone está na blocklist.
@@ -171,20 +173,7 @@ function inspectQuestionAudio(buffer: Buffer, declaredMime: string): { mimeType:
 
 async function validateQuestionAudioAccess(input: { phone?: string; accessCode?: string; cpToken?: string }): Promise<{ phone: string }> {
   if (input.cpToken?.trim()) {
-    const dbInst = await (await import('./db')).getDb();
-    const { eq: eqDrizzle } = await import('drizzle-orm');
-    const { customerPasswordSessions: cpSessions } = await import('../drizzle/schema');
-    const sessions = await (dbInst as any).select().from(cpSessions).where(eqDrizzle(cpSessions.token, input.cpToken.trim())).limit(1);
-    const session = sessions?.[0];
-    if (!session || new Date(session.expiresAt) < new Date()) {
-      throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão expirada. Faça login novamente.' });
-    }
-    const sessionPhone = String(session.phone || '').replace(/\D/g, '');
-    const requestedPhone = String(input.phone || '').replace(/\D/g, '');
-    if (!sessionPhone || (requestedPhone && requestedPhone !== sessionPhone)) {
-      throw new TRPCError({ code: 'FORBIDDEN', message: 'A sessão não autoriza este cliente.' });
-    }
-    return { phone: sessionPhone };
+    return requireCustomerSession(input.cpToken, input.phone);
   }
 
   const phone = String(input.phone || '').replace(/\D/g, '');
@@ -3075,13 +3064,17 @@ export const appRouter = router({
   adminAuth: router({
     // Setup inicial: cria admin se não existir nenhum (apenas se tabela estiver vazia)
     setup: publicProcedure
-      .input(z.object({ username: z.string().min(1), password: z.string().min(6) }))
+      .input(z.object({ username: z.string().min(1), password: z.string().min(6), setupSecret: z.string().min(1) }))
       .mutation(async ({ input }) => {
         const { adminCredentials: adminCredsTable } = await import('../drizzle/schema');
         const db = await (await import('./db')).getDb();
         if (!db) return { success: false, error: 'DB indisponível' };
-        const existing = await getAdminCredential(input.username);
-        if (existing) return { success: false, error: 'Admin já existe' };
+        const existingAdmins = await db.select({ username: adminCredsTable.username }).from(adminCredsTable).limit(1);
+        if (existingAdmins.length > 0) return { success: false, error: 'A criação inicial de administrador já foi concluída.' };
+        const configuredSetupSecret = process.env.ADMIN_SETUP_SECRET?.trim();
+        if (!configuredSetupSecret || input.setupSecret !== configuredSetupSecret) {
+          return { success: false, error: 'Criação inicial protegida. Configure e informe ADMIN_SETUP_SECRET.' };
+        }
         const hash = await bcrypt.hash(input.password, 12);
         await db.insert(adminCredsTable).values({ username: input.username, passwordHash: hash });
         return { success: true };
@@ -3110,7 +3103,8 @@ export const appRouter = router({
         // Login bem-sucedido: zerar tentativas
         await resetAdminLoginAttempts(ip);
         // Criar token JWT simples com username e timestamp
-        const secret = process.env.JWT_SECRET || 'admin-secret-fallback';
+        const secret = getAdminJwtSecret();
+        if (!secret) return { success: false, error: 'CONFIGURATION', message: 'JWT_SECRET seguro não está configurado no servidor.' };
         const token = jwt.sign(
           { sub: cred.username, role: 'admin', iat: Math.floor(Date.now() / 1000) },
           secret,
@@ -3180,7 +3174,7 @@ export const appRouter = router({
     // Logout: limpa cookie admin
     logout: publicProcedure
       .mutation(({ ctx }) => {
-        ctx.res.clearCookie('admin_token', { path: '/' });
+        ctx.res.clearCookie('admin_token', { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
         return { success: true };
       }),
 
@@ -3192,7 +3186,8 @@ export const appRouter = router({
         const token = cookies.admin_token;
         if (!token) return { isAdmin: false };
         try {
-          const secret = process.env.JWT_SECRET || 'admin-secret-fallback';
+          const secret = getAdminJwtSecret();
+          if (!secret) return { isAdmin: false };
           const payload = jwt.verify(token, secret) as { sub: string; role: string };
           return { isAdmin: payload.role === 'admin', username: payload.sub };
         } catch {
@@ -3209,7 +3204,8 @@ export const appRouter = router({
         const token = cookies.admin_token;
         if (!token) return { success: false, error: 'Não autenticado' };
         try {
-          const secret = process.env.JWT_SECRET || 'admin-secret-fallback';
+          const secret = getAdminJwtSecret();
+          if (!secret) return { success: false, error: 'JWT_SECRET seguro não está configurado no servidor.' };
           const payload = jwt.verify(token, secret) as { sub: string; role: string };
           if (payload.role !== 'admin') return { success: false, error: 'Sem permissão' };
           const cred = await getAdminCredential(payload.sub);

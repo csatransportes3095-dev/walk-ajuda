@@ -1163,6 +1163,11 @@ export default function Home() {
       console.error(`[Upload] Arquivo vazio "${label}"`);
       return null;
     }
+    const cpToken = localStorage.getItem('cp_token') || '';
+    if (!cpToken) {
+      console.error(`[Upload] Sessão ausente para "${label}"`);
+      return null;
+    }
     const payload = {
       label,
       phone,
@@ -1174,9 +1179,9 @@ export default function Home() {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s (conexões móveis lentas)
-        const res = await fetch('/api/upload/client-file-base64', {
+        const res = await fetch('/api/upload/order-file-base64', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-customer-session': cpToken },
           body: JSON.stringify(payload),
           credentials: 'include',
           signal: controller.signal,

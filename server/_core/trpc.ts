@@ -4,6 +4,7 @@ import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import { parse as parseCookieHeader } from "cookie";
 import jwt from "jsonwebtoken";
+import { getAdminJwtSecret } from "../adminJwt";
 
 // Verifica se o request tem um cookie JWT admin válido (login independente)
 function isAdminJwtValid(req: TrpcContext["req"]): boolean {
@@ -12,7 +13,8 @@ function isAdminJwtValid(req: TrpcContext["req"]): boolean {
     const cookies = parseCookieHeader(cookieHeader);
     const token = cookies.admin_token;
     if (!token) return false;
-    const secret = process.env.JWT_SECRET || 'admin-secret-fallback';
+    const secret = getAdminJwtSecret();
+    if (!secret) return false;
     const payload = jwt.verify(token, secret) as { sub: string; role: string };
     return payload.role === 'admin';
   } catch {
