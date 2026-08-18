@@ -270,6 +270,22 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     return ordered;
   };
 
+  // Limpa tudo que pertence à opção anterior. Dados do cliente são preservados,
+  // mas respostas, áudios, documentos, pagamento e cupom nunca podem migrar
+  // para uma nova opção do pedido.
+  const resetOptionFlow = () => {
+    const fs = flowState.current;
+    fs.option = null;
+    fs.answers = {};
+    fs.audioAnswers = {};
+    fs.audioFlowId = createAudioFlowId();
+    fs.docFiles = {};
+    fs.pixProofUrl = '';
+    fs.pixProofMime = '';
+    fs.couponCode = '';
+    fs.couponDiscount = null;
+  };
+
   // ── Fluxo ─────────────────────────────────────────────────────────────────
 
   const startWelcome = () => {
@@ -298,6 +314,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       addMsgs({ type: "user", id: uid(), text: opt });
       const product = products.find(p => p.name === opt);
       if (!product) return;
+      resetOptionFlow();
       flowState.current.product = product;
       saveBotProgress('questions', 'dados');
       setTimeout(() => {
@@ -328,6 +345,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         return label === opt;
       });
       if (!option) return;
+      resetOptionFlow();
+      flowState.current.product = product;
       flowState.current.option = option;
       saveBotProgress('questions', 'dados');
       setTimeout(() => askQuestions(product, option, {}), 300);
@@ -586,12 +605,26 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       markActionDone(actionId);
       setIsSubmitting(true);
 
+      // Considerar exclusivamente as perguntas de áudio visíveis da opção atual.
+      // Isso impede que rascunhos gerados antes de uma troca de opção acompanhem
+      // o novo pedido.
+      const visibleQuestions = option ? getVisibleQuestions(option.questions, flowState.current.answers) : [];
+      const visibleAudioQuestionIds = new Set(
+        visibleQuestions.filter(q => q.fieldType === 'audio').map(q => q.id),
+      );
+      const audioAnswersForCurrentOption = Object.entries(flowState.current.audioAnswers).reduce<Record<number, AudioDraft>>((acc, [questionId, audio]) => {
+        const numericQuestionId = Number(questionId);
+        if (visibleAudioQuestionIds.has(numericQuestionId)) acc[numericQuestionId] = audio;
+        return acc;
+      }, {});
+      const audioDraftIdsForSubmit = Object.values(audioAnswersForCurrentOption).map(audio => audio.id);
+      const hasAudioAnswersForCurrentOption = audioDraftIdsForSubmit.length > 0;
+
       // Montar answers array
       const answersArray: Array<{ question: string; answer: string; questionId?: number; answerType?: string; audioUrl?: string; durationSeconds?: number }> = [];
       if (option) {
-        const visible = getVisibleQuestions(option.questions, flowState.current.answers);
-        visible.forEach(q => {
-          const audio = flowState.current.audioAnswers[q.id];
+        visibleQuestions.forEach(q => {
+          const audio = audioAnswersForCurrentOption[q.id];
           if (audio) answersArray.push({ question: q.question, questionId: q.id, answer: 'Áudio anexado', answerType: 'audio', audioUrl: audio.audioUrl, durationSeconds: audio.durationSeconds });
           else if (flowState.current.answers[q.id]) answersArray.push({ question: q.question, questionId: q.id, answer: flowState.current.answers[q.id] });
         });
@@ -630,8 +663,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
           productId: product.id,
           optionId: option?.id,
-          questionAudioFlowId: Object.keys(flowState.current.audioAnswers).length > 0 ? flowState.current.audioFlowId : undefined,
-          audioDraftIds: Object.values(flowState.current.audioAnswers).map(audio => audio.id),
+          questionAudioFlowId: hasAudioAnswersForCurrentOption ? flowState.current.audioFlowId : undefined,
+          audioDraftIds: hasAudioAnswersForCurrentOption ? audioDraftIdsForSubmit : undefined,
           couponCode: flowState.current.couponCode || undefined,
           price: (() => {
             const rawPrice = option?.price;
@@ -941,7 +974,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               setUploadingDocId(null);
               setPixCopied(false);
               setUploadingPix(false);
-              flowState.current = { product: null, option: null, answers: {}, audioAnswers: {}, audioFlowId: crypto.randomUUID(), docFiles: {}, clientName: flowState.current.clientName, clientPhone: flowState.current.clientPhone, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
+              flowState.current = { product: null, option: null, answers: {}, audioAnswers: {}, audioFlowId: createAudioFlowId(), docFiles: {}, clientName: flowState.current.clientName, clientPhone: flowState.current.clientPhone, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
               callbacks.current = {};
               pendingUpload.current = null;
               pendingPixMsgId.current = '';

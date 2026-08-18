@@ -1245,7 +1245,11 @@ export const appRouter = router({
             try { parsedAnswers = JSON.parse(input.answers); } catch { /* ignore */ }
           }
           let audioDraftsForOrder: Awaited<ReturnType<typeof getQuestionAudioDraftsByIds>> = [];
-          if (input.productId || input.optionId || input.questionAudioFlowId || input.audioDraftIds?.length) {
+          // Produto e opção são usados também por pedidos comuns. Só iniciar a
+          // validação de áudio quando o cliente efetivamente enviou uma referência
+          // de fluxo ou rascunho de áudio.
+          const hasAudioSubmission = Boolean(input.questionAudioFlowId || input.audioDraftIds?.length);
+          if (hasAudioSubmission) {
             if (!input.productId || !input.optionId || !input.questionAudioFlowId) {
               return { success: false, message: 'Dados incompletos para validar a resposta em áudio.' };
             }
