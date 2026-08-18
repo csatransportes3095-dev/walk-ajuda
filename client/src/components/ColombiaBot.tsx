@@ -68,6 +68,11 @@ interface Props {
   botWelcome?: string;
 }
 
+const BOT_PROGRESS_KEY = 'walk_bot_order_progress';
+const BOT_UPLOADED_FILES_KEY = 'walk_bot_uploaded_files';
+const LEGACY_PROGRESS_KEY = 'walk_order_progress';
+const LEGACY_UPLOADED_FILES_KEY = 'walk_uploaded_files';
+
 function createAudioFlowId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   const hex = () => Math.floor(Math.random() * 16).toString(16);
@@ -111,7 +116,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     answers: Record<number, string>;
     audioAnswers: Record<number, AudioDraft>;
     audioFlowId: string;
-    docFiles: Record<number, { file: File; url?: string; fileKey?: string; mime?: string }>;
+    docFiles: Record<number, { file?: File; url?: string; fileKey?: string; mime?: string }>;
     clientName: string;
     clientPhone: string;
     pixProofUrl: string;
@@ -142,8 +147,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Inicializar
-  useEffect(() => { startWelcome(); }, []); // eslint-disable-line
+  // Inicializar: rascunhos do Bot só podem ser retomados dentro do próprio Bot.
+  useEffect(() => {
+    if (!restoreBotProgress()) startWelcome();
+  }, []); // eslint-disable-line
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -176,7 +183,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         savedAt: Date.now(),
         fromBot: true, // marcador para saber que veio do bot
       };
-      localStorage.setItem('walk_order_progress', JSON.stringify(progress));
+      localStorage.setItem(BOT_PROGRESS_KEY, JSON.stringify(progress));
       // Salvar URLs dos documentos já enviados
       const uploadedFiles: Record<string, { url: string; mimeType: string }> = {};
       Object.entries(fs.docFiles).forEach(([docId, df]) => {
@@ -184,16 +191,21 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       });
       if (fs.pixProofUrl) uploadedFiles['paymentProof'] = { url: fs.pixProofUrl, mimeType: fs.pixProofMime || 'image/jpeg' };
       if (Object.keys(uploadedFiles).length > 0) {
-        localStorage.setItem('walk_uploaded_files', JSON.stringify(uploadedFiles));
+        localStorage.setItem(BOT_UPLOADED_FILES_KEY, JSON.stringify(uploadedFiles));
       }
     } catch {}
   }, []);
 
-  // Pedido aceito não pode ser tratado como rascunho ao recarregar a vitrine.
+  // Pedido aceito não pode ser tratado como rascunho ao recarregar o Bot ou a vitrine.
   const clearCompletedBotProgress = useCallback(() => {
     try {
-      localStorage.removeItem('walk_order_progress');
-      localStorage.removeItem('walk_uploaded_files');
+      localStorage.removeItem(BOT_PROGRESS_KEY);
+      localStorage.removeItem(BOT_UPLOADED_FILES_KEY);
+      const legacy = localStorage.getItem(LEGACY_PROGRESS_KEY);
+      if (legacy && JSON.parse(legacy)?.fromBot) {
+        localStorage.removeItem(LEGACY_PROGRESS_KEY);
+        localStorage.removeItem(LEGACY_UPLOADED_FILES_KEY);
+      }
     } catch {}
   }, []);
 
@@ -294,6 +306,83 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     fs.couponDiscount = null;
   };
 
+  const restoreBotProgress = (): boolean => {
+    try {
+      let raw = localStorage.getItem(BOT_PROGRESS_KEY);
+      if (!raw) {
+        const legacyRaw = localStorage.getItem(LEGACY_PROGRESS_KEY);
+        if (legacyRaw && JSON.parse(legacyRaw)?.fromBot) {
+          raw = legacyRaw;
+          localStorage.setItem(BOT_PROGRESS_KEY, legacyRaw);
+          const legacyFiles = localStorage.getItem(LEGACY_UPLOADED_FILES_KEY);
+          if (legacyFiles) localStorage.setItem(BOT_UPLOADED_FILES_KEY, legacyFiles);
+          localStorage.removeItem(LEGACY_PROGRESS_KEY);
+          localStorage.removeItem(LEGACY_UPLOADED_FILES_KEY);
+        }
+      }
+      if (!raw) return false;
+
+      const saved = JSON.parse(raw);
+      if (!saved?.savedAt || Date.now() - saved.savedAt > 24 * 60 * 60 * 1000) {
+        clearCompletedBotProgress();
+        return false;
+      }
+      const product = products.find(item => item.id === saved.productId);
+      const option = product?.options.find(item => item.id === saved.optionId);
+      if (!product || !option) {
+        clearCompletedBotProgress();
+        return false;
+      }
+
+      const answers = Object.entries(saved.questionAnswers || {}).reduce<Record<number, string>>((acc, [questionId, answer]) => {
+        acc[Number(questionId)] = String(answer);
+        return acc;
+      }, {});
+      const uploads = JSON.parse(localStorage.getItem(BOT_UPLOADED_FILES_KEY) || '{}') as Record<string, { url?: string; mimeType?: string }>;
+      const docFiles: typeof flowState.current.docFiles = {};
+      Object.entries(uploads).forEach(([key, file]) => {
+        if (!key.startsWith('doc_') || !file?.url) return;
+        const docId = Number(key.slice(4));
+        if (Number.isFinite(docId)) docFiles[docId] = { url: file.url, mime: file.mimeType || 'image/jpeg' };
+      });
+
+      flowState.current = {
+        product,
+        option,
+        answers,
+        audioAnswers: saved.questionAudioAnswers || {},
+        audioFlowId: saved.questionAudioFlowId || createAudioFlowId(),
+        docFiles,
+        clientName: saved.clientName || '',
+        clientPhone: saved.clientPhone || '',
+        pixProofUrl: uploads.paymentProof?.url || '',
+        pixProofMime: uploads.paymentProof?.mimeType || '',
+        couponCode: saved.couponCode || '',
+        couponDiscount: null,
+      };
+      addMsgs({ type: 'bot', id: uid(), text: 'Encontrei seu pedido iniciado aqui no Bot. Vamos continuar de onde você parou. ✅' });
+
+      if (saved.cadastroSubStep === 'pagamento') {
+        askPix(product, option);
+        return true;
+      }
+      const visibleQuestions = getVisibleQuestions(option.questions, answers);
+      if (visibleQuestions.some(question => answers[question.id] === undefined)) {
+        askQuestions(product, option, answers);
+        return true;
+      }
+      const requiredDocs = option.documents.filter(doc => doc.isRequired === undefined || doc.isRequired === 1);
+      if (requiredDocs.some(doc => !docFiles[doc.id]?.url)) {
+        askDocuments(product, option);
+        return true;
+      }
+      askCoupon(product, option);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // ── Fluxo ─────────────────────────────────────────────────────────────────
 
   const startWelcome = () => {
@@ -302,6 +391,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       markAnswered(optId);
       addMsgs({ type: "user", id: uid(), text: opt });
       if (opt === "Continuar sozinho") {
+        clearCompletedBotProgress();
         setTimeout(() => onStartNormal(), 200);
       } else {
         setTimeout(() => askService(), 300);
@@ -479,6 +569,11 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       askCoupon(product, option);
       return;
     }
+    const requiredDocs = docs.filter(doc => doc.isRequired === undefined || doc.isRequired === 1);
+    if (requiredDocs.every(doc => flowState.current.docFiles[doc.id]?.url)) {
+      askCoupon(product, option);
+      return;
+    }
 
     const docMsgs: ChatMsg[] = docs.map(doc => {
       const msgId = uid();
@@ -492,6 +587,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             return;
           }
           flowState.current.docFiles[doc.id] = { file, url: uploaded.url, fileKey: uploaded.fileKey, mime: uploaded.mimeType };
+          saveBotProgress('questions', 'documentos');
           markDocUploaded(msgId);
           addMsgs({ type: "user", id: uid(), text: `\u2705 ${doc.label} enviado` });
           const required = docs.filter(d => d.isRequired === undefined ? true : d.isRequired === 1);
@@ -505,7 +601,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           setUploadingDocId(null);
         }
       };
-      return { type: "doc-upload" as const, id: msgId, docId: doc.id, label: doc.label, required: isRequired, uploaded: false };
+      return { type: "doc-upload" as const, id: msgId, docId: doc.id, label: doc.label, required: isRequired, uploaded: Boolean(flowState.current.docFiles[doc.id]?.url) };
     });
 
     addMsgs(

@@ -17,6 +17,9 @@ import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAud
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
 type FlowOrigin = "storefront" | "cart" | "legacy";
 
+const BOT_PROGRESS_KEY = 'walk_bot_order_progress';
+const BOT_UPLOADED_FILES_KEY = 'walk_bot_uploaded_files';
+
 type CartItem = {
   id: string; // unique key
   product: Product;
@@ -250,6 +253,7 @@ export default function Home() {
     refetchOnReconnect: true,
   });
   const { data: settings } = trpc.settings.getAll.useQuery();
+  const botEnabled = settings?.bot_assistant_enabled !== '0';
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: faqData } = trpc.faq.getPublic.useQuery();
 
@@ -271,11 +275,14 @@ export default function Home() {
     if (!localStorage.getItem('cp_token')) return false;
     // Verificar se há progresso salvo válido (menos de 24h)
     try {
+      const botRaw = localStorage.getItem(BOT_PROGRESS_KEY);
+      if (botRaw) return false; // Rascunho do Bot é retomado somente dentro do Bot.
       const raw = localStorage.getItem('walk_order_progress');
       if (raw) {
         const saved = JSON.parse(raw);
+        if (saved?.fromBot) return false; // Compatibilidade: o efeito abaixo migra o rascunho antigo para o Bot.
         if (saved?.savedAt && Date.now() - saved.savedAt < 24 * 60 * 60 * 1000 && saved.productId) {
-          return false; // Tem progresso salvo — não mostrar bot, mostrar modal de retomada
+          return false; // Tem progresso manual salvo — não mostrar a escolha inicial.
         }
       }
     } catch {}
@@ -480,26 +487,48 @@ export default function Home() {
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch {}
   }, [step, selectedProduct, selectedOption, questionAnswers, questionAudioAnswers, questionAudioFlowId, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin]);
 
-  // Verificar se há progresso salvo ao montar o componente (quando produtos estão carregados)
+  // Cada rascunho é retomado somente no canal onde foi iniciado.
   useEffect(() => {
-    if (!products || products.length === 0) return;
+    if (!products || products.length === 0 || step !== 'home') return;
     try {
+      const isFresh = (saved: any) => saved?.savedAt && Date.now() - saved.savedAt <= 24 * 60 * 60 * 1000 && saved.productId;
+      const botRaw = localStorage.getItem(BOT_PROGRESS_KEY);
+      if (botRaw) {
+        const botSaved = JSON.parse(botRaw);
+        if (isFresh(botSaved)) {
+          if (botEnabled) setShowColombiaBot(true);
+          return;
+        }
+        localStorage.removeItem(BOT_PROGRESS_KEY);
+        localStorage.removeItem(BOT_UPLOADED_FILES_KEY);
+      }
+
       const raw = localStorage.getItem(PROGRESS_KEY);
       if (!raw) return;
       const saved = JSON.parse(raw);
-      // Ignorar progresso com mais de 24 horas
-      if (Date.now() - saved.savedAt > 24 * 60 * 60 * 1000) {
+      // Compatibilidade com rascunhos do Bot criados antes da separação das chaves.
+      if (saved?.fromBot) {
+        if (isFresh(saved)) {
+          localStorage.setItem(BOT_PROGRESS_KEY, raw);
+          const legacyFiles = localStorage.getItem(UPLOADED_FILES_KEY);
+          if (legacyFiles) localStorage.setItem(BOT_UPLOADED_FILES_KEY, legacyFiles);
+          if (botEnabled) setShowColombiaBot(true);
+        }
         localStorage.removeItem(PROGRESS_KEY);
+        localStorage.removeItem(UPLOADED_FILES_KEY);
         return;
       }
-      // Só mostrar se estiver na tela home e tiver produto salvo
-      if (step !== 'home') return;
+      if (!isFresh(saved)) {
+        localStorage.removeItem(PROGRESS_KEY);
+        localStorage.removeItem(UPLOADED_FILES_KEY);
+        return;
+      }
       const prod = products.find((p: Product) => p.id === saved.productId);
       if (!prod) { localStorage.removeItem(PROGRESS_KEY); return; }
       setSavedProgressLabel(prod.name + (saved.optionId ? ` — ${prod.options.find((o: ProductOption) => o.id === saved.optionId)?.label || ''}` : ''));
       setShowResumeModal(true);
     } catch {}
-  }, [products]);
+  }, [products, step, botEnabled]);
 
   // Scroll automático para a próxima pergunta após selecionar uma opção
   const scrollToNextQuestion = (currentQuestionId: number, questions: ProductQuestion[], selectedLabel: string) => {
@@ -879,7 +908,6 @@ export default function Home() {
   const HERO_TITLE = settings?.hero_title || '';
   const HERO_SUBTITLE = settings?.hero_subtitle || "";
   const HERO_BUTTON = settings?.hero_button_text || "";
-  const botEnabled = settings?.bot_assistant_enabled !== '0';
   const SERVICES_TITLE = settings?.services_title || "";
   const SERVICES_SUBTITLE = settings?.services_subtitle || "";
   const FOOTER_TEXT = settings?.footer_text || "";
