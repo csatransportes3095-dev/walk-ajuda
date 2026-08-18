@@ -393,7 +393,9 @@ function AppContent() {
   if (isAdminRoute) {
     return (
       <>
-        <Router />
+        <div className="min-h-screen pb-24 sm:pb-0">
+          <Router />
+        </div>
         {location !== "/admin/login" && <AdminPWABanner />}
       </>
     );

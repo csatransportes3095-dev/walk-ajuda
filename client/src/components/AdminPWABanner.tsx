@@ -65,12 +65,12 @@ export default function AdminPWABanner() {
   if (!isInstallable || isInstalled || dismissed) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 bg-gradient-to-r from-violet-700 to-purple-700 rounded-xl p-3 shadow-2xl border border-violet-400/30 flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300">
+    <div className="fixed bottom-3 left-3 right-3 z-50 flex items-center gap-3 rounded-xl border border-violet-400/30 bg-gradient-to-r from-violet-700 to-purple-700 p-2.5 shadow-2xl animate-in slide-in-from-bottom-4 duration-300 sm:bottom-4 sm:left-4 sm:right-4 sm:p-3">
       <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
         <Download className="w-5 h-5 text-white" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-white font-bold text-sm leading-tight">
+        <p className="text-sm font-bold leading-tight text-white">
           Instale o painel como app
         </p>
         {isIOS ? (
@@ -87,14 +87,14 @@ export default function AdminPWABanner() {
         <button
           onClick={install}
           disabled={!deferredPrompt}
-          className="shrink-0 px-3 py-1.5 bg-white text-violet-700 font-bold text-xs rounded-lg hover:bg-white/90 transition-all disabled:opacity-50"
+          className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-violet-700 transition-all hover:bg-white/90 disabled:opacity-50"
         >
           Instalar
         </button>
       )}
       <button
         onClick={dismiss}
-        className="shrink-0 text-white/60 hover:text-white p-1"
+        className="shrink-0 p-1 text-white/60 transition-colors hover:text-white"
       >
         <X className="w-4 h-4" />
       </button>

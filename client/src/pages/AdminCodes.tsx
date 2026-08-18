@@ -82,6 +82,7 @@ export default function AdminCodes() {
   const [isOrganizingCards, setIsOrganizingCards] = useState(false);
   const [cardOrderDirty, setCardOrderDirty] = useState(false);
   const [selectedCardForSwap, setSelectedCardForSwap] = useState<string | null>(null);
+  const [showAllShortcuts, setShowAllShortcuts] = useState(false);
   const savedCardOrder = configQuery.data?.[ADMIN_CARD_ORDER_KEY];
   const saveCardOrderMutation = trpc.config.set.useMutation({
     onSuccess: () => {
@@ -113,6 +114,8 @@ export default function AdminCodes() {
     ...cardOrder.map((id) => byAdminShortcutId.get(id)).filter(Boolean) as AdminShortcut[],
     ...ADMIN_SHORTCUTS.filter((card) => !cardOrder.includes(card.id)),
   ];
+  const featuredAdminShortcuts = orderedAdminShortcuts.slice(0, 6);
+  const secondaryAdminShortcuts = orderedAdminShortcuts.slice(6);
 
   const saveCardOrder = () => {
     saveCardOrderMutation.mutate(
@@ -310,6 +313,38 @@ export default function AdminCodes() {
     );
   };
 
+  const renderShortcutCard = (card: AdminShortcut, index: number, featured = false) => {
+    const Icon = card.icon;
+    const content = <>
+      {card.emoji ? <span className="mb-1 block text-xl leading-5">{card.emoji}</span> : Icon ? <Icon className={`mx-auto mb-1 ${featured ? 'h-6 w-6' : 'h-5 w-5'} ${card.iconTone || 'text-white'}`} /> : null}
+      <span className={`${featured ? 'text-sm' : 'text-xs'} font-bold text-white`}>{card.label}</span>
+    </>;
+    const surfaceClass = `${featured ? 'min-h-[96px] p-4' : 'min-h-[76px] p-3'} rounded-xl text-center transition-all ${card.tone}`;
+
+    return (
+      <div
+        key={card.id}
+        className={`relative min-w-0 rounded-xl border transition-all ${isOrganizingCards ? 'cursor-pointer ring-1 ring-purple-400/35 hover:scale-[1.02]' : ''} ${selectedCardForSwap === card.id ? 'ring-2 ring-cyan-300 bg-cyan-300/10 shadow-[0_0_22px_rgba(103,232,249,.28)]' : ''}`}
+      >
+        {isOrganizingCards && (
+          <div className="pointer-events-none absolute inset-x-1 top-1 z-10 flex items-center justify-between gap-1">
+            <span className="rounded-md bg-black/55 px-1.5 py-1 text-[10px] font-black text-purple-100" title="Posição atual">#{String(index + 1).padStart(2, '0')}</span>
+            {selectedCardForSwap === card.id ? (
+              <span className="rounded-md bg-cyan-300 px-1.5 py-1 text-[10px] font-black text-slate-950">1º escolhido</span>
+            ) : (
+              <span className="rounded-md bg-black/55 p-1 text-purple-200"><ArrowLeftRight className="h-3.5 w-3.5" /></span>
+            )}
+          </div>
+        )}
+        {isOrganizingCards ? (
+          <button type="button" onClick={() => swapCards(card.id)} className={`${surfaceClass} w-full select-none pt-8`}>{content}</button>
+        ) : (
+          <a href={card.href} className={`block ${surfaceClass} hover:-translate-y-0.5 hover:shadow-lg`}>{content}</a>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0a1a]">
       {/* Header */}
@@ -318,71 +353,45 @@ export default function AdminCodes() {
       <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
 
         {/* Atalhos administrativos — ordem configurável pelo ADM */}
-        <section className="space-y-3" aria-label="Atalhos do painel administrativo">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="flex items-center gap-2 text-sm font-extrabold text-white">
-                <LayoutGrid className="h-4 w-4 text-purple-300" />
-                Atalhos do painel
-              </h2>
-              <p className="mt-1 text-xs text-white/45">{isOrganizingCards ? 'Toque em dois cards para trocar apenas as posições deles.' : 'Acesse rapidamente todas as áreas administrativas.'}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {isOrganizingCards && (
-                <>
-                  <Button type="button" variant="outline" size="sm" onClick={restoreDefaultCardOrder} disabled={saveCardOrderMutation.isPending} className="border-white/15 bg-white/5 text-white hover:bg-white/10">
-                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Padrão
-                  </Button>
-                  <Button type="button" size="sm" onClick={saveCardOrder} disabled={!cardOrderDirty || saveCardOrderMutation.isPending} className="bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-45">
-                    <Save className="mr-1.5 h-3.5 w-3.5" /> Salvar ordem
-                  </Button>
-                </>
-              )}
-              <Button type="button" size="sm" onClick={() => { setIsOrganizingCards((value) => !value); setSelectedCardForSwap(null); }} className={isOrganizingCards ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-purple-600 text-white hover:bg-purple-500'}>
-                <Settings2 className="mr-1.5 h-3.5 w-3.5" />
-                {isOrganizingCards ? 'Concluir' : 'Organizar cards'}
-              </Button>
+        <section className="space-y-4" aria-label="Atalhos do painel administrativo">
+          <div className="rounded-2xl border border-purple-400/20 bg-gradient-to-r from-purple-600/15 via-[#111127] to-transparent p-4 shadow-[0_12px_38px_rgba(0,0,0,.16)]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-sm font-extrabold text-white"><LayoutGrid className="h-4 w-4 text-purple-300" /> Painel de acesso rápido</p>
+                <p className="mt-1 text-xs text-white/55">{isOrganizingCards ? 'Toque em dois cards para trocar apenas as posições deles.' : 'As áreas mais usadas ficam em destaque; os demais atalhos continuam disponíveis abaixo.'}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {isOrganizingCards && (
+                  <>
+                    <Button type="button" variant="outline" size="sm" onClick={restoreDefaultCardOrder} disabled={saveCardOrderMutation.isPending} className="border-white/15 bg-white/5 text-white hover:bg-white/10"><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Padrão</Button>
+                    <Button type="button" size="sm" onClick={saveCardOrder} disabled={!cardOrderDirty || saveCardOrderMutation.isPending} className="bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-45"><Save className="mr-1.5 h-3.5 w-3.5" /> Salvar ordem</Button>
+                  </>
+                )}
+                <Button type="button" size="sm" onClick={() => { setIsOrganizingCards((value) => !value); setSelectedCardForSwap(null); }} className={isOrganizingCards ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-purple-600 text-white hover:bg-purple-500'}><Settings2 className="mr-1.5 h-3.5 w-3.5" />{isOrganizingCards ? 'Concluir' : 'Organizar cards'}</Button>
+              </div>
             </div>
           </div>
 
-          {isOrganizingCards && (
-            <div className="rounded-xl border border-purple-400/35 bg-purple-500/10 px-3 py-2 text-xs leading-relaxed text-purple-100">
-              Toque no <strong>primeiro card</strong> e depois no <strong>segundo card</strong>. Somente esses dois cards trocam de lugar; todos os outros ficam parados. Quando terminar, toque em <strong>Salvar ordem</strong>.
-            </div>
+          {isOrganizingCards ? (
+            <>
+              <div className="rounded-xl border border-purple-400/35 bg-purple-500/10 px-3 py-2 text-xs leading-relaxed text-purple-100">Toque no <strong>primeiro card</strong> e depois no <strong>segundo card</strong>. Somente esses dois cards trocam de lugar; todos os outros ficam parados. Quando terminar, toque em <strong>Salvar ordem</strong>.</div>
+              <div className="grid grid-cols-3 gap-3 md:grid-cols-6">{orderedAdminShortcuts.map((card, index) => renderShortcutCard(card, index))}</div>
+            </>
+          ) : (
+            <>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-3 sm:p-4">
+                <div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.16em] text-purple-200">Uso diário</p><p className="mt-1 text-xs text-white/45">Os seis primeiros atalhos seguem a ordem que você definir.</p></div><span className="rounded-full border border-purple-300/20 bg-purple-500/10 px-2.5 py-1 text-xs font-bold text-purple-100">6 em destaque</span></div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{featuredAdminShortcuts.map((card, index) => renderShortcutCard(card, index, true))}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.025]">
+                <button type="button" onClick={() => setShowAllShortcuts((value) => !value)} className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-white/[0.035]">
+                  <span><span className="block text-sm font-bold text-white">Todos os atalhos</span><span className="mt-1 block text-xs text-white/45">Configurações, comunicação, segurança e módulos complementares.</span></span>
+                  <span className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-purple-100">{showAllShortcuts ? 'Ocultar' : `Ver ${secondaryAdminShortcuts.length} atalhos`}</span>
+                </button>
+                {showAllShortcuts && <div className="border-t border-white/10 p-3 sm:p-4"><div className="grid grid-cols-3 gap-3 md:grid-cols-6">{secondaryAdminShortcuts.map((card, index) => renderShortcutCard(card, index + featuredAdminShortcuts.length))}</div></div>}
+              </div>
+            </>
           )}
-
-          <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
-            {orderedAdminShortcuts.map((card, index) => {
-              const Icon = card.icon;
-              const content = <>
-                {card.emoji ? <span className="mb-1 block text-xl leading-5">{card.emoji}</span> : Icon ? <Icon className={`mx-auto mb-1 h-5 w-5 ${card.iconTone || 'text-white'}`} /> : null}
-                <span className="text-xs font-bold text-white">{card.label}</span>
-              </>;
-              return (
-                <div
-                  key={card.id}
-                  onClick={() => { if (isOrganizingCards) swapCards(card.id); }}
-                  className={`relative min-w-0 rounded-xl border transition-all ${isOrganizingCards ? 'cursor-pointer ring-1 ring-purple-400/35 hover:scale-[1.02]' : ''} ${selectedCardForSwap === card.id ? 'ring-2 ring-cyan-300 bg-cyan-300/10 shadow-[0_0_22px_rgba(103,232,249,.28)]' : ''}`}
-                >
-                  {isOrganizingCards && (
-                    <div className="pointer-events-none absolute inset-x-1 top-1 z-10 flex items-center justify-between gap-1">
-                      <span className="rounded-md bg-black/55 px-1.5 py-1 text-[10px] font-black text-purple-100" title="Posição atual">#{String(index + 1).padStart(2, '0')}</span>
-                      {selectedCardForSwap === card.id ? (
-                        <span className="rounded-md bg-cyan-300 px-1.5 py-1 text-[10px] font-black text-slate-950">1º escolhido</span>
-                      ) : (
-                        <span className="rounded-md bg-black/55 p-1 text-purple-200"><ArrowLeftRight className="h-3.5 w-3.5" /></span>
-                      )}
-                    </div>
-                  )}
-                  {isOrganizingCards ? (
-                    <div className={`min-h-[76px] select-none rounded-xl p-3 pt-8 text-center ${card.tone}`}>{content}</div>
-                  ) : (
-                    <a href={card.href} className={`block min-h-[76px] rounded-xl p-3 text-center ${card.tone}`}>{content}</a>
-                  )}
-                </div>
-              );
-            })}
-          </div>
         </section>
 
         {/* ─── Senhas do Cadastro ─────────────────────────────────────────────── */}
