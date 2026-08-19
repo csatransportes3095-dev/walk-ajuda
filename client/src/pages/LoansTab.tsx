@@ -1078,11 +1078,54 @@ export function LoansTab({ token }: LoansTabProps) {
               <Clock className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
               <p className="text-xs text-blue-300">Após enviar, sua solicitação passará por análise. Você será informado se aprovada.</p>
             </div>
-            <div className="space-y-2">
-              <Label>Valor solicitado (R$)</Label>
-              <Input type="number" placeholder={`Máx: ${parseFloat(client.creditLimit || "0").toFixed(2)}`}
-                value={requestAmount} onChange={(e) => setRequestAmount(e.target.value)} min={1} max={parseFloat(client.creditLimit)} />
-              <p className="text-xs text-muted-foreground">Limite: <span className="text-green-400 font-bold">{fmt(client.creditLimit)}</span></p>
+            <div className="rounded-2xl border border-emerald-400/35 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-cyan-500/10 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-emerald-200">Limite disponível</p>
+                  <p className="mt-0.5 text-xs text-emerald-100/70">Este é o valor máximo que você pode solicitar.</p>
+                </div>
+                <p className="shrink-0 text-xl font-black text-emerald-300">{fmt(client.creditLimit)}</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <Label className="text-base font-black text-foreground">Quanto você deseja solicitar?</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Digite o valor ou escolha um atalho abaixo.</p>
+              </div>
+              <div className="flex items-center rounded-2xl border-2 border-violet-400/70 bg-violet-500/10 px-4 py-1 shadow-[0_0_22px_rgba(139,92,246,0.16)] transition-colors focus-within:border-violet-300 focus-within:bg-violet-500/15">
+                <span className="mr-2 text-2xl font-black text-violet-300">R$</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  placeholder="0,00"
+                  className="h-14 border-0 bg-transparent px-0 text-2xl font-black text-white shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0"
+                  value={requestAmount}
+                  onChange={(e) => setRequestAmount(e.target.value)}
+                  min={1}
+                  max={parseFloat(client.creditLimit)}
+                  aria-label="Valor que deseja solicitar"
+                />
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {([0.25, 0.5, 0.75, 1] as const).map((percent) => {
+                  const amount = Number(client.creditLimit || 0) * percent;
+                  const label = percent === 1 ? 'Limite total' : `${Math.round(percent * 100)}%`;
+                  return (
+                    <button
+                      key={percent}
+                      type="button"
+                      onClick={() => setRequestAmount(amount.toFixed(2))}
+                      disabled={amount <= 0}
+                      className={`min-h-14 rounded-xl border px-1 py-2 text-center transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 ${percent === 1 ? 'border-emerald-400/50 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25' : 'border-violet-400/30 bg-violet-500/10 text-violet-200 hover:border-violet-300/60 hover:bg-violet-500/20'}`}
+                    >
+                      <span className="block text-[10px] font-black uppercase leading-none">{label}</span>
+                      <span className="mt-1 block text-[10px] font-semibold leading-none opacity-80">{fmt(amount)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-center text-[11px] text-muted-foreground">Você pode solicitar qualquer valor entre R$ 1,00 e {fmt(client.creditLimit)}.</p>
             </div>
             <div className="space-y-2">
               <Label>Modo de pagamento</Label>
