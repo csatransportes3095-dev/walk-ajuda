@@ -1176,10 +1176,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     if (accessType === 'customer' && cpTokenForRoute && routeAccessSiteQuery.data && routeAccessSiteQuery.data.allowed === false) {
       const whatsappNum = (settings?.whatsapp_number || '5511978307371').replace(/[^\d+]/g, '');
       const allowedRoutes: string[] = (routeAccessSiteQuery.data as any).allowedRoutes || [];
-      const routeLabels: Record<string, { label: string; path: string }> = {
-        gastos: { label: 'Controle de Gastos', path: '/gastos' },
-        emprestimo: { label: 'Empréstimos', path: '/emprestimo' },
-        site: { label: 'Site Principal', path: '/' },
+      const routeLabels: Record<string, { label: string; description: string; path: string }> = {
+        gastos: { label: 'Controle de Gastos', description: 'Organize ganhos, despesas e acompanhe seu controle financeiro.', path: '/gastos' },
+        emprestimo: { label: 'Empréstimos', description: 'Consulte seu limite, solicitações, parcelas e comprovantes.', path: '/emprestimo' },
+        site: { label: 'Site Principal', description: 'Acesse pedidos, serviços e as demais funções do sistema.', path: '/' },
       };
       return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
@@ -1188,27 +1188,39 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               <Lock className="w-8 h-8 text-red-400" />
             </div>
             <h2 className="text-xl font-bold text-white mb-2">🔒 Acesso Restrito</h2>
+            <p className="text-slate-300 text-sm leading-relaxed mb-2">Seu acesso atual é limitado. Abaixo estão as áreas já liberadas para o seu cadastro.</p>
+            <p className="text-slate-500 text-xs leading-relaxed mb-5">Para acessar o site principal ou outros serviços, solicite a liberação ao atendimento pelo WhatsApp.</p>
             {allowedRoutes.length > 0 ? (
               <>
-                <p className="text-slate-400 text-sm mb-4">Você só tem acesso às seguintes áreas:</p>
-                <div className="flex flex-col gap-2 mb-6">
+                <div className="flex flex-col gap-3 mb-5 text-left">
                   {allowedRoutes.filter(r => r !== 'site').map(r => {
                     const info = routeLabels[r];
                     if (!info) return null;
                     return (
                       <a key={r} href={info.path}
-                        className="block bg-primary/20 border border-primary/40 hover:bg-primary/30 text-white font-semibold px-4 py-3 rounded-xl transition-colors text-sm">
-                        Acessar: h2colombiano.com{info.path}
+                        className="group block bg-primary/20 border border-primary/40 hover:bg-primary/30 text-white px-4 py-3 rounded-xl transition-colors">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-sm">Acessar {info.label}</p>
+                            <p className="mt-1 text-xs leading-relaxed text-slate-300">{info.description}</p>
+                          </div>
+                          <span className="text-lg text-primary-foreground/80 group-hover:translate-x-0.5 transition-transform">›</span>
+                        </div>
+                        <p className="mt-2 text-[11px] text-slate-400">h2colombiano.com{info.path}</p>
                       </a>
                     );
                   })}
                 </div>
+                <p className="text-slate-500 text-xs mb-5">A liberação é individual e poderá ser concedida conforme os serviços solicitados.</p>
               </>
             ) : (
-              <p className="text-slate-400 text-sm mb-6">Você não tem permissão para acessar esta área. Solicite liberação ao administrador.</p>
+              <div className="mb-5 rounded-xl border border-white/10 bg-white/5 p-4 text-left">
+                <p className="text-slate-200 text-sm font-semibold">Nenhuma área está liberada neste momento.</p>
+                <p className="mt-1 text-slate-400 text-xs leading-relaxed">Fale com o atendimento para informar qual serviço precisa utilizar e solicitar sua liberação.</p>
+              </div>
             )}
             <a
-              href={`https://wa.me/55${whatsappNum}?text=${encodeURIComponent('Olá, preciso de liberação de acesso ao site.')}`}
+              href={`https://wa.me/55${whatsappNum}?text=${encodeURIComponent('Olá, preciso de liberação de acesso ao site. Meu acesso atual está restrito e preciso de orientação.')}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition-colors"
@@ -1216,6 +1228,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               <MessageCircle className="w-5 h-5" />
               Solicitar liberação via WhatsApp
             </a>
+            <p className="mt-3 text-slate-600 text-[11px]">Informe no atendimento qual área ou serviço você deseja liberar.</p>
           </div>
         </div>
       );
