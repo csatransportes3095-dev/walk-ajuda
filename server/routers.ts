@@ -1898,6 +1898,24 @@ export const appRouter = router({
           return { success: false, url: '' };
         }
       }),
+    uploadHomeButtonLogo: adminProcedure
+      .input(z.object({
+        imageBase64: z.string().min(1).max(7_000_000),
+        mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']).optional(),
+        target: z.enum(['btn1', 'btn2', 'extra']),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          const mime = input.mimeType || 'image/jpeg';
+          const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+          const fileKey = `home-buttons/${input.target}-${Date.now()}-${randomUUID()}.${ext}`;
+          const { url } = await storagePut(fileKey, Buffer.from(input.imageBase64, 'base64'), mime);
+          return { success: true, url };
+        } catch (err) {
+          console.error('[uploadHomeButtonLogo]', err);
+          return { success: false, url: '' };
+        }
+      }),
     uploadBotAvatar: adminProcedure
       .input(z.object({ imageBase64: z.string().min(1), mimeType: z.string().optional() }))
       .mutation(async ({ input }) => {

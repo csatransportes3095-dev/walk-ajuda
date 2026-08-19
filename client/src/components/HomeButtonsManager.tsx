@@ -65,6 +65,7 @@ type HomeButton = {
   url: string;
   waMsg?: string | null;
   icon: string;
+  logoUrl?: string;
   color: string;
   textColor: string;
   subColor: string;
@@ -78,7 +79,7 @@ type HomeButton = {
 };
 
 const DEFAULT_FORM: Partial<HomeButton> = {
-  text: "", subtitle: "", url: "", waMsg: "",
+  text: "", subtitle: "", url: "", waMsg: "", logoUrl: "",
   icon: "gift", color: "#0ea5e9", textColor: "#ffffff",
   subColor: "rgba(255,255,255,0.7)", font: "", hover: "scale",
   linkType: "custom", openInNewTab: 0, vipOnly: 0, isActive: 1,
@@ -94,9 +95,29 @@ function buildUrl(linkType: string, url: string): string {
 
 export function HomeButtonsManager() {
   const { data: buttons = [], isLoading, refetch } = trpc.homeButtons.list.useQuery();
-  const createMut = trpc.homeButtons.create.useMutation({ onSuccess: () => { refetch(); toast.success("Botão criado!"); resetForm(); setShowForm(false); } });
-  const updateMut = trpc.homeButtons.update.useMutation({ onSuccess: () => { refetch(); toast.success("Botão atualizado!"); resetForm(); setShowForm(false); setEditingId(null); } });
-  const deleteMut = trpc.homeButtons.delete.useMutation({ onSuccess: () => { refetch(); toast.success("Botão excluído!"); } });
+  const { data: siteSettings = {} } = trpc.settings.getAll.useQuery();
+  const utils = trpc.useUtils();
+  const settingsUpdateMut = trpc.settings.update.useMutation({
+    onSuccess: () => { utils.settings.getAll.invalidate(); },
+  });
+  const uploadLogoMut = trpc.uploads.uploadHomeButtonLogo.useMutation();
+  const saveExtraLogo = (buttonId: number, logoUrl: string) => {
+    settingsUpdateMut.mutate({ settings: { [`home_extra_button_logo_${buttonId}`]: logoUrl } });
+  };
+  const createMut = trpc.homeButtons.create.useMutation({
+    onSuccess: (created: any, variables: any) => {
+      const logoUrl = String(variables?.logoUrl || '');
+      if (logoUrl) saveExtraLogo(created.id, logoUrl);
+      refetch(); toast.success("Botão criado!"); resetForm(); setShowForm(false);
+    }
+  });
+  const updateMut = trpc.homeButtons.update.useMutation({
+    onSuccess: (_result: any, variables: any) => {
+      if (variables?.data?.logoUrl !== undefined) saveExtraLogo(variables.id, String(variables.data.logoUrl || ''));
+      refetch(); toast.success("Botão atualizado!"); resetForm(); setShowForm(false); setEditingId(null);
+    }
+  });
+  const deleteMut = trpc.homeButtons.delete.useMutation({ onSuccess: (_result: any, variables: any) => { saveExtraLogo(variables.id, ''); refetch(); toast.success("Botão excluído!"); } });
   const toggleMut = trpc.homeButtons.toggle.useMutation({ onSuccess: () => refetch() });
   const reorderMut = trpc.homeButtons.reorder.useMutation({ onSuccess: () => refetch() });
 
@@ -107,9 +128,29 @@ export function HomeButtonsManager() {
   function resetForm() { setForm(DEFAULT_FORM); }
 
   function startEdit(btn: HomeButton) {
-    setForm({ ...btn });
+    setForm({ ...btn, logoUrl: (siteSettings as Record<string, string>)[`home_extra_button_logo_${btn.id}`] || '' });
     setEditingId(btn.id);
     setShowForm(true);
+  }
+
+  async function handleLogoSelect(file?: File) {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { toast.error('Envie uma imagem JPG, PNG ou WEBP.'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error('Imagem muito grande. Máximo de 5MB.'); return; }
+    try {
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadLogoMut.mutateAsync({ imageBase64, mimeType: file.type as 'image/jpeg' | 'image/png' | 'image/webp', target: 'extra' });
+      if (!result.url) throw new Error('Upload sem URL');
+      setForm(current => ({ ...current, logoUrl: result.url }));
+      toast.success(editingId ? 'Logo enviada. Clique em Atualizar para publicar.' : 'Logo enviada. Ela será vinculada quando o botão for criado.');
+    } catch {
+      toast.error('Não foi possível enviar a logo do botão.');
+    }
   }
 
   function handleSave() {
@@ -168,10 +209,12 @@ export function HomeButtonsManager() {
               className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${btn.isActive ? "border-gray-700 bg-gray-800/40" : "border-gray-800 bg-gray-900/40 opacity-50"}`}
             >
               <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
+                className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-lg overflow-hidden"
                 style={{ backgroundColor: btn.color }}
               >
-                {ICON_EMOJIS[btn.icon] || "🔗"}
+                {(siteSettings as Record<string, string>)[`home_extra_button_logo_${btn.id}`]
+                  ? <img src={(siteSettings as Record<string, string>)[`home_extra_button_logo_${btn.id}`]} alt={`Logo ${btn.text}`} className="w-full h-full object-cover" />
+                  : (ICON_EMOJIS[btn.icon] || "🔗")}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-semibold truncate">{btn.text}</p>
@@ -271,7 +314,7 @@ export function HomeButtonsManager() {
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-xs text-gray-400 block mb-1">Ícone</label>
+              <label className="text-xs text-gray-400 block mb-1">Ícone de reserva</label>
               <select
                 value={form.icon || "gift"}
                 onChange={e => setForm({ ...form, icon: e.target.value })}
@@ -290,6 +333,21 @@ export function HomeButtonsManager() {
                 {HOVER_OPTIONS.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Logo do botão (opcional)</label>
+            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-2.5">
+              <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
+                {form.logoUrl ? <img src={form.logoUrl} alt="Prévia da logo" className="w-full h-full object-cover" /> : <span className="text-xl">{ICON_EMOJIS[form.icon || "gift"] || "🔗"}</span>}
+              </div>
+              <label className="cursor-pointer rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-xs font-bold text-violet-200 hover:bg-violet-500/25">
+                {uploadLogoMut.isPending ? 'Enviando...' : 'Escolher imagem'}
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadLogoMut.isPending} onChange={e => { void handleLogoSelect(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+              </label>
+              {form.logoUrl && <button type="button" onClick={() => setForm(current => ({ ...current, logoUrl: '' }))} className="text-xs font-bold text-red-300 hover:text-red-200">Remover</button>}
+            </div>
+            <p className="mt-1 text-[10px] text-gray-500">JPG, PNG ou WEBP; até 5MB. O ícone de reserva aparece se não houver logo.</p>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
@@ -360,8 +418,8 @@ export function HomeButtonsManager() {
           <div>
             <label className="text-xs text-gray-400 block mb-1">Pré-visualização</label>
             <div className="flex items-center gap-3 rounded-xl px-4 py-3 shadow-lg" style={{ background: form.color || "#0ea5e9" }}>
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">
-                {ICON_EMOJIS[form.icon || "gift"] || "🔗"}
+              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-2xl flex-shrink-0 overflow-hidden">
+                {form.logoUrl ? <img src={form.logoUrl} alt="Prévia da logo" className="w-full h-full object-cover" /> : (ICON_EMOJIS[form.icon || "gift"] || "🔗")}
               </div>
               <div className="flex-1">
                 <p className="font-black text-base leading-snug" style={{ color: form.textColor || "#fff" }}>

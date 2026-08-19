@@ -68,6 +68,7 @@ export default function AdminSettings() {
   const uploadLoginImageMut = trpc.uploads.uploadLoginImage.useMutation();
   const uploadGastosLogoMut = trpc.uploads.uploadGastosLogo.useMutation();
   const uploadBotAvatarMut = trpc.uploads.uploadBotAvatar.useMutation();
+  const uploadHomeButtonLogoMut = trpc.uploads.uploadHomeButtonLogo.useMutation();
 
   // === PIX ACCOUNTS ===
   type PixAccount = { id: number; label: string; pixKey: string; pixType: string; pixName: string; pixBank: string; isActive: number; createdAt: Date };
@@ -205,6 +206,32 @@ export default function AdminSettings() {
     setForm(prev => ({ ...prev, [key]: value }));
     // Carrega fonte imediatamente ao selecionar
     if (key.endsWith('_font') && value) loadGoogleFont(value);
+  };
+
+  const handleHomeButtonLogoSelect = async (buttonKey: 'btn1' | 'btn2', file?: File) => {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      toast.error('Envie uma imagem JPG, PNG ou WEBP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Imagem muito grande. Máximo de 5MB.');
+      return;
+    }
+    try {
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadHomeButtonLogoMut.mutateAsync({ imageBase64, mimeType: file.type as 'image/jpeg' | 'image/png' | 'image/webp', target: buttonKey });
+      if (!result.url) throw new Error('Upload sem URL');
+      updateField(`home_${buttonKey}_logo_url`, result.url);
+      toast.success('Logo enviada. Clique em Salvar Configurações para publicar.');
+    } catch {
+      toast.error('Não foi possível enviar a logo do botão.');
+    }
   };
 
   const toggleField = (key: string) => {
@@ -483,9 +510,23 @@ export default function AdminSettings() {
                     </select>
                   </div>
                   <div>
+                    <label className="text-xs text-gray-400 block mb-1">Logo do botão (opcional)</label>
+                    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-2.5">
+                      <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl bg-white/10 flex items-center justify-center">
+                        {form.home_btn1_logo_url ? <img src={form.home_btn1_logo_url} alt="Logo do botão Fazer Pedido" className="h-full w-full object-cover" /> : <span className="text-xl">📋</span>}
+                      </div>
+                      <label className="cursor-pointer rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-xs font-bold text-violet-200 hover:bg-violet-500/25">
+                        {uploadHomeButtonLogoMut.isPending ? 'Enviando...' : 'Escolher imagem'}
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadHomeButtonLogoMut.isPending} onChange={e => { void handleHomeButtonLogoSelect('btn1', e.target.files?.[0]); e.currentTarget.value = ''; }} />
+                      </label>
+                      {form.home_btn1_logo_url && <button type="button" onClick={() => updateField('home_btn1_logo_url', '')} className="text-xs font-bold text-red-300 hover:text-red-200">Remover</button>}
+                    </div>
+                    <p className="mt-1 text-[10px] text-gray-500">JPG, PNG ou WEBP; até 5MB. Sem logo, o ícone padrão continua aparecendo.</p>
+                  </div>
+                  <div>
                     <p className="text-xs text-gray-500 mb-2">Preview:</p>
                     <div className="flex items-center gap-4 rounded-2xl px-5 py-4" style={{ background: form.home_btn1_color || "#7c3aed", fontFamily: form.home_btn1_font ? `'${form.home_btn1_font}', sans-serif` : undefined }}>
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">📋</span></div>
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden" style={{ background: 'rgba(255,255,255,0.2)' }}>{form.home_btn1_logo_url ? <img src={form.home_btn1_logo_url} alt="Prévia da logo" className="w-full h-full object-cover" /> : <span className="text-xl">📋</span>}</div>
                       <div className="flex-1">
                         <p className="font-black text-lg tracking-wide" style={{ color: form.home_btn1_text_color || "#ffffff" }}>{form.home_btn1_text || "FAZER PEDIDO"}</p>
                         <p className="text-sm" style={{ color: form.home_btn1_sub_color || "rgba(255,255,255,0.7)" }}>{form.home_btn1_subtitle || "Abrir conta Uber, 99 ou InDrive"}</p>
@@ -556,9 +597,23 @@ export default function AdminSettings() {
                     </select>
                   </div>
                   <div>
+                    <label className="text-xs text-gray-400 block mb-1">Logo do botão (opcional)</label>
+                    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-2.5">
+                      <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl bg-white/10 flex items-center justify-center">
+                        {form.home_btn2_logo_url ? <img src={form.home_btn2_logo_url} alt="Logo do botão Acompanhar" className="h-full w-full object-cover" /> : <span className="text-xl">🔍</span>}
+                      </div>
+                      <label className="cursor-pointer rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-xs font-bold text-violet-200 hover:bg-violet-500/25">
+                        {uploadHomeButtonLogoMut.isPending ? 'Enviando...' : 'Escolher imagem'}
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadHomeButtonLogoMut.isPending} onChange={e => { void handleHomeButtonLogoSelect('btn2', e.target.files?.[0]); e.currentTarget.value = ''; }} />
+                      </label>
+                      {form.home_btn2_logo_url && <button type="button" onClick={() => updateField('home_btn2_logo_url', '')} className="text-xs font-bold text-red-300 hover:text-red-200">Remover</button>}
+                    </div>
+                    <p className="mt-1 text-[10px] text-gray-500">JPG, PNG ou WEBP; até 5MB. Sem logo, o ícone padrão continua aparecendo.</p>
+                  </div>
+                  <div>
                     <p className="text-xs text-gray-500 mb-2">Preview:</p>
                     <div className="flex items-center gap-4 rounded-2xl px-5 py-4" style={{ background: form.home_btn2_color || "#059669", fontFamily: form.home_btn2_font ? `'${form.home_btn2_font}', sans-serif` : undefined }}>
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}><span className="text-xl">🔍</span></div>
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden" style={{ background: 'rgba(255,255,255,0.2)' }}>{form.home_btn2_logo_url ? <img src={form.home_btn2_logo_url} alt="Prévia da logo" className="w-full h-full object-cover" /> : <span className="text-xl">🔍</span>}</div>
                       <div className="flex-1">
                         <p className="font-black text-lg tracking-wide" style={{ color: form.home_btn2_text_color || "#ffffff" }}>{form.home_btn2_text || "ACOMPANHAR"}</p>
                         <p className="text-sm" style={{ color: form.home_btn2_sub_color || "rgba(255,255,255,0.7)" }}>{form.home_btn2_subtitle || "Ver o status do seu pedido"}</p>

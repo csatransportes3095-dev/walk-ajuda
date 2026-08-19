@@ -232,6 +232,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   // Configurações dinâmicas dos botões
   const BTN1_TEXT = settings?.home_btn1_text || "FAZER PEDIDO";
   const BTN1_SUBTITLE = settings?.home_btn1_subtitle || "Abrir conta Uber, 99 ou InDrive";
+  const BTN1_LOGO_URL = settings?.home_btn1_logo_url?.trim() || "";
   const BTN1_COLOR = settings?.home_btn1_color || "#7c3aed";
   const BTN1_TEXT_COLOR = settings?.home_btn1_text_color || "#ffffff";
   const BTN1_SUB_COLOR = settings?.home_btn1_sub_color || "rgba(255,255,255,0.7)";
@@ -246,6 +247,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   };
   const BTN2_TEXT = settings?.home_btn2_text || "ACOMPANHAR";
   const BTN2_SUBTITLE = settings?.home_btn2_subtitle || "Ver o status do seu pedido";
+  const BTN2_LOGO_URL = settings?.home_btn2_logo_url?.trim() || "";
   const BTN2_COLOR = settings?.home_btn2_color || "#059669";
   const BTN2_TEXT_COLOR = settings?.home_btn2_text_color || "#ffffff";
   const BTN2_SUB_COLOR = settings?.home_btn2_sub_color || "rgba(255,255,255,0.7)";
@@ -257,6 +259,10 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   // Efeitos hover por botão
   const BTN1_HOVER = settings?.home_btn1_hover || "scale";
   const BTN2_HOVER = settings?.home_btn2_hover || "scale";
+  const getExtraLogoUrl = (buttonId: number) => {
+    const value = (settings as Record<string, string> | undefined)?.[`home_extra_button_logo_${buttonId}`];
+    return typeof value === 'string' ? value.trim() : '';
+  };
 
   // Estado de hover por botão (para efeitos que precisam de JS)
   const [hovered, setHovered] = useState<Record<string, boolean>>({});
@@ -702,8 +708,8 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
             className={`w-full group relative overflow-hidden text-white rounded-[18px] transition-all duration-300 flex items-center gap-3 ${getHoverClass(BTN1_HOVER)}`}
             style={{ ...elegantBtnStyle(BTN1_COLOR, getFontStyle(BTN1_FONT)), ...getHoverStyle(BTN1_HOVER, BTN1_COLOR, 'btn1') }}
           >
-            <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0 }}>
-              <ClipboardList style={{ width: 20, height: 20, color: "#fff" }} />
+            <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0, overflow: "hidden" }}>
+              {BTN1_LOGO_URL ? <img src={BTN1_LOGO_URL} alt="Logo Fazer Pedido" className="h-full w-full object-cover" /> : <ClipboardList style={{ width: 20, height: 20, color: "#fff" }} />}
             </div>
             <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.1px", color: BTN1_TEXT_COLOR, lineHeight: 1.3, margin: 0 }}>{BTN1_TEXT}</p>
@@ -723,8 +729,8 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
             className={`w-full group relative overflow-hidden text-white rounded-[18px] transition-all duration-300 flex items-center gap-3 ${getHoverClass(BTN2_HOVER)}`}
             style={{ ...elegantBtnStyle(BTN2_COLOR, getFontStyle(BTN2_FONT)), ...getHoverStyle(BTN2_HOVER, BTN2_COLOR, 'btn2') }}
           >
-            <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0 }}>
-              <Search style={{ width: 20, height: 20, color: "#fff" }} />
+            <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0, overflow: "hidden" }}>
+              {BTN2_LOGO_URL ? <img src={BTN2_LOGO_URL} alt="Logo Acompanhar Pedido" className="h-full w-full object-cover" /> : <Search style={{ width: 20, height: 20, color: "#fff" }} />}
             </div>
             <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.1px", color: BTN2_TEXT_COLOR, lineHeight: 1.3, margin: 0 }}>{BTN2_TEXT}</p>
@@ -746,8 +752,8 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
               className={`w-full group relative overflow-hidden text-white rounded-[18px] transition-all duration-300 flex items-center gap-3 ${getHoverClass(btn.hover)}`}
               style={{ ...elegantBtnStyle(btn.color, getFontStyle(btn.font || HOME_FONT)), ...getHoverStyle(btn.hover, btn.color, `extra-${btn.id}`) }}
             >
-              <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0, fontSize: 20 }}>
-                {EXTRA_BTN_ICONS[btn.icon] || EXTRA_BTN_ICONS.gift}
+              <div style={{ width: 40, height: 40, minWidth: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", flexShrink: 0, fontSize: 20, overflow: "hidden" }}>
+                {getExtraLogoUrl(btn.id) ? <img src={getExtraLogoUrl(btn.id)} alt={`Logo ${btn.text}`} className="h-full w-full object-cover" /> : (EXTRA_BTN_ICONS[btn.icon] || EXTRA_BTN_ICONS.gift)}
               </div>
               <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.1px", color: btn.textColor, lineHeight: 1.3, margin: 0 }}>{btn.text}</p>
