@@ -321,7 +321,7 @@ async function syncCommercialProfileFromLevel(db: any, customerId: number, level
   await db.execute(sql`
     UPDATE loanClients
     SET profileSlug=${levelSlug}, creditLimit=${profile.creditLimit}, interestRate=${profile.interestRate},
-        maxDays=${profile.maxDays}, allowedPaymentTypes=${profile.defaultPaymentTypes}, updatedAt=NOW()
+        maxDays=${profile.maxDays}, updatedAt=NOW()
     WHERE (REGEXP_REPLACE(phone, '[^0-9]', '') = REGEXP_REPLACE(${customer.phone}, '[^0-9]', '')
       OR (REGEXP_REPLACE(cpf, '[^0-9]', '') <> '' AND REGEXP_REPLACE(cpf, '[^0-9]', '') = REGEXP_REPLACE(${customer.cpf}, '[^0-9]', '')))
       AND profileSlug NOT IN ('personalizado', 'custom')

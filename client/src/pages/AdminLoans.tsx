@@ -3013,8 +3013,9 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
     const p = profiles.find((x) => x.slug === slug);
     if (p) {
       setForm((prev) => ({ ...prev, profileSlug: slug, creditLimit: String(p.defaultLimit ?? p.creditLimit ?? ""), interestRate: String(p.defaultInterestRate ?? p.interestRate ?? "") }));
-      // Atualiza os modos de pagamento com os do novo perfil
-      if (p.defaultPaymentTypes) {
+      // Em cliente existente, os modos individuais definidos pelo ADM são
+      // prioritários. O perfil só preenche os modos ao criar um cliente novo.
+      if (!isEdit && p.defaultPaymentTypes) {
         setAllowedTypes(p.defaultPaymentTypes.split(",").filter(Boolean));
       }
     } else {

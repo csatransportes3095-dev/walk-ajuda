@@ -75,32 +75,9 @@ async function startServer() {
   registerUploadRoute(app);
   registerApkDownloadRoute(app);
   ensureApkTable().catch(console.error);
-  // Corrigir allowedPaymentTypes de clientes existentes para respeitar o perfil
-  (async () => {
-    try {
-      const { getDb } = await import('../db');
-      const { sql: drizzleSql } = await import('drizzle-orm');
-      const db = await getDb();
-      if (!db) return;
-      const qRows = async (d: any, q: any) => { const [rows] = await d.execute(q); return rows as any[]; };
-      const profiles = await qRows(db, drizzleSql`SELECT slug, defaultPaymentTypes FROM loanProfiles`);
-      let totalFixed = 0;
-      for (const profile of profiles) {
-        const profileModes = (profile.defaultPaymentTypes || 'diario').split(',').map((t: string) => t.trim()).filter(Boolean);
-        const clients = await qRows(db, drizzleSql`SELECT id, allowedPaymentTypes FROM loanClients WHERE profileSlug=${profile.slug}`);
-        for (const client of clients) {
-          const clientModes = (client.allowedPaymentTypes || 'diario').split(',').map((t: string) => t.trim()).filter(Boolean);
-          const filtered = clientModes.filter((m: string) => profileModes.includes(m));
-          const newModes = filtered.length > 0 ? filtered.join(',') : profileModes[0];
-          if (newModes !== client.allowedPaymentTypes) {
-            await db.execute(drizzleSql`UPDATE loanClients SET allowedPaymentTypes=${newModes}, updatedAt=NOW() WHERE id=${client.id}`);
-            totalFixed++;
-          }
-        }
-      }
-      if (totalFixed > 0) console.log(`[Startup] Corrigidos ${totalFixed} clientes com allowedPaymentTypes fora do perfil`);
-    } catch (e: any) { console.warn('[Startup] Erro ao corrigir allowedPaymentTypes:', e.message); }
-  })();
+  // Modos de pagamento gravados na ficha individual do cliente pelo ADM são
+  // prioritários. A inicialização não pode filtrá-los ou regravá-los pelo perfil.
+  // O perfil continua sendo usado apenas como padrão de criação de novos clientes.
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "200mb" }));
   app.use(express.urlencoded({ limit: "200mb", extended: true }));

@@ -444,7 +444,7 @@ export function LoansTab({ token }: LoansTabProps) {
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestAmount, setRequestAmount] = useState("");
-  const [paymentType, setPaymentType] = useState<"diario" | "semanal" | "mensal">("diario");
+  const [paymentType, setPaymentType] = useState<"diario" | "semanal" | "mensal" | "parcelado">("diario");
   const [workDays, setWorkDays] = useState<"seg_sab" | "seg_dom">("seg_sab");
   const [requestNotes, setRequestNotes] = useState("");
   const [uploadInstallmentId, setUploadInstallmentId] = useState<number | null>(null);
@@ -504,6 +504,18 @@ export function LoansTab({ token }: LoansTabProps) {
   );
 
   const { data: lateFeeConfig } = trpc.loans.getLateFeeConfig.useQuery();
+
+  // O modo individual gravado pelo ADM é a prioridade do cliente. O perfil só
+  // é usado pelo backend ao criar quem ainda não possui uma configuração própria.
+  useEffect(() => {
+    const configuredModes = String((data as any)?.client?.allowedPaymentTypes || '')
+      .split(',')
+      .map((mode) => mode.trim())
+      .filter((mode): mode is "diario" | "semanal" | "mensal" | "parcelado" => ["diario", "semanal", "mensal", "parcelado"].includes(mode));
+    if (configuredModes.length > 0 && !configuredModes.includes(paymentType)) {
+      setPaymentType(configuredModes[0]);
+    }
+  }, [(data as any)?.client?.allowedPaymentTypes, paymentType]);
 
   const [pixKeyInput, setPixKeyInput] = useState("");
   const [pixNameInput, setPixNameInput] = useState("");
@@ -1138,7 +1150,7 @@ export function LoansTab({ token }: LoansTabProps) {
                 ))}
               </div>
             </div>
-            {paymentType === "diario" && (
+            {paymentType === "diario" && allowedTypes.includes("diario") && (
               <div className="space-y-2">
                 <Label>Dias de pagamento</Label>
                 <div className="grid grid-cols-2 gap-2">

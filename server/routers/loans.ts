@@ -688,10 +688,9 @@ export const loanRouter = router({
     const profiles = await qRows(db, drizzleSql`SELECT * FROM loanProfiles WHERE slug=${input.profileSlug} LIMIT 1`);
     if (!profiles.length) throw new Error("Perfil não encontrado");
     const p = profiles[0];
-    const profilePaymentTypes = p.defaultPaymentTypes || "diario";
     await db.execute(drizzleSql`
       UPDATE loanClients
-      SET creditLimit=${p.creditLimit}, interestRate=${p.interestRate}, maxDays=${p.maxDays}, maxDaysSemanal=${p.maxDaysSemanal || 60}, maxDaysQuinzenal=${p.maxDaysQuinzenal || 60}, maxDaysMensal=${p.maxDaysMensal || 90}, allowedPaymentTypes=${profilePaymentTypes}, updatedAt=NOW()
+      SET creditLimit=${p.creditLimit}, interestRate=${p.interestRate}, maxDays=${p.maxDays}, maxDaysSemanal=${p.maxDaysSemanal || 60}, maxDaysQuinzenal=${p.maxDaysQuinzenal || 60}, maxDaysMensal=${p.maxDaysMensal || 90}, updatedAt=NOW()
       WHERE profileSlug=${input.profileSlug}
     `);
     const updated = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanClients WHERE profileSlug=${input.profileSlug}`);
@@ -791,11 +790,16 @@ export const loanRouter = router({
   })).mutation(async ({ input }) => {
     const db = await getDb() as any;
 
-    // Buscar perfil para derivar allowedPaymentTypes correto
+    // O perfil fornece modos somente para novos clientes. Em edição, uma lista
+    // individual já gravada não pode ser substituída por mudança de perfil.
     const profiles = await qRows(db, drizzleSql`SELECT * FROM loanProfiles WHERE slug=${input.profileSlug} LIMIT 1`);
     const profile = profiles[0];
-    // allowedPaymentTypes: usa o do perfil se não informado explicitamente
-    const resolvedAllowedTypes = input.allowedPaymentTypes || (profile?.defaultPaymentTypes ?? "diario");
+    let resolvedAllowedTypes = String(input.allowedPaymentTypes || '').trim();
+    if (!resolvedAllowedTypes && input.id) {
+      const existing = await qRows(db, drizzleSql`SELECT allowedPaymentTypes FROM loanClients WHERE id=${input.id} LIMIT 1`);
+      resolvedAllowedTypes = String(existing[0]?.allowedPaymentTypes || '').trim();
+    }
+    if (!resolvedAllowedTypes) resolvedAllowedTypes = profile?.defaultPaymentTypes ?? "diario";
 
     if (input.id) {
       await db.execute(drizzleSql`
@@ -1835,20 +1839,16 @@ export const loanRouter = router({
       throw new TRPCError({ code: "BAD_REQUEST", message: "Complete sua chave PIX para recebimento (chave, nome do titular e banco) antes de solicitar o empréstimo." });
     }
 
-    // Valida se o tipo de pagamento está liberado para este cliente
-    // Usa allowedPaymentTypes do cliente, mas também valida contra o perfil atual
-    const clientAllowed = (client.allowedPaymentTypes || "diario").split(",").map((t: string) => t.trim());
-    // Buscar perfil atual do cliente para validação adicional
-    const profileRows = await qRows(db, drizzleSql`SELECT defaultPaymentTypes FROM loanProfiles WHERE slug=${client.profileSlug} LIMIT 1`);
-    const profileAllowed = profileRows.length > 0
-      ? (profileRows[0].defaultPaymentTypes || "diario").split(",").map((t: string) => t.trim())
-      : clientAllowed;
-    // O modo deve estar liberado TANTO no cliente quanto no perfil
-    const effectiveAllowed = clientAllowed.filter((t: string) => profileAllowed.includes(t));
+    // A configuração individual gravada pelo ADM no cliente tem prioridade.
+    // O perfil serve apenas para definir o valor inicial quando o cliente é criado.
+    const effectiveAllowed = String(client.allowedPaymentTypes || "diario")
+      .split(",")
+      .map((t: string) => t.trim())
+      .filter(Boolean);
     if (!effectiveAllowed.includes(input.paymentType)) {
       const modeLabel: Record<string, string> = { diario: 'Diário', semanal: 'Semanal', mensal: 'Mensal', quinzenal: 'Quinzenal', parcelado: 'Parcelado' };
       const allowedLabels = effectiveAllowed.map((t: string) => modeLabel[t] || t).join(', ');
-      throw new TRPCError({ code: "BAD_REQUEST", message: `Modo de pagamento não liberado para seu perfil. Modos disponíveis: ${allowedLabels}` });
+      throw new TRPCError({ code: "BAD_REQUEST", message: `Modo de pagamento não liberado para este cliente. Modos disponíveis: ${allowedLabels}` });
     }
 
     const today = getBrazilToday();
