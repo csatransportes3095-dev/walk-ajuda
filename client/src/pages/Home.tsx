@@ -2319,19 +2319,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Mensagem de boas-vindas sem caixa de fundo */}
-            <div className="w-full max-w-sm mb-8">
-              <div className="px-5 py-1">
-                <p className="text-white text-sm leading-relaxed">
-                  Olá! 👋 Sou o <span className="font-bold" style={{ color: settings?.bot_assistant_name_color || '#a78bfa' }}>{settings?.bot_assistant_name || 'Colombia'}</span>, seu assistente de pedidos.
-                </p>
-                <p className="text-zinc-300 text-sm leading-relaxed mt-2">
-                  Posso te <span className="font-bold text-white">guiar passo a passo</span> para fazer seu pedido de forma rápida e sem erros — ou você pode navegar sozinho pelo site.
-                </p>
-                <p className="text-zinc-400 text-xs mt-3">Como prefere continuar?</p>
-              </div>
-            </div>
-
             {/* Botões de escolha */}
             <div className="w-full max-w-sm space-y-3">
               {/* Botão principal — com assistente */}
