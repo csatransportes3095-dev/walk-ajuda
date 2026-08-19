@@ -241,6 +241,17 @@ export async function serveStatic(app: Express) {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.html')) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return;
+      }
+
+      // Somente bundles versionados pelo Vite: um novo deploy gera outro hash,
+      // portanto o navegador nunca reaproveita JavaScript ou CSS de uma versão antiga.
+      const isVersionedAsset = /[\\/]assets[\\/].+-[A-Za-z0-9_-]{8,}\.(js|css)$/.test(filePath);
+      if (isVersionedAsset) {
+        const cacheControl = 'public, max-age=31536000, immutable';
+        res.setHeader('Cache-Control', cacheControl);
+        res.setHeader('CDN-Cache-Control', cacheControl);
+        res.setHeader('Cloudflare-CDN-Cache-Control', cacheControl);
       }
     }
   }));
