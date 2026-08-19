@@ -4738,76 +4738,61 @@ export default function AdminOrders() {
                       </button>
                     </>
                   ) : (
-                    <>
-                      {/* Linha 1: Ordenar por */}
-                      <div className="flex items-center gap-1.5 w-full">
-                        <span className="text-xs text-zinc-500 font-medium shrink-0">Ordenar por</span>
-                        {(["number", "name", "date"] as const).map(k => (
-                          <button
-                            key={k}
-                            onClick={() => {
-                              if (todosSortKey === k) setTodosSortDir(d => d === "asc" ? "desc" : "asc");
-                              else { setTodosSortKey(k); setTodosSortDir("asc"); }
-                            }}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors shrink-0 ${
-                              todosSortKey === k
-                                ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
-                                : "bg-card border-border text-muted-foreground hover:border-amber-500/40"
-                            }`}
-                          >
-                            {k === "number" ? "Número" : k === "name" ? "Nome (A–Z)" : "Data"}
-                            {todosSortKey === k && (
-                              todosSortDir === "asc"
-                                ? <ArrowUp className="w-3 h-3" />
-                                : <ArrowDown className="w-3 h-3" />
-                            )}
-                          </button>
-                        ))}
-                        <span className="ml-auto text-xs text-zinc-500 shrink-0">
-                          {group.orders.filter((o: any) => {
-                            if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
-                            if (todosQuickFilter !== "all") return getOperationalBucket(o) === todosQuickFilter;
-                            return true;
-                          }).length} resultado(s)
-                        </span>
-                      </div>
-                      {/* Linha 2: Filtros rápidos com scroll horizontal */}
-                      <div className="flex gap-2 w-full mt-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-                        {([
-                          { id: "all",                  label: "Todos",                    desc: "Todos os pedidos",            glow: "#f59e0b", ab: "linear-gradient(135deg,#78350f,#92400e)", ac: "#f59e0b", at: "#fde68a" },
-                          { id: "sem_status",            label: "Sem Agendamento",          desc: "Não agendados",               glow: "#ef4444", ab: "linear-gradient(135deg,#7f1d1d,#991b1b)", ac: "#ef4444", at: "#fca5a5" },
-                          { id: "agendamento_confirmado",label: "Agend. Confirmado",         desc: "Agendamento confirmado",       glow: "#22c55e", ab: "linear-gradient(135deg,#14532d,#166534)", ac: "#22c55e", at: "#86efac" },
-                          { id: "agendamento",           label: "Aguardando",               desc: "Aguardando confirmação",      glow: "#eab308", ab: "linear-gradient(135deg,#713f12,#854d0e)", ac: "#eab308", at: "#fef08a" },
-                          { id: "em_analise",            label: "Em Análise",               desc: "Foto em análise",             glow: "#38bdf8", ab: "linear-gradient(135deg,#0c4a6e,#075985)", ac: "#38bdf8", at: "#bae6fd" },
-                          { id: "novo",                  label: "Novos",                    desc: "Não visualizados",            glow: "#6366f1", ab: "linear-gradient(135deg,#1e1b4b,#312e81)", ac: "#6366f1", at: "#a5b4fc" },
-                          { id: "aguardando_ativa",      label: "Ag. Ficar Ativa",          desc: "Aguardando ficar ativa",      glow: "#84cc16", ab: "linear-gradient(135deg,#1a2e05,#365314)", ac: "#84cc16", at: "#bef264" },
-                          { id: "conta_ativa",           label: "Conta Ativa",              desc: "Conta já ativa",              glow: "#10b981", ab: "linear-gradient(135deg,#022c22,#064e3b)", ac: "#10b981", at: "#6ee7b7" },
-                        ] as const).map(f => {
-                          const cnt = group.orders.filter((o: any) => {
-                            if (f.id === "novo") return !viewedOrders.has(getOrderKey(o));
-                            if (f.id !== "all") return getOperationalBucket(o) === f.id;
-                            return true;
-                          }).length;
-                          const active = todosQuickFilter === f.id;
-                          return (
-                            <button
-                              key={f.id}
-                              onClick={() => setTodosQuickFilter(f.id)}
-                              style={active ? { background: f.ab, borderColor: f.ac, color: f.at, boxShadow: `0 0 10px ${f.glow}55` } : {}}
-                              className={`shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-2xl border transition-all ${
-                                active ? "" : "bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500"
-                              }`}
-                            >
-                              <span className={`text-2xl font-black leading-none ${active ? "" : "text-zinc-100"}`}>{cnt}</span>
-                              <div className="flex flex-col items-start">
-                                <span className="text-[12px] font-bold leading-tight whitespace-nowrap">{f.label}</span>
-                                <span className="text-[10px] opacity-60 leading-tight whitespace-nowrap">{f.desc}</span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>
+                    (() => {
+                      const quickFilters = [
+                        { id: "all",                   label: "Todos",             desc: "Todos os pedidos",       icon: Layers,       glow: "#f59e0b", ab: "linear-gradient(135deg,#78350f,#92400e)", ac: "#f59e0b", at: "#fde68a" },
+                        { id: "sem_status",            label: "Sem Agendamento",  desc: "Não agendados",          icon: Calendar,     glow: "#ef4444", ab: "linear-gradient(135deg,#7f1d1d,#991b1b)", ac: "#ef4444", at: "#fca5a5" },
+                        { id: "agendamento_confirmado", label: "Agend. Confirmado", desc: "Agenda confirmada",       icon: CheckCircle2, glow: "#22c55e", ab: "linear-gradient(135deg,#14532d,#166534)", ac: "#22c55e", at: "#86efac" },
+                        { id: "agendamento",            label: "Aguardando",        desc: "Aguardando confirmação", icon: Clock,        glow: "#eab308", ab: "linear-gradient(135deg,#713f12,#854d0e)", ac: "#eab308", at: "#fef08a" },
+                        { id: "em_analise",             label: "Em Análise",        desc: "Foto em análise",        icon: Search,       glow: "#38bdf8", ab: "linear-gradient(135deg,#0c4a6e,#075985)", ac: "#38bdf8", at: "#bae6fd" },
+                        { id: "novo",                   label: "Novos",             desc: "Não visualizados",       icon: Star,         glow: "#6366f1", ab: "linear-gradient(135deg,#1e1b4b,#312e81)", ac: "#6366f1", at: "#a5b4fc" },
+                        { id: "aguardando_ativa",       label: "Ag. Ficar Ativa",   desc: "Aguardando ficar ativa", icon: Zap,          glow: "#84cc16", ab: "linear-gradient(135deg,#1a2e05,#365314)", ac: "#84cc16", at: "#bef264" },
+                        { id: "conta_ativa",            label: "Conta Ativa",       desc: "Conta já ativa",         icon: UserCheck,    glow: "#10b981", ab: "linear-gradient(135deg,#022c22,#064e3b)", ac: "#10b981", at: "#6ee7b7" },
+                      ] as const;
+                      const counts: Record<string, number> = { all: group.orders.length, novo: 0 };
+                      for (const order of group.orders) {
+                        const bucket = getOperationalBucket(order);
+                        counts[bucket] = (counts[bucket] || 0) + 1;
+                        if (!viewedOrders.has(getOrderKey(order))) counts.novo += 1;
+                      }
+                      return (
+                        <div className="flex w-full items-stretch gap-2 overflow-x-auto pb-1 pr-1 snap-x" style={{ scrollbarWidth: "none" }} aria-label="Filtros operacionais de pedidos">
+                          {quickFilters.map(f => {
+                            const count = counts[f.id] || 0;
+                            const active = todosQuickFilter === f.id;
+                            const Icon = f.icon;
+                            return (
+                              <button
+                                key={f.id}
+                                type="button"
+                                onClick={() => setTodosQuickFilter(f.id)}
+                                title={`${f.label}: ${f.desc} (${count})`}
+                                aria-pressed={active}
+                                style={active ? { background: f.ab, borderColor: f.ac, color: f.at, boxShadow: `0 0 14px ${f.glow}66` } : {}}
+                                className={`group shrink-0 snap-start min-w-[148px] sm:min-w-[158px] min-h-[58px] flex items-center gap-2.5 px-3.5 py-2 rounded-xl border transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                                  active
+                                    ? "scale-[1.015]"
+                                    : f.id === "novo" && count === 0
+                                      ? "bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-200"
+                                      : "bg-zinc-900/95 border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800"
+                                }`}
+                              >
+                                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${active ? "border-white/20 bg-black/15" : "border-white/10 bg-white/5 text-zinc-400 group-hover:text-white"}`}>
+                                  <Icon className="w-4 h-4" />
+                                </span>
+                                <div className="min-w-0 flex-1 text-left">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`text-xl font-black leading-none tabular-nums ${active ? "" : "text-zinc-100"}`}>{count}</span>
+                                    <span className="truncate text-[12px] font-bold leading-tight">{f.label}</span>
+                                  </div>
+                                  <span className="mt-0.5 block truncate text-[10px] leading-tight opacity-65">{f.desc}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()
                   )}
                 </div>
               )}
