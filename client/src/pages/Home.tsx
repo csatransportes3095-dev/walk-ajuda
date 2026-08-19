@@ -242,13 +242,13 @@ export default function Home() {
     return map;
   }, [resellerPrices]);
 
-  // Buscar dados dinâmicos
-  // A vitrine consulta atualizações em segundo plano para refletir imediatamente as edições
-  // salvas no ADM (preço, texto, aparência, documentos e perguntas), sem exigir F5.
+  // Buscar dados dinâmicos.
+  // Mantém o contrato completo já usado por cards, carrinho e checkout, mas evita
+  // recarregar a árvore inteira de produtos enquanto a aba não está em uso.
   const { data: products } = trpc.products.listActive.useQuery(undefined, {
-    staleTime: 0,
-    refetchInterval: 3000,
-    refetchIntervalInBackground: true,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
