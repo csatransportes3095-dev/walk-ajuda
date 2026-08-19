@@ -2299,28 +2299,6 @@ export default function Home() {
 
           <div className="relative flex-1 flex flex-col items-center justify-center px-6 pb-8">
 
-            {/* Avatar do atendente */}
-            <div className="mb-6 flex flex-col items-center gap-3">
-              <div className="relative">
-                {/* Avatar circular com borda animada */}
-                {settings?.bot_assistant_avatar ? (
-                  <img src={settings.bot_assistant_avatar} alt={settings?.bot_assistant_name || 'Colombia'} className="w-28 h-28 rounded-full object-cover shadow-2xl shadow-violet-500/40 ring-4 ring-violet-500/30" />
-                ) : (
-                  <div className="w-28 h-28 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center shadow-2xl shadow-violet-500/40 ring-4 ring-violet-500/30">
-                    <span className="text-5xl select-none">👨‍💻</span>
-                  </div>
-                )}
-                {/* Indicador online */}
-                <div className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-400 rounded-full border-2 border-zinc-950 shadow-lg">
-                  <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
-                </div>
-              </div>
-              <div className="text-center">
-                <h2 className="text-2xl font-black tracking-wide" style={{ color: settings?.bot_assistant_name_color || '#ffffff' }}>{settings?.bot_assistant_name || 'Colombia'}</h2>
-                <p className="text-emerald-400 text-xs font-semibold mt-0.5">● Online agora — pronto para te atender</p>
-              </div>
-            </div>
-
             {/* Balão de mensagem */}
             <div className="w-full max-w-sm mb-8">
               <div className="bg-zinc-800 border border-zinc-700 rounded-2xl rounded-tl-sm px-5 py-4 shadow-lg">
