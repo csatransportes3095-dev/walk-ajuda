@@ -15,12 +15,19 @@ const S: Record<string, any> = {
 };
 
 const CATEGORIAS = [
-  "🥩 Açougue","🍎 Hortifruti","🥛 Laticínios","🥖 Padaria","🧴 Limpeza",
-  "🧻 Higiene","🍝 Mercearia","🥤 Bebidas","🍦 Frios","🐟 Peixaria",
-  "🌾 Grãos","🍬 Doces","🧊 Congelados","📦 Outros"
+  "🍎 Hortifruti", "🥩 Açougue", "🐟 Peixaria", "🥖 Padaria", "🍦 Frios", "🥛 Laticínios",
+  "🍝 Mercearia", "🌾 Grãos", "🥤 Bebidas", "🍬 Doces", "🧊 Congelados", "🧴 Limpeza",
+  "🧻 Higiene", "📦 Outros"
 ];
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+// A compra segue a mesma sequência no catálogo e na lista, evitando que as
+// categorias mudem de lugar durante a montagem do carrinho.
+const ordemCategoria = (categoria: string) => {
+  const index = CATEGORIAS.indexOf(categoria);
+  return index >= 0 ? index : CATEGORIAS.length;
+};
 
 // ─── Card de produto reutilizável ─────────────────────────────────────────────
 function ProdutoCard({ p, inline, setInline, onFav, onEdit, onDelete, onConfirm }: {
@@ -34,6 +41,7 @@ function ProdutoCard({ p, inline, setInline, onFav, onEdit, onDelete, onConfirm 
 }) {
   const state = inline[p.id];
   const isOpen = state?.open;
+  const [showOptions, setShowOptions] = React.useState(false);
 
   const fmtCents = (cents: number): string => {
     if (!cents) return "0,00";
@@ -64,28 +72,35 @@ function ProdutoCard({ p, inline, setInline, onFav, onEdit, onDelete, onConfirm 
           <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.nome}</div>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>{p.categoria} · {p.unidade}</div>
         </div>
-        <button onClick={onFav} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
-          <Star size={14} color={p.favorito ? "#fbbf24" : "rgba(255,255,255,0.25)"} fill={p.favorito ? "#fbbf24" : "none"} />
-        </button>
-        <button onClick={onEdit} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
-          <Edit3 size={13} color="rgba(255,255,255,0.3)" />
-        </button>
-        <button onClick={onDelete} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
-          <Trash2 size={13} color="rgba(239,68,68,0.5)" />
-        </button>
-        <button onClick={toggleOpen} style={{
-          background: isOpen ? "rgba(239,68,68,0.2)" : "rgba(124,58,237,0.3)",
-          border: `1px solid ${isOpen ? "rgba(239,68,68,0.4)" : "rgba(124,58,237,0.4)"}`,
-          borderRadius: 10, padding: "6px 10px", color: isOpen ? "#f87171" : "#a78bfa",
-          fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, flexShrink: 0
+        <button onClick={onConfirm} style={{
+          background: "linear-gradient(135deg,#7c3aed,#3b82f6)", border: "none", borderRadius: 10,
+          padding: "7px 10px", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer",
+          display: "flex", alignItems: "center", gap: 4, flexShrink: 0
         }}>
-          {isOpen ? <X size={13} /> : <Plus size={13} />}
-          {isOpen ? "Fechar" : "Lista"}
+          <Plus size={14} /> Adicionar
         </button>
+        <button onClick={toggleOpen} aria-label="Ajustar quantidade e valor" style={{
+          background: isOpen ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.07)",
+          border: `1px solid ${isOpen ? "rgba(124,58,237,0.5)" : "rgba(255,255,255,0.12)"}`,
+          borderRadius: 10, padding: "7px", color: isOpen ? "#c4b5fd" : "rgba(255,255,255,0.65)",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+        }}>
+          {isOpen ? <X size={14} /> : <Edit3 size={14} />}
+        </button>
+        <button onClick={() => setShowOptions(v => !v)} aria-label="Opções do produto" style={{ background: "none", border: "none", cursor: "pointer", padding: 5, color: "rgba(255,255,255,0.5)", fontSize: 18, lineHeight: 1, flexShrink: 0 }}>⋮</button>
       </div>
+
+      {showOptions && (
+        <div style={{ marginTop: 10, display: "flex", gap: 8, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+          <button onClick={onFav} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, padding: "7px 10px", color: "rgba(255,255,255,0.75)", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Star size={13} color={p.favorito ? "#fbbf24" : "currentColor"} fill={p.favorito ? "#fbbf24" : "none"} /> {p.favorito ? "Favorito" : "Favoritar"}</button>
+          <button onClick={onEdit} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, padding: "7px 10px", color: "rgba(255,255,255,0.75)", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Edit3 size={13} /> Editar produto</button>
+          <button onClick={onDelete} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 9, padding: "7px 10px", color: "#fca5a5", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Trash2 size={13} /> Excluir</button>
+        </div>
+      )}
 
       {isOpen && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", marginBottom: 8 }}>Ajustar quantidade e valor antes de adicionar</div>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>QTDE ({p.unidade})</div>
@@ -123,7 +138,7 @@ function ProdutoCard({ p, inline, setInline, onFav, onEdit, onDelete, onConfirm 
             )}
           </div>
           <button onClick={onConfirm} style={{ ...S.btn("linear-gradient(135deg,#7c3aed,#3b82f6)"), width: "100%", justifyContent: "center", marginTop: 10, padding: "10px" }}>
-            <ShoppingCart size={16} /> Adicionar à Lista
+            <ShoppingCart size={16} /> Adicionar com ajustes
           </button>
         </div>
       )}
@@ -222,9 +237,9 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>🔥 Mais comprados</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {maisComprados.map((p: any) => (
-              <button key={p.id} onClick={() => setInline(prev => ({ ...prev, [p.id]: prev[p.id]?.open ? { ...prev[p.id], open: false } : { qtd: "1", valorCents: 0, open: true } }))}
-                style={{ background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 20, padding: "5px 12px", color: "#a78bfa", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                {p.nome}
+              <button key={p.id} onClick={() => confirmAdd(p)}
+                style={{ background: "rgba(124,58,237,0.2)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 20, padding: "5px 12px", color: "#c4b5fd", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                + {p.nome}
               </button>
             ))}
           </div>
@@ -251,7 +266,9 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
       {!search && modo === "categoria" && (
         <>
           {CATEGORIAS.map(cat => {
-            const grupo = produtos.filter((p: any) => p.categoria === cat);
+            const grupo = produtos
+              .filter((p: any) => p.categoria === cat)
+              .sort((a: any, b: any) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
             if (grupo.length === 0) return null;
             return (
               <div key={cat} style={{ marginBottom: 4 }}>
@@ -275,7 +292,9 @@ function AbaProdutos({ onAddToList }: { onAddToList: (p: any, qtd: number, valor
           })}
           {/* Produtos sem categoria reconhecida */}
           {(() => {
-            const semCat = produtos.filter((p: any) => !p.categoria || !CATEGORIAS.includes(p.categoria));
+            const semCat = produtos
+              .filter((p: any) => !p.categoria || !CATEGORIAS.includes(p.categoria))
+              .sort((a: any, b: any) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
             if (semCat.length === 0) return null;
             return (
               <div style={{ marginBottom: 4 }}>
@@ -427,7 +446,10 @@ function AbaLista({ cartoes }: { cartoes: any[] }) {
       if (!map.has(cat)) map.set(cat, []);
       map.get(cat)!.push(item);
     }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      const ordem = ordemCategoria(a) - ordemCategoria(b);
+      return ordem !== 0 ? ordem : a.localeCompare(b);
+    });
   }, [lista]);
 
   const totalGeral = lista.reduce((s: number, i: any) => {
@@ -611,8 +633,8 @@ export default function CartaoMercadoPage() {
   const addToListMut = trpc.mercado.lista.add.useMutation({
     onSuccess: (data: any) => {
       utils.mercado.lista.get.invalidate();
-      if (data.duplicate) toast.info("Produto já está na lista!");
-      else { toast.success("Adicionado! 🛒"); setAba("lista"); }
+      if (data.duplicate) toast.info("Este produto já está na sua lista. Ajuste a quantidade na aba Lista.");
+      else toast.success("Adicionado à lista! Continue escolhendo seus produtos.");
     }
   });
 
