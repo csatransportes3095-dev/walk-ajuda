@@ -3185,92 +3185,100 @@ export default function AdminOrders() {
               return (
                 <div key={group.id} className={`mx-4 mt-3 border-2 ${colorCfg.border} rounded-xl overflow-hidden`}>
                   {/* Cabeçalho */}
-                  <div className={`flex items-center justify-between px-4 py-2.5 ${colorCfg.header} border-b`}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{group.icon}</span>
-                      {editingGroupId === group.id ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={editGroupName}
-                            onChange={e => setEditGroupName(e.target.value)}
-                            className="px-2 py-0.5 bg-black/30 border border-white/20 rounded text-xs text-white w-32 focus:outline-none"
-                            autoFocus
-                          />
-                          <div className="space-y-1">
-                            {[
-                              ['red','rose','pink','fuchsia','orange','amber','yellow'],
-                              ['lime','green','emerald','teal','cyan','sky','blue'],
-                              ['indigo','violet','purple','slate','zinc','white'],
-                            ].map((row, ri) => (
-                              <div key={ri} className="flex gap-1.5">
-                                {row.map(c => (
-                                  <button key={c} onClick={() => setEditGroupColor(c)}
-                                    title={c}
-                                    style={{ backgroundColor: GROUP_COLOR_MAP[c]?.hex || '#888' }}
-                                    className={`w-5 h-5 rounded-full border-2 transition-all ${editGroupColor === c ? 'border-white scale-125 ring-1 ring-white/40' : 'border-transparent opacity-65 hover:opacity-100 hover:scale-110 hover:border-white/40'}`}
-                                  />
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                          <div className="flex gap-0.5">
-                            {ICONS.slice(0, 6).map(ic => (
-                              <button key={ic} onClick={() => setEditGroupIcon(ic)}
-                                className={`w-6 h-6 rounded text-sm flex items-center justify-center ${editGroupIcon === ic ? 'bg-white/20' : 'hover:bg-white/10'}`}
-                              >{ic}</button>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => updateGroupMut.mutate({ id: group.id, name: editGroupName, color: editGroupColor, icon: editGroupIcon })}
-                            disabled={updateGroupMut.isPending}
-                            className="px-3 py-1 rounded-lg bg-green-500 hover:bg-green-400 text-white text-xs font-bold transition-colors flex items-center gap-1 disabled:opacity-60"
-                          >
-                            <Check className="w-3 h-3" />
-                            {updateGroupMut.isPending ? 'Salvando...' : 'Salvar'}
-                          </button>
-                          <button onClick={() => setEditingGroupId(null)} className="px-3 py-1 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white/70 hover:text-white text-xs font-bold transition-colors">Cancelar</button>
-                        </div>
-                      ) : (
-                        <span className={`${colorCfg.text} font-black text-sm uppercase tracking-wider`}>{group.name}</span>
-                      )}
-                      <span className={`${colorCfg.badge} text-white text-[11px] font-bold rounded-full px-2 py-0.5`}>{groupOrders.length}</span>
+                  <div className={`flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4 ${colorCfg.header} border-b`}>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="shrink-0 text-base">{group.icon}</span>
+                      <span className={`${colorCfg.text} min-w-0 truncate font-black text-sm uppercase tracking-wider`}>{group.name}</span>
+                      <span className={`${colorCfg.badge} shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-white`}>{groupOrders.length}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      {/* Botão colapsar/expandir grupo */}
+                    <div className="flex w-full items-center gap-1 sm:w-auto">
                       <button
                         onClick={() => toggleExtraGroup(group.id)}
-                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white/60 hover:text-white transition-colors"
+                        className="shrink-0 p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white/60 hover:text-white transition-colors"
                         title={collapsedExtraGroups.has(group.id) ? 'Expandir grupo' : 'Recolher grupo'}
                       >
                         {collapsedExtraGroups.has(group.id)
                           ? <ChevronDown className="w-3.5 h-3.5" />
                           : <ChevronUp className="w-3.5 h-3.5" />}
                       </button>
-                      {/* Botão filtrar por este grupo */}
                       <button
                         onClick={() => setFilterStatus(filterStatus === `group_${group.id}` ? 'all' : `group_${group.id}`)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
+                        className={`flex flex-1 items-center justify-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all sm:flex-none ${
                           filterStatus === `group_${group.id}`
                             ? 'bg-white/20 text-white ring-1 ring-white/40'
                             : 'bg-white/5 hover:bg-white/15 text-white/60 hover:text-white'
                         }`}
                         title={filterStatus === `group_${group.id}` ? 'Mostrar todos os pedidos' : 'Filtrar somente este grupo'}
                       >
-                        <span>{filterStatus === `group_${group.id}` ? '✕ Limpar filtro' : '🔍 Ver só este grupo'}</span>
+                        <span className="sm:hidden">{filterStatus === `group_${group.id}` ? '✕ Limpar' : '🔍 Ver grupo'}</span>
+                        <span className="hidden sm:inline">{filterStatus === `group_${group.id}` ? '✕ Limpar filtro' : '🔍 Ver só este grupo'}</span>
                       </button>
                       <button
                         onClick={() => { setEditingGroupId(group.id); setEditGroupName(group.name); setEditGroupColor(group.color); setEditGroupIcon(group.icon || '🔖'); }}
-                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white/50 hover:text-white transition-colors"
-                        title="Editar grupo"
+                        disabled={editingGroupId === group.id}
+                        className="shrink-0 rounded-lg bg-white/5 p-1.5 text-white/50 transition-colors hover:bg-white/15 hover:text-white disabled:cursor-default disabled:opacity-40"
+                        title={editingGroupId === group.id ? 'Editando grupo' : 'Editar grupo'}
                       ><Edit3 className="w-3.5 h-3.5" /></button>
                       <button
                         onClick={() => { if (confirm(`Deletar o grupo "${group.name}"? Os pedidos não serão apagados.`)) deleteGroupMut.mutate({ id: group.id }); }}
-                        className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/30 text-red-400/60 hover:text-red-400 transition-colors"
+                        className="shrink-0 rounded-lg bg-red-500/10 p-1.5 text-red-400/60 transition-colors hover:bg-red-500/30 hover:text-red-400"
                         title="Deletar grupo"
                       ><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
+                  {editingGroupId === group.id && (
+                    <div className="border-b border-white/10 bg-black/20 px-3 py-3 sm:px-4">
+                      <div className="space-y-3">
+                        <label className="block">
+                          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/60">Nome do grupo</span>
+                          <input
+                            type="text"
+                            value={editGroupName}
+                            onChange={e => setEditGroupName(e.target.value)}
+                            className="w-full rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-white/50"
+                            autoFocus
+                          />
+                        </label>
+                        <div>
+                          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-white/60">Cor do grupo</p>
+                          <div className="grid max-w-[220px] grid-cols-7 gap-2">
+                            {['red','rose','pink','fuchsia','orange','amber','yellow','lime','green','emerald','teal','cyan','sky','blue','indigo','violet','purple','slate','zinc','white'].map(c => (
+                              <button
+                                key={c}
+                                onClick={() => setEditGroupColor(c)}
+                                title={c}
+                                style={{ backgroundColor: GROUP_COLOR_MAP[c]?.hex || '#888' }}
+                                className={`h-6 w-6 rounded-full border-2 transition-all ${editGroupColor === c ? 'border-white scale-110 ring-1 ring-white/40' : 'border-transparent opacity-70 hover:opacity-100 hover:scale-105 hover:border-white/40'}`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-white/60">Ícone do grupo</p>
+                          <div className="grid w-fit grid-cols-6 gap-1.5">
+                            {ICONS.slice(0, 6).map(ic => (
+                              <button
+                                key={ic}
+                                onClick={() => setEditGroupIcon(ic)}
+                                className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors ${editGroupIcon === ic ? 'bg-white/20 ring-1 ring-white/40' : 'bg-white/5 hover:bg-white/10'}`}
+                              >{ic}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 border-t border-white/10 pt-3 sm:justify-end">
+                          <button
+                            onClick={() => updateGroupMut.mutate({ id: group.id, name: editGroupName, color: editGroupColor, icon: editGroupIcon })}
+                            disabled={updateGroupMut.isPending}
+                            className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-green-500 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-green-400 disabled:opacity-60 sm:flex-none"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            {updateGroupMut.isPending ? 'Salvando...' : 'Salvar'}
+                          </button>
+                          <button onClick={() => setEditingGroupId(null)} className="flex-1 rounded-lg bg-zinc-700 px-3 py-2 text-xs font-bold text-white/70 transition-colors hover:bg-zinc-600 hover:text-white sm:flex-none">Cancelar</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {/* Cards dos pedidos do grupo - ocultos se recolhido */}
                   {!collapsedExtraGroups.has(group.id) && groupOrders.length === 0 && (
                     <div className="px-4 py-4 text-center text-xs text-zinc-500">
