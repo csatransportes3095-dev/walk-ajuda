@@ -453,10 +453,10 @@ export default function Home() {
 
   // Quando o step vai para 'success' e o cliente NÃO é novo, pular o formulário de indicação
   useEffect(() => {
-    if (step === 'success' && !isNewCustomerOrder) {
-      setPostOrderReferralStep('done');
-    }
-  }, [step, isNewCustomerOrder]);
+    // A indicação válida pertence ao cadastro, antes do primeiro pedido. Depois de
+    // enviar o pedido ela não pode ser criada nem alterada, para proteger a comissão.
+    if (step === 'success') setPostOrderReferralStep('done');
+  }, [step]);
 
   // Salvar progresso automaticamente quando step muda (exceto home e success)
   useEffect(() => {
@@ -1551,7 +1551,7 @@ export default function Home() {
         // Sessão VIP mantida até o cliente confirmar no WhatsApp
         setSuccessMessage(`${successCount} pedido(s) enviado(s) com sucesso!`);
         setIsSubmitting(false);
-        setPostOrderReferralStep(wasExistingCustomer ? 'done' : 'question');
+        setPostOrderReferralStep('done');
         setStep("success");
         submitLockRef.current = false;
         return;
@@ -1648,7 +1648,7 @@ export default function Home() {
         setSuccessMessage('Arquivos enviados com sucesso!');
         if ((result as any).trackingPin) setTrackingPinFromServer((result as any).trackingPin);
         setIsSubmitting(false);
-        setPostOrderReferralStep(wasExistingCustomer ? 'done' : 'question');
+        setPostOrderReferralStep('done');
         setStep("success");
         submitLockRef.current = false;
         return;

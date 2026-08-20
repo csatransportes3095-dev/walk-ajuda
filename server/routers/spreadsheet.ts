@@ -15,6 +15,7 @@ import { findMainCustomerByIdentity, getRouteAccess, normalizeCustomerPhone, set
 import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, spreadsheetReferralDeclarations, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
+import { resolveReferralDeclaration } from "../referral";
 
 // Resolve o clientId a partir do token de sessão da planilha.
 // Lança UNAUTHORIZED se o token for inválido ou expirado.
@@ -1858,18 +1859,22 @@ export const spreadsheetRouter = router({
         )).limit(1);
       if (existingRows?.[0]) return { success: true, alreadyAnswered: true };
 
-      const referrerName = input.answer === 'yes' ? String(input.referrerName || '').trim() : '';
-      const referrerPhone = input.answer === 'yes' ? String(input.referrerPhone || '').trim() : '';
-      if (input.answer === 'yes' && (!referrerName || !referrerPhone)) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Informe o nome e o telefone de quem indicou você.' });
+      const submittedName = input.answer === 'yes' ? String(input.referrerName || '').trim() : '';
+      const submittedPhone = input.answer === 'yes' ? String(input.referrerPhone || '').trim() : '';
+      if (input.answer === 'yes' && !submittedName && !submittedPhone) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Informe o nome, o telefone ou os dois dados de quem indicou você.' });
       }
 
-      const normalizedReferrerPhone = referrerPhone.replace(/\D/g, '');
-      let referrerCustomerId: number | null = null;
-      if (normalizedReferrerPhone) {
-        const matchRows = await db.select({ id: customers.id }).from(customers)
-          .where(eq(customers.phone, normalizedReferrerPhone)).limit(1);
-        referrerCustomerId = matchRows?.[0]?.id ?? null;
+      const referral = await resolveReferralDeclaration({
+        customerPhone: client.phone,
+        referrerName: submittedName,
+        referrerPhone: submittedPhone,
+      });
+      if (referral.issue === 'invalid_phone') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Telefone do indicador inválido. Informe o número com DDD.' });
+      }
+      if (referral.issue === 'self_referral') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Você não pode indicar a si mesmo.' });
       }
 
       try {
@@ -1877,9 +1882,11 @@ export const spreadsheetRouter = router({
           clientId: client.id,
           route: input.route,
           answer: input.answer,
-          referrerName: referrerName || null,
-          referrerPhone: referrerPhone || null,
-          referrerCustomerId,
+          // Mantém a declaração independente da comissão. Só o primeiro cadastro,
+          // antes do primeiro pedido, pode criar vínculo que habilita comissão.
+          referrerName: referral.declaredName || null,
+          referrerPhone: referral.declaredPhone || null,
+          referrerCustomerId: referral.linkedReferrer?.id ?? null,
         });
         return { success: true, alreadyAnswered: false };
       } catch (error: any) {

@@ -53,8 +53,8 @@ export function PostLoginReferralManifest({ token, route, onComplete }: {
 
   const submit = (answer: 'yes' | 'no') => {
     setError('');
-    if (answer === 'yes' && (!referrerName.trim() || !referrerPhone.replace(/\D/g, ''))) {
-      setError('Informe o nome e o telefone de quem indicou você.');
+    if (answer === 'yes' && !referrerName.trim() && !referrerPhone.replace(/\D/g, '')) {
+      setError('Informe o nome, o telefone ou os dois dados de quem indicou você.');
       return;
     }
     submitMutation.mutate({
@@ -104,7 +104,7 @@ export function PostLoginReferralManifest({ token, route, onComplete }: {
               >
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/20 text-emerald-300"><CheckCircle2 className="h-7 w-7" /></div>
                 <p className="text-xl font-black text-emerald-200">SIM, fui indicado</p>
-                <p className="mt-2 text-sm leading-relaxed text-emerald-100/75">Vou informar o nome e o telefone de quem me indicou.</p>
+                <p className="mt-2 text-sm leading-relaxed text-emerald-100/75">Vou informar o nome, o telefone ou os dois dados de quem me indicou.</p>
               </button>
               <button
                 type="button"
@@ -125,16 +125,16 @@ export function PostLoginReferralManifest({ token, route, onComplete }: {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary"><UserRound className="h-5 w-5" /></div>
                 <div>
                   <h2 className="font-bold text-foreground">Dados de quem indicou</h2>
-                  <p className="text-xs text-muted-foreground">Informe os dois dados para registrar sua indicação.</p>
+                  <p className="text-xs text-muted-foreground">Informe o nome, o telefone ou os dois dados. Esta declaração não altera comissões anteriores.</p>
                 </div>
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-foreground"><UserRound className="mr-1.5 inline h-4 w-4 opacity-70" />Nome de quem indicou</label>
+                  <label className="mb-2 block text-sm font-semibold text-foreground"><UserRound className="mr-1.5 inline h-4 w-4 opacity-70" />Nome de quem indicou <span className="text-muted-foreground">(opcional se informar o telefone)</span></label>
                   <Input value={referrerName} onChange={(event) => setReferrerName(event.target.value)} placeholder="Nome completo" disabled={submitMutation.isPending} className="h-12 bg-input text-base" autoFocus />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-foreground"><Phone className="mr-1.5 inline h-4 w-4 opacity-70" />Telefone/WhatsApp de quem indicou</label>
+                  <label className="mb-2 block text-sm font-semibold text-foreground"><Phone className="mr-1.5 inline h-4 w-4 opacity-70" />Telefone/WhatsApp de quem indicou <span className="text-muted-foreground">(opcional se informar o nome)</span></label>
                   <Input value={formatPhone(referrerPhone)} onChange={(event) => setReferrerPhone(normalizeBrazilPhone(event.target.value))} inputMode="numeric" placeholder="(11) 99999-9999" disabled={submitMutation.isPending} className="h-12 bg-input text-base" />
                 </div>
               </div>

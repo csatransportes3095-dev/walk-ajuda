@@ -114,6 +114,7 @@ import { storagePut } from "./storage";
 import { r2DeleteObjects, r2GetObjectBuffer } from "./r2Storage";
 import { getAdminJwtSecret } from "./adminJwt";
 import { requireCustomerSession } from "./customerSession";
+import { resolveReferralDeclaration } from "./referral";
 
 /**
  * Verifica se um telefone está na blocklist.
@@ -2314,19 +2315,23 @@ export const appRouter = router({
             message: 'Você já possui cadastro no sistema. Entre na sua conta para continuar.',
           };
         }
-        // Validar indicador obrigatório ou código de bypass
-        const { validateReferrer, validateBypassCode, useBypassCode } = await import('./db');
+        // A origem de indicação é opcional. Telefone não localizado é preservado como
+        // declaração do cliente, mas não cria vínculo nem habilita comissão automática.
+        const { validateBypassCode, useBypassCode } = await import('./db');
         const cleanPhone = normalizedInput.phone;
-        const cleanRefPhone = (input.referredByPhone ?? '').replace(/\D/g, '');
-        
-        // Indicador agora e OPCIONAL. Se informado, validamos; se nao, o cadastro segue normalmente.
-        if (cleanRefPhone) {
-          const referrerValidation = await validateReferrer(cleanRefPhone);
-          if (!referrerValidation.valid) {
-            return { success: false, blocked: false, message: 'Indicador não encontrado no sistema. Verifique o telefone do indicador.' };
-          }
-        } else if (input.bypassCode) {
-          // Se o cliente informou um codigo de liberacao, validamos e consumimos.
+        const referral = await resolveReferralDeclaration({
+          customerPhone: cleanPhone,
+          referrerName: input.referredBy,
+          referrerPhone: input.referredByPhone,
+        });
+        if (referral.issue === 'invalid_phone') {
+          return { success: false, blocked: false, message: 'Telefone do indicador inválido. Informe o número com DDD.' };
+        }
+        if (referral.issue === 'self_referral') {
+          return { success: false, blocked: false, message: 'Você não pode indicar a si mesmo.' };
+        }
+        if (!referral.declaredPhone && input.bypassCode) {
+          // Código de liberação só é usado quando não existe telefone de indicador.
           const bypassValidation = await validateBypassCode(input.bypassCode);
           if (!bypassValidation.valid) {
             return { success: false, blocked: false, message: bypassValidation.message };
@@ -2336,8 +2341,8 @@ export const appRouter = router({
         
         const safeInput = {
           ...normalizedInput,
-          referredBy: cleanRefPhone && cleanRefPhone === cleanPhone ? undefined : input.referredBy,
-          referredByPhone: cleanRefPhone && cleanRefPhone === cleanPhone ? undefined : input.referredByPhone,
+          referredBy: referral.declaredName || undefined,
+          referredByPhone: referral.declaredPhone || undefined,
         };
         const customer = await createCustomer(safeInput);
         const sourceRoute = input.sourceRoute || 'site';
@@ -2349,12 +2354,12 @@ export const appRouter = router({
         }
         
         // Registrar indicação se houver indicador
-        if (safeInput.referredByPhone && safeInput.referredBy) {
+        if (safeInput.referredByPhone && referral.linkedReferrer) {
           try {
             const { recordReferral } = await import('./db');
             await recordReferral({
-              referrerPhone: safeInput.referredByPhone,
-              referrerName: safeInput.referredBy,
+              referrerPhone: referral.linkedReferrer.phone,
+              referrerName: referral.linkedReferrer.name || safeInput.referredBy || 'Indicador',
               referredCustomerId: customer.id,
               referredPhone: cleanPhone,
               referredName: safeInput.name,
@@ -2862,8 +2867,8 @@ export const appRouter = router({
     updateReferral: publicProcedure
       .input(z.object({
         phone: z.string().min(1),
-        referredBy: z.string().min(1),
-        referredByPhone: z.string().regex(/^\d{10,11}$/).optional(),
+        referredBy: z.string().optional(),
+        referredByPhone: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const clientIp = (ctx.req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || ctx.req.socket?.remoteAddress || 'unknown';
@@ -2871,9 +2876,9 @@ export const appRouter = router({
         if (blockResult.blocked) return { success: false, message: 'Acesso bloqueado' };
         const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
         if (!customer) return { success: false, message: 'Cliente não encontrado' };
-        // O manifesto inicial pode registrar a origem apenas uma vez, antes do primeiro pedido.
-        // Depois disso, a atribuição fica bloqueada e não pode ser trocada ou apagada.
-        if (customer.referredByPhone) {
+        // A origem inicial só pode ser registrada uma vez, antes do primeiro pedido.
+        // Depois disso, uma comissão congelada nunca pode ser trocada ou apagada.
+        if (customer.referredByPhone || customer.referredBy) {
           return { success: false, message: 'Esta indicação já foi registrada e não pode ser alterada.' };
         }
         const referralDb = await (await import('./db')).getDb();
@@ -2887,32 +2892,38 @@ export const appRouter = router({
             return { success: false, message: 'A indicação só pode ser registrada antes do primeiro pedido.' };
           }
         }
-        // Validar: não pode indicar a si mesmo
-        if (input.referredByPhone) {
-          const cleanSelf = input.phone.replace(/\D/g, '');
-          const cleanRef = input.referredByPhone.replace(/\D/g, '');
-          if (cleanSelf === cleanRef) {
-            return { success: false, message: 'Você não pode indicar a si mesmo' };
-          }
-          // Validar: o telefone do indicador deve estar cadastrado no banco
-          const referrer = await getCustomerByPhone(cleanRef);
-          if (!referrer) {
-            return { success: false, message: 'Telefone do indicador não encontrado no cadastro. Verifique o número informado.' };
-          }
-        }
-        // Buscar o nome real do indicador pelo telefone (evita salvar texto digitado pelo cliente)
-        let realReferrerName = input.referredBy;
-        if (input.referredByPhone) {
-          try {
-            const referrer = await getCustomerByPhone(input.referredByPhone.replace(/\D/g, ''));
-            if (referrer?.name) realReferrerName = referrer.name;
-          } catch (e) { /* usa o nome digitado como fallback */ }
-        }
-        await updateCustomer(customer.id, {
-          referredBy: realReferrerName,
-          referredByPhone: input.referredByPhone,
+        const referral = await resolveReferralDeclaration({
+          customerPhone: input.phone,
+          referrerName: input.referredBy,
+          referrerPhone: input.referredByPhone,
         });
-        return { success: true };
+        if (!referral.declaredName && !referral.declaredPhone) {
+          return { success: false, message: 'Informe o nome, o telefone ou os dois dados de quem indicou você.' };
+        }
+        if (referral.issue === 'invalid_phone') {
+          return { success: false, message: 'Telefone do indicador inválido. Informe o número com DDD.' };
+        }
+        if (referral.issue === 'self_referral') {
+          return { success: false, message: 'Você não pode indicar a si mesmo.' };
+        }
+
+        await updateCustomer(customer.id, {
+          referredBy: referral.declaredName || undefined,
+          referredByPhone: referral.declaredPhone || undefined,
+        });
+        if (referral.declaredPhone && referral.linkedReferrer) {
+          try {
+            const { recordReferral } = await import('./db');
+            await recordReferral({
+              referrerPhone: referral.linkedReferrer.phone,
+              referrerName: referral.linkedReferrer.name || referral.declaredName || 'Indicador',
+              referredCustomerId: customer.id,
+              referredPhone: input.phone.replace(/\D/g, ''),
+              referredName: customer.name,
+            });
+          } catch (error) { console.error('Erro ao registrar indicação inicial:', error); }
+        }
+        return { success: true, linked: Boolean(referral.linkedReferrer) };
       }),
 
     // Público: cliente visualiza seus próprios dados (somente leitura)

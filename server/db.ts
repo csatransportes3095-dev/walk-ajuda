@@ -853,7 +853,7 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
     uf: data.uf ? data.uf.toUpperCase().trim() : null,
     cpf: required.cpf,
     referredBy: data.referredBy ? data.referredBy.toUpperCase().trim() : null,
-    referredByPhone: data.referredByPhone || null,
+    referredByPhone: data.referredByPhone ? normalizeMainCustomerPhone(data.referredByPhone) : null,
     profilePhotoUrl: required.photoUrl,
   });
   // Colunas de identidade foram adicionadas de modo compatível para proteger novas criações.
@@ -884,7 +884,7 @@ export async function updateCustomer(id: number, data: { name?: string; phone?: 
   if (data.uf !== undefined) updateSet.uf = data.uf ? data.uf.toUpperCase().trim() : data.uf;
   if (data.cpf !== undefined) updateSet.cpf = data.cpf ? data.cpf.replace(/\D/g, '') : data.cpf;
   if (data.referredBy !== undefined) updateSet.referredBy = data.referredBy ? data.referredBy.toUpperCase().trim() : data.referredBy;
-  if (data.referredByPhone !== undefined) updateSet.referredByPhone = data.referredByPhone;
+  if (data.referredByPhone !== undefined) updateSet.referredByPhone = data.referredByPhone ? normalizeMainCustomerPhone(data.referredByPhone) : data.referredByPhone;
   if (data.profilePhotoUrl !== undefined) updateSet.profilePhotoUrl = data.profilePhotoUrl;
   if (data.customerNumber !== undefined) updateSet.customerNumber = data.customerNumber;
   if (data.adminNotes !== undefined) updateSet.adminNotes = data.adminNotes;
