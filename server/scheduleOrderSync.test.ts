@@ -4,8 +4,8 @@ import { readFile } from "node:fs/promises";
 const dbSource = () => readFile(new URL("./db.ts", import.meta.url), "utf8");
 const routerSource = () => readFile(new URL("./routers.ts", import.meta.url), "utf8");
 
-describe("sincronização de agenda após foto em análise", () => {
-  it("limita o encerramento ao mesmo pedido, subpedido e agendamento confirmado", async () => {
+describe("independência entre status do pedido e agendamento", () => {
+  it("mantém o helper manual limitado ao mesmo pedido, subpedido e agendamento confirmado", async () => {
     const source = await dbSource();
     const start = source.indexOf("export async function completeConfirmedAppointmentsForOrder");
     const helper = source.slice(start, source.indexOf("// CONFIRMAÇÃO ATÔMICA", start));
@@ -16,7 +16,7 @@ describe("sincronização de agenda após foto em análise", () => {
     expect(helper).toContain("await completeAppointment(appointment.id)");
   });
 
-  it("preserva o histórico de agenda ao concluir o registro sem apagá-lo", async () => {
+  it("mantém a conclusão manual preservando a linha histórica sem exclusão", async () => {
     const source = await dbSource();
     const start = source.indexOf("export async function completeAppointment");
     const completion = source.slice(start, source.indexOf("/**", start));
@@ -27,13 +27,18 @@ describe("sincronização de agenda após foto em análise", () => {
     expect(completion).not.toContain("db.delete(scheduleAppointments)");
   });
 
-  it("executa a sincronização somente ao avançar para foto_em_analise", async () => {
+  it("não encerra agendamento confirmado ao alterar o pedido para foto em análise", async () => {
     const source = await routerSource();
-    expect(source).toContain("const SCHEDULE_COMPLETION_STATUSES = ['foto_em_analise']");
-    expect(source).toContain("await completeConfirmedAppointmentsForOrder(input.registrationId, input.subOrderIndex)");
+    const updateStart = source.indexOf("updateStatus: adminProcedure");
+    const updateEnd = source.indexOf("// Admin: atualizar orderSource", updateStart);
+    const updateProcedure = source.slice(updateStart, updateEnd);
+
+    expect(updateProcedure).not.toContain("SCHEDULE_COMPLETION_STATUSES");
+    expect(updateProcedure).not.toContain("completeConfirmedAppointmentsForOrder");
+    expect(updateProcedure).toContain("Alterar o status do pedido não encerra nem modifica a agenda do cliente.");
   });
 
-  it("usa o último estado de agenda antes de classificar o filtro", async () => {
+  it("mantém a regra de filtro: somente agenda aberta tem prioridade operacional", async () => {
     const source = await routerSource();
     const start = source.indexOf("// Buscar o último estado de agenda de cada pedido");
     const block = source.slice(start, source.indexOf("// Fallback por telefone", start));

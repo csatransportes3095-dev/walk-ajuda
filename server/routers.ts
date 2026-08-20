@@ -4113,19 +4113,9 @@ export const appRouter = router({
         });
         if (!result.success) return result;
 
-        // Após o atendimento de foto avançar para análise, não pode restar um
-        // agendamento confirmado no mesmo pedido/subpedido. Encerrar somente
-        // confirmações ativas preserva o histórico e não altera pendências,
-        // cancelamentos ou agendamentos já concluídos.
-        const SCHEDULE_COMPLETION_STATUSES = ['foto_em_analise'];
-        if (SCHEDULE_COMPLETION_STATUSES.includes(input.status)) {
-          try {
-            const { completeConfirmedAppointmentsForOrder } = await import('./db');
-            await completeConfirmedAppointmentsForOrder(input.registrationId, input.subOrderIndex);
-          } catch (error) {
-            console.error('[Schedule] Falha ao encerrar agendamento confirmado após avanço do pedido', error);
-          }
-        }
+        // Alterar o status do pedido não encerra nem modifica a agenda do cliente.
+        // Um agendamento confirmado permanece reservado e visível até uma ação
+        // explícita de concluir, cancelar ou reagendar no módulo de agendamentos.
 
         // Ao marcar como entregue, remover urgência obrigatoriamente
         const FINAL_STATUSES = ['entregue', 'pedido_entregue', 'cancelado'];
