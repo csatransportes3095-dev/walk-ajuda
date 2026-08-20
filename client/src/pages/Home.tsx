@@ -26,7 +26,7 @@ type CartItem = {
   option: ProductOption | null;
 };
 
-type ProductQuestion = { id: number; question: string; fieldType: string; options: string | null; isRequired: number; sortOrder: number; helpText?: string | null; audioMinDurationSeconds?: number; audioMaxDurationSeconds?: number; allowAudioRerecord?: number; allowAudioFileUpload?: number; parentQuestionId: number | null; triggerOption: string | null };
+type ProductQuestion = { id: number; question: string; fieldType: string; options: string | null; isRequired: number; sortOrder: number; helpText?: string | null; audioMinDurationSeconds?: number; audioMaxDurationSeconds?: number; allowAudioRerecord?: number; allowAudioFileUpload?: number; questionPresentation?: 'text' | 'audio'; questionAudioUrl?: string | null; showQuestionTextWithAudio?: number; parentQuestionId: number | null; triggerOption: string | null };
 type OptionDocument = { id: number; optionId: number; label: string; exampleImageUrl: string | null; inputSource?: string; sortOrder: number; instruction?: string | null; exampleText?: string | null };
 type WarrantyTier = { id: number; optionId: number; warrantyType: string; warrantyValue: number; warrantyLabel: string | null; price: string; originalPrice: string | null; sortOrder: number; isActive: number; };
 type ProductOption = {
@@ -2143,9 +2143,17 @@ export default function Home() {
         <div className="space-y-3">
           {qs.filter(q => isQuestionVisible(q)).map(q => (
             <div key={q.id} ref={el => { questionRefs.current[q.id] = el; }}>
-              <Label className="text-white mb-1 block text-xs">
-                {q.question} {q.isRequired === 1 && <span className="text-red-400">*</span>}
-              </Label>
+              {(q.questionPresentation !== 'audio' || q.showQuestionTextWithAudio === 1) && (
+                <Label className="text-white mb-1 block text-xs">
+                  {q.question} {q.isRequired === 1 && <span className="text-red-400">*</span>}
+                </Label>
+              )}
+              {q.questionPresentation === 'audio' && q.questionAudioUrl && (
+                <div className="mb-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 p-2">
+                  <p className="mb-1 text-[11px] font-bold text-cyan-200">🔊 Ouça a pergunta</p>
+                  <audio controls preload="metadata" src={q.questionAudioUrl} className="h-8 w-full" />
+                </div>
+              )}
               {q.fieldType === 'select' && q.options ? (() => {
                 // Verificar se as opções têm cores (formato JSON enriquecido)
                 let parsedOpts: Array<{ label: string; color: string | null }> | null = null;
@@ -3202,11 +3210,16 @@ export default function Home() {
             {/* Pergunta atual */}
             {currentQ && (
               <div className="space-y-4">
-                <div>
-                  <p className="text-white text-base font-bold uppercase tracking-wider leading-snug">
-                    {currentQ.question} {currentQ.isRequired === 1 && <span className="text-red-400">*</span>}
-                  </p>
-                </div>
+                {(currentQ.questionPresentation !== 'audio' || currentQ.showQuestionTextWithAudio === 1) && (
+                  <div>
+                    <p className="text-white text-base font-bold uppercase tracking-wider leading-snug">
+                      {currentQ.question} {currentQ.isRequired === 1 && <span className="text-red-400">*</span>}
+                    </p>
+                  </div>
+                )}
+                {currentQ.questionPresentation === 'audio' && currentQ.questionAudioUrl && (
+                  <div className="rounded-xl border border-cyan-400/40 bg-cyan-500/10 p-3"><p className="mb-2 text-xs font-bold text-cyan-200">🔊 Ouça a pergunta</p><audio controls preload="metadata" src={currentQ.questionAudioUrl} className="h-8 w-full" /></div>
+                )}
                 <div>
                   {renderQuestionInput(currentQ)}
                 </div>

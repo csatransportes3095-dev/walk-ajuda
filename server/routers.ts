@@ -111,7 +111,7 @@ import {
   getViewedOrderKeys, markOrderAsViewed,
 } from "./db";
 import { storagePut } from "./storage";
-import { r2DeleteObjects } from "./r2Storage";
+import { r2DeleteObjects, r2GetObjectBuffer } from "./r2Storage";
 import { getAdminJwtSecret } from "./adminJwt";
 import { requireCustomerSession } from "./customerSession";
 
@@ -197,6 +197,27 @@ function normalizeQuestionAudioBase64(value: string): Buffer {
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Arquivo de áudio vazio ou acima do limite permitido.' });
   }
   return buffer;
+}
+
+function questionPromptAudioMimeFromKey(key: string): { mimeType: string; ext: string } | null {
+  const ext = key.split('.').pop()?.toLowerCase();
+  if (ext === 'webm') return { mimeType: 'audio/webm', ext };
+  if (ext === 'ogg') return { mimeType: 'audio/ogg', ext };
+  if (ext === 'm4a' || ext === 'mp4') return { mimeType: 'audio/mp4', ext: 'm4a' };
+  if (ext === 'mp3') return { mimeType: 'audio/mpeg', ext };
+  return null;
+}
+
+async function copyQuestionPromptAudio(source: { questionPresentation: string; questionAudioStorageKey: string | null }, targetQuestionId: number): Promise<{ questionPresentation: 'text' | 'audio'; questionAudioUrl: string | null; questionAudioStorageKey: string | null }> {
+  if (source.questionPresentation !== 'audio' || !source.questionAudioStorageKey) {
+    return { questionPresentation: 'text', questionAudioUrl: null, questionAudioStorageKey: null };
+  }
+  const descriptor = questionPromptAudioMimeFromKey(source.questionAudioStorageKey);
+  if (!descriptor) return { questionPresentation: 'text', questionAudioUrl: null, questionAudioStorageKey: null };
+  const buffer = await r2GetObjectBuffer(source.questionAudioStorageKey);
+  const storageKey = `question-prompts/${targetQuestionId}/${randomUUID()}.${descriptor.ext}`;
+  const { url } = await storagePut(storageKey, buffer, descriptor.mimeType);
+  return { questionPresentation: 'audio', questionAudioUrl: url, questionAudioStorageKey: storageKey };
 }
 
 function normalizeDomainValue(raw: string | null | undefined): string {
@@ -858,6 +879,8 @@ export const appRouter = router({
         audioMaxDurationSeconds: z.number().int().min(1).max(300).optional(),
         allowAudioRerecord: z.number().int().min(0).max(1).optional(),
         allowAudioFileUpload: z.number().int().min(0).max(1).optional(),
+        questionPresentation: z.enum(['text', 'audio']).optional(),
+        showQuestionTextWithAudio: z.number().int().min(0).max(1).optional(),
         parentQuestionId: z.number().nullable().optional(),
         triggerOption: z.string().nullable().optional(),
       }))
@@ -881,6 +904,8 @@ export const appRouter = router({
         audioMaxDurationSeconds: z.number().int().min(1).max(300).optional(),
         allowAudioRerecord: z.number().int().min(0).max(1).optional(),
         allowAudioFileUpload: z.number().int().min(0).max(1).optional(),
+        questionPresentation: z.enum(['text', 'audio']).optional(),
+        showQuestionTextWithAudio: z.number().int().min(0).max(1).optional(),
         parentQuestionId: z.number().nullable().optional(),
         triggerOption: z.string().nullable().optional(),
       }))
@@ -890,9 +915,61 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    uploadPromptAudio: adminProcedure
+      .input(z.object({
+        questionId: z.number().int().positive(),
+        mimeType: z.string().max(128),
+        data: z.string().min(1).max(16 * 1024 * 1024),
+      }))
+      .mutation(async ({ input }) => {
+        const question = await getProductQuestionById(input.questionId);
+        if (!question) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pergunta não encontrada.' });
+        const declaredMime = input.mimeType.trim().toLowerCase();
+        if (!QUESTION_AUDIO_MIME_TYPES.has(declaredMime)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Formato de áudio não permitido. Use WEBM, OGG, M4A ou MP3.' });
+        }
+        const buffer = normalizeQuestionAudioBase64(input.data);
+        const inspected = inspectQuestionAudio(buffer, declaredMime);
+        if (!inspected) throw new TRPCError({ code: 'BAD_REQUEST', message: 'O conteúdo enviado não é um áudio válido.' });
+        const storageKey = `question-prompts/${question.id}/${randomUUID()}.${inspected.ext}`;
+        const { url } = await storagePut(storageKey, buffer, inspected.mimeType);
+        try {
+          await updateProductQuestion(question.id, {
+            questionPresentation: 'audio',
+            questionAudioUrl: url,
+            questionAudioStorageKey: storageKey,
+          });
+        } catch (error) {
+          await r2DeleteObjects([storageKey]).catch(() => {});
+          throw error;
+        }
+        if (question.questionAudioStorageKey) await r2DeleteObjects([question.questionAudioStorageKey]).catch(() => {});
+        return { success: true, audioUrl: url };
+      }),
+
+    removePromptAudio: adminProcedure
+      .input(z.object({ questionId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const question = await getProductQuestionById(input.questionId);
+        if (!question) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pergunta não encontrada.' });
+        await updateProductQuestion(question.id, {
+          questionPresentation: 'text',
+          questionAudioUrl: null,
+          questionAudioStorageKey: null,
+          showQuestionTextWithAudio: 0,
+        });
+        if (question.questionAudioStorageKey) await r2DeleteObjects([question.questionAudioStorageKey]).catch(() => {});
+        return { success: true };
+      }),
+
     delete: adminProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => { await deleteProductQuestion(input.id); return { success: true }; }),
+      .mutation(async ({ input }) => {
+        const question = await getProductQuestionById(input.id);
+        await deleteProductQuestion(input.id);
+        if (question?.questionAudioStorageKey) await r2DeleteObjects([question.questionAudioStorageKey]).catch(() => {});
+        return { success: true };
+      }),
 
     reorder: adminProcedure
       .input(z.object({ items: z.array(z.object({ id: z.number(), sortOrder: z.number() })) }))
@@ -931,7 +1008,13 @@ export const appRouter = router({
             audioMaxDurationSeconds: q.audioMaxDurationSeconds,
             allowAudioRerecord: q.allowAudioRerecord,
             allowAudioFileUpload: q.allowAudioFileUpload,
+            questionPresentation: 'text',
+            questionAudioUrl: null,
+            questionAudioStorageKey: null,
+            showQuestionTextWithAudio: q.showQuestionTextWithAudio,
           });
+          const promptAudio = await copyQuestionPromptAudio(q, created.id);
+          if (promptAudio.questionPresentation === 'audio') await updateProductQuestion(created.id, promptAudio);
           idMap[q.id] = created.id;
         }
         // Depois, insere sub-perguntas com parentQuestionId mapeado
@@ -953,7 +1036,13 @@ export const appRouter = router({
             audioMaxDurationSeconds: q.audioMaxDurationSeconds,
             allowAudioRerecord: q.allowAudioRerecord,
             allowAudioFileUpload: q.allowAudioFileUpload,
+            questionPresentation: 'text',
+            questionAudioUrl: null,
+            questionAudioStorageKey: null,
+            showQuestionTextWithAudio: q.showQuestionTextWithAudio,
           });
+          const promptAudio = await copyQuestionPromptAudio(q, created.id);
+          if (promptAudio.questionPresentation === 'audio') await updateProductQuestion(created.id, promptAudio);
           idMap[q.id] = created.id;
         }
         return { success: true, count: sourceQuestions.length };

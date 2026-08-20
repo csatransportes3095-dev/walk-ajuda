@@ -571,7 +571,14 @@ export type ProductQuestionAudioSettings = {
   allowAudioFileUpload?: number;
 };
 
-export async function createProductQuestion(data: { productId: number; optionId?: number; question: string; fieldType?: ProductQuestionFieldType; options?: string; isRequired?: boolean; sortOrder?: number; parentQuestionId?: number | null; triggerOption?: string | null } & ProductQuestionAudioSettings): Promise<ProductQuestion> {
+export type ProductQuestionPresentationSettings = {
+  questionPresentation?: 'text' | 'audio';
+  questionAudioUrl?: string | null;
+  questionAudioStorageKey?: string | null;
+  showQuestionTextWithAudio?: number;
+};
+
+export async function createProductQuestion(data: { productId: number; optionId?: number; question: string; fieldType?: ProductQuestionFieldType; options?: string; isRequired?: boolean; sortOrder?: number; parentQuestionId?: number | null; triggerOption?: string | null } & ProductQuestionAudioSettings & ProductQuestionPresentationSettings): Promise<ProductQuestion> {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
   const result = await db.insert(productQuestions).values({
@@ -583,6 +590,10 @@ export async function createProductQuestion(data: { productId: number; optionId?
     audioMaxDurationSeconds: data.audioMaxDurationSeconds ?? 120,
     allowAudioRerecord: data.allowAudioRerecord ?? 1,
     allowAudioFileUpload: data.allowAudioFileUpload ?? 1,
+    questionPresentation: data.questionPresentation === 'audio' ? 'audio' : 'text',
+    questionAudioUrl: data.questionAudioUrl || null,
+    questionAudioStorageKey: data.questionAudioStorageKey || null,
+    showQuestionTextWithAudio: data.showQuestionTextWithAudio ?? 0,
     parentQuestionId: data.parentQuestionId || null,
     triggerOption: data.triggerOption || null,
   });
@@ -590,7 +601,7 @@ export async function createProductQuestion(data: { productId: number; optionId?
   return inserted[0];
 }
 
-export async function updateProductQuestion(id: number, data: Partial<{ question: string; fieldType: ProductQuestionFieldType; options: string | null; isRequired: number; sortOrder: number; parentQuestionId: number | null; triggerOption: string | null } & ProductQuestionAudioSettings>): Promise<void> {
+export async function updateProductQuestion(id: number, data: Partial<{ question: string; fieldType: ProductQuestionFieldType; options: string | null; isRequired: number; sortOrder: number; parentQuestionId: number | null; triggerOption: string | null } & ProductQuestionAudioSettings & ProductQuestionPresentationSettings>): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.update(productQuestions).set(data).where(eq(productQuestions.id, id));

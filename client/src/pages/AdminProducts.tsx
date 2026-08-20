@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useState, useRef, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, GripVertical, Eye, EyeOff, Save, X, HelpCircle, DollarSign, Package, ImagePlus, Loader2, FileText, Settings2, Palette, Gift } from "lucide-react";
+import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, GripVertical, Eye, EyeOff, Save, X, HelpCircle, DollarSign, Package, ImagePlus, Loader2, FileText, Settings2, Palette, Gift, Volume2, Upload, Headphones } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import React from "react";
 
@@ -11,6 +11,24 @@ const whiteInputStyle: React.CSSProperties = {
   border: '2px solid #555', borderRadius: '8px',
   padding: '8px 12px', width: '100%', outline: 'none', fontWeight: 500,
 };
+
+const QUESTION_PROMPT_AUDIO_MIME_TYPES = new Set(['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg']);
+
+async function readQuestionPromptAudio(file: File): Promise<{ data: string; mimeType: string }> {
+  if (!QUESTION_PROMPT_AUDIO_MIME_TYPES.has(file.type)) {
+    throw new Error('Use um áudio WEBM, OGG, M4A ou MP3.');
+  }
+  if (file.size === 0 || file.size > 12 * 1024 * 1024) {
+    throw new Error('O áudio deve ter até 12 MB.');
+  }
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Não foi possível ler o áudio.'));
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  });
+  return { data: dataUrl.split(',')[1] || '', mimeType: file.type };
+}
 
 type DocumentType = {
   id: number; optionId: number; label: string; exampleImageUrl: string | null; inputSource: string; sortOrder: number;
@@ -21,6 +39,8 @@ type QuestionType = {
   fieldType: string; options: string | null; isRequired: number; sortOrder: number;
   helpText: string | null; audioMinDurationSeconds: number; audioMaxDurationSeconds: number;
   allowAudioRerecord: number; allowAudioFileUpload: number;
+  questionPresentation: 'text' | 'audio'; questionAudioUrl: string | null; questionAudioStorageKey: string | null;
+  showQuestionTextWithAudio: number;
   parentQuestionId: number | null; triggerOption: string | null;
 };
 
@@ -208,6 +228,9 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
   const [newQAudioMax, setNewQAudioMax] = useState("120");
   const [newQAllowRerecord, setNewQAllowRerecord] = useState(true);
   const [newQAllowFileUpload, setNewQAllowFileUpload] = useState(true);
+  const [newQPresentation, setNewQPresentation] = useState<'text' | 'audio'>('text');
+  const [newQShowTextWithAudio, setNewQShowTextWithAudio] = useState(false);
+  const [newQPromptAudioFile, setNewQPromptAudioFile] = useState<File | null>(null);
   // Pergunta condicional
   const [newQParentId, setNewQParentId] = useState<number | null>(null);
   const [newQTriggerOption, setNewQTriggerOption] = useState("");
@@ -242,7 +265,15 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
     onSuccess: () => { utils.products.list.invalidate(); toast.success("Foto exemplo removida!"); },
   });
   const createQMut = trpc.productQuestions.create.useMutation({
-    onSuccess: () => { utils.products.list.invalidate(); setNewQText(""); setNewQOptions(""); setNewQHelpText(""); setNewQAudioMin("1"); setNewQAudioMax("120"); setNewQAllowRerecord(true); setNewQAllowFileUpload(true); toast.success("Pergunta criada!"); }
+    onSuccess: () => { utils.products.list.invalidate(); }
+  });
+  const uploadQuestionPromptAudioMut = trpc.productQuestions.uploadPromptAudio.useMutation({
+    onSuccess: () => { utils.products.list.invalidate(); toast.success('Áudio da pergunta enviado!'); },
+    onError: (error) => toast.error(error.message || 'Erro ao enviar o áudio da pergunta.'),
+  });
+  const removeQuestionPromptAudioMut = trpc.productQuestions.removePromptAudio.useMutation({
+    onSuccess: () => { utils.products.list.invalidate(); toast.success('Pergunta em áudio removida.'); },
+    onError: (error) => toast.error(error.message || 'Erro ao remover o áudio da pergunta.'),
   });
   const deleteQMut = trpc.productQuestions.delete.useMutation({
     onSuccess: () => { utils.products.list.invalidate(); toast.success("Pergunta excluída!"); }
@@ -259,11 +290,31 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
   const [editQAudioMax, setEditQAudioMax] = useState("120");
   const [editQAllowRerecord, setEditQAllowRerecord] = useState(true);
   const [editQAllowFileUpload, setEditQAllowFileUpload] = useState(true);
+  const [editQPresentation, setEditQPresentation] = useState<'text' | 'audio'>('text');
+  const [editQShowTextWithAudio, setEditQShowTextWithAudio] = useState(false);
+  const [editQPromptAudioFile, setEditQPromptAudioFile] = useState<File | null>(null);
   const [editQParentId, setEditQParentId] = useState<number | null>(null);
   const [editQTriggerOption, setEditQTriggerOption] = useState("");
   const updateQMut = trpc.productQuestions.update.useMutation({
-    onSuccess: () => { utils.products.list.invalidate(); setEditingQId(null); toast.success("Pergunta atualizada!"); }
+    onSuccess: () => { utils.products.list.invalidate(); }
   });
+  const startEditingQuestion = (question: QuestionType) => {
+    setEditingQId(question.id);
+    setEditQText(question.question);
+    setEditQType(question.fieldType as any);
+    setEditQOptions((() => { try { const p = JSON.parse(question.options || '[]'); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label).join(', ') : question.options || ''; } catch { return question.options || ''; } })());
+    setEditQRequired(question.isRequired === 1);
+    setEditQHelpText(question.helpText || '');
+    setEditQAudioMin(String(question.audioMinDurationSeconds || 1));
+    setEditQAudioMax(String(question.audioMaxDurationSeconds || 120));
+    setEditQAllowRerecord(question.allowAudioRerecord !== 0);
+    setEditQAllowFileUpload(question.allowAudioFileUpload !== 0);
+    setEditQPresentation(question.questionPresentation === 'audio' ? 'audio' : 'text');
+    setEditQShowTextWithAudio(question.showQuestionTextWithAudio === 1);
+    setEditQPromptAudioFile(null);
+    setEditQParentId(question.parentQuestionId);
+    setEditQTriggerOption(question.triggerOption || '');
+  };
   const reorderQMut = trpc.productQuestions.reorder.useMutation({
     onSuccess: () => { utils.products.list.invalidate(); }
   });
@@ -853,7 +904,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                             <input value={editQText} onChange={e => setEditQText(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
                           </div>
                           <div className="w-24">
-                            <label className="text-[10px] text-gray-400 block mb-1">Tipo</label>
+                            <label className="text-[10px] text-gray-400 block mb-1">Resposta</label>
                             <select value={editQType} onChange={e => setEditQType(e.target.value as any)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }}>
                               <option value="text">Texto</option>
                               <option value="select">Seleção</option>
@@ -864,6 +915,28 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                           <label className="flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap pb-1">
                             <input type="checkbox" checked={editQRequired} onChange={() => setEditQRequired(!editQRequired)} className="accent-purple-500" /> Obrig.
                           </label>
+                        </div>
+                        <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-2 space-y-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="text-[10px] font-bold text-cyan-300 flex items-center gap-1"><Volume2 className="w-3 h-3" /> Como o cliente recebe a pergunta</p>
+                              <p className="text-[10px] text-gray-400">Texto mantém o padrão atual. Áudio toca o enunciado antes da resposta.</p>
+                            </div>
+                            <select value={editQPresentation} onChange={e => setEditQPresentation(e.target.value as 'text' | 'audio')} style={{ ...whiteInputStyle, width: 'auto', minWidth: '150px', fontSize: '12px', padding: '6px 10px' }}>
+                              <option value="text">Texto</option>
+                              <option value="audio">Áudio gravado</option>
+                            </select>
+                          </div>
+                          {editQPresentation === 'audio' && (
+                            <div className="space-y-2">
+                              {q.questionAudioUrl && <audio controls preload="metadata" src={q.questionAudioUrl} className="w-full h-8" />}
+                              <label className="flex cursor-pointer items-center justify-center gap-2 rounded border border-dashed border-cyan-400/60 bg-black/20 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-500/15">
+                                <Upload className="w-3 h-3" /> {editQPromptAudioFile ? editQPromptAudioFile.name : (q.questionAudioUrl ? 'Trocar áudio da pergunta' : 'Enviar áudio da pergunta')}
+                                <input type="file" accept="audio/webm,audio/ogg,audio/mp4,audio/mpeg,.webm,.ogg,.m4a,.mp3" className="hidden" onChange={e => setEditQPromptAudioFile(e.target.files?.[0] || null)} />
+                              </label>
+                              <label className="flex items-center gap-1 text-[10px] text-gray-200"><input type="checkbox" checked={editQShowTextWithAudio} onChange={e => setEditQShowTextWithAudio(e.target.checked)} /> Mostrar também o texto da pergunta ao cliente</label>
+                            </div>
+                          )}
                         </div>
                         {editQType === 'select' && (
                           <div>
@@ -889,20 +962,39 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                         <div className="flex gap-2 justify-end">
                           <button onClick={() => setEditingQId(null)} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-xs">Cancelar</button>
                           <button
-                            onClick={() => updateQMut.mutate({
-                              id: q.id,
-                              question: editQText,
-                              fieldType: editQType,
-                              options: editQType === 'select' ? editQOptions : undefined,
-                              isRequired: editQRequired ? 1 : 0,
-                              parentQuestionId: editQParentId || null,
-                              triggerOption: editQTriggerOption.trim() || null,
-                              helpText: editQType === 'audio' ? (editQHelpText.trim() || null) : null,
-                              audioMinDurationSeconds: editQType === 'audio' ? Math.max(1, Math.min(300, parseInt(editQAudioMin) || 1)) : undefined,
-                              audioMaxDurationSeconds: editQType === 'audio' ? Math.max(1, Math.min(300, parseInt(editQAudioMax) || 120)) : undefined,
-                              allowAudioRerecord: editQType === 'audio' ? (editQAllowRerecord ? 1 : 0) : undefined,
-                              allowAudioFileUpload: editQType === 'audio' ? (editQAllowFileUpload ? 1 : 0) : undefined,
-                            })}
+                            onClick={async () => {
+                              if (editQPresentation === 'audio' && !q.questionAudioUrl && !editQPromptAudioFile) {
+                                toast.error('Envie o áudio da pergunta antes de salvar.');
+                                return;
+                              }
+                              try {
+                                await updateQMut.mutateAsync({
+                                  id: q.id,
+                                  question: editQText,
+                                  fieldType: editQType,
+                                  options: editQType === 'select' ? editQOptions : undefined,
+                                  isRequired: editQRequired ? 1 : 0,
+                                  parentQuestionId: editQParentId || null,
+                                  triggerOption: editQTriggerOption.trim() || null,
+                                  helpText: editQType === 'audio' ? (editQHelpText.trim() || null) : null,
+                                  audioMinDurationSeconds: editQType === 'audio' ? Math.max(1, Math.min(300, parseInt(editQAudioMin) || 1)) : undefined,
+                                  audioMaxDurationSeconds: editQType === 'audio' ? Math.max(1, Math.min(300, parseInt(editQAudioMax) || 120)) : undefined,
+                                  allowAudioRerecord: editQType === 'audio' ? (editQAllowRerecord ? 1 : 0) : undefined,
+                                  allowAudioFileUpload: editQType === 'audio' ? (editQAllowFileUpload ? 1 : 0) : undefined,
+                                  questionPresentation: editQPresentation,
+                                  showQuestionTextWithAudio: editQPresentation === 'audio' && editQShowTextWithAudio ? 1 : 0,
+                                });
+                                if (editQPromptAudioFile) {
+                                  const payload = await readQuestionPromptAudio(editQPromptAudioFile);
+                                  await uploadQuestionPromptAudioMut.mutateAsync({ questionId: q.id, ...payload });
+                                } else if (editQPresentation === 'text' && q.questionAudioUrl) {
+                                  await removeQuestionPromptAudioMut.mutateAsync({ questionId: q.id });
+                                }
+                                setEditQPromptAudioFile(null);
+                                setEditingQId(null);
+                                toast.success('Pergunta atualizada!');
+                              } catch (error: any) { toast.error(error?.message || 'Erro ao salvar a pergunta.'); }
+                            }}
                             disabled={!editQText.trim() || updateQMut.isPending}
                             className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded text-xs font-semibold"
                           >
@@ -956,6 +1048,9 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                           setNewQType(q.fieldType as any);
                           setNewQOptions((() => { try { const p = JSON.parse(q.options || '[]'); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label).join(', ') : q.options || ''; } catch { return q.options || ''; } })());
                           setNewQRequired(q.isRequired === 1);
+                          setNewQPresentation('text');
+                          setNewQShowTextWithAudio(false);
+                          setNewQPromptAudioFile(null);
                           toast.success('Pergunta copiada para o formulário abaixo!');
                         }}
                         className="p-1 text-yellow-400/70 hover:text-yellow-400 hover:bg-yellow-500/10 rounded transition-colors"
@@ -965,20 +1060,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                       </button>
                       {/* Botão Editar */}
                       <button
-                        onClick={() => {
-                          setEditingQId(q.id);
-                          setEditQText(q.question);
-                          setEditQType(q.fieldType as any);
-                          setEditQOptions((() => { try { const p = JSON.parse(q.options || '[]'); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label).join(', ') : q.options || ''; } catch { return q.options || ''; } })());
-                          setEditQRequired(q.isRequired === 1);
-                          setEditQHelpText(q.helpText || '');
-                          setEditQAudioMin(String(q.audioMinDurationSeconds || 1));
-                          setEditQAudioMax(String(q.audioMaxDurationSeconds || 120));
-                          setEditQAllowRerecord(q.allowAudioRerecord !== 0);
-                          setEditQAllowFileUpload(q.allowAudioFileUpload !== 0);
-                          setEditQParentId(q.parentQuestionId);
-                          setEditQTriggerOption(q.triggerOption || "");
-                        }}
+                        onClick={() => startEditingQuestion(q)}
                         className="p-1 text-blue-400/70 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
                         title="Editar pergunta"
                       >
@@ -993,7 +1075,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                         {qParsedOpts.map(optLabel => (
                           <button
                             key={optLabel}
-                            onClick={() => { setNewQParentId(q.id); setNewQTriggerOption(optLabel); setNewQText(''); setNewQType('text'); setNewQOptions(''); setNewQRequired(true); }}
+                            onClick={() => { setNewQParentId(q.id); setNewQTriggerOption(optLabel); setNewQText(''); setNewQType('text'); setNewQOptions(''); setNewQRequired(true); setNewQPresentation('text'); setNewQShowTextWithAudio(false); setNewQPromptAudioFile(null); }}
                             className="text-[10px] px-2 py-0.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 rounded-full transition-colors"
                             title={`Adicionar sub-pergunta quando resposta for "${optLabel}"`}
                           >
@@ -1019,7 +1101,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                             <span className="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">{sq.fieldType}</span>
                             {sq.isRequired === 1 && <span className="text-[10px] text-red-400">*</span>}
                             <button
-                              onClick={() => { setEditingQId(sq.id); setEditQText(sq.question); setEditQType(sq.fieldType as any); setEditQOptions((() => { try { const p = JSON.parse(sq.options || '[]'); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label).join(', ') : sq.options || ''; } catch { return sq.options || ''; } })());                           setEditQRequired(sq.isRequired === 1); setEditQHelpText(sq.helpText || ''); setEditQAudioMin(String(sq.audioMinDurationSeconds || 1)); setEditQAudioMax(String(sq.audioMaxDurationSeconds || 120)); setEditQAllowRerecord(sq.allowAudioRerecord !== 0); setEditQAllowFileUpload(sq.allowAudioFileUpload !== 0); setEditQParentId(sq.parentQuestionId); setEditQTriggerOption(sq.triggerOption || ''); }}
+                              onClick={() => startEditingQuestion(sq)}
                               className="p-1 text-blue-400/70 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
                               title="Editar sub-pergunta"
                             >
@@ -1033,7 +1115,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                               {sqParsedOpts.map(sqOptLabel => (
                                 <button
                                   key={sqOptLabel}
-                                  onClick={() => { setNewQParentId(sq.id); setNewQTriggerOption(sqOptLabel); setNewQText(''); setNewQType('text'); setNewQOptions(''); setNewQRequired(true); }}
+                                  onClick={() => { setNewQParentId(sq.id); setNewQTriggerOption(sqOptLabel); setNewQText(''); setNewQType('text'); setNewQOptions(''); setNewQRequired(true); setNewQPresentation('text'); setNewQShowTextWithAudio(false); setNewQPromptAudioFile(null); }}
                                   className="text-[10px] px-2 py-0.5 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 rounded-full transition-colors"
                                   title={`Adicionar sub-sub-pergunta quando resposta for "${sqOptLabel}"`}
                                 >
@@ -1050,7 +1132,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                               <span className="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">{ssq.fieldType}</span>
                               {ssq.isRequired === 1 && <span className="text-[10px] text-red-400">*</span>}
                               <button
-                                onClick={() => { setEditingQId(ssq.id); setEditQText(ssq.question); setEditQType(ssq.fieldType as any); setEditQOptions((() => { try { const p = JSON.parse(ssq.options || '[]'); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label).join(', ') : ssq.options || ''; } catch { return ssq.options || ''; } })()); setEditQRequired(ssq.isRequired === 1); setEditQHelpText(ssq.helpText || ''); setEditQAudioMin(String(ssq.audioMinDurationSeconds || 1)); setEditQAudioMax(String(ssq.audioMaxDurationSeconds || 120)); setEditQAllowRerecord(ssq.allowAudioRerecord !== 0); setEditQAllowFileUpload(ssq.allowAudioFileUpload !== 0); setEditQParentId(ssq.parentQuestionId); setEditQTriggerOption(ssq.triggerOption || ''); }}
+                                onClick={() => startEditingQuestion(ssq)}
                                 className="p-1 text-blue-400/70 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
                                 title="Editar sub-sub-pergunta"
                               >
@@ -1076,7 +1158,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                   <input value={newQText} onChange={e => setNewQText(e.target.value)} placeholder="Ex: Qual cidade você mora?" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
                 </div>
                 <div className="w-24">
-                  <label className="text-[10px] text-gray-400 block mb-1">Tipo</label>
+                  <label className="text-[10px] text-gray-400 block mb-1">Resposta</label>
                   <select value={newQType} onChange={e => setNewQType(e.target.value as any)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }}>
                     <option value="text">Texto</option>
                     <option value="select">Seleção</option>
@@ -1087,37 +1169,34 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                 <label className="flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap pb-1">
                   <input type="checkbox" checked={newQRequired} onChange={() => setNewQRequired(!newQRequired)} className="accent-purple-500" /> Obrig.
                 </label>
-                <Button onClick={() => {
+                <Button onClick={async () => {
                   if (!newQText.trim()) { toast.error("Pergunta obrigatória"); return; }
-                  createQMut.mutate({
-                    productId: productId,
-                    optionId: opt.id,
-                    question: newQText,
-                    fieldType: newQType,
-                    options: newQType === 'select' ? (() => {
-                      const opts = newQOptions.split(',').map(o => o.trim()).filter(Boolean);
-                      const hasColors = opts.some(o => optionColors[o]);
-                      const hasBlocking = opts.some(o => blockingOptions[o]);
-                      if (hasColors || hasBlocking) {
-                        return JSON.stringify(opts.map(o => ({ label: o, color: optionColors[o] || null, blocking: blockingOptions[o] || false })));
-                      }
-                      return newQOptions;
-                    })() : undefined,
-                    isRequired: newQRequired,
-                    sortOrder: totalQuestions,
-                    parentQuestionId: newQParentId || null,
-                    triggerOption: newQTriggerOption.trim() || null,
-                    helpText: newQType === 'audio' ? (newQHelpText.trim() || null) : null,
-                    audioMinDurationSeconds: newQType === 'audio' ? Math.max(1, Math.min(300, parseInt(newQAudioMin) || 1)) : undefined,
-                    audioMaxDurationSeconds: newQType === 'audio' ? Math.max(1, Math.min(300, parseInt(newQAudioMax) || 120)) : undefined,
-                    allowAudioRerecord: newQType === 'audio' ? (newQAllowRerecord ? 1 : 0) : undefined,
-                    allowAudioFileUpload: newQType === 'audio' ? (newQAllowFileUpload ? 1 : 0) : undefined,
-                  });
-                  setOptionColors({});
-                  setBlockingOptions({});
-                  setNewQParentId(null);
-                  setNewQTriggerOption("");
-                }} className="bg-purple-600 hover:bg-purple-700 text-white text-xs" size="sm" disabled={createQMut.isPending}>
+                  if (newQPresentation === 'audio' && !newQPromptAudioFile) { toast.error('Escolha o áudio da pergunta.'); return; }
+                  try {
+                    const created = await createQMut.mutateAsync({
+                      productId, optionId: opt.id, question: newQText, fieldType: newQType,
+                      options: newQType === 'select' ? (() => {
+                        const opts = newQOptions.split(',').map(o => o.trim()).filter(Boolean);
+                        const hasColors = opts.some(o => optionColors[o]); const hasBlocking = opts.some(o => blockingOptions[o]);
+                        return hasColors || hasBlocking ? JSON.stringify(opts.map(o => ({ label: o, color: optionColors[o] || null, blocking: blockingOptions[o] || false }))) : newQOptions;
+                      })() : undefined,
+                      isRequired: newQRequired, sortOrder: totalQuestions, parentQuestionId: newQParentId || null, triggerOption: newQTriggerOption.trim() || null,
+                      helpText: newQType === 'audio' ? (newQHelpText.trim() || null) : null,
+                      audioMinDurationSeconds: newQType === 'audio' ? Math.max(1, Math.min(300, parseInt(newQAudioMin) || 1)) : undefined,
+                      audioMaxDurationSeconds: newQType === 'audio' ? Math.max(1, Math.min(300, parseInt(newQAudioMax) || 120)) : undefined,
+                      allowAudioRerecord: newQType === 'audio' ? (newQAllowRerecord ? 1 : 0) : undefined,
+                      allowAudioFileUpload: newQType === 'audio' ? (newQAllowFileUpload ? 1 : 0) : undefined,
+                      questionPresentation: 'text', showQuestionTextWithAudio: newQPresentation === 'audio' && newQShowTextWithAudio ? 1 : 0,
+                    });
+                    if (!created.success || !created.question) throw new Error(created.message || 'Não foi possível criar a pergunta.');
+                    if (newQPresentation === 'audio' && newQPromptAudioFile) {
+                      const payload = await readQuestionPromptAudio(newQPromptAudioFile);
+                      await uploadQuestionPromptAudioMut.mutateAsync({ questionId: created.question.id, ...payload });
+                    }
+                    setOptionColors({}); setBlockingOptions({}); setNewQText(''); setNewQOptions(''); setNewQRequired(true); setNewQParentId(null); setNewQTriggerOption(''); setNewQPresentation('text'); setNewQShowTextWithAudio(false); setNewQPromptAudioFile(null); setNewQHelpText(''); setNewQAudioMin('1'); setNewQAudioMax('120'); setNewQAllowRerecord(true); setNewQAllowFileUpload(true);
+                    toast.success('Pergunta criada!');
+                  } catch (error: any) { toast.error(error?.message || 'Erro ao criar a pergunta.'); }
+                }} className="bg-purple-600 hover:bg-purple-700 text-white text-xs" size="sm" disabled={createQMut.isPending || uploadQuestionPromptAudioMut.isPending}>
                   <Plus className="w-3 h-3" />
                 </Button>
               </div>
@@ -1128,6 +1207,13 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                   <button onClick={() => { setNewQParentId(null); setNewQTriggerOption(''); }} className="ml-auto text-[10px] text-red-400 hover:text-red-300">✕ Cancelar</button>
                 </div>
               )}
+              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-2 space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div><p className="text-[10px] font-bold text-cyan-300 flex items-center gap-1"><Volume2 className="w-3 h-3" /> Como o cliente recebe a pergunta</p><p className="text-[10px] text-gray-400">A resposta escolhida acima continua independente.</p></div>
+                  <select value={newQPresentation} onChange={e => setNewQPresentation(e.target.value as 'text' | 'audio')} style={{ ...whiteInputStyle, width: 'auto', minWidth: '150px', fontSize: '12px', padding: '6px 10px' }}><option value="text">Texto</option><option value="audio">Áudio gravado</option></select>
+                </div>
+                {newQPresentation === 'audio' && <div className="space-y-2"><label className="flex cursor-pointer items-center justify-center gap-2 rounded border border-dashed border-cyan-400/60 bg-black/20 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-500/15"><Upload className="w-3 h-3" /> {newQPromptAudioFile ? newQPromptAudioFile.name : 'Enviar áudio da pergunta'}<input type="file" accept="audio/webm,audio/ogg,audio/mp4,audio/mpeg,.webm,.ogg,.m4a,.mp3" className="hidden" onChange={e => setNewQPromptAudioFile(e.target.files?.[0] || null)} /></label><label className="flex items-center gap-1 text-[10px] text-gray-200"><input type="checkbox" checked={newQShowTextWithAudio} onChange={e => setNewQShowTextWithAudio(e.target.checked)} /> Mostrar também o texto da pergunta ao cliente</label></div>}
+              </div>
               {newQType === 'audio' && (
                 <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 space-y-2">
                   <p className="text-[10px] font-bold text-sky-300">Configuração da resposta em áudio</p>

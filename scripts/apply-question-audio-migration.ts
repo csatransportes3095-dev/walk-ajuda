@@ -31,6 +31,11 @@ async function run() {
     await addColumnIfMissing(connection, "productQuestions", "audioMaxDurationSeconds", "INT NOT NULL DEFAULT 120");
     await addColumnIfMissing(connection, "productQuestions", "allowAudioRerecord", "INT NOT NULL DEFAULT 1");
     await addColumnIfMissing(connection, "productQuestions", "allowAudioFileUpload", "INT NOT NULL DEFAULT 1");
+    // Áudio usado para apresentar o enunciado, independente do tipo de resposta escolhido.
+    await addColumnIfMissing(connection, "productQuestions", "questionPresentation", "VARCHAR(16) NOT NULL DEFAULT 'text'");
+    await addColumnIfMissing(connection, "productQuestions", "questionAudioUrl", "TEXT NULL");
+    await addColumnIfMissing(connection, "productQuestions", "questionAudioStorageKey", "VARCHAR(512) NULL");
+    await addColumnIfMissing(connection, "productQuestions", "showQuestionTextWithAudio", "INT NOT NULL DEFAULT 0");
 
     await connection.query(`
       CREATE TABLE IF NOT EXISTS \`questionAudioDrafts\` (

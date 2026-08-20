@@ -167,6 +167,11 @@ export const productQuestions = mysqlTable("productQuestions", {
   audioMaxDurationSeconds: int("audioMaxDurationSeconds").notNull().default(120),
   allowAudioRerecord: int("allowAudioRerecord").notNull().default(1),
   allowAudioFileUpload: int("allowAudioFileUpload").notNull().default(1),
+  // Apresentação do enunciado ao cliente: mantém texto como padrão para todas as perguntas existentes
+  questionPresentation: varchar("questionPresentation", { length: 16 }).notNull().default("text"),
+  questionAudioUrl: text("questionAudioUrl"),
+  questionAudioStorageKey: varchar("questionAudioStorageKey", { length: 512 }),
+  showQuestionTextWithAudio: int("showQuestionTextWithAudio").notNull().default(0),
   // Pergunta condicional: sÃ³ aparece quando a pergunta pai tem a resposta triggerOption
   parentQuestionId: int("parentQuestionId"), // ID da pergunta pai (null = sempre exibida)
   triggerOption: varchar("triggerOption", { length: 256 }), // Resposta que ativa esta pergunta

@@ -24,6 +24,7 @@ type ProductQuestion = {
   isRequired: number; sortOrder: number;
   helpText?: string | null; audioMinDurationSeconds?: number; audioMaxDurationSeconds?: number;
   allowAudioRerecord?: number; allowAudioFileUpload?: number;
+  questionPresentation?: 'text' | 'audio'; questionAudioUrl?: string | null; showQuestionTextWithAudio?: number;
   parentQuestionId: number | null; triggerOption: string | null;
 };
 type ProductDocument = {
@@ -33,7 +34,7 @@ type ProductDocument = {
 // ── Mensagem do chat ─────────────────────────────────────────────────────────
 
 type ChatMsg =
-  | { type: "bot"; id: string; text: string }
+  | { type: "bot"; id: string; text: string; audioUrl?: string | null; hideText?: boolean }
   | { type: "user"; id: string; text: string }
   | { type: "options"; id: string; options: string[]; answered: boolean }
   | { type: "input"; id: string; multiline: boolean; answered: boolean }
@@ -486,7 +487,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         setTimeout(() => askQuestions(product, option, newAnswers), 200);
       };
       addMsgs(
-        { type: "bot", id: uid(), text: nextQ.question },
+        { type: "bot", id: uid(), text: nextQ.question, audioUrl: nextQ.questionPresentation === 'audio' ? nextQ.questionAudioUrl : null, hideText: nextQ.questionPresentation === 'audio' && nextQ.showQuestionTextWithAudio !== 1 },
         { type: "audio-input", id: msgId, question: nextQ, answered: false }
       );
     } else if (nextQ.fieldType === "select" && nextQ.options) {
@@ -501,7 +502,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         setTimeout(() => askQuestions(product, option, newAnswers), 300);
       };
       addMsgs(
-        { type: "bot", id: uid(), text: nextQ.question },
+        { type: "bot", id: uid(), text: nextQ.question, audioUrl: nextQ.questionPresentation === 'audio' ? nextQ.questionAudioUrl : null, hideText: nextQ.questionPresentation === 'audio' && nextQ.showQuestionTextWithAudio !== 1 },
         { type: "options", id: msgId, options: opts, answered: false }
       );
     } else {
@@ -514,7 +515,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         setTimeout(() => askQuestions(product, option, newAnswers), 300);
       };
       addMsgs(
-        { type: "bot", id: uid(), text: nextQ.question },
+        { type: "bot", id: uid(), text: nextQ.question, audioUrl: nextQ.questionPresentation === 'audio' ? nextQ.questionAudioUrl : null, hideText: nextQ.questionPresentation === 'audio' && nextQ.showQuestionTextWithAudio !== 1 },
         { type: "input", id: msgId, multiline: nextQ.fieldType === "textarea", answered: false }
       );
     }
@@ -834,7 +835,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           <div key={idx} className="flex items-start gap-2 mb-3">
             <BotAvatar />
             <div className="bg-zinc-800 border border-zinc-700 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[82%] text-sm text-zinc-100 leading-relaxed whitespace-pre-line">
-              {msg.text}
+              {!msg.hideText && msg.text}
+              {msg.audioUrl && <div className="mt-2 border-t border-zinc-700 pt-2"><p className="mb-1 text-[10px] font-semibold text-cyan-300">🔊 Ouça a pergunta</p><audio controls preload="metadata" src={msg.audioUrl} className="h-8 w-full" /></div>}
             </div>
           </div>
         );
