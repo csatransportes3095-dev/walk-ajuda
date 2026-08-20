@@ -10,6 +10,15 @@ export type ResolvedReferral = {
   issue: ReferralIssue | null;
 };
 
+/** Regra final do primeiro acesso do sistema restrito. */
+export function restrictedReferralAccessError(referral: ResolvedReferral): string | null {
+  if (referral.issue === 'invalid_phone') return 'Telefone do indicador inválido. Informe o número com DDD.';
+  if (referral.issue === 'self_referral') return 'Você não pode indicar a si mesmo.';
+  if (!referral.declaredPhone) return 'Acesso restrito: informe o telefone com DDD de quem indicou você.';
+  if (!referral.linkedReferrer) return 'Indicador não localizado no sistema. Sem uma indicação válida, o acesso não é liberado.';
+  return null;
+}
+
 /**
  * Normaliza somente o telefone do indicador. O cadastro principal continua sendo
  * a fonte de identidade; esta função apenas remove máscara e o DDI +55 quando

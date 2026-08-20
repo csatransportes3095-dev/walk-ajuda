@@ -5,7 +5,7 @@ vi.mock('./db', () => ({
 }));
 
 import { getDb } from './db';
-import { normalizeReferralName, normalizeReferralPhone, resolveReferralDeclaration } from './referral';
+import { normalizeReferralName, normalizeReferralPhone, resolveReferralDeclaration, restrictedReferralAccessError } from './referral';
 
 const getDbMock = vi.mocked(getDb);
 
@@ -64,6 +64,24 @@ describe('regra central de indicação', () => {
       linkedReferrer: null,
       issue: null,
     });
+  });
+
+  it('bloqueia o primeiro acesso sem telefone, com autorreferência ou sem indicador localizado', () => {
+    expect(restrictedReferralAccessError({ declaredName: null, declaredPhone: null, linkedReferrer: null, issue: null }))
+      .toContain('Acesso restrito');
+    expect(restrictedReferralAccessError({ declaredName: 'Eu', declaredPhone: '11988887777', linkedReferrer: null, issue: 'self_referral' }))
+      .toContain('não pode indicar a si mesmo');
+    expect(restrictedReferralAccessError({ declaredName: 'Desconhecido', declaredPhone: '11999990000', linkedReferrer: null, issue: null }))
+      .toContain('Indicador não localizado');
+  });
+
+  it('libera o primeiro acesso somente quando o indicador existe e está vinculado', () => {
+    expect(restrictedReferralAccessError({
+      declaredName: 'Ana',
+      declaredPhone: '11999990000',
+      linkedReferrer: { id: 41, name: 'ANA INDICADORA', phone: '11999990000' },
+      issue: null,
+    })).toBeNull();
   });
 
   it('vincula o indicador encontrado pelo telefone normalizado', async () => {

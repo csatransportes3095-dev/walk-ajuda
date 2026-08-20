@@ -632,16 +632,14 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       return;
     }
     
-    // Validar indicador apenas se foi preenchido (pode estar vazio se usou código de bypass)
-    if (referredPhoneDigits.length > 0) {
-      if (referredPhoneDigits.length !== 11) {
-        toast.error("Telefone do indicador deve ter 11 dígitos");
-        return;
-      }
-      if (referredPhoneDigits === clientPhoneDigits) {
-        toast.error("Você não pode indicar a si mesmo");
-        return;
-      }
+    // SISTEMA RESTRITO: todo primeiro cadastro exige telefone de indicador válido.
+    if (referredPhoneDigits.length !== 11) {
+      toast.error("Para acessar, informe o telefone com DDD de quem indicou você.");
+      return;
+    }
+    if (referredPhoneDigits === clientPhoneDigits) {
+      toast.error("Você não pode indicar a si mesmo");
+      return;
     }
     // SEGURANÇA: foto é obrigatória - não pode cadastrar sem foto
     if (!regProfilePhoto) {
@@ -2072,11 +2070,31 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 </div>
               </div>
 
-              {/* Quem indicou foi movido para step separado após cadastro */}
+              {/* Indicação obrigatória antes do primeiro acesso. O servidor confirma se o número existe. */}
+              <div className="border-2 border-yellow-500/50 rounded-xl p-5 space-y-4 bg-yellow-500/5">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 shrink-0 rounded-xl bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-yellow-300 font-black">!</div>
+                  <div>
+                    <p className="text-yellow-200 font-bold">Acesso restrito por indicação</p>
+                    <p className="text-white/65 text-xs mt-1 leading-relaxed">Para criar sua conta, informe o telefone com DDD de um cliente que já indicou você. Sem indicação válida, o acesso não é liberado.</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-white mb-2 block text-sm font-medium">Telefone/WhatsApp de quem indicou <span className="text-red-400">*</span></label>
+                  <input type="tel" inputMode="numeric" placeholder="(11) 99999-9999" value={formatPhone(regReferredByPhone)} onChange={(e) => setRegReferredByPhone(normalizeBrazilPhone(e.target.value))}
+                    className="w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 border-black focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/30 outline-none transition-all" />
+                  <p className="text-white/45 text-xs mt-2">O número será confirmado no sistema antes de liberar o cadastro.</p>
+                </div>
+                <div>
+                  <label className="text-white mb-2 block text-sm font-medium">Nome de quem indicou <span className="text-white/45">(opcional)</span></label>
+                  <input type="text" placeholder="Nome, se souber" value={regReferredBy} onChange={(e) => setRegReferredBy(e.target.value)}
+                    className="w-full px-4 py-3 bg-white text-black text-base text-center font-medium rounded-xl border-2 border-black focus:border-yellow-500 focus:ring-2 focus:ring-yellow-500/30 outline-none transition-all" />
+                </div>
+              </div>
 
               <button
                 type="submit"
-                disabled={registerMutation.isPending || isUploadingPhoto || !regProfilePhoto}
+                disabled={registerMutation.isPending || isUploadingPhoto || !regProfilePhoto || getPhoneDigits(regReferredByPhone).length !== 11}
                 className="w-full px-4 py-5 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-600/80 hover:to-green-500/80 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xl rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
                 {(isUploadingPhoto || registerMutation.isPending) ? (
@@ -2230,34 +2248,18 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </svg>
                 </div>
                 <h3 className="text-white font-bold text-xl mb-1">Alguém te indicou?</h3>
-                <p className="text-white/60 text-sm">Deseja informar quem te indicou? Quem indicou pode ganhar pela indicação! 🎁</p>
+                <p className="text-white/60 text-sm">Acesso restrito: informe o telefone de um cliente cadastrado que indicou você.</p>
               </div>
 
-              <div className="flex gap-3">
+              {!showReferralForm && (
                 <button
                   type="button"
                   onClick={() => setShowReferralForm(true)}
-                  className="flex-1 py-4 bg-yellow-500/20 hover:bg-yellow-500/30 border-2 border-yellow-500/50 text-yellow-300 font-bold text-lg rounded-xl transition-all"
+                  className="w-full py-4 bg-yellow-500/20 hover:bg-yellow-500/30 border-2 border-yellow-500/50 text-yellow-300 font-bold text-lg rounded-xl transition-all"
                 >
-                  ✅ SIM
+                  INFORMAR INDICADOR PARA CONTINUAR
                 </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setShowReferralForm(false);
-                    try {
-                      await updateReferralMutation.mutateAsync({
-                        phone: getPhoneDigits(clientPhone),
-                        referredBy: 'Não informou',
-                      });
-                    } catch { /* ignora erro silenciosamente */ }
-                    setGateStep("password");
-                  }}
-                  className="flex-1 py-4 bg-white/10 hover:bg-white/20 border-2 border-white/20 text-white/70 font-bold text-lg rounded-xl transition-all"
-                >
-                  ❌ NÃO
-                </button>
-              </div>
+              )}
 
               {showReferralForm && (
                 <div className="space-y-4 border border-yellow-500/30 rounded-xl p-5 bg-yellow-500/5">
@@ -2276,7 +2278,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </div>
                   <button
                     type="button"
-                    disabled={!regReferredBy.trim() || updateReferralMutation.isPending}
+                    disabled={getPhoneDigits(regReferredByPhone).length !== 11 || updateReferralMutation.isPending}
                     onClick={async () => {
                       const referredPhoneDigits = getPhoneDigits(regReferredByPhone);
                       if (referredPhoneDigits.length > 0 && referredPhoneDigits.length !== 11) {

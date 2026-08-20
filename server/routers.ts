@@ -114,7 +114,7 @@ import { storagePut } from "./storage";
 import { r2DeleteObjects, r2GetObjectBuffer } from "./r2Storage";
 import { getAdminJwtSecret } from "./adminJwt";
 import { requireCustomerSession } from "./customerSession";
-import { resolveReferralDeclaration } from "./referral";
+import { resolveReferralDeclaration, restrictedReferralAccessError } from "./referral";
 
 /**
  * Verifica se um telefone está na blocklist.
@@ -2315,30 +2315,20 @@ export const appRouter = router({
             message: 'Você já possui cadastro no sistema. Entre na sua conta para continuar.',
           };
         }
-        // A origem de indicação é opcional. Telefone não localizado é preservado como
-        // declaração do cliente, mas não cria vínculo nem habilita comissão automática.
-        const { validateBypassCode, useBypassCode } = await import('./db');
+        // SISTEMA RESTRITO: o primeiro cadastro só pode ser concluído com telefone
+        // de indicador já cadastrado e ativo. Esta checagem é de servidor e não pode
+        // ser ignorada por interface, link, navegador ou chamada direta à API.
         const cleanPhone = normalizedInput.phone;
         const referral = await resolveReferralDeclaration({
           customerPhone: cleanPhone,
           referrerName: input.referredBy,
           referrerPhone: input.referredByPhone,
         });
-        if (referral.issue === 'invalid_phone') {
-          return { success: false, blocked: false, message: 'Telefone do indicador inválido. Informe o número com DDD.' };
+        const restrictedAccessError = restrictedReferralAccessError(referral);
+        if (restrictedAccessError) {
+          return { success: false, blocked: false, message: restrictedAccessError };
         }
-        if (referral.issue === 'self_referral') {
-          return { success: false, blocked: false, message: 'Você não pode indicar a si mesmo.' };
-        }
-        if (!referral.declaredPhone && input.bypassCode) {
-          // Código de liberação só é usado quando não existe telefone de indicador.
-          const bypassValidation = await validateBypassCode(input.bypassCode);
-          if (!bypassValidation.valid) {
-            return { success: false, blocked: false, message: bypassValidation.message };
-          }
-          await useBypassCode(input.bypassCode, cleanPhone);
-        }
-        
+
         const safeInput = {
           ...normalizedInput,
           referredBy: referral.declaredName || undefined,
@@ -2900,12 +2890,8 @@ export const appRouter = router({
         if (!referral.declaredName && !referral.declaredPhone) {
           return { success: false, message: 'Informe o nome, o telefone ou os dois dados de quem indicou você.' };
         }
-        if (referral.issue === 'invalid_phone') {
-          return { success: false, message: 'Telefone do indicador inválido. Informe o número com DDD.' };
-        }
-        if (referral.issue === 'self_referral') {
-          return { success: false, message: 'Você não pode indicar a si mesmo.' };
-        }
+        const restrictedAccessError = restrictedReferralAccessError(referral);
+        if (restrictedAccessError) return { success: false, message: restrictedAccessError };
 
         await updateCustomer(customer.id, {
           referredBy: referral.declaredName || undefined,

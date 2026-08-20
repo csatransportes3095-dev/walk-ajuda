@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, Camera, Eye, EyeOff, KeyRound } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
-const steps = ['route', 'name', 'phone', 'cpf', 'email', 'cep', 'city', 'uf', 'photo', 'confirm', 'password'] as const;
+const steps = ['route', 'name', 'phone', 'cpf', 'email', 'cep', 'city', 'uf', 'referrer', 'photo', 'confirm', 'password'] as const;
 type Step = typeof steps[number];
 type Route = 'site' | 'acompanhar' | 'gastos' | 'emprestimo';
 type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void };
@@ -19,7 +19,7 @@ function toBase64(file: File) {
 export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone }: Props) {
   const [index, setIndex] = useState(0);
   const [route, setRoute] = useState<Route>('site');
-  const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', city: '', uf: '', profilePhotoUrl: '' });
+  const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', city: '', uf: '', referrerPhone: '', profilePhotoUrl: '' });
   const [value, setValue] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState('');
@@ -48,6 +48,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
     cep: 'Informe seu CEP',
     city: 'Qual é sua cidade?',
     uf: 'Selecione seu estado',
+    referrer: 'Telefone de quem indicou você',
     photo: 'Envie sua foto de perfil',
     confirm: 'Confira seus dados antes de concluir',
     password: 'Crie sua senha de acesso',
@@ -58,6 +59,18 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
     if (step === 'route') {
       await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step, field: 'route', value: route });
       setIndex(1);
+      return;
+    }
+    if (step === 'referrer') {
+      const referrerPhone = value.replace(/\D/g, '');
+      if (referrerPhone.length !== 11) {
+        setError('Acesso restrito: informe o telefone com DDD de um indicador cadastrado.');
+        return;
+      }
+      await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step, field: 'referrerPhone', value: referrerPhone });
+      setData(old => ({ ...old, referrerPhone }));
+      setValue('');
+      setIndex(index + 1);
       return;
     }
     if (step === 'photo') {
@@ -71,7 +84,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
       return;
     }
     if (step === 'confirm') {
-      const result = await register.mutateAsync({ ...data, phone: data.phone.replace(/\D/g, ''), sourceRoute: route });
+      const result = await register.mutateAsync({ ...data, phone: data.phone.replace(/\D/g, ''), referredByPhone: data.referrerPhone, sourceRoute: route });
       if (!result.success) { setError(result.message || 'Não foi possível concluir o cadastro.'); return; }
       await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step: 'confirm', data: { ...data, route } });
       // O cadastro nunca retorna à tela inicial sem a senha ser criada no passo seguinte.
@@ -150,10 +163,15 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
         <div style={{ display: 'grid', gap: 8 }}>
           {([['site', 'Site de Pedidos'], ['acompanhar', 'Acompanhar Pedido'], ['gastos', 'Controle de Gastos'], ['emprestimo', 'Empréstimos']] as [Route, string][]).map(([key, label]) => <button key={key} onClick={() => setRoute(key)} style={{ ...choice, borderColor: route === key ? '#818cf8' : 'rgba(255,255,255,.12)', background: route === key ? 'rgba(99,102,241,.2)' : 'rgba(255,255,255,.04)' }}>{label}</button>)}
         </div>
+      ) : step === 'referrer' ? (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ color: '#fde68a', fontSize: 12, lineHeight: 1.45 }}>Acesso restrito: informe o telefone com DDD de um cliente já cadastrado que indicou você. Sem indicação válida, não liberamos o cadastro.</div>
+          <input value={value} onChange={e => { setValue(e.target.value.replace(/\D/g, '').slice(0, 11)); setError(''); }} placeholder="(11) 99999-9999" inputMode="numeric" style={input} />
+        </div>
       ) : step === 'photo' ? (
         <label style={{ ...choice, display: 'block', textAlign: 'center' }}><Camera size={22} style={{ marginBottom: 6 }} /><div>{file ? file.name : 'Escolher foto'}</div><input type="file" accept="image/*" capture="user" onChange={e => setFile(e.target.files?.[0] || null)} style={{ display: 'none' }} /></label>
       ) : step === 'confirm' ? (
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>CPF:</b> {data.cpf}</div><div><b>E-mail:</b> {data.email}</div><div><b>CEP:</b> {data.cep}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div></div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>CPF:</b> {data.cpf}</div><div><b>E-mail:</b> {data.email}</div><div><b>CEP:</b> {data.cep}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div><div><b>Indicador:</b> {data.referrerPhone}</div></div>
       ) : step === 'password' ? (
         passwordCompleted ? (
           <div style={{ marginTop: 8, padding: 12, borderRadius: 10, background: 'rgba(34,197,94,.12)', border: '1px solid rgba(74,222,128,.45)', color: '#dcfce7', fontSize: 13, lineHeight: 1.5 }}>
