@@ -1694,6 +1694,14 @@ export const appRouter = router({
                 let orderNum: number | undefined;
                 try { orderNum = await generateOrderNumber(); } catch (e) { console.error('[OrderNumber] Erro:', e); }
                 console.log('[OrderStatus] Salvando status inicial:', initialStatus, 'regId:', regId, 'orderNum:', orderNum);
+                // O primeiro pedido é a única oportunidade de congelar uma comissão de indicação.
+                // A contagem é feita antes da inserção do status atual para excluir clientes recorrentes.
+                const previousOrderRows = await db2.execute(sql`
+                  SELECT COUNT(*) AS total FROM orderStatusHistory
+                  WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${phoneDigits}
+                `);
+                const previousOrderCount = Number((previousOrderRows[0] as unknown as Array<{ total?: number }>)[0]?.total || 0);
+
                 const createdOrderStatus = await addOrderStatus({
                   registrationId: regId,
                   orderNumber: orderNum,
@@ -1705,6 +1713,45 @@ export const appRouter = router({
                   pricePaid: input.price || null,
                   answers: input.answers,
                 });
+
+                if (previousOrderCount === 0 && input.optionId) {
+                  try {
+                    const referredCustomer = await getCustomerByPhone(phoneDigits);
+                    const referrerPhone = String(referredCustomer?.referredByPhone || '').replace(/\D/g, '');
+                    if (referredCustomer && referrerPhone && referrerPhone !== phoneDigits) {
+                      const referrer = await getCustomerByPhone(referrerPhone);
+                      const optionRows = await db2.execute(sql`
+                        SELECT id, productId, label, commissionValue
+                        FROM productOptions WHERE id = ${input.optionId} LIMIT 1
+                      `);
+                      const option = (optionRows[0] as unknown as Array<{ id: number; productId: number; label: string; commissionValue: number }>)[0];
+                      if (referrer && option && Number(option.commissionValue || 0) > 0) {
+                        const { createReferralCommissionAttribution } = await import('./db');
+                        await createReferralCommissionAttribution({
+                          referrerCustomerId: referrer.id,
+                          referrerPhone,
+                          referrerName: referrer.name || referredCustomer.referredBy || null,
+                          referredCustomerId: referredCustomer.id,
+                          referredPhone: phoneDigits,
+                          referredName: referredCustomer.name || input.clientName || null,
+                          source: input.accessCode ? 'link_ou_codigo' : 'cadastro',
+                          sourceReference: input.accessCode || null,
+                          registrationId: regId,
+                          orderStatusId: createdOrderStatus.id,
+                          orderNumber: orderNum || null,
+                          productId: option.productId,
+                          optionId: option.id,
+                          serviceName: input.service,
+                          serviceOption: option.label || input.nameOption,
+                          commissionValue: Number(option.commissionValue),
+                        });
+                      }
+                    }
+                  } catch (commissionError) {
+                    // O pedido não pode falhar se a atribuição de comissão encontrar uma inconsistência.
+                    console.error('[ReferralCommission] Falha ao congelar comissão:', commissionError);
+                  }
+                }
                 if (audioDraftsForOrder.length > 0) {
                   await createOrderQuestionAudioAnswers(audioDraftsForOrder.map(draft => ({
                     registrationId: regId,
@@ -2314,30 +2361,8 @@ export const appRouter = router({
             });
           } catch (e) { console.error('Erro ao registrar indicação:', e); }
 
-          // Notificar o indicador por e-mail (se tiver e-mail cadastrado)
-          try {
-            const { getCustomerByPhone } = await import('./db');
-            const referrerCleanPhone = safeInput.referredByPhone!.replace(/\D/g, '');
-            const referrer = await getCustomerByPhone(referrerCleanPhone);
-            const emailBranding = await getEmailBranding();
-            if (referrer?.email) {
-              const waLink = `https://wa.me/55${referrerCleanPhone}`;
-              await transporter.sendMail({
-                from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
-                to: referrer.email,
-                subject: `Í°Å¸Å½"° Sua indicação deu certo! ${safeInput.name} fez um pedido`,
-                html: emailIndicacaoSucesso({
-                  ...emailBranding,
-                  referrerName: referrer.name || safeInput.referredBy || undefined,
-                  referredName: safeInput.name,
-                  service: undefined,
-                }),
-              });
-              console.log(`[Indicação] E-mail enviado ao indicador ${referrer.email}`);
-            } else {
-              console.log(`[Indicação] Indicador ${referrerCleanPhone} sem e-mail cadastrado — notificação não enviada`);
-            }
-          } catch (e) { console.error('Erro ao notificar indicador:', e); }
+          // O cadastro somente registra a origem. O indicador é avisado quando a comissão
+          // for qualificada no primeiro pedido elegível, nunca no simples cadastro.
         }
         
         // Notificação: finalização do cadastro — enviado em segundo plano para não bloquear
@@ -2846,6 +2871,22 @@ export const appRouter = router({
         if (blockResult.blocked) return { success: false, message: 'Acesso bloqueado' };
         const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
         if (!customer) return { success: false, message: 'Cliente não encontrado' };
+        // O manifesto inicial pode registrar a origem apenas uma vez, antes do primeiro pedido.
+        // Depois disso, a atribuição fica bloqueada e não pode ser trocada ou apagada.
+        if (customer.referredByPhone) {
+          return { success: false, message: 'Esta indicação já foi registrada e não pode ser alterada.' };
+        }
+        const referralDb = await (await import('./db')).getDb();
+        if (referralDb) {
+          const orderRows = await referralDb.execute(sql`
+            SELECT COUNT(*) AS total FROM orderStatusHistory
+            WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${input.phone.replace(/\D/g, '')}
+          `);
+          const priorOrders = Number((orderRows[0] as unknown as Array<{ total?: number }>)[0]?.total || 0);
+          if (priorOrders > 0) {
+            return { success: false, message: 'A indicação só pode ser registrada antes do primeiro pedido.' };
+          }
+        }
         // Validar: não pode indicar a si mesmo
         if (input.referredByPhone) {
           const cleanSelf = input.phone.replace(/\D/g, '');
@@ -4954,6 +4995,11 @@ export const appRouter = router({
         const db = await (await import('./db')).getDb();
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível ao atualizar a comissão.' });
         await ensureCommissionReferralStatusColumns(db);
+        const { getReferralCommissionAttributionByRegistration, updateReferralCommissionAttributionStatus } = await import('./db');
+        const frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
+        if (input.paid && frozenAttribution && frozenAttribution.status !== 'elegivel') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'A comissão precisa ser aprovada antes do pagamento.' });
+        }
         const stateRows = await db.execute(sql`
           SELECT COALESCE(MAX(referralInvalid), 0) AS referralInvalid
           FROM orderStatusHistory WHERE registrationId = ${input.registrationId}
@@ -4969,6 +5015,13 @@ export const appRouter = router({
         `);
         const affected = Number((update[0] as unknown as { affectedRows?: number })?.affectedRows || 0);
         if (!affected) throw new TRPCError({ code: 'NOT_FOUND', message: 'Indicação não encontrada.' });
+        if (frozenAttribution) {
+          await updateReferralCommissionAttributionStatus({
+            registrationId: input.registrationId,
+            status: input.paid ? 'paga' : 'elegivel',
+            paidBy: input.paid ? 'admin' : null,
+          });
+        }
 
         // Se está marcando como PAGO, buscar dados do indicador e enviar e-mail
         if (input.paid) {
@@ -5103,6 +5156,13 @@ export const appRouter = router({
           c.name as customerName,
           c.referredBy,
           c.referredByPhone,
+          rca.status as frozenCommissionStatus,
+          rca.commissionValue as frozenCommissionValue,
+          rca.invalidReason as frozenCommissionInvalidReason,
+          rca.orderNumber as frozenOrderNumber,
+          rca.serviceName as frozenServiceName,
+          rca.serviceOption as frozenServiceOption,
+          rca.createdAt as frozenCreatedAt,
           (
             SELECT osh.status FROM orderStatusHistory osh
             WHERE osh.registrationId = acp.id
@@ -5164,6 +5224,7 @@ export const appRouter = router({
           ) as referrerPhotoUrl
         FROM accessCodePhones acp
         LEFT JOIN customers c ON REGEXP_REPLACE(c.phone, '[^0-9]', '') = REGEXP_REPLACE(acp.phone, '[^0-9]', '')
+        LEFT JOIN referralCommissionAttributions rca ON rca.registrationId = acp.id
         WHERE c.referredBy IS NOT NULL
           AND c.referredBy != ''
           AND (
@@ -5183,14 +5244,15 @@ export const appRouter = router({
         referredBy: r.referredBy as string,
         referredByPhone: r.referredByPhone as string | null,
         latestStatus: r.latestStatus as string | null,
-        serviceName: r.serviceName as string | null,
-        serviceOption: r.serviceOption as string | null,
-        submittedAt: r.submittedAt ? Number(r.submittedAt) : null,
-        commissionPaid: Number(r.commissionPaid),
-        referralInvalid: Number(r.referralInvalid || 0) === 1,
-        referralInvalidReason: r.referralInvalidReason ? String(r.referralInvalidReason) : null,
-        commissionValue: Number(r.commissionValue ?? 0),
-        orderNumber: r.orderNumber ? Number(r.orderNumber) : null,
+        serviceName: (r.frozenServiceName || r.serviceName) as string | null,
+        serviceOption: (r.frozenServiceOption || r.serviceOption) as string | null,
+        submittedAt: r.frozenCreatedAt ? new Date(r.frozenCreatedAt).getTime() : (r.submittedAt ? Number(r.submittedAt) : null),
+        commissionPaid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'paga' ? 1 : 0) : Number(r.commissionPaid),
+        referralInvalid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'nao_elegivel' || r.frozenCommissionStatus === 'cancelada') : Number(r.referralInvalid || 0) === 1,
+        referralInvalidReason: r.frozenCommissionStatus ? (r.frozenCommissionInvalidReason ? String(r.frozenCommissionInvalidReason) : null) : (r.referralInvalidReason ? String(r.referralInvalidReason) : null),
+        commissionValue: r.frozenCommissionStatus ? Number(r.frozenCommissionValue ?? 0) : Number(r.commissionValue ?? 0),
+        commissionStatus: r.frozenCommissionStatus ? String(r.frozenCommissionStatus) : (Number(r.referralInvalid || 0) === 1 ? 'nao_elegivel' : (Number(r.commissionPaid) === 1 ? 'paga' : 'legado')),
+        orderNumber: r.frozenOrderNumber ? Number(r.frozenOrderNumber) : (r.orderNumber ? Number(r.orderNumber) : null),
         totalReferrals: Number(r.totalReferrals ?? 0),
         referrerPhotoUrl: r.referrerPhotoUrl as string | null,
       }));
@@ -5209,6 +5271,15 @@ export const appRouter = router({
         await ensureCommissionReferralStatusColumns(db);
         if (input.invalid && !input.reason) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Informe o motivo da indicação não válida.' });
+        }
+        const { getReferralCommissionAttributionByRegistration: getFrozenAttribution, updateReferralCommissionAttributionStatus: updateFrozenAttribution } = await import('./db');
+        const frozenAttribution = await getFrozenAttribution(input.registrationId);
+        if (frozenAttribution) {
+          await updateFrozenAttribution({
+            registrationId: input.registrationId,
+            status: input.invalid ? 'nao_elegivel' : 'elegivel',
+            reason: input.invalid ? input.reason!.trim() : null,
+          });
         }
         const result = input.invalid
           ? await db.execute(sql`
@@ -5237,18 +5308,27 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const db = await (await import('./db')).getDb();
         if (!db) return { success: false };
-        // Buscar o phone do registro
-        const rows = await db.execute(`SELECT phone FROM accessCodePhones WHERE id = ${input.registrationId} LIMIT 1`);
-        const rec = (rows[0] as unknown as any[])[0];
-        if (rec?.phone) {
-          // Limpar referredBy do cliente para não aparecer mais como indicação
-          await db.execute(`
-            UPDATE customers
-            SET referredBy = NULL, referredByPhone = NULL
-            WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = REGEXP_REPLACE('${rec.phone}', '[^0-9]', '')
+        const { getReferralCommissionAttributionByRegistration, updateReferralCommissionAttributionStatus } = await import('./db');
+        const frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
+        if (frozenAttribution) {
+          await updateReferralCommissionAttributionStatus({
+            registrationId: input.registrationId,
+            status: 'cancelada',
+            reason: 'Cancelada pelo administrador',
+          });
+          // A origem do cadastro é histórica e não pode ser apagada por uma ação de comissão.
+          return { success: true, cancelled: true };
+        }
+        // Compatibilidade: registros anteriores ao congelamento mantêm a remoção legada.
+        const legacyRows = await db.execute(sql`SELECT phone FROM accessCodePhones WHERE id = ${input.registrationId} LIMIT 1`);
+        const legacyRecord = (legacyRows[0] as unknown as Array<{ phone?: string }>)[0];
+        if (legacyRecord?.phone) {
+          await db.execute(sql`
+            UPDATE customers SET referredBy = NULL, referredByPhone = NULL
+            WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${String(legacyRecord.phone).replace(/\D/g, '')}
           `);
         }
-        return { success: true };
+        return { success: true, legacy: true };
       }),
 
     resendReferralEmail: adminProcedure

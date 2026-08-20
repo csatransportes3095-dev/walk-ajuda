@@ -1311,6 +1311,41 @@ export const referralHistory = mysqlTable("referralHistory", {
 export type ReferralHistory = typeof referralHistory.$inferSelect;
 export type InsertReferralHistory = typeof referralHistory.$inferInsert;
 
+// Atribuição central e imutável de comissão: criada somente no primeiro pedido elegível.
+// Preserva o valor/regra aplicados naquele instante, independentemente de alterações futuras no produto.
+export const referralCommissionAttributions = mysqlTable("referralCommissionAttributions", {
+  id: int("id").autoincrement().primaryKey(),
+  referrerCustomerId: int("referrerCustomerId"),
+  referrerPhone: varchar("referrerPhone", { length: 32 }).notNull(),
+  referrerName: varchar("referrerName", { length: 128 }),
+  referredCustomerId: int("referredCustomerId").notNull(),
+  referredPhone: varchar("referredPhone", { length: 32 }).notNull(),
+  referredName: varchar("referredName", { length: 128 }),
+  source: varchar("source", { length: 32 }).notNull().default("cadastro"),
+  sourceReference: varchar("sourceReference", { length: 128 }),
+  registrationId: int("registrationId").notNull(),
+  orderStatusId: int("orderStatusId").notNull().unique(),
+  orderNumber: int("orderNumber"),
+  productId: int("productId"),
+  optionId: int("optionId"),
+  serviceName: varchar("serviceName", { length: 256 }),
+  serviceOption: varchar("serviceOption", { length: 256 }),
+  commissionRule: varchar("commissionRule", { length: 32 }).notNull().default("fixed_option"),
+  commissionValue: int("commissionValue").notNull().default(0),
+  status: mysqlEnum("status", ["em_analise", "elegivel", "paga", "nao_elegivel", "cancelada"]).notNull().default("em_analise"),
+  invalidReason: varchar("invalidReason", { length: 512 }),
+  invalidatedAt: timestamp("invalidatedAt"),
+  eligibleAt: timestamp("eligibleAt"),
+  paidAt: timestamp("paidAt"),
+  paidBy: varchar("paidBy", { length: 128 }),
+  paymentReference: varchar("paymentReference", { length: 256 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ReferralCommissionAttribution = typeof referralCommissionAttributions.$inferSelect;
+export type InsertReferralCommissionAttribution = typeof referralCommissionAttributions.$inferInsert;
+
 // Tabela de denÃºncias de indicados
 export const referralReports = mysqlTable("referralReports", {
   id: int("id").autoincrement().primaryKey(),

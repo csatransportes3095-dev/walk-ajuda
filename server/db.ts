@@ -37,6 +37,7 @@ import {
   referralUsages, ReferralUsage, InsertReferralUsage,
   referralStats, ReferralStats, InsertReferralStats,
   referralHistory, ReferralHistory, InsertReferralHistory,
+  referralCommissionAttributions, ReferralCommissionAttribution, InsertReferralCommissionAttribution,
   referralReports, ReferralReport, InsertReferralReport,
   trackingQuestions, TrackingQuestion,
   trackingAnswers, TrackingAnswer,
@@ -3304,7 +3305,8 @@ export async function recordReferral(data: {
     referredPhone: data.referredPhone.replace(/\D/g, ''),
     referredName: data.referredName,
     orderId: data.orderId ?? null,
-    status: 'completed',
+    // O cadastro apenas registra a origem. A comissão só é qualificada no primeiro pedido elegível.
+    status: 'pending',
   });
   
   // Atualizar ou criar stats
@@ -4080,3 +4082,124 @@ export async function deletePendingZohoOAuth(sessionId: string) {
   await db.delete(siteSettings).where(eq(siteSettings.settingKey, key)).catch(() => {});
 }
 
+
+// ─── Comissão de indicação congelada por pedido elegível ───────────────────
+export type ReferralCommissionStatus = "em_analise" | "elegivel" | "paga" | "nao_elegivel" | "cancelada";
+
+export async function getReferralCommissionAttributionByOrderStatus(orderStatusId: number): Promise<ReferralCommissionAttribution | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(referralCommissionAttributions)
+    .where(eq(referralCommissionAttributions.orderStatusId, orderStatusId))
+    .limit(1);
+  return rows[0] || null;
+}
+
+export async function createReferralCommissionAttribution(input: {
+  referrerCustomerId?: number | null;
+  referrerPhone: string;
+  referrerName?: string | null;
+  referredCustomerId: number;
+  referredPhone: string;
+  referredName?: string | null;
+  source: string;
+  sourceReference?: string | null;
+  registrationId: number;
+  orderStatusId: number;
+  orderNumber?: number | null;
+  productId?: number | null;
+  optionId?: number | null;
+  serviceName?: string | null;
+  serviceOption?: string | null;
+  commissionValue: number;
+}): Promise<ReferralCommissionAttribution | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const existing = await getReferralCommissionAttributionByOrderStatus(input.orderStatusId);
+  if (existing) return existing;
+
+  try {
+    await db.insert(referralCommissionAttributions).values({
+      referrerCustomerId: input.referrerCustomerId ?? null,
+      referrerPhone: input.referrerPhone.replace(/\D/g, ''),
+      referrerName: input.referrerName ?? null,
+      referredCustomerId: input.referredCustomerId,
+      referredPhone: input.referredPhone.replace(/\D/g, ''),
+      referredName: input.referredName ?? null,
+      source: input.source,
+      sourceReference: input.sourceReference ?? null,
+      registrationId: input.registrationId,
+      orderStatusId: input.orderStatusId,
+      orderNumber: input.orderNumber ?? null,
+      productId: input.productId ?? null,
+      optionId: input.optionId ?? null,
+      serviceName: input.serviceName ?? null,
+      serviceOption: input.serviceOption ?? null,
+      commissionRule: "fixed_option",
+      commissionValue: Math.max(0, Math.round(input.commissionValue)),
+      status: "em_analise",
+    } satisfies InsertReferralCommissionAttribution);
+  } catch (error: any) {
+    // Uma criação concorrente do mesmo pedido deve devolver o snapshot já gravado.
+    if (!String(error?.message || "").toLowerCase().includes("duplicate")) throw error;
+  }
+
+  return await getReferralCommissionAttributionByOrderStatus(input.orderStatusId);
+}
+
+export async function updateReferralCommissionAttributionStatus(input: {
+  registrationId: number;
+  status: ReferralCommissionStatus;
+  reason?: string | null;
+  paidBy?: string | null;
+  paymentReference?: string | null;
+}): Promise<ReferralCommissionAttribution | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(referralCommissionAttributions)
+    .where(eq(referralCommissionAttributions.registrationId, input.registrationId))
+    .limit(1);
+  const attribution = rows[0];
+  if (!attribution) return null;
+
+  const now = new Date();
+  const values: Partial<InsertReferralCommissionAttribution> = { status: input.status };
+  if (input.status === "nao_elegivel" || input.status === "cancelada") {
+    values.invalidReason = input.reason?.trim() || "Não elegível";
+    values.invalidatedAt = now;
+  }
+  if (input.status === "elegivel") {
+    values.invalidReason = null;
+    values.invalidatedAt = null;
+    values.eligibleAt = now;
+  }
+  if (input.status === "paga") {
+    values.paidAt = now;
+    values.paidBy = input.paidBy || "admin";
+    values.paymentReference = input.paymentReference?.trim() || null;
+  }
+  await db.update(referralCommissionAttributions).set(values)
+    .where(eq(referralCommissionAttributions.id, attribution.id));
+
+  const updated = await db.select().from(referralCommissionAttributions)
+    .where(eq(referralCommissionAttributions.id, attribution.id)).limit(1);
+  return updated[0] || null;
+}
+
+export async function listReferralCommissionAttributions(): Promise<ReferralCommissionAttribution[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(referralCommissionAttributions)
+    .orderBy(desc(referralCommissionAttributions.createdAt));
+}
+
+export async function getReferralCommissionAttributionByRegistration(registrationId: number): Promise<ReferralCommissionAttribution | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(referralCommissionAttributions)
+    .where(eq(referralCommissionAttributions.registrationId, registrationId))
+    .orderBy(desc(referralCommissionAttributions.createdAt))
+    .limit(1);
+  return rows[0] || null;
+}

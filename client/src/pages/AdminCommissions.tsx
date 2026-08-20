@@ -331,8 +331,11 @@ export default function AdminCommissions() {
                 <div className="divide-y divide-border">
                   {pedidos.map(c => {
                     const statusCfg = c.latestStatus ? STATUS_MAP[c.latestStatus] : null;
+                    const commissionStatus = (c as any).commissionStatus as string | undefined;
                     const isPaid = c.commissionPaid === 1;
                     const isInvalid = Boolean((c as any).referralInvalid);
+                    const isEligible = commissionStatus === 'elegivel' || commissionStatus === 'paga' || commissionStatus === 'legado';
+                    const isUnderReview = commissionStatus === 'em_analise';
                     const isReferralAction = referralAction?.registrationId === c.registrationId;
                     return (
                       <div key={c.registrationId} className={`px-4 py-3 flex items-start gap-3 ${isPaid ? "opacity-70" : ""}`}>
@@ -399,7 +402,7 @@ export default function AdminCommissions() {
                                   ? 'bg-green-500/20 border-green-500/40 text-green-400'
                                   : 'bg-red-500/20 border-red-500/40 text-red-400'
                             }`}>
-                              {isInvalid ? '⛔ Indicação não válida' : <>💰 {(c as any).commissionValue > 0 ? formatMoney((c as any).commissionValue) : 'Valor não definido'}</>}
+                              {isInvalid ? '⛔ Indicação não válida' : isUnderReview ? <>🔎 Comissão em análise · {formatMoney((c as any).commissionValue)}</> : <>💰 {(c as any).commissionValue > 0 ? formatMoney((c as any).commissionValue) : 'Valor não definido'}</>}
                             </span>
                             {isInvalid && (c as any).referralInvalidReason && (
                               <span className="text-[10px] text-zinc-400">Motivo: {(c as any).referralInvalidReason}</span>
@@ -419,7 +422,7 @@ export default function AdminCommissions() {
                             </div>
                           ) : isPaid ? (
                             <button onClick={() => toggleCommissionPaidMutation.mutate({ registrationId: c.registrationId, paid: false })} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-green-500/20 border-green-500/40 text-green-400 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 disabled:opacity-50" title="Clique para desfazer"><CheckCircle className="w-3.5 h-3.5" /> Paga</button>
-                          ) : !isInvalid ? (
+                          ) : !isInvalid && isEligible ? (
                             <button onClick={() => setConfirmPayment(c.registrationId)} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-red-500/20 border-red-500/40 text-red-400 hover:bg-green-500/10 hover:border-green-500/30 hover:text-green-400 disabled:opacity-50" title="Marcar como paga"><Clock className="w-3.5 h-3.5" /> Pagar</button>
                           ) : null}
                           {isReferralAction ? (
@@ -430,6 +433,8 @@ export default function AdminCommissions() {
                                 <button onClick={() => { setReferralAction(null); setInvalidReason(''); }} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground">Cancelar</button>
                               </div>
                             </div>
+                          ) : isUnderReview ? (
+                            <button onClick={() => setReferralAction({ registrationId: c.registrationId, mode: 'revalidate' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20" title="Aprovar comissão"><CheckCircle className="w-3.5 h-3.5" /> Aprovar</button>
                           ) : (
                             <button onClick={() => setReferralAction({ registrationId: c.registrationId, mode: isInvalid ? 'revalidate' : 'invalidate' })} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${isInvalid ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-zinc-500/40 bg-zinc-500/10 text-zinc-300 hover:bg-amber-500/10 hover:border-amber-500/40 hover:text-amber-300'}`} title={isInvalid ? 'Revalidar indicação' : 'Marcar como indicação não válida'}>{isInvalid ? '↺ Revalidar' : '⛔ Não válida'}</button>
                           )}
