@@ -326,6 +326,9 @@ export default function Home() {
   const [couponMessage, setCouponMessage] = useState("");
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [paymentProofPreview, setPaymentProofPreview] = useState<string | null>(null);
+  const [paymentProofUploadState, setPaymentProofUploadState] = useState<'idle' | 'preparing' | 'uploading' | 'uploaded' | 'failed'>('idle');
+  const [paymentProofUploadError, setPaymentProofUploadError] = useState('');
+  const paymentProofUploadRequestRef = useRef(0);
   const [pixCopied, setPixCopied] = useState(false);
   const [showExamplePhoto, setShowExamplePhoto] = useState(false);
   const [questionAnswers, setQuestionAnswers] = useState<Record<number, string>>({});
@@ -1029,67 +1032,63 @@ export default function Home() {
     });
   }, [PIX_KEY]);
 
+  const uploadPaymentProof = async (selectedFile: File) => {
+    const requestId = ++paymentProofUploadRequestRef.current;
+    setPaymentProofUploadError('');
+    setPaymentProofUploadState('preparing');
+    setRestoredFileUrls(prev => ({ ...prev, paymentProof: undefined }));
+    removeUploadedFileUrl('paymentProof');
+
+    const isPdf = selectedFile.type === 'application/pdf' || /\.pdf$/i.test(selectedFile.name);
+    let fileToUpload = selectedFile;
+    let preview: string = isPdf ? 'pdf' : '';
+    if (!isPdf) {
+      try {
+        const compressed = await compressImageFile(selectedFile);
+        fileToUpload = compressed.file;
+        preview = compressed.previewUrl;
+      } catch {
+        try {
+          preview = await fileToBase64(selectedFile).then(data => `data:${selectedFile.type || 'image/jpeg'};base64,${data}`);
+        } catch {
+          preview = 'pdf';
+        }
+      }
+    }
+    if (requestId !== paymentProofUploadRequestRef.current) return;
+
+    setPaymentProof(fileToUpload);
+    setPaymentProofPreview(preview);
+    setPaymentProofUploadState('uploading');
+    const phone = clientPhone.trim() || 'temp';
+    const result = await uploadFileToServer(fileToUpload, 'comprovante-pix', phone);
+    if (requestId !== paymentProofUploadRequestRef.current) return;
+
+    if (!result) {
+      setPaymentProofUploadState('failed');
+      setPaymentProofUploadError('O arquivo foi selecionado, mas ainda não foi enviado. Toque em “Tentar enviar novamente”.');
+      return;
+    }
+    saveUploadedFileUrl('paymentProof', result.url, result.mimeType);
+    setRestoredFileUrls(prev => ({ ...prev, paymentProof: result.url }));
+    setPaymentProofUploadState('uploaded');
+  };
+
   const handlePaymentProofSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Limpar input para permitir selecionar o mesmo arquivo novamente
     e.target.value = '';
-    // Aceitar qualquer imagem (incluindo HEIC/HEIF do iPhone) e PDF
     const isImage = file.type.startsWith('image/') || file.type === '' || file.type === 'application/octet-stream';
-    const isPdf = file.type === 'application/pdf';
-    // Verificar pela extensão se o MIME não foi reconhecido
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif', 'bmp', 'tiff'];
-    const isImageByExt = imageExts.includes(ext);
-    if (!isImage && !isPdf && !isImageByExt) { toast.error('Formato não suportado. Use JPG, PNG, PDF ou captura de tela.'); return; }
-    if (file.size > 25 * 1024 * 1024) { toast.error('Arquivo muito grande. Máximo 25MB.'); return; }
-    if (isPdf) {
-      // PDF: usa direto, sem compressão
-      setPaymentProof(file);
-      setPaymentProofPreview('pdf');
-      // Upload imediato ao S3
-      void (async () => {
-        const phone = clientPhone.trim() || 'temp';
-        const result = await uploadFileToServer(file, 'comprovante-pix', phone);
-        if (result) {
-          saveUploadedFileUrl('paymentProof', result.url, result.mimeType);
-          setRestoredFileUrls(prev => ({ ...prev, paymentProof: result.url }));
-        }
-      })();
-      return;
-    }
-    // Imagem: comprimir para reduzir tamanho e converter HEIC/HEIF → JPEG (resolve falha de upload em celular)
-    void (async () => {
-      try {
-        const compressed = await compressImageFile(file);
-        setPaymentProof(compressed.file);
-        setPaymentProofPreview(compressed.previewUrl);
-        // Upload imediato ao S3
-        const phone = clientPhone.trim() || 'temp';
-        const result = await uploadFileToServer(compressed.file, 'comprovante-pix', phone);
-        if (result) {
-          saveUploadedFileUrl('paymentProof', result.url, result.mimeType);
-          setRestoredFileUrls(prev => ({ ...prev, paymentProof: result.url }));
-        }
-      } catch {
-        // Se a compressão falhar, usa o arquivo original como fallback
-        setPaymentProof(file);
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          const result = ev.target?.result as string;
-          setPaymentProofPreview(result && result.startsWith('data:') ? result : 'pdf');
-        };
-        reader.onerror = () => setPaymentProofPreview('pdf');
-        reader.readAsDataURL(file);
-        // Upload imediato ao S3 (fallback)
-        const phone = clientPhone.trim() || 'temp';
-        const uploadResult = await uploadFileToServer(file, 'comprovante-pix', phone);
-        if (uploadResult) {
-          saveUploadedFileUrl('paymentProof', uploadResult.url, uploadResult.mimeType);
-          setRestoredFileUrls(prev => ({ ...prev, paymentProof: uploadResult.url }));
-        }
-      }
-    })();
+    if (!isImage && !isPdf && !imageExts.includes(ext)) { toast.error('Formato não suportado. Use JPG, PNG, PDF ou captura de tela.'); return; }
+    if (file.size > 15 * 1024 * 1024) { toast.error('Arquivo muito grande. Máximo 15MB.'); return; }
+    void uploadPaymentProof(file);
+  };
+
+  const retryPaymentProofUpload = () => {
+    if (paymentProof) void uploadPaymentProof(paymentProof);
   };
 
   // Comprime uma imagem no navegador via canvas: redimensiona p/ máx 1600px, exporta JPEG ~0.8.
@@ -1178,7 +1177,7 @@ export default function Home() {
   // e enviado dentro de um JSON. SEM multipart/form-data — isso elimina as
   // falhas de upload no celular causadas pelo parsing de multipart no proxy.
   const uploadFileToServer = async (file: File, label: string, phone: string): Promise<{ url: string; fileKey: string; mimeType: string } | null> => {
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 4;
     // Lê o arquivo como base64 puro (sem o prefixo data URI)
     let base64: string;
     try {
@@ -1216,16 +1215,21 @@ export default function Home() {
         }).finally(() => clearTimeout(timeoutId));
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: res.statusText }));
-          throw new Error(err.error || `HTTP ${res.status}`);
+          const uploadError: Error & { httpStatus?: number } = new Error(err.error || `HTTP ${res.status}`);
+          uploadError.httpStatus = res.status;
+          throw uploadError;
         }
         const data = await res.json();
         return { url: data.fileUrl, fileKey: data.fileKey, mimeType: data.mimeType };
       } catch (e: any) {
-        if (attempt === MAX_RETRIES) {
-          console.error(`[Upload] Falha após ${MAX_RETRIES} tentativas para "${label}":`, e);
+        const status = Number(e?.httpStatus || 0);
+        // 400/401/403 não melhoram com nova tentativa: arquivo, sessão ou permissão precisam de ação do cliente.
+        const transient = !status || status === 408 || status === 429 || status >= 500;
+        if (!transient || attempt === MAX_RETRIES) {
+          console.error(`[Upload] Falha após ${attempt} tentativa(s) para "${label}":`, e);
           return null;
         }
-        await new Promise(r => setTimeout(r, 1000 * attempt)); // espera antes de retry
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
       }
     }
     return null;
@@ -1264,7 +1268,16 @@ export default function Home() {
     if (!clientEmail.trim()) { toast.error('Preencha seu email para receber atualizações do pedido'); submitLockRef.current = false; return; }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(clientEmail.trim())) { toast.error('Digite um email válido'); submitLockRef.current = false; return; }
-    if (!paymentProof && !restoredFileUrls.paymentProof) { toast.error('Envie o comprovante de pagamento PIX'); submitLockRef.current = false; return; }
+    if (!restoredFileUrls.paymentProof) {
+      const message = paymentProofUploadState === 'uploading' || paymentProofUploadState === 'preparing'
+        ? 'Aguarde o envio do comprovante terminar.'
+        : paymentProofUploadState === 'failed'
+          ? (paymentProofUploadError || 'O comprovante ainda não foi enviado. Toque em “Tentar enviar novamente”.')
+          : 'Envie o comprovante de pagamento PIX';
+      toast.error(message);
+      submitLockRef.current = false;
+      return;
+    }
 
     // Validar perguntas obrigatórias (perguntas individuais por opção)
     const optQuestions = selectedOption?.questions || [];
@@ -1392,20 +1405,10 @@ export default function Home() {
         }
       }
 
-      // Comprovante PIX — sempre envia como URL (nunca base64), evita problemas no Android
-      let paymentProofUploadedUrl: string | undefined;
-      if (restoredFileUrls.paymentProof) {
-        // Comprovante já salvo no servidor (upload imediato ou restaurado) — reutilizar URL
-        paymentProofUploadedUrl = restoredFileUrls.paymentProof;
-      } else if (paymentProof) {
-        setSubmitProgress('Enviando comprovante PIX...');
-        const up = await uploadFileToServer(await prepareForUpload(paymentProof), 'comprovante-pix', phone);
-        if (up) {
-          paymentProofUploadedUrl = up.url;
-        } else {
-          throw new Error('UPLOAD_FAILED');
-        }
-      }
+      // Comprovante PIX já deve estar confirmado no servidor antes de Finalizar.
+      // Não abrir outro upload aqui evita concorrência e duplicidade em 4G instável.
+      const paymentProofUploadedUrl = restoredFileUrls.paymentProof;
+      if (!paymentProofUploadedUrl) throw new Error('PROOF_NOT_UPLOADED');
 
       // Normalizar MIME type do comprovante (HEIC/HEIF → image/jpeg para compatibilidade)
       const getProofMime = (f: File | null) => {
@@ -1661,8 +1664,9 @@ export default function Home() {
       if (msg.includes('Timeout') || msg.includes('timeout') || msg.includes('network') || msg.includes('Network')) {
         toast.error('Conexão lenta. Verifique sua internet e tente novamente.', { duration: 6000 });
       } else if (msg === 'UPLOAD_FAILED') {
-        // Upload de algum arquivo falhou — orientar reenvio (pode ser arquivo muito grande ou conexão instável)
-        toast.error('Não foi possível enviar um dos arquivos. Tente uma foto menor/mais leve ou reenvie em uma conexão mais estável.', { duration: 9000 });
+        toast.error('Não foi possível enviar um documento. Mantenha a tela aberta e tente reenviar o arquivo indicado.', { duration: 9000 });
+      } else if (msg === 'PROOF_NOT_UPLOADED') {
+        toast.error('O comprovante ainda não foi confirmado no servidor. Toque em “Tentar enviar novamente”.', { duration: 8000 });
       } else if (msg.includes('ler arquivo') || msg.includes('Leitura') || msg.includes('cancelada')) {
         // Limpar o comprovante para forçar nova seleção
         setPaymentProof(null);
@@ -3641,7 +3645,7 @@ export default function Home() {
               </div>
 
               {/* COMPROVANTE PIX */}
-              <div data-tour="comprovante" className={paymentProofPreview ? 'neon-upload-stop p-4' : 'neon-upload-pulse p-4'} style={{background:'rgba(0,0,0,0.8)'}}>
+              <div data-tour="comprovante" className={restoredFileUrls.paymentProof ? 'neon-upload-stop p-4' : 'neon-upload-pulse p-4'} style={{background:'rgba(0,0,0,0.8)'}}>
                 <div className="flex items-center gap-2 mb-2">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="#eab308"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
                   <p className="text-yellow-400 font-black text-sm tracking-widest">ENVIE O COMPROVANTE DE PAGAMENTO</p>
@@ -3660,9 +3664,18 @@ export default function Home() {
                     ) : (
                       <img src={paymentProofPreview} alt="Comprovante" className="w-full max-h-40 object-contain rounded-xl border border-yellow-500/40" />
                     )}
-                    <button onClick={() => { setPaymentProof(null); setPaymentProofPreview(null); setRestoredFileUrls(prev => ({ ...prev, paymentProof: undefined })); }} type="button"
+                    <button onClick={() => { paymentProofUploadRequestRef.current++; setPaymentProof(null); setPaymentProofPreview(null); setPaymentProofUploadState('idle'); setPaymentProofUploadError(''); removeUploadedFileUrl('paymentProof'); setRestoredFileUrls(prev => ({ ...prev, paymentProof: undefined })); }} type="button"
                       className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-500">✕</button>
-                    <p className="text-green-400 text-xs mt-2 font-black text-center">✓ Comprovante anexado com sucesso!</p>
+                    {restoredFileUrls.paymentProof ? (
+                      <p className="text-green-400 text-xs mt-2 font-black text-center">✓ Comprovante enviado com sucesso!</p>
+                    ) : paymentProofUploadState === 'preparing' || paymentProofUploadState === 'uploading' ? (
+                      <p className="text-yellow-300 text-xs mt-2 font-black text-center flex items-center justify-center gap-1"><Loader2 className="w-3.5 h-3.5 animate-spin" /> {paymentProofUploadState === 'preparing' ? 'Preparando comprovante...' : 'Enviando comprovante...'}</p>
+                    ) : (
+                      <div className="mt-2 text-center space-y-2">
+                        <p className="text-red-300 text-xs font-bold">{paymentProofUploadError || 'O comprovante ainda não foi enviado.'}</p>
+                        <button type="button" onClick={retryPaymentProofUpload} className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs font-black hover:bg-amber-500/30">TENTAR ENVIAR NOVAMENTE</button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <label className="cursor-pointer block">
@@ -3690,17 +3703,17 @@ export default function Home() {
                 </div>
               )}
               {/* Botão FINALIZAR — pulsa neon verde somente quando comprovante carregado */}
-              <button data-tour="finalizar" onClick={handleFinalSubmit} disabled={(!paymentProof && !restoredFileUrls.paymentProof) || isSubmitting}
+              <button data-tour="finalizar" onClick={handleFinalSubmit} disabled={!restoredFileUrls.paymentProof || isSubmitting}
                 className={`w-full px-4 py-4 font-black rounded-xl transition-all duration-300 text-lg flex items-center justify-center gap-3 tracking-wider ${
                   isSubmitting ? 'bg-gray-700 text-gray-400 cursor-not-allowed' :
-                  (paymentProof || restoredFileUrls.paymentProof) ? 'neon-finalizar-pulse text-white cursor-pointer' :
+                  restoredFileUrls.paymentProof ? 'neon-finalizar-pulse text-white cursor-pointer' :
                   'bg-gray-700/60 text-gray-500 cursor-not-allowed border-2 border-gray-600'
                 }`}>
                 {isSubmitting ? (
                   <><Loader2 className="w-5 h-5 animate-spin" /> {submitProgress || 'ENVIANDO...'}</>
-                ) : (paymentProof || restoredFileUrls.paymentProof) ? (
+                ) : restoredFileUrls.paymentProof ? (
                   <><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0"><svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6 2l.01 6L10 12l-3.99 4.01L6 22h12v-6l-4-4 4-3.99V2H6zm10 14.5V20H8v-3.5l4-4 4 4z"/></svg></div><div className="text-left"><p className="text-white font-black text-base">CLIQUE AQUI PARA FINALIZAR</p><p className="text-green-200 text-xs font-normal">Seu pedido será liberado após a confirmação do pagamento.</p></div><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polyline points="9 18 15 12 9 6"/></svg></>
-                ) : 'ENVIE O COMPROVANTE PARA FINALIZAR'}
+                ) : paymentProofUploadState === 'preparing' || paymentProofUploadState === 'uploading' ? 'AGUARDE O ENVIO DO COMPROVANTE' : 'ENVIE O COMPROVANTE PARA FINALIZAR'}
               </button>
               <button onClick={() => setCadastroSubStep('resumo')} disabled={isSubmitting}
                 className="w-full px-4 py-3 bg-white/5 hover:bg-white/10 text-white/70 font-semibold rounded-xl transition-all duration-300 disabled:opacity-50 border border-white/10 flex items-center justify-center gap-2">

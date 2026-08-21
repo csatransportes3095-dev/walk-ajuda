@@ -540,24 +540,33 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const uploadFileBase64 = async (file: File, label: string): Promise<{ url: string; fileKey: string; mimeType: string } | null> => {
     const phone = flowState.current.clientPhone || localStorage.getItem('walk_client_phone')?.replace(/\D/g, '') || '';
     const cpToken = localStorage.getItem('cp_token') || '';
-    if (!cpToken) return null;
+    if (!cpToken || file.size > 15 * 1024 * 1024) return null;
     try {
       const base64 = await fileToBase64(file);
       if (!base64) return null;
-      const res = await fetch('/api/upload/order-file-base64', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-customer-session': cpToken },
-        body: JSON.stringify({
-          label,
-          phone,
-          data: base64,
-          mimeType: file.type || 'image/jpeg',
-          filename: file.name || `${label}.jpg`,
-        }),
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return { url: data.fileUrl, fileKey: data.fileKey, mimeType: data.mimeType };
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000);
+        try {
+          const res = await fetch('/api/upload/order-file-base64', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-customer-session': cpToken },
+            body: JSON.stringify({ label, phone, data: base64, mimeType: file.type || 'image/jpeg', filename: file.name || `${label}.jpg` }),
+            signal: controller.signal,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            return { url: data.fileUrl, fileKey: data.fileKey, mimeType: data.mimeType };
+          }
+          if (![408, 429].includes(res.status) && res.status < 500) return null;
+        } catch {
+          if (attempt === 4) return null;
+        } finally {
+          clearTimeout(timeoutId);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
+      }
+      return null;
     } catch {
       return null;
     }
@@ -580,6 +589,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       const msgId = uid();
       const isRequired = doc.isRequired === undefined ? true : doc.isRequired === 1;
       callbacks.current[msgId] = async (file: File) => {
+        if (file.size > 15 * 1024 * 1024) {
+          addMsgs({ type: "bot", id: uid(), text: `${doc.label} está muito grande. Envie um arquivo de até 15 MB.` });
+          return;
+        }
         setUploadingDocId(doc.id);
         try {
           const uploaded = await uploadFileBase64(file, doc.label);
@@ -676,6 +689,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     pendingPixMsgId.current = msgId;
 
     callbacks.current[msgId] = async (file: File) => {
+      if (file.size > 15 * 1024 * 1024) {
+        addMsgs({ type: 'bot', id: uid(), text: 'O comprovante está muito grande. Envie um arquivo de até 15 MB.' });
+        return;
+      }
       setUploadingPix(true);
       try {
         const uploaded = await uploadFileBase64(file, 'comprovante-pix');

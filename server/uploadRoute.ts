@@ -2419,7 +2419,7 @@ export function registerUploadRoute(app: Express) {
       const base64 = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
       const buffer = Buffer.from(base64, "base64");
       if (buffer.length === 0) { res.status(400).json({ error: "Empty file" }); return; }
-      if (buffer.length > 20 * 1024 * 1024) { res.status(400).json({ error: "Arquivo muito grande. Máximo 20MB." }); return; }
+      if (buffer.length > 15 * 1024 * 1024) { res.status(400).json({ error: "Arquivo muito grande. Máximo 15MB." }); return; }
 
       const r = resolveFileExt(mimeType || "image/jpeg", filename);
       const safeLabel = makeSafeLabel(label);
