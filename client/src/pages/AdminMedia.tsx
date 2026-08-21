@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { Upload, Copy, Video, Image, Trash2, ExternalLink, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { publicSiteUrl } from "@shared/publicLinks";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 interface MediaFile {
@@ -251,9 +252,9 @@ export default function AdminMedia() {
         throw new Error(err.error || `HTTP ${res.status}`);
       }
       const data = await res.json();
-      const friendlyImgUrl = data.slug ? `https://walkajuda.com/foto/${data.slug}` : (data.url.startsWith("/") ? `${window.location.origin}${data.url}` : data.url);
+      const friendlyImgUrl = data.slug ? publicSiteUrl(`/foto/${data.slug}`) : (data.url.startsWith("/") ? `${window.location.origin}${data.url}` : data.url);
       setImgStatus({ phase: "completed", url: friendlyImgUrl, name: file.name, slug: data.slug });
-      toast.success(data.slug ? `Pronto! URL: https://walkajuda.com/foto/${data.slug}` : "Upload concluído!");
+      toast.success(data.slug ? `Pronto! URL: ${publicSiteUrl(`/foto/${data.slug}`)}` : "Upload concluído!");
       navigator.clipboard.writeText(friendlyImgUrl).catch(() => {});
       loadList();
     } catch (e: any) {

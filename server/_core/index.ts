@@ -131,17 +131,28 @@ async function startServer() {
       if (!rows.length) { res.status(404).end(); return; }
       const imageUrl = (rows[0] as any).url || '';
       if (!imageUrl) { res.status(502).end(); return; }
-      // Buscar a imagem do S3/CDN e fazer proxy
-      const https = await import('https');
-      const http = await import('http');
-      const urlMod = await import('url');
-      const parsedUrl = new urlMod.URL(imageUrl);
-      const protocol = parsedUrl.protocol === 'https:' ? https : http;
-      protocol.get(imageUrl, (imgRes) => {
-        res.set('Content-Type', imgRes.headers['content-type'] || 'image/jpeg');
-        res.set('Cache-Control', 'public, max-age=86400');
-        imgRes.pipe(res);
-      }).on('error', () => res.redirect(302, imageUrl));
+      // Buscar a imagem com redirecionamento seguido e responder diretamente.
+      // O WhatsApp precisa de uma imagem pública, rápida, com Content-Type e Content-Length.
+      const abort = new AbortController();
+      const timeout = setTimeout(() => abort.abort(), 8_000);
+      try {
+        const imageResponse = await fetch(imageUrl, { redirect: 'follow', signal: abort.signal });
+        if (!imageResponse.ok) { res.status(502).end(); return; }
+        const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+        if (!contentType.toLowerCase().startsWith('image/')) { res.status(415).end(); return; }
+        const declaredLength = Number(imageResponse.headers.get('content-length') || '0');
+        const maxPreviewBytes = 5 * 1024 * 1024;
+        if (declaredLength > maxPreviewBytes) { res.status(413).end(); return; }
+        const buffer = Buffer.from(await imageResponse.arrayBuffer());
+        if (buffer.length === 0 || buffer.length > maxPreviewBytes) { res.status(413).end(); return; }
+        res.status(200);
+        res.set('Content-Type', contentType);
+        res.set('Content-Length', String(buffer.length));
+        res.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        res.end(buffer);
+      } finally {
+        clearTimeout(timeout);
+      }
     } catch (err) {
       res.status(500).end();
     }

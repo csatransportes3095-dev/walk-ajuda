@@ -17,6 +17,7 @@ import { useTimezone } from "@/hooks/useTimezone";
 import { NotesTab } from "@/components/NotesTab";
 import { AuthenticatorQrAdminField, type PendingQr } from "@/components/AuthenticatorQrAdminField";
 import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
+import { normalizePublicSiteLinks, publicSiteUrl } from "@shared/publicLinks";
 
 type OrderStatus = "recebido" | "pagamento_recebido" | "em_andamento" | "em_montagem" | "documentos_aprovados" | "conta_ativa" | "aguardando_ativa" | "pedido_entregue" | "cancelado";
 
@@ -3968,7 +3969,7 @@ export default function AdminOrders() {
                                                     {saveLoginDataMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-lime-300" />Salvando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Dados de Login</>)}
                                                   </button>
                                                   {waPhone && hasLoginData && (
-                                                    <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent('🔐 Seus dados de acesso estão prontos! Acesse: https://walkajuda.com/acompanhar')}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
+                                                    <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent(`🔐 Seus dados de acesso estão prontos! Acesse: ${publicSiteUrl('/acompanhar')}`)}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
                                                       <MessageCircle className="w-3.5 h-3.5" />WhatsApp
                                                     </a>
                                                   )}
@@ -4430,7 +4431,7 @@ export default function AdminOrders() {
                                                                 {saveLoginDataMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-lime-300" />Salvando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Dados de Login</>)}
                                                               </button>
                                                               {waPhone && hasLoginData && (
-                                                                <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent('🔐 Seus dados de acesso estão prontos! Acesse: https://walkajuda.com/acompanhar')}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
+                                                                <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent(`🔐 Seus dados de acesso estão prontos! Acesse: ${publicSiteUrl('/acompanhar')}`)}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
                                                                   <MessageCircle className="w-3.5 h-3.5" />WhatsApp
                                                                 </a>
                                                               )}
@@ -5923,7 +5924,7 @@ export default function AdminOrders() {
                         // Usar template editável se disponível, senão usar mensagem padrão
                         let msg: string;
                         if (waOrderTemplate) {
-                          msg = waOrderTemplate
+                          msg = normalizePublicSiteLinks(waOrderTemplate
                             .replace(/\{nome\}/gi, clientName)
                             .replace(/\{status\}/gi, statusLabel)
                             .replace(/\{descricao_status\}/gi, cleanDesc)
@@ -5936,7 +5937,7 @@ export default function AdminOrders() {
                             .replace(/\{observacao\}/gi, observacao)
                             .replace(/\{DIA\}/g, dia)
                             .replace(/\{MES\}/g, mes)
-                            .replace(/\{ANO\}/g, ano);
+                            .replace(/\{ANO\}/g, ano));
                         } else {
                           // Mensagem padrão (fallback)
                           const linhas: string[] = [];
@@ -5958,7 +5959,7 @@ export default function AdminOrders() {
                           }
                           if (observacao) { linhas.push(`*Observação:* _${observacao}_`); linhas.push(``); }
                           linhas.push(`Acompanhe seu pedido em:`);
-                          linhas.push(`https://walkajuda.com/acompanhar`);
+                          linhas.push(publicSiteUrl('/acompanhar'));
                           if (pinForWa) {
                             linhas.push(``);
                             linhas.push(`🔐 *Senha de acesso:* ${pinForWa}`);
@@ -5979,18 +5980,18 @@ export default function AdminOrders() {
                                 || null;
                               setWaModalOrder({ ...order, waPhone, defaultMsg: msg });
                               if (defaultTemplate) {
-                                const baseMsg2 = defaultTemplate.message
+                                const baseMsg2 = normalizePublicSiteLinks(defaultTemplate.message
                                   .replace(/\{nome\}/gi, order.customerName || order.codeClientName || '')
                                   .replace(/\{status\}/gi, statusLabel)
                                   .replace(/\{pedido\}/gi, String(order.orderNumber || order.id))
                                   .replace(/\{telefone\}/gi, order.phone || '')
                                   .replace(/\{servico\}/gi, order.serviceName && order.serviceName !== 'NULL' ? `${order.serviceName}${order.serviceOption && order.serviceOption !== 'NULL' ? ` — ${order.serviceOption}` : ''}` : '')
                                   .replace(/\{cidade\}/gi, order.customerCity ? `${order.customerCity}${order.customerUf ? ` — ${order.customerUf}` : ''}` : '')
-                                  .replace(/\{previsao\}/gi, order.deliveryEstimate ? new Date(order.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
+                                  .replace(/\{previsao\}/gi, order.deliveryEstimate ? new Date(order.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''));
                                 const mediaLines2: string[] = [];
-                                if ((defaultTemplate as any).imageUrl) mediaLines2.push((defaultTemplate as any).imageUrl);
-                                if ((defaultTemplate as any).videoUrl) mediaLines2.push((defaultTemplate as any).videoUrl);
-                                if ((defaultTemplate as any).mediaFileUrl) mediaLines2.push((defaultTemplate as any).mediaFileUrl);
+                                if ((defaultTemplate as any).imageUrl) mediaLines2.push(normalizePublicSiteLinks((defaultTemplate as any).imageUrl));
+                                if ((defaultTemplate as any).videoUrl) mediaLines2.push(normalizePublicSiteLinks((defaultTemplate as any).videoUrl));
+                                if ((defaultTemplate as any).mediaFileUrl) mediaLines2.push(normalizePublicSiteLinks((defaultTemplate as any).mediaFileUrl));
                                 setWaModalMsg(mediaLines2.length > 0 ? baseMsg2 + '\n\n' + mediaLines2.join('\n') : baseMsg2);
                               } else {
                                 setWaModalMsg(msg);
@@ -6026,13 +6027,13 @@ export default function AdminOrders() {
                           const ANO = String(now.getFullYear());
                           // Usar template do banco se disponível
                           if (waLoginTemplate) {
-                            return waLoginTemplate
+                            return normalizePublicSiteLinks(waLoginTemplate
                               .replace(/\{nome\}/g, nome)
                               .replace(/\{senha\}/g, pinLogin)
                               .replace(/\{telefone\}/g, telefone)
                               .replace(/\{DIA\}/g, DIA)
                               .replace(/\{MES\}/g, MES)
-                              .replace(/\{ANO\}/g, ANO);
+                              .replace(/\{ANO\}/g, ANO));
                           }
                           // Fallback: mensagem padrão hardcoded
                           const linhas: string[] = [];
@@ -6044,7 +6045,7 @@ export default function AdminOrders() {
                           linhas.push(``);
                           linhas.push(`⚠️ IMPORTANTE: Os dados de acesso não são enviados por mensagem. Eles devem ser resgatados exclusivamente através do site abaixo:`);
                           linhas.push(``);
-                          linhas.push(`🌐 https://walkajuda.com/acompanhar`);
+                          linhas.push(`🌐 ${publicSiteUrl('/acompanhar')}`);
                           if (pinLogin) {
                             linhas.push(``);
                             linhas.push(`🔐 *Senha de acesso:* ${pinLogin}`);
