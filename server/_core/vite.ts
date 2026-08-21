@@ -6,21 +6,27 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
 import { getSettings } from "../db";
+import { getSharePreviewProfile, isSharePreviewProfileId, sharePreviewProfileForPath, sharePreviewProxyPath } from "../sharePreviewProfiles";
 import { ENV } from "./env";
 import { publicSiteUrl } from "../../shared/publicLinks";
 
-async function getOgMeta(): Promise<{ title: string; description: string; imageUrl: string | null; imageVersion: string }> {
-  try {
-    const settings = await getSettings(['og_title', 'og_description', 'og_image_url', 'og_image_version']);
-    return {
-      title: settings['og_title'] ?? 'H2 COLOMBIANO',
-      description: settings['og_description'] ?? 'H2 COLOMBIANO',
-      imageUrl: settings['og_image_url'] ?? '/og-image.png',
-      imageVersion: settings['og_image_version'] ?? '1',
-    };
-  } catch {
-    return { title: 'H2 COLOMBIANO', description: 'H2 COLOMBIANO', imageUrl: '/og-image.png', imageVersion: '1' };
-  }
+async function getOgMeta(requestPath: string): Promise<{ title: string; description: string; imageUrl: string | null; imageVersion: string; imageType?: string; imageWidth?: number; imageHeight?: number }> {
+  const profileId = sharePreviewProfileForPath(requestPath);
+  const profile = await getSharePreviewProfile(profileId);
+  // A imagem padrão do escudo é estática e rápida. Imagens escolhidas pelo ADM passam
+  // pelo proxy do próprio domínio para que o WhatsApp tenha Content-Type/Length estáveis.
+  const imageUrl = profile.imageUrl
+    ? (profile.imageUrl.startsWith('/') ? profile.imageUrl : sharePreviewProxyPath(profileId))
+    : null;
+  return {
+    title: profile.title,
+    description: profile.summary,
+    imageUrl,
+    imageVersion: profile.imageVersion,
+    imageType: profile.imageType || undefined,
+    imageWidth: profile.imageUrl?.endsWith('.png') ? 512 : 1200,
+    imageHeight: profile.imageUrl?.endsWith('.png') ? 512 : 630,
+  };
 }
 
 type OpenGraphMeta = {
@@ -44,19 +50,6 @@ export function resolveOpenGraphMeta(
 ): OpenGraphMeta {
   const pathname = `/${String(requestPath || '/').split('?')[0].replace(/^\/+/, '')}`;
   const canonicalUrl = publicSiteUrl(pathname);
-  if (/^\/agendar\/[a-f0-9]{32}$/i.test(pathname)) {
-    return {
-      title: "Agendamento — H2 COLOMBIANO",
-      description: "Escolha a melhor data e horário para seu atendimento.",
-      imageUrl: publicSiteUrl("/og.jpg"),
-      imageVersion: "schedule-v1",
-      imageType: "image/jpeg",
-      imageWidth: 800,
-      imageHeight: 420,
-      canonicalUrl,
-    };
-  }
-
   return { ...og, canonicalUrl };
 }
 
@@ -117,6 +110,11 @@ export function injectOgMeta(
 // Exported so uploadImage mutation can bust the cache immediately after upload
 export let ogImageCache: { buffer: Buffer; contentType: string; fetchedAt: number } | null = null;
 export function bustOgImageCache() { ogImageCache = null; }
+const sharePreviewImageCache = new Map<string, { version: string; buffer: Buffer; contentType: string; fetchedAt: number }>();
+
+function isSupportedPreviewImage(contentType: string) {
+  return /^image\/(jpeg|png|webp|gif)$/i.test(contentType.split(';')[0].trim());
+}
 
 function registerOgImageProxy(app: Express) {
   // Cache the image buffer in memory to serve instantly
@@ -156,6 +154,47 @@ function registerOgImageProxy(app: Express) {
       return null;
     }
   }
+
+  app.get('/share-preview/:profileId', async (req, res, next) => {
+    const profileId = req.params.profileId;
+    if (!isSharePreviewProfileId(profileId)) return next();
+    try {
+      const profile = await getSharePreviewProfile(profileId);
+      if (!profile.imageUrl) return res.status(404).end();
+      if (profile.imageUrl.startsWith('/')) return res.redirect(302, publicSiteUrl(profile.imageUrl));
+
+      const cached = sharePreviewImageCache.get(profileId);
+      if (cached && cached.version === profile.imageVersion && (Date.now() - cached.fetchedAt) < CACHE_TTL) {
+        res.setHeader('Content-Type', cached.contentType);
+        res.setHeader('Content-Length', cached.buffer.length);
+        res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+        return res.end(cached.buffer);
+      }
+
+      const abort = new AbortController();
+      const timeout = setTimeout(() => abort.abort(), 10_000);
+      try {
+        const imageResponse = await fetch(profile.imageUrl, { redirect: 'follow', signal: abort.signal });
+        const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+        const declaredLength = Number(imageResponse.headers.get('content-length') || '0');
+        const maxBytes = 5 * 1024 * 1024;
+        if (!imageResponse.ok || !isSupportedPreviewImage(contentType) || declaredLength > maxBytes) {
+          return res.status(502).end();
+        }
+        const buffer = Buffer.from(await imageResponse.arrayBuffer());
+        if (!buffer.length || buffer.length > maxBytes) return res.status(502).end();
+        sharePreviewImageCache.set(profileId, { version: profile.imageVersion, buffer, contentType, fetchedAt: Date.now() });
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', buffer.length);
+        res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+        return res.end(buffer);
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch {
+      return res.status(502).end();
+    }
+  });
 
   app.get('/og-image.jpg', async (_req, res, next) => {
     try {
@@ -235,7 +274,7 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx?v=${nanoid()}"`
       );
       // Inject dynamic OG meta tags
-      const og = await getOgMeta();
+      const og = await getOgMeta(req.originalUrl || req.path);
       template = injectOgMeta(template, og, req.originalUrl || req.path);
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).end(page);
@@ -285,6 +324,8 @@ export async function serveStatic(app: Express) {
   });
 
   app.use(express.static(distPath, {
+    // A raiz precisa chegar ao fallback abaixo para receber og:title/og:image dinâmicos.
+    index: false,
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.html')) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -307,7 +348,7 @@ export async function serveStatic(app: Express) {
   app.use("*", async (req, res) => {
     try {
       let html = await fs.promises.readFile(path.resolve(distPath, "index.html"), "utf-8");
-      const og = await getOgMeta();
+      const og = await getOgMeta(req.originalUrl || req.path);
       html = injectOgMeta(html, og, req.originalUrl || req.path);
       res.set("Content-Type", "text/html; charset=utf-8").send(html);
     } catch {

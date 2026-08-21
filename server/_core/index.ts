@@ -18,6 +18,8 @@ import { broadcastEmailHandler } from "../broadcastEmailHandler";
 import { registerPingRoute } from "./pingRoute";
 import { sendMail } from "./mailer";
 import { ensureCustomerIdentityInfrastructure, reconcileLegacyLoanPermissions } from "../customerAccess";
+import { getSharePreviewProfile, sharePreviewProxyPath, type SharePreviewProfileId } from "../sharePreviewProfiles";
+import { publicSiteUrl } from "../../shared/publicLinks";
 import { bootstrapCardInvoices } from "../cardsBilling";
 import path from "path";
 import fs from "fs";
@@ -49,6 +51,28 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
     }
   }
   throw new Error(`No available port found starting from ${startPort}`);
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>\"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char));
+}
+
+async function getPublicPreviewMeta(profileId: SharePreviewProfileId, canonicalUrl: string) {
+  const profile = await getSharePreviewProfile(profileId);
+  const imageBaseUrl = profile.imageUrl
+    ? (profile.imageUrl.startsWith('/') ? publicSiteUrl(profile.imageUrl) : publicSiteUrl(sharePreviewProxyPath(profileId)))
+    : null;
+  const imageUrl = imageBaseUrl
+    ? `${imageBaseUrl}${imageBaseUrl.includes('?') ? '&' : '?'}v=${encodeURIComponent(profile.imageVersion)}`
+    : null;
+  return { profile, canonicalUrl, imageUrl };
+}
+
+function renderPublicPreviewTags(meta: Awaited<ReturnType<typeof getPublicPreviewMeta>>, titleOverride?: string) {
+  const title = escapeHtml(titleOverride || meta.profile.title);
+  const description = escapeHtml(meta.profile.summary);
+  const image = meta.imageUrl ? `<meta property="og:image" content="${escapeHtml(meta.imageUrl)}"><meta property="og:image:type" content="${escapeHtml(meta.profile.imageType || 'image/jpeg')}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:image" content="${escapeHtml(meta.imageUrl)}">` : '';
+  return `<meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:type" content="website"><meta property="og:url" content="${escapeHtml(meta.canonicalUrl)}"><meta property="og:site_name" content="H2 COLOMBIANO">${image}<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="${description}">`;
 }
 
 async function startServer() {
@@ -189,8 +213,27 @@ async function startServer() {
 
   app.get("/video/:slug", async (req, res) => {
     const { slug } = req.params;
-    // Rota especial /video/tutorial usa fileKey fixo (tratada separadamente abaixo via redirect)
-    if (slug === "tutorial") { res.redirect(307, "/video/tutorial"); return; }
+    // O tutorial precisa ser tratado antes da consulta de mídia dinâmica para não redirecionar para si mesmo.
+    if (slug === "tutorial") {
+      try {
+        const { ENV } = await import('./env');
+        const forgeUrl = new URL("v1/storage/presign/get", ENV.forgeApiUrl!.replace(/\/+$/, "") + "/");
+        forgeUrl.searchParams.set("path", "tutorial_fe1af5d4.mp4");
+        const forgeResp = await fetch(forgeUrl, { headers: { Authorization: `Bearer ${ENV.forgeApiKey}` } });
+        if (!forgeResp.ok) { res.status(502).send("Erro ao obter vídeo"); return; }
+        const { url } = await forgeResp.json() as { url: string };
+        if (!url) { res.status(502).send("URL inválida"); return; }
+        const canonicalUrl = publicSiteUrl("/video/tutorial");
+        const preview = await getPublicPreviewMeta("tutorial", canonicalUrl);
+        res.set('Content-Type', 'text/html; charset=utf-8');
+        res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(preview.profile.title)}</title>${renderPublicPreviewTags(preview)}<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}video{width:100%;max-width:900px;max-height:100vh}</style></head><body><video controls autoplay playsinline preload="metadata"><source src="${escapeHtml(url)}" type="video/mp4">Seu browser não suporta vídeo HTML5.</video></body></html>`);
+        return;
+      } catch (err) {
+        console.error('[VideoRoute] tutorial error:', err);
+        res.status(500).send("Erro interno");
+        return;
+      }
+    }
     try {
       const { getDb } = await import('../db');
       const { adminMediaFiles } = await import('../../drizzle/schema');
@@ -204,29 +247,13 @@ async function startServer() {
       const videoUrl = (media as any).url || '';
       if (!videoUrl) { res.status(502).send("URL do vídeo não encontrada"); return; }
       const title = media.name.replace(/\.(mp4|webm|mov|avi)$/i, "");
-      const canonicalUrl = `https://h2colombiano.com/video/${slug}`;
+      const canonicalUrl = publicSiteUrl(`/video/${slug}`);
+      const preview = await getPublicPreviewMeta("video", canonicalUrl);
+      const pageTitle = `${title} — H2 COLOMBIANO`;
       res.set('Content-Type', 'text/html; charset=utf-8');
-      res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} - H2 COLOMBIANO</title><meta property="og:title" content="${title}"><meta property="og:description" content="H2 COLOMBIANO - Atendimento rápido para motoristas de app"><meta property="og:type" content="video.other"><meta property="og:url" content="${canonicalUrl}"><meta property="og:site_name" content="H2 COLOMBIANO"><meta property="og:video" content="${videoUrl}"><meta property="og:video:secure_url" content="${videoUrl}"><meta property="og:video:type" content="${media.mimeType || 'video/mp4'}"><meta property="og:video:width" content="1280"><meta property="og:video:height" content="720"><meta property="og:image" content="${videoUrl}"><meta name="twitter:card" content="player"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="H2 COLOMBIANO - Atendimento rápido para motoristas de app"><meta name="twitter:player" content="${canonicalUrl}"><meta name="twitter:player:width" content="1280"><meta name="twitter:player:height" content="720"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}video{width:100%;max-width:900px;max-height:100vh}</style></head><body><video controls autoplay playsinline preload="auto"><source src="${videoUrl}" type="${media.mimeType || 'video/mp4'}">Seu browser não suporta vídeo HTML5.</video></body></html>`);
+      res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(pageTitle)}</title>${renderPublicPreviewTags(preview, pageTitle)}<meta property="og:video" content="${escapeHtml(videoUrl)}"><meta property="og:video:secure_url" content="${escapeHtml(videoUrl)}"><meta property="og:video:type" content="${escapeHtml(media.mimeType || 'video/mp4')}"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}video{width:100%;max-width:900px;max-height:100vh}</style></head><body><video controls autoplay playsinline preload="metadata"><source src="${escapeHtml(videoUrl)}" type="${escapeHtml(media.mimeType || 'video/mp4')}">Seu browser não suporta vídeo HTML5.</video></body></html>`);
     } catch (err) {
       console.error('[VideoRoute] dynamic error:', err);
-      res.status(500).send("Erro interno");
-    }
-  });
-
-  // Rota de vídeos públicos â€” página HTML com player nativo
-  app.get("/video/tutorial", async (_req, res) => {
-    try {
-      const { ENV } = await import('./env');
-      const forgeUrl = new URL("v1/storage/presign/get", ENV.forgeApiUrl!.replace(/\/+$/, "") + "/");
-      forgeUrl.searchParams.set("path", "tutorial_fe1af5d4.mp4");
-      const forgeResp = await fetch(forgeUrl, { headers: { Authorization: `Bearer ${ENV.forgeApiKey}` } });
-      if (!forgeResp.ok) { res.status(502).send("Erro ao obter vídeo"); return; }
-      const { url } = await forgeResp.json() as { url: string };
-      if (!url) { res.status(502).send("URL inválida"); return; }
-      res.set('Content-Type', 'text/html; charset=utf-8');
-      res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tutorial H2 COLOMBIANO</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}video{width:100%;max-width:900px;max-height:100vh}</style></head><body><video controls autoplay playsinline preload="auto"><source src="${url}" type="video/mp4">Seu browser não suporta vídeo HTML5.</video></body></html>`);
-    } catch (err) {
-      console.error('[VideoRoute] error:', err);
       res.status(500).send("Erro interno");
     }
   });

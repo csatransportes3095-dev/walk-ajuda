@@ -116,6 +116,14 @@ import { r2DeleteObjects, r2GetObjectBuffer } from "./r2Storage";
 import { getAdminJwtSecret } from "./adminJwt";
 import { requireCustomerSession } from "./customerSession";
 import { resolveReferralDeclaration, restrictedReferralAccessError } from "./referral";
+import {
+  SHARE_PREVIEW_H2_SHIELD,
+  SHARE_PREVIEW_PROFILE_IDS,
+  getSharePreviewProfile,
+  getSharePreviewProfiles,
+  getSharePreviewProfileSettingKeys,
+  inferImageType,
+} from "./sharePreviewProfiles";
 
 /**
  * Verifica se um telefone está na blocklist.
@@ -6582,7 +6590,99 @@ export const appRouter = router({
       }),
   }),
 
-  // === OG SETTINGS (miniatura de compartilhamento) ===
+  // === MINIATURAS DE COMPARTILHAMENTO POR TIPO DE LINK ===
+  sharePreview: router({
+    list: publicProcedure.query(async () => {
+      return await getSharePreviewProfiles();
+    }),
+    get: publicProcedure
+      .input(z.object({ profileId: z.enum(SHARE_PREVIEW_PROFILE_IDS) }))
+      .query(async ({ input }) => {
+        return await getSharePreviewProfile(input.profileId);
+      }),
+    update: adminProcedure
+      .input(z.object({
+        profileId: z.enum(SHARE_PREVIEW_PROFILE_IDS),
+        title: z.string().trim().min(1).max(200),
+        summary: z.string().trim().max(500),
+        imageUrl: z.string().trim().max(2000).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        let imageUrl = input.imageUrl;
+        if (imageUrl && imageUrl !== SHARE_PREVIEW_H2_SHIELD) {
+          try {
+            const parsed = new URL(imageUrl);
+            if (parsed.protocol !== "https:") {
+              throw new TRPCError({ code: "BAD_REQUEST", message: "A URL da miniatura deve usar HTTPS." });
+            }
+          } catch (error) {
+            if (error instanceof TRPCError) throw error;
+            throw new TRPCError({ code: "BAD_REQUEST", message: "URL da miniatura inválida." });
+          }
+        }
+        const [titleKey, summaryKey, imageKey, typeKey, versionKey] = getSharePreviewProfileSettingKeys(input.profileId);
+        const current = await getSharePreviewProfile(input.profileId);
+        const nextImage = imageUrl === undefined ? current.imageUrl : (imageUrl || "");
+        const imageChanged = nextImage !== current.imageUrl;
+        await upsertSettings({
+          [titleKey]: input.title,
+          [summaryKey]: input.summary,
+          ...(imageUrl === undefined ? {} : {
+            [imageKey]: imageUrl || "",
+            [typeKey]: imageUrl ? inferImageType(imageUrl) : "",
+          }),
+          ...(imageChanged ? { [versionKey]: String(Date.now()) } : {}),
+        });
+        return await getSharePreviewProfile(input.profileId);
+      }),
+    useH2Shield: adminProcedure
+      .input(z.object({ profileId: z.enum(SHARE_PREVIEW_PROFILE_IDS) }))
+      .mutation(async ({ input }) => {
+        const [, , imageKey, typeKey, versionKey] = getSharePreviewProfileSettingKeys(input.profileId);
+        await upsertSettings({
+          [imageKey]: SHARE_PREVIEW_H2_SHIELD,
+          [typeKey]: "image/png",
+          [versionKey]: String(Date.now()),
+        });
+        return await getSharePreviewProfile(input.profileId);
+      }),
+    removeImage: adminProcedure
+      .input(z.object({ profileId: z.enum(SHARE_PREVIEW_PROFILE_IDS) }))
+      .mutation(async ({ input }) => {
+        const [, , imageKey, typeKey, versionKey] = getSharePreviewProfileSettingKeys(input.profileId);
+        await upsertSettings({
+          [imageKey]: "",
+          [typeKey]: "",
+          [versionKey]: String(Date.now()),
+        });
+        return await getSharePreviewProfile(input.profileId);
+      }),
+    uploadImage: adminProcedure
+      .input(z.object({
+        profileId: z.enum(SHARE_PREVIEW_PROFILE_IDS),
+        imageBase64: z.string().min(1),
+        mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.imageBase64, "base64");
+        const maxBytes = 5 * 1024 * 1024;
+        if (!buffer.length || buffer.length > maxBytes) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "A miniatura deve ter no máximo 5 MB." });
+        }
+        const ext = input.mimeType === "image/png" ? "png" : input.mimeType === "image/webp" ? "webp" : "jpg";
+        const fileName = `share-preview/${input.profileId}-${Date.now()}.${ext}`;
+        const { url } = await storagePut(fileName, buffer, input.mimeType);
+        const [, , imageKey, typeKey, versionKey] = getSharePreviewProfileSettingKeys(input.profileId);
+        await upsertSettings({
+          [imageKey]: url,
+          [typeKey]: input.mimeType,
+          [versionKey]: String(Date.now()),
+        });
+        return await getSharePreviewProfile(input.profileId);
+      }),
+  }),
+
+  // === OG SETTINGS (miniatura global legada; mantida para compatibilidade) ===
   ogSettings: router({
     get: publicProcedure.query(async () => {
       const settings = await getSettings(['og_title', 'og_description', 'og_image_url']);

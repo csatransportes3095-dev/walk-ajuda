@@ -6,6 +6,7 @@ import { Save, Globe, CreditCard, Layout, MessageSquare, Star, Clock, LogIn, Upl
 import AdminHeader from "@/components/AdminHeader";
 import { ImageCropModal } from "@/components/ImageCropModal";
 import { HomeButtonsManager } from "@/components/HomeButtonsManager";
+import { SharePreviewSettings } from "@/components/SharePreviewSettings";
 
 
 // Lista de fontes com estilos bem distintos
@@ -1412,7 +1413,7 @@ export default function AdminSettings() {
 
         {/* OG SETTINGS TAB */}
         {activeTab === "og" && (
-          <OgSettingsTab />
+          <SharePreviewSettings />
         )}
 
         {/* === ABA: FORMULÁRIO DE ACOMPANHAMENTO === */}
