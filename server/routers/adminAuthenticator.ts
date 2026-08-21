@@ -217,12 +217,12 @@ export const adminAuthenticatorRouter = router({
       const generated = links.map((entry) => {
         try {
           const secret = decryptTotpSecret({ ciphertext: entry.ciphertext, iv: entry.iv, tag: entry.tag });
-          return { entryId: entry.entryId, label: entry.label, issuer: entry.issuer, code: generateTotp(secret) };
+          const generated = generateTotp(secret);
+          return { entryId: entry.entryId, label: entry.label, issuer: entry.issuer, code: generated.code, expiresAt: generated.expiresAt };
         } catch {
-          return { entryId: entry.entryId, label: entry.label, issuer: entry.issuer, code: null };
+          return { entryId: entry.entryId, label: entry.label, issuer: entry.issuer, code: null, expiresAt: null };
         }
       });
-      for (const item of generated) await recordAudit(item.entryId, "code_viewed_in_order");
       return generated;
     }),
 

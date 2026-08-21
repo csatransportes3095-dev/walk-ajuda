@@ -39,6 +39,11 @@ describe("integração do autenticador privado", () => {
     for (const status of FINAL_STATUSES) expect(authenticatorRouter).toContain(`"${status}"`);
   });
 
+  it("devolve o código TOTP como texto, sem tentar renderizar o objeto completo", () => {
+    expect(authenticatorRouter).toContain("code: generated.code");
+    expect(authenticatorRouter).not.toContain("code: generateTotp(secret)");
+  });
+
   it("mostra o direcionamento no cofre e gera o código dentro dos Dados de Login", () => {
     expect(authenticatorPage).toContain("Direcionar chave para página de login");
     expect(authenticatorPage).toContain("Direcionar para login");
