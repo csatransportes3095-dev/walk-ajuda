@@ -4,6 +4,7 @@ import { z } from "zod";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
+import { publicSiteUrl } from "../../shared/publicLinks";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -233,7 +234,7 @@ export const scheduleRouter = router({
       await reopenAppointment(input.id);
       const appt = await getAppointmentById(input.id);
       if (!appt) return { success: true, emailSent: false, waLink: null };
-      const link = `${input.origin}/agendar/${appt.token}`;
+      const link = publicSiteUrl(`/agendar/${appt.token}`);
       const cfg = await getScheduleConfig();
       const accent = cfg?.accentColor || "#8b5cf6";
       const siteTitle = (await getSetting("site_title")) || "H2 COLOMBIANO";
@@ -332,7 +333,7 @@ export const scheduleRouter = router({
       if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento não encontrado" });
       if (!appt.customerEmail) throw new TRPCError({ code: "BAD_REQUEST", message: "Este cliente não possui e-mail cadastrado" });
       const cfg = await getScheduleConfig();
-      const link = `${input.origin}/agendar/${appt.token}`;
+      const link = publicSiteUrl(`/agendar/${appt.token}`);
       const subject = cfg?.emailSubject || "Agende seu atendimento";
       const intro = cfg?.emailMessage || "Seu pedido precisa ser agendado. Clique no link abaixo para escolher a data e o horário.";
       const accent = cfg?.accentColor || "#8b5cf6";

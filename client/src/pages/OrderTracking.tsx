@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
+import { publicSiteUrl } from "@shared/publicLinks";
 import { Link, useSearch } from "wouter";
 import { useDevToolsDetection } from "@/hooks/useDevToolsDetection";
 import {
@@ -1464,7 +1465,7 @@ export default function OrderTracking() {
             {canAccess && (scheduleQuery.data?.length ?? 0) > 0 && (
               <div className="space-y-3">
                 {scheduleQuery.data!.map((a) => {
-                  const link = `${window.location.origin}/agendar/${a.token}`;
+                  const link = publicSiteUrl(`/agendar/${a.token}`);
 
                   // ── CONFIRMADO ──────────────────────────────────────────
                   if (a.status === "confirmed" && a.slotDate) {

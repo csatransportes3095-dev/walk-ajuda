@@ -7,6 +7,7 @@ import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
 import { getSettings } from "../db";
 import { ENV } from "./env";
+import { publicSiteUrl } from "../../shared/publicLinks";
 
 async function getOgMeta(): Promise<{ title: string; description: string; imageUrl: string | null; imageVersion: string }> {
   try {
@@ -22,41 +23,88 @@ async function getOgMeta(): Promise<{ title: string; description: string; imageU
   }
 }
 
-function injectOgMeta(html: string, og: { title: string; description: string; imageUrl: string | null; imageVersion?: string }, origin: string): string {
-  // Use the dynamic image URL from the database; fall back to /og-image.jpg proxy route
-  // Add ?v= version param so WhatsApp is forced to re-fetch when image changes
-  const ver = og.imageVersion || '1';
+type OpenGraphMeta = {
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  imageVersion?: string;
+  imageType?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  canonicalUrl: string;
+};
+
+/**
+ * Cada link de agendamento precisa de uma identidade própria e de uma miniatura leve.
+ * Não inclui nome, telefone ou foto do cliente nos metadados para não expor dados pessoais no preview.
+ */
+export function resolveOpenGraphMeta(
+  og: { title: string; description: string; imageUrl: string | null; imageVersion?: string },
+  requestPath: string,
+): OpenGraphMeta {
+  const pathname = `/${String(requestPath || '/').split('?')[0].replace(/^\/+/, '')}`;
+  const canonicalUrl = publicSiteUrl(pathname);
+  if (/^\/agendar\/[a-f0-9]{32}$/i.test(pathname)) {
+    return {
+      title: "Agendamento — H2 COLOMBIANO",
+      description: "Escolha a melhor data e horário para seu atendimento.",
+      imageUrl: publicSiteUrl("/og.jpg"),
+      imageVersion: "schedule-v1",
+      imageType: "image/jpeg",
+      imageWidth: 800,
+      imageHeight: 420,
+      canonicalUrl,
+    };
+  }
+
+  return { ...og, canonicalUrl };
+}
+
+function inferImageType(imageUrl: string): string {
+  const normalized = imageUrl.toLowerCase().split('?')[0];
+  if (normalized.endsWith('.png')) return 'image/png';
+  if (normalized.endsWith('.webp')) return 'image/webp';
+  if (normalized.endsWith('.gif')) return 'image/gif';
+  return 'image/jpeg';
+}
+
+export function injectOgMeta(
+  html: string,
+  og: { title: string; description: string; imageUrl: string | null; imageVersion?: string },
+  requestPath: string,
+): string {
+  const meta = resolveOpenGraphMeta(og, requestPath);
+  // Add ?v= to make WhatsApp fetch a new preview after a deliberate image change.
+  const ver = meta.imageVersion || '1';
   let imgSrc: string | null = null;
-  if (og.imageUrl) {
-    if (og.imageUrl.startsWith('http')) {
-      // External URL: add version as query param to bust WhatsApp cache
-      const sep = og.imageUrl.includes('?') ? '&' : '?';
-      imgSrc = `${og.imageUrl}${sep}v=${ver}`;
-    } else if (og.imageUrl.startsWith('/manus-storage/')) {
-      // Serve via our proxy route so WhatsApp can fetch without redirects
-      imgSrc = `${origin}/og-image.jpg?v=${ver}`;
+  if (meta.imageUrl) {
+    if (meta.imageUrl.startsWith('http')) {
+      const sep = meta.imageUrl.includes('?') ? '&' : '?';
+      imgSrc = `${meta.imageUrl}${sep}v=${ver}`;
+    } else if (meta.imageUrl.startsWith('/manus-storage/')) {
+      imgSrc = `${publicSiteUrl('/og-image.jpg')}?v=${ver}`;
     } else {
-      imgSrc = `${origin}${og.imageUrl}?v=${ver}`;
+      imgSrc = `${publicSiteUrl(meta.imageUrl)}?v=${ver}`;
     }
   }
   const imageTag = imgSrc
     ? `<meta property="og:image" content="${imgSrc}" />
-    <meta property="og:image:type" content="image/jpeg" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="${meta.imageType || inferImageType(imgSrc)}" />
+    <meta property="og:image:width" content="${meta.imageWidth || 1200}" />
+    <meta property="og:image:height" content="${meta.imageHeight || 630}" />
     <meta name="twitter:image" content="${imgSrc}" />`
     : '';
   const metaTags = `
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="${origin}/" />
-    <meta property="og:title" content="${og.title}" />
-    <meta property="og:description" content="${og.description}" />
-    <meta property="og:site_name" content="${og.title}" />
+    <meta property="og:url" content="${meta.canonicalUrl}" />
+    <meta property="og:title" content="${meta.title}" />
+    <meta property="og:description" content="${meta.description}" />
+    <meta property="og:site_name" content="${meta.title}" />
     ${imageTag}
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${og.title}" />
-    <meta name="twitter:description" content="${og.description}" />`;
-  // Remove old static OG tags and inject fresh ones
+    <meta name="twitter:title" content="${meta.title}" />
+    <meta name="twitter:description" content="${meta.description}" />`;
+  // Remove old static OG tags and inject fresh ones.
   const cleaned = html
     .replace(/<meta property="og:[^"]+"[^>]*\/>/g, '')
     .replace(/<meta name="twitter:[^"]+"[^>]*\/>/g, '');
@@ -188,8 +236,7 @@ export async function setupVite(app: Express, server: Server) {
       );
       // Inject dynamic OG meta tags
       const og = await getOgMeta();
-      const origin = `${req.protocol}://${req.get('host')}`;
-      template = injectOgMeta(template, og, origin);
+      template = injectOgMeta(template, og, req.originalUrl || req.path);
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).end(page);
     } catch (e) {
@@ -261,8 +308,7 @@ export async function serveStatic(app: Express) {
     try {
       let html = await fs.promises.readFile(path.resolve(distPath, "index.html"), "utf-8");
       const og = await getOgMeta();
-      const origin = `${req.protocol}://${req.get('host')}`;
-      html = injectOgMeta(html, og, origin);
+      html = injectOgMeta(html, og, req.originalUrl || req.path);
       res.set("Content-Type", "text/html; charset=utf-8").send(html);
     } catch {
       res.sendFile(path.resolve(distPath, "index.html"));

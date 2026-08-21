@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
 import { CalendarClock, Link2, Copy, Mail, Send, RefreshCw, X, CheckCircle2, PlusCircle } from "lucide-react";
+import { PUBLIC_SITE_ORIGIN, publicSiteUrl } from "@shared/publicLinks";
 
 interface Props {
   registrationId: number;
@@ -36,8 +37,8 @@ export default function OrderScheduleBlock({ registrationId, subOrderIndex, cust
   const [open, setOpen] = useState(false);
 
   const appt = apptQuery.data;
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const link = appt ? `${origin}/agendar/${appt.token}` : "";
+  const origin = PUBLIC_SITE_ORIGIN;
+  const link = appt ? publicSiteUrl(`/agendar/${appt.token}`) : "";
 
   const createMut = trpc.schedule.createForOrder.useMutation({
     onSuccess: () => { toast.success("Link de agendamento gerado"); utils.schedule.getForOrder.invalidate({ registrationId, subOrderIndex }); setOpen(false); },
