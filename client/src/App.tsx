@@ -79,6 +79,7 @@ import AdminWhatsappTemplates from "./pages/AdminWhatsappTemplates";
 import AdminCartoesUsers from "./pages/AdminCartoesUsers";
 import AdminOnlineSupport from "./pages/AdminOnlineSupport";
 import AdminChatFlow from "./pages/AdminChatFlow";
+import AdminAuthenticator from "./pages/AdminAuthenticator";
 import AdminReferrals from "./pages/AdminReferrals";
 import AdminPreRegistrations from "./pages/AdminPreRegistrations";
 import AdminPreCadastroQuestions from "./pages/AdminPreCadastroQuestions";
@@ -152,6 +153,9 @@ function Router() {
   return (
     <Switch>
       <Route path={"/admin/login"} component={AdminLogin} />
+      <Route path={"/admin/authenticator"}>
+        <AdminGuard><AdminAuthenticator /></AdminGuard>
+      </Route>
       <Route path={"/admin/gastos"}>
         <AdminGuard><AdminGastosPage /></AdminGuard>
       </Route>

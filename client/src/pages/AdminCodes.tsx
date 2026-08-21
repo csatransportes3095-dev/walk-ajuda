@@ -31,6 +31,7 @@ const ADMIN_SHORTCUTS: AdminShortcut[] = [
   { id: 'schedule', href: '/admin/schedule', label: 'Agendamentos', icon: CalendarClock, tone: 'bg-fuchsia-600/20 border-fuchsia-500/30 hover:bg-fuchsia-600/30', iconTone: 'text-fuchsia-400' },
   { id: 'banners', href: '/admin/banners', label: 'Banners', icon: Bell, tone: 'bg-teal-600/20 border-teal-500/30 hover:bg-teal-600/30', iconTone: 'text-teal-400' },
   { id: 'ip-block', href: '/admin/ip-block', label: 'Bloquear IP', icon: Shield, tone: 'bg-red-600/20 border-red-500/30 hover:bg-red-600/30', iconTone: 'text-red-400' },
+  { id: 'authenticator', href: '/admin/authenticator', label: 'Autenticador', icon: Lock, tone: 'bg-cyan-600/20 border-cyan-500/30 hover:bg-cyan-600/30', iconTone: 'text-cyan-300' },
   { id: 'referrer-bypass', href: '/admin/referrer-bypass', label: 'Bypass Indicador', icon: KeyRound, tone: 'bg-indigo-600/20 border-indigo-500/30 hover:bg-indigo-600/30', iconTone: 'text-indigo-400' },
   { id: 'products', href: '/admin/products', label: 'Cards', icon: Package, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },
   { id: 'feature-cards', href: '/admin/feature-cards', label: 'Cards Início', icon: Layers, tone: 'bg-indigo-600/20 border-indigo-500/30 hover:bg-indigo-600/30', iconTone: 'text-indigo-400' },

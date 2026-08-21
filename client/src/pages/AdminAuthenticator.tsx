@@ -1,0 +1,136 @@
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
+import { Check, Copy, Eye, EyeOff, KeyRound, LockKeyhole, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+
+function secondsLeft(expiresAt?: number) {
+  if (!expiresAt) return 0;
+  return Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+}
+
+export default function AdminAuthenticator() {
+  const [, setLocation] = useLocation();
+  const utils = trpc.useUtils();
+  const [label, setLabel] = useState("");
+  const [issuer, setIssuer] = useState("");
+  const [secret, setSecret] = useState("");
+  const [showSecret, setShowSecret] = useState(false);
+  const [revealedEntryId, setRevealedEntryId] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [copied, setCopied] = useState(false);
+
+  const entriesQuery = trpc.adminAuthenticator.list.useQuery(undefined, { staleTime: 0 });
+  const codeQuery = trpc.adminAuthenticator.getCode.useQuery(
+    { id: revealedEntryId ?? 0 },
+    { enabled: revealedEntryId !== null, staleTime: 0, gcTime: 0, refetchInterval: revealedEntryId !== null ? 5000 : false },
+  );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    const hideWhenPageIsNotVisible = () => {
+      if (document.hidden) setRevealedEntryId(null);
+    };
+    document.addEventListener("visibilitychange", hideWhenPageIsNotVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", hideWhenPageIsNotVisible);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (revealedEntryId === null) return;
+    const timeout = window.setTimeout(() => setRevealedEntryId(null), 60_000);
+    return () => window.clearTimeout(timeout);
+  }, [revealedEntryId, codeQuery.data?.code]);
+
+  const createMutation = trpc.adminAuthenticator.create.useMutation({
+    onSuccess: () => {
+      setLabel("");
+      setIssuer("");
+      setSecret("");
+      setShowSecret(false);
+      void utils.adminAuthenticator.list.invalidate();
+      toast.success("Conta adicionada ao cofre privado.");
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível salvar a conta."),
+  });
+
+  const deleteMutation = trpc.adminAuthenticator.delete.useMutation({
+    onSuccess: () => {
+      setRevealedEntryId(null);
+      void utils.adminAuthenticator.list.invalidate();
+      toast.success("Conta removida definitivamente.");
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível remover a conta."),
+  });
+
+  const activeEntry = useMemo(
+    () => (entriesQuery.data || []).find((entry) => entry.id === revealedEntryId),
+    [entriesQuery.data, revealedEntryId],
+  );
+  const remaining = secondsLeft(codeQuery.data?.expiresAt);
+  const progress = Math.max(0, Math.min(100, (remaining / 30) * 100));
+
+  const addEntry = () => {
+    if (!label.trim() || !secret.trim()) {
+      toast.error("Informe o nome da conta e a chave secreta Base32.");
+      return;
+    }
+    createMutation.mutate({ label: label.trim(), issuer: issuer.trim() || undefined, secret: secret.trim() });
+  };
+
+  const copyCurrentCode = async () => {
+    if (!codeQuery.data?.code) return;
+    try {
+      await navigator.clipboard.writeText(codeQuery.data.code);
+      setCopied(true);
+      toast.success("Código copiado.");
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error("Não foi possível copiar o código.");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#070b16] px-4 py-5 text-white sm:px-6">
+      <div className="mx-auto max-w-5xl space-y-5">
+        <header className="flex flex-col gap-4 rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-950/50 to-slate-950 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl border border-cyan-300/30 bg-cyan-400/10 p-3"><ShieldCheck className="h-6 w-6 text-cyan-300" /></div>
+            <div>
+              <p className="text-xs font-bold tracking-[0.2em] text-cyan-300">COFRE PESSOAL</p>
+              <h1 className="text-xl font-black">Autenticador</h1>
+              <p className="mt-1 max-w-2xl text-sm text-slate-300">Gere códigos TOTP das suas próprias contas. As chaves ficam cifradas e não aparecem nesta tela depois de salvas.</p>
+            </div>
+          </div>
+          <button onClick={() => setLocation("/admin/codes")} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-white/10">Voltar ao ADM</button>
+        </header>
+
+        <section className="rounded-2xl border border-amber-300/20 bg-amber-400/5 p-4 text-sm text-amber-100">
+          <div className="flex gap-2"><LockKeyhole className="mt-0.5 h-4 w-4 flex-none text-amber-300" /><p>Cadastre somente contas suas. Guarde os códigos de recuperação do serviço externo antes de remover uma conta do Google Authenticator.</p></div>
+        </section>
+
+        <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-5">
+          <div className="mb-4 flex items-center gap-2"><Plus className="h-4 w-4 text-cyan-300" /><h2 className="font-bold">Adicionar conta</h2></div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-1"><span className="text-xs font-semibold text-slate-400">Nome da conta</span><input value={label} onChange={(event) => setLabel(event.target.value)} maxLength={128} placeholder="Ex.: Uber Motorista" className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm outline-none focus:border-cyan-300/60" /></label>
+            <label className="space-y-1"><span className="text-xs font-semibold text-slate-400">Emissor — opcional</span><input value={issuer} onChange={(event) => setIssuer(event.target.value)} maxLength={128} placeholder="Ex.: Uber" className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm outline-none focus:border-cyan-300/60" /></label>
+            <label className="space-y-1 md:col-span-2"><span className="text-xs font-semibold text-slate-400">Chave secreta Base32</span><div className="flex rounded-xl border border-white/10 bg-slate-900 focus-within:border-cyan-300/60"><input value={secret} onChange={(event) => setSecret(event.target.value)} type={showSecret ? "text" : "password"} autoComplete="off" spellCheck={false} placeholder="Cole a chave fornecida pela conta" className="min-w-0 flex-1 bg-transparent px-3 py-2.5 font-mono text-sm outline-none" /><button type="button" onClick={() => setShowSecret((value) => !value)} aria-label={showSecret ? "Ocultar chave" : "Mostrar chave"} className="px-3 text-slate-300 hover:text-white">{showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div><p className="text-xs text-slate-500">A chave é cifrada ao salvar e não poderá ser lida novamente pelo ADM.</p></label>
+          </div>
+          <button onClick={addEntry} disabled={createMutation.isPending} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"><KeyRound className="h-4 w-4" />{createMutation.isPending ? "Protegendo chave..." : "Adicionar conta"}</button>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between"><h2 className="text-base font-black">Contas cadastradas</h2><span className="rounded-full bg-white/5 px-3 py-1 text-xs font-bold text-slate-400">{entriesQuery.data?.length || 0}</span></div>
+          {entriesQuery.isLoading ? <p className="rounded-xl border border-white/10 p-5 text-sm text-slate-400">Carregando cofre...</p> : entriesQuery.data?.length ? entriesQuery.data.map((entry) => (
+            <article key={entry.id} className={`rounded-2xl border p-4 transition-colors ${revealedEntryId === entry.id ? "border-cyan-300/50 bg-cyan-400/5" : "border-white/10 bg-slate-950/75"}`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold">{entry.label}</p><p className="text-xs text-slate-400">{entry.issuer || "Sem emissor informado"}</p></div><div className="flex flex-wrap gap-2"><button onClick={() => setRevealedEntryId(revealedEntryId === entry.id ? null : entry.id)} className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-400/20">{revealedEntryId === entry.id ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}{revealedEntryId === entry.id ? "Ocultar" : "Ver código"}</button><button onClick={() => { if (window.confirm(`Excluir ${entry.label}? A chave não poderá ser recuperada.`)) deleteMutation.mutate({ id: entry.id }); }} disabled={deleteMutation.isPending} className="inline-flex items-center gap-2 rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-200 hover:bg-red-400/20"><Trash2 className="h-4 w-4" />Excluir</button></div></div>
+              {revealedEntryId === entry.id && <div className="mt-4 rounded-xl border border-cyan-300/20 bg-black/30 p-4"><p className="text-center text-xs font-bold tracking-[0.18em] text-cyan-200">{activeEntry?.label}</p>{codeQuery.isLoading ? <p className="py-4 text-center text-sm text-slate-400">Gerando código...</p> : codeQuery.data?.code ? <><button onClick={copyCurrentCode} className="mx-auto mt-2 flex items-center gap-3 rounded-xl px-3 py-2 font-mono text-4xl font-black tracking-[0.22em] text-white hover:bg-white/5"><span>{codeQuery.data.code}</span>{copied ? <Check className="h-5 w-5 text-emerald-300" /> : <Copy className="h-5 w-5 text-cyan-300" />}</button><div className="mx-auto mt-2 max-w-xs"><div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full bg-cyan-300 transition-[width] duration-1000" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-center text-xs text-slate-400">Novo código em {remaining}s · tela oculta automaticamente em 1 minuto</p></div></> : <p className="py-4 text-center text-sm text-red-300">Não foi possível gerar o código. Confira a configuração da chave.</p>}</div>}
+            </article>
+          )) : <p className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-slate-500">Nenhuma conta cadastrada. Adicione sua primeira chave acima.</p>}
+        </section>
+      </div>
+    </div>
+  );
+}

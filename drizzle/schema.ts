@@ -2561,3 +2561,29 @@ export type H2AssistantAudit = typeof h2AssistantAudit.$inferSelect;
 
 // Domínio isolado da locadora; tabelas físicas usam o prefixo locadora_.
 export * from "./locadoraSchema";
+
+
+// Cofre privado de autenticador TOTP do administrador.
+// O segredo nunca é salvo em texto puro: apenas ciphertext, IV e tag AES-GCM.
+export const adminAuthenticatorEntries = mysqlTable("adminAuthenticatorEntries", {
+  id: int("id").autoincrement().primaryKey(),
+  label: varchar("label", { length: 128 }).notNull(),
+  issuer: varchar("issuer", { length: 128 }),
+  secretCiphertext: text("secretCiphertext").notNull(),
+  secretIv: varchar("secretIv", { length: 64 }).notNull(),
+  secretTag: varchar("secretTag", { length: 64 }).notNull(),
+  keyVersion: varchar("keyVersion", { length: 16 }).notNull().default("v1"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastUsedAt: timestamp("lastUsedAt"),
+});
+export type AdminAuthenticatorEntry = typeof adminAuthenticatorEntries.$inferSelect;
+
+// Trilha de auditoria sem segredo, QR ou código temporário.
+export const adminAuthenticatorAudit = mysqlTable("adminAuthenticatorAudit", {
+  id: int("id").autoincrement().primaryKey(),
+  entryId: int("entryId"),
+  action: varchar("action", { length: 32 }).notNull(),
+  adminUsername: varchar("adminUsername", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});

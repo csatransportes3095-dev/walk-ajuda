@@ -47,6 +47,7 @@ import { mercadoRouter } from "./routers/mercado";
 import { privateTransportRouter } from "./routers/privateTransport";
 import { locadoraRouter } from "./routers/locadora";
 import { h2AssistantRouter } from "./routers/h2Assistant";
+import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "./_core/sendMailDirect";
@@ -3367,6 +3368,8 @@ export const appRouter = router({
   }),
 
   // ========== STATUS DO PEDIDO ==========
+  adminAuthenticator: adminAuthenticatorRouter,
+
   orderStatus: router({
     // Buscar nome do cliente pelo telefone (para exibir na página de acompanhamento)
     getClientName: publicProcedure
