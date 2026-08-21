@@ -15,6 +15,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { isIpBlocked, getSetting } from "../db";
 import { broadcastEmailHandler } from "../broadcastEmailHandler";
+import { registerPingRoute } from "./pingRoute";
 import { sendMail } from "./mailer";
 import { ensureCustomerIdentityInfrastructure, reconcileLegacyLoanPermissions } from "../customerAccess";
 import { bootstrapCardInvoices } from "../cardsBilling";
@@ -90,6 +91,8 @@ async function startServer() {
     };
     next();
   });
+  registerPingRoute(app);
+
   registerStorageProxy(app);
 
   // Middleware de bloqueio de IP â€” bloqueia antes de qualquer rota de negócio
@@ -515,20 +518,6 @@ async function startServer() {
       }
     }, 3000);
 
-    // Keep-alive: ping a cada 10 minutos para evitar cold start do Render
-    const SITE_URL = process.env.SITE_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-    setInterval(async () => {
-      try {
-        const https = await import('https');
-        const http = await import('http');
-        const url = new URL(`${SITE_URL}/api/trpc/system.health`);
-        const client = url.protocol === 'https:' ? https : http;
-        (client as any).get(url.toString(), (res: any) => {
-          res.resume(); // consumir resposta
-          console.log(`[keep-alive] ping ${url.toString()} → ${res.statusCode}`);
-        }).on('error', () => { /* silencioso */ });
-      } catch { /* silencioso */ }
-    }, 10 * 60 * 1000); // 10 minutos
   });
 }
 
