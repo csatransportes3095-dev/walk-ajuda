@@ -372,6 +372,7 @@ export default function AdminCustomers() {
   const [createCity, setCreateCity] = useState('');
   const [createUf, setCreateUf] = useState('');
   const [createPhotoUrl, setCreatePhotoUrl] = useState('');
+  const [createReferrerPhone, setCreateReferrerPhone] = useState('');
   const [createError, setCreateError] = useState('');
 
   const [showCsvImportModal, setShowCsvImportModal] = useState(false);
@@ -387,7 +388,7 @@ export default function AdminCustomers() {
         toast.success('Cliente cadastrado com sucesso!');
         setCreateModal(false);
         setCreateName(''); setCreatePhone(''); setCreateEmail('');
-        setCreateCpf(''); setCreateCity(''); setCreateUf(''); setCreatePhotoUrl('');
+        setCreateCpf(''); setCreateCity(''); setCreateUf(''); setCreatePhotoUrl(''); setCreateReferrerPhone('');
         setCreateError('');
         customersQuery.refetch();
       } else {
@@ -1318,13 +1319,17 @@ export default function AdminCustomers() {
                       <span>📍</span> {c.city}{c.uf ? `/${c.uf}` : ""}
                     </p>
                   )}
-                  <p className="text-xs flex items-center gap-1.5" style={{ color: c.referredBy === 'Não informou' ? '#f87171' : c.referredBy ? '#4ade80' : '#6b7280' }}>
+                  <p className="text-xs flex items-center gap-1.5" style={{ color: c.referredBy === 'Não informou' ? '#f87171' : (c.referredBy || (c as any).resolvedReferrerName || c.referredByPhone) ? '#4ade80' : '#6b7280' }}>
                     <span>👤</span>
                     {c.referredBy === 'Não informou'
                       ? 'Indicação: Não informou'
                       : c.referredBy
                         ? `Indicado por: ${c.referredBy}`
-                        : 'Indicação: Não respondeu'}
+                        : (c as any).resolvedReferrerName
+                          ? `Indicado por: ${(c as any).resolvedReferrerName}`
+                          : c.referredByPhone
+                            ? `Indicador informado: ${String(c.referredByPhone).replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')}`
+                            : 'Indicação: Não respondeu'}
                   </p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <span>📅</span> <span className="text-muted-foreground/70">Cadastro:</span> {formatDateBR(c.createdAt, true)}
@@ -1889,6 +1894,18 @@ export default function AdminCustomers() {
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
               </div>
+              <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
+                <label className="block text-xs font-bold text-amber-200 mb-1">Telefone do indicador cadastrado *</label>
+                <p className="mb-2 text-[11px] leading-snug text-amber-100/70">Obrigatório para criar o cadastro. O sistema confere se o número já pertence a um cliente.</p>
+                <input
+                  type="tel"
+                  value={createReferrerPhone}
+                  onChange={e => setCreateReferrerPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  placeholder="11999999999"
+                  maxLength={11}
+                  className="w-full px-3 py-2 bg-background border border-amber-400/30 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                />
+              </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">CPF</label>
                 <input
@@ -1951,6 +1968,7 @@ export default function AdminCustomers() {
                     setCreateError('');
                     if (!createName.trim()) { setCreateError('Nome é obrigatório'); return; }
                     if (createPhone.length < 10) { setCreateError('Telefone inválido (mínimo 10 dígitos)'); return; }
+                    if (createReferrerPhone.length < 10) { setCreateError('Informe o telefone válido do indicador cadastrado'); return; }
                     if (createCpf.length !== 11) { setCreateError('CPF obrigatório e inválido'); return; }
                     if (!/^\S+@\S+\.\S+$/.test(createEmail.trim())) { setCreateError('E-mail obrigatório e inválido'); return; }
                     if (!createPhotoUrl) { setCreateError('Foto de perfil obrigatória'); return; }
@@ -1960,6 +1978,7 @@ export default function AdminCustomers() {
                       email: createEmail.trim(),
                       cpf: createCpf,
                       profilePhotoUrl: createPhotoUrl,
+                      referredByPhone: createReferrerPhone,
                       city: createCity.trim() || undefined,
                       uf: createUf || undefined,
                     });

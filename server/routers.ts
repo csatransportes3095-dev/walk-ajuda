@@ -2407,6 +2407,14 @@ export const appRouter = router({
           ) THEN 1 ELSE 0 END AS hasOrder,
           COALESCE(c.fixedPasswordActive, 0) AS fixedPwdActive,
           (
+            SELECT referrer.name
+            FROM customers referrer
+            WHERE referrer.deletedAt IS NULL
+              AND REGEXP_REPLACE(referrer.phone, '[^0-9]', '') = REGEXP_REPLACE(c.referredByPhone, '[^0-9]', '')
+            ORDER BY referrer.createdAt ASC
+            LIMIT 1
+          ) AS resolvedReferrerName,
+          (
             SELECT osh2.orderNumber FROM accessCodePhones acp2
             INNER JOIN orderStatusHistory osh2 ON osh2.registrationId = acp2.id
             WHERE REGEXP_REPLACE(acp2.phone, '[^0-9]', '') = REGEXP_REPLACE(c.phone, '[^0-9]', '')
@@ -3030,6 +3038,8 @@ export const appRouter = router({
         email: z.string().email('E-mail obrigatório e inválido').min(1, 'E-mail obrigatório'),
         cpf: z.string().transform(value => value.replace(/\D/g, '')).refine(value => /^\d{11}$/.test(value), 'CPF obrigatório e inválido'),
         profilePhotoUrl: z.string().url('Foto de perfil obrigatória').min(1, 'Foto de perfil obrigatória'),
+        referredBy: z.string().trim().min(1).optional(),
+        referredByPhone: z.string().regex(/^\d{10,11}$/, 'Informe o telefone válido do indicador cadastrado'),
         city: z.string().optional(),
         uf: z.string().length(2).optional().or(z.literal('')),
       }))
@@ -3051,7 +3061,36 @@ export const appRouter = router({
         }
         const existing = await findMainCustomerByIdentity(profile);
         if (existing) return { success: false, message: 'Já existe um cadastro com estes dados. Use o cadastro principal original.' };
-        const customer = await createCustomer(profile);
+
+        // SISTEMA RESTRITO: o cadastro manual usa a mesma regra central do primeiro acesso.
+        // Não basta preencher o campo no ADM: o servidor precisa localizar um indicador cadastrado.
+        const referral = await resolveReferralDeclaration({
+          customerPhone: profile.phone,
+          referrerName: input.referredBy,
+          referrerPhone: input.referredByPhone,
+        });
+        const restrictedAccessError = restrictedReferralAccessError(referral);
+        if (restrictedAccessError) return { success: false, message: restrictedAccessError };
+
+        const customer = await createCustomer({
+          ...profile,
+          referredBy: referral.declaredName || undefined,
+          referredByPhone: referral.declaredPhone || undefined,
+        });
+        if (referral.declaredPhone && referral.linkedReferrer) {
+          try {
+            const { recordReferral } = await import('./db');
+            await recordReferral({
+              referrerPhone: referral.linkedReferrer.phone,
+              referrerName: referral.linkedReferrer.name || referral.declaredName || 'Indicador',
+              referredCustomerId: customer.id,
+              referredPhone: profile.phone,
+              referredName: profile.name,
+            });
+          } catch (error) {
+            console.error('Erro ao registrar indicação do cadastro manual:', error);
+          }
+        }
         return { success: true, customer };
       }),
   }),
