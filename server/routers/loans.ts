@@ -8,6 +8,7 @@ import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
+import { calculateLateFeeForInstallment } from "../loans/lateFee";
 import PDFDocument from "pdfkit";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
@@ -1681,14 +1682,36 @@ export const loanRouter = router({
     const loans = await qRows(db, drizzleSql`SELECT * FROM loans WHERE id=${input.loanId} AND clientId IN (${drizzleSql.raw(clientIds.join(','))})`);
     if (!loans.length) throw new TRPCError({ code: "NOT_FOUND" });
 
-    const today = getBrazilToday();
+    const clock = getBrazilClock();
     const rawInstallments = await qRows(db, drizzleSql`SELECT * FROM loanInstallments WHERE loanId=${input.loanId} ORDER BY installmentNumber ASC`);
     const scoreByInstallment = await getH2ScoreSubmissionMap(db, rawInstallments.map((i: any) => Number(i.id)));
-    const installments = rawInstallments.map((i: any) => ({
-      ...i,
-      h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
-      isOverdue: !["pago"].includes(i.status) && i.dueDate < today,
-    }));
+    const configRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+    const lateFeeConfig = configRows[0];
+    const installments = rawInstallments.map((i: any) => {
+      const canPreviewLateFee = !client.late_fee_disabled
+        && i.originalAmount == null
+        && ["pendente", "atrasado"].includes(i.status);
+      const originalAmount = Number(i.amount || 0);
+      const feeApplied = canPreviewLateFee
+        ? calculateLateFeeForInstallment({ dueDate: i.dueDate, amount: originalAmount, config: lateFeeConfig, clock })
+        : 0;
+      const hasPreviewLateFee = feeApplied > 0;
+      const amountWithPreview = hasPreviewLateFee
+        ? Math.round((originalAmount + feeApplied) * 100) / 100
+        : i.amount;
+
+      return {
+        ...i,
+        amount: amountWithPreview,
+        ...(hasPreviewLateFee ? {
+          originalAmount: originalAmount.toFixed(2),
+          feeApplied: feeApplied.toFixed(2),
+          lateFeePreview: true,
+        } : {}),
+        h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
+        isOverdue: !["pago"].includes(i.status) && i.dueDate < clock.today,
+      };
+    });
     return { loan: loans[0], installments };
   }),
 
@@ -1739,17 +1762,13 @@ export const loanRouter = router({
       const configRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
       const config = configRows[0];
       if (config?.enabled) {
-        const nowHour = getBrazilHour();
         const originalAmount = parseFloat(inst[0].amount || 0);
-        const fixedFeeAfter20 = parseFloat(config.fee_after_18h || '0') + parseFloat(config.fee_after_20h || '0');
-        if (dueDate < today) {
-          const overnightFee = Math.round(originalAmount * (parseFloat(config.fee_after_midnight_pct || '0') / 100) * 100) / 100;
-          appliedFee = Math.max(fixedFeeAfter20, overnightFee);
-        } else if (nowHour >= 20) {
-          appliedFee = fixedFeeAfter20;
-        } else if (nowHour >= 18) {
-          appliedFee = parseFloat(config.fee_after_18h || '0');
-        }
+        appliedFee = calculateLateFeeForInstallment({
+          dueDate,
+          amount: originalAmount,
+          config,
+          clock: getBrazilClock(),
+        });
         if (appliedFee > 0) {
           const updatedAmount = Math.round((originalAmount + appliedFee) * 100) / 100;
           const note = `Taxa de atraso automática: +R$ ${appliedFee.toFixed(2).replace('.', ',')} aplicada no envio do comprovante em ${new Date().toLocaleDateString('pt-BR')}`;
@@ -1976,25 +1995,22 @@ export const loanRouter = router({
     if (!inst.length) throw new TRPCError({ code: "NOT_FOUND" });
     const installment = inst[0];
 
-    // Só aplica taxa se a parcela está pendente/atrasada e é do dia de hoje
-    const today = getBrazilToday();
-    if (installment.status === "pago" || installment.dueDate > today) return { lateFee: 0, breakdown: null };
+    // Só apresenta taxa para uma parcela pendente/atrasada. O cálculo é o mesmo da tela e do envio.
+    const clock = getBrazilClock();
+    if (!["pendente", "atrasado"].includes(installment.status) || installment.dueDate > clock.date) {
+      return { lateFee: 0, breakdown: null };
+    }
 
-    const nowHour = getBrazilHour();
     const amount = parseFloat(installment.amount);
+    const lateFee = calculateLateFeeForInstallment({ dueDate: installment.dueDate, amount, config: cfg, clock });
     const fixedFeeAfter20 = parseFloat(cfg.fee_after_18h || '0') + parseFloat(cfg.fee_after_20h || '0');
-    let lateFee = 0;
     let breakdown: string[] = [];
 
-    if (installment.dueDate < today) {
-      const overnightFee = Math.round(amount * (parseFloat(cfg.fee_after_midnight_pct || '0') / 100) * 100) / 100;
-      lateFee = Math.max(fixedFeeAfter20, overnightFee);
+    if (installment.dueDate < clock.date) {
       breakdown = [`Após 23:59: será cobrado o maior valor entre a taxa fixa de R$ ${fixedFeeAfter20.toFixed(2)} e o valor da parcela (taxa aplicada: R$ ${lateFee.toFixed(2)})`];
-    } else if (nowHour >= 20) {
-      lateFee = fixedFeeAfter20;
+    } else if (clock.hour >= 20) {
       breakdown = [`Após 20h: taxa fixa acumulada de R$ ${lateFee.toFixed(2)}`];
-    } else if (nowHour >= 18) {
-      lateFee = parseFloat(cfg.fee_after_18h || '0');
+    } else if (clock.hour >= 18) {
       breakdown = [`Após 18h: +R$ ${lateFee.toFixed(2)}`];
     }
 
@@ -3360,11 +3376,14 @@ export const loanRouter = router({
       AND (lc.late_fee_disabled IS NULL OR lc.late_fee_disabled = 0)
     `);
     let applied = 0;
-    const fixedFeeAfter20 = parseFloat(cfg.fee_after_18h || '0') + parseFloat(cfg.fee_after_20h || '0');
     for (const inst of overdueInsts) {
       const originalAmount = parseFloat(inst.amount);
-      const overnightFee = Math.round(originalAmount * (parseFloat(cfg.fee_after_midnight_pct || '0') / 100) * 100) / 100;
-      const fee = Math.max(fixedFeeAfter20, overnightFee);
+      const fee = calculateLateFeeForInstallment({
+        dueDate: inst.dueDate,
+        amount: originalAmount,
+        config: cfg,
+        clock: { today, hour: 0 },
+      });
       if (fee <= 0) continue;
       const newAmount = Math.round((originalAmount + fee) * 100) / 100;
       const note = `Taxa de atraso automática: +R$ ${fee.toFixed(2).replace('.', ',')} aplicada em ${new Date().toLocaleDateString('pt-BR')}`;

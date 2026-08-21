@@ -500,7 +500,13 @@ export function LoansTab({ token }: LoansTabProps) {
 
   const { data: instData, refetch: refetchInst } = trpc.loans.getClientInstallments.useQuery(
     { token, loanId: expandedLoan! },
-    { enabled: !!expandedLoan }
+    {
+      enabled: !!expandedLoan,
+      // Mantém o total da parcela aberto sincronizado com a regra de horário e com ações do ADM.
+      refetchOnMount: "always",
+      refetchOnWindowFocus: true,
+      refetchInterval: 15000,
+    }
   );
 
   const { data: lateFeeConfig } = trpc.loans.getLateFeeConfig.useQuery();
