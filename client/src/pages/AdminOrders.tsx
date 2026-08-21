@@ -97,7 +97,7 @@ function getOperationalBucket(order: any): string {
   // Agendamento concluído deixa de prevalecer: o pedido passa à sua etapa atual.
   if (status === 'p') return 'conta_ativa';
   if (status === 'aguardando_ficar_ativa') return 'aguardando_ativa';
-  if (status === 'foto_em_analise') return 'em_analise';
+  if (status === 'foto_em_anal') return 'em_analise';
   return 'sem_status';
 }
 
