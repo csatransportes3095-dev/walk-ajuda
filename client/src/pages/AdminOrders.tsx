@@ -16,6 +16,7 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useTimezone } from "@/hooks/useTimezone";
 import { NotesTab } from "@/components/NotesTab";
 import { AuthenticatorQrAdminField, type PendingQr } from "@/components/AuthenticatorQrAdminField";
+import { AccountProvisioningLauncher } from "@/components/AccountProvisioningLauncher";
 
 type OrderStatus = "recebido" | "pagamento_recebido" | "em_andamento" | "em_montagem" | "documentos_aprovados" | "conta_ativa" | "aguardando_ativa" | "pedido_entregue" | "cancelado";
 
@@ -613,6 +614,9 @@ export default function AdminOrders() {
   const urlOpenId = (() => {
     try { return new URLSearchParams(window.location.search).get('open') || ''; } catch { return ''; }
   })();
+  const urlCreateAccount = (() => {
+    try { return new URLSearchParams(window.location.search).get('account') === '1'; } catch { return false; }
+  })();
   const [search, setSearch] = useState(urlSearch);
   const [searchPending, setSearchPending] = useState(false);
   // Busca de emergência: ativada quando o termo começa com '/'
@@ -931,9 +935,9 @@ export default function AdminOrders() {
   // autoMarkUrgent automático REMOVIDO — urgência agora é somente manual pelo admin
 
   // Abrir card automaticamente via ?open=registrationId (ex: vindo de Agendamentos)
-  const openedViaUrl = React.useRef(false);
+  const openedViaUrl = React.useRef<string | null>(null);
   useEffect(() => {
-    if (!urlOpenId || openedViaUrl.current) return;
+    if (!urlOpenId || openedViaUrl.current === urlOpenId) return;
     const data = ordersQuery.data as Order[] | undefined;
     if (!data) return;
     const target = data.find(o => String(o.id) === String(urlOpenId));
@@ -941,14 +945,15 @@ export default function AdminOrders() {
       const key = getOrderKey(target);
       setExpandedId(key);
       setActiveProductTab('__todos__');
-      openedViaUrl.current = true;
+      if (urlCreateAccount) setTab(key, 'cliente');
+      openedViaUrl.current = urlOpenId;
       // Scroll suave para o card após um tick
       setTimeout(() => {
         const el = document.getElementById(`order-card-${key}`);
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 300);
     }
-  }, [ordersQuery.data, urlOpenId]);
+  }, [ordersQuery.data, urlOpenId, urlCreateAccount]);
 
   // Detectar novos pedidos e tocar bipe
   useEffect(() => {
@@ -2683,6 +2688,7 @@ export default function AdminOrders() {
                 ) : null;
               })()}
             </button>
+            <AccountProvisioningLauncher onOpenOrder={(registrationId) => navigate(`/admin/orders?open=${registrationId}&account=1`)} />
           </div>
 
           {/* Filtros colápsáveis */}
