@@ -3388,6 +3388,21 @@ export const appRouter = router({
         if (!customer) return { name: null, found: false };
         return { name: customer.name || null, found: true };
       }),
+    // Admin: marcador leve para sincronizar a lista somente quando houver mudança real.
+    // Não retorna pedidos nem dados de cliente; apenas versões máximas de status e agenda.
+    getUpdateMarker: adminProcedure.query(async () => {
+      const db = await (await import('./db')).getDb();
+      if (!db) return { marker: '0' };
+      const result: any = await db.execute(sql.raw(`
+        SELECT CONCAT(
+          COALESCE((SELECT MAX(id) FROM orderStatusHistory), 0), ':',
+          COALESCE((SELECT MAX(id) FROM scheduleAppointments), 0), ':',
+          COALESCE((SELECT UNIX_TIMESTAMP(MAX(updatedAt)) * 1000 FROM scheduleAppointments), 0)
+        ) AS marker
+      `));
+      const rows = Array.isArray(result) ? result[0] : [];
+      return { marker: String(rows?.[0]?.marker ?? '0') };
+    }),
     // Admin: listar todos os pedidos com status mais recente
     // Suporta múltiplos pedidos no mesmo registrationId (separados por cada 'recebido')
     listOrders: adminProcedure.query(async () => {

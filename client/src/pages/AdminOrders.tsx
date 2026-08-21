@@ -876,6 +876,26 @@ export default function AdminOrders() {
     placeholderData: (prev: any) => prev,
   });
 
+  // Consulta de poucos bytes: detecta mudança externa em status/agendamento sem buscar a lista inteira.
+  const ordersUpdateMarkerQuery = trpc.orderStatus.getUpdateMarker.useQuery(undefined, {
+    refetchInterval: 3000,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+  const lastOrdersUpdateMarkerRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    const marker = ordersUpdateMarkerQuery.data?.marker;
+    if (!marker) return;
+    if (lastOrdersUpdateMarkerRef.current === null) {
+      lastOrdersUpdateMarkerRef.current = marker;
+      return;
+    }
+    if (marker === lastOrdersUpdateMarkerRef.current) return;
+    lastOrdersUpdateMarkerRef.current = marker;
+    void ordersQuery.refetch();
+  }, [ordersUpdateMarkerQuery.data?.marker]);
+
   // Função de busca forçada: invalida cache e faz novo fetch do servidor
   const handleForcedSearch = async () => {
     setSearchPending(true);
