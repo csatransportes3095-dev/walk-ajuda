@@ -16,6 +16,7 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useTimezone } from "@/hooks/useTimezone";
 import { NotesTab } from "@/components/NotesTab";
 import { AuthenticatorQrAdminField, type PendingQr } from "@/components/AuthenticatorQrAdminField";
+import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
 
 type OrderStatus = "recebido" | "pagamento_recebido" | "em_andamento" | "em_montagem" | "documentos_aprovados" | "conta_ativa" | "aguardando_ativa" | "pedido_entregue" | "cancelado";
 
@@ -6397,6 +6398,7 @@ export default function AdminOrders() {
                                   {fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
                                 </div>
                               </div>
+                              <OrderLoginAuthenticatorCode registrationId={order.id} />
                               <div>
                                 <label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label>
                                 <div className="flex gap-1">

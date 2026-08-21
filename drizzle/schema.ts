@@ -2587,3 +2587,18 @@ export const adminAuthenticatorAudit = mysqlTable("adminAuthenticatorAudit", {
   adminUsername: varchar("adminUsername", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+
+// Vínculo exclusivamente administrativo: uma conta TOTP pode direcionar seu código para os Dados de Login de um pedido.
+// Nenhuma chave, código ou referência desta tabela é retornada pelas rotas de cliente.
+export const adminAuthenticatorOrderLinks = mysqlTable("adminAuthenticatorOrderLinks", {
+  id: int("id").autoincrement().primaryKey(),
+  authenticatorEntryId: int("authenticatorEntryId").notNull(),
+  registrationId: int("registrationId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  uniqueAuthenticatorEntry: uniqueIndex("adminAuthenticatorOrderLinks_entry_unique").on(table.authenticatorEntryId),
+  orderLookup: index("adminAuthenticatorOrderLinks_registration_idx").on(table.registrationId),
+}));
+export type AdminAuthenticatorOrderLink = typeof adminAuthenticatorOrderLinks.$inferSelect;

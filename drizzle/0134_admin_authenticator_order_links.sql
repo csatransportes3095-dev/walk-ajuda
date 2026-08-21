@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS `adminAuthenticatorOrderLinks` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `authenticatorEntryId` INT NOT NULL,
+  `registrationId` INT NOT NULL,
+  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `adminAuthenticatorOrderLinks_entry_unique` (`authenticatorEntryId`),
+  KEY `adminAuthenticatorOrderLinks_registration_idx` (`registrationId`)
+);

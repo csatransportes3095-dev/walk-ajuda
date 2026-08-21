@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { Check, Copy, Eye, EyeOff, KeyRound, LockKeyhole, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, KeyRound, Link2, LockKeyhole, Plus, ShieldCheck, Trash2, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -19,11 +19,18 @@ export default function AdminAuthenticator() {
   const [revealedEntryId, setRevealedEntryId] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [copied, setCopied] = useState(false);
+  const [linkingEntryId, setLinkingEntryId] = useState<number | null>(null);
+  const [linkSearch, setLinkSearch] = useState("");
+  const [submittedLinkSearch, setSubmittedLinkSearch] = useState<string | null>(null);
 
   const entriesQuery = trpc.adminAuthenticator.list.useQuery(undefined, { staleTime: 0 });
   const codeQuery = trpc.adminAuthenticator.getCode.useQuery(
     { id: revealedEntryId ?? 0 },
     { enabled: revealedEntryId !== null, staleTime: 0, gcTime: 0, refetchInterval: revealedEntryId !== null ? 5000 : false },
+  );
+  const orderSearchQuery = trpc.adminAuthenticator.searchOpenOrders.useQuery(
+    { query: submittedLinkSearch || "#0" },
+    { enabled: linkingEntryId !== null && Boolean(submittedLinkSearch), retry: false },
   );
 
   useEffect(() => {
@@ -45,15 +52,37 @@ export default function AdminAuthenticator() {
   }, [revealedEntryId, codeQuery.data?.code]);
 
   const createMutation = trpc.adminAuthenticator.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (created) => {
       setLabel("");
       setIssuer("");
       setSecret("");
       setShowSecret(false);
+      setLinkingEntryId(created.id);
+      setLinkSearch("");
+      setSubmittedLinkSearch(null);
       void utils.adminAuthenticator.list.invalidate();
-      toast.success("Conta adicionada ao cofre privado.");
+      toast.success("Conta adicionada. Escolha agora a página de login do pedido.");
     },
     onError: (error) => toast.error(error.message || "Não foi possível salvar a conta."),
+  });
+
+  const linkMutation = trpc.adminAuthenticator.linkToOrder.useMutation({
+    onSuccess: () => {
+      setLinkingEntryId(null);
+      setLinkSearch("");
+      setSubmittedLinkSearch(null);
+      void utils.adminAuthenticator.list.invalidate();
+      toast.success("Chave direcionada para a página de login do pedido.");
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível direcionar a chave."),
+  });
+
+  const unlinkMutation = trpc.adminAuthenticator.unlinkFromOrder.useMutation({
+    onSuccess: () => {
+      void utils.adminAuthenticator.list.invalidate();
+      toast.success("Chave removida da página de login do pedido.");
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível remover o direcionamento."),
   });
 
   const deleteMutation = trpc.adminAuthenticator.delete.useMutation({
@@ -68,6 +97,10 @@ export default function AdminAuthenticator() {
   const activeEntry = useMemo(
     () => (entriesQuery.data || []).find((entry) => entry.id === revealedEntryId),
     [entriesQuery.data, revealedEntryId],
+  );
+  const linkingEntry = useMemo(
+    () => (entriesQuery.data || []).find((entry) => entry.id === linkingEntryId),
+    [entriesQuery.data, linkingEntryId],
   );
   const remaining = secondsLeft(codeQuery.data?.expiresAt);
   const progress = Math.max(0, Math.min(100, (remaining / 30) * 100));
@@ -121,11 +154,13 @@ export default function AdminAuthenticator() {
           <button onClick={addEntry} disabled={createMutation.isPending} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"><KeyRound className="h-4 w-4" />{createMutation.isPending ? "Protegendo chave..." : "Adicionar conta"}</button>
         </section>
 
+        {linkingEntryId !== null && <section className="rounded-2xl border border-lime-300/30 bg-lime-300/5 p-5"><div className="flex items-start gap-3"><Link2 className="mt-0.5 h-5 w-5 flex-none text-lime-300" /><div className="min-w-0 flex-1"><p className="font-black text-lime-100">Direcionar chave para página de login</p><p className="mt-1 text-sm text-slate-300">{linkingEntry?.label || "Nova conta"} ficará gerando código na seção Dados de Login do pedido escolhido. Só pedidos em aberto aparecem.</p><div className="mt-4 flex gap-2"><input value={linkSearch} onChange={(event) => setLinkSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && linkSearch.trim()) setSubmittedLinkSearch(linkSearch.trim()); }} placeholder="Telefone, CPF, *cadastro ou #pedido" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-lime-300/60" /><button onClick={() => setSubmittedLinkSearch(linkSearch.trim())} disabled={!linkSearch.trim() || orderSearchQuery.isFetching} className="rounded-xl bg-lime-300 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50">{orderSearchQuery.isFetching ? "Buscando..." : "Buscar"}</button><button onClick={() => { setLinkingEntryId(null); setSubmittedLinkSearch(null); setLinkSearch(""); }} className="rounded-xl border border-white/15 px-3 py-2 text-sm text-slate-300 hover:bg-white/5">Cancelar</button></div>{orderSearchQuery.isError && <p className="mt-3 text-sm text-red-300">{orderSearchQuery.error.message}</p>}{submittedLinkSearch && !orderSearchQuery.isFetching && !orderSearchQuery.isError && orderSearchQuery.data?.length === 0 && <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm text-amber-100">Nenhum pedido em aberto encontrado para esta busca.</p>}{orderSearchQuery.data && orderSearchQuery.data.length > 0 && <div className="mt-3 space-y-2">{orderSearchQuery.data.map((order) => <button key={order.registrationId} onClick={() => linkMutation.mutate({ entryId: linkingEntryId, registrationId: order.registrationId })} disabled={linkMutation.isPending} className="w-full rounded-xl border border-white/10 bg-slate-950/70 p-3 text-left hover:border-lime-300/50 hover:bg-lime-300/5 disabled:opacity-60"><div className="flex items-start justify-between gap-3"><div><p className="font-bold text-white">#{order.orderNumber || order.registrationId} · {order.customerName || "Cliente"}</p><p className="mt-1 text-xs text-slate-400">Cadastro {order.customerNumber ? `*${order.customerNumber}` : "não informado"} · {order.customerPhone || "telefone não informado"}{order.customerCpfMasked ? ` · CPF ${order.customerCpfMasked}` : ""}</p><p className="mt-1 text-xs text-lime-200">{order.serviceName || "Pedido"}{order.serviceOption ? ` — ${order.serviceOption}` : ""}</p></div><span className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-bold text-slate-300">{order.latestStatus}</span></div></button>)}</div>}</div></div></section>}
+
         <section className="space-y-3">
           <div className="flex items-center justify-between"><h2 className="text-base font-black">Contas cadastradas</h2><span className="rounded-full bg-white/5 px-3 py-1 text-xs font-bold text-slate-400">{entriesQuery.data?.length || 0}</span></div>
           {entriesQuery.isLoading ? <p className="rounded-xl border border-white/10 p-5 text-sm text-slate-400">Carregando cofre...</p> : entriesQuery.data?.length ? entriesQuery.data.map((entry) => (
             <article key={entry.id} className={`rounded-2xl border p-4 transition-colors ${revealedEntryId === entry.id ? "border-cyan-300/50 bg-cyan-400/5" : "border-white/10 bg-slate-950/75"}`}>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold">{entry.label}</p><p className="text-xs text-slate-400">{entry.issuer || "Sem emissor informado"}</p></div><div className="flex flex-wrap gap-2"><button onClick={() => setRevealedEntryId(revealedEntryId === entry.id ? null : entry.id)} className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-400/20">{revealedEntryId === entry.id ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}{revealedEntryId === entry.id ? "Ocultar" : "Ver código"}</button><button onClick={() => { if (window.confirm(`Excluir ${entry.label}? A chave não poderá ser recuperada.`)) deleteMutation.mutate({ id: entry.id }); }} disabled={deleteMutation.isPending} className="inline-flex items-center gap-2 rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-200 hover:bg-red-400/20"><Trash2 className="h-4 w-4" />Excluir</button></div></div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold">{entry.label}</p><p className="text-xs text-slate-400">{entry.issuer || "Sem emissor informado"}</p>{entry.linkedRegistrationId && <p className="mt-1 text-xs font-bold text-lime-300">Direcionada ao pedido #{entry.linkedRegistrationId}</p>}</div><div className="flex flex-wrap gap-2"><button onClick={() => setRevealedEntryId(revealedEntryId === entry.id ? null : entry.id)} className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-400/20">{revealedEntryId === entry.id ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}{revealedEntryId === entry.id ? "Ocultar" : "Ver código"}</button>{entry.linkedRegistrationId ? <button onClick={() => unlinkMutation.mutate({ id: entry.id })} disabled={unlinkMutation.isPending} className="inline-flex items-center gap-2 rounded-xl border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-xs font-bold text-amber-100 hover:bg-amber-300/20"><Unlink className="h-4 w-4" />Remover do pedido</button> : <button onClick={() => { setLinkingEntryId(entry.id); setLinkSearch(""); setSubmittedLinkSearch(null); }} className="inline-flex items-center gap-2 rounded-xl border border-lime-300/30 bg-lime-300/10 px-3 py-2 text-xs font-bold text-lime-100 hover:bg-lime-300/20"><Link2 className="h-4 w-4" />Direcionar para login</button>}<button onClick={() => { if (window.confirm(`Excluir ${entry.label}? A chave não poderá ser recuperada.`)) deleteMutation.mutate({ id: entry.id }); }} disabled={deleteMutation.isPending} className="inline-flex items-center gap-2 rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-200 hover:bg-red-400/20"><Trash2 className="h-4 w-4" />Excluir</button></div></div>
               {revealedEntryId === entry.id && <div className="mt-4 rounded-xl border border-cyan-300/20 bg-black/30 p-4"><p className="text-center text-xs font-bold tracking-[0.18em] text-cyan-200">{activeEntry?.label}</p>{codeQuery.isLoading ? <p className="py-4 text-center text-sm text-slate-400">Gerando código...</p> : codeQuery.data?.code ? <><button onClick={copyCurrentCode} className="mx-auto mt-2 flex items-center gap-3 rounded-xl px-3 py-2 font-mono text-4xl font-black tracking-[0.22em] text-white hover:bg-white/5"><span>{codeQuery.data.code}</span>{copied ? <Check className="h-5 w-5 text-emerald-300" /> : <Copy className="h-5 w-5 text-cyan-300" />}</button><div className="mx-auto mt-2 max-w-xs"><div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full bg-cyan-300 transition-[width] duration-1000" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-center text-xs text-slate-400">Novo código em {remaining}s · tela oculta automaticamente em 1 minuto</p></div></> : <p className="py-4 text-center text-sm text-red-300">Não foi possível gerar o código. Confira a configuração da chave.</p>}</div>}
             </article>
           )) : <p className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-slate-500">Nenhuma conta cadastrada. Adicione sua primeira chave acima.</p>}
