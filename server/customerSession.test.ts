@@ -84,22 +84,24 @@ describe("authenticated order upload wiring", () => {
   it("requires the customer session on the new order upload route", () => {
     const source = readFileSync(resolve(process.cwd(), "server/uploadRoute.ts"), "utf8");
     expect(source).toContain('app.post("/api/upload/order-file-base64"');
-    expect(source).toContain("requireCustomerSession(getCustomerSessionTokenFromRequest(req), phone)");
+    expect(source).toContain("requireCustomerSession(getCustomerSessionTokenFromRequest(req))");
+    expect(source).not.toContain("requireCustomerSession(getCustomerSessionTokenFromRequest(req), phone)");
   });
 
-  it("makes both the vitrine and Bot use the authenticated order upload route", () => {
+  it("makes both the vitrine and Bot use the same authenticated upload core", () => {
     const home = readFileSync(resolve(process.cwd(), "client/src/pages/Home.tsx"), "utf8");
     const bot = readFileSync(resolve(process.cwd(), "client/src/components/ColombiaBot.tsx"), "utf8");
-    expect(home).toContain("/api/upload/order-file-base64");
-    expect(bot).toContain("/api/upload/order-file-base64");
-    expect(home).toContain("x-customer-session");
-    expect(bot).toContain("x-customer-session");
+    const shared = readFileSync(resolve(process.cwd(), "client/src/lib/reliableOrderUpload.ts"), "utf8");
+    expect(home).toContain('uploadOrderFileReliably');
+    expect(bot).toContain('uploadOrderFileReliably');
+    expect(shared).toContain("/api/upload/order-file-base64");
+    expect(shared).toContain("x-customer-session");
   });
 
   it("does not mark failed Bot uploads as sent", () => {
     const bot = readFileSync(resolve(process.cwd(), "client/src/components/ColombiaBot.tsx"), "utf8");
-    expect(bot).toContain("Não consegui enviar o comprovante");
-    expect(bot).toContain("Não consegui enviar ${doc.label}");
+    expect(bot).toContain("if (!uploaded.ok)");
+    expect(bot).toContain("text: uploaded.message");
     expect(bot).not.toContain("flowState.current.docFiles[doc.id] = { file };");
   });
 

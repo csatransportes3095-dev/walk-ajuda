@@ -13,6 +13,7 @@ import { ColombiaBot } from "@/components/ColombiaBot";
 import { StorefrontProductCard, type StorefrontCatalogItem, type StorefrontWarrantyTier } from "@/components/StorefrontProductCard";
 import { StorefrontFilters } from "@/components/StorefrontFilters";
 import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
+import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
 type FlowOrigin = "storefront" | "cart" | "legacy";
@@ -1176,7 +1177,11 @@ export default function Home() {
   // O arquivo (já comprimido para JPEG no caso de imagens) é lido como base64
   // e enviado dentro de um JSON. SEM multipart/form-data — isso elimina as
   // falhas de upload no celular causadas pelo parsing de multipart no proxy.
-  const uploadFileToServer = async (file: File, label: string, phone: string): Promise<{ url: string; fileKey: string; mimeType: string } | null> => {
+  const uploadFileToServer = async (file: File, label: string, _phone: string): Promise<{ url: string; fileKey: string; mimeType: string } | null> => {
+    const result = await uploadOrderFileReliably(file, label);
+    return result.ok ? { url: result.url, fileKey: result.fileKey, mimeType: result.mimeType } : null;
+  };
+    /* legacy implementation retained below for reference only
     const MAX_RETRIES = 4;
     // Lê o arquivo como base64 puro (sem o prefixo data URI)
     let base64: string;
@@ -1235,6 +1240,7 @@ export default function Home() {
     return null;
   };
 
+  */
   const fileToBase64 = (file: File): Promise<string> => {
     // Tenta ler o arquivo; em caso de erro, tenta novamente uma vez
     const tryRead = (attempt: number): Promise<string> => new Promise((resolve, reject) => {

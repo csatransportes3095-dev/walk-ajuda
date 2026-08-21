@@ -2407,15 +2407,15 @@ export function registerUploadRoute(app: Express) {
 
   // ─── ORDER UPLOAD via JSON base64 (cliente autenticado) ─────────────────────
   // Usado pela vitrine e pelo Bot Carminha após o login por senha do cliente.
-  // A identidade vem exclusivamente da sessão; o telefone do corpo é apenas
-  // conferido para impedir que um token envie arquivo para outro cadastro.
+  // A identidade vem exclusivamente da sessão autenticada. O navegador não
+  // escolhe o telefone de destino e não pode causar divergência de cadastro.
   app.post("/api/upload/order-file-base64", jsonParserBig, async (req: Request, res: Response) => {
     try {
-      const { label, phone, data, mimeType, filename } = req.body || {};
+      const { label, data, mimeType, filename } = req.body || {};
       if (!label) { res.status(400).json({ error: "Missing label" }); return; }
       if (!data || typeof data !== "string") { res.status(400).json({ error: "No file data" }); return; }
 
-      const identity = await requireCustomerSession(getCustomerSessionTokenFromRequest(req), phone);
+      const identity = await requireCustomerSession(getCustomerSessionTokenFromRequest(req));
       const base64 = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
       const buffer = Buffer.from(base64, "base64");
       if (buffer.length === 0) { res.status(400).json({ error: "Empty file" }); return; }

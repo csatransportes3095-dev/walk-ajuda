@@ -7,6 +7,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Bot, X, Camera, ChevronRight, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
+import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -521,57 +522,6 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     }
   };
 
-  // Helper: converter File para base64 (sem prefixo data URI)
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        // Remover prefixo "data:image/jpeg;base64,"
-        const base64 = result.split(',')[1] || result;
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Upload via base64 — mesmo endpoint que o pedido manual usa
-  const uploadFileBase64 = async (file: File, label: string): Promise<{ url: string; fileKey: string; mimeType: string } | null> => {
-    const phone = flowState.current.clientPhone || localStorage.getItem('walk_client_phone')?.replace(/\D/g, '') || '';
-    const cpToken = localStorage.getItem('cp_token') || '';
-    if (!cpToken || file.size > 15 * 1024 * 1024) return null;
-    try {
-      const base64 = await fileToBase64(file);
-      if (!base64) return null;
-      for (let attempt = 1; attempt <= 4; attempt++) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000);
-        try {
-          const res = await fetch('/api/upload/order-file-base64', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-customer-session': cpToken },
-            body: JSON.stringify({ label, phone, data: base64, mimeType: file.type || 'image/jpeg', filename: file.name || `${label}.jpg` }),
-            signal: controller.signal,
-          });
-          if (res.ok) {
-            const data = await res.json();
-            return { url: data.fileUrl, fileKey: data.fileKey, mimeType: data.mimeType };
-          }
-          if (![408, 429].includes(res.status) && res.status < 500) return null;
-        } catch {
-          if (attempt === 4) return null;
-        } finally {
-          clearTimeout(timeoutId);
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  };
-
   const askDocuments = (product: Product, option: ProductOption) => {
     saveSnapshot();
     const docs = option.documents || [];
@@ -595,9 +545,9 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         }
         setUploadingDocId(doc.id);
         try {
-          const uploaded = await uploadFileBase64(file, doc.label);
-          if (!uploaded) {
-            addMsgs({ type: "bot", id: uid(), text: `Não consegui enviar ${doc.label}. Verifique sua conexão e tente novamente.` });
+          const uploaded = await uploadOrderFileReliably(file, doc.label);
+          if (!uploaded.ok) {
+            addMsgs({ type: "bot", id: uid(), text: uploaded.message });
             return;
           }
           flowState.current.docFiles[doc.id] = { file, url: uploaded.url, fileKey: uploaded.fileKey, mime: uploaded.mimeType };
@@ -695,9 +645,9 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       }
       setUploadingPix(true);
       try {
-        const uploaded = await uploadFileBase64(file, 'comprovante-pix');
-        if (!uploaded) {
-          addMsgs({ type: 'bot', id: uid(), text: 'Não consegui enviar o comprovante. Verifique sua conexão e tente novamente.' });
+        const uploaded = await uploadOrderFileReliably(file, 'comprovante-pix');
+        if (!uploaded.ok) {
+          addMsgs({ type: 'bot', id: uid(), text: uploaded.message });
           return;
         }
         flowState.current.pixProofUrl = uploaded.url;
