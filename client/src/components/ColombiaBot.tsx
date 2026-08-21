@@ -40,8 +40,8 @@ type ChatMsg =
   | { type: "options"; id: string; options: string[]; answered: boolean }
   | { type: "input"; id: string; multiline: boolean; answered: boolean }
   | { type: "audio-input"; id: string; question: ProductQuestion; answered: boolean }
-  | { type: "doc-upload"; id: string; docId: number; label: string; required: boolean; uploaded: boolean }
-  | { type: "pix-payment"; id: string; pixKey: string; pixName: string; pixBank: string; price: string; uploaded: boolean }
+  | { type: "doc-upload"; id: string; docId: number; label: string; required: boolean; uploaded: boolean; previewUrl?: string; previewMime?: string }
+  | { type: "pix-payment"; id: string; pixKey: string; pixName: string; pixBank: string; price: string; uploaded: boolean; previewUrl?: string; previewMime?: string }
   | { type: "action"; id: string; label: string; done: boolean };
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -241,9 +241,9 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     ));
   }, []);
 
-  const markDocUploaded = useCallback((id: string) => {
+  const markDocUploaded = useCallback((id: string, previewUrl: string, previewMime: string) => {
     setMessages(prev => prev.map(m =>
-      m.type === "doc-upload" && m.id === id ? { ...m, uploaded: true } : m
+      m.type === "doc-upload" && m.id === id ? { ...m, uploaded: true, previewUrl, previewMime } : m
     ));
   }, []);
 
@@ -552,7 +552,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           }
           flowState.current.docFiles[doc.id] = { file, url: uploaded.url, fileKey: uploaded.fileKey, mime: uploaded.mimeType };
           saveBotProgress('questions', 'documentos');
-          markDocUploaded(msgId);
+          markDocUploaded(msgId, uploaded.url, uploaded.mimeType);
           addMsgs({ type: "user", id: uid(), text: `\u2705 ${doc.label} enviado` });
           const required = docs.filter(d => d.isRequired === undefined ? true : d.isRequired === 1);
           const allDone = required.every(d => flowState.current.docFiles[d.id]?.url);
@@ -653,7 +653,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         flowState.current.pixProofUrl = uploaded.url;
         flowState.current.pixProofMime = uploaded.mimeType || file.type || 'image/jpeg';
         setMessages(prev => prev.map(m =>
-          m.type === 'pix-payment' && m.id === msgId ? { ...m, uploaded: true } : m
+          m.type === 'pix-payment' && m.id === msgId ? { ...m, uploaded: true, previewUrl: uploaded.url, previewMime: uploaded.mimeType } : m
         ));
         addMsgs({ type: 'user', id: uid(), text: '\u2705 Comprovante enviado' });
         setTimeout(() => finishWithProduct(product, option), 400);
@@ -900,13 +900,30 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         );
 
       case "doc-upload":
-        if (msg.uploaded) return null;
+        if (msg.uploaded) {
+          const isPdf = msg.previewMime === "application/pdf" || /\.pdf(?:$|\?)/i.test(msg.previewUrl || "");
+          return (
+            <div key={idx} className="ml-10 mb-4 rounded-2xl border-2 border-emerald-400/70 bg-emerald-500/10 p-4 shadow-lg shadow-emerald-500/10">
+              <p className="mb-3 text-sm font-extrabold text-emerald-300">✓ {msg.label} RECEBIDO COM SUCESSO</p>
+              {isPdf ? (
+                <a href={msg.previewUrl} target="_blank" rel="noreferrer" className="flex min-h-20 items-center justify-center rounded-xl border border-emerald-400/40 bg-zinc-950 px-4 text-center text-sm font-bold text-emerald-200">PDF enviado — toque para conferir</a>
+              ) : (
+                <a href={msg.previewUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-emerald-400/40 bg-zinc-950">
+                  <img src={msg.previewUrl} alt={`${msg.label} enviado`} className="h-44 w-full object-contain" />
+                  <p className="border-t border-emerald-400/20 px-3 py-2 text-center text-xs font-bold text-emerald-200">Toque na foto para ampliar e conferir</p>
+                </a>
+              )}
+            </div>
+          );
+        }
         return (
-          <div key={idx} className="ml-10 mb-3">
+          <div key={idx} className="ml-10 mb-4 rounded-2xl border-2 border-cyan-400/70 bg-gradient-to-br from-cyan-500/20 via-blue-500/15 to-violet-500/20 p-4 shadow-xl shadow-cyan-500/10">
+            <p className="mb-1 text-base font-black uppercase tracking-wide text-white">Envie agora: {msg.label}</p>
+            <p className="mb-4 text-sm font-medium text-cyan-100">Toque no botão abaixo para abrir a câmera, a galeria ou os seus arquivos. Máximo 15 MB.</p>
             {uploadingDocId === msg.docId ? (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-xs text-zinc-400">
-                <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-                Enviando...
+              <div className="flex min-h-16 items-center justify-center gap-3 rounded-xl bg-zinc-950/70 px-4 text-sm font-bold text-cyan-200">
+                <div className="h-6 w-6 border-2 border-cyan-300 border-t-transparent rounded-full animate-spin" />
+                ENVIANDO. AGUARDE A CONFIRMAÇÃO...
               </div>
             ) : (
               <button
@@ -914,17 +931,24 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                   pendingUpload.current = { msgId: msg.id, docId: msg.docId };
                   fileInputRef.current?.click();
                 }}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-zinc-700 hover:border-violet-500 text-zinc-400 hover:text-violet-300 text-sm transition-all"
+                className="w-full min-h-[4.5rem] rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-4 text-left text-white shadow-lg shadow-cyan-500/30 transition-all hover:scale-[1.01] hover:from-cyan-400 hover:to-blue-500 active:scale-[0.99]"
               >
-                <Camera className="w-4 h-4" />
-                {msg.label}{!msg.required ? " (opcional)" : ""}
+                <span className="flex items-center gap-3"><Camera className="h-8 w-8 shrink-0" /><span><span className="block text-base font-black uppercase">Toque para enviar {msg.label}</span><span className="mt-0.5 block text-xs font-semibold text-cyan-50">Câmera • Galeria • Arquivos</span></span><ChevronRight className="ml-auto h-6 w-6" /></span>
               </button>
             )}
           </div>
         );
 
       case "pix-payment":
-        if (msg.uploaded) return null;
+        if (msg.uploaded) {
+          const isPdf = msg.previewMime === "application/pdf" || /\.pdf(?:$|\?)/i.test(msg.previewUrl || "");
+          return (
+            <div key={idx} className="ml-10 mb-4 rounded-2xl border-2 border-emerald-400/70 bg-emerald-500/10 p-4 shadow-lg shadow-emerald-500/10">
+              <p className="mb-3 text-sm font-extrabold text-emerald-300">✓ COMPROVANTE PIX RECEBIDO COM SUCESSO</p>
+              {isPdf ? <a href={msg.previewUrl} target="_blank" rel="noreferrer" className="flex min-h-20 items-center justify-center rounded-xl border border-emerald-400/40 bg-zinc-950 px-4 text-center text-sm font-bold text-emerald-200">PDF enviado — toque para conferir</a> : <a href={msg.previewUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-emerald-400/40 bg-zinc-950"><img src={msg.previewUrl} alt="Comprovante Pix enviado" className="h-44 w-full object-contain" /><p className="border-t border-emerald-400/20 px-3 py-2 text-center text-xs font-bold text-emerald-200">Toque na foto para ampliar e conferir</p></a>}
+            </div>
+          );
+        }
         return (
           <div key={idx} className="ml-10 mb-3 space-y-2">
             {/* Card Pix */}
@@ -949,23 +973,26 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               </div>
             </div>
             {/* Upload comprovante */}
-            {uploadingPix ? (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-xs text-zinc-400">
-                <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
-                Enviando comprovante...
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  pendingPixMsgId.current = msg.id;
-                  pixFileInputRef.current?.click();
-                }}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-zinc-700 hover:border-emerald-500 text-zinc-400 hover:text-emerald-300 text-sm transition-all"
-              >
-                <Camera className="w-4 h-4" />
-                Enviar comprovante Pix
-              </button>
-            )}
+            <div className="rounded-2xl border-2 border-amber-300/80 bg-gradient-to-br from-amber-400/20 via-orange-500/15 to-emerald-500/15 p-4 shadow-xl shadow-amber-500/10">
+              <p className="mb-1 text-base font-black uppercase tracking-wide text-amber-100">Último passo: envie o comprovante</p>
+              <p className="mb-4 text-sm font-medium text-amber-50">Depois do pagamento Pix, toque no botão grande abaixo e escolha a foto ou PDF do comprovante. Sem o comprovante, o pedido não pode ser finalizado.</p>
+              {uploadingPix ? (
+                <div className="flex min-h-16 items-center justify-center gap-3 rounded-xl bg-zinc-950/70 px-4 text-sm font-bold text-amber-100">
+                  <Loader2 className="h-6 w-6 animate-spin text-amber-300" />
+                  ENVIANDO COMPROVANTE. AGUARDE...
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    pendingPixMsgId.current = msg.id;
+                    pixFileInputRef.current?.click();
+                  }}
+                  className="w-full min-h-20 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-emerald-600 px-4 py-4 text-left text-zinc-950 shadow-lg shadow-amber-500/40 transition-all hover:scale-[1.01] hover:brightness-110 active:scale-[0.99]"
+                >
+                  <span className="flex items-center gap-3"><Camera className="h-9 w-9 shrink-0" /><span><span className="block text-lg font-black uppercase">Enviar comprovante Pix</span><span className="mt-0.5 block text-xs font-bold">Toque aqui • Foto, galeria ou PDF • Máximo 15 MB</span></span><ChevronRight className="ml-auto h-7 w-7" /></span>
+                </button>
+              )}
+            </div>
           </div>
         );
 
