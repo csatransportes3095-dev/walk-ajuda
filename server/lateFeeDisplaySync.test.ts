@@ -50,6 +50,7 @@ describe("sincronização da tela /gastos", () => {
   const root = path.resolve(process.cwd());
   const loansRouter = fs.readFileSync(path.join(root, "server/routers/loans.ts"), "utf8");
   const clientLoans = fs.readFileSync(path.join(root, "client/src/pages/LoansTab.tsx"), "utf8");
+  const adminLoans = fs.readFileSync(path.join(root, "client/src/pages/AdminLoans.tsx"), "utf8");
 
   it("calcula somente uma prévia para parcela pendente sem taxa persistida", () => {
     expect(loansRouter).toContain('i.originalAmount == null');
@@ -60,6 +61,12 @@ describe("sincronização da tela /gastos", () => {
   it("bloqueia no servidor a taxa manual antes do vencimento", () => {
     expect(loansRouter).toContain("if (dueDate >= getBrazilToday())");
     expect(loansRouter).toContain("Taxa de atraso só pode ser aplicada após o vencimento da parcela.");
+  });
+
+  it("permite pagar somente juros antes do vencimento, sem somar multa", () => {
+    expect(loansRouter).toContain("const isOverdue = dueDate < today;");
+    expect(loansRouter).toContain("const feeApplied = isOverdue ? parseFloat(inst.feeApplied || 0) : 0;");
+    expect(adminLoans).toContain('loan.interestOnlyEnabled && inst.status === "pendente"');
   });
 
   it("atualiza a lista aberta periodicamente e ao voltar para a aba", () => {

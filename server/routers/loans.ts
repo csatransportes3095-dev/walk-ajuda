@@ -2318,7 +2318,7 @@ export const loanRouter = router({
 
   payInterestOnly: adminProcedure.input(z.object({
     loanId: z.number(),
-    installmentId: z.number(), // ID da parcela vencida específica
+    installmentId: z.number(), // ID da parcela pendente escolhida para pagar somente os juros
   })).mutation(async ({ ctx, input }) => {
     const db = await getDb() as any;
     const loans = await qRows(db, drizzleSql`SELECT * FROM loans WHERE id=${input.loanId}`);
@@ -2333,14 +2333,20 @@ export const loanRouter = router({
     if (!instRows.length) throw new TRPCError({ code: "NOT_FOUND", message: "Parcela não encontrada" });
     const inst = instRows[0];
     if (inst.status !== 'pendente') throw new TRPCError({ code: "BAD_REQUEST", message: "Parcela não está pendente" });
-    if (inst.dueDate >= today) throw new TRPCError({ code: "BAD_REQUEST", message: "Parcela ainda não venceu" });
+    const dueDateValue = inst.dueDate;
+    const dueDate = typeof dueDateValue === 'string'
+      ? dueDateValue.slice(0, 10)
+      : new Date(dueDateValue).toISOString().slice(0, 10);
+    // O cliente pode antecipar somente os juros; multa continua aplicável apenas após vencer.
+    const isOverdue = dueDate < today;
 
     const loanPrincipal = parseFloat(loan.amount);
     const totalInstallments = parseInt(loan.installments);
     const interestRate = parseFloat(loan.interestRate);
     // Principal desta parcela = valor total do empréstimo / número de parcelas
     const principalPerInstallment = Math.round((loanPrincipal / totalInstallments) * 100) / 100;
-    const feeApplied = parseFloat(inst.feeApplied || 0);
+    // Mesmo que uma taxa antiga exista no registro, ela nunca compõe o pagamento antecipado de juros.
+    const feeApplied = isOverdue ? parseFloat(inst.feeApplied || 0) : 0;
     const interestOnPrincipal = Math.round(principalPerInstallment * (interestRate / 100) * 100) / 100;
     const totalJuros = Math.round((interestOnPrincipal + feeApplied) * 100) / 100;
     const paidBy = ctx.user?.name || "admin";

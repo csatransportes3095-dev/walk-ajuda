@@ -1212,8 +1212,8 @@ function LoansTab() {
                                 <CheckCircle className="w-4 h-4" />
                                 Pago Manual
                               </button>
-                              {/* Botão Cobrar Juros - aparece em parcelas vencidas OU no dia do vencimento com interestOnly ativado */}
-                              {loan.interestOnlyEnabled && (inst.isOverdue || isVenceHoje) ? (
+                              {/* Pagamento somente de juros pode ser antecipado enquanto a parcela estiver pendente. */}
+                              {loan.interestOnlyEnabled && inst.status === "pendente" ? (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
                                   onClick={() => setInterestOnlyInstModal({ inst, loan })}>
