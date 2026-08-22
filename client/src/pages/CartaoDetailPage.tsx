@@ -311,7 +311,9 @@ export default function CartaoDetailPage() {
   } | undefined;
   const statusFaturaAtual = faturaAtualInvoice?.status ?? "ABERTA";
   const faturaAtualOriginal = Number(faturaAtualInvoice?.originalAmount ?? faturaDoMes);
-  const faturaAtualPago = Number(faturaAtualInvoice?.paidAmount ?? 0) + Number(faturaAtualInvoice?.legacyPaidAmount ?? 0);
+  // Fontes separadas: só cc_pagamentos é pagamento registrado; baixa antiga não é comprovante de pagamento.
+  const faturaAtualPagamentosRegistrados = Number(faturaAtualInvoice?.paidAmount ?? 0);
+  const faturaAtualBaixasAntigas = Number(faturaAtualInvoice?.legacyPaidAmount ?? 0);
   const faturaAtualCompetencia = competenciaLabel(faturaAtualInvoice?.competencia);
 
   // Fatura fechada: quando hoje > fechamentoDia, a fatura está fechada aguardando pagamento
@@ -348,6 +350,10 @@ export default function CartaoDetailPage() {
   const faturaFechadaValor = Number(faturaFechadaInfo?.valor ?? 0);
 
   const pagamentosOrdenados = [...pagamentos].sort((a: any, b: any) => new Date(b.dataPagamento).getTime() - new Date(a.dataPagamento).getTime());
+  // Se existe pagamento registrado para a mesma fatura vencida, não oferecer nova cobrança enquanto a API concilia o status.
+  const faturaEmAtrasoComPagamentoRegistrado = isFaturaEmAtraso && pagamentos.some((pagamento: any) =>
+    Number(pagamento.invoiceId) === faturaEmAtrasoInvoiceId && Number(pagamento.valorPago || 0) >= faturaEmAtrasoValor
+  );
   const parcelamentosAtivos = parcelamentos.filter((p: any) => p.parcelasRestantes > 0);
 
   // Agrupa gastos: parcelados por parcelamentoId, avulsos separados
@@ -502,10 +508,15 @@ export default function CartaoDetailPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, borderTop: "1px solid rgba(255,255,255,0.1)", marginTop: 10, paddingTop: 9 }}>
                 {[
                   { label: "Total", value: fmt(faturaAtualOriginal), color: "#fff" },
-                  { label: "Já pago", value: fmt(faturaAtualPago), color: faturaAtualPago > 0 ? "#B9F6CA" : "rgba(255,255,255,0.58)" },
-                  { label: "Saldo", value: fmt(faturaDoMes), color: "#FFCDD2" },
+                  { label: "Pagamentos", value: fmt(faturaAtualPagamentosRegistrados), color: faturaAtualPagamentosRegistrados > 0 ? "#B9F6CA" : "rgba(255,255,255,0.58)" },
+                  { label: "Saldo exibido", value: fmt(faturaDoMes), color: "#FFCDD2" },
                 ].map(item => <div key={item.label}><div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", textTransform: "uppercase" }}>{item.label}</div><div style={{ fontSize: 12, fontWeight: 800, color: item.color, marginTop: 2 }}>{item.value}</div></div>)}
               </div>
+              {faturaAtualBaixasAntigas > 0 && (
+                <div style={{ marginTop: 9, padding: "8px 9px", borderRadius: 9, background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", color: "#fde68a", fontSize: 10, lineHeight: 1.4 }}>
+                  <strong>Conferência necessária:</strong> há {fmt(faturaAtualBaixasAntigas)} em baixas antigas sem pagamento registrado. Esse valor não é chamado de pagamento e nenhum saldo será alterado automaticamente.
+                </div>
+              )}
             </div>
           )}
 
@@ -542,11 +553,17 @@ export default function CartaoDetailPage() {
               <div style={{ fontSize: 10, color: "rgba(239,68,68,0.7)", textTransform: "uppercase" }}>a pagar</div>
             </div>
           </div>
-          <button onClick={() => setShowPagar(true)}
-            style={{ width: "100%", height: 50, borderRadius: 12, border: "none", background: "#ef4444", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 16px rgba(239,68,68,0.4)" }}>
-            <CheckCircle size={18} />
-            Paguei a Fatura — {fmt(faturaEmAtrasoValor)}
-          </button>
+          {faturaEmAtrasoComPagamentoRegistrado ? (
+            <div style={{ borderRadius: 12, padding: "11px 12px", background: "rgba(59,130,246,0.12)", border: "1px solid rgba(96,165,250,0.35)", color: "#bfdbfe", fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>
+              Pagamento de {fmt(faturaEmAtrasoValor)} já está registrado. A fatura está em conferência; não registre ou pague novamente.
+            </div>
+          ) : (
+            <button onClick={() => setShowPagar(true)}
+              style={{ width: "100%", height: 50, borderRadius: 12, border: "none", background: "#ef4444", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'Roboto',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 16px rgba(239,68,68,0.4)" }}>
+              <CheckCircle size={18} />
+              Paguei a Fatura — {fmt(faturaEmAtrasoValor)}
+            </button>
+          )}
         </div>
       )}
 
