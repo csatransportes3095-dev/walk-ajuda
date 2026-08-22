@@ -115,6 +115,9 @@ import WhatsAppFloat from "./components/WhatsAppFloat";
 import { useAdminAuth } from "./hooks/useAdminAuth";
 import { useAdminIdleLogout } from "./hooks/useAdminIdleLogout";
 import { useAntiPrint } from "./hooks/useAntiPrint";
+import { trpc } from "@/lib/trpc";
+import { MaintenanceManifestGate } from "@/components/MaintenanceManifestGate";
+import { isMaintenanceManifestActiveForPath } from "@shared/maintenanceManifest";
 
 // Guard para rotas admin — redireciona para /admin/login se não autenticado
 function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -350,6 +353,16 @@ function AppContent() {
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
   const isLocadoraRoute = location === "/locadora" || location === "/locadora/";
   const isLocadoraBrandRoute = location === "/locadora" || location.startsWith("/locadora/") || location.startsWith("/admin/locadora");
+  const maintenanceManifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
+    enabled: !isAdminRoute,
+    staleTime: 15_000,
+    refetchInterval: !isAdminRoute ? 30_000 : false,
+    refetchOnWindowFocus: true,
+  });
+  const maintenanceManifest = maintenanceManifestQuery.data;
+  const showMaintenanceManifest = maintenanceManifest
+    ? isMaintenanceManifestActiveForPath(maintenanceManifest, location)
+    : false;
 
   // Proteção anti-print para rotas de cliente
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || undefined : undefined;
@@ -408,6 +421,11 @@ function AppContent() {
   // 🔧 MODO MANUTENÇÃO — bloqueia todas as rotas públicas
   if (MAINTENANCE_MODE) {
     return <MaintenancePage />;
+  }
+
+  // O manifesto bloqueia somente as rotas escolhidas pelo ADM; demais rotas seguem inalteradas.
+  if (showMaintenanceManifest && maintenanceManifest) {
+    return <MaintenanceManifestGate config={maintenanceManifest} />;
   }
 
   // Rota /gastos é pública — sem senha

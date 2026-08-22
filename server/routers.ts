@@ -48,6 +48,7 @@ import { privateTransportRouter } from "./routers/privateTransport";
 import { locadoraRouter } from "./routers/locadora";
 import { h2AssistantRouter } from "./routers/h2Assistant";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
+import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "./_core/sendMailDirect";
@@ -1132,6 +1133,29 @@ export const appRouter = router({
         }
         return { id: draftId, audioUrl: url, mimeType: inspected.mimeType, durationSeconds: Math.round(input.durationSeconds) };
       }),
+  }),
+
+  maintenanceManifest: router({
+    get: publicProcedure.query(async () => {
+      const stored = await getSetting("maintenance_manifest");
+      return parseMaintenanceManifest(stored);
+    }),
+    update: adminProcedure
+      .input(z.object({
+        enabled: z.boolean(),
+        routeIds: z.array(z.enum(["home", "login", "loan", "gastos"])),
+        eyebrow: z.string().max(64),
+        title: z.string().max(120),
+        message: z.string().max(600),
+        startsAt: z.string().max(32),
+        expectedReturnAt: z.string().max(32),
+      }))
+      .mutation(async ({ input }) => {
+        const sanitized = parseMaintenanceManifest(JSON.stringify(input));
+        await upsertSetting("maintenance_manifest", JSON.stringify(sanitized));
+        return sanitized;
+      }),
+    availableRoutes: publicProcedure.query(() => MAINTENANCE_ROUTE_OPTIONS),
   }),
 
   // === CONFIGURAÍ"¡Í"¢ES DO SITE ===

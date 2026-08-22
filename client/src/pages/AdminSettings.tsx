@@ -2,11 +2,12 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Save, Globe, CreditCard, Layout, MessageSquare, Star, Clock, LogIn, Upload, Trash2, Eye, EyeOff, Camera, ShieldCheck, Share2, ImageIcon, Plus, CheckCircle2, Circle, Pencil, X, Check, Smartphone, Info, RotateCcw } from "lucide-react";
+import { Save, Globe, CreditCard, Layout, MessageSquare, Star, Clock, LogIn, Upload, Trash2, Eye, EyeOff, Camera, ShieldCheck, Share2, ImageIcon, Plus, CheckCircle2, Circle, Pencil, X, Check, Smartphone, Info, RotateCcw, Wrench } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import { ImageCropModal } from "@/components/ImageCropModal";
 import { HomeButtonsManager } from "@/components/HomeButtonsManager";
 import { SharePreviewSettings } from "@/components/SharePreviewSettings";
+import { MaintenanceManifestSettings } from "@/components/MaintenanceManifestSettings";
 
 
 // Lista de fontes com estilos bem distintos
@@ -84,7 +85,7 @@ export default function AdminSettings() {
   const [editPix, setEditPix] = useState<{ label: string; pixKey: string; pixType: string; pixName: string; pixBank: string }>({ label: '', pixKey: '', pixType: 'TELEFONE', pixName: '', pixBank: '' });
 
   const [form, setForm] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<"page" | "login" | "pix" | "contact" | "features" | "advanced" | "photo" | "security" | "og" | "trackingForm" | "whatsappOrder" | "whatsappLogin" | "apk">("page");
+  const [activeTab, setActiveTab] = useState<"page" | "login" | "pix" | "contact" | "features" | "advanced" | "photo" | "security" | "og" | "trackingForm" | "whatsappOrder" | "whatsappLogin" | "apk" | "maintenance">("page");
   const [apkFile, setApkFile] = useState<File | null>(null);
   const [uploadingApk, setUploadingApk] = useState(false);
   const [apkUrl, setApkUrl] = useState<string | null>(null);
@@ -361,6 +362,7 @@ export default function AdminSettings() {
     { id: "photo" as const, label: "Foto de Perfil", icon: Camera },
     { id: "security" as const, label: "Segurança", icon: ShieldCheck },
     { id: "og" as const, label: "Compartilhamento", icon: Share2 },
+    { id: "maintenance" as const, label: "Manutenção", icon: Wrench },
     { id: "trackingForm" as const, label: "Form. Acompanhamento", icon: MessageSquare },
     { id: "whatsappOrder" as const, label: "WhatsApp Pedidos", icon: Smartphone },
     { id: "whatsappLogin" as const, label: "WhatsApp Login", icon: Smartphone },
@@ -1415,6 +1417,9 @@ export default function AdminSettings() {
         {activeTab === "og" && (
           <SharePreviewSettings />
         )}
+
+        {/* MAINTENANCE MANIFEST TAB */}
+        {activeTab === "maintenance" && <MaintenanceManifestSettings />}
 
         {/* === ABA: FORMULÁRIO DE ACOMPANHAMENTO === */}
         {activeTab === 'trackingForm' && (
