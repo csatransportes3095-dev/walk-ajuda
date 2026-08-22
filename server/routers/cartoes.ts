@@ -573,22 +573,34 @@ export const cartoesRouter = router({
 
     // Pagamentos novos sempre pertencem à fatura exata selecionada.
     create: ccProtected
-      .input(z.object({ cartaoId: z.number().int(), invoiceId: z.number().int(), valorPago: z.number().positive(), observacao: z.string().max(200).optional() }))
+      .input(z.object({
+        cartaoId: z.number().int(),
+        invoiceId: z.number().int(),
+        valorPago: z.number().positive(),
+        observacao: z.string().max(200).optional(),
+        dataPagamento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de pagamento inválida").optional(),
+      }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
         const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
         if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
-        const fatura = await markInvoiceAsPaid(input.invoiceId, input.cartaoId, input.valorPago, input.observacao);
+        const fatura = await markInvoiceAsPaid(input.invoiceId, input.cartaoId, input.valorPago, input.observacao, input.dataPagamento);
         return { success: true, invoice: fatura };
       }),
 
     pagar: ccProtected
-      .input(z.object({ cartaoId: z.number().int(), invoiceId: z.number().int(), valorPago: z.number().positive(), observacao: z.string().max(200).optional() }))
+      .input(z.object({
+        cartaoId: z.number().int(),
+        invoiceId: z.number().int(),
+        valorPago: z.number().positive(),
+        observacao: z.string().max(200).optional(),
+        dataPagamento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de pagamento inválida").optional(),
+      }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
         const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
         if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
-        const fatura = await markInvoiceAsPaid(input.invoiceId, input.cartaoId, input.valorPago, input.observacao);
+        const fatura = await markInvoiceAsPaid(input.invoiceId, input.cartaoId, input.valorPago, input.observacao, input.dataPagamento);
         return { success: true, invoice: fatura, parcelasMarcadas: fatura.status === "PAGA" ? 1 : 0 };
       }),
 

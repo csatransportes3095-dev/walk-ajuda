@@ -112,6 +112,9 @@ export default function CartaoHistoricoPage() {
                     {fatura.gastos?.length > 0 && (
                       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>{fatura.gastos.length} lançamento{fatura.gastos.length !== 1 ? 's' : ''}</div>
                     )}
+                    {fatura.saldo > 0 && Number(fatura.saldo) !== Number(fatura.total) && (
+                      <div style={{ fontSize: 10, color: cfg.color, fontWeight: 700, marginTop: 2 }}>Saldo: {fmt(fatura.saldo)}</div>
+                    )}
                   </div>
                   {true && (
                     <div style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }}>
@@ -180,6 +183,13 @@ export default function CartaoHistoricoPage() {
                         <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>Total pago</span>
                         <span style={{ fontSize: 14, fontWeight: 800, color: "#10b981" }}>{fmt(fatura.totalPago)}</span>
                       </div>
+                    )}
+                    {fatura.saldo > 0 && (
+                      <button
+                        onClick={() => navigate(`/cartoes/cartao/${cartaoId}?pagar=${fatura.invoiceId}`)}
+                        style={{ width: "100%", height: 42, marginTop: 14, border: "none", borderRadius: 11, background: fatura.status === "VENCIDA" ? "#ef4444" : "#1565C0", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                        <CheckCircle size={16} /> {fatura.status === "VENCIDA" ? `Registrar pagamento vencido — ${fmt(fatura.saldo)}` : `Registrar pagamento — ${fmt(fatura.saldo)}`}
+                      </button>
                     )}
                   </div>
                 )}

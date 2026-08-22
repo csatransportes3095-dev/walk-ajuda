@@ -247,7 +247,7 @@ export async function getOverdueInvoices(cardId: number) {
   return overdue;
 }
 
-export async function markInvoiceAsPaid(invoiceId: number, cartaoId: number, amount: number, observacao?: string) {
+export async function markInvoiceAsPaid(invoiceId: number, cartaoId: number, amount: number, observacao?: string, dataPagamento?: string) {
   const invoiceRows = await exec(`SELECT * FROM cc_faturas WHERE id = ${invoiceId} AND cartaoId = ${cartaoId} LIMIT 1`);
   const invoice = invoiceRows[0] as any;
   if (!invoice) throw new Error("Fatura não encontrada para este cartão");
@@ -256,7 +256,10 @@ export async function markInvoiceAsPaid(invoiceId: number, cartaoId: number, amo
   if (remaining <= 0) throw new Error("Esta fatura já está paga");
   if (Math.round(amount * 100) > Math.round(remaining * 100)) throw new Error("O pagamento não pode ser maior que o saldo da fatura");
 
-  await exec(`INSERT INTO cc_pagamentos (cartaoId, invoiceId, valorPago, observacao) VALUES (${cartaoId}, ${invoiceId}, ${amount}, ${sqlValue(observacao || null)})`);
+  // A data é aplicada apenas ao novo registro de pagamento; nenhuma fatura ou lançamento anterior é reprocessado.
+  const paymentTimestamp = dataPagamento ? `${dataPagamento} 12:00:00` : null;
+  await exec(`INSERT INTO cc_pagamentos (cartaoId, invoiceId, valorPago, observacao, dataPagamento)
+    VALUES (${cartaoId}, ${invoiceId}, ${amount}, ${sqlValue(observacao || null)}, ${paymentTimestamp ? sqlValue(paymentTimestamp) : "NOW()"})`);
   const updated = await refreshInvoice(invoiceId);
   if (updated.status === "PAGA") {
     await exec(`UPDATE cc_gastos SET paga = 1, dataOriginal = COALESCE(dataOriginal, data), data = NOW() WHERE invoiceId = ${invoiceId}`);
