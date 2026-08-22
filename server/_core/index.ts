@@ -213,26 +213,14 @@ async function startServer() {
 
   app.get("/video/:slug", async (req, res) => {
     const { slug } = req.params;
-    // O tutorial precisa ser tratado antes da consulta de mídia dinâmica para não redirecionar para si mesmo.
+    // O preview do tutorial é entregue antes de o navegador abrir o player SPA.
+    // Assim o WhatsApp não depende da credencial de streaming para construir a miniatura.
     if (slug === "tutorial") {
-      try {
-        const { ENV } = await import('./env');
-        const forgeUrl = new URL("v1/storage/presign/get", ENV.forgeApiUrl!.replace(/\/+$/, "") + "/");
-        forgeUrl.searchParams.set("path", "tutorial_27dcff60.mp4");
-        const forgeResp = await fetch(forgeUrl, { headers: { Authorization: `Bearer ${ENV.forgeApiKey}` } });
-        if (!forgeResp.ok) { res.status(502).send("Erro ao obter vídeo"); return; }
-        const { url } = await forgeResp.json() as { url: string };
-        if (!url) { res.status(502).send("URL inválida"); return; }
-        const canonicalUrl = publicSiteUrl("/video/tutorial");
-        const preview = await getPublicPreviewMeta("tutorial", canonicalUrl);
-        res.set('Content-Type', 'text/html; charset=utf-8');
-        res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(preview.profile.title)}</title>${renderPublicPreviewTags(preview)}<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}video{width:100%;max-width:900px;max-height:100vh}</style></head><body><video controls autoplay playsinline preload="metadata"><source src="${escapeHtml(url)}" type="video/mp4">Seu browser não suporta vídeo HTML5.</video></body></html>`);
-        return;
-      } catch (err) {
-        console.error('[VideoRoute] tutorial error:', err);
-        res.status(500).send("Erro interno");
-        return;
-      }
+      const canonicalUrl = publicSiteUrl("/video/tutorial");
+      const preview = await getPublicPreviewMeta("tutorial", canonicalUrl);
+      res.set('Content-Type', 'text/html; charset=utf-8');
+      res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(preview.profile.title)}</title>${renderPublicPreviewTags(preview)}<meta http-equiv="refresh" content="0;url=/tutorial"><style>body{font-family:system-ui,sans-serif;background:#070711;color:#fff;min-height:100vh;display:grid;place-items:center;margin:0}p{color:#bcb9d6}</style></head><body><p>Abrindo tutorial…</p><script>window.location.replace('/tutorial')</script></body></html>`);
+      return;
     }
     try {
       const { getDb } = await import('../db');
