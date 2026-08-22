@@ -56,14 +56,21 @@ export default function DashboardPage() {
   });
 
   const nome = ((user as any)?.name || "Usuário").split(" ")[0];
-  // O frontend apenas apresenta as faturas que o backend classificou com datas reais.
+  // Exibe alerta somente quando não existe pagamento real integral registrado para a mesma fatura.
+  const faturaTemPagamentoIntegral = (card: any, invoice: any) =>
+    (card.pagamentosFaturas || []).some((pagamento: any) =>
+      Number(pagamento.invoiceId) === Number(invoice.id) && Number(pagamento.totalPago || 0) >= Number(invoice.remainingAmount || 0)
+    );
   const alertas = cartoes.flatMap((c: any) =>
-    ((c.faturasVencidas || []) as any[]).map((invoice) => ({ card: c, invoice }))
+    ((c.faturasVencidas || []) as any[])
+      .filter((invoice) => !faturaTemPagamentoIntegral(c, invoice))
+      .map((invoice) => ({ card: c, invoice }))
   );
   const totalFatura = cartoes.reduce((total: number, c: any) => {
     const invoiceIds = new Set<number>();
     let subtotal = 0;
     for (const invoice of (c.faturasVencidas || []) as any[]) {
+      if (faturaTemPagamentoIntegral(c, invoice)) continue;
       if (!invoiceIds.has(Number(invoice.id))) {
         subtotal += Number(invoice.remainingAmount || 0);
         invoiceIds.add(Number(invoice.id));
@@ -178,8 +185,12 @@ export default function DashboardPage() {
           cartoes.map((c) => {
             const grad = GRADIENTS[c.corCartao] || GRADIENTS.purple;
             const shadow = SHADOWS[c.corCartao] || SHADOWS.purple;
-            const faturaEmAtrasoInfo = (c as any).faturaEmAtraso as { valor: number; diasAtraso: number } | null;
-            const emAtraso = faturaEmAtrasoInfo ? Number(faturaEmAtrasoInfo.valor ?? 0) : 0;
+            const faturaEmAtrasoInfo = (c as any).faturaEmAtraso as { valor: number; diasAtraso: number; invoiceId?: number } | null;
+            const atrasoQuitadoRegistrado = faturaEmAtrasoInfo && faturaTemPagamentoIntegral(c, {
+              id: faturaEmAtrasoInfo.invoiceId,
+              remainingAmount: faturaEmAtrasoInfo.valor,
+            });
+            const emAtraso = !atrasoQuitadoRegistrado && faturaEmAtrasoInfo ? Number(faturaEmAtrasoInfo.valor ?? 0) : 0;
             const faturaDoMes = Number((c as any).faturaAtual ?? 0);
             const faturaTotal = emAtraso + faturaDoMes; // total a pagar
             const mesSeguinte = Number((c as any).proximaFatura ?? 0);

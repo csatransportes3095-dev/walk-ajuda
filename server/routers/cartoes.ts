@@ -325,7 +325,20 @@ export const cartoesRouter = router({
       const lista = await ccExec(`SELECT * FROM cc_cartoes WHERE userId = ${userId}`);
       return Promise.all(lista.map(async (c: any) => {
         const calc = await calcCartao(c);
-        return { ...c, limiteTotal: parseFloat(c.limiteTotal), ...calc };
+        // Leitura exclusiva: expõe os pagamentos reais por fatura para o painel não alertar uma cobrança já registrada.
+        const pagamentosFaturas = await ccExec(`SELECT invoiceId, ROUND(SUM(valorPago), 2) AS totalPago
+          FROM cc_pagamentos
+          WHERE cartaoId = ${Number(c.id)} AND invoiceId IS NOT NULL
+          GROUP BY invoiceId`);
+        return {
+          ...c,
+          limiteTotal: parseFloat(c.limiteTotal),
+          ...calc,
+          pagamentosFaturas: pagamentosFaturas.map((p: any) => ({
+            invoiceId: Number(p.invoiceId),
+            totalPago: parseFloat(p.totalPago || 0),
+          })),
+        };
       }));
     }),
 
