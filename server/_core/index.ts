@@ -143,6 +143,14 @@ async function startServer() {
     next();
   });
 
+  // Link exclusivo de compartilhamento: força uma nova leitura do WhatsApp sem alterar o acesso real.
+  app.get("/link/acompanhamento", async (_req, res) => {
+    const canonicalUrl = publicSiteUrl("/link/acompanhamento");
+    const preview = await getPublicPreviewMeta("tracking", canonicalUrl);
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(preview.profile.title)}</title>${renderPublicPreviewTags(preview)}<meta http-equiv="refresh" content="0;url=/acompanhar"><style>body{font-family:system-ui,sans-serif;background:#070711;color:#fff;min-height:100vh;display:grid;place-items:center;margin:0}p{color:#bcb9d6}</style></head><body><p>Abrindo acompanhamento…</p><script>window.location.replace('/acompanhar')</script></body></html>`);
+  });
+
   // Rota dinâmica de vídeos â€” busca fileKey no banco pelo slug
   // Rota pública para imagens com slug amigável: /foto/:slug
   // Proxy público da imagem para WhatsApp preview (og:image)

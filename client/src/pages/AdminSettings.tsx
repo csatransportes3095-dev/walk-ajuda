@@ -1943,7 +1943,7 @@ Olá, *{nome}*! 👋
 • Cidade: {cidade}
 
 Acompanhe seu pedido em:
-https://walkajuda.com/acompanhar
+https://h2colombiano.com/link/acompanhamento
 
 🔐 *Senha de acesso:* {senha}
 ⚠️ _Não compartilhe esta senha com ninguém para evitar bloqueios de acesso._`;
@@ -2231,7 +2231,7 @@ Seu pedido já foi liberado.
 
 ⚠️ IMPORTANTE: Os dados de acesso não são enviados por mensagem. Eles devem ser resgatados exclusivamente através do site abaixo:
 
-🌐 https://walkajuda.com/acompanhar
+🌐 https://h2colombiano.com/link/acompanhamento
 
 🔐 *Senha de acesso:* {senha}
 ⚠️ _Não compartilhe esta senha com ninguém para evitar bloqueios de acesso._

@@ -2,6 +2,7 @@ import { getSettings } from "./db";
 
 export const SHARE_PREVIEW_PROFILE_IDS = [
   "institutional",
+  "tracking",
   "schedule",
   "quote",
   "receipt",
@@ -34,6 +35,15 @@ const PROFILE_DEFAULTS: Record<SharePreviewProfileId, SharePreviewDefaults> = {
     description: "Página inicial, acompanhamento, login e links públicos gerais.",
     title: "H2 COLOMBIANO",
     summary: "Atendimento rápido para motoristas de app.",
+    imageUrl: H2_SHIELD_IMAGE,
+    imageType: "image/png",
+  },
+  tracking: {
+    id: "tracking",
+    label: "Acompanhamento",
+    description: "Link enviado pelo WhatsApp para acompanhar o pedido.",
+    title: "Acompanhe seu pedido — H2 COLOMBIANO",
+    summary: "Consulte o andamento do seu pedido com segurança.",
     imageUrl: H2_SHIELD_IMAGE,
     imageType: "image/png",
   },
@@ -161,6 +171,7 @@ export function inferImageType(imageUrl: string): string {
 
 export function sharePreviewProfileForPath(requestPath: string): SharePreviewProfileId {
   const pathname = `/${String(requestPath || "/").split("?")[0].replace(/^\/+/, "")}`;
+  if (pathname === "/link/acompanhamento" || pathname === "/acompanhar") return "tracking";
   if (/^\/agendar\/[a-f0-9]{32}$/i.test(pathname)) return "schedule";
   if (/^\/orcamento\/[^/]+$/i.test(pathname)) return "quote";
   if (/^\/recibo\/[^/]+$/i.test(pathname)) return "receipt";

@@ -10,6 +10,8 @@ import {
 describe("perfis de miniatura de links", () => {
   it("separa cada rota pública no perfil correto", () => {
     expect(sharePreviewProfileForPath("/")).toBe("institutional");
+    expect(sharePreviewProfileForPath("/acompanhar")).toBe("tracking");
+    expect(sharePreviewProfileForPath("/link/acompanhamento")).toBe("tracking");
     expect(sharePreviewProfileForPath("/agendar/c7b4264b374bca4a9aecb6af7e2e88ec")).toBe("schedule");
     expect(sharePreviewProfileForPath("/orcamento/token-publico")).toBe("quote");
     expect(sharePreviewProfileForPath("/recibo/token-publico")).toBe("receipt");
@@ -20,8 +22,11 @@ describe("perfis de miniatura de links", () => {
 
   it("usa o escudo H2 existente como padrão sem herdar arte antiga", () => {
     const profile = defaultSharePreviewProfile("schedule");
+    const tracking = defaultSharePreviewProfile("tracking");
     expect(profile.imageUrl).toBe(SHARE_PREVIEW_H2_SHIELD);
     expect(profile.title).toBe("Agendamento — H2 COLOMBIANO");
+    expect(tracking.imageUrl).toBe(SHARE_PREVIEW_H2_SHIELD);
+    expect(tracking.title).toBe("Acompanhe seu pedido — H2 COLOMBIANO");
   });
 
   it("mantém alterações isoladas em cada perfil", () => {

@@ -17,7 +17,7 @@ import { useTimezone } from "@/hooks/useTimezone";
 import { NotesTab } from "@/components/NotesTab";
 import { AuthenticatorQrAdminField, type PendingQr } from "@/components/AuthenticatorQrAdminField";
 import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
-import { normalizePublicSiteLinks, publicSiteUrl } from "@shared/publicLinks";
+import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl, publicTrackingShareUrl } from "@shared/publicLinks";
 
 type OrderStatus = "recebido" | "pagamento_recebido" | "em_andamento" | "em_montagem" | "documentos_aprovados" | "conta_ativa" | "aguardando_ativa" | "pedido_entregue" | "cancelado";
 
@@ -3969,7 +3969,7 @@ export default function AdminOrders() {
                                                     {saveLoginDataMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-lime-300" />Salvando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Dados de Login</>)}
                                                   </button>
                                                   {waPhone && hasLoginData && (
-                                                    <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent(`🔐 Seus dados de acesso estão prontos! Acesse: ${publicSiteUrl('/acompanhar')}`)}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
+                                                    <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent(`🔐 Seus dados de acesso estão prontos! Acesse: ${publicTrackingShareUrl()}`)}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
                                                       <MessageCircle className="w-3.5 h-3.5" />WhatsApp
                                                     </a>
                                                   )}
@@ -4431,7 +4431,7 @@ export default function AdminOrders() {
                                                                 {saveLoginDataMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-lime-300" />Salvando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Dados de Login</>)}
                                                               </button>
                                                               {waPhone && hasLoginData && (
-                                                                <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent(`🔐 Seus dados de acesso estão prontos! Acesse: ${publicSiteUrl('/acompanhar')}`)}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
+                                                                <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent(`🔐 Seus dados de acesso estão prontos! Acesse: ${publicTrackingShareUrl()}`)}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
                                                                   <MessageCircle className="w-3.5 h-3.5" />WhatsApp
                                                                 </a>
                                                               )}
@@ -5924,7 +5924,7 @@ export default function AdminOrders() {
                         // Usar template editável se disponível, senão usar mensagem padrão
                         let msg: string;
                         if (waOrderTemplate) {
-                          msg = normalizePublicSiteLinks(waOrderTemplate
+                          msg = normalizeWhatsAppTrackingLinks(waOrderTemplate
                             .replace(/\{nome\}/gi, clientName)
                             .replace(/\{status\}/gi, statusLabel)
                             .replace(/\{descricao_status\}/gi, cleanDesc)
@@ -5959,7 +5959,7 @@ export default function AdminOrders() {
                           }
                           if (observacao) { linhas.push(`*Observação:* _${observacao}_`); linhas.push(``); }
                           linhas.push(`Acompanhe seu pedido em:`);
-                          linhas.push(publicSiteUrl('/acompanhar'));
+                          linhas.push(publicTrackingShareUrl());
                           if (pinForWa) {
                             linhas.push(``);
                             linhas.push(`🔐 *Senha de acesso:* ${pinForWa}`);
@@ -6027,7 +6027,7 @@ export default function AdminOrders() {
                           const ANO = String(now.getFullYear());
                           // Usar template do banco se disponível
                           if (waLoginTemplate) {
-                            return normalizePublicSiteLinks(waLoginTemplate
+                            return normalizeWhatsAppTrackingLinks(waLoginTemplate
                               .replace(/\{nome\}/g, nome)
                               .replace(/\{senha\}/g, pinLogin)
                               .replace(/\{telefone\}/g, telefone)
@@ -6045,7 +6045,7 @@ export default function AdminOrders() {
                           linhas.push(``);
                           linhas.push(`⚠️ IMPORTANTE: Os dados de acesso não são enviados por mensagem. Eles devem ser resgatados exclusivamente através do site abaixo:`);
                           linhas.push(``);
-                          linhas.push(`🌐 ${publicSiteUrl('/acompanhar')}`);
+                          linhas.push(`🌐 ${publicTrackingShareUrl()}`);
                           if (pinLogin) {
                             linhas.push(``);
                             linhas.push(`🔐 *Senha de acesso:* ${pinLogin}`);

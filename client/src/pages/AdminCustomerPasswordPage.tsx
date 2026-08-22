@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
+import { publicTrackingShareUrl } from '@shared/publicLinks';
 
 export default function AdminCustomerPasswordPage() {
   const [searchPhone, setSearchPhone] = useState('');
@@ -98,7 +99,7 @@ export default function AdminCustomerPasswordPage() {
       `Sua senha de acesso ao sistema foi liberada com sucesso e já está ativa.`,
       ``,
       `━━━━━━━━━━━━━━━━━━━`,
-      `🌐 *Acesse agora:* https://walkajuda.com/acompanhar`,
+      `🌐 *Acesse agora:* ${publicTrackingShareUrl()}`,
       `━━━━━━━━━━━━━━━━━━━`,
       ``,
       `📱 *Como acessar:*`,
