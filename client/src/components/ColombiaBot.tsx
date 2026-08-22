@@ -35,11 +35,11 @@ type ProductDocument = {
 // ── Mensagem do chat ─────────────────────────────────────────────────────────
 
 type ChatMsg =
-  | { type: "bot"; id: string; text: string; audioUrl?: string | null; hideText?: boolean }
+  | { type: "bot"; id: string; text: string; audioUrl?: string | null; hideText?: boolean; questionLevel?: "principal" | "sub" }
   | { type: "user"; id: string; text: string }
-  | { type: "options"; id: string; options: string[]; answered: boolean }
-  | { type: "input"; id: string; multiline: boolean; answered: boolean }
-  | { type: "audio-input"; id: string; question: ProductQuestion; answered: boolean }
+  | { type: "options"; id: string; options: string[]; answered: boolean; questionLevel?: "principal" | "sub" }
+  | { type: "input"; id: string; multiline: boolean; answered: boolean; questionLevel?: "principal" | "sub" }
+  | { type: "audio-input"; id: string; question: ProductQuestion; answered: boolean; questionLevel?: "principal" | "sub" }
   | { type: "doc-upload"; id: string; docId: number; label: string; required: boolean; uploaded: boolean; previewUrl?: string; previewMime?: string }
   | { type: "pix-payment"; id: string; pixKey: string; pixName: string; pixBank: string; price: string; uploaded: boolean; previewUrl?: string; previewMime?: string }
   | { type: "action"; id: string; label: string; done: boolean };
@@ -487,9 +487,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         saveBotProgress('questions', 'dados');
         setTimeout(() => askQuestions(product, option, newAnswers), 200);
       };
+      const questionLevel = nextQ.parentQuestionId ? "sub" as const : "principal" as const;
       addMsgs(
-        { type: "bot", id: uid(), text: nextQ.question, audioUrl: nextQ.questionPresentation === 'audio' ? nextQ.questionAudioUrl : null, hideText: nextQ.questionPresentation === 'audio' && nextQ.showQuestionTextWithAudio !== 1 },
-        { type: "audio-input", id: msgId, question: nextQ, answered: false }
+        { type: "bot", id: uid(), text: nextQ.question, audioUrl: nextQ.questionPresentation === 'audio' ? nextQ.questionAudioUrl : null, hideText: nextQ.questionPresentation === 'audio' && nextQ.showQuestionTextWithAudio !== 1, questionLevel },
+        { type: "audio-input", id: msgId, question: nextQ, answered: false, questionLevel }
       );
     } else if (nextQ.fieldType === "select" && nextQ.options) {
       const opts = parseOptions(nextQ.options);
@@ -502,9 +503,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         // Continuar com as novas respostas — sub-perguntas serão recalculadas
         setTimeout(() => askQuestions(product, option, newAnswers), 300);
       };
+      const questionLevel = nextQ.parentQuestionId ? "sub" as const : "principal" as const;
       addMsgs(
-        { type: "bot", id: uid(), text: nextQ.question, audioUrl: nextQ.questionPresentation === 'audio' ? nextQ.questionAudioUrl : null, hideText: nextQ.questionPresentation === 'audio' && nextQ.showQuestionTextWithAudio !== 1 },
-        { type: "options", id: msgId, options: opts, answered: false }
+        { type: "bot", id: uid(), text: nextQ.question, audioUrl: nextQ.questionPresentation === 'audio' ? nextQ.questionAudioUrl : null, hideText: nextQ.questionPresentation === 'audio' && nextQ.showQuestionTextWithAudio !== 1, questionLevel },
+        { type: "options", id: msgId, options: opts, answered: false, questionLevel }
       );
     } else {
       callbacks.current[msgId] = (val: string) => {
@@ -515,9 +517,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         saveBotProgress('questions', 'dados');
         setTimeout(() => askQuestions(product, option, newAnswers), 300);
       };
+      const questionLevel = nextQ.parentQuestionId ? "sub" as const : "principal" as const;
       addMsgs(
-        { type: "bot", id: uid(), text: nextQ.question, audioUrl: nextQ.questionPresentation === 'audio' ? nextQ.questionAudioUrl : null, hideText: nextQ.questionPresentation === 'audio' && nextQ.showQuestionTextWithAudio !== 1 },
-        { type: "input", id: msgId, multiline: nextQ.fieldType === "textarea", answered: false }
+        { type: "bot", id: uid(), text: nextQ.question, audioUrl: nextQ.questionPresentation === 'audio' ? nextQ.questionAudioUrl : null, hideText: nextQ.questionPresentation === 'audio' && nextQ.showQuestionTextWithAudio !== 1, questionLevel },
+        { type: "input", id: msgId, multiline: nextQ.fieldType === "textarea", answered: false, questionLevel }
       );
     }
   };
@@ -797,16 +800,25 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   const renderMsg = (msg: ChatMsg, idx: number) => {
     switch (msg.type) {
-      case "bot":
+      case "bot": {
+        const isQuestion = Boolean(msg.questionLevel);
+        const isSubQuestion = msg.questionLevel === "sub";
+        const glassClass = isSubQuestion
+          ? "border-violet-300/45 bg-gradient-to-br from-violet-500/25 via-fuchsia-500/10 to-slate-950/65 shadow-[0_10px_32px_rgba(139,92,246,0.2)]"
+          : isQuestion
+            ? "border-cyan-300/45 bg-gradient-to-br from-cyan-400/20 via-blue-500/10 to-slate-950/65 shadow-[0_10px_32px_rgba(34,211,238,0.16)]"
+            : "border-zinc-700 bg-zinc-800";
         return (
           <div key={idx} className="flex items-start gap-2 mb-3">
             <BotAvatar />
-            <div className="bg-zinc-800 border border-zinc-700 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[82%] text-sm text-zinc-100 leading-relaxed whitespace-pre-line">
-              {!msg.hideText && msg.text}
-              {msg.audioUrl && <div className="mt-2 border-t border-zinc-700 pt-2"><p className="mb-1 text-[10px] font-semibold text-cyan-300">🔊 Ouça a pergunta</p><audio controls preload="metadata" src={msg.audioUrl} className="h-8 w-full" /></div>}
+            <div className={`max-w-[82%] rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed text-zinc-100 whitespace-pre-line backdrop-blur-xl ${glassClass}`}>
+              {isQuestion && <p className={`mb-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${isSubQuestion ? "text-violet-200" : "text-cyan-200"}`}>{isSubQuestion ? "Subpergunta" : "Pergunta"}</p>}
+              {!msg.hideText && <p className="font-semibold">{msg.text}</p>}
+              {msg.audioUrl && <div className={`mt-2 border-t pt-2 ${isSubQuestion ? "border-violet-200/20" : "border-cyan-200/20"}`}><p className={`mb-1 text-[10px] font-semibold ${isSubQuestion ? "text-violet-200" : "text-cyan-200"}`}>🔊 Ouça a pergunta</p><audio controls preload="metadata" src={msg.audioUrl} className="h-8 w-full" /></div>}
             </div>
           </div>
         );
+      }
 
       case "user":
         return (
@@ -817,10 +829,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           </div>
         );
 
-      case "options":
+      case "options": {
         if (msg.answered) return null;
+        const isSubQuestion = msg.questionLevel === "sub";
+        const optionTone = isSubQuestion
+          ? "border-violet-300/30 bg-violet-500/[0.10] hover:border-violet-300/70 hover:bg-violet-500/20"
+          : "border-cyan-300/30 bg-cyan-500/[0.09] hover:border-cyan-300/70 hover:bg-cyan-500/20";
         return (
-          <div key={idx} className="ml-10 space-y-2 mb-3">
+          <div key={idx} className={`ml-10 mb-3 space-y-2 rounded-2xl border p-2 backdrop-blur-xl ${isSubQuestion ? "border-violet-400/25 bg-violet-950/20" : "border-cyan-400/25 bg-cyan-950/20"}`}>
             {msg.options.map(opt => (
               <button
                 key={opt}
@@ -828,7 +844,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                   const cb = callbacks.current[msg.id];
                   if (cb) cb(opt);
                 }}
-                className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-zinc-700 bg-zinc-900 hover:border-violet-500 hover:bg-violet-500/10 text-sm font-medium text-zinc-200 transition-all active:scale-95 text-left"
+                className={`w-full flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-sm font-bold text-zinc-100 transition-all active:scale-[0.98] ${optionTone}`}
               >
                 <span>{opt}</span>
                 <ChevronRight className="w-4 h-4 text-zinc-500 shrink-0" />
@@ -836,14 +852,18 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             ))}
           </div>
         );
+      }
 
-      case "input":
+      case "input": {
         if (msg.answered) return null;
+        const isSubQuestion = msg.questionLevel === "sub";
+        const inputTone = isSubQuestion ? "border-violet-300/35 bg-violet-950/25 focus:border-violet-300" : "border-cyan-300/35 bg-cyan-950/25 focus:border-cyan-300";
+        const confirmTone = isSubQuestion ? "from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500" : "from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500";
         return (
-          <div key={idx} className="ml-10 space-y-2 mb-3">
+          <div key={idx} className={`ml-10 mb-3 space-y-2 rounded-2xl border p-2 backdrop-blur-xl ${isSubQuestion ? "border-violet-400/25 bg-violet-950/20" : "border-cyan-400/25 bg-cyan-950/20"}`}>
             {msg.multiline ? (
               <textarea
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-violet-500 resize-none"
+                className={`w-full rounded-xl border px-3 py-2 text-sm text-zinc-100 placeholder-zinc-400 focus:outline-none resize-none backdrop-blur-xl ${inputTone}`}
                 rows={3}
                 placeholder="Digite sua resposta..."
                 value={inputValues[msg.id] || ""}
@@ -852,7 +872,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             ) : (
               <input
                 type="text"
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-violet-500"
+                className={`w-full rounded-xl border px-3 py-2 text-sm text-zinc-100 placeholder-zinc-400 focus:outline-none backdrop-blur-xl ${inputTone}`}
                 placeholder="Digite sua resposta..."
                 value={inputValues[msg.id] || ""}
                 onChange={e => setInputValues(prev => ({ ...prev, [msg.id]: e.target.value }))}
@@ -869,18 +889,20 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                 const cb = callbacks.current[msg.id];
                 if (cb) { cb(inputValues[msg.id]?.trim() || ""); setInputValues(prev => { const n = { ...prev }; delete n[msg.id]; return n; }); }
               }}
-              className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold transition-colors"
+              className={`w-full rounded-xl bg-gradient-to-r py-2.5 text-sm font-bold text-white shadow-lg transition-colors ${confirmTone}`}
             >
               Confirmar
             </button>
           </div>
         );
+      }
 
-      case "audio-input":
+      case "audio-input": {
         if (msg.answered) return null;
         if (!flowState.current.product || !flowState.current.option) return null;
+        const isSubQuestion = msg.questionLevel === "sub";
         return (
-          <div key={idx} className="ml-10 mb-3">
+          <div key={idx} className={`ml-10 mb-3 rounded-2xl border p-2 backdrop-blur-xl ${isSubQuestion ? "border-violet-400/25 bg-violet-950/20" : "border-cyan-400/25 bg-cyan-950/20"}`}>
             <QuestionAudioRecorder
               questionId={msg.question.id}
               productId={flowState.current.product.id}
@@ -898,6 +920,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             />
           </div>
         );
+      }
 
       case "doc-upload":
         if (msg.uploaded) {
