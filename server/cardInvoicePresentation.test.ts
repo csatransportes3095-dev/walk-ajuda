@@ -12,7 +12,7 @@ describe("Visor e pagamento de faturas", () => {
   it("explica total, baixas e saldo da competência atual", () => {
     expect(detail).toContain("Fatura de {faturaAtualCompetencia}");
     expect(detail).toContain('label: "Pagamentos"');
-    expect(detail).toContain('label: "Saldo exibido"');
+    expect(detail).toContain('label: "Saldo a pagar"');
     expect(detail).toContain("faturaAtualInvoice.closingDate");
     expect(detail).toContain("faturaAtualInvoice.dueDate");
   });

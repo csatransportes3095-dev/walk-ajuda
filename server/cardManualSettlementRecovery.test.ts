@@ -27,15 +27,17 @@ describe("Recuperação de baixa manual de cartão", () => {
     expect(detail).toContain("utils.cartoes.cartoes.get.invalidate({ id })");
   });
 
-  it("separa pagamentos registrados de baixas antigas sem recalcular o saldo", () => {
+  it("calcula o saldo exibido somente a partir de pagamentos reais", () => {
     expect(detail).toContain("faturaAtualPagamentosRegistrados");
     expect(detail).toContain("faturaAtualBaixasAntigas");
-    expect(detail).toContain("baixas antigas sem pagamento registrado");
-    expect(detail).toContain("nenhum saldo será alterado automaticamente");
+    expect(detail).toContain("const faturaExibida");
+    expect(detail).toContain("faturaAtualOriginal - faturaAtualPagamentosRegistrados");
+    expect(detail).toContain('label: "Saldo a pagar"');
   });
 
-  it("não oferece pagamento duplicado quando o valor já foi registrado para a mesma fatura", () => {
+  it("remove o aviso e a ação duplicada quando o valor vencido já foi registrado", () => {
     expect(detail).toContain("faturaEmAtrasoComPagamentoRegistrado");
-    expect(detail).toContain("não registre ou pague novamente");
+    expect(detail).toContain("const mostrarFaturaEmAtraso");
+    expect(detail).toContain("{mostrarFaturaEmAtraso && (");
   });
 });
