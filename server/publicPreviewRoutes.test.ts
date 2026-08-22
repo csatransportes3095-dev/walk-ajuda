@@ -23,6 +23,8 @@ describe("rotas públicas de miniatura", () => {
     expect(indexSource).not.toContain('res.redirect(307, "/video/tutorial")');
     expect(indexSource).toContain('getPublicPreviewMeta("video", canonicalUrl)');
     expect(indexSource).toContain('getPublicPreviewMeta("tutorial", canonicalUrl)');
+    expect(indexSource).toContain('tutorial_27dcff60.mp4');
+    expect(indexSource).not.toContain('tutorial_fe1af5d4.mp4');
     expect(indexSource).not.toContain('<meta property="og:image" content="${videoUrl}">');
   });
 

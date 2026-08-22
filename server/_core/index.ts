@@ -218,7 +218,7 @@ async function startServer() {
       try {
         const { ENV } = await import('./env');
         const forgeUrl = new URL("v1/storage/presign/get", ENV.forgeApiUrl!.replace(/\/+$/, "") + "/");
-        forgeUrl.searchParams.set("path", "tutorial_fe1af5d4.mp4");
+        forgeUrl.searchParams.set("path", "tutorial_27dcff60.mp4");
         const forgeResp = await fetch(forgeUrl, { headers: { Authorization: `Bearer ${ENV.forgeApiKey}` } });
         if (!forgeResp.ok) { res.status(502).send("Erro ao obter vídeo"); return; }
         const { url } = await forgeResp.json() as { url: string };
