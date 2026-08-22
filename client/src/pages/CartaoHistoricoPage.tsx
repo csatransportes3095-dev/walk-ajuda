@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import { ArrowLeft, ChevronDown, ChevronUp, CheckCircle, Clock, TrendingUp, AlertTriangle } from "lucide-react";
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -23,6 +24,16 @@ export default function CartaoHistoricoPage() {
   const idMatch = fullPath.match(/\/cartoes\/historico\/(\d+)/);
   const cartaoId = parseInt(idMatch?.[1] || "0");
   const [expandido, setExpandido] = useState<number | null>(null);
+  const utils = trpc.useUtils();
+  const restaurarBaixaMutation = trpc.cartoes.gastos.restaurarBaixaManual.useMutation({
+    onSuccess: () => {
+      utils.cartoes.cartoes.get.invalidate({ id: cartaoId });
+      utils.cartoes.cartoes.historico.invalidate({ cartaoId, meses: 12 });
+      utils.cartoes.gastos.list.invalidate({ cartaoId });
+      toast.success("Baixa manual restaurada: o lançamento voltou a pendente.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const { data: cartao } = trpc.cartoes.cartoes.get.useQuery({ id: cartaoId }, { enabled: !!cartaoId });
   const { data: historico = [], isLoading } = trpc.cartoes.cartoes.historico.useQuery(
@@ -150,6 +161,18 @@ export default function CartaoHistoricoPage() {
                               {g.paga === 1 && <CheckCircle size={12} color="#10b981" />}
                               <span style={{ fontSize: 14, fontWeight: 700, color: g.paga === 1 ? "#10b981" : "#ef4444" }}>{fmt(g.valor)}</span>
                             </div>
+                            {g.paga === 1 && fatura.requiresReview && (
+                              <button
+                                type="button"
+                                disabled={restaurarBaixaMutation.isPending}
+                                onClick={() => {
+                                  const confirmar = window.confirm(`Restaurar ${g.parcelDescricao || g.descricao} (${fmt(g.valor)}) como pendente? Nenhum pagamento real será cancelado.`);
+                                  if (confirmar) restaurarBaixaMutation.mutate({ id: Number(g.id), cartaoId });
+                                }}
+                                style={{ width: "100%", marginTop: 3, border: "1px solid rgba(245,158,11,0.42)", borderRadius: 8, padding: "6px 8px", background: "rgba(245,158,11,0.08)", color: "#fbbf24", fontSize: 11, fontWeight: 800, cursor: restaurarBaixaMutation.isPending ? "wait" : "pointer", fontFamily: "inherit" }}>
+                                Restaurar como pendente
+                              </button>
+                            )}
                           </div>
                         ))}
                       </>

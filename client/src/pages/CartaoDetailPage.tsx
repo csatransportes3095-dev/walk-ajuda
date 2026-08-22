@@ -212,7 +212,7 @@ export default function CartaoDetailPage() {
   const [showEdit, setShowEdit] = useState(false);
   const [tab, setTab] = useState<"gastos" | "pagamentos" | "parcelamentos">("gastos");
 
-  const { data: cartao, isLoading: cartaoLoading } = trpc.cartoes.cartoes.get.useQuery({ id }, { enabled: !!id, refetchOnWindowFocus: true });
+  const { data: cartao, isLoading: cartaoLoading, refetch: refetchCartao } = trpc.cartoes.cartoes.get.useQuery({ id }, { enabled: !!id, refetchOnWindowFocus: true });
   const { data: gastos = [] } = trpc.cartoes.gastos.list.useQuery({ cartaoId: id }, { enabled: !!id });
   const { data: pagamentos = [] } = trpc.cartoes.pagamentos.list.useQuery({ cartaoId: id }, { enabled: !!id });
   const { data: parcelamentos = [] } = trpc.cartoes.parcelamentos.list.useQuery({ cartaoId: id }, { enabled: !!id });
@@ -837,7 +837,7 @@ export default function CartaoDetailPage() {
 
       {/* ── Modais ── */}
       {showGasto && <GastoSheet accent={accent} cartaoId={id} onClose={() => setShowGasto(false)} onSuccess={() => { setShowGasto(false); utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Gasto adicionado!"); }} />}
-      {showPagar && invoiceParaPagamento && <PagarSheet accent={accent} cartaoId={id} faturaAtual={Number(invoiceParaPagamento.remainingAmount ?? 0)} invoiceId={Number(invoiceParaPagamento.id ?? 0)} competencia={competenciaLabel(invoiceParaPagamento.competencia)} isFaturaEmAtraso={pagamentoEhAtrasado} onClose={() => { setShowPagar(false); if (requestedPaymentInvoiceId) navigate(`/cartoes/cartao/${id}`); }} onSuccess={(data: any) => { setShowPagar(false); utils.cartoes.cartoes.get.invalidate({ id }); utils.cartoes.cartoes.list.invalidate(); utils.cartoes.pagamentos.list.invalidate({ cartaoId: id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); if (data?.parcelasMarcadas > 0) { toast.success(`Pagamento registrado! ${data.parcelasMarcadas} parcela(s) baixada(s) da fatura.`); } else { toast.success("Pagamento registrado!"); } }} />}
+      {showPagar && invoiceParaPagamento && <PagarSheet accent={accent} cartaoId={id} faturaAtual={Number(invoiceParaPagamento.remainingAmount ?? 0)} invoiceId={Number(invoiceParaPagamento.id ?? 0)} competencia={competenciaLabel(invoiceParaPagamento.competencia)} isFaturaEmAtraso={pagamentoEhAtrasado} onClose={() => { setShowPagar(false); if (requestedPaymentInvoiceId) navigate(`/cartoes/cartao/${id}`); }} onSuccess={async (data: any) => { setShowPagar(false); await Promise.all([utils.cartoes.cartoes.get.invalidate({ id }), utils.cartoes.cartoes.list.invalidate(), utils.cartoes.pagamentos.list.invalidate({ cartaoId: id }), utils.cartoes.gastos.list.invalidate({ cartaoId: id }), utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id })]); await refetchCartao(); if (data?.parcelasMarcadas > 0) { toast.success(`Pagamento registrado! ${data.parcelasMarcadas} parcela(s) baixada(s) da fatura.`); } else { toast.success("Pagamento registrado!"); } }} />}
       {showEdit && <EditCartaoSheet cartao={cartao} accent={accent} onClose={() => setShowEdit(false)} onSuccess={() => { setShowEdit(false); utils.cartoes.cartoes.list.invalidate({ id }); toast.success("Cartão atualizado!"); }} />}
       {editarGastoData && (
         <EditarGastoSheet

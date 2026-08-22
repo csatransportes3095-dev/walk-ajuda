@@ -525,12 +525,29 @@ export const cartoesRouter = router({
         const userId = (ctx as any).ccUserId as number;
         const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
         if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
-        const gasto = await ccExec(`SELECT id, parcelamentoId, dataOriginal FROM cc_gastos WHERE id = ${input.id} AND cartaoId = ${input.cartaoId} LIMIT 1`);
+        const gasto = await ccExec(`SELECT id, parcelamentoId, dataOriginal, invoiceId FROM cc_gastos WHERE id = ${input.id} AND cartaoId = ${input.cartaoId} LIMIT 1`);
         if (!gasto.length) throw new TRPCError({ code: "NOT_FOUND" });
         if (!gasto[0].parcelamentoId) throw new TRPCError({ code: "BAD_REQUEST", message: "Apenas parcelas podem ter pagamento cancelado" });
         const restoreData = gasto[0].dataOriginal ? `'${new Date(gasto[0].dataOriginal).toISOString().slice(0, 19).replace("T", " ")}'` : "NOW()";
         await ccExec(`UPDATE cc_gastos SET paga = 0, data = ${restoreData}, dataOriginal = NULL WHERE id = ${input.id} AND cartaoId = ${input.cartaoId}`);
+        if (gasto[0].invoiceId) await refreshInvoice(Number(gasto[0].invoiceId));
         return { success: true };
+      }),
+
+    // Restaura gasto avulso ou parcela marcada como paga manualmente. Não cancela nenhum cc_pagamentos.
+    restaurarBaixaManual: ccProtected
+      .input(z.object({ id: z.number().int(), cartaoId: z.number().int() }))
+      .mutation(async ({ input, ctx }) => {
+        const userId = (ctx as any).ccUserId as number;
+        const cartao = await ccExec(`SELECT id FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        if (!cartao.length) throw new TRPCError({ code: "NOT_FOUND" });
+        const gasto = await ccExec(`SELECT id, paga, data, dataOriginal, invoiceId FROM cc_gastos WHERE id = ${input.id} AND cartaoId = ${input.cartaoId} LIMIT 1`);
+        if (!gasto.length) throw new TRPCError({ code: "NOT_FOUND" });
+        if (Number(gasto[0].paga) !== 1) throw new TRPCError({ code: "BAD_REQUEST", message: "Este gasto já está pendente" });
+        const restoreData = gasto[0].dataOriginal ? `'${new Date(gasto[0].dataOriginal).toISOString().slice(0, 19).replace("T", " ")}'` : "data";
+        await ccExec(`UPDATE cc_gastos SET paga = 0, data = ${restoreData}, dataOriginal = NULL WHERE id = ${input.id} AND cartaoId = ${input.cartaoId}`);
+        if (gasto[0].invoiceId) await refreshInvoice(Number(gasto[0].invoiceId));
+        return { success: true, invoiceId: gasto[0].invoiceId ? Number(gasto[0].invoiceId) : null };
       }),
 
     editar: ccProtected
