@@ -24,6 +24,10 @@ describe("taxa de atraso exibida ao cliente", () => {
     expect(fee("2026-08-21", 17)).toBe(0);
   });
 
+  it("não cobra em parcela futura, mesmo após 18h", () => {
+    expect(fee("2026-09-18", 23, 400)).toBe(0);
+  });
+
   it("mostra a taxa de 18h antes de qualquer comprovante", () => {
     expect(fee("2026-08-21", 18)).toBe(5);
   });
@@ -51,6 +55,11 @@ describe("sincronização da tela /gastos", () => {
     expect(loansRouter).toContain('i.originalAmount == null');
     expect(loansRouter).toContain('["pendente", "atrasado"].includes(i.status)');
     expect(loansRouter).toContain('lateFeePreview: true');
+  });
+
+  it("bloqueia no servidor a taxa manual antes do vencimento", () => {
+    expect(loansRouter).toContain("if (dueDate >= getBrazilToday())");
+    expect(loansRouter).toContain("Taxa de atraso só pode ser aplicada após o vencimento da parcela.");
   });
 
   it("atualiza a lista aberta periodicamente e ao voltar para a aba", () => {

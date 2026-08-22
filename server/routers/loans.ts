@@ -3086,6 +3086,18 @@ export const loanRouter = router({
     if (!inst.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Parcela não encontrada' });
     const current = inst[0];
     if (current.status === 'pago') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Parcela já está paga' });
+    // Taxa de atraso manual só pode ser aplicada após o vencimento, no horário do Brasil.
+    // Esta barreira é no servidor para impedir chamadas diretas fora da interface ADM.
+    const dueDateValue = current.dueDate;
+    const dueDate = typeof dueDateValue === 'string'
+      ? dueDateValue.slice(0, 10)
+      : new Date(dueDateValue).toISOString().slice(0, 10);
+    if (dueDate >= getBrazilToday()) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Taxa de atraso só pode ser aplicada após o vencimento da parcela.',
+      });
+    }
     // Salva o valor original se ainda não foi salvo
     const originalAmount = current.originalAmount != null ? parseFloat(current.originalAmount) : parseFloat(current.amount);
     const newAmount = originalAmount + input.feeAmount;

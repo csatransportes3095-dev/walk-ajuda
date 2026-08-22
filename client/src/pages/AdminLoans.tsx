@@ -1228,14 +1228,14 @@ function LoansTab() {
                                   <AlertTriangle className="w-4 h-4" />
                                   -Taxa
                                 </button>
-                              ) : (
+                              ) : inst.isOverdue ? (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
                                   onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}>
                                   <AlertTriangle className="w-4 h-4" />
                                   +Taxa
                                 </button>
-                              )}
+                              ) : null}
                               {/* Botão Avisar Parcela */}
                               {!loan.interestOnlyEnabled || !inst.isOverdue ? (
                                 <button
@@ -1269,14 +1269,14 @@ function LoansTab() {
                                   <AlertTriangle className="w-4 h-4" />
                                   -Taxa
                                 </button>
-                              ) : (
+                              ) : inst.isOverdue ? (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
                                   onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}>
                                   <AlertTriangle className="w-4 h-4" />
                                   +Taxa
                                 </button>
-                              )}
+                              ) : null}
                               <button
                                 className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all text-xs font-semibold active:scale-95"
                                 onClick={() => refusePayment.mutate({ installmentId: inst.id, reason: "Comprovante inválido" })}>
