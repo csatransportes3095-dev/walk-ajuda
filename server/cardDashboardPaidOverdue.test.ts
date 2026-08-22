@@ -19,4 +19,12 @@ describe("Alerta de fatura vencida no painel geral", () => {
     expect(dashboard).toContain("if (faturaTemPagamentoIntegral(c, invoice)) continue;");
     expect(dashboard).toContain("const atrasoQuitadoRegistrado");
   });
+
+  it("aplica no card a mesma apresentação da fatura atual usada no detalhe", () => {
+    expect(dashboard).toContain("const faturaAtualOriginal");
+    expect(dashboard).toContain("const faturaAtualPagamentosRegistrados");
+    expect(dashboard).toContain("const faturaAbertaExibida");
+    expect(dashboard).toContain("Math.max(0, faturaAtualOriginal - faturaAtualPagamentosRegistrados)");
+    expect(dashboard).toContain("value: fmt(temAtraso ? emAtraso : faturaAbertaExibida)");
+  });
 });

@@ -192,12 +192,19 @@ export default function DashboardPage() {
             });
             const emAtraso = !atrasoQuitadoRegistrado && faturaEmAtrasoInfo ? Number(faturaEmAtrasoInfo.valor ?? 0) : 0;
             const faturaDoMes = Number((c as any).faturaAtual ?? 0);
-            const faturaTotal = emAtraso + faturaDoMes; // total a pagar
             const mesSeguinte = Number((c as any).proximaFatura ?? 0);
             const limite = Number(c.limiteTotal ?? 0);
             const disponivel = Number((c as any).limiteDisponivel ?? 0);
             const pct = Number((c as any).pctLimite ?? 0);
             const invoiceAtual = (c as any).faturaAtualInvoice;
+            // Mesma leitura do detalhe: uma baixa antiga não reduz o saldo visual da fatura.
+            // Apenas pagamentos reais registrados em cc_pagamentos são descontados na apresentação.
+            const faturaAtualOriginal = Number(invoiceAtual?.originalAmount ?? faturaDoMes);
+            const faturaAtualPagamentosRegistrados = Number(invoiceAtual?.paidAmount ?? 0);
+            const faturaAtualBaixasAntigas = Number(invoiceAtual?.legacyPaidAmount ?? 0);
+            const faturaAbertaExibida = invoiceAtual && faturaAtualBaixasAntigas > 0
+              ? Math.max(0, faturaAtualOriginal - faturaAtualPagamentosRegistrados)
+              : faturaDoMes;
             const statusAtual = invoiceAtual?.status ?? "ABERTA";
             const temAtraso = emAtraso > 0;
 
@@ -239,8 +246,8 @@ export default function DashboardPage() {
                   {/* 4 métricas */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
                     {[
-                      { label: temAtraso ? "Em Atraso" : "Fatura do Mês", value: fmt(temAtraso ? emAtraso : faturaDoMes), icon: <TrendingUp size={10} />, highlight: true, red: temAtraso },
-                      { label: temAtraso ? "Fatura Atual" : "Mês Seguinte", value: fmt(temAtraso ? faturaDoMes : mesSeguinte), icon: <Repeat size={10} />, highlight: false, red: false },
+                      { label: temAtraso ? "Em Atraso" : "Fatura do Mês", value: fmt(temAtraso ? emAtraso : faturaAbertaExibida), icon: <TrendingUp size={10} />, highlight: true, red: temAtraso },
+                      { label: temAtraso ? "Fatura Atual" : "Mês Seguinte", value: fmt(temAtraso ? faturaAbertaExibida : mesSeguinte), icon: <Repeat size={10} />, highlight: false, red: false },
                       { label: "Limite Total", value: fmt(limite), icon: null, highlight: false, red: false },
                       { label: "Disponível", value: fmt(disponivel), icon: <CheckCircle size={10} />, highlight: disponivel < limite * 0.2, red: false },
                     ].map((item, i) => (
