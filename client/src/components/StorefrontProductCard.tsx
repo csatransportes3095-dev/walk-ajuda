@@ -106,22 +106,26 @@ export function StorefrontProductCard({
   const description = item.option.description || item.product.description;
   const warrantyLabel = selectedTier?.warrantyLabel || (selectedTier ? `${selectedTier.warrantyValue} ${selectedTier.warrantyType}` : item.option.warranty);
   const detailsId = `product-details-${item.product.id}-${item.option.id}`;
+  const glassBackground = cardBackground
+    ? `linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(15,23,42,0.60) 42%, rgba(2,6,23,0.90) 100%), ${cardBackground}`
+    : "linear-gradient(145deg, rgba(30,41,59,0.72) 0%, rgba(8,15,32,0.88) 48%, rgba(2,6,23,0.96) 100%)";
 
   return (
     <article
-      className="group relative flex h-full flex-col overflow-hidden rounded-3xl border bg-slate-950/90 shadow-[0_18px_55px_rgba(0,0,0,0.34)] transition-transform duration-200 hover:-translate-y-1"
-      style={{ borderColor: `${borderColor}99`, ...(cardBackground ? { background: cardBackground } : {}) }}
+      className="group relative flex h-full flex-col overflow-hidden rounded-3xl border shadow-[0_20px_58px_rgba(0,0,0,0.46),0_0_30px_rgba(59,130,246,0.08)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_72px_rgba(0,0,0,0.54),0_0_34px_rgba(34,211,238,0.16)] backdrop-blur-xl"
+      style={{ borderColor: `${borderColor}b8`, background: glassBackground, boxShadow: `0 20px 58px rgba(0,0,0,.46), 0 0 24px ${accentColor}2c, inset 0 1px 0 rgba(255,255,255,.16)` }}
     >
-      <div className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)` }} />
+      <div className="pointer-events-none absolute inset-x-5 top-0 h-px opacity-95" style={{ background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`, boxShadow: `0 0 13px ${accentColor}` }} />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/[0.10] via-white/[0.025] to-transparent" />
       {discount > 0 && (
         <div className="absolute right-4 top-4 z-10 rounded-full bg-rose-600 px-2.5 py-1 text-xs font-black text-white shadow-lg">
           -{discount}% OFF
         </div>
       )}
 
-      <div className="p-5 pb-4">
+      <div className="relative z-[1] p-5 pb-4">
         <div className="mb-4 flex items-start gap-3 pr-14">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-white/5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/25 bg-white/[0.10] shadow-[inset_0_1px_0_rgba(255,255,255,.20),0_0_18px_rgba(255,255,255,.08)] backdrop-blur-xl">
             {item.product.iconUrl ? (
               <img src={item.product.iconUrl} alt="" loading="lazy" className="h-9 w-9 object-contain" />
             ) : (
@@ -145,7 +149,7 @@ export function StorefrontProductCard({
             <select
               value={tierId ?? ""}
               onChange={(event) => setTierId(Number(event.target.value))}
-              className="w-full rounded-xl border border-white/15 bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white outline-none focus:border-violet-400"
+              className="w-full rounded-xl border border-white/20 bg-slate-950/45 px-3 py-2.5 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,.10)] outline-none backdrop-blur-xl focus:border-violet-300"
             >
               {tiers.map((tier) => (
                 <option key={tier.id} value={tier.id}>
@@ -162,7 +166,7 @@ export function StorefrontProductCard({
             <p className="text-2xl font-black text-white" style={textColor ? { color: textColor } : undefined}>{asMoney(effectivePrice)}</p>
             {discount > 0 && <p className="mt-0.5 text-xs font-bold text-emerald-300">Economize {discount}%</p>}
           </div>
-          {item.product.deliveryDays && <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-right text-[11px] font-bold text-white/65">Prazo: {item.product.deliveryDays}</span>}
+          {item.product.deliveryDays && <span className="rounded-lg border border-white/20 bg-white/[0.08] px-2 py-1 text-right text-[11px] font-bold text-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,.12)] backdrop-blur-xl">Prazo: {item.product.deliveryDays}</span>}
         </div>
 
         {warrantyLabel && (
@@ -172,20 +176,20 @@ export function StorefrontProductCard({
         )}
       </div>
 
-      <div className="mt-auto border-t border-white/10 bg-black/20 p-4">
+      <div className="relative z-[1] mt-auto border-t border-white/15 bg-slate-950/35 p-4 backdrop-blur-xl">
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={() => onBuy(selectedTier)}
-            className="min-h-12 rounded-xl bg-white px-3 py-3 text-sm font-black text-slate-950 transition-transform active:scale-[0.98]"
+            className="min-h-12 rounded-xl border border-white/60 bg-white/95 px-3 py-3 text-sm font-black text-slate-950 shadow-[0_8px_24px_rgba(255,255,255,.14)] transition-all hover:bg-white hover:shadow-[0_8px_28px_rgba(255,255,255,.25)] active:scale-[0.98]"
           >
             Comprar agora
           </button>
           <button
             type="button"
             onClick={() => onAddToCart(selectedTier)}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-black text-white transition-transform active:scale-[0.98]"
-            style={{ background: `${cartButtonColor}28`, borderColor: `${cartButtonColor}aa` }}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-black text-white shadow-[0_8px_24px_rgba(0,0,0,.18)] backdrop-blur-xl transition-all hover:brightness-125 active:scale-[0.98]"
+            style={{ background: `linear-gradient(135deg, ${cartButtonColor}52, ${cartButtonColor}24)`, borderColor: `${cartButtonColor}cc`, boxShadow: `0 8px 24px ${cartButtonColor}24, inset 0 1px 0 rgba(255,255,255,.18)` }}
           >
             <ShoppingCart className="h-4 w-4" /> Carrinho
           </button>
@@ -201,7 +205,7 @@ export function StorefrontProductCard({
           {detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
         {detailsOpen && (
-          <div id={detailsId} className="mt-2 rounded-xl border border-white/10 bg-slate-900/80 p-3 text-sm text-white/75">
+          <div id={detailsId} className="mt-2 rounded-xl border border-white/15 bg-slate-950/55 p-3 text-sm text-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,.10)] backdrop-blur-xl">
             {warrantyLabel && <p className="mb-2 flex items-center gap-2"><Check className="h-4 w-4 text-emerald-300" />{warrantyLabel}</p>}
             {item.option.documents.length > 0 && <p className="mb-2"><strong className="text-white">Documentos:</strong> {item.option.documents.map((document) => document.label).join(", ")}</p>}
             {item.option.questions.length > 0 && <p><strong className="text-white">Etapas:</strong> perguntas específicas desta opção serão apresentadas no fluxo de compra.</p>}
