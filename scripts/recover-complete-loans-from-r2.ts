@@ -43,6 +43,22 @@ const validDateTime = (value: unknown) => {
   const parsed = new Date(String(value));
   return Number.isFinite(parsed.getTime()) ? parsed : null;
 };
+const addDays = (date: string, amount: number) => {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + amount);
+  return value.toISOString().slice(0, 10);
+};
+const generatedDueDate = (releaseDate: string, payment: string, number: number, count: number) => {
+  if (payment === "semanal") return addDays(releaseDate, number * 7);
+  if (payment === "quinzenal") return addDays(releaseDate, number * 15);
+  if (payment === "mensal") return addDays(releaseDate, number * 30);
+  let date = releaseDate;
+  for (let index = 0; index < number; index++) {
+    date = addDays(date, 1);
+    if (count === 20) while (new Date(`${date}T12:00:00Z`).getUTCDay() === 0) date = addDays(date, 1);
+  }
+  return date;
+};
 const samePhone = (a: unknown, b: unknown) => {
   const x = digits(a).slice(-11), y = digits(b).slice(-11);
   return x.length >= 10 && y.length >= 10 && x === y;
@@ -322,7 +338,8 @@ async function main() {
     await db.beginTransaction();
     const summary = { clientesInseridos: 0, clientesAtualizados: 0, identidadesPrincipaisAtualizadas: 0, pixRecuperados: 0, pixAindaAusentes: 0, emprestimosInseridos: 0, emprestimosCorrigidos: 0, parcelasInseridas: 0, parcelasCorrigidas: 0, comprovantesLigados: 0 };
     try {
-      const clientMap = new Map<number, number>();
+      const sourceClientMap = new Map<number, number>();
+      const loanClientMap = new Map<number, number>();
 
       for (const loanId of loanIds) {
         const statement = latestStatements.get(loanId);
@@ -355,8 +372,8 @@ async function main() {
           await updateDynamic(db, "loanClients", Number(client.id), data, clientCols);
           Object.assign(client, data); summary.clientesAtualizados++;
         }
-        if (sourceClientId) clientMap.set(sourceClientId, Number(client.id));
-        clientMap.set(loanId, Number(client.id));
+        if (sourceClientId) sourceClientMap.set(sourceClientId, Number(client.id));
+        loanClientMap.set(loanId, Number(client.id));
 
         const canonical = customers.find(row => sameIdentity(row, client!));
         if (canonical) {
@@ -390,14 +407,40 @@ async function main() {
         }
       }
 
+      const proofLoanMap = new Map<string, number>();
+      for (const proof of proofs) {
+        if (proof.loanId) { proofLoanMap.set(proof.key, proof.loanId); continue; }
+        const existingInstallment = currentInstallments.find(row => Number(row.id) === proof.installmentId);
+        if (existingInstallment) { proofLoanMap.set(proof.key, Number(existingInstallment.loanId)); continue; }
+        const exactReceipt = receipts.find(row => row.installmentId === proof.installmentId && row.loanId);
+        if (exactReceipt?.loanId) { proofLoanMap.set(proof.key, exactReceipt.loanId); continue; }
+        const mappedClientId = proof.clientId ? sourceClientMap.get(proof.clientId) || proof.clientId : null;
+        const candidates = loanIds.filter(id => loanClientMap.get(id) === mappedClientId);
+        if (candidates.length === 1) { proofLoanMap.set(proof.key, candidates[0]); continue; }
+        const ranked = candidates.map(id => {
+          const anchors = [
+            ...receipts.filter(row => row.loanId === id).map(row => row.installmentId),
+            ...proofs.filter(row => row.loanId === id).map(row => row.installmentId),
+          ].filter((value): value is number => !!value);
+          const distance = anchors.length && proof.installmentId
+            ? Math.min(...anchors.map(value => Math.abs(value - proof.installmentId!)))
+            : Number.MAX_SAFE_INTEGER;
+          return { id, distance };
+        }).sort((a, b) => a.distance - b.distance);
+        if (ranked[0] && ranked[0].distance <= 50 && ranked[0].distance < (ranked[1]?.distance ?? Number.MAX_SAFE_INTEGER)) {
+          proofLoanMap.set(proof.key, ranked[0].id);
+        }
+      }
+
       for (const loanId of loanIds) {
         const statement = latestStatements.get(loanId);
         const loanReceipts = receipts.filter(row => row.loanId === loanId);
         let loan = currentLoans.find(row => Number(row.id) === loanId);
         const sourceClientId = loanReceipts.find(row => row.clientId)?.clientId || n(loan?.clientId);
-        const clientId = clientMap.get(loanId) || (sourceClientId ? clientMap.get(sourceClientId) : null) || n(loan?.clientId);
+        const clientId = loanClientMap.get(loanId) || (sourceClientId ? sourceClientMap.get(sourceClientId) : null) || n(loan?.clientId);
         if (!clientId) { console.warn("IGNORADO SEM CLIENTE", loanId); continue; }
         const client = currentClients.find(row => Number(row.id) === clientId)!;
+        const loanProofs = proofs.filter(proof => proofLoanMap.get(proof.key) === loanId);
         const receiptTotal = loanReceipts.find(row => row.totalInstallments)?.totalInstallments || null;
         const count = statement?.totalInstallments || receiptTotal || n(loan?.installments) || 1;
         const installmentAmount = statement?.installments.find(row => row.amount)?.amount || loanReceipts.find(row => row.amountPaid)?.amountPaid || null;
@@ -408,17 +451,24 @@ async function main() {
         const interestAmount = statement?.interestAmount ?? n(loan?.interestAmount) ?? Math.round((totalAmount - amount) * 100) / 100;
         const receiptDates = loanReceipts.map(row => row.paidAt).filter((value): value is string => !!value).sort();
         const releaseDate = statement?.releaseDate || sqlDate(loan?.releaseDate) || receiptDates[0] || TODAY;
-        const dueDate = statement?.dueDate || sqlDate(loan?.dueDate) || receiptDates.at(-1) || releaseDate;
+        const recoveredPaymentType = statement?.paymentType || (receiptTotal && count >= 20 ? "diario" : loan?.paymentType || "mensal");
+        const dueDate = statement?.dueDate || (receiptTotal ? generatedDueDate(releaseDate, recoveredPaymentType, count, count) : sqlDate(loan?.dueDate)) || receiptDates.at(-1) || releaseDate;
+        const proofDates = loanProofs.map(proof => proof.occurredAt ? new Date(proof.occurredAt) : null).filter((value): value is Date => !!value).sort((a, b) => a.getTime() - b.getTime());
+        const firstPaymentEvidence = validDateTime(receiptDates[0]) || proofDates[0] || null;
         const loanData: Row = {
           userId: loan?.userId || 1, clientId, amount, interestRate: rate,
           days: statement?.totalInstallments || n(loan?.days) || count,
-          paymentType: statement?.paymentType || loan?.paymentType || "mensal",
+          paymentType: recoveredPaymentType,
           interestAmount, totalAmount, releaseDate, dueDate,
           status: statement ? loanStatusForDatabase(statement.status) : loan?.status || "aprovado",
           installments: count,
           notes: loan?.notes || (!statement ? "Recuperado de recibos do R2; condições preservadas quando existentes." : "Recuperado do extrato do R2."),
           approvedBy: loan?.approvedBy || (statement?.status === "aprovado" ? "recuperacao-r2" : null),
           approvedAt: validDateTime(loan?.approvedAt) || (statement?.status === "aprovado" ? validDateTime(statement.generatedAt) : null),
+          pixSentAt: validDateTime(loan?.pixSentAt) || firstPaymentEvidence || (loanReceipts.length || loanProofs.length ? validDateTime(releaseDate) : null),
+          pixConfirmedDate: sqlDate(loan?.pixConfirmedDate) || (loanReceipts.length || loanProofs.length ? releaseDate : null),
+          pixSentBy: loan?.pixSentBy || (loanReceipts.length || loanProofs.length ? "recuperacao-documentos-r2" : null),
+          pixSendNote: loan?.pixSendNote || (loanReceipts.length || loanProofs.length ? "Liberação confirmada pelos comprovantes de pagamento recuperados do R2." : null),
         };
         if (!loan) {
           const id = await insertDynamic(db, "loans", { id: loanId, createdAt: statement?.releaseDate || receiptDates[0] || new Date(), updatedAt: new Date(), ...loanData }, loanCols);
@@ -435,16 +485,27 @@ async function main() {
           const previous = receiptByNumber.get(receipt.installmentNumber);
           if (!previous || String(previous.paidAt).localeCompare(String(receipt.paidAt)) < 0) receiptByNumber.set(receipt.installmentNumber, receipt);
         }
+        const uniqueLoanProofs = [...new Map(loanProofs
+          .filter(proof => proof.installmentId)
+          .sort((a, b) => Number(a.installmentId) - Number(b.installmentId))
+          .map(proof => [Number(proof.installmentId), proof])).values()];
+        const paidEvidenceCount = statement
+          ? statement.paidInstallments || 0
+          : Math.min(count, Math.max(receiptByNumber.size, uniqueLoanProofs.length));
         const schedule = statement?.installments.length ? statement.installments : Array.from({ length: count }, (_, index) => {
           const number = index + 1;
           const existing = loanInstallments.find(row => Number(row.installmentNumber) === number);
           const receipt = receiptByNumber.get(number);
-          const status = receipt
+          const proofEvidence = uniqueLoanProofs[index];
+          const status = receipt || number <= paidEvidenceCount
             ? "pago"
             : receiptTotal
               ? "pendente"
               : existing?.status || "pendente";
-          return { installmentNumber: number, dueDate: sqlDate(existing?.dueDate) || receipt?.paidAt || dueDate, amount: n(existing?.amount) || installmentAmount || Math.round(totalAmount / count * 100) / 100, paidAt: receipt?.paidAt || (status === "pago" ? sqlDate(existing?.paidAt) : null), status };
+          const calculatedDueDate = receiptTotal
+            ? generatedDueDate(releaseDate, recoveredPaymentType, number, count)
+            : sqlDate(existing?.dueDate) || dueDate;
+          return { installmentNumber: number, dueDate: calculatedDueDate, amount: n(existing?.amount) || installmentAmount || Math.round(totalAmount / count * 100) / 100, paidAt: receipt?.paidAt || (proofEvidence?.occurredAt ? new Date(proofEvidence.occurredAt) : status === "pago" ? sqlDate(existing?.paidAt) : null), status };
         });
 
         for (const item of schedule) {
@@ -452,9 +513,9 @@ async function main() {
           let status = receipt ? "pago" : installmentStatusForDatabase(item.status);
           if (statement?.status === "pago") status = "pago";
           let installment = loanInstallments.find(row => Number(row.installmentNumber) === item.installmentNumber);
-          const proof = proofs.find(p => p.installmentId === Number(installment?.id))
-            || proofs.find(p => p.loanId === loanId && p.installmentId === Number(installment?.id))
-            || proofs.find(p => p.installmentId === receipt?.installmentId);
+          const proof = loanProofs.find(p => p.installmentId === Number(installment?.id))
+            || loanProofs.find(p => p.installmentId === receipt?.installmentId)
+            || uniqueLoanProofs[item.installmentNumber - 1];
           const installmentData: Row = {
             loanId: Number(loan.id), installmentNumber: item.installmentNumber,
             dueDate: item.dueDate || dueDate, amount: item.amount || installmentAmount || Math.round(totalAmount / count * 100) / 100,
