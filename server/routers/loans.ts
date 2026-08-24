@@ -1359,6 +1359,53 @@ export const loanRouter = router({
   }),
 
   // ââ€â‚¬ââ€â‚¬ DASHBOARD (admin) ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
+  diagnoseLoanStorage: adminProcedure.query(async () => {
+    const db = await getDb() as any;
+    const messageOf = (error: any) => String(
+      error?.cause?.cause?.message || error?.cause?.message || error?.message || error || 'erro desconhecido'
+    );
+    const result: any = {
+      database: null, loansExists: false, loanInstallmentsExists: false,
+      loansCount: null, installmentCount: null, joinCount: null,
+      loansError: null, installmentsError: null, joinError: null, metadataError: null,
+    };
+
+    try {
+      const dbRows = await qRows(db, drizzleSql`SELECT DATABASE() as dbName`);
+      result.database = dbRows[0]?.dbName || null;
+      const tableRows = await qRows(db, drizzleSql`
+        SELECT LOWER(TABLE_NAME) as tableName
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND LOWER(TABLE_NAME) IN ('loans', 'loaninstallments')
+      `);
+      const names = new Set(tableRows.map((row: any) => String(row.tableName || '').toLowerCase()));
+      result.loansExists = names.has('loans');
+      result.loanInstallmentsExists = names.has('loaninstallments');
+    } catch (error: any) { result.metadataError = messageOf(error); }
+
+    try {
+      const rows = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loans`);
+      result.loansCount = Number(rows[0]?.cnt || 0); result.loansExists = true;
+    } catch (error: any) { result.loansError = messageOf(error); }
+
+    try {
+      const rows = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanInstallments`);
+      result.installmentCount = Number(rows[0]?.cnt || 0); result.loanInstallmentsExists = true;
+    } catch (error: any) { result.installmentsError = messageOf(error); }
+
+    try {
+      const rows = await qRows(db, drizzleSql`
+        SELECT COUNT(*) as cnt
+        FROM loanInstallments li
+        INNER JOIN loans l ON l.id = li.loanId
+      `);
+      result.joinCount = Number(rows[0]?.cnt || 0);
+    } catch (error: any) { result.joinError = messageOf(error); }
+
+    return result;
+  }),
+
   getDashboard: adminProcedure.query(async () => {
     const db = await getDb() as any;
     // Usar fuso horário de São Paulo (GMT-3) para calcular "hoje"
