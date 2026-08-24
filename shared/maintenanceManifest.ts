@@ -3,6 +3,7 @@ export const MAINTENANCE_ROUTE_OPTIONS = [
   { id: "login", label: "Login", path: "/login" },
   { id: "loan", label: "Empréstimo", path: "/emprestimo" },
   { id: "gastos", label: "Gastos", path: "/gastos" },
+  { id: "tracking", label: "Acompanhar", path: "/acompanhar" },
 ] as const;
 
 export type MaintenanceRouteId = (typeof MAINTENANCE_ROUTE_OPTIONS)[number]["id"];
@@ -19,7 +20,7 @@ export type MaintenanceManifestConfig = {
 
 export const DEFAULT_MAINTENANCE_MANIFEST: MaintenanceManifestConfig = {
   enabled: false,
-  routeIds: ["home", "login", "loan", "gastos"],
+  routeIds: ["home", "login", "loan", "gastos", "tracking"],
   eyebrow: "COMUNICADO OPERACIONAL",
   title: "Estamos em manutenção programada",
   message: "Estamos aprimorando esta área para oferecer uma experiência mais rápida e segura. Volte em breve.",
@@ -62,6 +63,7 @@ export function maintenanceRouteIdForPath(pathname: string): MaintenanceRouteId 
   if (path === "/login") return "login";
   if (path === "/emprestimo") return "loan";
   if (path === "/gastos") return "gastos";
+  if (path === "/acompanhar") return "tracking";
   return null;
 }
 
