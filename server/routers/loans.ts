@@ -437,9 +437,11 @@ async function ensureClientPixFieldsSynced(db: any) {
 
 // ── Migração automática: tabela loanInstallmentPlans ──────────────────────
 let _installmentPlansMigrated = false;
+let _installmentPlansMigrationPromise: Promise<void> | null = null;
 async function ensureInstallmentPlansTable(db: any) {
   if (_installmentPlansMigrated) return;
-  _installmentPlansMigrated = true;
+  if (_installmentPlansMigrationPromise) return _installmentPlansMigrationPromise;
+  _installmentPlansMigrationPromise = (async () => {
   await ensureParceladoPaymentType(db);
   await db.execute(drizzleSql`
     CREATE TABLE IF NOT EXISTS loanInstallmentPlans (
@@ -460,6 +462,13 @@ async function ensureInstallmentPlansTable(db: any) {
       await db.execute(drizzleSql`INSERT INTO loanInstallmentPlans (parcelas, percentual, ativo, ordem) VALUES (${parcelas}, ${percentual}, 1, ${i})`);
     }
   }
+    _installmentPlansMigrated = true;
+  })().catch((error) => {
+    _installmentPlansMigrationPromise = null;
+    _installmentPlansMigrated = false;
+    throw error;
+  });
+  return _installmentPlansMigrationPromise;
 }
 
 export const loanRouter = router({

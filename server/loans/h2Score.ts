@@ -2,6 +2,13 @@ import { sql } from "drizzle-orm";
 
 export const H2_SCORE_TIMEZONE = "America/Sao_Paulo";
 
+// A infraestrutura é preparada uma única vez por processo. Chamadas simultâneas
+// compartilham a mesma Promise para evitar DDL repetido e locks desnecessários no TiDB.
+let h2ScoreInfrastructureReady = false;
+let h2ScoreInfrastructurePromise: Promise<void> | null = null;
+let h2ScoreBackfillReady = false;
+let h2ScoreBackfillPromise: Promise<void> | null = null;
+
 export type ScoreConfig = {
   onTimePoints: number;
   eveningPoints: number;
@@ -46,6 +53,9 @@ function brazilDateTime(now = new Date()) {
 }
 
 export async function ensureLoanH2ScoreTables(db: any) {
+  if (h2ScoreInfrastructureReady) return;
+  if (h2ScoreInfrastructurePromise) return h2ScoreInfrastructurePromise;
+  h2ScoreInfrastructurePromise = (async () => {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS loanH2ScoreConfig (
       id TINYINT PRIMARY KEY,
@@ -134,6 +144,13 @@ export async function ensureLoanH2ScoreTables(db: any) {
       INDEX idx_customer_h2_score_loan_client (loanClientId, createdAt)
     )
   `);
+    h2ScoreInfrastructureReady = true;
+  })().catch((error) => {
+    h2ScoreInfrastructurePromise = null;
+    h2ScoreInfrastructureReady = false;
+    throw error;
+  });
+  return h2ScoreInfrastructurePromise;
 }
 
 export async function getLoanH2ScoreConfig(db: any): Promise<ScoreConfig> {
@@ -486,10 +503,22 @@ export async function getH2ScoreCustomerDirectory(db: any) {
     const id = Number(customer.customerId);
     grouped.set(id, [...(grouped.get(id) || []), customer]);
   }
+  // Busca as contas existentes em uma única consulta. Antes era uma consulta sequencial
+  // por cliente, o que deixava o ADM lento com centenas de cadastros.
+  const customerIds = Array.from(grouped.keys());
+  const existingAccounts = customerIds.length
+    ? rows(await db.execute(sql`SELECT * FROM customerH2ScoreAccounts WHERE customerId IN (${sql.raw(customerIds.join(','))})`))
+    : [];
+  const accountByCustomerId = new Map<number, any>(existingAccounts.map((account: any) => [Number(account.customerId), account]));
+
   const result: any[] = [];
   for (const [customerId, links] of grouped.entries()) {
     const preferred = [...links].sort((a, b) => Number(b.activeLoans || 0) - Number(a.activeLoans || 0))[0];
-    const account = await ensureCustomerH2ScoreAccount(db, customerId, preferred?.loanClientId ? Number(preferred.loanClientId) : null);
+    let account = accountByCustomerId.get(customerId);
+    if (!account) {
+      account = await ensureCustomerH2ScoreAccount(db, customerId, preferred?.loanClientId ? Number(preferred.loanClientId) : null);
+      accountByCustomerId.set(customerId, account);
+    }
     const totalPoints = clampH2Score(Number(account.totalPoints || 0));
     const level = getH2ScoreLevel(totalPoints, config);
     const activeLoans = links.reduce((sum, link) => sum + Number(link.activeLoans || 0), 0);
@@ -511,6 +540,9 @@ export async function getH2ScoreCustomerDirectory(db: any) {
 
 
 export async function backfillLegacyH2ScoreEvents(db: any) {
+  if (h2ScoreBackfillReady) return;
+  if (h2ScoreBackfillPromise) return h2ScoreBackfillPromise;
+  h2ScoreBackfillPromise = (async () => {
   await ensureLoanH2ScoreTables(db);
   const legacyRows = rows(await db.execute(sql`
     SELECT s.id AS submissionId, s.clientId AS loanClientId, s.loanId, s.installmentId, s.scoreBand,
@@ -519,17 +551,16 @@ export async function backfillLegacyH2ScoreEvents(db: any) {
     FROM loanH2ScoreSubmissions s
     INNER JOIN loanH2ScoreLedger l ON l.submissionId=s.id
     INNER JOIN loanClients lc ON lc.id=s.clientId
+    LEFT JOIN customerH2ScoreEvents existingEvent ON existingEvent.submissionId=s.id
     INNER JOIN customers c ON c.deletedAt IS NULL AND (
       REGEXP_REPLACE(c.phone, '[^0-9]', '')=REGEXP_REPLACE(lc.phone, '[^0-9]', '')
       OR (REGEXP_REPLACE(c.cpf, '[^0-9]', '')<>'' AND REGEXP_REPLACE(c.cpf, '[^0-9]', '')=REGEXP_REPLACE(lc.cpf, '[^0-9]', ''))
     )
-    WHERE s.status='aprovado'
+    WHERE s.status='aprovado' AND existingEvent.id IS NULL
     ORDER BY s.id ASC
   `));
   for (const row of legacyRows) {
     const account = await ensureCustomerH2ScoreAccount(db, Number(row.customerId), Number(row.loanClientId));
-    const exists = rows(await db.execute(sql`SELECT id FROM customerH2ScoreEvents WHERE submissionId=${row.submissionId} LIMIT 1`))[0];
-    if (exists) continue;
     const before = clampH2Score(Number(account.totalPoints || 0) - Number(row.points || 0));
     const after = clampH2Score(Number(account.totalPoints || 0));
     await db.execute(sql`
@@ -539,4 +570,11 @@ export async function backfillLegacyH2ScoreEvents(db: any) {
         (${row.customerId}, ${row.loanClientId}, ${row.loanId}, ${row.installmentId}, ${row.submissionId}, 'migracao', ${row.scoreBand}, ${before}, ${row.points}, ${after}, 'Evento H2 Score preservado da implementação anterior', ${row.approvedBy || 'Sistema'}, ${row.approvedAt || row.submittedAt})
     `);
   }
+    h2ScoreBackfillReady = true;
+  })().catch((error) => {
+    h2ScoreBackfillPromise = null;
+    h2ScoreBackfillReady = false;
+    throw error;
+  });
+  return h2ScoreBackfillPromise;
 }

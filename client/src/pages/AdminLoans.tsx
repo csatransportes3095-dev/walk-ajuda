@@ -138,10 +138,22 @@ export default function AdminLoans() {
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 function DashboardTab() {
-  const { data, isLoading } = trpc.loans.getDashboard.useQuery();
-  const { data: proofStats } = trpc.loans.getProofDashboardStats.useQuery();
+  const dashboardQuery = trpc.loans.getDashboard.useQuery(undefined, { staleTime: 15_000 });
+  const proofStatsQuery = trpc.loans.getProofDashboardStats.useQuery(undefined, { staleTime: 15_000 });
+  const { data, isLoading, isError, error, refetch } = dashboardQuery;
+  const proofStats = proofStatsQuery.data;
   if (isLoading) return <div className="text-center py-12 text-muted-foreground"><RefreshCw className="w-6 h-6 animate-spin mx-auto" /></div>;
-  if (!data) return null;
+  if (isError) return (
+    <Card className="border-red-500/30 bg-red-500/5 p-5 text-center">
+      <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-red-400" />
+      <p className="font-bold text-red-300">Não foi possível carregar o Dashboard de Empréstimos.</p>
+      <p className="mt-1 text-xs text-muted-foreground">{(error as any)?.message || 'A consulta demorou demais ou o banco não respondeu.'}</p>
+      <Button className="mt-4" size="sm" variant="outline" onClick={() => refetch()}>
+        <RefreshCw className="mr-2 h-4 w-4" />Tentar novamente
+      </Button>
+    </Card>
+  );
+  if (!data) return <div className="py-10 text-center text-sm text-muted-foreground">Dashboard sem dados para exibir.</div>;
 
   const lucroAReceber = (data as any).lucroAReceber ?? 0;
   const capitalAReceber = Math.max(0, data.valorEmAberto - lucroAReceber);
