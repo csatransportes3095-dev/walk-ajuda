@@ -31,7 +31,7 @@ function formatCpf(value: string) {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
-type Step = "phone" | "password" | "create_password" | "profile" | "done";
+type Step = "phone" | "password" | "create_password" | "profile" | "done" | "already_done";
 
 export default function AtualizarCadastro() {
   const [step, setStep] = useState<Step>("phone");
@@ -62,6 +62,12 @@ export default function AtualizarCadastro() {
     const profile = profileQuery.data;
     if (!profile || loadedToken.current === token) return;
     loadedToken.current = token;
+    if (profile.completed) {
+      localStorage.removeItem(TOKEN_KEY);
+      setToken("");
+      setStep("already_done");
+      return;
+    }
     setPhone(formatPhone(profile.phone));
     setName(profile.name || "");
     setEmail(profile.email || "");
@@ -95,6 +101,10 @@ export default function AtualizarCadastro() {
       const result = await statusMutation.mutateAsync({ phone: clean });
       if (result.status === "not_found") return toast.error("Cadastro não encontrado. Confira o telefone.");
       if (result.status === "blocked") return toast.error("Cadastro bloqueado. Fale com o atendimento.");
+      if (result.status === "completed") {
+        localStorage.removeItem(TOKEN_KEY);
+        return setStep("already_done");
+      }
       setStep(result.status === "password" ? "password" : "create_password");
     } catch (error: any) {
       toast.error(error?.message || "Não foi possível consultar o cadastro.");
@@ -105,7 +115,10 @@ export default function AtualizarCadastro() {
     event.preventDefault();
     try {
       const result = await loginMutation.mutateAsync({ phone: normalizePhone(phone), password });
-      if (!result.success) return toast.error(result.error === "wrong_password" ? "Senha incorreta." : "Não foi possível entrar.");
+      if (!result.success) {
+        if (result.error === "completed") return setStep("already_done");
+        return toast.error(result.error === "wrong_password" ? "Senha incorreta." : "Não foi possível entrar.");
+      }
       acceptToken(result.token);
     } catch (error: any) {
       toast.error(error?.message || "Não foi possível entrar.");
@@ -118,7 +131,10 @@ export default function AtualizarCadastro() {
     if (password !== confirmPassword) return toast.error("As senhas não são iguais.");
     try {
       const result = await createPasswordMutation.mutateAsync({ phone: normalizePhone(phone), password });
-      if (!result.success) return toast.error(result.error === "password_exists" ? "Já existe uma senha. Digite a senha existente." : "Não foi possível criar a senha.");
+      if (!result.success) {
+        if (result.error === "completed") return setStep("already_done");
+        return toast.error(result.error === "password_exists" ? "Já existe uma senha. Digite a senha existente." : "Não foi possível criar a senha.");
+      }
       acceptToken(result.token);
       toast.success("Senha criada com sucesso.");
     } catch (error: any) {
@@ -149,10 +165,16 @@ export default function AtualizarCadastro() {
     if (!photoUrl) return toast.error("Envie sua foto de perfil.");
     try {
       await saveMutation.mutateAsync({ token, name, email, cpf, city, uf });
-      await profileQuery.refetch();
+      localStorage.removeItem(TOKEN_KEY);
+      setToken("");
       setStep("done");
       toast.success("Cadastro atualizado em todo o sistema.");
     } catch (error: any) {
+      if (String(error?.message || "").includes("já foi atualizado")) {
+        localStorage.removeItem(TOKEN_KEY);
+        setToken("");
+        return setStep("already_done");
+      }
       toast.error(error?.message || "Não foi possível atualizar o cadastro.");
     }
   }
@@ -230,7 +252,11 @@ export default function AtualizarCadastro() {
           )}
 
           {step === "done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro atualizado!</h2><p className="mt-2 text-sm leading-6 text-slate-400">Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos.</p></div><a href="/login" className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-4 font-black text-slate-950"><RefreshCcw className="h-5 w-5" />ENTRAR NO SISTEMA</a></div>
+            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro atualizado!</h2><p className="mt-2 text-sm leading-6 text-slate-400">Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos. Aguarde a liberação do site.</p></div><a href="/acompanhar" className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-4 font-black text-slate-950"><RefreshCcw className="h-5 w-5" />ACOMPANHAR LIBERAÇÃO</a></div>
+          )}
+
+          {step === "already_done" && (
+            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Seu cadastro já foi atualizado</h2><p className="mt-2 text-sm leading-6 text-slate-400">Aguarde a liberação do site.</p></div><a href="/acompanhar" className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-4 font-black text-slate-950"><RefreshCcw className="h-5 w-5" />ACOMPANHAR LIBERAÇÃO</a></div>
           )}
         </section>
         <p className="mt-5 text-center text-xs text-slate-600">Se não reconhecer o cadastro, não continue e fale com o atendimento.</p>
