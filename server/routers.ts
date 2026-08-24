@@ -3520,7 +3520,7 @@ export const appRouter = router({
           ) THEN 1 ELSE 0 END AS isBlocked
         FROM accessCodePhones acp
         LEFT JOIN accessCodes ac ON ac.id = acp.codeId
-        LEFT JOIN customers c ON REGEXP_REPLACE(c.phone, '[^0-9]', '') = REGEXP_REPLACE(acp.phone, '[^0-9]', '')
+        LEFT JOIN customers c ON RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(acp.phone, '[^0-9]', ''), 11) AND c.deletedAt IS NULL
         WHERE acp.archived = 0
           AND acp.rgCnhApproved = 0
           AND (ac.type IS NULL OR ac.type != 'raffle')
@@ -3567,7 +3567,7 @@ export const appRouter = router({
             ) THEN 1 ELSE 0 END AS isBlocked
           FROM orderStatusHistory osh
           LEFT JOIN accessCodePhones acp ON acp.id = osh.registrationId
-          LEFT JOIN customers c ON REGEXP_REPLACE(c.phone, '[^0-9]', '') = REGEXP_REPLACE(osh.customerPhone, '[^0-9]', '') AND c.deletedAt IS NULL
+          LEFT JOIN customers c ON RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(osh.customerPhone, '[^0-9]', ''), 11) AND c.deletedAt IS NULL
           WHERE acp.id IS NULL
             AND osh.approval = 'approved'
             AND NOT EXISTS (
