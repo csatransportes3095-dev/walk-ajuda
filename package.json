@@ -22,6 +22,7 @@
     "db:migrate:locadora": "tsx scripts/apply-locadora-migration.ts",
     "db:migrate:spreadsheet-referral-declaration": "tsx scripts/apply-spreadsheet-referral-declaration-migration.ts",
     "db:migrate:referral-commission-attribution": "tsx scripts/apply-referral-commission-attribution-migration.ts",
+    "db:migrate:loans-recovery": "tsx scripts/apply-loans-recovery-migration.ts",
     "db:restore:financeiro": "tsx scripts/restore-financeiro-backup.ts"
   },
   "dependencies": {
