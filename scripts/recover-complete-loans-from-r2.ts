@@ -106,6 +106,7 @@ function loanStatusForDatabase(value: unknown) {
 
 function installmentStatusForDatabase(value: unknown) {
   const raw = String(value || "").toLowerCase();
+  if (raw === "pago_juros" || /pago\s+de\s+juros/.test(raw)) return "pago_juros";
   const status = raw === "em_analise" ? "em_analise" : raw === "pago" ? "pago" : statusFromText(value);
   if (status === "pago") return "pago";
   if (status === "em_analise") return "em_analise";
@@ -172,7 +173,7 @@ function parseStatement(key: string, text: string) {
       dueDate: isoDate(match[2]),
       amount: money(match[3]),
       paidAt: isoDate(match[4]),
-      status: statusFromText(match[5]),
+      status: /juros/i.test(match[5]) ? "pago_juros" : statusFromText(match[5]),
     }];
   });
 
@@ -457,9 +458,11 @@ async function main() {
         const recoveredPaymentType = statement?.paymentType || (receiptTotal && count >= 20 ? "diario" : loan?.paymentType || "mensal");
         const dueDate = statement?.dueDate || (receiptTotal ? generatedDueDate(releaseDate, recoveredPaymentType, count, count) : sqlDate(loan?.dueDate)) || receiptDates.at(-1) || releaseDate;
         const dailySettledByCutoff = recoveredPaymentType === "diario" && dueDate <= DAILY_SETTLED_CUTOFF;
+        const dailyHadPaymentsByCutoff = recoveredPaymentType === "diario"
+          && generatedDueDate(releaseDate, recoveredPaymentType, 1, count) <= DAILY_SETTLED_CUTOFF;
         const proofDates = loanProofs.map(proof => proof.occurredAt ? new Date(proof.occurredAt) : null).filter((value): value is Date => !!value).sort((a, b) => a.getTime() - b.getTime());
         const firstPaymentEvidence = validDateTime(receiptDates[0]) || proofDates[0] || null;
-        const releaseWasConfirmed = loanReceipts.length > 0 || loanProofs.length > 0 || dailySettledByCutoff;
+        const releaseWasConfirmed = loanReceipts.length > 0 || loanProofs.length > 0 || dailyHadPaymentsByCutoff;
         const loanData: Row = {
           userId: loan?.userId || 1, clientId, amount, interestRate: rate,
           days: statement?.totalInstallments || n(loan?.days) || count,
@@ -517,24 +520,27 @@ async function main() {
 
         for (const item of schedule) {
           const receipt = receiptByNumber.get(item.installmentNumber);
+          const itemDueDate = item.dueDate || dueDate;
+          const dailyInstallmentPaidByCutoff = recoveredPaymentType === "diario" && itemDueDate <= DAILY_SETTLED_CUTOFF;
           let status = receipt ? "pago" : installmentStatusForDatabase(item.status);
           if (statement?.status === "pago") status = "pago";
           // Não inventa quitação para mensal/quinzenal/parcelado. Esta inferência vale
-          // exclusivamente para os diários que já tinham terminado até o corte.
-          if (dailySettledByCutoff) status = "pago";
+          // exclusivamente para parcelas diárias vencidas até o corte confirmado.
+          if (dailyInstallmentPaidByCutoff) status = "pago";
+          const paidOrInterestOnly = status === "pago" || status === "pago_juros";
           let installment = loanInstallments.find(row => Number(row.installmentNumber) === item.installmentNumber);
           const proof = loanProofs.find(p => p.installmentId === Number(installment?.id))
             || loanProofs.find(p => p.installmentId === receipt?.installmentId)
             || uniqueLoanProofs[item.installmentNumber - 1];
           const installmentData: Row = {
             loanId: Number(loan.id), installmentNumber: item.installmentNumber,
-            dueDate: item.dueDate || dueDate, amount: item.amount || installmentAmount || Math.round(totalAmount / count * 100) / 100,
-            status, paidAt: status === "pago" ? (receipt?.paidAt || item.paidAt || (dailySettledByCutoff ? item.dueDate || DAILY_SETTLED_CUTOFF : statement?.generatedAt || new Date())) : null,
-            paidBy: status === "pago" ? (dailySettledByCutoff && !receipt && !item.paidAt ? "quitacao-confirmada-ate-2026-08-22" : "recuperacao-documentos-r2") : null,
-            paidAmount: status === "pago" ? (receipt?.amountPaid || item.amount || installmentAmount) : null,
+            dueDate: itemDueDate, amount: item.amount || installmentAmount || Math.round(totalAmount / count * 100) / 100,
+            status, paidAt: paidOrInterestOnly ? (receipt?.paidAt || item.paidAt || (dailyInstallmentPaidByCutoff ? itemDueDate : statement?.generatedAt || new Date())) : null,
+            paidBy: paidOrInterestOnly ? (dailyInstallmentPaidByCutoff && !receipt && !item.paidAt ? "quitacao-confirmada-ate-2026-08-22" : "recuperacao-documentos-r2") : null,
+            paidAmount: paidOrInterestOnly ? (receipt?.amountPaid || item.amount || installmentAmount) : null,
             proofUrl: proof ? buildR2PublicUrl(proof.key) : installment?.proofUrl || null,
             proofSentAt: proof?.occurredAt ? new Date(proof.occurredAt) : validDateTime(installment?.proofSentAt),
-            notes: dailySettledByCutoff && !receipt && !item.paidAt
+            notes: dailyInstallmentPaidByCutoff && !receipt && !item.paidAt
               ? "Quitada pela regra operacional confirmada: não havia empréstimos diários atrasados até 22/08/2026."
               : installment?.notes || "Parcela conferida na recuperação documental do R2",
           };
