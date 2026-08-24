@@ -64,6 +64,24 @@ function paymentType(value: unknown) {
   return "mensal";
 }
 
+function loanStatusForDatabase(value: unknown) {
+  const raw = String(value || "").toLowerCase();
+  const status = raw === "em_analise" ? "em_analise" : raw === "aprovado" ? "aprovado" : raw === "pendente" ? "pendente" : statusFromText(value);
+  if (status === "pago") return "pago";
+  if (status === "cancelado" || status === "reprovado") return "cancelado";
+  if (status === "em_analise") return "em_analise";
+  if (status === "pendente") return "pendente";
+  return "aprovado";
+}
+
+function installmentStatusForDatabase(value: unknown) {
+  const raw = String(value || "").toLowerCase();
+  const status = raw === "em_analise" ? "em_analise" : raw === "pago" ? "pago" : statusFromText(value);
+  if (status === "pago") return "pago";
+  if (status === "em_analise") return "em_analise";
+  return "pendente";
+}
+
 async function pdfText(key: string) {
   const response = await fetch(buildR2PublicUrl(key));
   if (!response.ok) throw new Error(`R2 ${response.status}: ${key}`);
@@ -385,7 +403,7 @@ async function main() {
           days: statement?.totalInstallments || n(loan?.days) || count,
           paymentType: statement?.paymentType || loan?.paymentType || "mensal",
           interestAmount, totalAmount, releaseDate, dueDate,
-          status: statement?.status || loan?.status || "aprovado",
+          status: statement ? loanStatusForDatabase(statement.status) : loan?.status || "aprovado",
           installments: count,
           notes: loan?.notes || (!statement ? "Recuperado de recibos do R2; condições preservadas quando existentes." : "Recuperado do extrato do R2."),
           approvedBy: loan?.approvedBy || (statement?.status === "aprovado" ? "recuperacao-r2" : null),
@@ -420,9 +438,8 @@ async function main() {
 
         for (const item of schedule) {
           const receipt = receiptByNumber.get(item.installmentNumber);
-          let status = receipt ? "pago" : item.status || "pendente";
+          let status = receipt ? "pago" : installmentStatusForDatabase(item.status);
           if (statement?.status === "pago") status = "pago";
-          if (status === "pendente" && item.dueDate && item.dueDate < TODAY) status = "atrasado";
           let installment = loanInstallments.find(row => Number(row.installmentNumber) === item.installmentNumber);
           const proof = proofs.find(p => p.installmentId === Number(installment?.id))
             || proofs.find(p => p.loanId === loanId && p.installmentId === Number(installment?.id))
@@ -484,7 +501,6 @@ async function main() {
         if (Number(totals.total) > 0 && Number(totals.paid) === Number(totals.total)) finalStatus = "pago";
         else if (statement || receiptTotal) {
           if (Number(totals.analysing) > 0) finalStatus = "aguardando_pagamento";
-          else if (Number(totals.overdue) > 0) finalStatus = "atrasado";
           else finalStatus = statement?.status === "pendente" ? "pendente" : "aprovado";
         }
         await updateDynamic(db, "loans", Number(loan.id), { status: finalStatus, paidAt: finalStatus === "pago" ? totals.paidAt || statement?.generatedAt || new Date() : null, paidBy: finalStatus === "pago" ? "recuperacao-documentos-r2" : null }, loanCols);
