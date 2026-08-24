@@ -20,6 +20,7 @@ const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000;
 const PASSWORD_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const GENERIC_NAME = /^(?:CLIENTE|CADASTRO|PEDIDO)\s+RECUPERAD[OA]|^RECUPERAD[OA](?:\s|$)/i;
+const ALREADY_UPDATED_MESSAGE = "Seu cadastro já foi atualizado. Aguarde a liberação do site.";
 
 async function rows(db: any, query: any): Promise<any[]> {
   const result = await db.execute(query);
@@ -47,6 +48,35 @@ async function passwordRows(db: any, phone: string) {
     ORDER BY id DESC
     LIMIT 1
   `);
+}
+
+async function ensureCustomerUpdateCompletionInfrastructure(db: any) {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS customerProfileUpdateCompletions (
+      customerId INT NOT NULL PRIMARY KEY,
+      phone VARCHAR(32) NOT NULL,
+      completedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY customerProfileUpdateCompletions_phone_unique (phone),
+      KEY customerProfileUpdateCompletions_completedAt_idx (completedAt)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+}
+
+async function customerUpdateAlreadyCompleted(db: any, customer: any) {
+  await ensureCustomerUpdateCompletionInfrastructure(db);
+  const phone = normalizeCustomerPhone(customer?.phone);
+  const completed = await rows(db, sql`
+    SELECT customerId
+    FROM customerProfileUpdateCompletions
+    WHERE customerId=${Number(customer?.id) || 0}
+       OR phone=${phone}
+    LIMIT 1
+  `);
+  return completed.length > 0;
+}
+
+function alreadyUpdatedError() {
+  return new TRPCError({ code: "CONFLICT", message: ALREADY_UPDATED_MESSAGE });
 }
 
 async function requireCustomerSession(token: string) {
@@ -90,6 +120,7 @@ export const customerUpdateRouter = router({
       const customer = await findMainCustomerByIdentity({ phone }, db);
       if (!customer) return { status: "not_found" as const };
       if (Number(customer.blocked) === 1) return { status: "blocked" as const };
+      if (await customerUpdateAlreadyCompleted(db, customer)) return { status: "completed" as const };
       const passwords = await passwordRows(db, phone);
       return { status: passwords.length ? "password" as const : "create_password" as const };
     }),
@@ -102,6 +133,7 @@ export const customerUpdateRouter = router({
       const phone = normalizeCustomerPhone(input.phone);
       const customer = phone ? await findMainCustomerByIdentity({ phone }, db) : null;
       if (!customer || Number(customer.blocked) === 1) return { success: false as const, error: "invalid" as const };
+      if (await customerUpdateAlreadyCompleted(db, customer)) return { success: false as const, error: "completed" as const };
       const passwords = await passwordRows(db, phone);
       if (!passwords[0]) return { success: false as const, error: "no_password" as const };
       const matches = await bcrypt.compare(input.password, String(passwords[0].password || ""));
@@ -118,6 +150,7 @@ export const customerUpdateRouter = router({
       const phone = normalizeCustomerPhone(input.phone);
       const customer = phone ? await findMainCustomerByIdentity({ phone }, db) : null;
       if (!customer || Number(customer.blocked) === 1) return { success: false as const, error: "invalid" as const };
+      if (await customerUpdateAlreadyCompleted(db, customer)) return { success: false as const, error: "completed" as const };
       const existing = await passwordRows(db, phone);
       if (existing.length) return { success: false as const, error: "password_exists" as const };
       const hash = await bcrypt.hash(input.password, 10);
@@ -135,9 +168,10 @@ export const customerUpdateRouter = router({
   profile: publicProcedure
     .input(z.object({ token: z.string().min(32).max(255) }))
     .query(async ({ input }) => {
-      const { customer } = await requireCustomerSession(input.token);
+      const { db, customer } = await requireCustomerSession(input.token);
       const name = String(customer.name || "").trim();
       return {
+        completed: await customerUpdateAlreadyCompleted(db, customer),
         customerNumber: customer.customerNumber || null,
         phone: normalizeCustomerPhone(customer.phone),
         name: GENERIC_NAME.test(name) ? "" : name,
@@ -154,6 +188,7 @@ export const customerUpdateRouter = router({
     .input(z.object({ token: z.string().min(32).max(255), imageBase64: z.string().min(100).max(8_000_000) }))
     .mutation(async ({ input }) => {
       const { db, customer } = await requireCustomerSession(input.token);
+      if (await customerUpdateAlreadyCompleted(db, customer)) throw alreadyUpdatedError();
       const comma = input.imageBase64.indexOf(",");
       const pureBase64 = (comma >= 0 ? input.imageBase64.slice(comma + 1) : input.imageBase64).trim();
       const buffer = Buffer.from(pureBase64, "base64");
@@ -184,6 +219,7 @@ export const customerUpdateRouter = router({
     }))
     .mutation(async ({ input }) => {
       const { db, customer } = await requireCustomerSession(input.token);
+      if (await customerUpdateAlreadyCompleted(db, customer)) throw alreadyUpdatedError();
       await ensureCustomerIdentityInfrastructure(db);
       const name = input.name.trim().replace(/\s+/g, " ");
       const email = normalizeCustomerEmail(input.email);
@@ -212,6 +248,11 @@ export const customerUpdateRouter = router({
         WHERE id=${customer.id} AND deletedAt IS NULL
       `);
       const synchronization = await syncUnifiedCustomerRegistry([previousIdentity]);
+      await db.execute(sql`
+        INSERT INTO customerProfileUpdateCompletions (customerId, phone, completedAt)
+        VALUES (${customer.id}, ${normalizeCustomerPhone(customer.phone)}, NOW())
+        ON DUPLICATE KEY UPDATE completedAt=completedAt
+      `);
       return { success: true, synchronization };
     }),
 });
