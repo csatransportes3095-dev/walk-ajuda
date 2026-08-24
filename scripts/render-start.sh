@@ -12,6 +12,7 @@ pnpm run db:migrate:spreadsheet-referral-declaration
 pnpm run db:migrate:referral-commission-attribution
 pnpm run db:migrate:online-support
 pnpm run db:migrate:cartoes
+pnpm run db:migrate:loans-recovery
 
 echo "Iniciando servidor..."
 exec node dist/index.js
