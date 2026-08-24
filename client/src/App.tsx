@@ -85,6 +85,7 @@ import AdminPreRegistrations from "./pages/AdminPreRegistrations";
 import AdminPreCadastroQuestions from "./pages/AdminPreCadastroQuestions";
 import PreCadastro from "./pages/PreCadastro";
 import ConsultarCadastro from "./pages/ConsultarCadastro";
+import AtualizarCadastro from "./pages/AtualizarCadastro";
 import ClientReferralTree from "./pages/ClientReferralTree";
 import SchedulePage from "./pages/SchedulePage";
 import PublicQuotePage from "./pages/PublicQuotePage";
@@ -233,6 +234,7 @@ function Router() {
       </Route>
       <Route path={"/pre-cadastro"} component={PreCadastro} />
       <Route path={"/consultar-cadastro"} component={ConsultarCadastro} />
+      <Route path={"/atualizarcadastro"} component={AtualizarCadastro} />
       <Route path={"/admin/referrer-bypass"}>
         <AdminGuard><AdminReferrerBypass /></AdminGuard>
       </Route>
@@ -351,6 +353,7 @@ function AppContent() {
   const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
+  const isAtualizarCadastroRoute = location === "/atualizarcadastro";
   const isLocadoraRoute = location === "/locadora" || location === "/locadora/";
   const isLocadoraBrandRoute = location === "/locadora" || location.startsWith("/locadora/") || location.startsWith("/admin/locadora");
   const maintenanceManifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
@@ -485,6 +488,10 @@ function AppContent() {
   }
   // Rota /consultar-cadastro é pública — consulta de status por CPF
   if (isConsultarCadastroRoute) {
+    return <Router />;
+  }
+  // Rota /atualizarcadastro é pública e possui autenticação própria por telefone e senha.
+  if (isAtualizarCadastroRoute) {
     return <Router />;
   }
   // Rota /locadora é o portal isolado do módulo; o próprio portal exige ADM para dados operacionais.

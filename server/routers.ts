@@ -26,6 +26,7 @@ import { spreadsheetRouter } from "./routers/spreadsheet";
 import { loanRouter } from "./routers/loans";
 import { apkRouter } from "./routers/apk";
 import { customerPasswordRouter } from "./routers/customerPassword";
+import { customerUpdateRouter } from "./routers/customerUpdate";
 import { syncUnifiedCustomerRegistry } from "./customerIdentity";
 import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, setCustomerCommercialProfileMode } from "./loans/h2Score";
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
@@ -323,6 +324,7 @@ export const appRouter = router({
   loans: loanRouter,
   apk: apkRouter,
   customerPassword: customerPasswordRouter,
+  customerUpdate: customerUpdateRouter,
   adCampaigns: adCampaignsRouter,
   preRegistrations: preRegistrationsRouter,
   preCadastroQuestions: preCadastroQuestionsRouter,

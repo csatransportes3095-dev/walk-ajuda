@@ -1,4 +1,4 @@
-import { Clock3, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import { Clock3, ShieldCheck, Sparkles, UserRoundCog, Wrench } from "lucide-react";
 import type { MaintenanceManifestConfig } from "@shared/maintenanceManifest";
 
 function displayDate(value: string) {
@@ -38,6 +38,7 @@ export function MaintenanceManifestGate({ config }: { config: MaintenanceManifes
               </div>}
             </div>
           </div>
+          <a href="/atualizarcadastro" className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300/30 bg-emerald-400 px-5 py-4 text-sm font-black tracking-wide text-slate-950 shadow-[0_0_30px_rgba(52,211,153,.22)] transition hover:bg-emerald-300 active:scale-[.99]"><UserRoundCog className="h-5 w-5" />ATUALIZAR CADASTRO</a>
           <div className="mt-8 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
           <p className="mt-5 text-center text-xs text-slate-400">Agradecemos sua compreensão. Estamos preparando uma experiência ainda melhor para você.</p>
         </div>
