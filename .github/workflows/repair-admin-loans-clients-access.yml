@@ -1,0 +1,27 @@
+name: Repair Admin Loans Clients Access
+
+on:
+  push:
+    paths:
+      - '.github/workflows/repair-admin-loans-clients-access.yml'
+      - 'scripts/repair-admin-loans-clients-access.cjs'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: node scripts/repair-admin-loans-clients-access.cjs
+      - name: Commit fixes and cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/repair-admin-loans-clients-access.cjs .github/workflows/repair-admin-loans-clients-access.yml
+          git add server/routers/loans.ts client/src/pages/AdminLoans.tsx
+          git commit -m "fix: corrige clientes e controle de acesso de empréstimos"
+          git push origin HEAD:main
