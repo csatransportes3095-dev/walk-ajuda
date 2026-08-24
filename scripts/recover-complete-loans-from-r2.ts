@@ -11,6 +11,9 @@ type Db = Awaited<ReturnType<typeof createConnection>>;
 const APPLY = process.argv.includes("--apply");
 const TODAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 const BACKUP_SUFFIX = "backup_complete_20260824";
+// Regra operacional confirmada: em 22/08/2026 não havia empréstimo diário atrasado.
+// Portanto, um contrato diário totalmente vencido até essa data já estava quitado.
+const DAILY_SETTLED_CUTOFF = "2026-08-22";
 
 const n = (value: unknown) => {
   const parsed = Number(value);
@@ -453,8 +456,10 @@ async function main() {
         const releaseDate = statement?.releaseDate || sqlDate(loan?.releaseDate) || receiptDates[0] || TODAY;
         const recoveredPaymentType = statement?.paymentType || (receiptTotal && count >= 20 ? "diario" : loan?.paymentType || "mensal");
         const dueDate = statement?.dueDate || (receiptTotal ? generatedDueDate(releaseDate, recoveredPaymentType, count, count) : sqlDate(loan?.dueDate)) || receiptDates.at(-1) || releaseDate;
+        const dailySettledByCutoff = recoveredPaymentType === "diario" && dueDate <= DAILY_SETTLED_CUTOFF;
         const proofDates = loanProofs.map(proof => proof.occurredAt ? new Date(proof.occurredAt) : null).filter((value): value is Date => !!value).sort((a, b) => a.getTime() - b.getTime());
         const firstPaymentEvidence = validDateTime(receiptDates[0]) || proofDates[0] || null;
+        const releaseWasConfirmed = loanReceipts.length > 0 || loanProofs.length > 0 || dailySettledByCutoff;
         const loanData: Row = {
           userId: loan?.userId || 1, clientId, amount, interestRate: rate,
           days: statement?.totalInstallments || n(loan?.days) || count,
@@ -465,10 +470,12 @@ async function main() {
           notes: loan?.notes || (!statement ? "Recuperado de recibos do R2; condições preservadas quando existentes." : "Recuperado do extrato do R2."),
           approvedBy: loan?.approvedBy || (statement?.status === "aprovado" ? "recuperacao-r2" : null),
           approvedAt: validDateTime(loan?.approvedAt) || (statement?.status === "aprovado" ? validDateTime(statement.generatedAt) : null),
-          pixSentAt: validDateTime(loan?.pixSentAt) || firstPaymentEvidence || (loanReceipts.length || loanProofs.length ? validDateTime(releaseDate) : null),
-          pixConfirmedDate: sqlDate(loan?.pixConfirmedDate) || (loanReceipts.length || loanProofs.length ? releaseDate : null),
-          pixSentBy: loan?.pixSentBy || (loanReceipts.length || loanProofs.length ? "recuperacao-documentos-r2" : null),
-          pixSendNote: loan?.pixSendNote || (loanReceipts.length || loanProofs.length ? "Liberação confirmada pelos comprovantes de pagamento recuperados do R2." : null),
+          pixSentAt: validDateTime(loan?.pixSentAt) || firstPaymentEvidence || (releaseWasConfirmed ? validDateTime(releaseDate) : null),
+          pixConfirmedDate: sqlDate(loan?.pixConfirmedDate) || (releaseWasConfirmed ? releaseDate : null),
+          pixSentBy: loan?.pixSentBy || (releaseWasConfirmed ? "recuperacao-documentos-r2" : null),
+          pixSendNote: loan?.pixSendNote || (dailySettledByCutoff
+            ? `Liberação confirmada: empréstimo diário quitado até ${DAILY_SETTLED_CUTOFF}.`
+            : releaseWasConfirmed ? "Liberação confirmada pelos comprovantes de pagamento recuperados do R2." : null),
         };
         if (!loan) {
           const id = await insertDynamic(db, "loans", { id: loanId, createdAt: statement?.releaseDate || receiptDates[0] || new Date(), updatedAt: new Date(), ...loanData }, loanCols);
@@ -512,6 +519,9 @@ async function main() {
           const receipt = receiptByNumber.get(item.installmentNumber);
           let status = receipt ? "pago" : installmentStatusForDatabase(item.status);
           if (statement?.status === "pago") status = "pago";
+          // Não inventa quitação para mensal/quinzenal/parcelado. Esta inferência vale
+          // exclusivamente para os diários que já tinham terminado até o corte.
+          if (dailySettledByCutoff) status = "pago";
           let installment = loanInstallments.find(row => Number(row.installmentNumber) === item.installmentNumber);
           const proof = loanProofs.find(p => p.installmentId === Number(installment?.id))
             || loanProofs.find(p => p.installmentId === receipt?.installmentId)
@@ -519,12 +529,14 @@ async function main() {
           const installmentData: Row = {
             loanId: Number(loan.id), installmentNumber: item.installmentNumber,
             dueDate: item.dueDate || dueDate, amount: item.amount || installmentAmount || Math.round(totalAmount / count * 100) / 100,
-            status, paidAt: status === "pago" ? (receipt?.paidAt || item.paidAt || statement?.generatedAt || new Date()) : null,
-            paidBy: status === "pago" ? "recuperacao-documentos-r2" : null,
+            status, paidAt: status === "pago" ? (receipt?.paidAt || item.paidAt || (dailySettledByCutoff ? item.dueDate || DAILY_SETTLED_CUTOFF : statement?.generatedAt || new Date())) : null,
+            paidBy: status === "pago" ? (dailySettledByCutoff && !receipt && !item.paidAt ? "quitacao-confirmada-ate-2026-08-22" : "recuperacao-documentos-r2") : null,
             paidAmount: status === "pago" ? (receipt?.amountPaid || item.amount || installmentAmount) : null,
             proofUrl: proof ? buildR2PublicUrl(proof.key) : installment?.proofUrl || null,
             proofSentAt: proof?.occurredAt ? new Date(proof.occurredAt) : validDateTime(installment?.proofSentAt),
-            notes: installment?.notes || "Parcela conferida na recuperação documental do R2",
+            notes: dailySettledByCutoff && !receipt && !item.paidAt
+              ? "Quitada pela regra operacional confirmada: não havia empréstimos diários atrasados até 22/08/2026."
+              : installment?.notes || "Parcela conferida na recuperação documental do R2",
           };
           if (!installment) {
             const desiredId = receipt?.installmentId && !currentInstallments.some(row => Number(row.id) === receipt.installmentId) ? receipt.installmentId : undefined;
@@ -586,9 +598,11 @@ async function main() {
 
     const dashboard = (await rows(db, `SELECT COUNT(*) contratos, ROUND(COALESCE(SUM(amount),0),2) capitalHistorico, ROUND(COALESCE(SUM(totalAmount),0),2) totalComJuros, SUM(status='pago') finalizados, SUM(status NOT IN ('pago','cancelado','reprovado')) ativos FROM loans`))[0];
     const installments = (await rows(db, `SELECT COUNT(*) parcelas, SUM(status='pago') pagas, ROUND(COALESCE(SUM(CASE WHEN status='pago' THEN COALESCE(paidAmount,amount) ELSE 0 END),0),2) recebido, ROUND(COALESCE(SUM(CASE WHEN status NOT IN ('pago','pago_juros') THEN amount ELSE 0 END),0),2) aReceber FROM loanInstallments`))[0];
+    const multipleLoans = await rows(db, `SELECT lc.id clientId, lc.name cliente, COUNT(*) emprestimos, GROUP_CONCAT(CONCAT(l.id, ':', l.paymentType, ':', l.status, ':', DATE_FORMAT(l.releaseDate,'%d/%m/%Y'), '-', DATE_FORMAT(l.dueDate,'%d/%m/%Y')) ORDER BY l.releaseDate SEPARATOR ' | ') contratos FROM loans l JOIN loanClients lc ON lc.id=l.clientId GROUP BY lc.id,lc.name HAVING COUNT(*) > 1 ORDER BY COUNT(*) DESC,lc.name`);
     console.log("RECUPERACAO COMPLETA CONCLUIDA", summary);
     console.log("CARTEIRA RECONSTRUIDA", dashboard);
     console.log("PARCELAS RECONSTRUIDAS", installments);
+    console.log("CLIENTES COM 2 OU MAIS EMPRESTIMOS", multipleLoans);
     console.log(`BACKUPS: loanClients_${BACKUP_SUFFIX}, loans_${BACKUP_SUFFIX}, loanInstallments_${BACKUP_SUFFIX}`);
   } finally {
     await db.end();
