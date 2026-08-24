@@ -63,6 +63,9 @@ async function ensureCustomerUpdateCompletionInfrastructure(db: any) {
 }
 
 async function customerUpdateAlreadyCompleted(db: any, customer: any) {
+  // Cadastros que já estão completos também não precisam entrar novamente no formulário.
+  // Isso cobre quem concluiu a atualização antes da criação do registro de conclusão.
+  if (missingFields(customer).length === 0) return true;
   await ensureCustomerUpdateCompletionInfrastructure(db);
   const phone = normalizeCustomerPhone(customer?.phone);
   const completed = await rows(db, sql`
