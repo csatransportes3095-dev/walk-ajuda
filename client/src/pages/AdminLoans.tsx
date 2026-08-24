@@ -3008,18 +3008,20 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
     { enabled: searchEnabled && searchQuery.length >= 2 }
   );
 
+  const initialProfile = profiles.find((p) => p.slug === (client?.profileSlug || 'bronze')) || profiles[0];
   const [form, setForm] = useState({
     name: client?.name || "",
     cpf: client?.cpf || "",
     phone: client?.phone || "",
     status: client?.status || "ativo",
     profileSlug: client?.profileSlug || "bronze",
-    creditLimit: client?.creditLimit || "",
-    interestRate: client?.interestRate || "",
+    creditLimit: client?.creditLimit ?? initialProfile?.creditLimit ?? "",
+    interestRate: client?.interestRate ?? initialProfile?.interestRate ?? "",
     notes: client?.notes || "",
     pixKey: client?.pixKey || client?.client_pix_key || "",
     pixKeyType: client?.pixKeyType || "cpf",
     pixName: client?.pixName || client?.client_pix_name || "",
+    pixBank: client?.client_pix_bank || "",
     spreadsheetToken: client?.spreadsheetToken || "",
   });
   const getDefaultAllowedTypes = (profileSlug?: string) => {
@@ -3132,8 +3134,8 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
           {/* Modos de pagamento liberados */}
           <div className="space-y-2">
             <Label className="text-xs font-semibold">Modos de pagamento liberados</Label>
-            <div className="grid grid-cols-4 gap-2">
-              {(["diario", "semanal", "mensal", "parcelado"] as const).map(m => (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {(["diario", "semanal", "quinzenal", "mensal", "parcelado"] as const).map(m => (
                 <button
                   key={m}
                   type="button"
@@ -3144,7 +3146,7 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
                       : "border-border/50 text-muted-foreground hover:border-violet-500/40"
                   }`}
                 >
-                  {m === "diario" ? "Diário" : m === "semanal" ? "Semanal" : m === "parcelado" ? "Parcelado" : "Mensal"}
+                  {m === "diario" ? "Diário" : m === "semanal" ? "Semanal" : m === "quinzenal" ? "Quinzenal" : m === "parcelado" ? "Parcelado" : "Mensal"}
                 </button>
               ))}
             </div>
@@ -3159,6 +3161,7 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
                   <SelectTrigger className="bg-card/60"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="cpf">CPF</SelectItem>
+                    <SelectItem value="cnpj">CNPJ</SelectItem>
                     <SelectItem value="telefone">Telefone</SelectItem>
                     <SelectItem value="email">E-mail</SelectItem>
                     <SelectItem value="aleatoria">Aleatória</SelectItem>
@@ -3167,6 +3170,7 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
               </div>
               <div className="space-y-1"><Label>Chave PIX</Label><Input value={form.pixKey} onChange={(e) => set("pixKey", e.target.value)} /></div>
               <div className="col-span-2 space-y-1"><Label>Nome do titular PIX</Label><Input value={form.pixName} onChange={(e) => set("pixName", e.target.value)} /></div>
+              <div className="col-span-2 space-y-1"><Label>Banco do PIX</Label><Input value={form.pixBank} onChange={(e) => set("pixBank", e.target.value)} placeholder="Ex: Nubank, Itaú..." /></div>
             </div>
           </div>
           <div className="space-y-1"><Label>Observações</Label><Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} /></div>
@@ -3174,7 +3178,7 @@ function ClientFormModal({ client, profiles, onClose, onSuccess }: { client: any
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button onClick={() => save.mutate({ id: client?.id, ...form, creditLimit: parseFloat(form.creditLimit), interestRate: parseFloat(form.interestRate), allowedPaymentTypes: allowedTypes.join(",") })}
-            disabled={!form.name || save.isPending}>
+            disabled={!form.name || !Number.isFinite(parseFloat(String(form.creditLimit))) || !Number.isFinite(parseFloat(String(form.interestRate))) || save.isPending}>
             {save.isPending ? "Salvando..." : "Salvar"}
           </Button>
         </DialogFooter>
@@ -3415,7 +3419,7 @@ function PixTab() {
 // ─── Controle de Acesso ───────────────────────────────────────────────────────
 function AccessControlTab() {
   const { data: clients, isLoading, refetch } = trpc.loans.listSpreadsheetClients.useQuery();
-  const toggle = trpc.loans.toggleLoanByPhone.useMutation({ onSuccess: () => refetch() });
+  const toggle = trpc.loans.toggleLoanByPhone.useMutation({ onSuccess: () => refetch(), onError: (e) => toast.error(e.message) });
   const [search, setSearch] = useState("");
 
   const filtered = ((clients || []) as any[]).filter((c: any) =>
@@ -3521,7 +3525,8 @@ function LateFeeTab() {
   const [form, setForm] = useState<any>(null);
   const [search, setSearch] = useState("");
 
-  if (!form && cfg) {
+  useEffect(() => {
+    if (!cfg) return;
     setForm({
       enabled: !!cfg.enabled,
       fee_after_18h: parseFloat(String(cfg.fee_after_18h)) || 10,
@@ -3529,7 +3534,7 @@ function LateFeeTab() {
       fee_after_midnight_pct: parseFloat(String(cfg.fee_after_midnight_pct)) || 100,
       rules_text: cfg.rules_text || "Regras de pagamento:\n- Pague sua parcela diária até as 18h para evitar taxas adicionais.\n- Após 18h: taxa adicional de R$ 10,00.\n- Após 20h: taxa adicional de mais R$ 10,00 (acumulada: R$ 20,00).\n- Após 23:59: a parcela do dia é cobrada integralmente (100%).",
     });
-  }
+  }, [cfg]);
 
   const filteredClients = ((clients || []) as any[]).filter((c: any) =>
     !search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.phone?.includes(search)

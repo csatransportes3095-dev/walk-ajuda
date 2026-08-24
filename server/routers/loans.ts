@@ -3,7 +3,7 @@ import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
 import { getDb, createFinancialSale } from "../db";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
-import { findMainCustomerByIdentity, getRouteAccess } from "../customerAccess";
+import { CUSTOMER_ROUTES, findMainCustomerByIdentity, getRouteAccess, setCustomerRoutePermissions } from "../customerAccess";
 import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
@@ -81,6 +81,25 @@ async function requireLoanRouteAccess(db: any, rawToken: string): Promise<any> {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso não autorizado para a área de Empréstimos.' });
   }
   return session;
+}
+
+async function setMainCustomerLoanAccess(
+  db: any,
+  identity: { phone?: string | null; cpf?: string | null },
+  enabled: boolean,
+  grantedBy = 'ADM Empréstimos',
+): Promise<void> {
+  const customer = await findMainCustomerByIdentity(identity, db);
+  if (!customer) return;
+  const access = await getRouteAccess(customer.id, db);
+  if (!access.restricted && enabled) return;
+  const currentRoutes = access.restricted
+    ? access.routes
+    : CUSTOMER_ROUTES.filter((route) => route !== 'emprestimo');
+  const nextRoutes = enabled
+    ? [...new Set([...currentRoutes, 'emprestimo'])]
+    : currentRoutes.filter((route) => route !== 'emprestimo');
+  await setCustomerRoutePermissions(customer.id, nextRoutes, grantedBy, db);
 }
 
 function isSameLoanIdentity(row: any, cpf?: string | null, phone?: string | null) {
@@ -621,7 +640,7 @@ export const loanRouter = router({
     const qNum = `%${input.query.replace(/\D/g, '')}%`;
     const rows = await qRows(db, drizzleSql`
       SELECT id, name, phone, cpf, email FROM customers
-      WHERE (phone LIKE ${qNum} OR cpf LIKE ${qNum} OR name LIKE ${q})
+      WHERE (REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', '') LIKE ${qNum} OR REGEXP_REPLACE(COALESCE(cpf,''), '[^0-9]', '') LIKE ${qNum} OR name LIKE ${q})
       AND deletedAt IS NULL AND blocked=0
       LIMIT 10
     `);
@@ -790,11 +809,12 @@ export const loanRouter = router({
     profileSlug: z.string().default("bronze"),
     creditLimit: z.number(),
     interestRate: z.number(),
-    loanEnabled: z.number().default(0),
+    loanEnabled: z.number().optional(),
     allowedPaymentTypes: z.string().optional(), // será derivado do perfil se não informado
     pixKey: z.string().optional(),
     pixKeyType: z.enum(["cpf", "cnpj", "telefone", "email", "aleatoria"]).optional(),
     pixName: z.string().optional(),
+    pixBank: z.string().optional(),
     spreadsheetToken: z.string().optional(),
     notes: z.string().optional(),
   })).mutation(async ({ input }) => {
@@ -805,9 +825,11 @@ export const loanRouter = router({
     const profiles = await qRows(db, drizzleSql`SELECT * FROM loanProfiles WHERE slug=${input.profileSlug} LIMIT 1`);
     const profile = profiles[0];
     let resolvedAllowedTypes = String(input.allowedPaymentTypes || '').trim();
-    if (!resolvedAllowedTypes && input.id) {
-      const existing = await qRows(db, drizzleSql`SELECT allowedPaymentTypes FROM loanClients WHERE id=${input.id} LIMIT 1`);
-      resolvedAllowedTypes = String(existing[0]?.allowedPaymentTypes || '').trim();
+    let resolvedLoanEnabled = input.loanEnabled ?? 0;
+    if (input.id) {
+      const existing = await qRows(db, drizzleSql`SELECT allowedPaymentTypes, loanEnabled FROM loanClients WHERE id=${input.id} LIMIT 1`);
+      if (!resolvedAllowedTypes) resolvedAllowedTypes = String(existing[0]?.allowedPaymentTypes || '').trim();
+      if (input.loanEnabled === undefined) resolvedLoanEnabled = Number(existing[0]?.loanEnabled || 0);
     }
     if (!resolvedAllowedTypes) resolvedAllowedTypes = profile?.defaultPaymentTypes ?? "diario";
 
@@ -817,10 +839,10 @@ export const loanRouter = router({
           name=${input.name}, cpf=${input.cpf || null}, phone=${input.phone || null},
           status=${input.status}, profileSlug=${input.profileSlug},
           creditLimit=${input.creditLimit}, interestRate=${input.interestRate},
-          loanEnabled=${input.loanEnabled}, allowedPaymentTypes=${resolvedAllowedTypes},
+          loanEnabled=${resolvedLoanEnabled}, allowedPaymentTypes=${resolvedAllowedTypes},
           pixKey=${input.pixKey || null}, pixKeyType=${input.pixKeyType || null},
           pixName=${input.pixName || null},
-          client_pix_key=${input.pixKey || null}, client_pix_name=${input.pixName || null},
+          client_pix_key=${input.pixKey || null}, client_pix_name=${input.pixName || null}, client_pix_bank=${input.pixBank || null},
           spreadsheetToken=${input.spreadsheetToken || null},
           notes=${input.notes || null}, updatedAt=NOW()
         WHERE id=${input.id}
@@ -838,11 +860,11 @@ export const loanRouter = router({
       }
       const result = await db.execute(drizzleSql`
         INSERT INTO loanClients (name, cpf, phone, status, profileSlug, creditLimit, interestRate,
-          loanEnabled, allowedPaymentTypes, pixKey, pixKeyType, pixName, client_pix_key, client_pix_name, spreadsheetToken, notes, userId)
+          loanEnabled, allowedPaymentTypes, pixKey, pixKeyType, pixName, client_pix_key, client_pix_name, client_pix_bank, spreadsheetToken, notes, userId)
         VALUES (${mainCustomer.name}, ${mainCustomer.cpf || null}, ${mainCustomer.phone || null}, ${input.status},
-          ${input.profileSlug}, ${input.creditLimit}, ${input.interestRate}, ${input.loanEnabled},
+          ${input.profileSlug}, ${input.creditLimit}, ${input.interestRate}, ${resolvedLoanEnabled},
           ${resolvedAllowedTypes}, ${input.pixKey || null}, ${input.pixKeyType || null},
-          ${input.pixName || null}, ${input.pixKey || null}, ${input.pixName || null}, ${input.spreadsheetToken || null}, ${input.notes || null}, 1)
+          ${input.pixName || null}, ${input.pixKey || null}, ${input.pixName || null}, ${input.pixBank || null}, ${input.spreadsheetToken || null}, ${input.notes || null}, 1)
       `);
       try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
         console.warn('[loans.saveClient] sincronização unificada não aplicada:', error?.message);
@@ -854,16 +876,21 @@ export const loanRouter = router({
   toggleLoanEnabled: adminProcedure.input(z.object({
     clientId: z.number(),
     enabled: z.number(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ input, ctx }) => {
     const db = await getDb() as any;
+    const rows = await qRows(db, drizzleSql`SELECT phone, cpf FROM loanClients WHERE id=${input.clientId} LIMIT 1`);
+    if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado.' });
     await db.execute(drizzleSql`UPDATE loanClients SET loanEnabled=${input.enabled}, updatedAt=NOW() WHERE id=${input.clientId}`);
+    await setMainCustomerLoanAccess(db, rows[0], input.enabled === 1, ctx.user?.name || 'ADM Empréstimos');
     return { ok: true };
   }),
 
   deleteClient: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
     const db = await getDb() as any;
-    await db.execute(drizzleSql`DELETE FROM loanInstallments WHERE loanId IN (SELECT id FROM loans WHERE clientId=${input.id})`);
-    await db.execute(drizzleSql`DELETE FROM loans WHERE clientId=${input.id}`);
+    const history = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loans WHERE clientId=${input.id}`);
+    if (Number(history[0]?.cnt || 0) > 0) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Este cliente possui histórico de empréstimos. Por segurança, o histórico financeiro não pode ser apagado por esta tela.' });
+    }
     await db.execute(drizzleSql`DELETE FROM loanClients WHERE id=${input.id}`);
     return { ok: true };
   }),
@@ -2030,14 +2057,15 @@ export const loanRouter = router({
   toggleLoanByPhone: adminProcedure.input(z.object({
     phone: z.string(),
     enabled: z.number(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ input, ctx }) => {
     const db = await getDb() as any;
-    const existing = await qRows(db, drizzleSql`SELECT id FROM loanClients WHERE phone=${input.phone}`);
+    const phone = onlyDigits(input.phone);
+    const existing = await qRows(db, drizzleSql`SELECT id, phone, cpf FROM loanClients WHERE RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', ''), 9)=RIGHT(${phone}, 9) LIMIT 1`);
     if (existing.length) {
       // Atualiza todos os registros com esse telefone (evita inconsistência em duplicatas)
-      await db.execute(drizzleSql`UPDATE loanClients SET loanEnabled=${input.enabled}, updatedAt=NOW() WHERE phone=${input.phone}`);
+      await db.execute(drizzleSql`UPDATE loanClients SET loanEnabled=${input.enabled}, updatedAt=NOW() WHERE id=${existing[0].id}`);
     } else {
-      const clients = await qRows(db, drizzleSql`SELECT * FROM spreadsheetClients WHERE phone=${input.phone} LIMIT 1`);
+      const clients = await qRows(db, drizzleSql`SELECT * FROM spreadsheetClients WHERE id=${existing[0].id} LIMIT 1`);
       if (!clients.length) throw new TRPCError({ code: "NOT_FOUND" });
       const sc = clients[0];
       let mainCustomer: any;
@@ -2054,6 +2082,8 @@ export const loanRouter = router({
         VALUES (1, ${mainCustomer.name}, ${mainCustomer.cpf || null}, ${mainCustomer.phone}, 'ativo', 'bronze', ${profile?.creditLimit || 500}, ${profile?.interestRate || 5}, ${profile?.maxDays || 30}, ${input.enabled}, ${paymentTypes})
       `);
     }
+    const centralIdentity = existing[0] || { phone };
+    await setMainCustomerLoanAccess(db, centralIdentity, input.enabled === 1, ctx.user?.name || 'ADM Empréstimos');
     try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
       console.warn('[loans.toggleLoanByPhone] sincronização unificada não aplicada:', error?.message);
     }
