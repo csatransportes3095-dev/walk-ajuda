@@ -31,7 +31,18 @@ const dateMs = (value: unknown) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 1_500_000_000_000 && parsed < 2_500_000_000_000 ? parsed : null;
 };
-const sqlDate = (value: unknown) => value ? String(value).slice(0, 10) : null;
+const sqlDate = (value: unknown) => {
+  if (!value) return null;
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0, 10);
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] && match[1] !== "0000-00-00" ? match[1] : null;
+};
+const validDateTime = (value: unknown) => {
+  if (!value || String(value).trim() === "?") return null;
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null;
+  const parsed = new Date(String(value));
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
+};
 const samePhone = (a: unknown, b: unknown) => {
   const x = digits(a).slice(-11), y = digits(b).slice(-11);
   return x.length >= 10 && y.length >= 10 && x === y;
@@ -407,7 +418,7 @@ async function main() {
           installments: count,
           notes: loan?.notes || (!statement ? "Recuperado de recibos do R2; condições preservadas quando existentes." : "Recuperado do extrato do R2."),
           approvedBy: loan?.approvedBy || (statement?.status === "aprovado" ? "recuperacao-r2" : null),
-          approvedAt: loan?.approvedAt || (statement?.status === "aprovado" ? statement.generatedAt : null),
+          approvedAt: validDateTime(loan?.approvedAt) || (statement?.status === "aprovado" ? validDateTime(statement.generatedAt) : null),
         };
         if (!loan) {
           const id = await insertDynamic(db, "loans", { id: loanId, createdAt: statement?.releaseDate || receiptDates[0] || new Date(), updatedAt: new Date(), ...loanData }, loanCols);
@@ -451,7 +462,7 @@ async function main() {
             paidBy: status === "pago" ? "recuperacao-documentos-r2" : null,
             paidAmount: status === "pago" ? (receipt?.amountPaid || item.amount || installmentAmount) : null,
             proofUrl: proof ? buildR2PublicUrl(proof.key) : installment?.proofUrl || null,
-            proofSentAt: proof?.occurredAt ? new Date(proof.occurredAt) : installment?.proofSentAt || null,
+            proofSentAt: proof?.occurredAt ? new Date(proof.occurredAt) : validDateTime(installment?.proofSentAt),
             notes: installment?.notes || "Parcela conferida na recuperação documental do R2",
           };
           if (!installment) {
