@@ -1,13 +1,26 @@
 import { trpc } from "@/lib/trpc";
 import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { httpBatchLink, TRPCClientError } from "@trpc/client";
+import { httpBatchLink, splitLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import "./index.css";
 
-const queryClient = new QueryClient();
+// Consultas de tela não podem ficar em loop por vários minutos quando o servidor
+// responde lentamente ou ocorre algum erro. Mutations continuam com prazo maior
+// porque uploads, geração de arquivos e envio de e-mails podem levar mais tempo.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: 0,
+    },
+  },
+});
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
@@ -36,21 +49,36 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
+function fetchWithTimeout(timeoutMs: number) {
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    return globalThis.fetch(input, {
+      ...(init ?? {}),
+      credentials: "include",
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+  };
+}
+
 const trpcClient = trpc.createClient({
   links: [
-    httpBatchLink({
-      url: "/api/trpc",
-      transformer: superjson,
-      fetch(input, init) {
-        const controller = new AbortController();
-        // Timeout de 150s para mutations pesadas (upload de arquivos + emails)
-        const timeoutId = setTimeout(() => controller.abort(), 150000);
-        return globalThis.fetch(input, {
-          ...(init ?? {}),
-          credentials: "include",
-          signal: controller.signal,
-        }).finally(() => clearTimeout(timeoutId));
+    splitLink({
+      condition(op) {
+        return op.type === "mutation";
       },
+      true: httpBatchLink({
+        url: "/api/trpc",
+        transformer: superjson,
+        fetch: fetchWithTimeout(150000),
+      }),
+      false: httpBatchLink({
+        url: "/api/trpc",
+        transformer: superjson,
+        // Consultas normais do painel devem responder rapidamente. Se não responderem,
+        // encerramos a tentativa em vez de deixar a tela girando indefinidamente.
+        fetch: fetchWithTimeout(30000),
+      }),
     }),
   ],
 });
