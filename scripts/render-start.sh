@@ -15,6 +15,7 @@ pnpm run db:migrate:cartoes
 pnpm run db:migrate:loans-compat
 pnpm exec tsx scripts/apply-loans-recovery-preflight.ts
 pnpm exec tsx scripts/apply-loans-recovery-wrapper.ts
+pnpm exec tsx scripts/apply-loans-recovery-20260822-fix.ts
 
 echo "Iniciando servidor..."
 exec node dist/index.js
