@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { CheckCircle2, Eye, EyeOff, LockKeyhole, Phone, RefreshCcw, ShieldCheck, Upload, UserRoundCog } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, LockKeyhole, Phone, ShieldCheck, Upload, UserRoundCog } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -252,11 +252,11 @@ export default function AtualizarCadastro() {
           )}
 
           {step === "done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro atualizado!</h2><p className="mt-2 text-sm leading-6 text-slate-400">Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos. Aguarde a liberação do site.</p></div><a href="/acompanhar" className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-4 font-black text-slate-950"><RefreshCcw className="h-5 w-5" />ACOMPANHAR LIBERAÇÃO</a></div>
+            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro atualizado!</h2><p className="mt-2 text-sm leading-6 text-slate-400">Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos. Aguarde a liberação do site.</p></div></div>
           )}
 
           {step === "already_done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Seu cadastro já foi atualizado</h2><p className="mt-2 text-sm leading-6 text-slate-400">Aguarde a liberação do site.</p></div><a href="/acompanhar" className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-4 font-black text-slate-950"><RefreshCcw className="h-5 w-5" />ACOMPANHAR LIBERAÇÃO</a></div>
+            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Seu cadastro já foi atualizado</h2><p className="mt-2 text-sm leading-6 text-slate-400">Aguarde a liberação do site.</p></div></div>
           )}
         </section>
         <p className="mt-5 text-center text-xs text-slate-600">Se não reconhecer o cadastro, não continue e fale com o atendimento.</p>
