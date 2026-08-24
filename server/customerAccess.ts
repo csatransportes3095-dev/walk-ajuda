@@ -118,6 +118,23 @@ export async function setRouteReleaseMode(route: CustomerRoute, mode: RouteRelea
     VALUES (${route}, ${mode}, ${updatedBy}, NOW())
     ON DUPLICATE KEY UPDATE releaseMode=VALUES(releaseMode), updatedBy=VALUES(updatedBy), updatedAt=NOW()
   `);
+
+  // Regra do ADM: ao deixar a rota em automático, nenhuma solicitação daquela
+  // rota pode continuar presa em "Aguardando". Libera todas as pendências já
+  // existentes e mantém o comportamento automático para as próximas solicitações.
+  if (mode === 'automatico') {
+    const pendingRequests = await rows(db, sql`
+      SELECT customerId
+      FROM customerAccessRequests
+      WHERE route=${route} AND status='pending' AND pendingKey=1
+      ORDER BY id ASC
+    `);
+    const customerIds = [...new Set(pendingRequests.map((request: any) => Number(request.customerId)).filter(Boolean))];
+    for (const customerId of customerIds) {
+      await releaseAutomaticRouteForCustomer(db, customerId, route, `Liberação automática (${updatedBy})`);
+    }
+  }
+
   return mode;
 }
 
@@ -172,6 +189,22 @@ export async function setCustomerRoutePermissions(
   }
   await syncLegacyLoanPermission(db, customerId, routes.includes('emprestimo'));
   return routes;
+}
+
+async function releaseAutomaticRouteForCustomer(db: any, customerId: number, route: CustomerRoute, grantedBy: string): Promise<void> {
+  const access = await getRouteAccess(customerId, db);
+
+  // Cliente legado sem restrição já possui acesso total. Nesse caso, apenas
+  // finalizamos a pendência para não transformar o acesso total em acesso parcial.
+  if (access.restricted && !access.routes.includes(route)) {
+    await setCustomerRoutePermissions(customerId, [...access.routes, route], grantedBy, db);
+  }
+
+  await db.execute(sql`
+    UPDATE customerAccessRequests
+    SET status='approved', pendingKey=NULL, analyzedAt=NOW(), analyzedBy=${grantedBy}
+    WHERE customerId=${customerId} AND route=${route} AND status='pending' AND pendingKey=1
+  `);
 }
 
 export async function reconcileLegacyLoanPermissions(dbArg?: any): Promise<number> {
@@ -241,6 +274,15 @@ export async function requestCustomerRouteAccess(customerId: number, route: Cust
   const db = dbArg || await getDb() as any;
   if (!db) throw new Error("Banco de dados indisponível");
   await ensureCustomerIdentityInfrastructure(db);
+
+  // A fonte de verdade é o modo configurado no ADM. Em automático, nenhuma
+  // chamada pode criar ou manter uma solicitação pendente.
+  const releaseMode = await getRouteReleaseMode(route, db);
+  if (releaseMode === 'automatico') {
+    await releaseAutomaticRouteForCustomer(db, customerId, route, 'Liberação automática');
+    return { created: false, pending: false, cooldown: false, retryAtMs: null, daysRemaining: 0 };
+  }
+
   const pending = await rows(db, sql`
     SELECT id FROM customerAccessRequests
     WHERE customerId=${customerId} AND route=${route} AND pendingKey=1
