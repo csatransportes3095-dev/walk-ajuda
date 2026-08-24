@@ -892,9 +892,9 @@ export const loanRouter = router({
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='em_analise') as pendingProofs,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='pago') as paidInstallments,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id) as totalInstallments,
-        (SELECT COALESCE(SUM(amount), 0) FROM loanInstallments WHERE loanId=l.id AND status='pendente' AND dueDate < CURDATE()) as overdueAmount,
-        (SELECT COALESCE(SUM(COALESCE(feeApplied, 0)), 0) FROM loanInstallments WHERE loanId=l.id AND status='pendente' AND dueDate < CURDATE()) as overdueFees,
-        (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='pendente' AND dueDate < CURDATE()) as overdueCount,
+        (SELECT COALESCE(SUM(amount), 0) FROM loanInstallments WHERE loanId=l.id AND status IN ('pendente','atrasado') AND dueDate < DATE(DATE_SUB(NOW(), INTERVAL 3 HOUR))) as overdueAmount,
+        (SELECT COALESCE(SUM(COALESCE(feeApplied, 0)), 0) FROM loanInstallments WHERE loanId=l.id AND status IN ('pendente','atrasado') AND dueDate < DATE(DATE_SUB(NOW(), INTERVAL 3 HOUR))) as overdueFees,
+        (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status IN ('pendente','atrasado') AND dueDate < DATE(DATE_SUB(NOW(), INTERVAL 3 HOUR))) as overdueCount,
         (SELECT COALESCE(SUM(paidAmount), 0) FROM loanInstallments WHERE loanId=l.id AND status='pago_juros') as interestOnlyPaidTotal,
         (SELECT COALESCE(SUM(points), 0) FROM loanH2ScoreLedger WHERE clientId=l.clientId) as h2ScoreTotal
       FROM loans l
@@ -1614,7 +1614,7 @@ export const loanRouter = router({
       const overdueInstalls = await qRows(db, drizzleSql`
         SELECT COUNT(*) as cnt FROM loanInstallments
         WHERE loanId IN (${drizzleSql.raw(allLoanIds.join(','))})
-        AND status='pendente' AND dueDate < ${today}
+        AND status IN ('pendente','atrasado') AND dueDate < ${today}
       `);
       const overdueCount = parseInt(overdueInstalls[0]?.cnt || '0');
       // Score baseado APENAS em parcelas pendentes vencidas atualmente
@@ -2455,7 +2455,7 @@ export const loanRouter = router({
     const db = await getDb() as any;
     const rows = await qRows(db, drizzleSql`
       SELECT * FROM loanInstallments
-      WHERE loanId=${input.loanId} AND notes='interest_only'
+      WHERE loanId=${input.loanId} AND status='pago_juros'
       ORDER BY installmentNumber ASC
     `);
     return rows;
@@ -2570,7 +2570,12 @@ export const loanRouter = router({
     if (parseInt(pending[0].cnt) === 0) {
       await db.execute(drizzleSql`UPDATE loans SET status='pago', paidAt=NOW(), paidBy=${paidBy} WHERE id=${loanId}`);
     } else {
-      await db.execute(drizzleSql`UPDATE loans SET status='aprovado' WHERE id=${loanId} AND status='aguardando_pagamento'`);
+      const awaitingProof = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanInstallments WHERE loanId=${loanId} AND status IN ('aguardando_confirmacao','em_analise')`);
+      if (parseInt(awaitingProof[0]?.cnt || 0) > 0) {
+        await db.execute(drizzleSql`UPDATE loans SET status='aguardando_pagamento' WHERE id=${loanId}`);
+      } else {
+        await db.execute(drizzleSql`UPDATE loans SET status='aprovado' WHERE id=${loanId} AND status='aguardando_pagamento'`);
+      }
     }
     return { ok: true, hasProof: !!hasProof, fileUrl, h2ScoreApproval, permanentH2Score };
   }),
