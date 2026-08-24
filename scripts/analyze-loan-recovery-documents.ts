@@ -205,6 +205,7 @@ async function main() {
         statementSnapshots: snapshots.length,
         receiptInstallments: uniquePaidInstallments,
         receiptCount: loanReceipts.length,
+        receiptDetails: latest ? undefined : loanReceipts,
         paidConfirmed,
         totalInstallments,
         finalByDocuments,
@@ -212,15 +213,37 @@ async function main() {
       };
     });
 
-    console.log("ANALISE COMPLETA DE EMPRESTIMOS E PAGAMENTOS");
-    console.log(JSON.stringify({
+    const fullReport = {
       databaseLoans: current.length,
       statementPdfs: statements.length,
       receiptPdfs: receipts.length,
       clientProofFiles: clientProofKeys.length,
       adminProofFiles: adminProofKeys.length,
       loans: report,
-    }, null, 2));
+    };
+    writeFileSync("/tmp/loan-recovery-analysis.json", JSON.stringify(fullReport, null, 2), "utf8");
+
+    console.log("ANALISE COMPLETA DE EMPRESTIMOS E PAGAMENTOS", {
+      databaseLoans: current.length,
+      statementPdfs: statements.length,
+      receiptPdfs: receipts.length,
+      clientProofFiles: clientProofKeys.length,
+      adminProofFiles: adminProofKeys.length,
+    });
+    console.table(report.map((row) => ({
+      id: row.loanId,
+      noBanco: row.existsInDatabase ? "SIM" : "NAO",
+      statusBanco: row.currentStatus,
+      statusExtrato: row.latestStatement?.status || null,
+      pagas: `${row.paidConfirmed}/${row.totalInstallments || "?"}`,
+      finalizado: row.finalByDocuments ? "SIM" : "NAO",
+      recibos: row.receiptCount,
+      cliente: row.client?.name || "",
+    })));
+    console.log("EMPRESTIMOS SEM EXTRATO — DADOS DOS RECIBOS", report
+      .filter((row) => !row.latestStatement && row.receiptCount > 0)
+      .map((row) => ({ loanId: row.loanId, client: row.client, receipts: row.receiptDetails })));
+    console.log("Relatorio completo salvo em /tmp/loan-recovery-analysis.json");
     console.log("MODO ANALISE: nenhum dado foi alterado");
   } finally {
     await db.end();
