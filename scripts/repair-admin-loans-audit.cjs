@@ -45,7 +45,7 @@ s = replaceOnce(
 // Reagendamento deve atuar somente no que ainda é efetivamente devido.
 const rescheduleStart = s.indexOf('rescheduleInstallments: adminProcedure');
 if (rescheduleStart < 0) throw new Error('rescheduleInstallments não localizado');
-const rescheduleEnd = s.indexOf('// ── SYNC:', rescheduleStart);
+const rescheduleEnd = s.indexOf('syncFromGastos: adminProcedure', rescheduleStart);
 if (rescheduleEnd < 0) throw new Error('fim de rescheduleInstallments não localizado');
 let rescheduleBlock = s.slice(rescheduleStart, rescheduleEnd);
 rescheduleBlock = replaceOnce(
