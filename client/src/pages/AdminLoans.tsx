@@ -146,47 +146,31 @@ function DashboardTab() {
   const dashboardQuery = trpc.loans.getDashboard.useQuery(undefined, { staleTime: 15_000 });
   const proofStatsQuery = trpc.loans.getProofDashboardStats.useQuery(undefined, { staleTime: 15_000 });
   const storageDiagnosticQuery = trpc.loans.diagnoseLoanStorage.useQuery(undefined, { enabled: dashboardQuery.isError, retry: false });
-  const { data, isLoading, isError, error, refetch } = dashboardQuery;
+  const { data: dashboardData, isLoading, isError, error, refetch } = dashboardQuery;
   const proofStats = proofStatsQuery.data;
   if (isLoading) return <div className="text-center py-12 text-muted-foreground"><RefreshCw className="w-6 h-6 animate-spin mx-auto" /></div>;
-  if (isError) return (
-    <Card className="border-red-500/30 bg-red-500/5 p-5 text-center">
-      <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-red-400" />
-      <p className="font-bold text-red-300">Não foi possível carregar o Dashboard de Empréstimos.</p>
-      <p className="mt-1 text-xs text-muted-foreground">{(error as any)?.message || 'A consulta demorou demais ou o banco não respondeu.'}</p>
-      <div className="mt-4 rounded-lg border border-red-500/20 bg-black/20 p-3 text-left text-xs">
-        {storageDiagnosticQuery.isLoading && <p className="text-muted-foreground">Verificando estrutura do banco...</p>}
-        {storageDiagnosticQuery.data && (() => {
-          const d: any = storageDiagnosticQuery.data;
-          return (
-            <div className="space-y-1">
-              <p><strong>Base conectada:</strong> {d.database || 'não identificada'}</p>
-              <p><strong>Tabela loans:</strong> {d.loansExists ? 'EXISTE' : 'NÃO ENCONTRADA'} {d.loansCount !== null ? ' — ' + d.loansCount + ' empréstimo(s)' : ''}</p>
-              <p><strong>Tabela loanInstallments:</strong> {d.loanInstallmentsExists ? 'EXISTE' : 'NÃO ENCONTRADA'} {d.installmentCount !== null ? ' — ' + d.installmentCount + ' parcela(s)' : ''}</p>
-              <p><strong>Relacionamento parcelas → empréstimos:</strong> {d.joinCount !== null ? 'OK — ' + d.joinCount + ' registro(s)' : 'FALHOU'}</p>
-              {d.installmentsError && <p className="break-all text-red-300"><strong>Erro das parcelas:</strong> {d.installmentsError}</p>}
-              {d.joinError && <p className="break-all text-red-300"><strong>Erro do relacionamento:</strong> {d.joinError}</p>}
-              {d.loansError && <p className="break-all text-red-300"><strong>Erro de loans:</strong> {d.loansError}</p>}
-              {d.metadataError && <p className="break-all text-red-300"><strong>Erro de estrutura:</strong> {d.metadataError}</p>}
-            </div>
-          );
-        })()}
-        {storageDiagnosticQuery.isError && <p className="text-red-300">O diagnóstico separado também falhou: {(storageDiagnosticQuery.error as any)?.message}</p>}
-      </div>
-      <Button className="mt-4" size="sm" variant="outline" onClick={() => { refetch(); storageDiagnosticQuery.refetch(); }}>
-        <RefreshCw className="mr-2 h-4 w-4" />Tentar novamente
-      </Button>
-    </Card>
-  );
-  if (!data) return <div className="py-10 text-center text-sm text-muted-foreground">Dashboard sem dados para exibir.</div>;
+  const data: any = dashboardData ?? {
+    valorEmAberto: 0,
+    lucroAReceber: 0,
+    totalOverdue: 0,
+    totalDueToday: 0,
+    overdueClientsCount: 0,
+    activeCount: 0,
+    monthlyChart: [],
+  };
 
-  const lucroAReceber = (data as any).lucroAReceber ?? 0;
+  const lucroAReceber = data.lucroAReceber ?? 0;
   const capitalAReceber = Math.max(0, data.valorEmAberto - lucroAReceber);
   const temAtraso = data.totalOverdue > 0;
   const temVenceHoje = (data.totalDueToday ?? 0) > 0;
 
   return (
     <div className="space-y-5">
+      {isError && (
+        <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-4 py-2 text-xs text-amber-300">
+          Dados financeiros indisponíveis no momento. Os visores permanecem zerados até a estrutura de Empréstimos estar disponível.
+        </div>
+      )}
 
       {/* ── RESUMO DA CARTEIRA ── */}
       <Card className="p-5 bg-gradient-to-br from-card/80 to-card/40 border-border">
