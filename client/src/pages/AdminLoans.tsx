@@ -36,6 +36,11 @@ function fmtDate(d: string | null | undefined) {
   const [y, m, day] = s.split("-");
   return `${day}/${m}/${y}`;
 }
+
+// Data civil de São Paulo. Evita virar o dia às 21h por causa do UTC.
+function todayBRTDate() {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 function fmtDateTime(ts: number | string | Date | null | undefined) {
   if (!ts) return "\u2014";
   // O banco retorna paidAt como string "2026-07-18 20:00:49" (sem Z, sem T) via drizzle raw SQL.
@@ -423,7 +428,7 @@ function LoansTab() {
   const [paymentModal, setPaymentModal] = useState<{ inst: any; loanId: number } | null>(null);
   const [pmAmountPaid, setPmAmountPaid] = useState("");
   // Data de hoje no fuso de São Paulo (GMT-3)
-  const todayBRT = () => new Date(new Date().getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const todayBRT = todayBRTDate;
   const [pmPaidAt, setPmPaidAt] = useState(todayBRT);
   const [pmObservation, setPmObservation] = useState("");
   const [pmFile, setPmFile] = useState<File | null>(null);
@@ -1149,7 +1154,7 @@ function LoansTab() {
                       Parcelas — {loan.paymentType === "diario" ? "Pagamento Diário" : loan.paymentType === "semanal" ? "Pagamento Semanal" : loan.paymentType === "quinzenal" ? "Pagamento Quinzenal" : "Pagamento Mensal"}
                     </p>
                     {(instData.installments as any[]).map((inst) => {
-                      const todayDateStr = new Date().toISOString().slice(0, 10);
+                      const todayDateStr = todayBRTDate();
                       const isVenceHoje = inst.status === "pendente" && inst.dueDate === todayDateStr;
                       const instStKey = inst.isOverdue && inst.status !== "pago" && inst.status !== "pago_juros" ? "atrasado" : isVenceHoje ? "vence_hoje" : inst.status;
                       const instSt = INST_STATUS_COLORS[instStKey] || INST_STATUS_COLORS.pendente;
@@ -2362,7 +2367,7 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
   const [paymentType, setPaymentType] = useState<"diario" | "semanal" | "mensal" | "quinzenal">("diario");
   const [workDays, setWorkDays] = useState<"seg_sab" | "seg_dom" | "custom">("seg_sab");
   const [customInstallments, setCustomInstallments] = useState("10");
-  const [releaseDate, setReleaseDate] = useState(new Date().toISOString().slice(0, 10));
+  const [releaseDate, setReleaseDate] = useState(todayBRTDate());
   const [notes, setNotes] = useState("");
   const [customDays, setCustomDays] = useState(""); // prazo editável para semanal/quinzenal/mensal
   const [customRate, setCustomRate] = useState(""); // taxa de juros editável
@@ -2705,7 +2710,7 @@ function EditLoanModal({ loan, onClose, onSuccess }: { loan: any; onClose: () =>
   const [workDays, setWorkDays] = useState<"seg_sab" | "seg_dom" | "custom">(loan.workDays || "seg_sab");
   // Inicializa customInstallments com o número atual de parcelas do empréstimo
   const [customInstallments, setCustomInstallments] = useState(String(loan.installments || (loan.workDays === "seg_dom" ? 25 : 20)));
-  const [releaseDate, setReleaseDate] = useState(loan.releaseDate ? loan.releaseDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const [releaseDate, setReleaseDate] = useState(loan.releaseDate ? loan.releaseDate.slice(0, 10) : todayBRTDate());
   const [notes, setNotes] = useState(loan.notes || "");
   const [status, setStatus] = useState<string>(loan.status || "pendente");
   const [rejectedReason, setRejectedReason] = useState(loan.rejectedReason || "");

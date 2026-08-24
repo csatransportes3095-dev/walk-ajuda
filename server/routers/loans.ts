@@ -2095,17 +2095,17 @@ export const loanRouter = router({
     const willReceiveRows = await qRows(db, drizzleSql`
       SELECT COALESCE(SUM(li.amount), 0) as total, COUNT(*) as count
       FROM loanInstallments li
-      WHERE li.status IN ('pendente', 'em_analise') AND ${drizzleSql.raw(dateCondition)}
+      WHERE li.status IN ('pendente', 'atrasado', 'em_analise') AND ${drizzleSql.raw(dateCondition)}
     `);
 
     // 3. Quanto vou ganhar de juros (proporcional ao período)
     const interestProjectionRows = await qRows(db, drizzleSql`
       SELECT COALESCE(SUM(
-        l.interestAmount * (COUNT(li.id) / GREATEST(l.installments, 1))
+        l.interestAmount * (1.0 / GREATEST(l.installments, 1))
       ), 0) as totalInterest
       FROM loanInstallments li
       JOIN loans l ON l.id = li.loanId
-      WHERE li.status IN ('pendente', 'em_analise') AND ${drizzleSql.raw(dateCondition)}
+      WHERE li.status IN ('pendente', 'atrasado', 'em_analise') AND ${drizzleSql.raw(dateCondition)}
     `);
 
     // 4. Juros já recebidos no período
@@ -2132,7 +2132,7 @@ export const loanRouter = router({
     const overdueRows = await qRows(db, drizzleSql`
       SELECT COALESCE(SUM(li.amount), 0) as total, COUNT(*) as count
       FROM loanInstallments li
-      WHERE li.status = 'pendente' AND li.dueDate < ${today} AND ${drizzleSql.raw(dateCondition)}
+      WHERE li.status IN ('pendente','atrasado') AND li.dueDate < ${today} AND ${drizzleSql.raw(dateCondition)}
     `);
 
     // 7. Timeline: parcelas a receber por dia (para gráfico)
@@ -2141,7 +2141,7 @@ export const loanRouter = router({
       timelineRows = await qRows(db, drizzleSql`
         SELECT DATE(li.dueDate) as day,
           SUM(CASE WHEN li.status='pago' THEN li.amount ELSE 0 END) as received,
-          SUM(CASE WHEN li.status IN ('pendente','em_analise') THEN li.amount ELSE 0 END) as pending
+          SUM(CASE WHEN li.status IN ('pendente','atrasado','em_analise') THEN li.amount ELSE 0 END) as pending
         FROM loanInstallments li
         WHERE DATE_FORMAT(li.dueDate, '%Y-%m') = ${date}
         GROUP BY day ORDER BY day ASC
@@ -2150,7 +2150,7 @@ export const loanRouter = router({
       timelineRows = await qRows(db, drizzleSql`
         SELECT DATE_FORMAT(li.dueDate, '%Y-%m') as month,
           SUM(CASE WHEN li.status='pago' THEN li.amount ELSE 0 END) as received,
-          SUM(CASE WHEN li.status IN ('pendente','em_analise') THEN li.amount ELSE 0 END) as pending
+          SUM(CASE WHEN li.status IN ('pendente','atrasado','em_analise') THEN li.amount ELSE 0 END) as pending
         FROM loanInstallments li
         WHERE YEAR(li.dueDate) = ${date}
         GROUP BY month ORDER BY month ASC
@@ -2160,10 +2160,11 @@ export const loanRouter = router({
     // 8. Próximas parcelas a vencer (para tabela "quando vou receber")
     const upcomingRows = await qRows(db, drizzleSql`
       SELECT li.id, li.dueDate, li.amount, li.installmentNumber,
-             l.clientName, l.id as loanId
+             lc.name as clientName, l.id as loanId
       FROM loanInstallments li
       JOIN loans l ON l.id = li.loanId
-      WHERE li.status IN ('pendente','em_analise') AND ${drizzleSql.raw(dateCondition)}
+      JOIN loanClients lc ON lc.id = l.clientId
+      WHERE li.status IN ('pendente','atrasado','em_analise') AND ${drizzleSql.raw(dateCondition)}
       ORDER BY li.dueDate ASC
       LIMIT 100
     `);
@@ -2266,7 +2267,7 @@ export const loanRouter = router({
     // recriadas durante uma edição, pois isso duplicaria o mesmo número de parcela.
     const reservedRows = await qRows(db, drizzleSql`
       SELECT installmentNumber FROM loanInstallments
-      WHERE loanId=${input.id} AND status IN ('pago', 'em_analise')
+      WHERE loanId=${input.id} AND status IN ('pago', 'pago_juros', 'em_analise', 'aguardando_confirmacao', 'atrasado')
     `);
     const reservedInstallmentNumbers = new Set(reservedRows.map((row: any) => Number(row.installmentNumber)));
 
@@ -2404,7 +2405,13 @@ export const loanRouter = router({
 
     // 4. Registra entrada no financeiro (receita de juros cobrados)
     try {
-      const clientRows = await qRows(db, drizzleSql`SELECT name, phone, email, cpf FROM customers WHERE id=${loan.clientId}`);
+      const clientRows = await qRows(db, drizzleSql`SELECT lc.name, lc.phone, COALESCE(lc.cpf, c.cpf) as cpf, c.email
+        FROM loanClients lc
+        LEFT JOIN customers c ON c.deletedAt IS NULL AND (
+          RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 9) = RIGHT(REGEXP_REPLACE(lc.phone, '[^0-9]', ''), 9)
+          OR (REGEXP_REPLACE(COALESCE(c.cpf,''), '[^0-9]', '') <> '' AND REGEXP_REPLACE(COALESCE(c.cpf,''), '[^0-9]', '') = REGEXP_REPLACE(COALESCE(lc.cpf,''), '[^0-9]', ''))
+        )
+        WHERE lc.id=${loan.clientId} LIMIT 1`);
       const client = clientRows[0] || {};
       await createFinancialSale({
         customerName: client.name || 'Cliente',
@@ -2423,7 +2430,13 @@ export const loanRouter = router({
 
     // 5. Envia recibo por email ao cliente (se tiver email)
     try {
-      const clientRows = await qRows(db, drizzleSql`SELECT name, phone, email, cpf FROM customers WHERE id=${loan.clientId}`);
+      const clientRows = await qRows(db, drizzleSql`SELECT lc.name, lc.phone, COALESCE(lc.cpf, c.cpf) as cpf, c.email
+        FROM loanClients lc
+        LEFT JOIN customers c ON c.deletedAt IS NULL AND (
+          RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 9) = RIGHT(REGEXP_REPLACE(lc.phone, '[^0-9]', ''), 9)
+          OR (REGEXP_REPLACE(COALESCE(c.cpf,''), '[^0-9]', '') <> '' AND REGEXP_REPLACE(COALESCE(c.cpf,''), '[^0-9]', '') = REGEXP_REPLACE(COALESCE(lc.cpf,''), '[^0-9]', ''))
+        )
+        WHERE lc.id=${loan.clientId} LIMIT 1`);
       const client = clientRows[0] || {};
       if (client.email) {
         const receiptNumber = `JUR-${String(input.loanId).padStart(4,'0')}-${String(inst.installmentNumber).padStart(2,'0')}-${today.replace(/-/g,'')}`;
@@ -3303,7 +3316,7 @@ export const loanRouter = router({
     // Buscar parcelas pendentes (não pagas)
     const pendingRows = await qRows(db, drizzleSql`
       SELECT * FROM loanInstallments
-      WHERE loanId=${input.loanId} AND status != 'pago'
+      WHERE loanId=${input.loanId} AND status IN ('pendente','atrasado')
       ORDER BY installmentNumber ASC
     `);
     if (!pendingRows.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Não há parcelas pendentes para reagendar' });
