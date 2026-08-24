@@ -6,6 +6,7 @@ const PASS = String(process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || 
 const HOST = String(process.env.IMAP_HOST || "imap.zoho.com").trim();
 const PORT = Number(process.env.IMAP_PORT || 993);
 const STORE = process.argv.includes("--store");
+const ALL_FOLDERS = process.argv.includes("--all-folders");
 
 if (!PASS) {
   console.log("SENHA DO ZOHO AUSENTE NO RENDER");
@@ -237,7 +238,7 @@ async function main() {
     const listed = await imap.command('LIST "" "*"');
     const allMailboxes = parseListMailboxes(listed);
     const preferred = allMailboxes.filter(name => /^(INBOX|Archive|Arquiv|Sent|Enviad|All Mail|Todos)/i.test(name));
-    const mailboxes = preferred.length ? preferred : ["INBOX"];
+    const mailboxes = ALL_FOLDERS ? allMailboxes : (preferred.length ? preferred : ["INBOX"]);
     const messages = [];
     const seenMessageIds = new Set();
     const countsByFolder = {};
@@ -295,6 +296,7 @@ async function main() {
     }, {});
     console.log("VARREDURA ZOHO — TODOS OS PEDIDOS ANTIGOS", {
       conta: USER,
+      modoPastas: ALL_FOLDERS ? "todas" : "principais",
       pastasVerificadas: mailboxes,
       mensagensEncontradasPorPasta: countsByFolder,
       emailsDePedido: messages.length,
@@ -357,7 +359,7 @@ async function main() {
       console.log("PEDIDOS AINDA NAO FORAM INSERIDOS: somente as evidencias foram guardadas");
     } else {
       console.log("MODO VARREDURA: nenhum pedido foi alterado");
-      console.log("Para guardar as evidencias: node scripts/scan-zoho-order-mails.mjs --store");
+      console.log("Para guardar todas as evidencias: node scripts/scan-zoho-order-mails.mjs --all-folders --store");
     }
     await imap.command("LOGOUT", 10000).catch(() => {});
   } finally {
