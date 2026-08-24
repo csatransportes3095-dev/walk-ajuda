@@ -6,7 +6,7 @@ import { MAINTENANCE_ROUTE_OPTIONS, type MaintenanceManifestConfig, type Mainten
 
 const emptyConfig: MaintenanceManifestConfig = {
   enabled: false,
-  routeIds: ["home", "login", "loan", "gastos"],
+  routeIds: ["home", "login", "loan", "gastos", "tracking"],
   eyebrow: "COMUNICADO OPERACIONAL",
   title: "Estamos em manutenção programada",
   message: "Estamos aprimorando esta área para oferecer uma experiência mais rápida e segura. Volte em breve.",
