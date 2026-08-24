@@ -1145,7 +1145,7 @@ export const appRouter = router({
     update: adminProcedure
       .input(z.object({
         enabled: z.boolean(),
-        routeIds: z.array(z.enum(["home", "login", "loan", "gastos"])),
+        routeIds: z.array(z.enum(["home", "login", "loan", "gastos", "tracking"])),
         eyebrow: z.string().max(64),
         title: z.string().max(120),
         message: z.string().max(600),
