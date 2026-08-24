@@ -52,7 +52,7 @@ function decodeRecoveryPayload(rawValue) {
   }
 }
 
-async function listOrderObjects() {
+async function listObjects(prefix) {
   const client = new S3Client({
     region: "auto",
     endpoint: String(process.env.R2_ENDPOINT).trim().replace(/\/+$/, ""),
@@ -69,7 +69,7 @@ async function listOrderObjects() {
   do {
     const response = await client.send(new ListObjectsV2Command({
       Bucket: String(process.env.R2_BUCKET_NAME).trim(),
-      Prefix: "order-docs/",
+      Prefix: prefix,
       ContinuationToken: continuationToken,
     }));
     for (const item of response.Contents ?? []) {
@@ -115,12 +115,29 @@ async function main() {
   try {
     const [[orderCount]] = await db.query("SELECT COUNT(*) AS total FROM orderStatusHistory");
     const [[fileCount]] = await db.query("SELECT COUNT(*) AS total FROM orderFiles");
-    const objects = await listOrderObjects();
+    const [objects, adminObjects, responseObjects] = await Promise.all([
+      listObjects("order-docs/"),
+      listObjects("admin-docs/"),
+      listObjects("doc-responses/"),
+    ]);
     const dated = objects.filter(object => Number.isFinite(object.modifiedAt.getTime()));
     const withPhone = dated.filter(object => phoneFromKey(object.key));
     const sessions = buildSessions(withPhone);
     const augustObjects = withPhone.filter(object => localDate(object.modifiedAt).startsWith("2026-08-"));
     const augustSessions = sessions.filter(session => localDate(session.firstAt).startsWith("2026-08-"));
+    const monthSummary = {};
+    for (const session of sessions) {
+      const month = localDate(session.firstAt).slice(0, 7);
+      if (!monthSummary[month]) monthSummary[month] = { pedidosCandidatos: 0, documentos: 0, clientes: new Set() };
+      monthSummary[month].pedidosCandidatos += 1;
+      monthSummary[month].documentos += session.objects.length;
+      monthSummary[month].clientes.add(session.phone);
+    }
+    const monthOutput = Object.fromEntries(Object.entries(monthSummary).sort().map(([month, value]) => [month, {
+      pedidosCandidatos: value.pedidosCandidatos,
+      documentos: value.documentos,
+      clientes: value.clientes.size,
+    }]));
     const daily = {};
     for (const session of augustSessions) {
       const date = localDate(session.firstAt);
@@ -148,17 +165,41 @@ async function main() {
       }
     }
 
-    console.log("VARREDURA DE PEDIDOS RECENTES", {
+    const [tableRows] = await db.query(
+      `SELECT TABLE_NAME FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA=DATABASE()
+         AND (TABLE_NAME LIKE '%order%' OR TABLE_NAME LIKE '%pedido%' OR TABLE_NAME IN ('accessCodePhones','scheduleAppointments'))
+       ORDER BY TABLE_NAME`,
+    );
+    const populatedTables = {};
+    for (const row of tableRows) {
+      const table = String(row.TABLE_NAME);
+      const safeTable = `\`${table.replace(/`/g, "``")}\``;
+      const [[count]] = await db.query(`SELECT COUNT(*) AS total FROM ${safeTable}`);
+      if (Number(count.total ?? 0) > 0) populatedTables[table] = Number(count.total);
+    }
+
+    const allDates = sessions.map(session => session.firstAt).sort((a, b) => a - b);
+    console.log("VARREDURA DE TODOS OS PEDIDOS", {
       pedidosAtuaisBanco: Number(orderCount.total ?? 0),
       arquivosAtuaisBanco: Number(fileCount.total ?? 0),
       objetosR2Total: objects.length,
       objetosR2ComTelefone: withPhone.length,
+      pedidosCandidatosTodasDatas: sessions.length,
+      clientesTodasDatas: new Set(sessions.map(session => session.phone)).size,
+      primeiraDataEncontrada: allDates.length ? localDate(allDates[0]) : null,
+      ultimaDataEncontrada: allDates.length ? localDate(allDates[allDates.length - 1]) : null,
+      documentosEnviadosPeloAdmin: adminObjects.length,
+      respostasDeDocumentos: responseObjects.length,
       objetosR2Agosto: augustObjects.length,
       pedidosCandidatosAgosto: augustSessions.length,
       clientesAgosto: new Set(augustSessions.map(session => session.phone)).size,
     });
+    console.log("PEDIDOS POR MÊS — TODAS AS DATAS", monthOutput);
     console.log("PEDIDOS POR DIA EM AGOSTO", dailyOutput);
+    console.log("TABELAS OPERACIONAIS COM DADOS", populatedTables);
     console.log("TABELAS DE PEDIDO NO PACOTE PRIVADO", privateOrderTables);
+    console.log("REFERÊNCIA GITHUB 13/08", { pedidosAuditados: 122, entregues: 92, contaAtiva: 10, aguardandoAtiva: 2, fotoEmAnalise: 10, aguardandoAgendamento: 8 });
     console.log("MODO VARREDURA: nenhum pedido foi alterado");
   } finally {
     await db.end();
