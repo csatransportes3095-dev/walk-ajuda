@@ -1376,12 +1376,72 @@ export const loanRouter = router({
     const totals = totalsRows[0] || {};
 
     // Total previsto = soma de TODAS as parcelas de empréstimos ativos (capital + juros)
-    const expectedRows = await qRows(db, drizzleSql`
-      SELECT COALESCE(SUM(li.amount), 0) as totalExpected
-      FROM loanInstallments li
-      INNER JOIN loans l ON l.id = li.loanId
-      WHERE l.status NOT IN ('cancelado','reprovado')
-    `);
+    // Se esta primeira consulta das parcelas falhar, faz apenas diagnósticos de leitura
+    // para revelar a causa real sem criar, alterar ou apagar nenhuma tabela/registro.
+    let expectedRows: any[];
+    try {
+      expectedRows = await qRows(db, drizzleSql`
+        SELECT COALESCE(SUM(li.amount), 0) as totalExpected
+        FROM loanInstallments li
+        INNER JOIN loans l ON l.id = li.loanId
+        WHERE l.status NOT IN ('cancelado','reprovado')
+      `);
+    } catch (error: any) {
+      const causeMessage = String(
+        error?.cause?.cause?.message || error?.cause?.message || error?.message || error || 'erro desconhecido'
+      );
+      let databaseName = 'desconhecida';
+      let tableName = '';
+      let columns: string[] = [];
+      let installmentCount: number | null = null;
+      let joinCount: number | null = null;
+      let diagnosticError = '';
+      try {
+        const dbRows = await qRows(db, drizzleSql`SELECT DATABASE() as dbName`);
+        databaseName = String(dbRows[0]?.dbName || databaseName);
+        const tableRows = await qRows(db, drizzleSql`
+          SELECT TABLE_NAME as tableName
+          FROM INFORMATION_SCHEMA.TABLES
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND LOWER(TABLE_NAME) = LOWER('loanInstallments')
+          LIMIT 5
+        `);
+        tableName = String(tableRows[0]?.tableName || '');
+        if (tableName) {
+          const columnRows = await qRows(db, drizzleSql`
+            SELECT COLUMN_NAME as columnName
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${tableName}
+            ORDER BY ORDINAL_POSITION
+          `);
+          columns = columnRows.map((row: any) => String(row.columnName));
+          try {
+            const countRows = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanInstallments`);
+            installmentCount = Number(countRows[0]?.cnt || 0);
+          } catch {}
+          try {
+            const relRows = await qRows(db, drizzleSql`
+              SELECT COUNT(*) as cnt
+              FROM loanInstallments li
+              INNER JOIN loans l ON l.id = li.loanId
+            `);
+            joinCount = Number(relRows[0]?.cnt || 0);
+          } catch {}
+        }
+      } catch (diag: any) {
+        diagnosticError = String(diag?.cause?.message || diag?.message || diag || '');
+      }
+
+      const missing = !tableName;
+      const details = missing
+        ? `A tabela loanInstallments não foi encontrada na base ${databaseName}.`
+        : `Tabela encontrada como ${tableName}; colunas: ${columns.join(', ') || 'não foi possível listar'}; parcelas acessíveis: ${installmentCount === null ? 'não foi possível contar' : installmentCount}; relacionamento com loans: ${joinCount === null ? 'falhou' : joinCount}.`;
+      console.error('[loans.getDashboard] falha em loanInstallments:', { databaseName, tableName, columns, installmentCount, joinCount, causeMessage, diagnosticError });
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `Diagnóstico das parcelas: ${details} Causa do banco: ${causeMessage}${diagnosticError ? ` | Diagnóstico: ${diagnosticError}` : ''}`,
+      });
+    }
     const totalExpected = parseFloat(expectedRows[0]?.totalExpected || 0);
 
     // Total recebido = soma das parcelas individualmente pagas (independente do status do empréstimo)
