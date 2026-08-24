@@ -453,7 +453,18 @@ function LoansTab() {
   // Alertas de score D
   const { data: scoreDAlerts = [] } = trpc.loans.getScoreDAlerts.useQuery();
   // Aplica taxas automáticas ao montar o componente
-  const autoApplyFees = trpc.loans.autoApplyLateFees.useMutation();
+  const autoApplyFees = trpc.loans.autoApplyLateFees.useMutation({
+    onSuccess: async () => {
+      // A aplicação automática pode mudar valor e status para "atrasado".
+      // Atualiza imediatamente as informações visíveis no ADM.
+      await Promise.all([
+        utils.loans.listLoans.invalidate(),
+        utils.loans.getScoreDAlerts.invalidate(),
+        utils.loans.getDashboard.invalidate(),
+      ]);
+    },
+    onError: (e) => toast.error(e.message || 'Não foi possível atualizar as taxas automáticas.'),
+  });
   useEffect(() => { autoApplyFees.mutate(); }, []);
   const { data: instData } = trpc.loans.getLoan.useQuery(
     { id: expandedLoan! },

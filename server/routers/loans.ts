@@ -982,7 +982,7 @@ export const loanRouter = router({
     // Busca empréstimos que têm QUALQUER parcela pendente com vencimento anterior a hoje
     const overdueLoans = await qRows(db, drizzleSql`
       SELECT DISTINCT loanId FROM loanInstallments
-      WHERE dueDate < ${today} AND status='pendente'
+      WHERE dueDate < ${today} AND status IN ('pendente','atrasado')
     `);
     const overdueLoanIds = new Set(overdueLoans.map((r: any) => r.loanId));
     let result = rows.map((r: any) => ({
@@ -1286,7 +1286,7 @@ export const loanRouter = router({
         await db.execute(drizzleSql`UPDATE loans SET status='pago', paidAt=NOW(), paidBy=${paidBy} WHERE id=${loanId}`);
       } else {
         // Ainda há parcelas pendentes ââ€ â€™ verificar se há alguma aguardando análise
-        const awaitingProof = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanInstallments WHERE loanId=${loanId} AND status='aguardando_confirmacao'`);
+        const awaitingProof = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanInstallments WHERE loanId=${loanId} AND status IN ('aguardando_confirmacao','em_analise')`);
         if (parseInt(awaitingProof[0].cnt) > 0) {
           // Ainda tem comprovante aguardando ââ€ â€™ mantém aguardando_pagamento
           await db.execute(drizzleSql`UPDATE loans SET status='aguardando_pagamento' WHERE id=${loanId}`);
@@ -1584,7 +1584,7 @@ export const loanRouter = router({
     // Busca empréstimos com parcelas pendentes vencidas
     const overdueClientLoans = await qRows(db, drizzleSql`
       SELECT DISTINCT loanId FROM loanInstallments
-      WHERE dueDate < ${today} AND status='pendente'
+      WHERE dueDate < ${today} AND status IN ('pendente','atrasado')
     `);
     const overdueClientLoanIds = new Set(overdueClientLoans.map((r: any) => r.loanId));
     const loansWithStatus = loans.map((l: any) => ({
@@ -3437,7 +3437,7 @@ export const loanRouter = router({
       JOIN loans l ON l.clientId = lc.id AND l.status NOT IN ('pago','cancelado','reprovado')
       JOIN loanInstallments li ON li.loanId = l.id
       WHERE lc.status NOT IN ('bloqueado', 'inativo')
-      AND li.status = 'pendente'
+      AND li.status IN ('pendente','atrasado')
       AND li.dueDate < ${today}
       GROUP BY lc.id, lc.name, lc.phone
       HAVING lateCount >= 1
