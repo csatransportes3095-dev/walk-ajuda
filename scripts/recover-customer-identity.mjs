@@ -1,4 +1,5 @@
 import { createConnection } from "mysql2/promise";
+import { gunzipSync } from "node:zlib";
 
 const apply = process.argv.includes("--apply");
 const digits = value => String(value ?? "").replace(/\D/g, "");
@@ -68,6 +69,52 @@ function parseStructured(raw, phone, source) {
   }
 }
 
+function decodeRecoveryPayload(rawValue) {
+  let raw = String(rawValue ?? "").replace(/^\uFEFF/, "").trim();
+  if (!raw) return null;
+  const assignment = raw.indexOf("LOAN_RESTORE_PAYLOAD_B64=");
+  if (assignment >= 0) raw = raw.slice(assignment + "LOAN_RESTORE_PAYLOAD_B64=".length).trim();
+  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+    raw = raw.slice(1, -1).trim();
+  }
+  if (raw.startsWith("```")) raw = raw.replace(/^```[^\n]*\n?/, "").replace(/```\s*$/, "").trim();
+  if (raw.startsWith("{")) return JSON.parse(raw);
+  const marker = raw.indexOf("H4sI");
+  if (marker >= 0) raw = raw.slice(marker);
+  const decoded = Buffer.from(raw.replace(/\s+/g, ""), "base64");
+  try {
+    return JSON.parse(gunzipSync(decoded).toString("utf8"));
+  } catch {
+    const text = decoded.toString("utf8").trim();
+    if (text.startsWith("{")) return JSON.parse(text);
+    throw new Error("pacote privado em formato desconhecido");
+  }
+}
+
+function ingestRecoveryPayload(payload) {
+  const tables = payload?.tables && typeof payload.tables === "object" ? payload.tables : {};
+  let rowsRead = 0;
+  for (const [table, rows] of Object.entries(tables)) {
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const phone = row.customerPhone ?? row.phone ?? row.visitorPhone ?? row.clientPhone ?? row.loginPhone;
+      if (!phoneKey(phone)) continue;
+      rowsRead += 1;
+      for (const [column, value] of Object.entries(row)) {
+        if (/email$/i.test(column) && !/(link|sent|notified)/i.test(column)) {
+          addCandidate(phone, "email", value, `pacotePrivado.${table}.${column}`);
+        }
+        if (/cpf/i.test(column)) addCandidate(phone, "cpf", value, `pacotePrivado.${table}.${column}`);
+        if (/^(answers|data|formData|responses|payload)$/i.test(column)) {
+          parseStructured(value, phone, `pacotePrivado.${table}.${column}`);
+        }
+      }
+    }
+  }
+  return rowsRead;
+}
+
 function preferredPhoneColumn(columns) {
   const names = columns.map(column => column.COLUMN_NAME);
   const priorities = [
@@ -81,6 +128,15 @@ async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL ausente");
   const db = await createConnection(process.env.DATABASE_URL);
   try {
+    let privatePackageRows = 0;
+    const privatePayload = String(process.env.LOAN_RESTORE_PAYLOAD_B64 ?? "").trim();
+    if (privatePayload) {
+      try {
+        privatePackageRows = ingestRecoveryPayload(decodeRecoveryPayload(privatePayload));
+      } catch (error) {
+        console.log("PACOTE PRIVADO NÃO PÔDE SER LIDO", error instanceof Error ? error.message : String(error));
+      }
+    }
     const [columnRows] = await db.query(
       `SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE
        FROM information_schema.COLUMNS
@@ -154,6 +210,8 @@ async function main() {
       conflitosEmail: emailConflicts,
       conflitosCpf: cpfConflicts,
       clientesComAlgumaRecuperacao: changes.length,
+      pacotePrivadoPresente: privatePayload ? 1 : 0,
+      linhasLidasPacotePrivado: privatePackageRows,
     });
     console.log("FONTES ENCONTRADAS", Object.fromEntries([...sourceStats].sort()));
 
