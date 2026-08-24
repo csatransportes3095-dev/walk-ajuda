@@ -5,6 +5,7 @@ const USER = String(process.env.SMTP_USER || "h2@h2colombiano.com").trim();
 const PASS = String(process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || "").trim();
 const HOST = String(process.env.IMAP_HOST || "imap.zoho.com").trim();
 const PORT = Number(process.env.IMAP_PORT || 993);
+const STORE = process.argv.includes("--store");
 
 if (!PASS) {
   console.log("SENHA DO ZOHO AUSENTE NO RENDER");
@@ -267,6 +268,7 @@ async function main() {
         if (!/(pedido|entregue)/i.test(combined)) continue;
         const rows = extractInfoRows(html);
         messages.push({
+          messageKey: createHash("sha256").update(messageId).digest("hex"),
           folder: mailbox,
           date: String(topHeaders.date || ""),
           subject,
@@ -274,6 +276,7 @@ async function main() {
           phone: phone(rows.telefone),
           client: String(rows.cliente || rows.nome || "").trim(),
           service: String(rows["serviço"] || rows.servico || "").trim(),
+          option: String(rows["opção"] || rows.opcao || "").trim(),
           status: identifyStatus(combined),
           isNew: /NOVO PEDIDO RECEBIDO/i.test(combined),
         });
@@ -302,7 +305,60 @@ async function main() {
       evidenciasDeEntregue: messages.filter(item => item.status === "entregue").length,
       statusEncontrados: statusCounts,
     });
-    console.log("MODO VARREDURA: nenhum pedido foi alterado");
+    if (STORE) {
+      if (!String(process.env.DATABASE_URL || "").trim()) throw new Error("DATABASE_URL ausente");
+      const { createConnection } = await import("mysql2/promise");
+      const db = await createConnection(process.env.DATABASE_URL);
+      try {
+        await db.query(`
+          CREATE TABLE IF NOT EXISTS orderEmailRecoveryEvidence (
+            messageKey VARCHAR(64) PRIMARY KEY,
+            folder VARCHAR(255) NOT NULL,
+            sourceDate VARCHAR(255) NULL,
+            eventAt DATETIME NULL,
+            subject VARCHAR(512) NULL,
+            orderNumber VARCHAR(64) NULL,
+            customerPhone VARCHAR(32) NULL,
+            customerName VARCHAR(255) NULL,
+            serviceName VARCHAR(255) NULL,
+            serviceOption VARCHAR(255) NULL,
+            detectedStatus VARCHAR(64) NULL,
+            isNewOrder TINYINT NOT NULL DEFAULT 0,
+            source VARCHAR(32) NOT NULL DEFAULT 'zoho_imap',
+            createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_email_recovery_phone (customerPhone),
+            INDEX idx_email_recovery_event (eventAt),
+            INDEX idx_email_recovery_status (detectedStatus)
+          )
+        `);
+        for (const item of messages) {
+          const parsedDate = new Date(item.date);
+          const eventAt = Number.isFinite(parsedDate.getTime()) ? parsedDate : null;
+          await db.query(
+            `INSERT INTO orderEmailRecoveryEvidence
+              (messageKey,folder,sourceDate,eventAt,subject,orderNumber,customerPhone,customerName,serviceName,serviceOption,detectedStatus,isNewOrder)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+             ON DUPLICATE KEY UPDATE
+               folder=VALUES(folder),sourceDate=VALUES(sourceDate),eventAt=VALUES(eventAt),subject=VALUES(subject),
+               orderNumber=VALUES(orderNumber),customerPhone=VALUES(customerPhone),customerName=VALUES(customerName),
+               serviceName=VALUES(serviceName),serviceOption=VALUES(serviceOption),detectedStatus=VALUES(detectedStatus),
+               isNewOrder=VALUES(isNewOrder)`,
+            [item.messageKey, item.folder, item.date || null, eventAt, item.subject || null,
+              item.orderNumber || null, item.phone || null, item.client || null, item.service || null,
+              item.option || null, item.status || null, item.isNew ? 1 : 0],
+          );
+        }
+        const [[stored]] = await db.query("SELECT COUNT(*) total FROM orderEmailRecoveryEvidence");
+        console.log("EVIDENCIAS DOS EMAILS SALVAS", { processadas: messages.length, totalNaTabela: Number(stored.total || 0) });
+      } finally {
+        await db.end();
+      }
+      console.log("PEDIDOS AINDA NAO FORAM INSERIDOS: somente as evidencias foram guardadas");
+    } else {
+      console.log("MODO VARREDURA: nenhum pedido foi alterado");
+      console.log("Para guardar as evidencias: node scripts/scan-zoho-order-mails.mjs --store");
+    }
     await imap.command("LOGOUT", 10000).catch(() => {});
   } finally {
     imap.close();
