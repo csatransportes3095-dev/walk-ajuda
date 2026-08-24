@@ -39,7 +39,6 @@ export function MaintenanceManifestGate({ config }: { config: MaintenanceManifes
             </div>
           </div>
           <a href="/atualizarcadastro" className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300/30 bg-emerald-400 px-5 py-4 text-sm font-black tracking-wide text-slate-950 shadow-[0_0_30px_rgba(52,211,153,.22)] transition hover:bg-emerald-300 active:scale-[.99]"><UserRoundCog className="h-5 w-5" />ATUALIZAR CADASTRO</a>
-          <a href="/acompanhar" className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-200/30 bg-cyan-300/10 px-5 py-4 text-sm font-black tracking-wide text-cyan-100 transition hover:bg-cyan-300/20 active:scale-[.99]"><Clock3 className="h-5 w-5" />ACOMPANHAR</a>
           <div className="mt-8 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
           <p className="mt-5 text-center text-xs text-slate-400">Agradecemos sua compreensão. Estamos preparando uma experiência ainda melhor para você.</p>
         </div>
