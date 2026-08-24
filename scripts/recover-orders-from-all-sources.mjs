@@ -241,6 +241,7 @@ async function backupTable(db, table) {
 }
 
 async function ensureStructures(db) {
+  await db.query("ALTER TABLE orderFiles ADD COLUMN IF NOT EXISTS addedByAdmin INT NOT NULL DEFAULT 0");
   await db.query(`
     CREATE TABLE IF NOT EXISTS orderFullRecoveryMeta (
       recoveryKey VARCHAR(64) PRIMARY KEY,
