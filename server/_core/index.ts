@@ -513,7 +513,7 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
-    })
+    }) as any
   );
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {

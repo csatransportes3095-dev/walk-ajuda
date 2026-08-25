@@ -48,7 +48,7 @@ function getCookieOptions(req: any) {
 function makeCcProtectedProcedure() {
   return publicProcedure.use(async ({ ctx, next }) => {
     const cookieHeader = (ctx as any).req?.headers?.cookie ?? "";
-    const cookies = new Map(
+    const cookies = new Map<string, string>(
       cookieHeader.split(";").map((c: string) => {
         const [k, ...v] = c.trim().split("=");
         return [k.trim(), v.join("=")];
@@ -247,7 +247,7 @@ export const cartoesRouter = router({
   auth: router({
     me: publicProcedure.query(async ({ ctx }) => {
       const cookieHeader = (ctx as any).req?.headers?.cookie ?? "";
-      const cookies = new Map(
+      const cookies = new Map<string, string>(
         cookieHeader.split(";").map((c: string) => {
           const [k, ...v] = c.trim().split("=");
           return [k.trim(), v.join("=")];

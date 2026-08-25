@@ -754,7 +754,7 @@ export default function AdminCustomers() {
       toast.info('Nenhuma alteração para salvar.');
       return;
     }
-    updateMut.mutate(payload);
+    updateMut.mutate(payload as any);
   };
 
   const handleDownloadPhoto = async (url: string, name: string) => {

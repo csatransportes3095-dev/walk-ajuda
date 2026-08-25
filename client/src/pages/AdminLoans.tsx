@@ -95,6 +95,7 @@ const INST_STATUS_COLORS: Record<string, string> = {
 };
 
 type TabId = "dashboard" | "loans" | "clients" | "profiles" | "pix" | "access" | "latefee" | "h2score" | "financeiro" | "proofhistory" | "parcelamento";
+type EditableLoanStatus = "pendente" | "aprovado" | "reprovado" | "cancelado" | "pago";
 
 export default function AdminLoans() {
   const [tab, setTab] = useState<TabId>("dashboard");
@@ -2574,7 +2575,6 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                 Deixe em branco para usar o padrão do perfil ({getDefaultDaysByType()} dias) —{" "}
                 {paymentType === "semanal" && `${Math.max(1, Math.floor(days / 7))} parcela(s) semanal(is)`}
                 {paymentType === "quinzenal" && `${Math.max(1, Math.floor(days / 15))} parcela(s) quinzenal(is)`}
-                {paymentType === "mensal" && `${Math.max(1, Math.floor(days / 30))} parcela(s) mensal(is)`}
               </p>
             </div>
           )}
@@ -2716,7 +2716,7 @@ function EditLoanModal({ loan, onClose, onSuccess }: { loan: any; onClose: () =>
   const [customInstallments, setCustomInstallments] = useState(String(loan.installments || (loan.workDays === "seg_dom" ? 25 : 20)));
   const [releaseDate, setReleaseDate] = useState(loan.releaseDate ? loan.releaseDate.slice(0, 10) : todayBRTDate());
   const [notes, setNotes] = useState(loan.notes || "");
-  const [status, setStatus] = useState<string>(loan.status || "pendente");
+  const [status, setStatus] = useState<EditableLoanStatus>((loan.status || "pendente") as EditableLoanStatus);
   const [rejectedReason, setRejectedReason] = useState(loan.rejectedReason || "");
 
   const editLoan = trpc.loans.editLoan.useMutation({
@@ -2848,7 +2848,7 @@ function EditLoanModal({ loan, onClose, onSuccess }: { loan: any; onClose: () =>
           {/* Campo de Status — ADM pode alterar qualquer status */}
           <div className="space-y-2">
             <Label>Status do Empréstimo</Label>
-            <Select value={status} onValueChange={setStatus}>
+            <Select value={status} onValueChange={(value) => setStatus(value as EditableLoanStatus)}>
               <SelectTrigger className="bg-card/60"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="pendente">Aguardando Aprovação</SelectItem>

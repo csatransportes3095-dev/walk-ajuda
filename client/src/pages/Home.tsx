@@ -246,13 +246,14 @@ export default function Home() {
   // Buscar dados dinâmicos.
   // Mantém o contrato completo já usado por cards, carrinho e checkout, mas evita
   // recarregar a árvore inteira de produtos enquanto a aba não está em uso.
-  const { data: products } = trpc.products.listActive.useQuery(undefined, {
+  const { data: rawProducts } = trpc.products.listActive.useQuery(undefined, {
     staleTime: 30_000,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
+  const products = rawProducts as unknown as Product[] | undefined;
   const { data: settings } = trpc.settings.getAll.useQuery();
   const botEnabled = settings?.bot_assistant_enabled !== '0';
   const { data: activePix } = trpc.pix.getActive.useQuery();

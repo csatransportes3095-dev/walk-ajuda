@@ -39,6 +39,8 @@ function daysUntil(dateStr: string | null | undefined): number | null {
   return Math.round((due - today) / 86400000);
 }
 
+type LoanPaymentType = "diario" | "semanal" | "quinzenal" | "mensal" | "parcelado";
+
 const PAYMENT_LABELS: Record<string, string> = {
   diario: "Diário",
   semanal: "Semanal",
@@ -444,7 +446,7 @@ export function LoansTab({ token }: LoansTabProps) {
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestAmount, setRequestAmount] = useState("");
-  const [paymentType, setPaymentType] = useState<"diario" | "semanal" | "mensal" | "parcelado">("diario");
+  const [paymentType, setPaymentType] = useState<LoanPaymentType>("diario");
   const [workDays, setWorkDays] = useState<"seg_sab" | "seg_dom">("seg_sab");
   const [requestNotes, setRequestNotes] = useState("");
   const [uploadInstallmentId, setUploadInstallmentId] = useState<number | null>(null);
@@ -481,8 +483,9 @@ export function LoansTab({ token }: LoansTabProps) {
     }
   }, [requestAmount, paymentType, workDays]);
 
+  const normalPaymentType = paymentType === "parcelado" ? "diario" : paymentType;
   const simQuery = trpc.loans.simulateLoan.useQuery(
-    { token, amount: simAmount, paymentType, workDays },
+    { token, amount: simAmount, paymentType: normalPaymentType, workDays },
     { enabled: simEnabled && simAmount > 0, retry: false }
   );
 
@@ -517,7 +520,7 @@ export function LoansTab({ token }: LoansTabProps) {
     const configuredModes = String((data as any)?.client?.allowedPaymentTypes || '')
       .split(',')
       .map((mode) => mode.trim())
-      .filter((mode): mode is "diario" | "semanal" | "mensal" | "parcelado" => ["diario", "semanal", "mensal", "parcelado"].includes(mode));
+      .filter((mode): mode is LoanPaymentType => ["diario", "semanal", "quinzenal", "mensal", "parcelado"].includes(mode));
     if (configuredModes.length > 0 && !configuredModes.includes(paymentType)) {
       setPaymentType(configuredModes[0]);
     }
@@ -576,6 +579,7 @@ export function LoansTab({ token }: LoansTabProps) {
   };
 
   const handleRequest = () => {
+    if (paymentType === 'parcelado') return;
     const v = parseFloat(requestAmount);
     if (!v || v <= 0) { toast.error("Informe um valor válido"); return; }
     if (v > Number(client?.creditLimit || 0)) { toast.error("O valor solicitado excede o seu limite disponível."); return; }
@@ -647,9 +651,9 @@ export function LoansTab({ token }: LoansTabProps) {
     { slug: 'diamante', icon: '💎', label: 'Diamante', benefit: 'Pagamento semanal' },
   ];
   const nextInstallment = (data as any).nextInstallment;
-  const allowedTypes: string[] = (client.allowedPaymentTypes || "diario")
+  const allowedTypes: LoanPaymentType[] = (client.allowedPaymentTypes || "diario")
     .split(",").map((t: string) => t.trim())
-    .filter((t: string) => ["diario", "semanal", "mensal", "parcelado"].includes(t));
+    .filter((t: string): t is LoanPaymentType => ["diario", "semanal", "quinzenal", "mensal", "parcelado"].includes(t));
 
   const activeLoans = (loans as any[]).filter((l) => !["pago", "cancelado", "reprovado"].includes(l.status));
   const hasActive = activeLoans.length > 0;

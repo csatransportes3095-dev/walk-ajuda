@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, like, or, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { getDb } from "../db";
 import { requireCompleteMainCustomerProfile } from "../customerIdentity";
@@ -476,7 +476,7 @@ export async function createPrivateAppointment(user: PrivateTransportUser, draft
       const conflict = conflicts[0];
       throw new Error(`CONFLITO DE HORÁRIO: já existe a viagem de ${conflict.clientNameSnapshot} prevista para ${new Date(conflict.startsAt).toLocaleString("pt-BR")}.`);
     }
-    const result = await user.db.insert(privateAppointments).values({
+    const result: any = await user.db.insert(privateAppointments).values({
       userId: user.userId, clientId: Number(client.id), quoteId: null, parentAppointmentId: parentId,
       status: "AGENDADA", clientNameSnapshot: client.name, clientPhoneSnapshot: client.whatsapp || client.phone,
       pickupAddress: draft.pickupAddress.trim(), pickupLat: draft.pickupLat || null, pickupLng: draft.pickupLng || null,
@@ -486,7 +486,7 @@ export async function createPrivateAppointment(user: PrivateTransportUser, draft
       estimatedDurationMinutes: durationMinutes, estimatedCost: String(money(draft.estimatedCost)), finalPrice: String(money(draft.finalPrice)),
       recurrenceRule: draft.recurrenceRule || null, recurrenceUntil: draft.recurrenceUntil ? toValidDate(draft.recurrenceUntil) : null,
     });
-    const appointmentId = Number((result as any)[0]?.insertId);
+    const appointmentId: number = Number(result[0]?.insertId);
     if (!parentId) parentId = appointmentId;
     const appointment = (await user.db.select().from(privateAppointments).where(and(eq(privateAppointments.id, appointmentId), eq(privateAppointments.userId, user.userId))).limit(1))[0];
     created.push(appointment);
@@ -657,7 +657,7 @@ async function postPaymentIncome(user: PrivateTransportUser, paymentId: number) 
     userId: user.userId, date, uber: "0", ninetynine: "0", indrive: "0", particular: String(money(payment.amount)), deliveries: "0", tips: "0", otherEarnings: "0",
   });
   const earningId = Number((earningResult as any)[0]?.insertId);
-  await user.db.update(privatePayments).set({ incomeEarningId: earningId, incomePostedAt: new Date() }).where(and(eq(privatePayments.id, paymentId), eq(privatePayments.userId, user.userId), eq(privatePayments.incomeEarningId, null)));
+  await user.db.update(privatePayments).set({ incomeEarningId: earningId, incomePostedAt: new Date() }).where(and(eq(privatePayments.id, paymentId), eq(privatePayments.userId, user.userId), isNull(privatePayments.incomeEarningId)));
   return (await user.db.select().from(privatePayments).where(and(eq(privatePayments.id, paymentId), eq(privatePayments.userId, user.userId))).limit(1))[0];
 }
 

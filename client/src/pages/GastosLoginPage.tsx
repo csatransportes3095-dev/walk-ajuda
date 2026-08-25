@@ -16,6 +16,9 @@ interface GastosLoginPageProps {
   requiredProfilePhone?: string;
 }
 
+type AccessRoute = 'site' | 'gastos' | 'emprestimo' | 'acompanhar';
+type CheckRoute = Exclude<AccessRoute, 'acompanhar'>;
+
 type Step =
   | 'phone'             // Etapa 1: digitar telefone
   | 'register'          // Etapa 1b: cadastro completo (não encontrado)
@@ -44,6 +47,8 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePhone }: GastosLoginPageProps) {
+  const requestedAccessRoute: AccessRoute = ['site', 'gastos', 'emprestimo', 'acompanhar'].includes(sourceRoute || '') ? sourceRoute as AccessRoute : 'gastos';
+  const requestedCheckRoute: CheckRoute = requestedAccessRoute === 'acompanhar' ? 'gastos' : requestedAccessRoute;
   const { data: settings } = trpc.settings.getAll.useQuery();
   const gastosLogoUrl = settings?.gastos_logo_url || '';
   const gastosTitle = settings?.gastos_title || 'GASTOS WALK AJUDA';
@@ -149,7 +154,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
     }
     setIsLoading(true);
     try {
-      const result = await checkPhoneMutation.mutateAsync({ identifier: cleanId, isCpf: useCpf, requestedRoute: sourceRoute || 'gastos' });
+      const result = await checkPhoneMutation.mutateAsync({ identifier: cleanId, isCpf: useCpf, requestedRoute: requestedCheckRoute });
       setClientName(result.clientName || '');
       switch (result.status) {
         case 'not_found':
@@ -255,9 +260,9 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
       };
       const result = profileUpdateLookup
         ? await completeProfileMutation.mutateAsync({ ...payload, lookupIdentifier: profileUpdateLookup.identifier, lookupIsCpf: profileUpdateLookup.isCpf })
-        : await registerMutation.mutateAsync({ ...payload, city: regCity.trim(), uf: regUf.toUpperCase().slice(0, 2), sourceRoute: sourceRoute || 'gastos' });
+        : await registerMutation.mutateAsync({ ...payload, city: regCity.trim(), uf: regUf.toUpperCase().slice(0, 2), sourceRoute: requestedCheckRoute });
 
-      if (result.blocked) {
+      if ("blocked" in result && result.blocked) {
         setError(result.message || 'Cadastro não permitido.');
         setIsLoading(false);
         return;
@@ -279,7 +284,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
       setClientName(regName.trim());
       // Disparar checkPhone para garantir que spreadsheetClient seja criado
       try {
-        await checkPhoneMutation.mutateAsync({ identifier: cleanPhone, isCpf: false, requestedRoute: sourceRoute || 'gastos' });
+        await checkPhoneMutation.mutateAsync({ identifier: cleanPhone, isCpf: false, requestedRoute: requestedCheckRoute });
       } catch (_) { /* ignora erro — spreadsheetClient pode já ter sido criado */ }
       setProfileUpdateLookup(null);
       setStep('create_password');
@@ -294,10 +299,10 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   const handleRequestRouteAccess = async () => {
     if (!restrictedPhone) return;
     try {
-      const result = await requestRouteAccessMutation.mutateAsync({ phone: restrictedPhone, route: sourceRoute || 'gastos' });
+      const result = await requestRouteAccessMutation.mutateAsync({ phone: restrictedPhone, route: requestedAccessRoute });
       if (result.alreadyAllowed) {
         toast.success('Esta rota já está liberada para o seu cadastro.');
-      } else if (result.created) {
+      } else if ("created" in result && result.created) {
         toast.success('Sua solicitação foi enviada ao administrador.');
       } else {
         toast.info('Sua solicitação de acesso já está em análise.');

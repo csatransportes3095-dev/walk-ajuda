@@ -600,10 +600,12 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             const result = await validateCouponMutation.mutateAsync({ code: code.trim() });
             if (result.valid) {
               flowState.current.couponCode = code.trim();
-              flowState.current.couponDiscount = result.discount ? { type: result.discount.type, value: result.discount.value } : null;
-              const discountText = result.discount?.type === 'percentage'
-                ? `${result.discount.value}% de desconto`
-                : `R$ ${result.discount?.value?.toFixed(2).replace('.', ',')} de desconto`;
+              const discountType = result.discountType || result.coupon?.discountType || 'fixed';
+              const discountValue = result.discountValue ?? result.coupon?.discountValue ?? 0;
+              flowState.current.couponDiscount = { type: discountType, value: discountValue };
+              const discountText = discountType === 'percentage'
+                ? `${discountValue}% de desconto`
+                : `R$ ${Number(discountValue).toFixed(2).replace('.', ',')} de desconto`;
               addMsgs({ type: 'bot', id: uid(), text: `✅ Cupom aplicado! ${discountText}` });
             } else {
               addMsgs({ type: 'bot', id: uid(), text: `❌ Cupom inválido: ${result.reason || 'Código não encontrado.'}` });

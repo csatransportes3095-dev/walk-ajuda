@@ -21,7 +21,7 @@ RUN pip3 install weasyprint --break-system-packages
 WORKDIR /app
 COPY . .
 RUN sed -i 's/\r$//' /app/scripts/render-start.sh && chmod +x /app/scripts/render-start.sh
-RUN npm install -g corepack@latest && corepack pnpm install && corepack pnpm run build
+RUN npm install -g pnpm@10.4.1 && pnpm install --frozen-lockfile && pnpm run build
 
 ENV NODE_ENV=production
 CMD ["/app/scripts/render-start.sh"]

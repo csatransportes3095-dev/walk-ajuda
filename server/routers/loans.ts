@@ -10,7 +10,6 @@ import { eq, sql as drizzleSql } from "drizzle-orm";
 import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
 import { calculateLateFeeForInstallment } from "../loans/lateFee";
 import PDFDocument from "pdfkit";
-import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
 import sharp from "sharp";
 import * as fs from "fs";
@@ -19,7 +18,7 @@ import * as os from "os";
 import { execSync } from "child_process";
 
 // ââ€â‚¬ââ€â‚¬ââ€â‚¬ Helper: obter data de hoje em UTC-3 (Brasil) ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
-function getBrazilClock(now = new Date()): { date: string; hour: number } {
+function getBrazilClock(now = new Date()): { today: string; date: string; hour: number } {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Sao_Paulo",
     year: "numeric",
@@ -29,8 +28,10 @@ function getBrazilClock(now = new Date()): { date: string; hour: number } {
     hourCycle: "h23",
   }).formatToParts(now);
   const valueOf = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "0";
+  const today = `${valueOf("year")}-${valueOf("month")}-${valueOf("day")}`;
   return {
-    date: `${valueOf("year")}-${valueOf("month")}-${valueOf("day")}`,
+    today,
+    date: today,
     hour: Number(valueOf("hour")),
   };
 }
@@ -237,11 +238,7 @@ async function generateReceiptJpg(pdfBuffer: Buffer): Promise<Buffer> {
 }
 
 async function sendReceiptEmail(to: string, clientName: string, receiptNumber: string, installmentNumber: number, pdfBuffer: Buffer): Promise<void> {
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.zoho.com', port: 465, secure: true,
-    auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-  });
-  await transporter.sendMail({
+  await sendMailDirect({
     from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
     to,
     subject: `Recibo de Pagamento ââ‚¬â€ Parcela #${installmentNumber} | ${receiptNumber}`,
@@ -1255,7 +1252,7 @@ export const loanRouter = router({
     if (clientEmail) {
       try {
         const amountFmt = parseFloat(loan.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        await transporter.sendMail({
+        await sendMailDirect({
           from: '"CSA Empréstimos SP" <h2@h2colombiano.com>',
           to: clientEmail,
           subject: `Atualização sobre sua solicitação de empréstimo ââ‚¬â€ CSA Empréstimos SP`,
@@ -3230,11 +3227,7 @@ export const loanRouter = router({
     }
     if (!toEmail) throw new TRPCError({ code: 'BAD_REQUEST', message: 'E-mail do cliente não encontrado. Informe o e-mail manualmente.' });
     const pdfBuffer = Buffer.from(input.pdfBase64, 'base64');
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.zoho.com', port: 465, secure: true,
-      auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-    });
-    await transporter.sendMail({
+    await sendMailDirect({
       from: '"CSA Empréstimos SP" <h2@h2colombiano.com>',
       to: toEmail,
       subject: `Extrato do seu Empréstimo ââ‚¬â€ ${input.docId} | CSA Empréstimos SP`,

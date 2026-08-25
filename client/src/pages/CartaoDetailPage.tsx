@@ -219,12 +219,12 @@ export default function CartaoDetailPage() {
   const { data: categoriasList = [] } = trpc.cartoes.categorias.list.useQuery();
 
   const deleteGastoMutation = trpc.cartoes.gastos.delete.useMutation({
-    onSuccess: () => { utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); toast.success("Gasto removido"); },
+    onSuccess: () => { utils.cartoes.cartoes.list.invalidate(); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); toast.success("Gasto removido"); },
     onError: e => toast.error(e.message),
   });
 
   const editarGastoMutation = trpc.cartoes.gastos.editar.useMutation({
-    onSuccess: () => { utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); toast.success("Gasto atualizado!"); },
+    onSuccess: () => { utils.cartoes.cartoes.list.invalidate(); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); toast.success("Gasto atualizado!"); },
     onError: e => toast.error(e.message),
   });
 
@@ -236,37 +236,37 @@ export default function CartaoDetailPage() {
   });
 
   const cancelarPagamentoMutation = trpc.cartoes.pagamentos.cancelar.useMutation({
-    onSuccess: () => { utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.pagamentos.list.invalidate({ cartaoId: id }); toast.success("Pagamento cancelado"); },
+    onSuccess: () => { utils.cartoes.cartoes.list.invalidate(); utils.cartoes.pagamentos.list.invalidate({ cartaoId: id }); toast.success("Pagamento cancelado"); },
     onError: e => toast.error(e.message),
   });
 
   const marcarParcelaPagaMutation = trpc.cartoes.gastos.marcarPaga.useMutation({
-    onSuccess: () => { utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Parcela marcada como paga"); },
+    onSuccess: () => { utils.cartoes.cartoes.list.invalidate(); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Parcela marcada como paga"); },
     onError: e => toast.error(e.message),
   });
 
   const cancelarPagamentoParcelaMutation = trpc.cartoes.gastos.cancelarPagamento.useMutation({
-    onSuccess: () => { utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Pagamento da parcela cancelado"); },
+    onSuccess: () => { utils.cartoes.cartoes.list.invalidate(); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Pagamento da parcela cancelado"); },
     onError: e => toast.error(e.message),
   });
 
   const cancelarParcelamentoMutation = trpc.cartoes.parcelamentos.cancelar.useMutation({
-    onSuccess: () => { utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Parcelas não pagas canceladas"); },
+    onSuccess: () => { utils.cartoes.cartoes.list.invalidate(); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Parcelas não pagas canceladas"); },
     onError: e => toast.error(e.message),
   });
 
   const editarParcelamentoMutation = trpc.cartoes.parcelamentos.editar.useMutation({
-    onSuccess: () => { utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Compra atualizada com sucesso!"); },
+    onSuccess: () => { utils.cartoes.cartoes.list.invalidate(); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Compra atualizada com sucesso!"); },
     onError: e => toast.error(e.message),
   });
 
   const editarDataParcelamentoMutation = trpc.cartoes.parcelamentos.editarData.useMutation({
-    onSuccess: () => { utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Data da compra atualizada! Parcelas recalculadas."); },
+    onSuccess: () => { utils.cartoes.cartoes.list.invalidate(); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Data da compra atualizada! Parcelas recalculadas."); },
     onError: e => toast.error(e.message),
   });
 
   const excluirParcelamentoTudoMutation = trpc.cartoes.parcelamentos.excluirTudo.useMutation({
-    onSuccess: () => { utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Compra parcelada excluída completamente"); },
+    onSuccess: () => { utils.cartoes.cartoes.list.invalidate(); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Compra parcelada excluída completamente"); },
     onError: e => toast.error(e.message),
   });
 
@@ -440,7 +440,7 @@ export default function CartaoDetailPage() {
         <div style={{ position: "absolute", top: -32, right: -32, width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.1)" }} />
         <div style={{ position: "absolute", bottom: -20, left: 40, width: 80, height: 80, borderRadius: 40, background: "rgba(255,255,255,0.07)" }} />
         {/* Logo da bandeira como marca d'agua no header */}
-        {(cartao as any).bandeira && <BandeiraLogo bandeira={(cartao as any).bandeira} opacity={0.15} style={{ width: 110, height: 60, bottom: 16, right: 20 }} />}
+        {(cartao as any).bandeira && <BandeiraLogo bandeira={(cartao as any).bandeira} variant="watermark" style={{ width: 110, height: 60, bottom: 16, right: 20 }} />}
 
         <div style={{ height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px", position: "relative" }}>
           <button onClick={() => navigate("/cartoes")} style={{ width: 40, height: 40, borderRadius: 20, background: "rgba(255,255,255,0.2)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -849,9 +849,9 @@ export default function CartaoDetailPage() {
       </button>
 
       {/* ── Modais ── */}
-      {showGasto && <GastoSheet accent={accent} cartaoId={id} onClose={() => setShowGasto(false)} onSuccess={() => { setShowGasto(false); utils.cartoes.cartoes.list.invalidate({ id }); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Gasto adicionado!"); }} />}
+      {showGasto && <GastoSheet accent={accent} cartaoId={id} onClose={() => setShowGasto(false)} onSuccess={() => { setShowGasto(false); utils.cartoes.cartoes.list.invalidate(); utils.cartoes.gastos.list.invalidate({ cartaoId: id }); utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id }); toast.success("Gasto adicionado!"); }} />}
       {showPagar && invoiceParaPagamento && <PagarSheet accent={accent} cartaoId={id} faturaAtual={Number(invoiceParaPagamento.remainingAmount ?? 0)} invoiceId={Number(invoiceParaPagamento.id ?? 0)} competencia={competenciaLabel(invoiceParaPagamento.competencia)} isFaturaEmAtraso={pagamentoEhAtrasado} onClose={() => { setShowPagar(false); if (requestedPaymentInvoiceId) navigate(`/cartoes/cartao/${id}`); }} onSuccess={async (data: any) => { setShowPagar(false); await Promise.all([utils.cartoes.cartoes.get.invalidate({ id }), utils.cartoes.cartoes.list.invalidate(), utils.cartoes.pagamentos.list.invalidate({ cartaoId: id }), utils.cartoes.gastos.list.invalidate({ cartaoId: id }), utils.cartoes.parcelamentos.list.invalidate({ cartaoId: id })]); await refetchCartao(); if (data?.parcelasMarcadas > 0) { toast.success(`Pagamento registrado! ${data.parcelasMarcadas} parcela(s) baixada(s) da fatura.`); } else { toast.success("Pagamento registrado!"); } }} />}
-      {showEdit && <EditCartaoSheet cartao={cartao} accent={accent} onClose={() => setShowEdit(false)} onSuccess={() => { setShowEdit(false); utils.cartoes.cartoes.list.invalidate({ id }); toast.success("Cartão atualizado!"); }} />}
+      {showEdit && <EditCartaoSheet cartao={cartao} accent={accent} onClose={() => setShowEdit(false)} onSuccess={() => { setShowEdit(false); utils.cartoes.cartoes.list.invalidate(); toast.success("Cartão atualizado!"); }} />}
       {editarGastoData && (
         <EditarGastoSheet
           accent={accent}
@@ -883,9 +883,9 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
 
   const utils = trpc.useUtils();
   const { data: cats = [] } = trpc.cartoes.categorias.list.useQuery();
-  const createCat = trpc.cartoes.categorias.create.useMutation({ onSuccess: () => utils.categorias.list.invalidate() });
-  const updateCat = trpc.cartoes.categorias.update.useMutation({ onSuccess: () => { utils.categorias.list.invalidate(); setEditCatId(null); } });
-  const deleteCat = trpc.cartoes.categorias.delete.useMutation({ onSuccess: () => { utils.categorias.list.invalidate(); setCategoriaId(prev => prev === editCatId ? null : prev); } });
+  const createCat = trpc.cartoes.categorias.create.useMutation({ onSuccess: () => utils.cartoes.categorias.list.invalidate() });
+  const updateCat = trpc.cartoes.categorias.update.useMutation({ onSuccess: () => { utils.cartoes.categorias.list.invalidate(); setEditCatId(null); } });
+  const deleteCat = trpc.cartoes.categorias.delete.useMutation({ onSuccess: () => { utils.cartoes.categorias.list.invalidate(); setCategoriaId(prev => prev === editCatId ? null : prev); } });
 
   const mutGasto = trpc.cartoes.gastos.create.useMutation({ onSuccess, onError: e => toast.error(e.message) });
   const mutParcelamento = trpc.cartoes.parcelamentos.create.useMutation({ onSuccess, onError: e => toast.error(e.message) });

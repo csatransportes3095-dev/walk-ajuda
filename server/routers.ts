@@ -2013,7 +2013,7 @@ export const appRouter = router({
             paymentProofUrl = url;
           } catch (uploadError) { console.error('[S3] Erro:', uploadError); }
           const emailBranding = await getEmailBranding();
-          await transporter.sendMail({
+          await sendMailDirect({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: emailTo,
             subject: `COMPROVANTE PIX - ${input.service} - ${input.clientName}`,
@@ -2405,7 +2405,7 @@ export const appRouter = router({
               secure: true,
               auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
             });
-            await transporter.sendMail({
+            await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: emailTo,
               subject: `âÅ“"¦ Cadastro finalizado — ${safeInput.name} (${safeInput.phone})`,
@@ -2813,7 +2813,7 @@ export const appRouter = router({
             secure: true,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
-          await transporter.sendMail({
+          await sendMailDirect({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: emailTo,
             subject: `Í°Å¸"Â¸ Novo cliente iniciou cadastro — ${input.phone}`,
@@ -3366,7 +3366,7 @@ export const appRouter = router({
             secure: true,
             auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
           });
-          await transporter.sendMail({
+          await sendMailDirect({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: await getSetting('contact_email') || 'h2@h2colombiano.com',
             subject: title,
@@ -5140,7 +5140,7 @@ export const appRouter = router({
                   secure: true,
                   auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
                 });
-                await transporter.sendMail({
+                await sendMailDirect({
                   from: `"${siteTitle}" <h2@h2colombiano.com>`,
                   to: referrer.email,
                   subject: `âÅ“"¦ Sua comissão${commText} foi paga! - ${siteTitle}`,
@@ -5433,7 +5433,7 @@ export const appRouter = router({
           const commissionHtml = input.commissionValue && input.commissionValue > 0
             ? `<p style="margin:12px 0 8px;font-size:13px;color:#fcd34d;font-weight:bold;">Í°Å¸'° Comissão: R$ ${(input.commissionValue / 100).toFixed(2).replace('.', ',')}</p>`
             : '';
-          await transporter.sendMail({
+          await sendMailDirect({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: referrer.email,
             subject: `[Reenvio] Í°Å¸Å½"° Sua indicação deu certo! ${input.referredName} fez um pedido`,
@@ -7037,7 +7037,7 @@ export const appRouter = router({
 
           // Preparar anexo se imagem for do storage interno (pode ser baixada pelo servidor)
           // Para URLs externas, a imagem já está inline no HTML
-          const attachments: { filename: string; path?: string; href?: string; contentType?: string }[] = [];
+          const attachments: Array<{ filename: string; content: Buffer | string; contentType?: string }> = [];
           if (broadcast.imageUrl) {
             const imgUrl = broadcast.imageUrl.startsWith('/manus-storage/')
               ? `https://h2colombiano.com${broadcast.imageUrl}`
@@ -7051,7 +7051,6 @@ export const appRouter = router({
                 const ext2 = contentType.includes('png') ? 'png' : contentType.includes('gif') ? 'gif' : contentType.includes('webp') ? 'webp' : 'jpg';
                 attachments.push({
                   filename: `imagem.${ext2}`,
-                  // @ts-ignore
                   content: imgBuffer,
                   contentType,
                 });
@@ -7066,7 +7065,7 @@ export const appRouter = router({
             await Promise.allSettled(
               batch.map(async (c) => {
                 try {
-                  await transporter.sendMail({
+                  await sendMailDirect({
                     from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
                     to: c.email!,
                     subject,

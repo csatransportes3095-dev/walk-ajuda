@@ -143,23 +143,23 @@ export default function DespesasPage() {
   const { data: cats = [] } = trpc.cartoes.categorias.list.useQuery();
 
   const createMut = trpc.cartoes.despesas.create.useMutation({
-    onSuccess: () => { utils.despesas.list.invalidate(); setShowAdd(false); toast.success("Despesa adicionada!"); },
+    onSuccess: () => { utils.cartoes.despesas.list.invalidate({ mes, ano }); setShowAdd(false); toast.success("Despesa adicionada!"); },
     onError: e => toast.error(e.message),
   });
   const updateMut = trpc.cartoes.despesas.update.useMutation({
-    onSuccess: () => { utils.despesas.list.invalidate(); setEditDespesa(null); toast.success("Despesa atualizada!"); },
+    onSuccess: () => { utils.cartoes.despesas.list.invalidate({ mes, ano }); setEditDespesa(null); toast.success("Despesa atualizada!"); },
     onError: e => toast.error(e.message),
   });
   const deleteMut = trpc.cartoes.despesas.delete.useMutation({
-    onSuccess: () => { utils.despesas.list.invalidate(); toast.success("Despesa removida!"); },
+    onSuccess: () => { utils.cartoes.despesas.list.invalidate({ mes, ano }); toast.success("Despesa removida!"); },
     onError: e => toast.error(e.message),
   });
   const marcarMut = trpc.cartoes.despesas.marcarPaga.useMutation({
-    onSuccess: () => { utils.despesas.list.invalidate(); setPagarDespesa(null); setValorPagar(""); toast.success("Despesa marcada como paga!"); },
+    onSuccess: () => { utils.cartoes.despesas.list.invalidate({ mes, ano }); setPagarDespesa(null); setValorPagar(""); toast.success("Despesa marcada como paga!"); },
     onError: e => toast.error(e.message),
   });
   const desmarcarMut = trpc.cartoes.despesas.desmarcarPaga.useMutation({
-    onSuccess: () => { utils.despesas.list.invalidate(); toast.success("Pagamento desfeito!"); },
+    onSuccess: () => { utils.cartoes.despesas.list.invalidate({ mes, ano }); toast.success("Pagamento desfeito!"); },
     onError: e => toast.error(e.message),
   });
 

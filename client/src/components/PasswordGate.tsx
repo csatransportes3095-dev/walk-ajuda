@@ -691,7 +691,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         toast.error(result.message || 'Cadastro não permitido. Entre em contato pelo WhatsApp.');
         return;
       }
-      if (result.duplicateCpf) {
+      if ("duplicateCpf" in result && result.duplicateCpf) {
         toast.error(result.message || 'CPF já registrado no sistema.');
         setCpfDuplicado(true);
         return;

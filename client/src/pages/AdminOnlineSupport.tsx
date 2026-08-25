@@ -482,7 +482,7 @@ export default function AdminOnlineSupport() {
 
   return (
     <div className="min-h-screen bg-[#0b1222] text-white">
-      <AdminHeader />
+      <AdminHeader title="Atendimento Online" />
       <div className="max-w-5xl mx-auto px-4 py-6">
         <div className="mb-6">
           <h1 className="text-2xl font-black text-white">Atendimento Online</h1>
@@ -779,12 +779,12 @@ export default function AdminOnlineSupport() {
                     <input
                       value={reply}
                       onChange={e => setReply(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && !e.shiftKey && reply.trim() && sendMut.mutate({ conversationId: selectedConvId, text: reply.trim() })}
+                      onKeyDown={e => e.key === "Enter" && !e.shiftKey && reply.trim() && sendMut.mutate({ conversationId: selectedConvId, agentUser: "admin", agentName: "Atendente H2", text: reply.trim() })}
                       placeholder="Responder como atendente..."
                       className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-400"
                     />
                     <button
-                      onClick={() => reply.trim() && sendMut.mutate({ conversationId: selectedConvId, text: reply.trim() })}
+                      onClick={() => reply.trim() && sendMut.mutate({ conversationId: selectedConvId, agentUser: "admin", agentName: "Atendente H2", text: reply.trim() })}
                       disabled={!reply.trim()}
                       className="h-10 w-10 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white flex items-center justify-center transition-colors"
                     >

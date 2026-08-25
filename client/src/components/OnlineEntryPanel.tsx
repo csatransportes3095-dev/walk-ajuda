@@ -185,7 +185,7 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
         else openRoute(route);
         return;
       }
-      if (result.cooldown && result.retryAtMs) {
+      if ("cooldown" in result && result.cooldown && result.retryAtMs) {
         setError(`Sua solicitação foi reprovada. Você poderá solicitar novamente em ${new Date(result.retryAtMs).toLocaleDateString('pt-BR')}.`);
         return;
       }
