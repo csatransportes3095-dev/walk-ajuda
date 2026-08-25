@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { isRecoveredCustomerName } from "../shared/customerProfile";
 import {
   createScheduleAccessToken,
   missingCustomerFields,
@@ -21,6 +22,13 @@ describe("acesso protegido do agendamento", () => {
     expect(phonesMatch("(11) 8888-1234", "1199991234")).toBe(false);
   });
 
+  it("identifica nomes provisórios recuperados em qualquer posição", () => {
+    expect(isRecoveredCustomerName("CLIENTE RECUPERADO 5852")).toBe(true);
+    expect(isRecoveredCustomerName("Pessoa Recuperada")).toBe(true);
+    expect(isRecoveredCustomerName("CLIENTE RECUPEADO 5852")).toBe(true);
+    expect(isRecoveredCustomerName("Maria de Souza")).toBe(false);
+  });
+
   it("sinaliza somente os campos incompletos do cadastro principal", () => {
     expect(missingCustomerFields({
       name: "Cliente Recuperado",
@@ -30,6 +38,15 @@ describe("acesso protegido do agendamento", () => {
       uf: "SP",
       profilePhotoUrl: "https://example.invalid/photo.jpg",
     })).toEqual(["name", "email", "cpf"]);
+
+    expect(missingCustomerFields({
+      name: "Cliente Recuperado 5852",
+      email: "cliente@example.com",
+      cpf: "52998224725",
+      city: "São Paulo",
+      uf: "SP",
+      profilePhotoUrl: "https://example.invalid/photo.jpg",
+    })).toContain("name");
 
     expect(missingCustomerFields({
       name: "Pessoa Completa",

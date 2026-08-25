@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { isValidCPF } from "@shared/cpf";
+import { isRecoveredCustomerName } from "../../shared/customerProfile";
 import { publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import {
@@ -19,7 +20,6 @@ import { storagePut } from "../storage";
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000;
 const PASSWORD_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const GENERIC_NAME = /^(?:CLIENTE|CADASTRO|PEDIDO)\s+RECUPERAD[OA]|^RECUPERAD[OA](?:\s|$)/i;
 const ALREADY_UPDATED_MESSAGE = "Seu cadastro já foi atualizado. Aguarde a liberação do site.";
 
 async function rows(db: any, query: any): Promise<any[]> {
@@ -30,7 +30,7 @@ async function rows(db: any, query: any): Promise<any[]> {
 function missingFields(customer: any) {
   const missing: string[] = [];
   const name = String(customer?.name || "").trim();
-  if (name.length < 2 || GENERIC_NAME.test(name)) missing.push("name");
+  if (name.length < 2 || isRecoveredCustomerName(name)) missing.push("name");
   if (!normalizeCustomerEmail(customer?.email)) missing.push("email");
   if (!normalizeCustomerCpf(customer?.cpf) || !isValidCPF(normalizeCustomerCpf(customer?.cpf))) missing.push("cpf");
   if (String(customer?.city || "").trim().length < 2) missing.push("city");
@@ -177,7 +177,7 @@ export const customerUpdateRouter = router({
         completed: await customerUpdateAlreadyCompleted(db, customer),
         customerNumber: customer.customerNumber || null,
         phone: normalizeCustomerPhone(customer.phone),
-        name: GENERIC_NAME.test(name) ? "" : name,
+        name: isRecoveredCustomerName(name) ? "" : name,
         email: normalizeCustomerEmail(customer.email),
         cpf: normalizeCustomerCpf(customer.cpf),
         city: String(customer.city || "").trim(),
@@ -229,7 +229,7 @@ export const customerUpdateRouter = router({
       const cpf = normalizeCustomerCpf(input.cpf);
       const city = input.city.trim().replace(/\s+/g, " ");
       const uf = input.uf.trim().toUpperCase();
-      if (GENERIC_NAME.test(name)) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo." });
+      if (isRecoveredCustomerName(name)) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo, sem a indicação de cadastro recuperado." });
       if (!email) throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
       if (!cpf || !isValidCPF(cpf)) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido." });
       if (!/^[A-Z]{2}$/.test(uf)) throw new TRPCError({ code: "BAD_REQUEST", message: "UF inválida." });

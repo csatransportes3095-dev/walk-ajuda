@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { ESTADOS_BR, CIDADES_POR_UF } from "@/lib/brasilData";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
-import { Zap, Lock, Eye, EyeOff, Clock, Phone, Download, X, UserPlus, MessageCircle, AlertTriangle, CheckCircle2, User, Mail, CreditCard } from "lucide-react";
+import { isRecoveredCustomerName } from "@shared/customerProfile";
+import { Zap, Lock, Eye, EyeOff, Clock, Phone, Download, X, UserPlus, MessageCircle, AlertTriangle, CheckCircle2, User, Mail, CreditCard, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -1137,19 +1138,27 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     { phone: canonicalPhone },
     { enabled: accessGranted && !!canonicalPhone, staleTime: 0, refetchOnWindowFocus: true }
   );
+  const updateNameForCompleteMutation = trpc.customers.updateNameByPhone.useMutation();
   const updateEmailForCompleteMutation = trpc.customers.updateEmailByPhone.useMutation();
   const updateCpfForCompleteMutation = trpc.customers.updateCpfByPhone.useMutation();
+  const [completeName, setCompleteName] = useState("");
   const [completeEmail, setCompleteEmail] = useState("");
   const [completeCpf, setCompleteCpf] = useState("");
   const [completeSaving, setCompleteSaving] = useState(false);
 
   const profileData = profileCheckQuery.data?.customer as any;
   const profileLoading = profileCheckQuery.isLoading;
+  const missingName = accessGranted && !profileLoading && profileData && isRecoveredCustomerName(profileData.name);
   const missingEmail = accessGranted && !profileLoading && profileData && !profileData.email;
   const missingCpf = accessGranted && !profileLoading && profileData && !profileData.cpf;
-  const hasIncomplete = missingEmail || missingCpf;
+  const hasIncomplete = missingName || missingEmail || missingCpf;
 
   const handleCompleteProfile = async () => {
+    const normalizedName = completeName.trim().replace(/\s+/g, " ");
+    if (missingName && (normalizedName.length < 2 || isRecoveredCustomerName(normalizedName))) {
+      toast.error("Substitua o nome recuperado pelo seu nome completo para continuar.");
+      return;
+    }
     if (missingEmail && !completeEmail.match(/^[^@]+@[^@]+\.[^@]+$/)) {
       toast.error("Digite um e-mail válido");
       return;
@@ -1160,6 +1169,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
     setCompleteSaving(true);
     try {
+      if (missingName) {
+        const r = await updateNameForCompleteMutation.mutateAsync({ phone: canonicalPhone, name: normalizedName });
+        if (!r.success) { toast.error(r.message || "Erro ao salvar nome"); setCompleteSaving(false); return; }
+      }
       if (missingEmail) {
         const r = await updateEmailForCompleteMutation.mutateAsync({ phone: canonicalPhone, email: completeEmail.trim() });
         if (!r.success) { toast.error(r.message || "Erro ao salvar e-mail"); setCompleteSaving(false); return; }
@@ -1264,19 +1277,37 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               <div className="w-16 h-16 rounded-full bg-yellow-500/20 border-2 border-yellow-500 flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-8 h-8 text-yellow-500" />
               </div>
-              <h1 className="text-2xl font-bold text-white mb-2">Complete seu Cadastro</h1>
-              <p className="text-muted-foreground text-sm">Para continuar, preencha os dados obrigatórios abaixo.</p>
+              <h1 className="text-2xl font-bold text-white mb-2">{missingName ? "Atenção: atualize seu nome" : "Complete seu Cadastro"}</h1>
+              <p className="text-muted-foreground text-sm">{missingName ? "O nome exibido é provisório e precisa ser substituído pelo seu nome completo antes de continuar." : "Para continuar, preencha os dados obrigatórios abaixo."}</p>
             </div>
             <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-              {/* Nome — somente leitura */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
-                <User className="w-5 h-5 text-green-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">Nome</p>
-                  <p className="font-semibold text-white truncate">{profileData?.name || "—"}</p>
+              {/* Nome — obrigatório quando o cadastro foi recuperado */}
+              {missingName ? (
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-white flex items-center gap-2">
+                    <UserRound className="w-4 h-4 text-yellow-400" />
+                    Nome completo <span className="text-red-400">*</span>
+                  </label>
+                  <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs leading-relaxed text-amber-100">Seu cadastro possui um nome provisório de recuperação. Para continuar, substitua-o pelo seu nome completo real.</p>
+                  <input
+                    type="text"
+                    placeholder="Digite seu nome completo"
+                    value={completeName}
+                    onChange={e => setCompleteName(e.target.value)}
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                    autoComplete="name"
+                  />
                 </div>
-                <CheckCircle2 className="w-5 h-5 text-green-400 ml-auto shrink-0" />
-              </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
+                  <User className="w-5 h-5 text-green-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Nome</p>
+                    <p className="font-semibold text-white truncate">{profileData?.name || "—"}</p>
+                  </div>
+                  <CheckCircle2 className="w-5 h-5 text-green-400 ml-auto shrink-0" />
+                </div>
+              )}
               {/* Telefone — somente leitura */}
               <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
                 <Phone className="w-5 h-5 text-green-400 shrink-0" />
@@ -1344,7 +1375,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               <button
                 onClick={handleCompleteProfile}
                 disabled={completeSaving}
-                className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.97] disabled:opacity-60 flex items-center justify-center gap-2 mt-2"
+                className="w-full mt-4 bg-primary text-primary-foreground py-3 rounded-lg font-semibold hover:bg-primary/90 disabled:opacity-50"
               >
                 {completeSaving ? (
                   <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Salvando...</>

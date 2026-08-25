@@ -9,6 +9,7 @@ import { sendMailDirect } from "../_core/sendMailDirect";
 import { publicSiteUrl } from "../../shared/publicLinks";
 import { isValidCPF } from "@shared/cpf";
 import { parseMaintenanceManifest } from "../../shared/maintenanceManifest";
+import { isRecoveredCustomerName } from "../../shared/customerProfile";
 import { findMainCustomerByIdentity, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone } from "../customerAccess";
 import { syncUnifiedCustomerRegistry } from "../customerIdentity";
 import { storagePut } from "../storage";
@@ -27,8 +28,6 @@ function makeToken(): string {
 }
 
 const SCHEDULE_ACCESS_DURATION_MS = 15 * 60 * 1000;
-const GENERIC_CUSTOMER_NAME = /^(?:CLIENTE|CADASTRO|PEDIDO)\s+RECUPERAD[OA]|^RECUPERAD[OA](?:\s|$)/i;
-
 type ScheduleAccessPayload = { appointmentToken: string; customerId: number; expiresAt: number };
 
 function scheduleAccessSecret(): string {
@@ -47,7 +46,7 @@ export function phonesMatch(leftValue: unknown, rightValue: unknown): boolean {
 export function missingCustomerFields(customer: any): string[] {
   const missing: string[] = [];
   const name = String(customer?.name || "").trim();
-  if (name.length < 2 || GENERIC_CUSTOMER_NAME.test(name)) missing.push("name");
+  if (name.length < 2 || isRecoveredCustomerName(name)) missing.push("name");
   if (!normalizeCustomerEmail(customer?.email)) missing.push("email");
   const cpf = normalizeCustomerCpf(customer?.cpf);
   if (!cpf || !isValidCPF(cpf)) missing.push("cpf");
@@ -699,7 +698,7 @@ export const scheduleRouter = router({
       const cpf = input.cpf ? normalizeCustomerCpf(input.cpf) : "";
       const city = input.city?.trim().replace(/\s+/g, " ");
       const uf = input.uf?.trim().toUpperCase();
-      if (missing.includes("name") && input.name !== undefined && (!name || name.length < 2 || GENERIC_CUSTOMER_NAME.test(name))) {
+      if (missing.includes("name") && input.name !== undefined && (!name || name.length < 2 || isRecoveredCustomerName(name))) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo." });
       }
       if (missing.includes("email") && input.email !== undefined && !email) {

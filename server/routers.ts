@@ -50,6 +50,7 @@ import { locadoraRouter } from "./routers/locadora";
 import { h2AssistantRouter } from "./routers/h2Assistant";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
+import { isRecoveredCustomerName } from "../shared/customerProfile";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "./_core/sendMailDirect";
@@ -2224,6 +2225,22 @@ export const appRouter = router({
           return { exists: true, customerBlocked: true, blockReason: (customer as any).blockReason || 'Acesso bloqueado' };
         }
         return { exists: !!customer, customerBlocked: false };
+      }),
+
+    // Atualizar nome do cliente pelo telefone quando o cadastro foi recuperado.
+    updateNameByPhone: publicProcedure
+      .input(z.object({ phone: z.string().min(1), name: z.string().trim().min(2).max(128) }))
+      .mutation(async ({ input, ctx }) => {
+        const clientIp = (ctx.req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || ctx.req.socket?.remoteAddress || 'unknown';
+        const blockResult = await checkPhoneBlockedAndBlockIp(input.phone, clientIp, 'atualizar_nome');
+        if (blockResult.blocked) return { success: false, message: 'Acesso bloqueado' };
+        const name = input.name.trim().replace(/\s+/g, ' ');
+        if (name.length < 2 || isRecoveredCustomerName(name)) return { success: false, message: 'Informe seu nome completo, sem a indicação de cadastro recuperado.' };
+        const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
+        if (!customer) return { success: false, message: 'Cliente não encontrado' };
+        if (!isRecoveredCustomerName(customer.name)) return { success: false, message: 'Este cadastro não possui nome provisório para atualização.' };
+        await updateCustomer(customer.id, { name });
+        return { success: true };
       }),
 
     // Atualizar email do cliente pelo telefone (chamado quando cliente preenche email no formulário)
