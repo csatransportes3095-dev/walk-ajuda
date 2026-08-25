@@ -103,7 +103,18 @@ export async function verifySystemBackup(encryptedFile: string, outputRoot: stri
     await runProcess("tar", ["-tf", tarFile], entriesFile);
     const entries = (await readFile(entriesFile, "utf8")).split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
     validateTarEntries(entries);
-    await runProcess("tar", ["-xpf", tarFile, "--no-same-owner", "--no-same-permissions", "-C", tempRoot, "database.sql", "source.tar.gz", "manifest.json", "files"]);
+    await runProcess("tar", [
+      "-xpf",
+      tarFile,
+      "--no-same-owner",
+      "--no-same-permissions",
+      "-C",
+      tempRoot,
+      "./database.sql",
+      "./source.tar.gz",
+      "./manifest.json",
+      "./files",
+    ]);
     await mkdir(extractedRoot, { recursive: true });
     // O tar é extraído em tempRoot; manter uma raiz previsível para as comparações.
     await writeFile(manifestFile, await readFile(path.join(tempRoot, "manifest.json"), "utf8"), "utf8");
@@ -152,8 +163,10 @@ export async function verifySystemBackup(encryptedFile: string, outputRoot: stri
 }
 
 async function main() {
-  const encryptedFile = process.argv[2];
-  const outputRoot = process.argv[3] || path.resolve("backup-verification");
+  const args = process.argv.slice(2);
+  const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
+  const encryptedFile = normalizedArgs[0];
+  const outputRoot = normalizedArgs[1] || path.resolve("backup-verification");
   if (!encryptedFile) throw new Error("Uso: pnpm exec tsx scripts/verify-system-backup.ts <backup.wajuda.enc> [pasta-de-saida]");
   const result = await verifySystemBackup(path.resolve(encryptedFile), path.resolve(outputRoot));
   console.log(JSON.stringify(result, null, 2));
