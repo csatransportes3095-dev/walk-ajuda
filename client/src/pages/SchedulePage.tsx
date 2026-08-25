@@ -9,7 +9,7 @@ export default function SchedulePage() {
   const token = (params as any).token as string;
   const utils = trpc.useUtils();
 
-  const { data, isLoading } = trpc.schedule.getByToken.useQuery({ token }, { enabled: !!token });
+  const { data, isLoading, isError } = trpc.schedule.getByToken.useQuery({ token }, { enabled: !!token });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [showChangeDate, setShowChangeDate] = useState(false);
@@ -116,6 +116,18 @@ export default function SchedulePage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-fuchsia-400" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
+        <div className="bg-black/40 border border-yellow-500/20 rounded-2xl p-8 max-w-md">
+          <AlertTriangle className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
+          <h1 className="text-xl font-bold text-white mb-2">Agendamento temporariamente indisponível</h1>
+          <p className="text-white/60 text-sm">Não foi possível carregar este agendamento agora. Aguarde alguns instantes e tente abrir o link novamente.</p>
+        </div>
       </div>
     );
   }

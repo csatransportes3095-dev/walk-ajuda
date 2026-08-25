@@ -2475,15 +2475,45 @@ export async function reorderFaqItems(items: { id: number; order: number }[]): P
 // ========== SISTEMA DE AGENDAMENTO ==========
 
 // --- Config global (única linha id=1) ---
-export async function getScheduleConfig(): Promise<ScheduleConfig | null> {
+const DEFAULT_SCHEDULE_CONFIG: ScheduleConfig = {
+  id: 1,
+  title: "Agende seu atendimento",
+  introMessage: "Seu pedido precisa ser agendado. Escolha abaixo a melhor data e horário disponível para o seu atendimento.",
+  emailSubject: "Agende seu atendimento - H2 COLOMBIANO",
+  emailMessage: "Olá! Seu pedido precisa ser agendado. Clique no link abaixo para escolher a data e o horário do seu atendimento.",
+  whatsappMessage: "Olá! Seu pedido na H2 COLOMBIANO precisa ser agendado. Acesse o link para escolher a data e o horário do seu atendimento:",
+  scheduledWhatsappMessage: "Olá {nome}! Seu atendimento está confirmado para o dia {data} às {hora}. Fique disponível no WhatsApp nesse horário. Qualquer dúvida, estamos à disposição!",
+  confirmationMessage: "Seu atendimento foi agendado com sucesso! Guarde a data e o horário escolhidos. O atendimento será feito pelo WhatsApp nesse horário.",
+  noShowWarning: "ATENÇÃO: O atendimento será feito pelo WhatsApp no horário escolhido. Fique disponível no WhatsApp nesse horário. Se você não atender quando for chamado, será necessário reagendar.",
+  accentColor: "#8b5cf6",
+  updatedAt: new Date(),
+};
+
+function getDefaultScheduleConfig(): ScheduleConfig {
+  return { ...DEFAULT_SCHEDULE_CONFIG, updatedAt: new Date() };
+}
+
+export async function getScheduleConfig(): Promise<ScheduleConfig> {
   const db = await getDb();
-  if (!db) return null;
-  const rows = await db.select().from(scheduleConfig).where(eq(scheduleConfig.id, 1)).limit(1);
-  if (rows.length > 0) return rows[0];
-  // cria default se não existir
-  await db.insert(scheduleConfig).values({ id: 1 } as any);
-  const created = await db.select().from(scheduleConfig).where(eq(scheduleConfig.id, 1)).limit(1);
-  return created.length > 0 ? created[0] : null;
+  if (!db) return getDefaultScheduleConfig();
+
+  try {
+    const rows = await db.select().from(scheduleConfig).where(eq(scheduleConfig.id, 1)).limit(1);
+    if (rows.length > 0) return rows[0];
+
+    // Tenta criar a linha padrão, mas nunca bloqueia a página pública se a escrita falhar.
+    try {
+      await db.insert(scheduleConfig).values({ id: 1 } as any);
+      const created = await db.select().from(scheduleConfig).where(eq(scheduleConfig.id, 1)).limit(1);
+      return created.length > 0 ? created[0] : getDefaultScheduleConfig();
+    } catch (error) {
+      console.warn("[ScheduleConfig] Configuração não pôde ser criada; usando defaults em memória:", error);
+      return getDefaultScheduleConfig();
+    }
+  } catch (error) {
+    console.warn("[ScheduleConfig] Falha ao carregar configuração; usando defaults em memória:", error);
+    return getDefaultScheduleConfig();
+  }
 }
 
 export async function updateScheduleConfig(data: Partial<{
