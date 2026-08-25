@@ -8,6 +8,7 @@ import { Bot, X, Camera, ChevronRight, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
+import { isPersistedOrderResult } from "@shared/orderSubmission";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -761,7 +762,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           paymentProofMime: flowState.current.pixProofMime || undefined,
         });
 
-        if (result.success) {
+        if (isPersistedOrderResult(result)) {
           // Limpar antes de fechar o Bot: evita que a vitrine recupere um pedido já concluído.
           clearCompletedBotProgress();
           addMsgs({ type: "bot", id: uid(), text: "Pedido enviado com sucesso! \u2705\n\nO admin j\u00e1 recebeu e entrar\u00e1 em contato em breve." });
@@ -778,7 +779,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             trackingPin: (result as any).trackingPin || undefined,
           });
         } else {
-          addMsgs({ type: "bot", id: uid(), text: `Erro ao enviar pedido: ${(result as any).message || 'Tente novamente.'}` });
+          const message = (result as any).message || (result.success
+            ? 'O servidor não confirmou o registro do pedido. Tente novamente.'
+            : 'Tente novamente.');
+          addMsgs({ type: "bot", id: uid(), text: `Erro ao enviar pedido: ${message}` });
         }
       } catch (err: any) {
         addMsgs({ type: "bot", id: uid(), text: `Erro ao enviar: ${err?.message || 'Tente novamente.'}` });

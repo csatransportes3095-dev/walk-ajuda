@@ -14,6 +14,7 @@ import { StorefrontProductCard, type StorefrontCatalogItem, type StorefrontWarra
 import { StorefrontFilters } from "@/components/StorefrontFilters";
 import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
+import { isPersistedOrderResult } from "@shared/orderSubmission";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
 type FlowOrigin = "storefront" | "cart" | "legacy";
@@ -1490,7 +1491,7 @@ export default function Home() {
           // Calcular preço individual do item (sem desconto — o desconto é do carrinho todo)
           const itemRawPrice = item.option?.price || undefined;
           try {
-            await submitMutation.mutateAsync({
+            const itemResult = await submitMutation.mutateAsync({
               clientName: clientName.trim() || 'Cliente',
               service: item.product.name,
               nameOption: item.option?.label || 'N/A',
@@ -1535,10 +1536,19 @@ export default function Home() {
               cartCouponDiscount: cartCouponDiscountValue,
               cartItemIndex: i,
             });
+            if (!isPersistedOrderResult(itemResult)) {
+              throw new Error('O servidor não confirmou o registro deste pedido.');
+            }
             successCount++;
           } catch (err) {
             console.error(`Erro ao enviar pedido ${i + 1}:`, err);
           }
+        }
+        if (successCount !== cartItems.length) {
+          toast.error('Nem todos os pedidos foram registrados. Nada foi confirmado como concluído; tente novamente.');
+          setIsSubmitting(false);
+          submitLockRef.current = false;
+          return;
         }
         setCart([]);
         // Salvar dados do pedido para mensagem WhatsApp
@@ -1620,7 +1630,7 @@ export default function Home() {
         })(),
       });
 
-      if (result.success) {
+      if (isPersistedOrderResult(result)) {
         // Registrar pedido do revendedor se houver slug ativo
         if (activeResellerSlug && result.registrationId && selectedOption) {
           try {
@@ -1663,7 +1673,9 @@ export default function Home() {
         submitLockRef.current = false;
         return;
       } else {
-        toast.error(result.message || 'Erro ao enviar');
+        toast.error(result.message || (result.success
+          ? 'O servidor não confirmou o registro do pedido. Tente novamente.'
+          : 'Erro ao enviar'));
       }
     } catch (error: any) {
       console.error('Erro no envio:', error);

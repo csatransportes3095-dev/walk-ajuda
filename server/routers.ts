@@ -1721,6 +1721,38 @@ export const appRouter = router({
                   } catch (e) { console.error('[OrderStatus] Erro no fallback regId:', e); }
                 }
               }
+              // Contingência: a validação do acesso pode ter sucesso sem que o fluxo anterior
+              // tenha criado accessCodePhones (por exemplo, sessão cpToken recém-criada ou
+              // código legado sem passagem pela tela de validação). Sem registrationId,
+              // addOrderStatus não consegue alimentar o card do ADM.
+              if (!regId) {
+                try {
+                  const fallbackCode = `ORDER-${phoneDigits}-${Date.now()}-${randomUUID().slice(0, 8)}`;
+                  await db2.execute(sql`
+                    INSERT INTO accessCodes (code, type, status, clientName, maxUses, currentUses, createdAt)
+                    VALUES (${fallbackCode}, 'vip', 'used', ${input.clientName || null}, 1, 1, NOW())
+                  `);
+                  const fallbackCodeRows = await db2.execute(sql`
+                    SELECT id FROM accessCodes WHERE code = ${fallbackCode} LIMIT 1
+                  `);
+                  const fallbackCodeId = (fallbackCodeRows[0] as unknown as Array<{ id: number }>)[0]?.id;
+                  if (fallbackCodeId) {
+                    await db2.execute(sql`
+                      INSERT INTO accessCodePhones (codeId, phone, consumed, archived, rgCnhApproved, orderSource, accessedAt)
+                      VALUES (${fallbackCodeId}, ${phoneDigits}, 1, 0, 0, 'auto', NOW())
+                    `);
+                    const fallbackRegistrationRows = await db2.execute(sql`
+                      SELECT id FROM accessCodePhones
+                      WHERE codeId = ${fallbackCodeId} AND phone = ${phoneDigits}
+                      ORDER BY id DESC LIMIT 1
+                    `);
+                    regId = (fallbackRegistrationRows[0] as unknown as Array<{ id: number }>)[0]?.id;
+                    console.log('[OrderStatus] Registro de contingência criado - regId:', regId);
+                  }
+                } catch (e) {
+                  console.error('[OrderStatus] Falha ao criar registro de contingência:', e);
+                }
+              }
               if (regId) {
                 // Buscar status inicial dinâmico do banco
                 let initialStatus = 'pedido_recebido';
@@ -1839,6 +1871,13 @@ export const appRouter = router({
               }
             }
           } catch (e) { console.error('[OrderStatus] Erro ao salvar status inicial:', e); }
+          // Nunca confirmar um pedido sem o registro que alimenta o card do ADM.
+          // Os avisos de email/WhatsApp podem ter sido preparados antes deste bloco,
+          // mas o cliente receberá falha e não será tratado como pedido concluído.
+          if (!outerRegId) {
+            console.error('[OrderStatus] Pedido rejeitado: registrationId não foi criado.');
+            return { success: false, message: 'Não foi possível registrar o pedido. Tente novamente; nenhum pedido foi confirmado.' };
+          }
           // Salvar/atualizar todos os dados do cliente ao finalizar pedido
           if (input.phone) {
             try {
