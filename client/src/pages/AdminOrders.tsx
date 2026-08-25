@@ -18,6 +18,7 @@ import { NotesTab } from "@/components/NotesTab";
 import { AuthenticatorQrAdminField, type PendingQr } from "@/components/AuthenticatorQrAdminField";
 import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
 import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl, publicTrackingShareUrl } from "@shared/publicLinks";
+import { getOperationalBucket } from "@shared/orderBuckets";
 
 type OrderStatus = "recebido" | "pagamento_recebido" | "em_andamento" | "em_montagem" | "documentos_aprovados" | "conta_ativa" | "aguardando_ativa" | "pedido_entregue" | "cancelado";
 
@@ -88,20 +89,6 @@ type Order = {
 const getOrderKey = (order: Order): string => `${order.id}_${order.subOrderIndex ?? 0}`;
 const getIdFromKey = (key: string): number => parseInt(key.split('_')[0], 10);
 
-// Cada pedido aparece em uma única categoria operacional. O agendamento deixa de ser
-// prioridade quando o pedido avançou para análise, conta ativa ou conclusão.
-function getOperationalBucket(order: any): string {
-  const status = String(order?.latestStatus || '');
-  if (['entregue', 'pedido_entregue', 'cancelado'].includes(status)) return 'finalizado';
-  // Somente agendamentos ainda abertos têm prioridade operacional.
-  if (order?.scheduleStatus === 'confirmed') return 'agendamento_confirmado';
-  if (order?.scheduleStatus === 'pending') return 'agendamento';
-  // Agendamento concluído deixa de prevalecer: o pedido passa à sua etapa atual.
-  if (status === 'p') return 'conta_ativa';
-  if (status === 'aguardando_ficar_ativa') return 'aguardando_ativa';
-  if (status === 'foto_em_anal') return 'em_analise';
-  return 'sem_status';
-}
 
 type EditData = {
   name: string;
