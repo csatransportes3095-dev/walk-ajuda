@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { ESTADOS_BR, CIDADES_POR_UF } from "@/lib/brasilData";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -16,6 +16,19 @@ const CP_TOKEN_KEY = "cp_token";
 
 interface PasswordGateProps {
   children: React.ReactNode;
+}
+
+function getSafeScheduleReturnTo(): string | null {
+  if (typeof window === "undefined") return null;
+  const candidate = new URLSearchParams(window.location.search).get("returnTo");
+  if (!candidate) return null;
+  try {
+    const url = new URL(candidate, window.location.origin);
+    if (url.origin !== window.location.origin || !/^\/agendar\/[A-Za-z0-9_-]{32,64}$/.test(url.pathname)) return null;
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
 }
 
 // Hook para detectar se pode instalar o PWA
@@ -85,6 +98,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const [isCheckingPhone, setIsCheckingPhone] = useState(false);
   const [showPasswordError, setShowPasswordError] = useState(false);
   const [customerBlockReason, setCustomerBlockReason] = useState<string | null>(null);
+  const [, navigate] = useLocation();
+  const scheduleReturnTo = useMemo(() => getSafeScheduleReturnTo(), []);
 
   // Campos de cadastro
   const [regName, setRegName] = useState("");
@@ -1076,6 +1091,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           setAccessType('customer');
           setTimeRemaining(null);
           toast.success("Senha criada! Acesso liberado.");
+          if (scheduleReturnTo) navigate(scheduleReturnTo);
           return;
         }
       } catch (autoErr: any) {
@@ -1107,7 +1123,6 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const [, navigate] = useLocation();
   // Redirecionar para /sorteio se o tipo de acesso for raffle
   useEffect(() => {
     if (accessGranted && accessType === 'raffle') {

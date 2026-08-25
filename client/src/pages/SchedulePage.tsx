@@ -16,6 +16,7 @@ export default function SchedulePage() {
   const [identity, setIdentity] = useState("");
   const [password, setPassword] = useState("");
   const [authStep, setAuthStep] = useState<"identity" | "password">("identity");
+  const [needsPasswordCreation, setNeedsPasswordCreation] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
   const [profileCpf, setProfileCpf] = useState("");
@@ -32,12 +33,14 @@ export default function SchedulePage() {
       if (!result.success) {
         const messages: Record<string, string> = {
           invalid: "Telefone/CPF não corresponde a este agendamento.",
-          no_password: "Este cadastro ainda não possui uma senha ativa.",
+          no_password: "Sua senha foi resetada ou ainda não foi criada.",
           pending_approval: "Sua senha ainda aguarda aprovação.",
-          expired: "Sua senha expirou. Solicite a atualização ao atendimento.",
+          expired: "Sua senha expirou. Crie uma nova senha no login principal.",
           wrong_password: "Senha incorreta.",
         };
         setPassword("");
+        setAuthStep("identity");
+        setNeedsPasswordCreation(result.error === "no_password" || result.error === "expired");
         return toast.error(messages[result.error] || "Não foi possível confirmar os dados para este agendamento.");
       }
       try { sessionStorage.setItem(accessStorageKey, result.accessToken); } catch { /* sessão continua em memória */ }
@@ -45,6 +48,7 @@ export default function SchedulePage() {
       setIdentity("");
       setPassword("");
       setAuthStep("identity");
+      setNeedsPasswordCreation(false);
       toast.success("Acesso confirmado.");
     },
     onError: () => toast.error("Não foi possível confirmar os dados para este agendamento."),
@@ -84,6 +88,7 @@ export default function SchedulePage() {
     setAccessToken("");
     setPassword("");
     setAuthStep("identity");
+    setNeedsPasswordCreation(false);
     toast.error("Sua sessão do agendamento expirou. Identifique-se novamente.");
   }, [isError, accessToken, accessStorageKey]);
 
@@ -214,6 +219,11 @@ export default function SchedulePage() {
         setPassword={setPassword}
         step={authStep}
         setStep={setAuthStep}
+        needsPasswordCreation={needsPasswordCreation}
+        onCreatePassword={() => {
+          const returnTo = `/agendar/${encodeURIComponent(token)}`;
+          window.location.assign(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+        }}
         busy={authorizeMut.isPending}
         onSubmit={(event) => {
           event.preventDefault();
@@ -790,6 +800,8 @@ function ScheduleIdentityGate({
   setPassword,
   step,
   setStep,
+  needsPasswordCreation,
+  onCreatePassword,
   busy,
   onSubmit,
 }: {
@@ -799,6 +811,8 @@ function ScheduleIdentityGate({
   setPassword: TextSetter;
   step: "identity" | "password";
   setStep: (value: "identity" | "password") => void;
+  needsPasswordCreation: boolean;
+  onCreatePassword: () => void;
   busy: boolean;
   onSubmit: (event: FormEvent) => void;
 }) {
@@ -834,6 +848,7 @@ function ScheduleIdentityGate({
             {busy ? "CONFIRMANDO..." : isPasswordStep ? "ENTRAR" : "CONTINUAR"}
           </button>
           {isPasswordStep && <button type="button" onClick={() => setStep("identity")} disabled={busy} className="mt-3 w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition hover:bg-white/5 disabled:opacity-50">Voltar e corrigir telefone/CPF</button>}
+          {needsPasswordCreation && <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-center"><p className="text-sm font-bold text-amber-100">Este cadastro precisa de uma nova senha.</p><p className="mt-1 text-xs text-amber-100/75">Use o mesmo login principal para criar a senha e depois volte a este agendamento.</p><button type="button" onClick={onCreatePassword} className="mt-3 w-full rounded-xl bg-amber-500 px-4 py-3 font-black text-slate-950 transition hover:bg-amber-400">CRIAR NOVA SENHA NO /LOGIN</button></div>}
           <p className="mt-4 text-center text-xs text-slate-500">Se não reconhecer este agendamento, não continue e fale com o atendimento.</p>
         </form>
       </div>
