@@ -14,6 +14,8 @@ export default function SchedulePage() {
     try { return sessionStorage.getItem(accessStorageKey) || ""; } catch { return ""; }
   });
   const [identity, setIdentity] = useState("");
+  const [password, setPassword] = useState("");
+  const [authStep, setAuthStep] = useState<"identity" | "password">("identity");
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
   const [profileCpf, setProfileCpf] = useState("");
@@ -27,10 +29,22 @@ export default function SchedulePage() {
   );
   const authorizeMut = trpc.schedule.authorize.useMutation({
     onSuccess: (result) => {
-      if (!result.success) return toast.error("Não foi possível confirmar os dados para este agendamento.");
+      if (!result.success) {
+        const messages: Record<string, string> = {
+          invalid: "Telefone/CPF não corresponde a este agendamento.",
+          no_password: "Este cadastro ainda não possui uma senha ativa.",
+          pending_approval: "Sua senha ainda aguarda aprovação.",
+          expired: "Sua senha expirou. Solicite a atualização ao atendimento.",
+          wrong_password: "Senha incorreta.",
+        };
+        setPassword("");
+        return toast.error(messages[result.error] || "Não foi possível confirmar os dados para este agendamento.");
+      }
       try { sessionStorage.setItem(accessStorageKey, result.accessToken); } catch { /* sessão continua em memória */ }
       setAccessToken(result.accessToken);
       setIdentity("");
+      setPassword("");
+      setAuthStep("identity");
       toast.success("Acesso confirmado.");
     },
     onError: () => toast.error("Não foi possível confirmar os dados para este agendamento."),
@@ -68,6 +82,8 @@ export default function SchedulePage() {
     if (!isError || !accessToken) return;
     try { sessionStorage.removeItem(accessStorageKey); } catch { /* ignora */ }
     setAccessToken("");
+    setPassword("");
+    setAuthStep("identity");
     toast.error("Sua sessão do agendamento expirou. Identifique-se novamente.");
   }, [isError, accessToken, accessStorageKey]);
 
@@ -194,15 +210,32 @@ export default function SchedulePage() {
       <ScheduleIdentityGate
         identity={identity}
         setIdentity={setIdentity}
+        password={password}
+        setPassword={setPassword}
+        step={authStep}
+        setStep={setAuthStep}
         busy={authorizeMut.isPending}
         onSubmit={(event) => {
           event.preventDefault();
-          if (!identity.trim()) return toast.error("Digite seu telefone ou CPF.");
-          authorizeMut.mutate({ token, identity: identity.trim() });
+          if (authStep === "identity") {
+            if (!identity.trim()) return toast.error("Digite seu telefone ou CPF.");
+            setAuthStep("password");
+            return;
+          }
+          if (!password) return toast.error("Digite sua senha.");
+          authorizeMut.mutate({ token, identity: identity.trim(), password });
         }}
       />
     );
   }
+
+  const logout = () => {
+    try { sessionStorage.removeItem(accessStorageKey); } catch { /* ignora */ }
+    setAccessToken("");
+    setIdentity("");
+    setPassword("");
+    setAuthStep("identity");
+  };
 
   const accent = data.config?.accentColor || "#8b5cf6";
   const appt = data.appointment;
@@ -224,6 +257,7 @@ export default function SchedulePage() {
         uf={profileUf}
         setUf={setProfileUf}
         photoUrl={profilePhoto}
+        onLogout={logout}
         uploading={uploadMissingPhotoMut.isPending}
         saving={saveMissingProfileMut.isPending}
         onPhoto={(file) => {
@@ -457,7 +491,7 @@ export default function SchedulePage() {
             )}
           </div>
 
-          <ScheduleOrderContext order={data.order} />
+          <ScheduleOrderContext order={data.order} onLogout={logout} />
 
           {/* Card de data e hora */}
           <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 mb-5">
@@ -611,7 +645,7 @@ export default function SchedulePage() {
           {appt.instructions && <p className="w-full text-white/60 text-sm mt-3 bg-white/5 border border-white/10 rounded-lg p-4 text-left whitespace-pre-line leading-relaxed">{appt.instructions}</p>}
         </div>
 
-        <ScheduleOrderContext order={data.order} />
+        <ScheduleOrderContext order={data.order} onLogout={logout} />
 
         {/* Aviso de reagendamento */}
         {cfg?.noShowWarning && (
@@ -752,14 +786,23 @@ type TextSetter = (value: string) => void;
 function ScheduleIdentityGate({
   identity,
   setIdentity,
+  password,
+  setPassword,
+  step,
+  setStep,
   busy,
   onSubmit,
 }: {
   identity: string;
   setIdentity: TextSetter;
+  password: string;
+  setPassword: TextSetter;
+  step: "identity" | "password";
+  setStep: (value: "identity" | "password") => void;
   busy: boolean;
   onSubmit: (event: FormEvent) => void;
 }) {
+  const isPasswordStep = step === "password";
   return (
     <main className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8 text-white sm:py-12">
       <div className="mx-auto w-full max-w-lg">
@@ -768,21 +811,29 @@ function ScheduleIdentityGate({
             <ShieldCheck className="h-8 w-8 text-violet-300" />
           </div>
           <p className="text-xs font-black tracking-[.2em] text-violet-300">WALK AJUDA</p>
-          <h1 className="mt-2 text-3xl font-black">Confirme seu acesso</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-400">Informe o telefone ou CPF do cadastro principal para continuar com este agendamento.</p>
+          <h1 className="mt-2 text-3xl font-black">{isPasswordStep ? "Digite sua senha" : "Confirme seu acesso"}</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{isPasswordStep ? "A senha protege os dados do seu pedido e cadastro." : "Informe o telefone ou CPF do cadastro principal para continuar com este agendamento."}</p>
         </header>
         <form onSubmit={onSubmit} className="rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl backdrop-blur sm:p-7">
           <div className="mb-5 rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4 text-sm text-violet-100">
             <p className="flex items-center gap-2 font-bold"><UserRoundCog className="h-5 w-5" />Acesso vinculado ao pedido</p>
             <p className="mt-1 text-xs text-violet-100/70">Os dados do pedido só aparecem depois da confirmação.</p>
           </div>
-          <label className="block">
-            <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Telefone ou CPF</span>
-            <input autoFocus value={identity} onChange={(event) => setIdentity(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/15" placeholder="Telefone ou CPF" autoComplete="username" inputMode="numeric" />
-          </label>
+          {!isPasswordStep ? (
+            <label className="block">
+              <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Telefone ou CPF</span>
+              <input autoFocus value={identity} onChange={(event) => setIdentity(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/15" placeholder="Telefone ou CPF" autoComplete="username" inputMode="numeric" />
+            </label>
+          ) : (
+            <label className="block">
+              <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Senha</span>
+              <input autoFocus type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/15" placeholder="Digite sua senha" autoComplete="current-password" minLength={4} />
+            </label>
+          )}
           <button type="submit" disabled={busy} className="mt-5 flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-4 font-black shadow-lg shadow-violet-950/50 transition active:scale-[.98] disabled:opacity-50">
-            {busy ? "CONFIRMANDO..." : "CONTINUAR"}
+            {busy ? "CONFIRMANDO..." : isPasswordStep ? "ENTRAR" : "CONTINUAR"}
           </button>
+          {isPasswordStep && <button type="button" onClick={() => setStep("identity")} disabled={busy} className="mt-3 w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition hover:bg-white/5 disabled:opacity-50">Voltar e corrigir telefone/CPF</button>}
           <p className="mt-4 text-center text-xs text-slate-500">Se não reconhecer este agendamento, não continue e fale com o atendimento.</p>
         </form>
       </div>
@@ -813,6 +864,7 @@ function ScheduleMissingProfileGate({
   uf,
   setUf,
   photoUrl,
+  onLogout,
   uploading,
   saving,
   onPhoto,
@@ -830,6 +882,7 @@ function ScheduleMissingProfileGate({
   uf: string;
   setUf: TextSetter;
   photoUrl: string;
+  onLogout: () => void;
   uploading: boolean;
   saving: boolean;
   onPhoto: (file?: File) => void;
@@ -843,7 +896,7 @@ function ScheduleMissingProfileGate({
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-400/40 bg-amber-500/15 shadow-[0_0_35px_rgba(245,158,11,.2)]">
             <UserRoundCog className="h-8 w-8 text-amber-300" />
           </div>
-          <p className="text-xs font-black tracking-[.2em] text-violet-300">WALK AJUDA</p>
+          <div className="flex items-center justify-between gap-3"><p className="text-xs font-black tracking-[.2em] text-violet-300">WALK AJUDA</p><button type="button" onClick={onLogout} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/5">Sair</button></div>
           <h1 className="mt-2 text-3xl font-black">Complete apenas o que falta</h1>
           <p className="mt-2 text-sm leading-6 text-slate-400">Encontramos {missingFields.length} dado(s) incompleto(s) no cadastro principal. Os demais dados não serão alterados.</p>
         </header>
@@ -871,11 +924,11 @@ function ScheduleMissingProfileGate({
   );
 }
 
-function ScheduleOrderContext({ order }: { order: any }) {
+function ScheduleOrderContext({ order, onLogout }: { order: any; onLogout: () => void }) {
   const appointmentLabels: Record<string, string> = { pending: "Aguardando escolha", confirmed: "Confirmado", cancelled: "Cancelado", completed: "Concluído" };
   return (
     <div className="mb-5 rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4">
-      <div className="mb-3 flex items-center gap-2 text-violet-200"><ShieldCheck className="h-4 w-4" /><p className="text-xs font-black uppercase tracking-wider">Resumo do pedido</p></div>
+      <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-violet-200"><ShieldCheck className="h-4 w-4" /><p className="text-xs font-black uppercase tracking-wider">Resumo do pedido</p></div><button type="button" onClick={onLogout} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/5">Sair</button></div>
       <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
         <p className="text-white/80"><span className="text-white/45">Pedido:</span> #{order?.registrationId}</p>
         <p className="text-white/80"><span className="text-white/45">Agendamento:</span> {appointmentLabels[order?.appointmentStatus] || "Em atualização"}</p>

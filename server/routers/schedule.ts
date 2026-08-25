@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
 import { publicSiteUrl } from "../../shared/publicLinks";
@@ -111,6 +112,23 @@ async function loadMainCustomerById(db: any, customerId: number): Promise<any | 
     LIMIT 1
   `);
   return found[0] || null;
+}
+
+async function verifyCustomerPassword(db: any, phone: unknown, password: string): Promise<"ok" | "no_password" | "pending_approval" | "expired" | "wrong_password"> {
+  const cleanPhone = normalizeCustomerPhone(phone);
+  if (!cleanPhone) return "no_password";
+  const passwordRows = await rows(db, sql`
+    SELECT password, isActive, pendingApproval, expiresAt
+    FROM customerPasswords
+    WHERE phone=${cleanPhone} AND isActive=1
+    ORDER BY id DESC
+    LIMIT 1
+  `);
+  const current = passwordRows[0];
+  if (!current) return "no_password";
+  if (Number(current.pendingApproval) === 1) return "pending_approval";
+  if (!current.expiresAt || new Date(current.expiresAt).getTime() < Date.now()) return "expired";
+  return await bcrypt.compare(password, String(current.password || "")) ? "ok" : "wrong_password";
 }
 
 async function requireScheduleAccess(appointmentToken: string, accessToken: string) {
@@ -579,7 +597,7 @@ export const scheduleRouter = router({
 
   // Valida telefone ou CPF contra o cadastro principal e libera uma sessão curta do agendamento.
   authorize: publicProcedure
-    .input(z.object({ token: z.string().min(32).max(64), identity: z.string().min(5).max(32) }))
+    .input(z.object({ token: z.string().min(32).max(64), identity: z.string().min(5).max(32), password: z.string().min(4).max(128) }))
     .mutation(async ({ input }) => {
       const appt = await getAppointmentByToken(input.token);
       if (!appt) return { success: false as const, error: "invalid" as const };
@@ -596,6 +614,8 @@ export const scheduleRouter = router({
       if (!customer || customer.deletedAt || Number(customer.blocked) === 1 || !phonesMatch(customer.phone, appt.customerPhone)) {
         return { success: false as const, error: "invalid" as const };
       }
+      const passwordState = await verifyCustomerPassword(db, customer.phone, input.password);
+      if (passwordState !== "ok") return { success: false as const, error: passwordState };
       const accessToken = createScheduleAccessToken(input.token, Number(customer.id));
       return { success: true as const, accessToken, data: await buildAuthenticatedScheduleData(appt, customer) };
     }),
