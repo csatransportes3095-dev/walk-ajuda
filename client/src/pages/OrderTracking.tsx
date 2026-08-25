@@ -622,10 +622,6 @@ export default function OrderTracking() {
     { phone: searchPhone },
     { enabled: canAccess && !!searchPhone && searchPhone.length >= 10, refetchInterval: 30000 }
   );
-  const rescheduleMut = trpc.schedule.requestReschedule.useMutation({
-    onSuccess: () => { scheduleQuery.refetch(); },
-  });
-
   return (
     <div className="min-h-screen bg-[#0d0d1a] text-white">
       {/* ========== MODAL DE PROPAGANDA OBRIGATÓRIA ========== */}
@@ -1500,17 +1496,14 @@ export default function OrderTracking() {
                           >
                             <Calendar className="w-4 h-4" /> Ver detalhes do agendamento
                           </a>
-                          <button
-                            onClick={() => {
-                              if (confirm("Deseja solicitar o reagendamento? Seu horário atual será liberado e você poderá escolher um novo horário disponível.")) {
-                                rescheduleMut.mutate({ token: a.token });
-                              }
-                            }}
-                            disabled={rescheduleMut.isPending}
-                            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium hover:bg-amber-500/20 active:scale-[0.98] transition-all disabled:opacity-50"
+                          <a
+                            href={link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium hover:bg-amber-500/20 active:scale-[0.98] transition-all"
                           >
-                            {rescheduleMut.isPending ? "Aguarde..." : "⚠️ Não poderei comparecer — quero reagendar"}
-                          </button>
+                            ⚠️ Não poderei comparecer — autenticar e reagendar
+                          </a>
                         </div>
                       </div>
                     );

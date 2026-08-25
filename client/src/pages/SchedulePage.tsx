@@ -1,15 +1,54 @@
 import { trpc } from "@/lib/trpc";
 import { useParams } from "wouter";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, type FormEvent } from "react";
 import { toast } from "sonner";
-import { CalendarClock, CheckCircle2, AlertTriangle, Clock, CalendarDays, Loader2, ShieldAlert, MessageCircle, AlertCircle } from "lucide-react";
+import { CalendarClock, CheckCircle2, AlertTriangle, Clock, CalendarDays, Loader2, ShieldAlert, MessageCircle, AlertCircle, ShieldCheck, UserRoundCog, Upload } from "lucide-react";
+import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
 export default function SchedulePage() {
   const params = useParams();
   const token = (params as any).token as string;
   const utils = trpc.useUtils();
+  const accessStorageKey = `schedule_access_${token}`;
+  const [accessToken, setAccessToken] = useState(() => {
+    try { return sessionStorage.getItem(accessStorageKey) || ""; } catch { return ""; }
+  });
+  const [identity, setIdentity] = useState("");
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
+  const [profileCpf, setProfileCpf] = useState("");
+  const [profileCity, setProfileCity] = useState("");
+  const [profileUf, setProfileUf] = useState("");
+  const [profilePhoto, setProfilePhoto] = useState("");
 
-  const { data, isLoading, isError } = trpc.schedule.getByToken.useQuery({ token }, { enabled: !!token });
+  const { data, isLoading, isError } = trpc.schedule.getByToken.useQuery(
+    { token, accessToken: accessToken || undefined },
+    { enabled: !!token, retry: false },
+  );
+  const authorizeMut = trpc.schedule.authorize.useMutation({
+    onSuccess: (result) => {
+      if (!result.success) return toast.error("Não foi possível confirmar os dados para este agendamento.");
+      try { sessionStorage.setItem(accessStorageKey, result.accessToken); } catch { /* sessão continua em memória */ }
+      setAccessToken(result.accessToken);
+      setIdentity("");
+      toast.success("Acesso confirmado.");
+    },
+    onError: () => toast.error("Não foi possível confirmar os dados para este agendamento."),
+  });
+  const saveMissingProfileMut = trpc.schedule.saveMissingProfile.useMutation({
+    onSuccess: () => {
+      toast.success("Dados faltantes atualizados.");
+      utils.schedule.getByToken.invalidate({ token, accessToken });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const uploadMissingPhotoMut = trpc.schedule.uploadMissingProfilePhoto.useMutation({
+    onSuccess: () => {
+      toast.success("Foto atualizada.");
+      utils.schedule.getByToken.invalidate({ token, accessToken });
+    },
+    onError: (error) => toast.error(error.message),
+  });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [showChangeDate, setShowChangeDate] = useState(false);
@@ -17,15 +56,20 @@ export default function SchedulePage() {
   const [showMidnightWarning, setShowMidnightWarning] = useState(false);
 
   const confirmMut = trpc.schedule.confirm.useMutation({
-    onSuccess: () => { toast.success("Horário agendado com sucesso!"); utils.schedule.getByToken.invalidate({ token }); },
+    onSuccess: () => { toast.success("Horário agendado com sucesso!"); utils.schedule.getByToken.invalidate({ token, accessToken }); },
     onError: (e) => {
       toast.error(e.message);
-      utils.schedule.getByToken.invalidate({ token });
+      utils.schedule.getByToken.invalidate({ token, accessToken });
       setSelectedSlot(null);
     },
   });
 
-  const accent = (data?.found && data.config?.accentColor) || "#8b5cf6";
+  useEffect(() => {
+    if (!isError || !accessToken) return;
+    try { sessionStorage.removeItem(accessStorageKey); } catch { /* ignora */ }
+    setAccessToken("");
+    toast.error("Sua sessão do agendamento expirou. Identifique-se novamente.");
+  }, [isError, accessToken, accessStorageKey]);
 
   // Processa variáveis de template no texto de aviso
   const processWarningText = (text: string) => {
@@ -97,15 +141,16 @@ export default function SchedulePage() {
   };
 
   // Agrupar slots disponíveis por data
+  const availableSlots = data && data.found && "slots" in data ? data.slots : undefined;
   const grouped = useMemo(() => {
     const g: Record<string, any[]> = {};
-    if (data?.found && data.slots && Array.isArray(data.slots)) {
-      data.slots.forEach((s: any) => { 
-        (g[s.slotDate] ||= []).push(s); 
+    if (Array.isArray(availableSlots)) {
+      availableSlots.forEach((s: any) => {
+        (g[s.slotDate] ||= []).push(s);
       });
     }
     return g;
-  }, [data?.slots]);
+  }, [availableSlots]);
 
   // Obter datas disponíveis
   const dates = useMemo(() => {
@@ -144,9 +189,69 @@ export default function SchedulePage() {
     );
   }
 
+  if (data.requiresIdentity) {
+    return (
+      <ScheduleIdentityGate
+        identity={identity}
+        setIdentity={setIdentity}
+        busy={authorizeMut.isPending}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!identity.trim()) return toast.error("Digite seu telefone ou CPF.");
+          authorizeMut.mutate({ token, identity: identity.trim() });
+        }}
+      />
+    );
+  }
+
+  const accent = data.config?.accentColor || "#8b5cf6";
   const appt = data.appointment;
   const cfg = data.config;
-  
+  const missingFields = data.profile?.missing || [];
+
+  if (missingFields.length > 0) {
+    return (
+      <ScheduleMissingProfileGate
+        missingFields={missingFields}
+        name={profileName}
+        setName={setProfileName}
+        email={profileEmail}
+        setEmail={setProfileEmail}
+        cpf={profileCpf}
+        setCpf={setProfileCpf}
+        city={profileCity}
+        setCity={setProfileCity}
+        uf={profileUf}
+        setUf={setProfileUf}
+        photoUrl={profilePhoto}
+        uploading={uploadMissingPhotoMut.isPending}
+        saving={saveMissingProfileMut.isPending}
+        onPhoto={(file) => {
+          if (!file) return;
+          if (file.size > 5 * 1024 * 1024 || !/^image\/(jpeg|png|webp)$/.test(file.type)) {
+            return toast.error("Envie uma foto JPG, PNG ou WEBP de até 5 MB.");
+          }
+          const reader = new FileReader();
+          reader.onload = () => uploadMissingPhotoMut.mutate({ token, accessToken, imageBase64: String(reader.result || "") });
+          reader.readAsDataURL(file);
+        }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (missingFields.includes("cpf") && !isValidCPF(normalizeCpf(profileCpf))) return toast.error("Digite um CPF válido.");
+          saveMissingProfileMut.mutate({
+            token,
+            accessToken,
+            ...(missingFields.includes("name") ? { name: profileName } : {}),
+            ...(missingFields.includes("email") ? { email: profileEmail } : {}),
+            ...(missingFields.includes("cpf") ? { cpf: profileCpf } : {}),
+            ...(missingFields.includes("city") ? { city: profileCity } : {}),
+            ...(missingFields.includes("uf") ? { uf: profileUf } : {}),
+          });
+        }}
+      />
+    );
+  }
+
   // Slots do dia selecionado
   const slotsOfDay = selectedDate ? (grouped[selectedDate] || []) : [];
   
@@ -276,7 +381,7 @@ export default function SchedulePage() {
                 <button
                   onClick={() => {
                     if (selectedSlot) {
-                      confirmMut.mutate({ token, slotId: selectedSlot });
+                      confirmMut.mutate({ token, accessToken, slotId: selectedSlot });
                     } else {
                       toast.error('Selecione um horário');
                     }
@@ -351,6 +456,8 @@ export default function SchedulePage() {
               </span>
             )}
           </div>
+
+          <ScheduleOrderContext order={data.order} />
 
           {/* Card de data e hora */}
           <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 mb-5">
@@ -504,6 +611,8 @@ export default function SchedulePage() {
           {appt.instructions && <p className="w-full text-white/60 text-sm mt-3 bg-white/5 border border-white/10 rounded-lg p-4 text-left whitespace-pre-line leading-relaxed">{appt.instructions}</p>}
         </div>
 
+        <ScheduleOrderContext order={data.order} />
+
         {/* Aviso de reagendamento */}
         {cfg?.noShowWarning && (
           <div className="relative mb-6 overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/15 via-amber-500/5 to-transparent shadow-lg shadow-amber-900/20">
@@ -619,7 +728,7 @@ export default function SchedulePage() {
             <button
               onClick={() => {
                 if (selectedSlot) {
-                  confirmMut.mutate({ token, slotId: selectedSlot });
+                  confirmMut.mutate({ token, accessToken, slotId: selectedSlot });
                 } else {
                   toast.error('Selecione um horário');
                 }
@@ -632,6 +741,145 @@ export default function SchedulePage() {
             </button>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+type TextSetter = (value: string) => void;
+
+function ScheduleIdentityGate({
+  identity,
+  setIdentity,
+  busy,
+  onSubmit,
+}: {
+  identity: string;
+  setIdentity: TextSetter;
+  busy: boolean;
+  onSubmit: (event: FormEvent) => void;
+}) {
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8 text-white sm:py-12">
+      <div className="mx-auto w-full max-w-lg">
+        <header className="mb-7 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-violet-400/40 bg-violet-500/15 shadow-[0_0_35px_rgba(139,92,246,.25)]">
+            <ShieldCheck className="h-8 w-8 text-violet-300" />
+          </div>
+          <p className="text-xs font-black tracking-[.2em] text-violet-300">WALK AJUDA</p>
+          <h1 className="mt-2 text-3xl font-black">Confirme seu acesso</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-400">Informe o telefone ou CPF do cadastro principal para continuar com este agendamento.</p>
+        </header>
+        <form onSubmit={onSubmit} className="rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl backdrop-blur sm:p-7">
+          <div className="mb-5 rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4 text-sm text-violet-100">
+            <p className="flex items-center gap-2 font-bold"><UserRoundCog className="h-5 w-5" />Acesso vinculado ao pedido</p>
+            <p className="mt-1 text-xs text-violet-100/70">Os dados do pedido só aparecem depois da confirmação.</p>
+          </div>
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Telefone ou CPF</span>
+            <input autoFocus value={identity} onChange={(event) => setIdentity(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/15" placeholder="Telefone ou CPF" autoComplete="username" inputMode="numeric" />
+          </label>
+          <button type="submit" disabled={busy} className="mt-5 flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-4 font-black shadow-lg shadow-violet-950/50 transition active:scale-[.98] disabled:opacity-50">
+            {busy ? "CONFIRMANDO..." : "CONTINUAR"}
+          </button>
+          <p className="mt-4 text-center text-xs text-slate-500">Se não reconhecer este agendamento, não continue e fale com o atendimento.</p>
+        </form>
+      </div>
+    </main>
+  );
+}
+
+const PROFILE_UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
+const PROFILE_FIELD_LABELS: Record<string, string> = {
+  name: "Nome completo",
+  email: "E-mail",
+  cpf: "CPF",
+  city: "Cidade",
+  uf: "UF",
+  profilePhotoUrl: "Foto de perfil",
+};
+
+function ScheduleMissingProfileGate({
+  missingFields,
+  name,
+  setName,
+  email,
+  setEmail,
+  cpf,
+  setCpf,
+  city,
+  setCity,
+  uf,
+  setUf,
+  photoUrl,
+  uploading,
+  saving,
+  onPhoto,
+  onSubmit,
+}: {
+  missingFields: string[];
+  name: string;
+  setName: TextSetter;
+  email: string;
+  setEmail: TextSetter;
+  cpf: string;
+  setCpf: TextSetter;
+  city: string;
+  setCity: TextSetter;
+  uf: string;
+  setUf: TextSetter;
+  photoUrl: string;
+  uploading: boolean;
+  saving: boolean;
+  onPhoto: (file?: File) => void;
+  onSubmit: (event: FormEvent) => void;
+}) {
+  const has = (field: string) => missingFields.includes(field);
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8 text-white sm:py-12">
+      <div className="mx-auto w-full max-w-lg">
+        <header className="mb-7 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-400/40 bg-amber-500/15 shadow-[0_0_35px_rgba(245,158,11,.2)]">
+            <UserRoundCog className="h-8 w-8 text-amber-300" />
+          </div>
+          <p className="text-xs font-black tracking-[.2em] text-violet-300">WALK AJUDA</p>
+          <h1 className="mt-2 text-3xl font-black">Complete apenas o que falta</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-400">Encontramos {missingFields.length} dado(s) incompleto(s) no cadastro principal. Os demais dados não serão alterados.</p>
+        </header>
+        <form onSubmit={onSubmit} className="space-y-5 rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl backdrop-blur sm:p-7">
+          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
+            <p className="font-bold">Dados necessários: {missingFields.map((field) => PROFILE_FIELD_LABELS[field] || field).join(", ")}</p>
+            <p className="mt-1 text-xs text-amber-100/70">Campos já completos permanecem preservados.</p>
+          </div>
+          {has("profilePhotoUrl") && (
+            <label className="block cursor-pointer rounded-2xl border border-dashed border-violet-400/50 bg-violet-400/5 p-4 text-center hover:bg-violet-400/10">
+              {photoUrl ? <img src={photoUrl} alt="Pré-visualização da foto" className="mx-auto h-24 w-24 rounded-full object-cover ring-2 ring-violet-400" /> : <Upload className="mx-auto h-9 w-9 text-violet-300" />}
+              <span className="mt-2 block text-sm font-bold">{uploading ? "Enviando foto..." : "Enviar foto de perfil"}</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" className="hidden" disabled={uploading} onChange={(event) => onPhoto(event.target.files?.[0])} />
+            </label>
+          )}
+          {has("name") && <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Nome completo</span><input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none focus:border-violet-500" required minLength={2} autoComplete="name" /></label>}
+          {has("email") && <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">E-mail</span><input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none focus:border-violet-500" required type="email" autoComplete="email" /></label>}
+          {has("cpf") && <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">CPF</span><input value={cpf} onChange={(event) => setCpf(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none focus:border-violet-500" required inputMode="numeric" placeholder="000.000.000-00" /></label>}
+          {has("city") && <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Cidade</span><input value={city} onChange={(event) => setCity(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none focus:border-violet-500" required /></label>}
+          {has("uf") && <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">UF</span><select value={uf} onChange={(event) => setUf(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none focus:border-violet-500" required><option value="">Selecione a UF</option>{PROFILE_UFS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>}
+          {missingFields.some((field) => field !== "profilePhotoUrl") && <button type="submit" disabled={saving || uploading} className="flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-4 font-black shadow-lg shadow-violet-950/50 transition active:scale-[.98] disabled:opacity-50">{saving ? "SALVANDO..." : "SALVAR DADOS FALTANTES"}</button>}
+        </form>
+      </div>
+    </main>
+  );
+}
+
+function ScheduleOrderContext({ order }: { order: any }) {
+  const appointmentLabels: Record<string, string> = { pending: "Aguardando escolha", confirmed: "Confirmado", cancelled: "Cancelado", completed: "Concluído" };
+  return (
+    <div className="mb-5 rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4">
+      <div className="mb-3 flex items-center gap-2 text-violet-200"><ShieldCheck className="h-4 w-4" /><p className="text-xs font-black uppercase tracking-wider">Resumo do pedido</p></div>
+      <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+        <p className="text-white/80"><span className="text-white/45">Pedido:</span> #{order?.registrationId}</p>
+        <p className="text-white/80"><span className="text-white/45">Agendamento:</span> {appointmentLabels[order?.appointmentStatus] || "Em atualização"}</p>
+        <p className="text-white/80 sm:col-span-2"><span className="text-white/45">Status do pedido:</span> <strong className="text-violet-200">{order?.orderStatusLabel || "Ainda não informado"}</strong></p>
       </div>
     </div>
   );

@@ -1,10 +1,15 @@
 import { router, publicProcedure, adminProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { sql } from "drizzle-orm";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
 import { publicSiteUrl } from "../../shared/publicLinks";
+import { isValidCPF } from "@shared/cpf";
+import { findMainCustomerByIdentity, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone } from "../customerAccess";
+import { syncUnifiedCustomerRegistry } from "../customerIdentity";
+import { storagePut } from "../storage";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -12,11 +17,145 @@ import {
   getAppointmentByOrder, getAppointmentByToken, createAppointment, markAppointmentEmailSent, listAppointmentsByRegistration, listAppointmentsByPhone,
   cancelAppointment, reopenAppointment, confirmAppointment, listAppointments, deleteAppointment, completeAppointment,
   getAppointmentById, manualConfirmAppointment, adminDismissScheduleAlert,
-  getSetting, getLatestOrderStatus, getStatusLabelFromDb,
+  getSetting, getLatestOrderStatus, getStatusLabelFromDb, getDb,
 } from "../db";
 
 function makeToken(): string {
   return crypto.randomBytes(16).toString("hex");
+}
+
+const SCHEDULE_ACCESS_DURATION_MS = 15 * 60 * 1000;
+const GENERIC_CUSTOMER_NAME = /^(?:CLIENTE|CADASTRO|PEDIDO)\s+RECUPERAD[OA]|^RECUPERAD[OA](?:\s|$)/i;
+
+type ScheduleAccessPayload = { appointmentToken: string; customerId: number; expiresAt: number };
+
+function scheduleAccessSecret(): string {
+  return String(process.env.JWT_SECRET || "").trim();
+}
+
+export function phonesMatch(leftValue: unknown, rightValue: unknown): boolean {
+  const left = normalizeCustomerPhone(leftValue);
+  const right = normalizeCustomerPhone(rightValue);
+  if (!left || !right) return false;
+  return left === right ||
+    (left.length === 11 && right.length === 10 && left.slice(1) === right) ||
+    (right.length === 11 && left.length === 10 && right.slice(1) === left);
+}
+
+export function missingCustomerFields(customer: any): string[] {
+  const missing: string[] = [];
+  const name = String(customer?.name || "").trim();
+  if (name.length < 2 || GENERIC_CUSTOMER_NAME.test(name)) missing.push("name");
+  if (!normalizeCustomerEmail(customer?.email)) missing.push("email");
+  const cpf = normalizeCustomerCpf(customer?.cpf);
+  if (!cpf || !isValidCPF(cpf)) missing.push("cpf");
+  if (String(customer?.city || "").trim().length < 2) missing.push("city");
+  if (!/^[A-Z]{2}$/.test(String(customer?.uf || "").trim().toUpperCase())) missing.push("uf");
+  if (!String(customer?.profilePhotoUrl || "").trim()) missing.push("profilePhotoUrl");
+  return missing;
+}
+
+function publicAppointment(appt: any) {
+  return {
+    id: appt.id,
+    subOrderIndex: appt.subOrderIndex,
+    serviceName: appt.serviceName,
+    status: appt.status,
+    slotDate: appt.slotDate,
+    slotTime: appt.slotTime,
+    instructions: appt.instructions,
+  };
+}
+
+export function createScheduleAccessToken(appointmentToken: string, customerId: number): string {
+  const secret = scheduleAccessSecret();
+  if (secret.length < 16) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "A autenticação do agendamento está indisponível." });
+  const payload: ScheduleAccessPayload = {
+    appointmentToken,
+    customerId,
+    expiresAt: Date.now() + SCHEDULE_ACCESS_DURATION_MS,
+  };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+export function verifyScheduleAccessToken(token: string, appointmentToken: string): ScheduleAccessPayload | null {
+  const secret = scheduleAccessSecret();
+  if (secret.length < 16 || !token || token.length > 512) return null;
+  const [encoded, signature] = token.split(".");
+  if (!encoded || !signature) return null;
+  const expected = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
+  const expectedBuffer = Buffer.from(expected);
+  const signatureBuffer = Buffer.from(signature);
+  if (expectedBuffer.length !== signatureBuffer.length || !crypto.timingSafeEqual(expectedBuffer, signatureBuffer)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as ScheduleAccessPayload;
+    if (payload.appointmentToken !== appointmentToken || !Number.isInteger(payload.customerId) || payload.expiresAt < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function rows(db: any, query: any): Promise<any[]> {
+  const result = await db.execute(query);
+  return (result[0] || result || []) as any[];
+}
+
+async function loadMainCustomerById(db: any, customerId: number): Promise<any | null> {
+  const found = await rows(db, sql`
+    SELECT id, customerNumber, name, phone, cpf, email, city, uf, profilePhotoUrl, blocked, deletedAt
+    FROM customers
+    WHERE id=${customerId} AND deletedAt IS NULL
+    LIMIT 1
+  `);
+  return found[0] || null;
+}
+
+async function requireScheduleAccess(appointmentToken: string, accessToken: string) {
+  const payload = verifyScheduleAccessToken(accessToken, appointmentToken);
+  if (!payload) throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão do agendamento inválida ou vencida." });
+  const appt = await getAppointmentByToken(appointmentToken);
+  const db = await getDb() as any;
+  if (!appt || !db) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento não encontrado." });
+  const customer = await loadMainCustomerById(db, payload.customerId);
+  if (!customer || Number(customer.blocked) === 1 || !phonesMatch(customer.phone, appt.customerPhone)) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão do agendamento inválida ou vencida." });
+  }
+  return { db, appt, customer };
+}
+
+async function getPublicOrderContext(registrationId: number) {
+  const latestStatus = await getLatestOrderStatus(registrationId);
+  const statusKey = latestStatus?.status ? String(latestStatus.status) : null;
+  return {
+    statusKey,
+    statusLabel: statusKey ? await getStatusLabelFromDb(statusKey) : null,
+  };
+}
+
+async function buildAuthenticatedScheduleData(appt: any, customer: any) {
+  const cfg = await getScheduleConfig();
+  const slots = await listAvailableScheduleSlots(appt.templateId ?? null);
+  const orderStatus = await getPublicOrderContext(Number(appt.registrationId));
+  return {
+    found: true as const,
+    requiresIdentity: false as const,
+    appointment: publicAppointment(appt),
+    config: cfg,
+    slots,
+    profile: {
+      missing: missingCustomerFields(customer),
+    },
+    order: {
+      registrationId: Number(appt.registrationId),
+      serviceName: appt.serviceName || null,
+      appointmentStatus: String(appt.status || "pending"),
+      orderStatusKey: orderStatus.statusKey,
+      orderStatusLabel: orderStatus.statusLabel,
+    },
+  };
 }
 
 async function sendScheduleEmail(to: string, subject: string, html: string): Promise<boolean> {
@@ -427,22 +566,120 @@ export const scheduleRouter = router({
     }),
 
   // ââ€â‚¬ââ€â‚¬ââ€â‚¬ PÚBLICO (PÁGINA DO CLIENTE) ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
-  // Dados do agendamento pelo token + slots disponíveis + config
+  // Dados públicos mínimos: antes da identificação, não vaza pedido, cliente, status ou horários.
   getByToken: publicProcedure
-    .input(z.object({ token: z.string() }))
+    .input(z.object({ token: z.string().min(32).max(64), accessToken: z.string().min(32).max(512).optional() }))
     .query(async ({ input }) => {
       const appt = await getAppointmentByToken(input.token);
       if (!appt) return { found: false as const };
-      const cfg = await getScheduleConfig();
-      // envia slots disponíveis sempre, para permitir reagendamento
-      const slots = await listAvailableScheduleSlots(appt.templateId ?? null);
-      return { found: true as const, appointment: appt, config: cfg, slots };
+      if (!input.accessToken) return { found: true as const, requiresIdentity: true as const };
+      const { customer } = await requireScheduleAccess(input.token, input.accessToken);
+      return buildAuthenticatedScheduleData(appt, customer);
+    }),
+
+  // Valida telefone ou CPF contra o cadastro principal e libera uma sessão curta do agendamento.
+  authorize: publicProcedure
+    .input(z.object({ token: z.string().min(32).max(64), identity: z.string().min(5).max(32) }))
+    .mutation(async ({ input }) => {
+      const appt = await getAppointmentByToken(input.token);
+      if (!appt) return { success: false as const, error: "invalid" as const };
+      const rawIdentity = input.identity.trim();
+      const phone = normalizeCustomerPhone(rawIdentity);
+      const cpf = normalizeCustomerCpf(rawIdentity);
+      if (!phone && !cpf) return { success: false as const, error: "invalid" as const };
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Agendamento temporariamente indisponível." });
+      let customer = phone ? await findMainCustomerByIdentity({ phone }, db) : null;
+      if (!customer || !phonesMatch(customer.phone, appt.customerPhone)) {
+        customer = cpf ? await findMainCustomerByIdentity({ cpf }, db) : null;
+      }
+      if (!customer || customer.deletedAt || Number(customer.blocked) === 1 || !phonesMatch(customer.phone, appt.customerPhone)) {
+        return { success: false as const, error: "invalid" as const };
+      }
+      const accessToken = createScheduleAccessToken(input.token, Number(customer.id));
+      return { success: true as const, accessToken, data: await buildAuthenticatedScheduleData(appt, customer) };
+    }),
+
+  // Atualiza somente os campos que estavam faltantes no cadastro principal.
+  saveMissingProfile: publicProcedure
+    .input(z.object({
+      token: z.string().min(32).max(64),
+      accessToken: z.string().min(32).max(512),
+      name: z.string().trim().min(2).max(128).optional(),
+      email: z.string().trim().email().max(320).optional(),
+      cpf: z.string().min(11).max(18).optional(),
+      city: z.string().trim().min(2).max(128).optional(),
+      uf: z.string().trim().length(2).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { db, appt, customer } = await requireScheduleAccess(input.token, input.accessToken);
+      const missing = missingCustomerFields(customer);
+      const name = input.name?.trim().replace(/\s+/g, " ");
+      const email = input.email ? normalizeCustomerEmail(input.email) : "";
+      const cpf = input.cpf ? normalizeCustomerCpf(input.cpf) : "";
+      const city = input.city?.trim().replace(/\s+/g, " ");
+      const uf = input.uf?.trim().toUpperCase();
+      if (missing.includes("name") && input.name !== undefined && (!name || name.length < 2 || GENERIC_CUSTOMER_NAME.test(name))) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo." });
+      }
+      if (missing.includes("email") && input.email !== undefined && !email) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um e-mail válido." });
+      }
+      if (missing.includes("cpf") && input.cpf !== undefined && (!cpf || !isValidCPF(cpf))) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um CPF válido." });
+      }
+      if (missing.includes("uf") && input.uf !== undefined && !uf?.match(/^[A-Z]{2}$/)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe uma UF válida." });
+      }
+      const cpfConflict = cpf && missing.includes("cpf") ? await findMainCustomerByIdentity({ cpf }, db) : null;
+      const emailConflict = email && missing.includes("email") ? await findMainCustomerByIdentity({ email }, db) : null;
+      if ((cpfConflict && Number(cpfConflict.id) !== Number(customer.id)) || (emailConflict && Number(emailConflict.id) !== Number(customer.id))) {
+        throw new TRPCError({ code: "CONFLICT", message: "CPF ou e-mail já pertence a outro cadastro." });
+      }
+      const previousIdentity = { phone: customer.phone, cpf: customer.cpf };
+      const updates: any[] = [];
+      if (missing.includes("name") && name) updates.push(sql`name=${name}`);
+      if (missing.includes("email") && email) updates.push(sql`email=${email}, normalizedEmail=${email}`);
+      if (missing.includes("cpf") && cpf) updates.push(sql`cpf=${cpf}, normalizedCpf=${cpf}`);
+      if (missing.includes("city") && city) updates.push(sql`city=${city}`);
+      if (missing.includes("uf") && uf) updates.push(sql`uf=${uf}`);
+      if (updates.length > 0) {
+        updates.push(sql`updatedAt=NOW()`);
+        await db.execute(sql`UPDATE customers SET ${sql.join(updates, sql`, `)} WHERE id=${customer.id} AND deletedAt IS NULL`);
+        await syncUnifiedCustomerRegistry([previousIdentity]);
+      }
+      const refreshed = await loadMainCustomerById(db, Number(customer.id));
+      if (!refreshed) throw new TRPCError({ code: "NOT_FOUND", message: "Cadastro não encontrado." });
+      return { success: true as const, remaining: missingCustomerFields(refreshed), data: await buildAuthenticatedScheduleData(appt, refreshed) };
+    }),
+
+  // Atualiza a foto somente quando ela estiver faltante no cadastro principal.
+  uploadMissingProfilePhoto: publicProcedure
+    .input(z.object({ token: z.string().min(32).max(64), accessToken: z.string().min(32).max(512), imageBase64: z.string().min(100).max(8_000_000) }))
+    .mutation(async ({ input }) => {
+      const { db, appt, customer } = await requireScheduleAccess(input.token, input.accessToken);
+      if (!missingCustomerFields(customer).includes("profilePhotoUrl")) return { success: true as const, remaining: missingCustomerFields(customer), data: await buildAuthenticatedScheduleData(appt, customer) };
+      const comma = input.imageBase64.indexOf(",");
+      const pureBase64 = (comma >= 0 ? input.imageBase64.slice(comma + 1) : input.imageBase64).trim();
+      const buffer = Buffer.from(pureBase64, "base64");
+      const isJpeg = buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+      const isPng = buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+      const isWebp = buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+      if (!buffer.length || buffer.length > 5 * 1024 * 1024 || (!isJpeg && !isPng && !isWebp)) throw new TRPCError({ code: "BAD_REQUEST", message: "Envie uma foto JPG, PNG ou WEBP de até 5 MB." });
+      const ext = isJpeg ? "jpg" : isPng ? "png" : "webp";
+      const mime = isJpeg ? "image/jpeg" : isPng ? "image/png" : "image/webp";
+      const phone = normalizeCustomerPhone(customer.phone);
+      const { url } = await storagePut(`profile-photos/${phone}-${Date.now()}.${ext}`, buffer, mime);
+      await db.execute(sql`UPDATE customers SET profilePhotoUrl=${url}, updatedAt=NOW() WHERE id=${customer.id} AND deletedAt IS NULL`);
+      const refreshed = await loadMainCustomerById(db, Number(customer.id));
+      return { success: true as const, remaining: refreshed ? missingCustomerFields(refreshed) : [], data: refreshed ? await buildAuthenticatedScheduleData(appt, refreshed) : null };
     }),
 
   // Cliente confirma o horário escolhido (reserva exclusiva)
   confirm: publicProcedure
-    .input(z.object({ token: z.string(), slotId: z.number() }))
+    .input(z.object({ token: z.string().min(32).max(64), accessToken: z.string().min(32).max(512), slotId: z.number() }))
     .mutation(async ({ input }) => {
+      await requireScheduleAccess(input.token, input.accessToken);
       const result = await confirmAppointment(input.token, input.slotId);
       if (!result.ok) throw new TRPCError({ code: "CONFLICT", message: result.reason || "Não foi possível agendar" });
       const appt = result.appointment!;
@@ -484,8 +721,9 @@ export const scheduleRouter = router({
   // Cliente solicita reagendamento pelo token: libera o slot atual e volta para pending
   // para que ele possa escolher um novo horário disponível.
   requestReschedule: publicProcedure
-    .input(z.object({ token: z.string() }))
+    .input(z.object({ token: z.string().min(32).max(64), accessToken: z.string().min(32).max(512) }))
     .mutation(async ({ input }) => {
+      await requireScheduleAccess(input.token, input.accessToken);
       const appt = await getAppointmentByToken(input.token);
       if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento não encontrado" });
       if (appt.status !== "confirmed") {
