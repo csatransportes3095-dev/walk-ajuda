@@ -11,3 +11,7 @@ A primeira captura indicou que o site está acessível, mas a captura visual seg
 ## Configuração do pnpm
 
 A documentação oficial do pnpm 10.x confirma que `pnpm-workspace.yaml` é o ficheiro de configuração do workspace e que `overrides` deve estar na raiz do projeto. A busca automática por `patchedDependencies` não encontrou o termo nessa página, portanto a configuração do patch do wouter continuará a ser validada pelo comportamento do pnpm e pelo lockfile, não por uma suposição.
+
+## Estado do Render — 25 de agosto de 2026
+
+O serviço `walk-ajuda` está ativo no Render, com domínio `h2colombiano.com`, mas o painel mostra o repositório `csatransportes3095-dev/walk-ajuda` no branch `main`. O deploy live mais recente observado é o commit `965fdc5`, enquanto as correções recuperadas estão no branch `recovery/organizar-salvos-2026-08-24`, commit `f2e1fc7`. Portanto, as correções ainda não estão publicadas no serviço de produção.
