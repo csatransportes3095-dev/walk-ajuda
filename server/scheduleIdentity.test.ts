@@ -4,6 +4,7 @@ import {
   missingCustomerFields,
   phonesMatch,
   verifyScheduleAccessToken,
+  getCustomerPasswordState,
 } from "./routers/schedule";
 
 const originalSecret = process.env.JWT_SECRET;
@@ -37,6 +38,13 @@ describe("acesso protegido do agendamento", () => {
       uf: "SP",
       profilePhotoUrl: "https://example.invalid/photo.jpg",
     })).toEqual([]);
+  });
+
+  it("classifica corretamente a ausência, expiração, aprovação e ativação da senha", () => {
+    expect(getCustomerPasswordState(null)).toBe("no_password");
+    expect(getCustomerPasswordState({ expiresAt: new Date(Date.now() - 1) })).toBe("expired");
+    expect(getCustomerPasswordState({ pendingApproval: 1, expiresAt: new Date(Date.now() + 60_000) })).toBe("pending_approval");
+    expect(getCustomerPasswordState({ pendingApproval: 0, expiresAt: new Date(Date.now() + 60_000) })).toBe("active");
   });
 
   it("vincula a sessão ao token do agendamento e rejeita adulteração", () => {

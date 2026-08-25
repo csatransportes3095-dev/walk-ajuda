@@ -28,6 +28,32 @@ export default function SchedulePage() {
     { token, accessToken: accessToken || undefined },
     { enabled: !!token, retry: false },
   );
+  const passwordStatusMut = trpc.schedule.checkPasswordStatus.useMutation({
+    onSuccess: (result) => {
+      if (!result.success) {
+        setNeedsPasswordCreation(false);
+        setPassword("");
+        setAuthStep("identity");
+        return toast.error("Telefone/CPF não corresponde a este agendamento.");
+      }
+      if (result.status === "no_password" || result.status === "expired") {
+        setNeedsPasswordCreation(true);
+        setPassword("");
+        setAuthStep("identity");
+        return toast.info("Este cadastro precisa criar uma nova senha no login principal.");
+      }
+      if (result.status === "pending_approval") {
+        setNeedsPasswordCreation(false);
+        setPassword("");
+        setAuthStep("identity");
+        return toast.info("A senha deste cadastro ainda aguarda aprovação.");
+      }
+      setNeedsPasswordCreation(false);
+      setAuthStep("password");
+    },
+    onError: () => toast.error("Não foi possível verificar o estado da senha."),
+  });
+
   const authorizeMut = trpc.schedule.authorize.useMutation({
     onSuccess: (result) => {
       if (!result.success) {
@@ -224,12 +250,12 @@ export default function SchedulePage() {
           const returnTo = `/agendar/${encodeURIComponent(token)}`;
           window.location.assign(`/login?returnTo=${encodeURIComponent(returnTo)}`);
         }}
-        busy={authorizeMut.isPending}
+        busy={passwordStatusMut.isPending || authorizeMut.isPending}
         onSubmit={(event) => {
           event.preventDefault();
           if (authStep === "identity") {
             if (!identity.trim()) return toast.error("Digite seu telefone ou CPF.");
-            setAuthStep("password");
+            passwordStatusMut.mutate({ token, identity: identity.trim() });
             return;
           }
           if (!password) return toast.error("Digite sua senha.");
@@ -825,8 +851,8 @@ function ScheduleIdentityGate({
             <ShieldCheck className="h-8 w-8 text-violet-300" />
           </div>
           <p className="text-xs font-black tracking-[.2em] text-violet-300">WALK AJUDA</p>
-          <h1 className="mt-2 text-3xl font-black">{isPasswordStep ? "Digite sua senha" : "Confirme seu acesso"}</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-400">{isPasswordStep ? "A senha protege os dados do seu pedido e cadastro." : "Informe o telefone ou CPF do cadastro principal para continuar com este agendamento."}</p>
+          <h1 className="mt-2 text-3xl font-black">{needsPasswordCreation ? "Crie sua senha" : isPasswordStep ? "Digite sua senha" : "Confirme seu acesso"}</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{needsPasswordCreation ? "Use o login principal para criar a senha e voltar a este agendamento." : isPasswordStep ? "A senha protege os dados do seu pedido e cadastro." : "Informe o telefone ou CPF do cadastro principal para continuar com este agendamento."}</p>
         </header>
         <form onSubmit={onSubmit} className="rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl backdrop-blur sm:p-7">
           <div className="mb-5 rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4 text-sm text-violet-100">
@@ -844,9 +870,9 @@ function ScheduleIdentityGate({
               <input autoFocus type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/15" placeholder="Digite sua senha" autoComplete="current-password" minLength={4} />
             </label>
           )}
-          <button type="submit" disabled={busy} className="mt-5 flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-4 font-black shadow-lg shadow-violet-950/50 transition active:scale-[.98] disabled:opacity-50">
+          {!needsPasswordCreation && <button type="submit" disabled={busy} className="mt-5 flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-4 font-black shadow-lg shadow-violet-950/50 transition active:scale-[.98] disabled:opacity-50">
             {busy ? "CONFIRMANDO..." : isPasswordStep ? "ENTRAR" : "CONTINUAR"}
-          </button>
+          </button>}
           {isPasswordStep && <button type="button" onClick={() => setStep("identity")} disabled={busy} className="mt-3 w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition hover:bg-white/5 disabled:opacity-50">Voltar e corrigir telefone/CPF</button>}
           {needsPasswordCreation && <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-center"><p className="text-sm font-bold text-amber-100">Este cadastro precisa de uma nova senha.</p><p className="mt-1 text-xs text-amber-100/75">Use o mesmo login principal para criar a senha e depois volte a este agendamento.</p><button type="button" onClick={onCreatePassword} className="mt-3 w-full rounded-xl bg-amber-500 px-4 py-3 font-black text-slate-950 transition hover:bg-amber-400">CRIAR NOVA SENHA NO /LOGIN</button></div>}
           <p className="mt-4 text-center text-xs text-slate-500">Se não reconhecer este agendamento, não continue e fale com o atendimento.</p>

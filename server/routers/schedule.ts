@@ -114,9 +114,17 @@ async function loadMainCustomerById(db: any, customerId: number): Promise<any | 
   return found[0] || null;
 }
 
-async function verifyCustomerPassword(db: any, phone: unknown, password: string): Promise<"ok" | "no_password" | "pending_approval" | "expired" | "wrong_password"> {
+type CustomerPasswordState = "no_password" | "pending_approval" | "expired" | "active";
+
+type CustomerPasswordRecord = {
+  password?: string | null;
+  pendingApproval?: number | null;
+  expiresAt?: Date | string | null;
+};
+
+async function loadCustomerPassword(db: any, phone: unknown): Promise<CustomerPasswordRecord | null> {
   const cleanPhone = normalizeCustomerPhone(phone);
-  if (!cleanPhone) return "no_password";
+  if (!cleanPhone) return null;
   const passwordRows = await rows(db, sql`
     SELECT password, isActive, pendingApproval, expiresAt
     FROM customerPasswords
@@ -124,11 +132,21 @@ async function verifyCustomerPassword(db: any, phone: unknown, password: string)
     ORDER BY id DESC
     LIMIT 1
   `);
-  const current = passwordRows[0];
+  return passwordRows[0] || null;
+}
+
+export function getCustomerPasswordState(current: CustomerPasswordRecord | null): CustomerPasswordState {
   if (!current) return "no_password";
   if (Number(current.pendingApproval) === 1) return "pending_approval";
   if (!current.expiresAt || new Date(current.expiresAt).getTime() < Date.now()) return "expired";
-  return await bcrypt.compare(password, String(current.password || "")) ? "ok" : "wrong_password";
+  return "active";
+}
+
+async function verifyCustomerPassword(db: any, phone: unknown, password: string): Promise<"ok" | "no_password" | "pending_approval" | "expired" | "wrong_password"> {
+  const current = await loadCustomerPassword(db, phone);
+  const state = getCustomerPasswordState(current);
+  if (state !== "active") return state;
+  return await bcrypt.compare(password, String(current?.password || "")) ? "ok" : "wrong_password";
 }
 
 async function requireScheduleAccess(appointmentToken: string, accessToken: string) {
@@ -593,6 +611,29 @@ export const scheduleRouter = router({
       if (!input.accessToken) return { found: true as const, requiresIdentity: true as const };
       const { customer } = await requireScheduleAccess(input.token, input.accessToken);
       return buildAuthenticatedScheduleData(appt, customer);
+    }),
+
+  // Consulta o estado da senha depois da identidade, sem exigir uma senha inexistente.
+  checkPasswordStatus: publicProcedure
+    .input(z.object({ token: z.string().min(32).max(64), identity: z.string().min(5).max(32) }))
+    .mutation(async ({ input }) => {
+      const appt = await getAppointmentByToken(input.token);
+      if (!appt) return { success: false as const, error: "invalid" as const };
+      const rawIdentity = input.identity.trim();
+      const phone = normalizeCustomerPhone(rawIdentity);
+      const cpf = normalizeCustomerCpf(rawIdentity);
+      if (!phone && !cpf) return { success: false as const, error: "invalid" as const };
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Agendamento temporariamente indisponível." });
+      let customer = phone ? await findMainCustomerByIdentity({ phone }, db) : null;
+      if (!customer || !phonesMatch(customer.phone, appt.customerPhone)) {
+        customer = cpf ? await findMainCustomerByIdentity({ cpf }, db) : null;
+      }
+      if (!customer || customer.deletedAt || Number(customer.blocked) === 1 || !phonesMatch(customer.phone, appt.customerPhone)) {
+        return { success: false as const, error: "invalid" as const };
+      }
+      const status = getCustomerPasswordState(await loadCustomerPassword(db, customer.phone));
+      return { success: true as const, status };
     }),
 
   // Valida telefone ou CPF contra o cadastro principal e libera uma sessão curta do agendamento.
