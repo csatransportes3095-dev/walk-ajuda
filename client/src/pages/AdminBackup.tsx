@@ -68,6 +68,8 @@ export default function AdminBackup() {
 
   const isStarting = startMut.isPending;
   const isBusy = Boolean(activeBackup) || isStarting;
+  const encryptionConfigured = backupConfigQuery.data?.encryptionConfigured === true;
+  const backupButtonDisabled = isBusy || backupConfigQuery.isLoading || !encryptionConfigured;
 
   return (
     <div className="min-h-screen bg-[#0a0a1a] text-white">
@@ -87,15 +89,28 @@ export default function AdminBackup() {
                 O processo copia os registos reais de todas as tabelas do banco, fotos e ficheiros do R2, código e migrações. O pacote é cifrado antes de ser guardado e só fica disponível para download após conclusão e verificação.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => startMut.mutate()}
-              disabled={isBusy || backupConfigQuery.data?.encryptionConfigured === false}
-              className="inline-flex min-w-[220px] items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isStarting || activeBackup ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseBackup className="h-4 w-4" />}
-              {activeBackup ? "Backup em processamento" : isStarting ? "Iniciando..." : "Gerar backup completo"}
-            </button>
+            <div className="flex min-w-[240px] flex-col items-stretch gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!encryptionConfigured) {
+                    toast.error("Backup bloqueado: configure BACKUP_ENCRYPTION_KEY no Render e atualize esta página.");
+                    return;
+                  }
+                  startMut.mutate();
+                }}
+                disabled={backupButtonDisabled}
+                aria-disabled={backupButtonDisabled}
+                title={backupConfigQuery.isLoading ? "Verificando a chave de cifragem" : encryptionConfigured ? "Iniciar backup completo" : "Configure uma BACKUP_ENCRYPTION_KEY válida no Render"}
+                className="inline-flex min-w-[220px] items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isStarting || activeBackup ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseBackup className="h-4 w-4" />}
+                {activeBackup ? "Backup em processamento" : isStarting ? "Iniciando..." : "Gerar backup completo"}
+              </button>
+              <p className={`text-center text-[11px] leading-4 ${backupConfigQuery.isLoading ? "text-slate-400" : encryptionConfigured ? "text-emerald-300" : "text-amber-300"}`}>
+                {backupConfigQuery.isLoading ? "Verificando a chave de cifragem..." : encryptionConfigured ? "Chave de cifragem reconhecida." : "Botão bloqueado: chave ausente ou inválida no Render."}
+              </p>
+            </div>
           </div>
         </section>
 
@@ -143,7 +158,7 @@ export default function AdminBackup() {
               <h2 className="text-lg font-black">Histórico de backups</h2>
               <p className="mt-1 text-xs text-slate-400">Somente backups concluídos e verificados podem ser baixados.</p>
             </div>
-            <button type="button" onClick={() => void backupsQuery.refetch()} className="inline-flex items-center gap-2 self-start rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-white/5">
+            <button type="button" onClick={() => { void backupsQuery.refetch(); void backupConfigQuery.refetch(); }} className="inline-flex items-center gap-2 self-start rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-white/5">
               <RefreshCw className="h-3.5 w-3.5" /> Atualizar
             </button>
           </div>
