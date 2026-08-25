@@ -2602,3 +2602,31 @@ export const adminAuthenticatorOrderLinks = mysqlTable("adminAuthenticatorOrderL
   orderLookup: index("adminAuthenticatorOrderLinks_registration_idx").on(table.registrationId),
 }));
 export type AdminAuthenticatorOrderLink = typeof adminAuthenticatorOrderLinks.$inferSelect;
+
+// Histórico técnico dos pacotes de backup cifrados armazenados no R2.
+// O conteúdo do backup não fica no banco; apenas metadados e o inventário sem PII.
+export const systemBackups = mysqlTable("systemBackups", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  status: mysqlEnum("status", ["queued", "running", "completed", "failed"]).notNull().default("queued"),
+  stage: varchar("stage", { length: 32 }).notNull().default("queued"),
+  progress: int("progress").notNull().default(0),
+  artifactKey: varchar("artifactKey", { length: 512 }),
+  fileSize: bigint("fileSize", { mode: "number" }),
+  archiveSha256: varchar("archiveSha256", { length: 64 }),
+  manifestJson: text("manifestJson"),
+  errorMessage: text("errorMessage"),
+  initiatedBy: varchar("initiatedBy", { length: 128 }),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+  driveFileId: varchar("driveFileId", { length: 256 }),
+  driveStatus: mysqlEnum("driveStatus", ["not_configured", "queued", "uploading", "completed", "failed"]).notNull().default("not_configured"),
+  driveError: text("driveError"),
+  driveUploadedAt: timestamp("driveUploadedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  statusIndex: index("systemBackups_status_idx").on(table.status),
+  createdIndex: index("systemBackups_created_idx").on(table.createdAt),
+}));
+export type SystemBackup = typeof systemBackups.$inferSelect;
+export type InsertSystemBackup = typeof systemBackups.$inferInsert;

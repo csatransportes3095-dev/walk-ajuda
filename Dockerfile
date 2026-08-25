@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     fonts-liberation \
     fonts-dejavu-core \
+    mariadb-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar weasyprint via pip (mesma forma que no sandbox)

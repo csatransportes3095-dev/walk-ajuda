@@ -100,6 +100,27 @@ export async function r2PutObject(key: string, body: Buffer | Uint8Array | strin
   return { key: normalizedKey, url: buildR2PublicUrl(normalizedKey) };
 }
 
+/** Uploada artefatos grandes sem materializar todo o conteúdo na memória. */
+export async function r2PutObjectStream(
+  key: string,
+  body: Readable,
+  contentType: string,
+  contentLength?: number,
+) {
+  const client = getR2Client();
+  const normalizedKey = normalizeKey(key);
+  const command = new PutObjectCommand({
+    Bucket: ENV.r2BucketName.trim(),
+    Key: normalizedKey,
+    Body: body,
+    ContentType: contentType,
+    ...(contentLength === undefined ? {} : { ContentLength: contentLength }),
+    CacheControl: "private, no-store",
+  });
+  await client.send(command);
+  return { key: normalizedKey, url: buildR2PublicUrl(normalizedKey) };
+}
+
 export async function r2GetObjectBuffer(key: string) {
   const client = getR2Client();
   const normalizedKey = normalizeKey(key);
@@ -109,6 +130,18 @@ export async function r2GetObjectBuffer(key: string) {
     throw new Error(`R2 object ${normalizedKey} has no body`);
   }
   return await streamToBuffer(response.Body);
+}
+
+/** Retorna o corpo do objecto para streaming de downloads grandes. */
+export async function r2GetObjectStream(key: string) {
+  const client = getR2Client();
+  const normalizedKey = normalizeKey(key);
+  const command = new GetObjectCommand({ Bucket: ENV.r2BucketName.trim(), Key: normalizedKey });
+  const response = await client.send(command);
+  if (!response.Body) {
+    throw new Error(`R2 object ${normalizedKey} has no body`);
+  }
+  return response.Body;
 }
 
 export async function r2DeleteObjects(keys: string[]) {
@@ -134,4 +167,35 @@ export async function r2ListObjects(prefix: string) {
   });
   const response = await client.send(command);
   return response.Contents?.map((item) => item.Key).filter(Boolean) as string[];
+}
+
+export type R2ObjectInfo = {
+  key: string;
+  size: number;
+  etag: string | null;
+  lastModified: Date | null;
+};
+
+/** Lista uma página do bucket; o chamador deve seguir nextContinuationToken até null. */
+export async function r2ListObjectsPage(prefix = "", continuationToken?: string) {
+  const client = getR2Client();
+  const command = new ListObjectsV2Command({
+    Bucket: ENV.r2BucketName.trim(),
+    Prefix: normalizeKey(prefix),
+    MaxKeys: 1000,
+    ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+  });
+  const response = await client.send(command);
+  const objects: R2ObjectInfo[] = (response.Contents || [])
+    .filter((item): item is typeof item & { Key: string } => Boolean(item.Key))
+    .map((item) => ({
+      key: item.Key,
+      size: Number(item.Size || 0),
+      etag: item.ETag || null,
+      lastModified: item.LastModified || null,
+    }));
+  return {
+    objects,
+    nextContinuationToken: response.IsTruncated ? (response.NextContinuationToken || null) : null,
+  };
 }

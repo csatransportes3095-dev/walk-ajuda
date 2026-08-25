@@ -23,6 +23,8 @@
     "db:migrate:spreadsheet-referral-declaration": "tsx scripts/apply-spreadsheet-referral-declaration-migration.ts",
     "db:migrate:referral-commission-attribution": "tsx scripts/apply-referral-commission-attribution-migration.ts",
     "db:migrate:loans-compat": "tsx scripts/apply-loans-compat-migration.ts",
+    "db:migrate:system-backups": "tsx scripts/apply-system-backups-migration.ts",
+    "backup:verify": "tsx scripts/verify-system-backup.ts",
     "db:migrate:loans-recovery": "tsx scripts/apply-loans-recovery-migration.ts",
     "db:restore:financeiro": "tsx scripts/restore-financeiro-backup.ts"
   },

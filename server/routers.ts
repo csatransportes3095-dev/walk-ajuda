@@ -49,6 +49,7 @@ import { privateTransportRouter } from "./routers/privateTransport";
 import { locadoraRouter } from "./routers/locadora";
 import { h2AssistantRouter } from "./routers/h2Assistant";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
+import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
 import { isRecoveredCustomerName } from "../shared/customerProfile";
 import bcrypt from "bcryptjs";
@@ -3460,6 +3461,7 @@ export const appRouter = router({
 
   // ========== STATUS DO PEDIDO ==========
   adminAuthenticator: adminAuthenticatorRouter,
+  backup: backupRouter,
 
   orderStatus: router({
     // Buscar nome do cliente pelo telefone (para exibir na página de acompanhamento)

@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { Save, Globe, CreditCard, Layout, MessageSquare, Star, Clock, LogIn, Upload, Trash2, Eye, EyeOff, Camera, ShieldCheck, Share2, ImageIcon, Plus, CheckCircle2, Circle, Pencil, X, Check, Smartphone, Info, RotateCcw, Wrench } from "lucide-react";
+import { Save, Globe, CreditCard, Layout, MessageSquare, Star, Clock, LogIn, Upload, Trash2, Eye, EyeOff, Camera, ShieldCheck, Share2, ImageIcon, Plus, CheckCircle2, Circle, Pencil, X, Check, Smartphone, Info, RotateCcw, Wrench, DatabaseBackup } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import { ImageCropModal } from "@/components/ImageCropModal";
 import { HomeButtonsManager } from "@/components/HomeButtonsManager";
@@ -58,6 +59,7 @@ const FONT_OPTIONS = [
 ];
 
 export default function AdminSettings() {
+  const [, navigate] = useLocation();
   const { data: settings, isLoading } = trpc.settings.getAll.useQuery();
   const utils = trpc.useUtils();
   const updateMut = trpc.settings.update.useMutation({
@@ -363,6 +365,7 @@ export default function AdminSettings() {
     { id: "security" as const, label: "Segurança", icon: ShieldCheck },
     { id: "og" as const, label: "Compartilhamento", icon: Share2 },
     { id: "maintenance" as const, label: "Manutenção", icon: Wrench },
+    { id: "backup" as const, label: "Backup Geral", icon: DatabaseBackup },
     { id: "trackingForm" as const, label: "Form. Acompanhamento", icon: MessageSquare },
     { id: "whatsappOrder" as const, label: "WhatsApp Pedidos", icon: Smartphone },
     { id: "whatsappLogin" as const, label: "WhatsApp Login", icon: Smartphone },
@@ -381,7 +384,7 @@ export default function AdminSettings() {
         {/* Tabs as Cards Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
           {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            <button key={tab.id} onClick={() => tab.id === "backup" ? navigate("/admin/backup") : setActiveTab(tab.id)}
               className={`flex flex-col items-center gap-2 p-3 rounded-xl text-xs font-medium transition-all border-2 ${
                 activeTab === tab.id 
                   ? 'bg-purple-600/20 border-purple-500 text-purple-300' 

@@ -21,6 +21,7 @@ import { ensureCustomerIdentityInfrastructure, reconcileLegacyLoanPermissions } 
 import { getSharePreviewProfile, sharePreviewProxyPath, type SharePreviewProfileId } from "../sharePreviewProfiles";
 import { publicSiteUrl } from "../../shared/publicLinks";
 import { bootstrapCardInvoices } from "../cardsBilling";
+import { getBackupDownload, getBackupDownloadName } from "../routers/backup";
 import path from "path";
 import fs from "fs";
 
@@ -99,6 +100,25 @@ async function startServer() {
   });
   registerUploadRoute(app);
   registerApkDownloadRoute(app);
+  app.get("/api/admin/backups/:id/download", async (req, res) => {
+    try {
+      const artifact = await getBackupDownload(req, req.params.id);
+      if (!artifact) {
+        res.status(404).json({ error: "Backup não encontrado ou não autorizado." });
+        return;
+      }
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="${getBackupDownloadName(artifact.id)}"`);
+      res.setHeader("Cache-Control", "no-store, private");
+      if (artifact.fileSize !== null && artifact.fileSize !== undefined) {
+        res.setHeader("Content-Length", String(artifact.fileSize));
+      }
+      artifact.body.pipe(res);
+    } catch (error) {
+      console.error("[Backup] falha no download administrativo:", error instanceof Error ? error.message : String(error));
+      if (!res.headersSent) res.status(500).json({ error: "Não foi possível baixar o backup." });
+    }
+  });
   ensureApkTable().catch(console.error);
   // Modos de pagamento gravados na ficha individual do cliente pelo ADM são
   // prioritários. A inicialização não pode filtrá-los ou regravá-los pelo perfil.

@@ -45,6 +45,7 @@ import AdminAdCampaigns from "./pages/AdminAdCampaigns";
 import AdminCoupons from "./pages/AdminCoupons";
 import AdminProducts from "./pages/AdminProducts";
 import AdminSettings from "./pages/AdminSettings";
+import AdminBackup from "./pages/AdminBackup";
 import AdminCustomers from "./pages/AdminCustomers";
 import AdminRaffles from "./pages/AdminRaffles";
 import AdminLogin from "./pages/AdminLogin";
@@ -177,6 +178,9 @@ function Router() {
       </Route>
       <Route path={"/admin/settings"}>
         <AdminGuard><AdminSettings /></AdminGuard>
+      </Route>
+      <Route path={"/admin/backup"}>
+        <AdminGuard><AdminBackup /></AdminGuard>
       </Route>
       <Route path={"/admin/customers"}>
         <AdminGuard><AdminCustomers /></AdminGuard>
