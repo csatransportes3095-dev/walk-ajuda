@@ -8,6 +8,7 @@ import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
 import { publicSiteUrl } from "../../shared/publicLinks";
 import { isValidCPF } from "@shared/cpf";
+import { parseMaintenanceManifest } from "../../shared/maintenanceManifest";
 import { findMainCustomerByIdentity, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone } from "../customerAccess";
 import { syncUnifiedCustomerRegistry } from "../customerIdentity";
 import { storagePut } from "../storage";
@@ -54,6 +55,10 @@ export function missingCustomerFields(customer: any): string[] {
   if (!/^[A-Z]{2}$/.test(String(customer?.uf || "").trim().toUpperCase())) missing.push("uf");
   if (!String(customer?.profilePhotoUrl || "").trim()) missing.push("profilePhotoUrl");
   return missing;
+}
+
+export function shouldBlockScheduleCompletion(requireCompleteProfile: boolean, customer: any): boolean {
+  return requireCompleteProfile && missingCustomerFields(customer).length > 0;
 }
 
 function publicAppointment(appt: any) {
@@ -171,8 +176,21 @@ async function getPublicOrderContext(registrationId: number) {
   };
 }
 
+async function isCompleteProfileRequiredForSchedule(): Promise<boolean> {
+  const stored = await getSetting("maintenance_manifest");
+  return parseMaintenanceManifest(stored).requireCompleteProfileForSchedule;
+}
+
+function rejectIncompleteScheduleProfile() {
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message: "Conclua a atualização cadastral com todos os dados obrigatórios e a foto de perfil antes de continuar.",
+  });
+}
+
 async function buildAuthenticatedScheduleData(appt: any, customer: any) {
   const cfg = await getScheduleConfig();
+  const requireCompleteProfile = await isCompleteProfileRequiredForSchedule();
   const slots = await listAvailableScheduleSlots(appt.templateId ?? null);
   const orderStatus = await getPublicOrderContext(Number(appt.registrationId));
   return {
@@ -183,6 +201,7 @@ async function buildAuthenticatedScheduleData(appt: any, customer: any) {
     slots,
     profile: {
       missing: missingCustomerFields(customer),
+      updateRequired: requireCompleteProfile,
     },
     order: {
       registrationId: Number(appt.registrationId),
@@ -740,7 +759,10 @@ export const scheduleRouter = router({
   confirm: publicProcedure
     .input(z.object({ token: z.string().min(32).max(64), accessToken: z.string().min(32).max(512), slotId: z.number() }))
     .mutation(async ({ input }) => {
-      await requireScheduleAccess(input.token, input.accessToken);
+      const { customer } = await requireScheduleAccess(input.token, input.accessToken);
+      if (shouldBlockScheduleCompletion(await isCompleteProfileRequiredForSchedule(), customer)) {
+        rejectIncompleteScheduleProfile();
+      }
       const result = await confirmAppointment(input.token, input.slotId);
       if (!result.ok) throw new TRPCError({ code: "CONFLICT", message: result.reason || "Não foi possível agendar" });
       const appt = result.appointment!;
@@ -784,7 +806,10 @@ export const scheduleRouter = router({
   requestReschedule: publicProcedure
     .input(z.object({ token: z.string().min(32).max(64), accessToken: z.string().min(32).max(512) }))
     .mutation(async ({ input }) => {
-      await requireScheduleAccess(input.token, input.accessToken);
+      const { customer } = await requireScheduleAccess(input.token, input.accessToken);
+      if (shouldBlockScheduleCompletion(await isCompleteProfileRequiredForSchedule(), customer)) {
+        rejectIncompleteScheduleProfile();
+      }
       const appt = await getAppointmentByToken(input.token);
       if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento não encontrado" });
       if (appt.status !== "confirmed") {

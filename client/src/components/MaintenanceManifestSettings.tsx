@@ -6,6 +6,7 @@ import { MAINTENANCE_ROUTE_OPTIONS, type MaintenanceManifestConfig, type Mainten
 
 const emptyConfig: MaintenanceManifestConfig = {
   enabled: false,
+  requireCompleteProfileForSchedule: false,
   routeIds: ["home", "login", "loan", "gastos", "tracking"],
   eyebrow: "COMUNICADO OPERACIONAL",
   title: "Estamos em manutenção programada",
@@ -41,7 +42,9 @@ export function MaintenanceManifestSettings() {
   const saveMutation = trpc.maintenanceManifest.update.useMutation({
     onSuccess: async () => {
       await Promise.all([utils.maintenanceManifest.get.invalidate(), utils.settings.getAll.invalidate()]);
-      toast.success(draft.enabled ? "Manifesto de manutenção ativado e salvo." : "Manifesto de manutenção salvo como desativado.");
+      toast.success(draft.requireCompleteProfileForSchedule
+        ? "Manifesto salvo. Atualização cadastral obrigatória está ativa."
+        : "Manifesto salvo. Atualização cadastral obrigatória está desativada.");
     },
     onError: (error) => toast.error(error.message || "Não foi possível salvar o manifesto."),
   });
@@ -80,6 +83,17 @@ export function MaintenanceManifestSettings() {
           <div className="flex gap-3"><div className="flex h-12 w-12 flex-none items-center justify-center rounded-2xl border border-cyan-200/25 bg-cyan-300/10"><Wrench className="h-6 w-6 text-cyan-100" /></div><div><p className="text-[11px] font-black tracking-[0.18em] text-cyan-200">CONTROLE DE COMUNICADO</p><h2 className="text-xl font-black text-white">Manifesto de Manutenção</h2><p className="mt-1 max-w-2xl text-sm text-slate-300">Quando ativo, o card bloqueia somente as rotas marcadas abaixo. Desative a qualquer momento para liberar as páginas imediatamente.</p></div></div>
           <button type="button" onClick={() => setDraft((current) => ({ ...current, enabled: !current.enabled }))} className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition ${draft.enabled ? "border-emerald-300/40 bg-emerald-300/15 text-emerald-100" : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10"}`}><Power className="h-4 w-4" />{draft.enabled ? "Manifesto ativo" : "Manifesto desativado"}</button>
         </header>
+
+        <section className={`rounded-2xl border p-4 sm:p-5 ${draft.requireCompleteProfileForSchedule ? "border-amber-300/35 bg-amber-300/10" : "border-white/10 bg-black/15"}`}>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-200">Regra do agendamento público</p>
+              <h3 className="mt-1 text-base font-black text-white">Exigir atualização cadastral completa</h3>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-300">Quando ativa, o cliente precisa ter todos os dados obrigatórios válidos e uma foto de perfil no cadastro principal antes de escolher ou confirmar o horário. Os campos já completos permanecem preservados e somente as pendências são solicitadas.</p>
+            </div>
+            <button type="button" aria-pressed={draft.requireCompleteProfileForSchedule} onClick={() => setDraft((current) => ({ ...current, requireCompleteProfileForSchedule: !current.requireCompleteProfileForSchedule }))} className={`inline-flex min-w-48 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-black transition ${draft.requireCompleteProfileForSchedule ? "border-amber-300/50 bg-amber-300/20 text-amber-100" : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10"}`}><Power className="h-4 w-4" />{draft.requireCompleteProfileForSchedule ? "Atualização obrigatória" : "Atualização desativada"}</button>
+          </div>
+        </section>
 
         <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
           <div className="space-y-4 rounded-2xl border border-white/10 bg-black/15 p-4 sm:p-5">

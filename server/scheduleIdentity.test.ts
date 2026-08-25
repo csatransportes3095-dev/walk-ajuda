@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createScheduleAccessToken,
   missingCustomerFields,
+  shouldBlockScheduleCompletion,
   phonesMatch,
   verifyScheduleAccessToken,
   getCustomerPasswordState,
@@ -38,6 +39,21 @@ describe("acesso protegido do agendamento", () => {
       uf: "SP",
       profilePhotoUrl: "https://example.invalid/photo.jpg",
     })).toEqual([]);
+  });
+
+  it("bloqueia a finalização somente quando o modo obrigatório está ativo e há pendências", () => {
+    const completeCustomer = {
+      name: "Pessoa Completa",
+      email: "cliente@example.com",
+      cpf: "52998224725",
+      city: "São Paulo",
+      uf: "SP",
+      profilePhotoUrl: "https://example.invalid/photo.jpg",
+    };
+    expect(shouldBlockScheduleCompletion(true, completeCustomer)).toBe(false);
+    expect(shouldBlockScheduleCompletion(false, { ...completeCustomer, profilePhotoUrl: "" })).toBe(false);
+    expect(shouldBlockScheduleCompletion(true, { ...completeCustomer, profilePhotoUrl: "" })).toBe(true);
+    expect(shouldBlockScheduleCompletion(true, { ...completeCustomer, email: "" })).toBe(true);
   });
 
   it("classifica corretamente a ausência, expiração, aprovação e ativação da senha", () => {

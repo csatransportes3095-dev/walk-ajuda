@@ -10,6 +10,7 @@ export type MaintenanceRouteId = (typeof MAINTENANCE_ROUTE_OPTIONS)[number]["id"
 
 export type MaintenanceManifestConfig = {
   enabled: boolean;
+  requireCompleteProfileForSchedule: boolean;
   routeIds: MaintenanceRouteId[];
   eyebrow: string;
   title: string;
@@ -20,6 +21,7 @@ export type MaintenanceManifestConfig = {
 
 export const DEFAULT_MAINTENANCE_MANIFEST: MaintenanceManifestConfig = {
   enabled: false,
+  requireCompleteProfileForSchedule: false,
   routeIds: ["home", "login", "loan", "gastos", "tracking"],
   eyebrow: "COMUNICADO OPERACIONAL",
   title: "Estamos em manutenção programada",
@@ -45,6 +47,7 @@ export function parseMaintenanceManifest(raw?: string | null): MaintenanceManife
       : [...DEFAULT_MAINTENANCE_MANIFEST.routeIds];
     return {
       enabled: parsed.enabled === true,
+      requireCompleteProfileForSchedule: parsed.requireCompleteProfileForSchedule === true,
       routeIds,
       eyebrow: safeText(parsed.eyebrow, DEFAULT_MAINTENANCE_MANIFEST.eyebrow, 64),
       title: safeText(parsed.title, DEFAULT_MAINTENANCE_MANIFEST.title, 120),

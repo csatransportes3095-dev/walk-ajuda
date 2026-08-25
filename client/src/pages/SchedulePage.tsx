@@ -277,11 +277,13 @@ export default function SchedulePage() {
   const appt = data.appointment;
   const cfg = data.config;
   const missingFields = data.profile?.missing || [];
+  const profileUpdateRequired = data.profile?.updateRequired === true;
 
   if (missingFields.length > 0) {
     return (
       <ScheduleMissingProfileGate
         missingFields={missingFields}
+        updateRequired={profileUpdateRequired}
         name={profileName}
         setName={setProfileName}
         email={profileEmail}
@@ -894,6 +896,7 @@ const PROFILE_FIELD_LABELS: Record<string, string> = {
 
 function ScheduleMissingProfileGate({
   missingFields,
+  updateRequired,
   name,
   setName,
   email,
@@ -912,6 +915,7 @@ function ScheduleMissingProfileGate({
   onSubmit,
 }: {
   missingFields: string[];
+  updateRequired: boolean;
   name: string;
   setName: TextSetter;
   email: string;
@@ -938,8 +942,8 @@ function ScheduleMissingProfileGate({
             <UserRoundCog className="h-8 w-8 text-amber-300" />
           </div>
           <div className="flex items-center justify-between gap-3"><p className="text-xs font-black tracking-[.2em] text-violet-300">WALK AJUDA</p><button type="button" onClick={onLogout} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/5">Sair</button></div>
-          <h1 className="mt-2 text-3xl font-black">Complete apenas o que falta</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-400">Encontramos {missingFields.length} dado(s) incompleto(s) no cadastro principal. Os demais dados não serão alterados.</p>
+          <h1 className="mt-2 text-3xl font-black">{updateRequired ? "Atualização cadastral obrigatória" : "Complete apenas o que falta"}</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{updateRequired ? "Para continuar o agendamento, o cadastro principal precisa ter todos os dados obrigatórios e uma foto de perfil." : `Encontramos ${missingFields.length} dado(s) incompleto(s) no cadastro principal. Os demais dados não serão alterados.`}</p>
         </header>
         <form onSubmit={onSubmit} className="space-y-5 rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl backdrop-blur sm:p-7">
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">

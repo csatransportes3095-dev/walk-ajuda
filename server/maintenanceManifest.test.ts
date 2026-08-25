@@ -11,6 +11,12 @@ describe("Manifesto de Manutenção", () => {
     expect(parseMaintenanceManifest(undefined)).toEqual(DEFAULT_MAINTENANCE_MANIFEST);
   });
 
+  it("mantém a atualização cadastral desativada por padrão e aceita sua ativação", () => {
+    expect(DEFAULT_MAINTENANCE_MANIFEST.requireCompleteProfileForSchedule).toBe(false);
+    expect(parseMaintenanceManifest(JSON.stringify({ requireCompleteProfileForSchedule: true })).requireCompleteProfileForSchedule).toBe(true);
+    expect(parseMaintenanceManifest(JSON.stringify({ requireCompleteProfileForSchedule: 1 })).requireCompleteProfileForSchedule).toBe(false);
+  });
+
   it("aceita apenas rotas liberadas e descarta valores inválidos", () => {
     const config = parseMaintenanceManifest(JSON.stringify({
       enabled: true,
