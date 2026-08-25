@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterAll, describe, it, expect, vi, beforeEach } from 'vitest';
 import { appRouter } from './routers';
 
 // Mock nodemailer
@@ -106,19 +106,82 @@ vi.mock('./db', () => ({
   listAccessCodePhones: vi.fn().mockResolvedValue([]), listAllAccessCodePhones: vi.fn().mockResolvedValue([]),
 }));
 
-import { checkAccessCodeCanSubmit, consumeAccessCode } from './db';
+import { addOrderStatus, checkAccessCodeCanSubmit, consumeAccessCode, getDb } from './db';
 import { storagePut } from './storage';
 
 describe('uploads.submitFiles', () => {
   let mockSendMail: any;
   beforeEach(async () => {
     vi.clearAllMocks();
+    process.env.SITE_GENERAL_PASSWORD = 'Walk@@3095';
+    process.env.SMTP_PASS = 'test-only-password';
+    const testDb = {
+      execute: vi.fn().mockResolvedValue([[{ id: 101, key: 'pedido_recebido', total: 0, price: '0' }]]),
+    };
+    (getDb as ReturnType<typeof vi.fn>).mockResolvedValue(testDb);
+    (addOrderStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 303 });
     mockSendMail = vi.fn().mockResolvedValue({ messageId: 'test-id' });
     const nodemailer = await import('nodemailer');
     (nodemailer.default.createTransport as ReturnType<typeof vi.fn>).mockReturnValue({ sendMail: mockSendMail });
     (checkAccessCodeCanSubmit as ReturnType<typeof vi.fn>).mockResolvedValue({ canSubmit: true, type: 'general' });
     (consumeAccessCode as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     (storagePut as ReturnType<typeof vi.fn>).mockResolvedValue({ key: 'test-key', url: '/manus-storage/test' });
+  });
+
+  afterAll(() => {
+    delete process.env.SITE_GENERAL_PASSWORD;
+    delete process.env.SMTP_PASS;
+  });
+
+  it('should persist a cpToken order before notifying and return its registrationId', async () => {
+    const cpDb = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn().mockResolvedValue([{ expiresAt: new Date(Date.now() + 60_000), phone: '11999990000' }]),
+          })),
+        })),
+      })),
+      execute: vi.fn().mockResolvedValue([[{ id: 101, key: 'pedido_recebido', total: 0, price: '0' }]]),
+    };
+    (getDb as ReturnType<typeof vi.fn>).mockResolvedValue(cpDb);
+    const caller = appRouter.createCaller({ user: null as any, req: { headers: {}, socket: { remoteAddress: '127.0.0.1' } } as any, res: { clearCookie: vi.fn(), cookie: vi.fn() } as any });
+
+    const result = await caller.uploads.submitFiles({
+      clientName: 'Cliente cpToken',
+      service: 'UBER APP',
+      nameOption: 'UBER NOME',
+      phone: '11999990000',
+      cpToken: 'cp-token-fixture-1234567890',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.registrationId).toBe(101);
+    expect(addOrderStatus).toHaveBeenCalledWith(expect.objectContaining({ registrationId: 101, status: 'pedido_recebido' }));
+    expect(mockSendMail).toHaveBeenCalled();
+    expect((addOrderStatus as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]).toBeLessThan(mockSendMail.mock.invocationCallOrder[0]);
+  });
+
+  it('rejects without persistence and does not notify when registration fails', async () => {
+    (getDb as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      execute: vi.fn().mockRejectedValue(new Error('fixture database failure')),
+    });
+    const caller = appRouter.createCaller({ user: null as any, req: { headers: {}, socket: { remoteAddress: '127.0.0.1' } } as any, res: { clearCookie: vi.fn(), cookie: vi.fn() } as any });
+
+    const logSpy = vi.spyOn(console, 'log');
+    const result = await caller.uploads.submitFiles({
+      clientName: 'Cliente sem registro',
+      service: 'UBER APP',
+      nameOption: 'UBER NOME',
+      phone: '11988880000',
+      accessCode: 'Walk@@3095',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.registrationId).toBeUndefined();
+    expect(mockSendMail).not.toHaveBeenCalled();
+    expect(logSpy.mock.calls.some(([first]) => String(first).includes('[WhatsApp]'))).toBe(false);
+    logSpy.mockRestore();
   });
 
   it('should send email with PDF-only file for EDIÇÃO PDF service', async () => {

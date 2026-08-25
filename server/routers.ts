@@ -49,6 +49,7 @@ import { privateTransportRouter } from "./routers/privateTransport";
 import { locadoraRouter } from "./routers/locadora";
 import { h2AssistantRouter } from "./routers/h2Assistant";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
+import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
 import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
 import { isRecoveredCustomerName } from "../shared/customerProfile";
@@ -1340,20 +1341,8 @@ export const appRouter = router({
 
 
 
-          // Comprovante PIX: aceitar URL já enviada (novo fluxo) ou base64 (legado)
+          // URL já enviada pelo fluxo novo; o upload base64 legado só ocorre após persistência.
           let paymentProofUrl = input.paymentProofUrl || '';
-          if (!paymentProofUrl && input.paymentProof) {
-            try {
-              const proofMime = input.paymentProofMime || 'image/jpeg';
-              const proofExt = proofMime === 'application/pdf' ? 'pdf' : proofMime === 'image/png' ? 'png' : 'jpg';
-              const randomSuffix = Math.random().toString(36).substring(2, 10);
-              const fileKey = `comprovantes/${input.clientName.replace(/\s+/g, '-')}-${randomSuffix}.${proofExt}`;
-              const { url } = await storagePut(fileKey, Buffer.from(input.paymentProof, 'base64'), proofMime);
-              paymentProofUrl = url;
-            } catch (uploadError) {
-              console.error('[S3] Erro ao fazer upload do comprovante:', uploadError);
-            }
-          }
 
           // Parse e normaliza respostas. Áudios nunca recebem URL confiada do navegador:
           // a referência é construída a partir dos rascunhos validados no banco.
@@ -1440,14 +1429,56 @@ export const appRouter = router({
           // Garantir que temos o phone: usar input.phone ou extrair do cpToken
           const effectivePhone = (input.phone || cpTokenPhone || '').replace(/\D/g, '');
 
-          let docRegId = 0;
+          let persistedOrder: Awaited<ReturnType<typeof persistPublicOrder>> | undefined;
+          let persistenceDb: any;
+          let outerRegId: number | undefined;
           try {
-            const db2 = await (await import('./db')).getDb();
-            if (db2 && effectivePhone) {
-              const phoneRow2 = await db2.execute(`SELECT id FROM accessCodePhones WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = '${effectivePhone}' ORDER BY accessedAt DESC LIMIT 1`);
-              docRegId = (phoneRow2[0] as unknown as Array<{ id: number }>)[0]?.id || 0;
+            persistenceDb = await (await import('./db')).getDb();
+            if (persistenceDb && effectivePhone) {
+              persistedOrder = await persistPublicOrder({
+                effectivePhone,
+                cpTokenValid,
+                accessCode: input.accessCode,
+                generalPassword: process.env.SITE_GENERAL_PASSWORD || '',
+                clientName: input.clientName,
+                serviceName: input.service,
+                serviceOption: input.nameOption,
+                pricePaid: input.price || null,
+                answers: input.answers,
+              }, {
+                store: createSqlOrderPersistenceStore(persistenceDb),
+                addOrderStatus,
+                generateOrderNumber,
+              });
+              outerRegId = persistedOrder.registrationId;
+              console.log('[OrderStatus] Pedido persistido antes das notificações - regId:', outerRegId, 'status:', persistedOrder.initialStatus, 'orderStatusId:', persistedOrder.orderStatusId);
             }
-          } catch (e) { console.error('[OrderFiles] Erro ao obter regId:', e); }
+          } catch (e) {
+            console.error('[OrderStatus] Erro ao persistir pedido antes das notificações:', e);
+          }
+          if (!isPersistedPublicOrder(persistedOrder)) {
+            console.error('[OrderStatus] Pedido rejeitado: registrationId/status inicial não foram persistidos.');
+            return { success: false, message: 'Não foi possível registrar o pedido. Tente novamente; nenhum pedido foi confirmado.' };
+          }
+          try {
+            if (!cpTokenValid) await consumeAccessCode(input.accessCode || '', input.phone);
+          } catch (e) { console.error('[AccessCode] Erro ao consumir após persistência:', e); }
+
+          const docRegId = persistedOrder.registrationId;
+
+          // Comprovante PIX legado: só enviar ao R2 depois da persistência confirmada.
+          if (!paymentProofUrl && input.paymentProof) {
+            try {
+              const proofMime = input.paymentProofMime || 'image/jpeg';
+              const proofExt = proofMime === 'application/pdf' ? 'pdf' : proofMime === 'image/png' ? 'png' : 'jpg';
+              const randomSuffix = Math.random().toString(36).substring(2, 10);
+              const fileKey = `comprovantes/${input.clientName.replace(/\s+/g, '-')}-${randomSuffix}.${proofExt}`;
+              const { url } = await storagePut(fileKey, Buffer.from(input.paymentProof, 'base64'), proofMime);
+              paymentProofUrl = url;
+            } catch (uploadError) {
+              console.error('[S3] Erro ao fazer upload do comprovante:', uploadError);
+            }
+          }
 
           // Documentos dinâmicos (novo sistema)
           // Suporta tanto base64 (legado) quanto URL já enviada via /api/upload/client-file
@@ -1531,8 +1562,11 @@ export const appRouter = router({
             documents: docLinks.length > 0 ? docLinks : undefined,
           });
 
-          // Enviar email admin com timeout (não-bloqueante)
-          const emailSent = await sendEmailWithTimeout({
+          // As notificações só podem ser disparadas depois da persistência confirmada.
+          let emailSent = false;
+          const notifyAdminAfterPersistence = async () => {
+            // Enviar email admin com timeout (não-bloqueante)
+            emailSent = await sendEmailWithTimeout({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: emailTo,
             subject: `Novo Pedido - ${input.service} - ${input.clientName}`,
@@ -1634,157 +1668,15 @@ export const appRouter = router({
           } catch (whatsappError) {
             console.error('[WhatsApp] Erro:', whatsappError);
           }
+          };
 
-          try {
-            console.log('[AccessCode] Chamando consumeAccessCode com code:', input.accessCode, 'phone:', input.phone);
-            if (!cpTokenValid) await consumeAccessCode(input.accessCode || '', input.phone);
-            console.log('[AccessCode] consumeAccessCode executado com sucesso');
-          } catch (e) { console.error('[AccessCode] Erro:', e); }
-          // Salvar status inicial do pedido com produto e respostas
-          let outerRegId: number | undefined;
-          try {
-            const db2 = await (await import('./db')).getDb();
-            if (db2 && effectivePhone) {
-              // Usar effectivePhone (input.phone ou phone do cpToken)
-              const phoneDigits = effectivePhone;
-              let regId: number | undefined;
-
-              // Se senha geral, criar registro em accessCodePhones (não existe código VIP associado)
-              const generalPwd = process.env.SITE_GENERAL_PASSWORD || '';
-              const isGeneralCode = generalPwd && input.accessCode === generalPwd;
-              if (cpTokenValid) {
-                // Novo sistema de senha (cpToken): criar registro usando código __cptoken__
-                try {
-                  let cpCodeId: number | undefined;
-                  const cpRows = await db2.execute(`SELECT id FROM accessCodes WHERE code = '__cptoken__' LIMIT 1`);
-                  const cpArr = (cpRows[0] as unknown as Array<{ id: number }>);
-                  if (cpArr && cpArr.length > 0) {
-                    cpCodeId = cpArr[0].id;
-                  } else {
-                    await db2.execute(`INSERT INTO accessCodes (code, type, status, clientName, maxUses, currentUses, createdAt) VALUES ('__cptoken__', 'cptoken', 'active', 'Senha de Cliente', 99999, 0, NOW())`);
-                    const cpRows2 = await db2.execute(`SELECT id FROM accessCodes WHERE code = '__cptoken__' LIMIT 1`);
-                    cpCodeId = (cpRows2[0] as unknown as Array<{ id: number }>)[0]?.id;
-                  }
-                  if (cpCodeId) {
-                    await db2.execute(`INSERT INTO accessCodePhones (codeId, phone, consumed, accessedAt) VALUES (${cpCodeId}, '${phoneDigits}', 0, NOW())`);
-                    const newRow = await db2.execute(`SELECT id FROM accessCodePhones WHERE codeId = ${cpCodeId} AND phone = '${phoneDigits}' ORDER BY accessedAt DESC LIMIT 1`);
-                    regId = (newRow[0] as unknown as Array<{ id: number }>)[0]?.id;
-                    console.log('[OrderStatus] Registro cpToken criado - regId:', regId);
-                  }
-                } catch (e) { console.error('[OrderStatus] Erro ao criar registro cpToken:', e); }
-              } else if (isGeneralCode) {
-                try {
-                  // Criar um código de acesso geral no banco se não existir
-                  let generalCodeId: number | undefined;
-                  const gcRows = await db2.execute(`SELECT id FROM accessCodes WHERE code = '__general__' LIMIT 1`);
-                  const gcArr = (gcRows[0] as unknown as Array<{ id: number }>);
-                  if (gcArr && gcArr.length > 0) {
-                    generalCodeId = gcArr[0].id;
-                  } else {
-                    await db2.execute(`INSERT INTO accessCodes (code, type, status, clientName, maxUses, currentUses, createdAt) VALUES ('__general__', 'general', 'active', 'Senha Geral', 99999, 0, NOW())`);
-                    const gcRows2 = await db2.execute(`SELECT id FROM accessCodes WHERE code = '__general__' LIMIT 1`);
-                    generalCodeId = (gcRows2[0] as unknown as Array<{ id: number }>)[0]?.id;
-                  }
-                  if (generalCodeId) {
-                    await db2.execute(`INSERT INTO accessCodePhones (codeId, phone, consumed, accessedAt) VALUES (${generalCodeId}, '${phoneDigits}', 0, NOW())`);
-                    const newRow = await db2.execute(`SELECT id FROM accessCodePhones WHERE codeId = ${generalCodeId} AND phone = '${phoneDigits}' ORDER BY accessedAt DESC LIMIT 1`);
-                    regId = (newRow[0] as unknown as Array<{ id: number }>)[0]?.id;
-                    console.log('[OrderStatus] Registro geral criado - regId:', regId);
-                  }
-                } catch (e) { console.error('[OrderStatus] Erro ao criar registro geral:', e); }
-              } else {
-                // Buscar regId pelo phone + código VIP
-                try {
-                  const phoneRow = await db2.execute(`SELECT acp.id FROM accessCodePhones acp INNER JOIN accessCodes ac ON ac.id = acp.codeId WHERE REGEXP_REPLACE(acp.phone, '[^0-9]', '') = '${phoneDigits}' AND ac.code = '${input.accessCode}' ORDER BY acp.accessedAt DESC LIMIT 1`);
-                  regId = (phoneRow[0] as unknown as Array<{ id: number }>)[0]?.id;
-                  console.log('[OrderStatus] Buscando regId por phone+code:', phoneDigits, input.accessCode, '-> regId:', regId);
-                } catch (e) { console.error('[OrderStatus] Erro ao buscar regId:', e); }
-                // Se não encontrou, criar o registro em accessCodePhones para o código VIP
-                if (!regId) {
-                  try {
-                    const acRows = await db2.execute(`SELECT id FROM accessCodes WHERE code = '${input.accessCode}' LIMIT 1`);
-                    const acId = (acRows[0] as unknown as Array<{ id: number }>)[0]?.id;
-                    if (acId) {
-                      await db2.execute(`INSERT INTO accessCodePhones (codeId, phone, consumed, accessedAt) VALUES (${acId}, '${phoneDigits}', 0, NOW())`);
-                      const newRow = await db2.execute(`SELECT id FROM accessCodePhones WHERE codeId = ${acId} AND phone = '${phoneDigits}' ORDER BY accessedAt DESC LIMIT 1`);
-                      regId = (newRow[0] as unknown as Array<{ id: number }>)[0]?.id;
-                      console.log('[OrderStatus] Registro VIP criado - regId:', regId);
-                    }
-                  } catch (e) { console.error('[OrderStatus] Erro ao criar registro VIP:', e); }
-                }
-                // Fallback final: buscar pelo phone sem filtro de código
-                if (!regId) {
-                  try {
-                    const phoneRow2 = await db2.execute(`SELECT id FROM accessCodePhones WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = '${phoneDigits}' ORDER BY accessedAt DESC LIMIT 1`);
-                    regId = (phoneRow2[0] as unknown as Array<{ id: number }>)[0]?.id;
-                    console.log('[OrderStatus] Fallback regId por phone:', phoneDigits, '-> regId:', regId);
-                  } catch (e) { console.error('[OrderStatus] Erro no fallback regId:', e); }
-                }
-              }
-              // Contingência: a validação do acesso pode ter sucesso sem que o fluxo anterior
-              // tenha criado accessCodePhones (por exemplo, sessão cpToken recém-criada ou
-              // código legado sem passagem pela tela de validação). Sem registrationId,
-              // addOrderStatus não consegue alimentar o card do ADM.
-              if (!regId) {
-                try {
-                  const fallbackCode = `ORDER-${phoneDigits}-${Date.now()}-${randomUUID().slice(0, 8)}`;
-                  await db2.execute(sql`
-                    INSERT INTO accessCodes (code, type, status, clientName, maxUses, currentUses, createdAt)
-                    VALUES (${fallbackCode}, 'vip', 'used', ${input.clientName || null}, 1, 1, NOW())
-                  `);
-                  const fallbackCodeRows = await db2.execute(sql`
-                    SELECT id FROM accessCodes WHERE code = ${fallbackCode} LIMIT 1
-                  `);
-                  const fallbackCodeId = (fallbackCodeRows[0] as unknown as Array<{ id: number }>)[0]?.id;
-                  if (fallbackCodeId) {
-                    await db2.execute(sql`
-                      INSERT INTO accessCodePhones (codeId, phone, consumed, archived, rgCnhApproved, orderSource, accessedAt)
-                      VALUES (${fallbackCodeId}, ${phoneDigits}, 1, 0, 0, 'auto', NOW())
-                    `);
-                    const fallbackRegistrationRows = await db2.execute(sql`
-                      SELECT id FROM accessCodePhones
-                      WHERE codeId = ${fallbackCodeId} AND phone = ${phoneDigits}
-                      ORDER BY id DESC LIMIT 1
-                    `);
-                    regId = (fallbackRegistrationRows[0] as unknown as Array<{ id: number }>)[0]?.id;
-                    console.log('[OrderStatus] Registro de contingência criado - regId:', regId);
-                  }
-                } catch (e) {
-                  console.error('[OrderStatus] Falha ao criar registro de contingência:', e);
-                }
-              }
-              if (regId) {
-                // Buscar status inicial dinâmico do banco
-                let initialStatus = 'pedido_recebido';
-                try {
-                  const stRows = await db2.execute(`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
-                  const stArr = (stRows[0] as unknown as Array<{ key: string }>);
-                  if (stArr && stArr.length > 0 && stArr[0].key) initialStatus = stArr[0].key;
-                } catch (e) { /* usa pedido_recebido como fallback */ }
-                // Gerar número de pedido único
-                let orderNum: number | undefined;
-                try { orderNum = await generateOrderNumber(); } catch (e) { console.error('[OrderNumber] Erro:', e); }
-                console.log('[OrderStatus] Salvando status inicial:', initialStatus, 'regId:', regId, 'orderNum:', orderNum);
-                // O primeiro pedido é a única oportunidade de congelar uma comissão de indicação.
-                // A contagem é feita antes da inserção do status atual para excluir clientes recorrentes.
-                const previousOrderRows = await db2.execute(sql`
-                  SELECT COUNT(*) AS total FROM orderStatusHistory
-                  WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${phoneDigits}
-                `);
-                const previousOrderCount = Number((previousOrderRows[0] as unknown as Array<{ total?: number }>)[0]?.total || 0);
-
-                const createdOrderStatus = await addOrderStatus({
-                  registrationId: regId,
-                  orderNumber: orderNum,
-                  customerPhone: phoneDigits,
-                  status: initialStatus,
-                  note: 'Pedido recebido via site',
-                  serviceName: input.service,
-                  serviceOption: input.nameOption,
-                  pricePaid: input.price || null,
-                  answers: input.answers,
-                });
-
+          // A persistência e o status inicial já foram confirmados antes dos side effects restantes.
+          const regId = persistedOrder.registrationId;
+          const createdOrderStatus = { id: persistedOrder.orderStatusId };
+          const previousOrderCount = persistedOrder.previousOrderCount;
+          const orderNum = persistedOrder.orderNumber;
+          const phoneDigits = effectivePhone;
+          const db2 = persistenceDb;
                 if (previousOrderCount === 0 && input.optionId) {
                   try {
                     const referredCustomer = await getCustomerByPhone(phoneDigits);
@@ -1839,20 +1731,6 @@ export const appRouter = router({
                   })));
                   await deleteQuestionAudioDrafts(audioDraftsForOrder.map(draft => draft.id));
                 }
-                outerRegId = regId;
-                // Corrigir registrationId dos documentos salvos antes da criação do pedido
-                // Inclui docRegId = 0 (quando telefone não encontrado em accessCodePhones)
-                if (docRegId !== regId) {
-                  try {
-                    await db2.execute(`UPDATE orderFiles SET registrationId = ${regId} WHERE registrationId = ${docRegId} AND customerPhone = '${phoneDigits}' AND createdAt >= NOW() - INTERVAL 5 MINUTE`);
-                    console.log('[OrderFiles] Documentos migrados de regId', docRegId, 'para', regId);
-                  } catch (e) { console.error('[OrderFiles] Erro ao migrar documentos:', e); }
-                  // Também migrar documentos salvos com customerPhone = 'desconhecido'
-                  try {
-                    await db2.execute(`UPDATE orderFiles SET registrationId = ${regId}, customerPhone = '${phoneDigits}' WHERE registrationId = ${docRegId} AND (customerPhone = 'desconhecido' OR customerPhone = '') AND createdAt >= NOW() - INTERVAL 10 MINUTE`);
-                    console.log('[OrderFiles] Documentos desconhecidos migrados para regId', regId);
-                  } catch (e) { console.error('[OrderFiles] Erro ao migrar docs desconhecidos:', e); }
-                }
                 // Salvar thirdPartyName, resellerDiscountApplied e campos de carrinho no registro do pedido
                 const hasExtraFields = input.thirdPartyName || input.resellerDiscountApplied || input.cartGroupId || input.cartTotal !== undefined || input.cartCouponCode || input.cartCouponDiscount !== undefined || input.cartItemIndex !== undefined;
                 if (hasExtraFields) {
@@ -1866,18 +1744,8 @@ export const appRouter = router({
                     await db2.execute(`UPDATE accessCodePhones SET thirdPartyName = ${input.thirdPartyName ? `'${input.thirdPartyName.replace(/'/g, "''")}'` : 'NULL'}, thirdPartyPhone = ${thirdPartyPhoneSql}, resellerDiscountApplied = ${input.resellerDiscountApplied ?? 'NULL'}, cartGroupId = ${cartGroupIdSql}, cartTotal = ${cartTotalSql}, cartCouponCode = ${cartCouponCodeSql}, cartCouponDiscount = ${cartCouponDiscountSql}, cartItemIndex = ${cartItemIndexSql} WHERE id = ${regId}`);
                   } catch (e) { console.error('[Cart] Erro ao salvar dados de carrinho/revendedor:', e); }
                 }
-              } else {
-                console.error('[OrderStatus] regId não encontrado para phone:', phoneDigits, 'code:', input.accessCode);
-              }
-            }
-          } catch (e) { console.error('[OrderStatus] Erro ao salvar status inicial:', e); }
-          // Nunca confirmar um pedido sem o registro que alimenta o card do ADM.
-          // Os avisos de email/WhatsApp podem ter sido preparados antes deste bloco,
-          // mas o cliente receberá falha e não será tratado como pedido concluído.
-          if (!outerRegId) {
-            console.error('[OrderStatus] Pedido rejeitado: registrationId não foi criado.');
-            return { success: false, message: 'Não foi possível registrar o pedido. Tente novamente; nenhum pedido foi confirmado.' };
-          }
+
+          await notifyOnlyAfterPersistence(persistedOrder, notifyAdminAfterPersistence);
           // Salvar/atualizar todos os dados do cliente ao finalizar pedido
           if (input.phone) {
             try {
@@ -7597,21 +7465,23 @@ export const appRouter = router({
           // Sessão expirada — não criar nova, exigir senha
           return { success: false, reason: 'Sessão expirada', expired: true };
         }
-        // Criar nova entrada em accessCodePhones com codeId = 0 (sem senha VIP)
-        // Buscar ou criar um accessCode genérico para links de indicação
-        let refCodeId = 0;
-        try {
-          const gcResult = await db.execute(sql.raw(`SELECT id FROM accessCodes WHERE type = 'referral_link' LIMIT 1`));
-          const gcRows = (gcResult as any)[0] as any[];
-          if (gcRows && gcRows.length > 0) {
-            refCodeId = Number(gcRows[0].id);
-          } else {
-            // Criar um accessCode genérico para links de indicação
-            await db.execute(sql.raw(`INSERT INTO accessCodes (clientName, type, status, maxUses, currentUses, timeOnly, createdAt) VALUES ('Link de Indicação', 'referral_link', 'active', 9999, 0, 1, NOW())`));
-            const newGc = await db.execute(sql.raw(`SELECT id FROM accessCodes WHERE type = 'referral_link' LIMIT 1`));
-            refCodeId = Number(((newGc as any)[0] as any[])[0]?.id || 0);
-          }
-        } catch (e) { /* usa 0 */ }
+                  // Criar nova entrada em accessCodePhones usando um código interno VIP.
+          // O enum de accessCodes aceita somente general|vip; o código fixo separa
+          // a sessão de indicação sem inventar um terceiro tipo no schema.
+          let refCodeId = 0;
+          try {
+            const referralAccessCode = '__referral_link__';
+            const gcResult = await db.execute(sql.raw(`SELECT id FROM accessCodes WHERE code = '${referralAccessCode}' LIMIT 1`));
+            const gcRows = (gcResult as any)[0] as any[];
+            if (gcRows && gcRows.length > 0) {
+              refCodeId = Number(gcRows[0].id);
+            } else {
+              await db.execute(sql.raw(`INSERT INTO accessCodes (code, clientName, type, status, maxUses, currentUses, timeOnly, createdAt) VALUES ('${referralAccessCode}', 'Link de Indicação', 'vip', 'active', 9999, 0, 1, NOW())`));
+              const newGc = await db.execute(sql.raw(`SELECT id FROM accessCodes WHERE code = '${referralAccessCode}' LIMIT 1`));
+              refCodeId = Number(((newGc as any)[0] as any[])[0]?.id || 0);
+            }
+          } catch (e) { /* usa 0 */ }
+
         await db.execute(sql.raw(
           `INSERT INTO accessCodePhones (codeId, phone, consumed, archived, orderSource, accessedAt, refCode, refExpiresAt, refOwnerName)
            VALUES (${refCodeId}, '${phone}', 0, 0, 'auto', NOW(), '${link.code}', ${expiresAt}, '${link.customerName.replace(/'/g, "''")}')`
