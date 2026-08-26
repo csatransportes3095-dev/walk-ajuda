@@ -42,6 +42,11 @@ function fmtDate(d: string | null | undefined) {
 function todayBRTDate() {
   return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
+function civilDate(value: unknown) {
+  if (typeof value === "string") return value.slice(0, 10);
+  const parsed = new Date(value as Date);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+}
 function fmtDateTime(ts: number | string | Date | null | undefined) {
   if (!ts) return "\u2014";
   // O banco retorna paidAt como string "2026-07-18 20:00:49" (sem Z, sem T) via drizzle raw SQL.
@@ -621,6 +626,16 @@ function LoansTab() {
   const { data: lateFeeConfig } = trpc.loans.getLateFeeConfig.useQuery();
   const [feeModal, setFeeModal] = useState<{ inst: any; loanId: number } | null>(null);
   const [feeCustomAmount, setFeeCustomAmount] = useState("");
+  const handleOpenLateFee = useCallback((inst: any, loanId: number) => {
+    const dueDate = civilDate(inst.dueDate);
+    if (!dueDate || dueDate >= todayBRTDate()) {
+      const dueLabel = dueDate ? ` (vencimento: ${fmtDate(dueDate)})` : "";
+      toast.info(`A parcela #${inst.installmentNumber} ainda não venceu${dueLabel}. A taxa de atraso só pode ser aplicada após o vencimento.`);
+      return;
+    }
+    setFeeModal({ inst, loanId });
+    setFeeCustomAmount("");
+  }, []);
   const applyLateFee = trpc.loans.applyLateFeeToInstallment.useMutation({
     onSuccess: (d) => {
       toast.success(`Taxa aplicada! Novo valor: R$ ${d.newAmount.toFixed(2).replace('.', ',')}`);
@@ -1275,7 +1290,7 @@ function LoansTab() {
                               ) : (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
-                                  onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}
+                                  onClick={() => handleOpenLateFee(inst, loan.id)}
                                   data-testid="manual-late-fee-button">
                                   <AlertTriangle className="w-4 h-4" />
                                   +Taxa
@@ -1317,7 +1332,7 @@ function LoansTab() {
                               ) : (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
-                                  onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}
+                                  onClick={() => handleOpenLateFee(inst, loan.id)}
                                   data-testid="manual-late-fee-button">
                                   <AlertTriangle className="w-4 h-4" />
                                   +Taxa

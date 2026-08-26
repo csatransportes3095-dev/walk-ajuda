@@ -84,4 +84,11 @@ describe("sincronização da tela /gastos", () => {
     expect(adminLoans).toContain('Taxa após meia-noite');
     expect(loansRouter).toContain("if (dueDate >= getBrazilToday())");
   });
+
+  it("bloqueia a abertura do modal manual antes do vencimento e informa o motivo", () => {
+    expect(adminLoans).toContain("const handleOpenLateFee = useCallback");
+    expect(adminLoans).toContain("dueDate >= todayBRTDate()");
+    expect(adminLoans).toContain("ainda não venceu");
+    expect(adminLoans.match(/onClick=\{\(\) => handleOpenLateFee\(inst, loan\.id\)\}/g) || []).toHaveLength(2);
+  });
 });
