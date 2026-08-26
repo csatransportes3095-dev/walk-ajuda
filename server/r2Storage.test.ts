@@ -70,10 +70,11 @@ describe("r2Storage", () => {
         "system-backups/test.wajuda.enc",
         Readable.from([Buffer.from("abc")]),
         "application/octet-stream",
-        undefined,
+        3,
         { backupId: "backup-test", stage: "r2-upload" },
       );
       expect(result).toMatchObject({ bytesSent: 3, httpStatus: 200, etag: '"etag-test"' });
+      expect(sendMock.mock.calls[0]?.[0]).toMatchObject({ input: { ContentLength: 3 } });
       const output = logSpy.mock.calls.flat().join(" ");
       expect(output).toContain("event=started");
       expect(output).toContain("event=completed");

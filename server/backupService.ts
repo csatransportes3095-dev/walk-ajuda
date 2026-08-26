@@ -21,6 +21,8 @@ export const BACKUP_STALE_AFTER_MS = 10 * 60_000;
 const DUMPLING_BINARY = process.env.BACKUP_DUMPLING_BINARY?.trim() || "dumpling";
 const DUMPLING_FILE_SIZE = "256MiB";
 export const DEFAULT_DUMPLING_CA_PATH = "/etc/ssl/certs/ca-certificates.crt";
+export const BACKUP_ARCHIVE_HEADER_BYTES = Buffer.byteLength("WJBACK1\n", "utf8") + 12;
+export const BACKUP_ARCHIVE_AUTH_TAG_BYTES = 16;
 
 type BackupDiagnosticContext = {
   backupId: string;
@@ -270,6 +272,7 @@ async function runProcess(
   env: NodeJS.ProcessEnv,
   stdoutFile?: string,
   diagnostic?: BackupDiagnosticContext,
+  onStdoutBytes?: (bytes: number) => void,
 ): Promise<void> {
   const commandName = path.basename(command);
   const processStartedAt = Date.now();
@@ -277,7 +280,7 @@ async function runProcess(
   const child = spawn(command, args, {
     cwd: BACKUP_SOURCE_ROOT,
     env,
-    stdio: ["ignore", stdoutFile ? "pipe" : "ignore", "pipe"],
+    stdio: ["ignore", stdoutFile || onStdoutBytes ? "pipe" : "ignore", "pipe"],
   });
   let stderr = "";
   child.stderr?.on("data", (chunk) => {
@@ -286,7 +289,14 @@ async function runProcess(
 
   const outputPromise = stdoutFile && child.stdout
     ? pipeline(child.stdout, createWriteStream(stdoutFile, { flags: "wx" }))
-    : Promise.resolve();
+    : onStdoutBytes && child.stdout
+      ? pipeline(child.stdout, new Transform({
+        transform(chunk, _encoding, callback) {
+          onStdoutBytes(Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk)));
+          callback();
+        },
+      }))
+      : Promise.resolve();
   const exitPromise = new Promise<void>((resolve, reject) => {
     let settled = false;
     const finish = (event: string, code: number | null, signal: NodeJS.Signals | null, error?: unknown) => {
@@ -469,6 +479,21 @@ async function dumpDatabase(databaseFile: string, diagnostic?: BackupDiagnosticC
   return { info, tables, bytes: fileInfo.size, sha256 };
 }
 
+export async function measureTarArchiveBytes(sourceDirectory: string, diagnostic?: BackupDiagnosticContext): Promise<number> {
+  let bytes = 0;
+  await runProcess("tar", ["-cf", "-", "-C", sourceDirectory, "."], { ...process.env }, undefined, diagnostic, (chunkBytes) => {
+    bytes += chunkBytes;
+  });
+  return bytes;
+}
+
+export function encryptedArchiveLength(plaintextTarBytes: number): number {
+  if (!Number.isSafeInteger(plaintextTarBytes) || plaintextTarBytes < 0) {
+    throw new Error("Tamanho do tar inválido para calcular o Content-Length.");
+  }
+  return BACKUP_ARCHIVE_HEADER_BYTES + plaintextTarBytes + BACKUP_ARCHIVE_AUTH_TAG_BYTES;
+}
+
 async function createSourceSnapshot(destination: string, diagnostic?: BackupDiagnosticContext): Promise<{ bytes: number; sha256: string }> {
   const args = [
     "-czf",
@@ -508,6 +533,7 @@ export function createEncryptedArchiveStream(
   const output = new PassThrough();
   const artifactCounter = new HashingTransform();
   const header = Buffer.concat([Buffer.from("WJBACK1\n", "utf8"), iv]);
+  if (header.length !== BACKUP_ARCHIVE_HEADER_BYTES) throw new Error("Formato do cabeçalho cifrado inesperado.");
   artifactCounter.hash.update(header);
   artifactCounter.bytes = header.length;
   output.write(header);
@@ -585,6 +611,7 @@ export function createEncryptedArchiveStream(
       const authTag = cipher.getAuthTag();
       artifactCounter.hash.update(authTag);
       artifactCounter.bytes += authTag.length;
+      if (authTag.length !== BACKUP_ARCHIVE_AUTH_TAG_BYTES) throw new Error("Tamanho do auth tag inesperado.");
       output.write(authTag);
       output.end();
       const result = { bytes: artifactCounter.bytes, sha256: artifactCounter.hash.digest("hex") };
@@ -857,8 +884,19 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
 
     diagnostic.stage = "archive";
     logBackupDiagnostic(diagnostic, "stage-start", { progress: 88 });
+    await updateRun(id, { stage: "archive", progress: 88 });
     await logDiskDiagnostic(diagnostic, workDirectory, "archive");
-    const archiveInputBytes = Math.max(database.bytes + source.bytes + totalR2Bytes + Buffer.byteLength(JSON.stringify(manifest)), 1);
+    diagnostic.stage = "archive-size";
+    logBackupDiagnostic(diagnostic, "archive-size-pass-start", { progress: 88 });
+    const plaintextTarBytes = await measureTarArchiveBytes(workDirectory, diagnostic);
+    const expectedContentLength = encryptedArchiveLength(plaintextTarBytes);
+    logBackupDiagnostic(diagnostic, "archive-size-pass-end", {
+      plaintextTarBytes,
+      expectedContentLength,
+      overheadBytes: expectedContentLength - plaintextTarBytes,
+    });
+    diagnostic.stage = "archive";
+    const archiveInputBytes = Math.max(plaintextTarBytes, 1);
     let lastArchiveProgressAt = 0;
     const encrypted = createEncryptedArchiveStream(workDirectory, signal, (processedBytes) => {
       const now = Date.now();
@@ -868,7 +906,7 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
       void updateRun(id, { stage: "archive", progress }).catch(() => undefined);
     }, diagnostic);
     const artifactKey = `${BACKUP_ARTIFACT_PREFIX}${id}.wajuda.enc`;
-    const uploadOutcome = r2PutObjectStream(artifactKey, encrypted.stream, "application/octet-stream", undefined, { backupId: id, stage: "r2-upload" }).then(
+    const uploadOutcome = r2PutObjectStream(artifactKey, encrypted.stream, "application/octet-stream", expectedContentLength, { backupId: id, stage: "r2-upload" }).then(
       (result) => ({ result, error: null as Error | null }),
       (error) => {
         const failure = error instanceof Error ? error : new Error(String(error));
@@ -879,6 +917,9 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
     let archiveInfo: { bytes: number; sha256: string };
     try {
       archiveInfo = await encrypted.completion;
+      if (archiveInfo.bytes !== expectedContentLength) {
+        throw new Error(`Tamanho cifrado divergente: esperado ${expectedContentLength}, produzido ${archiveInfo.bytes}.`);
+      }
       diagnostic.stage = "r2-upload";
       logBackupDiagnostic(diagnostic, "stage-start", { progress: 95, expectedBytes: archiveInfo.bytes });
       await updateRun(id, { stage: "r2-upload", progress: 95 });

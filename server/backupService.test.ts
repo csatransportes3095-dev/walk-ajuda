@@ -3,7 +3,7 @@ import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BACKUP_STALE_AFTER_MS, concatenateDumplingSqlFiles, createEncryptedArchiveStream, DEFAULT_DUMPLING_CA_PATH, isBackupStale, logProcessDiagnostic, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath } from "./backupService";
+import { BACKUP_ARCHIVE_AUTH_TAG_BYTES, BACKUP_ARCHIVE_HEADER_BYTES, BACKUP_STALE_AFTER_MS, concatenateDumplingSqlFiles, createEncryptedArchiveStream, DEFAULT_DUMPLING_CA_PATH, encryptedArchiveLength, isBackupStale, logProcessDiagnostic, measureTarArchiveBytes, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath } from "./backupService";
 import { getBackupDownloadName } from "./routers/backup";
 
 const TEST_BACKUP_KEY = Buffer.alloc(32, 7).toString("hex");
@@ -108,6 +108,8 @@ describe("backupService", () => {
       await mkdir(path.join(directory, "files"), { recursive: true });
       await writeFile(path.join(directory, "database.sql"), "CREATE TABLE teste (id INT);\n");
       await writeFile(path.join(directory, "manifest.json"), '{"formatVersion":1}\n');
+      const plaintextTarBytes = await measureTarArchiveBytes(directory);
+      expect(encryptedArchiveLength(plaintextTarBytes)).toBe(plaintextTarBytes + BACKUP_ARCHIVE_HEADER_BYTES + BACKUP_ARCHIVE_AUTH_TAG_BYTES);
       const archive = createEncryptedArchiveStream(directory);
       const chunks: Buffer[] = [];
       for await (const chunk of archive.stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -116,6 +118,7 @@ describe("backupService", () => {
       expect(result.bytes).toBe(body.length);
       expect(result.sha256).toBe(createHash("sha256").update(body).digest("hex"));
       expect(result.bytes).toBeGreaterThan(32);
+      expect(result.bytes).toBe(encryptedArchiveLength(plaintextTarBytes));
     } finally {
       if (previousKey === undefined) delete process.env.BACKUP_ENCRYPTION_KEY;
       else process.env.BACKUP_ENCRYPTION_KEY = previousKey;
