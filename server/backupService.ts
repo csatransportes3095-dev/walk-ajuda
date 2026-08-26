@@ -359,7 +359,12 @@ async function createSourceSnapshot(destination: string): Promise<{ bytes: numbe
   return { bytes: fileInfo.size, sha256 };
 }
 
-async function encryptTarDirectory(sourceDirectory: string, encryptedFile: string, signal?: AbortSignal): Promise<void> {
+async function encryptTarDirectory(
+  sourceDirectory: string,
+  encryptedFile: string,
+  signal?: AbortSignal,
+  onBytes?: (bytes: number) => void,
+): Promise<void> {
   throwIfBackupAborted(signal);
   const key = getEncryptionKey();
   const iv = randomBytes(12);
@@ -374,6 +379,7 @@ async function encryptTarDirectory(sourceDirectory: string, encryptedFile: strin
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stderr = "";
+  let processedBytes = 0;
   let timedOut = false;
   const stopTar = () => { tar.kill("SIGTERM"); };
   let idleTimeout = setTimeout(() => {
@@ -388,10 +394,17 @@ async function encryptTarDirectory(sourceDirectory: string, encryptedFile: strin
     }, BACKUP_ARCHIVE_IDLE_TIMEOUT_MS);
   };
   tar.stdout?.on("data", resetIdleTimeout);
+  const progressCounter = new Transform({
+    transform(chunk, _encoding, callback) {
+      processedBytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk));
+      onBytes?.(processedBytes);
+      callback(null, chunk);
+    },
+  });
   signal?.addEventListener("abort", stopTar, { once: true });
   tar.stderr?.on("data", (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-4000); });
   try {
-    await pipeline(tar.stdout!, cipher, output);
+    await pipeline(tar.stdout!, progressCounter, cipher, output);
     const exitCode = await new Promise<number>((resolve, reject) => {
       tar.once("error", reject);
       tar.once("close", (code) => resolve(code ?? 1));
@@ -408,6 +421,7 @@ async function encryptTarDirectory(sourceDirectory: string, encryptedFile: strin
   } finally {
     clearTimeout(idleTimeout);
     tar.stdout?.removeListener("data", resetIdleTimeout);
+    progressCounter.destroy();
     signal?.removeEventListener("abort", stopTar);
   }
 }
@@ -616,8 +630,16 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
     throwIfBackupAborted(signal);
 
     await updateRun(id, { stage: "archive", progress: 88 });
-    clearInterval(heartbeat);
-    await encryptTarDirectory(workDirectory, encryptedFile, signal);
+    const archiveInputBytes = Math.max(database.bytes + source.bytes + totalR2Bytes + Buffer.byteLength(JSON.stringify(manifest)), 1);
+    let lastArchiveProgressAt = 0;
+    await encryptTarDirectory(workDirectory, encryptedFile, signal, (processedBytes) => {
+      const now = Date.now();
+      if (now - lastArchiveProgressAt < 5_000) return;
+      lastArchiveProgressAt = now;
+      const progress = 88 + Math.min(6, Math.floor((processedBytes / archiveInputBytes) * 6));
+      void updateRun(id, { stage: "archive", progress }).catch(() => undefined);
+    });
+    await updateRun(id, { stage: "archive", progress: 94 });
     const archiveInfo = await stat(encryptedFile);
     const archiveSha256 = await sha256File(encryptedFile);
     const artifactKey = `${BACKUP_ARTIFACT_PREFIX}${id}.wajuda.enc`;
