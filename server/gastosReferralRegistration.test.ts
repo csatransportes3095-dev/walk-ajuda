@@ -18,11 +18,14 @@ describe('padrão de indicação antes do cadastro', () => {
 
   it('Gastos usa o gate separado antes do novo cadastro', () => {
     expect(gastosSource).toContain("| 'referral'");
+    expect(gastosSource).toContain("useState<Step>(requiredProfilePhone ? 'register' : 'referral')");
     expect(gastosSource).toContain("setStep('referral')");
     expect(gastosSource).toContain('<ReferralAccessManifest');
     expect(gastosSource).toContain('initialPhone={regPhone}');
-    expect(gastosSource).toContain("setRegReferralPhone(referralPhone || '')");
+    expect(gastosSource).toContain("setRegReferralPhone(referralPhone);");
     expect(gastosSource).toContain("setStep('register')");
+    expect(gastosSource).toContain("setPhone(verifiedPhone);");
+    expect(gastosSource).toContain("setStep('phone')");
     expect(gastosSource).toContain('referredByPhone: cleanReferralPhone');
     expect(gastosSource).not.toContain('referredBy: regReferralName');
   });

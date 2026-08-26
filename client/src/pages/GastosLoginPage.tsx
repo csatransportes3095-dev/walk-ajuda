@@ -58,7 +58,8 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   const gastosButtonText = settings?.gastos_button_text || 'Continuar';
   const gastosFooterText = settings?.gastos_footer_text || 'Problemas com acesso? Fale com o administrador';
 
-  const [step, setStep] = useState<Step>('phone');
+  // O manifesto é a primeira etapa para novos acessos; perfil incompleto segue direto à atualização obrigatória.
+  const [step, setStep] = useState<Step>(requiredProfilePhone ? 'register' : 'referral');
   const [phone, setPhone] = useState('');
   const [cpfInput, setCpfInput] = useState('');
   const activeField = phone.replace(/\D/g, '').length > 0 ? 'phone' : cpfInput.replace(/\D/g, '').length > 0 ? 'cpf' : null;
@@ -405,10 +406,17 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
       <ReferralAccessManifest
         initialPhone={regPhone}
         onGranted={({ phone: verifiedPhone, referralPhone }) => {
-          setRegPhone(verifiedPhone);
-          setRegReferralPhone(referralPhone || '');
           setError('');
-          setStep('register');
+          if (referralPhone) {
+            // Novo cadastro: a indicação já foi validada pelo manifesto.
+            setRegPhone(verifiedPhone);
+            setRegReferralPhone(referralPhone);
+            setStep('register');
+            return;
+          }
+          // Cadastro existente: mantém o login normal, sem exigir nova indicação.
+          setPhone(verifiedPhone);
+          setStep('phone');
         }}
       />
     );
