@@ -10,6 +10,7 @@ import {
   isBackupEncryptionConfigured,
   isGoogleDriveBackupConfigured,
   listSystemBackups,
+  reconcileStaleSystemBackups,
   startSystemBackup,
   type BackupManifest,
   streamSystemBackupArtifact,
@@ -40,6 +41,10 @@ export const backupRouter = router({
   config: adminProcedure.query(() => ({
     encryptionConfigured: isBackupEncryptionConfigured(),
     driveConfigured: isGoogleDriveBackupConfigured(),
+  })),
+
+  reconcileStale: adminProcedure.mutation(async () => ({
+    reconciled: await reconcileStaleSystemBackups(),
   })),
 
   sendToDrive: adminProcedure

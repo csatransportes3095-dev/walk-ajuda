@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { concatenateDumplingSqlFiles, DEFAULT_DUMPLING_CA_PATH, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath } from "./backupService";
+import { BACKUP_STALE_AFTER_MS, concatenateDumplingSqlFiles, DEFAULT_DUMPLING_CA_PATH, isBackupStale, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath } from "./backupService";
 import { getBackupDownloadName } from "./routers/backup";
 
 describe("backupService", () => {
@@ -97,5 +97,13 @@ describe("backupService", () => {
 
   it("usa um nome de download determinado pelo ID hexadecimal validado pelo router", () => {
     expect(getBackupDownloadName("a".repeat(48))).toBe(`walk-ajuda-backup-${"a".repeat(48)}.wajuda.enc`);
+  });
+
+  it("considera stale somente uma execução sem atualização há pelo menos 10 minutos", () => {
+    const now = Date.parse("2026-08-26T07:00:00.000Z");
+    expect(isBackupStale(new Date(now - BACKUP_STALE_AFTER_MS + 1), now)).toBe(false);
+    expect(isBackupStale(new Date(now - BACKUP_STALE_AFTER_MS), now)).toBe(true);
+    expect(isBackupStale(null, now)).toBe(false);
+    expect(isBackupStale("data inválida", now)).toBe(false);
   });
 });

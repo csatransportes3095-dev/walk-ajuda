@@ -14,6 +14,8 @@ import { systemBackups, type InsertSystemBackup } from "../drizzle/schema";
 export const BACKUP_ARTIFACT_PREFIX = "system-backups/";
 const BACKUP_SOURCE_ROOT = process.env.BACKUP_SOURCE_ROOT?.trim() || process.cwd();
 const MAX_CONCURRENT_BACKUPS = 1;
+export const BACKUP_HEARTBEAT_INTERVAL_MS = 30_000;
+export const BACKUP_STALE_AFTER_MS = 10 * 60_000;
 const DUMPLING_BINARY = process.env.BACKUP_DUMPLING_BINARY?.trim() || "dumpling";
 const DUMPLING_FILE_SIZE = "256MiB";
 export const DEFAULT_DUMPLING_CA_PATH = "/etc/ssl/certs/ca-certificates.crt";
@@ -400,6 +402,31 @@ async function updateRun(id: string, patch: Partial<InsertSystemBackup>) {
   await db.update(systemBackups).set(patch).where(eq(systemBackups.id, id));
 }
 
+export function isBackupStale(updatedAt: Date | string | number | null | undefined, now = Date.now()): boolean {
+  if (updatedAt === null || updatedAt === undefined) return false;
+  const timestamp = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
+  return Number.isFinite(timestamp) && now - timestamp >= BACKUP_STALE_AFTER_MS;
+}
+
+export async function reconcileStaleSystemBackups(now = new Date()): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const activeRows = await db
+    .select({ id: systemBackups.id, status: systemBackups.status, stage: systemBackups.stage, progress: systemBackups.progress, updatedAt: systemBackups.updatedAt })
+    .from(systemBackups)
+    .where(inArray(systemBackups.status, ["queued", "running"]));
+  const staleRows = activeRows.filter((row) => isBackupStale(row.updatedAt, now.getTime()));
+  for (const row of staleRows) {
+    await db.update(systemBackups).set({
+      status: "failed",
+      stage: "failed",
+      progress: 0,
+      errorMessage: "Execução interrompida após reinício do serviço; nenhum artefato foi validado.",
+    }).where(eq(systemBackups.id, row.id));
+  }
+  return staleRows.length;
+}
+
 async function listAllR2Objects(): Promise<R2ObjectInfo[]> {
   const objects: R2ObjectInfo[] = [];
   let continuationToken: string | undefined;
@@ -434,6 +461,10 @@ function summaryFromManifest(manifest: BackupManifest, archiveBytes: number, arc
 }
 
 async function executeBackup(id: string): Promise<void> {
+  const heartbeat = setInterval(() => {
+    void updateRun(id, { updatedAt: new Date() }).catch(() => undefined);
+  }, BACKUP_HEARTBEAT_INTERVAL_MS);
+  heartbeat.unref?.();
   const workDirectory = path.join("/tmp", `walk-ajuda-backup-${id}`);
   const databaseFile = path.join(workDirectory, "database.sql");
   const sourceFile = path.join(workDirectory, "source.tar.gz");
@@ -546,6 +577,7 @@ async function executeBackup(id: string): Promise<void> {
       errorMessage: message.slice(0, 1000),
     }).catch(() => undefined);
   } finally {
+    clearInterval(heartbeat);
     await rm(workDirectory, { recursive: true, force: true }).catch(() => undefined);
     await rm(encryptedFile, { force: true }).catch(() => undefined);
   }

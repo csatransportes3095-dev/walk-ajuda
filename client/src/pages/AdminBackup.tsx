@@ -61,6 +61,15 @@ export default function AdminBackup() {
     onError: (error) => toast.error(error.message || "Não foi possível enviar para o Google Drive."),
   });
 
+  const reconcileMut = trpc.backup.reconcileStale.useMutation({
+    onSuccess: ({ reconciled }) => {
+      if (reconciled > 0) toast.success(`${reconciled} execução(ões) abandonada(s) encerrada(s). O registro foi mantido no histórico.`);
+      else toast.info("Nenhuma execução abandonada foi encontrada. Um backup ainda ativo não foi alterado.");
+      void backupsQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível verificar a execução travada."),
+  });
+
   const activeBackup = useMemo(
     () => backupsQuery.data?.find((backup) => backup.status === "queued" || backup.status === "running"),
     [backupsQuery.data],
@@ -146,6 +155,20 @@ export default function AdminBackup() {
                 </div>
                 <div className="mt-4 h-2 overflow-hidden rounded-full bg-black/30">
                   <div className="h-full rounded-full bg-amber-300 transition-all" style={{ width: `${Math.max(0, Math.min(100, activeBackup.progress))}%` }} />
+                </div>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Encerrar somente se esta execução estiver travada há mais de 10 minutos? O registro será mantido e nenhum dado será apagado.")) reconcileMut.mutate();
+                    }}
+                    disabled={reconcileMut.isPending}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-300/30 bg-red-300/10 px-3 py-2 text-xs font-black text-red-100 hover:bg-red-300/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    {reconcileMut.isPending ? "Verificando..." : "Encerrar se estiver travado"}
+                  </button>
+                  <p className="text-[11px] leading-4 text-amber-100/70">Só altera execuções sem atualização há mais de 10 minutos. O histórico permanece.</p>
                 </div>
               </div>
             </div>
