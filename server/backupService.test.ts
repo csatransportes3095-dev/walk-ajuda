@@ -1,5 +1,8 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseDatabaseUrl, safeBackupObjectPath } from "./backupService";
+import { concatenateDumplingSqlFiles, orderDumplingSqlFiles, parseDatabaseUrl, safeBackupObjectPath } from "./backupService";
 import { getBackupDownloadName } from "./routers/backup";
 
 describe("backupService", () => {
@@ -18,6 +21,43 @@ describe("backupService", () => {
   it("rejeita protocolos e conexões incompletas", () => {
     expect(() => parseDatabaseUrl("postgres://user:pass@example.test/db")).toThrow(/MySQL\/TiDB/);
     expect(() => parseDatabaseUrl("mysql://user:pass@example.test/")).toThrow(/host, utilizador ou banco/);
+  });
+
+  it("ordena os arquivos SQL do Dumpling por dependência e ignora metadados não SQL", () => {
+    expect(orderDumplingSqlFiles([
+      "walk-ajuda.clientes.000000001.sql",
+      "walk-ajuda-schema-post.sql",
+      "metadata",
+      "walk-ajuda-schema-create.sql",
+      "walk-ajuda.pedidos-schema.sql",
+      "walk-ajuda.pedidos.000000000.sql",
+      "walk-ajuda-schema-trigger.sql",
+    ])).toEqual([
+      "walk-ajuda-schema-create.sql",
+      "walk-ajuda.pedidos-schema.sql",
+      "walk-ajuda.clientes.000000001.sql",
+      "walk-ajuda.pedidos.000000000.sql",
+      "walk-ajuda-schema-post.sql",
+      "walk-ajuda-schema-trigger.sql",
+    ]);
+  });
+
+  it("monta um database.sql compatível a partir da saída do Dumpling", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "wajuda-dumpling-test-"));
+    try {
+      await writeFile(path.join(directory, "walk-ajuda.pedidos.000000000.sql"), "INSERT INTO pedidos VALUES (1);\n");
+      await writeFile(path.join(directory, "walk-ajuda-schema-post.sql"), "CREATE INDEX idx_pedidos ON pedidos (id);\n");
+      await writeFile(path.join(directory, "walk-ajuda-schema-create.sql"), "CREATE DATABASE IF NOT EXISTS `walk_ajuda`;\n");
+      await writeFile(path.join(directory, "walk-ajuda.pedidos-schema.sql"), "CREATE TABLE `pedidos` (`id` INT);\n");
+      await concatenateDumplingSqlFiles(path.join(directory), path.join(directory, "database.sql"), "walk_ajuda");
+      const sql = await readFile(path.join(directory, "database.sql"), "utf8");
+      expect(sql.indexOf("CREATE DATABASE IF NOT EXISTS")).toBeLessThan(sql.indexOf("USE `walk_ajuda`;"));
+      expect(sql.indexOf("USE `walk_ajuda`;")).toBeLessThan(sql.indexOf("CREATE TABLE `pedidos`"));
+      expect(sql.indexOf("CREATE TABLE `pedidos`")).toBeLessThan(sql.indexOf("INSERT INTO pedidos"));
+      expect(sql.indexOf("INSERT INTO pedidos")).toBeLessThan(sql.indexOf("CREATE INDEX idx_pedidos"));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("impede path traversal ao copiar objetos do R2", () => {

@@ -1,6 +1,6 @@
 import { createHash, createCipheriv, randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { Readable, Transform, type TransformCallback } from "node:stream";
@@ -14,6 +14,8 @@ import { systemBackups, type InsertSystemBackup } from "../drizzle/schema";
 export const BACKUP_ARTIFACT_PREFIX = "system-backups/";
 const BACKUP_SOURCE_ROOT = process.env.BACKUP_SOURCE_ROOT?.trim() || process.cwd();
 const MAX_CONCURRENT_BACKUPS = 1;
+const DUMPLING_BINARY = process.env.BACKUP_DUMPLING_BINARY?.trim() || "dumpling";
+const DUMPLING_FILE_SIZE = "256MiB";
 
 type DatabaseConnectionInfo = {
   host: string;
@@ -35,6 +37,7 @@ export type BackupManifest = {
   sourceCommit: string;
   database: {
     engine: "mysql-compatible";
+    dumpTool: "dumpling";
     databaseName: string;
     tableCount: number;
     tables: Array<{ name: string; estimatedRows: number | null }>;
@@ -157,7 +160,7 @@ async function runProcess(command: string, args: string[], env: NodeJS.ProcessEn
   const child = spawn(command, args, {
     cwd: BACKUP_SOURCE_ROOT,
     env,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", stdoutFile ? "pipe" : "ignore", "pipe"],
   });
   let stderr = "";
   child.stderr?.on("data", (chunk) => {
@@ -176,6 +179,53 @@ async function runProcess(command: string, args: string[], env: NodeJS.ProcessEn
   });
 
   await Promise.all([outputPromise, exitPromise]);
+}
+
+function quoteSqlIdentifier(value: string): string {
+  if (!value || /[\0\r\n]/.test(value)) throw new Error("Nome de banco inválido para o dump.");
+  return `\`${value.replace(/`/g, "``")}\``;
+}
+
+export function orderDumplingSqlFiles(fileNames: string[]): string[] {
+  const rank = (name: string) => {
+    if (name.endsWith("-schema-create.sql")) return 10;
+    if (name.endsWith("-schema.sql")) return 20;
+    if (/-schema-(view|trigger|triggers|post)\.sql$/i.test(name)) return 40;
+    return 30;
+  };
+  return fileNames
+    .filter((name) => name.toLowerCase().endsWith(".sql"))
+    .slice()
+    .sort((left, right) => rank(left) - rank(right) || left.localeCompare(right));
+}
+
+export async function concatenateDumplingSqlFiles(outputDirectory: string, databaseFile: string, databaseName: string): Promise<void> {
+  const entries = await readdir(outputDirectory, { withFileTypes: true });
+  const sqlNames: string[] = [];
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) throw new Error(`Dumpling produziu link simbólico inesperado: ${entry.name}`);
+    if (entry.isFile() && entry.name.toLowerCase().endsWith(".sql")) sqlNames.push(entry.name);
+  }
+  const orderedSqlNames = orderDumplingSqlFiles(sqlNames);
+  if (orderedSqlNames.length === 0) throw new Error("Dumpling terminou sem produzir arquivos SQL.");
+
+  const output = await open(databaseFile, "wx");
+  try {
+    const hasSchemaCreate = orderedSqlNames.some((name) => name.endsWith("-schema-create.sql"));
+    if (!hasSchemaCreate) await output.write(Buffer.from(`USE ${quoteSqlIdentifier(databaseName)};\n`, "utf8"));
+    for (const name of orderedSqlNames) {
+      const input = createReadStream(path.join(outputDirectory, name));
+      for await (const chunk of input) {
+        await output.write(chunk as Buffer);
+      }
+      await output.write(Buffer.from("\n", "utf8"));
+      if (name.endsWith("-schema-create.sql")) {
+        await output.write(Buffer.from(`USE ${quoteSqlIdentifier(databaseName)};\n`, "utf8"));
+      }
+    }
+  } finally {
+    await output.close();
+  }
 }
 
 async function dumpDatabase(databaseFile: string): Promise<{ info: DatabaseConnectionInfo; tables: Array<{ name: string; estimatedRows: number | null }>; bytes: number; sha256: string }> {
@@ -204,24 +254,43 @@ async function dumpDatabase(databaseFile: string): Promise<{ info: DatabaseConne
     await metadataConnection.end();
   }
 
+  const outputDirectory = `${databaseFile}.dumpling`;
   const args = [
-    "--single-transaction",
-    "--quick",
-    "--routines",
-    "--events",
-    "--triggers",
-    "--hex-blob",
-    "--skip-lock-tables",
-    "--no-tablespaces",
     `--host=${info.host}`,
     `--port=${info.port}`,
     `--user=${info.user}`,
-    "--databases",
-    info.database,
+    `--password=${info.password}`,
+    `--database=${info.database}`,
+    `--output=${outputDirectory}`,
+    "--filetype=sql",
+    "--consistency=auto",
+    "--threads=2",
+    `--filesize=${DUMPLING_FILE_SIZE}`,
+    "--statement-size=1000000",
+    "--no-views=false",
+    "--compress=no-compression",
+    "--loglevel=warn",
   ];
-  if (info.useTls) args.push("--ssl");
-  await runProcess("mysqldump", args, { ...process.env, MYSQL_PWD: info.password }, databaseFile);
+  if (info.useTls) {
+    const caPath = process.env.BACKUP_DUMPLING_CA_PATH?.trim();
+    const certPath = process.env.BACKUP_DUMPLING_CERT_PATH?.trim();
+    const keyPath = process.env.BACKUP_DUMPLING_KEY_PATH?.trim();
+    if (!caPath || !certPath || !keyPath) {
+      throw new Error("Dumpling com TLS exige BACKUP_DUMPLING_CA_PATH, BACKUP_DUMPLING_CERT_PATH e BACKUP_DUMPLING_KEY_PATH.");
+    }
+    args.push(`--ca=${caPath}`, `--cert=${certPath}`, `--key=${keyPath}`);
+  }
+
+  try {
+    await mkdir(outputDirectory, { recursive: true });
+    await runProcess(DUMPLING_BINARY, args, { ...process.env });
+    await concatenateDumplingSqlFiles(outputDirectory, databaseFile, info.database);
+  } finally {
+    await rm(outputDirectory, { recursive: true, force: true }).catch(() => undefined);
+  }
+
   const fileInfo = await stat(databaseFile);
+  if (fileInfo.size <= 0) throw new Error("Dumpling produziu um database.sql vazio.");
   const sha256 = await sha256File(databaseFile);
   return { info, tables, bytes: fileInfo.size, sha256 };
 }
@@ -307,6 +376,7 @@ function summaryFromManifest(manifest: BackupManifest, archiveBytes: number, arc
     generatedAt: manifest.generatedAt,
     sourceCommit: manifest.sourceCommit,
     database: {
+      dumpTool: manifest.database.dumpTool,
       databaseName: manifest.database.databaseName,
       tableCount: manifest.database.tableCount,
       dumpBytes: manifest.database.dumpBytes,
@@ -362,6 +432,7 @@ async function executeBackup(id: string): Promise<void> {
       sourceCommit,
       database: {
         engine: "mysql-compatible",
+        dumpTool: "dumpling",
         databaseName: database.info.database,
         tableCount: database.tables.length,
         tables: database.tables,
@@ -389,7 +460,8 @@ async function executeBackup(id: string): Promise<void> {
       },
       verification: {
         checks: [
-          "mysqldump concluído com código zero",
+          "Dumpling concluído com código zero",
+          "arquivos SQL do Dumpling ordenados e concatenados deterministicamente",
           "inventário de tabelas capturado",
           "todos os objetos R2 paginados e comparados por tamanho",
           "SHA-256 calculado para cada objeto R2",
