@@ -1279,7 +1279,18 @@ function LoansTab() {
                                   <AlertTriangle className="w-4 h-4" />
                                   +Taxa
                                 </button>
-                              ) : null}
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled
+                                  title="A taxa de atraso fica disponível após o vencimento da parcela."
+                                  className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-muted/20 border border-border/40 text-muted-foreground/60 cursor-not-allowed text-xs font-semibold"
+                                >
+                                  <AlertTriangle className="w-4 h-4" />
+                                  <span>Taxa</span>
+                                  <span className="text-[10px] leading-none">Após vencimento</span>
+                                </button>
+                              )}
                               {/* Botão Avisar Parcela */}
                               {!loan.interestOnlyEnabled || !inst.isOverdue ? (
                                 <button
@@ -1320,7 +1331,18 @@ function LoansTab() {
                                   <AlertTriangle className="w-4 h-4" />
                                   +Taxa
                                 </button>
-                              ) : null}
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled
+                                  title="A taxa de atraso fica disponível após o vencimento da parcela."
+                                  className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-muted/20 border border-border/40 text-muted-foreground/60 cursor-not-allowed text-xs font-semibold"
+                                >
+                                  <AlertTriangle className="w-4 h-4" />
+                                  <span>Taxa</span>
+                                  <span className="text-[10px] leading-none">Após vencimento</span>
+                                </button>
+                              )}
                               <button
                                 className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all text-xs font-semibold active:scale-95"
                                 onClick={() => refusePayment.mutate({ installmentId: inst.id, reason: "Comprovante inválido" })}>

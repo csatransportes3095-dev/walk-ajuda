@@ -74,4 +74,16 @@ describe("sincronização da tela /gastos", () => {
     expect(clientLoans).toContain('refetchOnWindowFocus: true');
     expect(clientLoans).toContain('refetchInterval: 15000');
   });
+
+  it("mantém o card da taxa visível e desabilitado antes do vencimento", () => {
+    expect(adminLoans).toContain('title="A taxa de atraso fica disponível após o vencimento da parcela."');
+    expect(adminLoans).toContain('Após vencimento');
+    expect(adminLoans).toContain('disabled\n                                  title="A taxa de atraso fica disponível após o vencimento da parcela."');
+  });
+
+  it("mantém o botão +Taxa funcional somente para parcelas vencidas", () => {
+    expect(adminLoans).toContain(') : inst.isOverdue ? (');
+    expect(adminLoans).toContain('>\n                                  +Taxa\n                                </button>');
+    expect(loansRouter).toContain("if (dueDate >= getBrazilToday())");
+  });
 });
