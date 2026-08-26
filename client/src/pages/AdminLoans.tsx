@@ -3410,7 +3410,7 @@ function PixTab() {
   const { data: configs = [], isLoading } = trpc.loans.getPixConfig.useQuery();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ pixKey: "", pixKeyType: "cpf", pixName: "", bankName: "" });
-  const [passwordAction, setPasswordAction] = useState<"save" | "delete" | null>(null);
+  const [passwordAction, setPasswordAction] = useState<"openSave" | "save" | "delete" | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -3424,7 +3424,10 @@ function PixTab() {
   });
 
   const confirmPixAction = (password: string) => {
-    if (passwordAction === "save") {
+    if (passwordAction === "openSave") {
+      setShowForm(true);
+      setPasswordAction(null);
+    } else if (passwordAction === "save") {
       save.mutate({ ...form, pixKeyType: form.pixKeyType as any, editPassword: password });
     } else if (passwordAction === "delete" && deleteId !== null) {
       if (confirm("Remover esta chave PIX?")) del.mutate({ id: deleteId, editPassword: password });
@@ -3439,7 +3442,7 @@ function PixTab() {
           <h3 className="font-semibold">Chaves PIX para recebimento</h3>
           <p className="text-sm text-muted-foreground">A chave PIX ativa é exibida para o cliente na aba de empréstimos.</p>
         </div>
-        <Button size="sm" className="gap-1" onClick={() => setShowForm(true)}>
+        <Button size="sm" className="gap-1" onClick={() => showForm ? setShowForm(false) : setPasswordAction("openSave")}>
           <Plus className="w-4 h-4" />Adicionar PIX
         </Button>
       </div>
@@ -3500,7 +3503,7 @@ function PixTab() {
 
       <AdminActionPasswordDialog
         open={passwordAction !== null}
-        description={passwordAction === "delete" ? "Digite a senha para excluir esta chave PIX." : "Digite a senha para cadastrar esta chave PIX."}
+        description={passwordAction === "openSave" ? "Digite a senha para abrir o cadastro de uma chave PIX." : passwordAction === "delete" ? "Digite a senha para excluir esta chave PIX." : "Digite a senha para cadastrar esta chave PIX."}
         onCancel={() => { setPasswordAction(null); setDeleteId(null); }}
         onConfirm={confirmPixAction}
         isPending={save.isPending || del.isPending}
