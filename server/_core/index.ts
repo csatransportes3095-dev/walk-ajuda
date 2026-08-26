@@ -22,7 +22,7 @@ import { getSharePreviewProfile, sharePreviewProxyPath, type SharePreviewProfile
 import { publicSiteUrl } from "../../shared/publicLinks";
 import { bootstrapCardInvoices } from "../cardsBilling";
 import { getBackupDownload, getBackupDownloadName } from "../routers/backup";
-import { reconcileStaleSystemBackups } from "../backupService";
+import { reconcileBackupsAfterRestart } from "../backupService";
 import path from "path";
 import fs from "fs";
 
@@ -99,7 +99,7 @@ async function startServer() {
   }).catch((error) => {
     console.error('[LoanAccess] reconciliação de permissões não concluída:', error);
   });
-  void reconcileStaleSystemBackups().then((total) => {
+  void reconcileBackupsAfterRestart().then((total) => {
     if (total > 0) console.warn(`[Backup] ${total} execução(ões) abandonada(s) marcada(s) como falha técnica.`);
   }).catch((error) => {
     console.error('[Backup] reconciliação de execuções abandonadas não concluída:', error);

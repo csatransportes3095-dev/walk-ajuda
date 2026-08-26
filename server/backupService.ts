@@ -15,6 +15,7 @@ export const BACKUP_ARTIFACT_PREFIX = "system-backups/";
 const BACKUP_SOURCE_ROOT = process.env.BACKUP_SOURCE_ROOT?.trim() || process.cwd();
 const MAX_CONCURRENT_BACKUPS = 1;
 export const BACKUP_HEARTBEAT_INTERVAL_MS = 30_000;
+export const BACKUP_ARCHIVE_IDLE_TIMEOUT_MS = 10 * 60_000;
 export const BACKUP_STALE_AFTER_MS = 10 * 60_000;
 const DUMPLING_BINARY = process.env.BACKUP_DUMPLING_BINARY?.trim() || "dumpling";
 const DUMPLING_FILE_SIZE = "256MiB";
@@ -358,7 +359,8 @@ async function createSourceSnapshot(destination: string): Promise<{ bytes: numbe
   return { bytes: fileInfo.size, sha256 };
 }
 
-async function encryptTarDirectory(sourceDirectory: string, encryptedFile: string): Promise<void> {
+async function encryptTarDirectory(sourceDirectory: string, encryptedFile: string, signal?: AbortSignal): Promise<void> {
+  throwIfBackupAborted(signal);
   const key = getEncryptionKey();
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
@@ -372,6 +374,21 @@ async function encryptTarDirectory(sourceDirectory: string, encryptedFile: strin
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stderr = "";
+  let timedOut = false;
+  const stopTar = () => { tar.kill("SIGTERM"); };
+  let idleTimeout = setTimeout(() => {
+    timedOut = true;
+    stopTar();
+  }, BACKUP_ARCHIVE_IDLE_TIMEOUT_MS);
+  const resetIdleTimeout = () => {
+    clearTimeout(idleTimeout);
+    idleTimeout = setTimeout(() => {
+      timedOut = true;
+      stopTar();
+    }, BACKUP_ARCHIVE_IDLE_TIMEOUT_MS);
+  };
+  tar.stdout?.on("data", resetIdleTimeout);
+  signal?.addEventListener("abort", stopTar, { once: true });
   tar.stderr?.on("data", (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-4000); });
   try {
     await pipeline(tar.stdout!, cipher, output);
@@ -379,13 +396,19 @@ async function encryptTarDirectory(sourceDirectory: string, encryptedFile: strin
       tar.once("error", reject);
       tar.once("close", (code) => resolve(code ?? 1));
     });
+    if (timedOut) throw new Error("Cifragem do pacote ficou sem progresso por 10 minutos.");
+    throwIfBackupAborted(signal);
     if (exitCode !== 0) throw new Error(`tar terminou com código ${exitCode}: ${stderr.slice(-800)}`);
     const authTag = cipher.getAuthTag();
     await writeFile(encryptedFile, authTag, { flag: "a" });
   } catch (error) {
-    tar.kill("SIGTERM");
+    stopTar();
     await rm(encryptedFile, { force: true }).catch(() => undefined);
     throw error;
+  } finally {
+    clearTimeout(idleTimeout);
+    tar.stdout?.removeListener("data", resetIdleTimeout);
+    signal?.removeEventListener("abort", stopTar);
   }
 }
 
@@ -396,11 +419,17 @@ async function sha256File(filePath: string): Promise<string> {
   return hash.digest("hex");
 }
 
+function throwIfBackupAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("Backup encerrado antes da conclusão; nenhum artefato foi validado.");
+}
+
 async function updateRun(id: string, patch: Partial<InsertSystemBackup>) {
   const db = await getDb();
   if (!db) throw new Error("Banco indisponível para atualizar o histórico do backup.");
   await db.update(systemBackups).set(patch).where(eq(systemBackups.id, id));
 }
+
+const activeBackupControllers = new Map<string, AbortController>();
 
 export function isBackupStale(updatedAt: Date | string | number | null | undefined, now = Date.now()): boolean {
   if (updatedAt === null || updatedAt === undefined) return false;
@@ -417,6 +446,40 @@ export async function reconcileStaleSystemBackups(now = new Date()): Promise<num
     .where(inArray(systemBackups.status, ["queued", "running"]));
   const staleRows = activeRows.filter((row) => isBackupStale(row.updatedAt, now.getTime()));
   for (const row of staleRows) {
+    activeBackupControllers.get(row.id)?.abort();
+    await db.update(systemBackups).set({
+      status: "failed",
+      stage: "failed",
+      progress: 0,
+      errorMessage: "Execução encerrada por falta de atualização; nenhum artefato foi validado.",
+    }).where(eq(systemBackups.id, row.id));
+  }
+  return staleRows.length;
+}
+
+export async function cancelSystemBackup(id: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Banco indisponível para encerrar o backup.");
+  const [row] = await db.select({ status: systemBackups.status }).from(systemBackups).where(eq(systemBackups.id, id)).limit(1);
+  if (!row || (row.status !== "queued" && row.status !== "running")) return false;
+  activeBackupControllers.get(id)?.abort();
+  await db.update(systemBackups).set({
+    status: "failed",
+    stage: "failed",
+    progress: 0,
+    errorMessage: "Execução encerrada pelo administrador; nenhum artefato foi validado.",
+  }).where(and(eq(systemBackups.id, id), inArray(systemBackups.status, ["queued", "running"])));
+  return true;
+}
+
+export async function reconcileBackupsAfterRestart(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const activeRows = await db
+    .select({ id: systemBackups.id })
+    .from(systemBackups)
+    .where(inArray(systemBackups.status, ["queued", "running"]));
+  for (const row of activeRows) {
     await db.update(systemBackups).set({
       status: "failed",
       stage: "failed",
@@ -424,7 +487,7 @@ export async function reconcileStaleSystemBackups(now = new Date()): Promise<num
       errorMessage: "Execução interrompida após reinício do serviço; nenhum artefato foi validado.",
     }).where(eq(systemBackups.id, row.id));
   }
-  return staleRows.length;
+  return activeRows.length;
 }
 
 async function listAllR2Objects(): Promise<R2ObjectInfo[]> {
@@ -460,7 +523,7 @@ function summaryFromManifest(manifest: BackupManifest, archiveBytes: number, arc
   });
 }
 
-async function executeBackup(id: string): Promise<void> {
+async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
   const heartbeat = setInterval(() => {
     void updateRun(id, { updatedAt: new Date() }).catch(() => undefined);
   }, BACKUP_HEARTBEAT_INTERVAL_MS);
@@ -474,15 +537,18 @@ async function executeBackup(id: string): Promise<void> {
 
   try {
     getEncryptionKey();
+    throwIfBackupAborted(signal);
     await mkdir(filesDirectory, { recursive: true });
     await updateRun(id, { status: "running", stage: "database", progress: 5, startedAt: new Date(), errorMessage: null });
     const database = await dumpDatabase(databaseFile);
     await updateRun(id, { stage: "r2", progress: 20 });
+    throwIfBackupAborted(signal);
 
     const r2Objects = await listAllR2Objects();
     const r2Entries: BackupR2Entry[] = [];
     let totalR2Bytes = 0;
     for (let index = 0; index < r2Objects.length; index += 1) {
+      throwIfBackupAborted(signal);
       const object = r2Objects[index];
       const relativePath = safeBackupObjectPath(object.key);
       const result = await downloadR2Object(object.key, path.join(workDirectory, relativePath), object.size);
@@ -495,6 +561,7 @@ async function executeBackup(id: string): Promise<void> {
     }
 
     await updateRun(id, { stage: "source", progress: 80 });
+    throwIfBackupAborted(signal);
     const source = await createSourceSnapshot(sourceFile);
     const sourceCommit = process.env.RENDER_GIT_COMMIT?.trim() || process.env.COMMIT_SHA?.trim() || "unknown";
     const generatedAt = new Date().toISOString();
@@ -546,9 +613,11 @@ async function executeBackup(id: string): Promise<void> {
       },
     };
     await writeFile(manifestFile, JSON.stringify(manifest, null, 2), "utf8");
+    throwIfBackupAborted(signal);
 
     await updateRun(id, { stage: "archive", progress: 88 });
-    await encryptTarDirectory(workDirectory, encryptedFile);
+    clearInterval(heartbeat);
+    await encryptTarDirectory(workDirectory, encryptedFile, signal);
     const archiveInfo = await stat(encryptedFile);
     const archiveSha256 = await sha256File(encryptedFile);
     const artifactKey = `${BACKUP_ARTIFACT_PREFIX}${id}.wajuda.enc`;
@@ -561,6 +630,7 @@ async function executeBackup(id: string): Promise<void> {
       manifestJson: summaryFromManifest(manifest, archiveInfo.size, archiveSha256),
     });
     await r2PutObjectStream(artifactKey, createReadStream(encryptedFile), "application/octet-stream", archiveInfo.size);
+    throwIfBackupAborted(signal);
     await updateRun(id, {
       status: "completed",
       stage: "completed",
@@ -578,6 +648,7 @@ async function executeBackup(id: string): Promise<void> {
     }).catch(() => undefined);
   } finally {
     clearInterval(heartbeat);
+    activeBackupControllers.delete(id);
     await rm(workDirectory, { recursive: true, force: true }).catch(() => undefined);
     await rm(encryptedFile, { force: true }).catch(() => undefined);
   }
@@ -601,7 +672,9 @@ export async function startSystemBackup(initiatedBy?: string | null) {
     progress: 0,
     initiatedBy: initiatedBy?.slice(0, 128) || "admin",
   });
-  void executeBackup(id);
+  const controller = new AbortController();
+  activeBackupControllers.set(id, controller);
+  void executeBackup(id, controller.signal);
   return { accepted: true as const, id };
 }
 

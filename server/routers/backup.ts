@@ -6,6 +6,7 @@ import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
 import { getAdminJwtSecret } from "../adminJwt";
 import {
+  cancelSystemBackup,
   getSystemBackup,
   isBackupEncryptionConfigured,
   isGoogleDriveBackupConfigured,
@@ -46,6 +47,12 @@ export const backupRouter = router({
   reconcileStale: adminProcedure.mutation(async () => ({
     reconciled: await reconcileStaleSystemBackups(),
   })),
+
+  cancel: adminProcedure
+    .input(z.object({ id: z.string().regex(/^[a-f0-9]{48}$/i) }))
+    .mutation(async ({ input }) => ({
+      cancelled: await cancelSystemBackup(input.id),
+    })),
 
   sendToDrive: adminProcedure
     .input(z.object({ id: z.string().regex(/^[a-f0-9]{48}$/i) }))

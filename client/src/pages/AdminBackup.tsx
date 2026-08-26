@@ -61,13 +61,12 @@ export default function AdminBackup() {
     onError: (error) => toast.error(error.message || "Não foi possível enviar para o Google Drive."),
   });
 
-  const reconcileMut = trpc.backup.reconcileStale.useMutation({
-    onSuccess: ({ reconciled }) => {
-      if (reconciled > 0) toast.success(`${reconciled} execução(ões) abandonada(s) encerrada(s). O registro foi mantido no histórico.`);
-      else toast.info("Nenhuma execução abandonada foi encontrada. Um backup ainda ativo não foi alterado.");
+  const cancelMut = trpc.backup.cancel.useMutation({
+    onSuccess: ({ cancelled }) => {
+      toast.success(cancelled ? "Execução encerrada. O registro foi mantido e nenhum artefato foi validado." : "Essa execução já não está ativa.");
       void backupsQuery.refetch();
     },
-    onError: (error) => toast.error(error.message || "Não foi possível verificar a execução travada."),
+    onError: (error) => toast.error(error.message || "Não foi possível encerrar a execução."),
   });
 
   const activeBackup = useMemo(
@@ -160,15 +159,15 @@ export default function AdminBackup() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (window.confirm("Encerrar somente se esta execução estiver travada há mais de 10 minutos? O registro será mantido e nenhum dado será apagado.")) reconcileMut.mutate();
+                      if (window.confirm("Encerrar esta execução? Ela será marcada como falha técnica, o registro será mantido e nenhum dado será apagado.")) cancelMut.mutate({ id: activeBackup.id });
                     }}
-                    disabled={reconcileMut.isPending}
+                    disabled={cancelMut.isPending}
                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-300/30 bg-red-300/10 px-3 py-2 text-xs font-black text-red-100 hover:bg-red-300/20 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <AlertTriangle className="h-4 w-4" />
-                    {reconcileMut.isPending ? "Verificando..." : "Encerrar se estiver travado"}
+                    {cancelMut.isPending ? "Encerrando..." : "Cancelar execução"}
                   </button>
-                  <p className="text-[11px] leading-4 text-amber-100/70">Só altera execuções sem atualização há mais de 10 minutos. O histórico permanece.</p>
+                  <p className="text-[11px] leading-4 text-amber-100/70">Encerra somente esta execução. O histórico permanece e nenhum dado do sistema é apagado.</p>
                 </div>
               </div>
             </div>
