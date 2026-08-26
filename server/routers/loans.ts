@@ -653,12 +653,16 @@ export const loanRouter = router({
 
   savePixConfig: adminProcedure.input(z.object({
     id: z.number().optional(),
+    editPassword: z.string().min(1),
     pixKey: z.string().min(1),
     pixKeyType: z.enum(["cpf", "cnpj", "telefone", "email", "aleatoria"]),
     pixName: z.string().min(1),
     bankName: z.string().optional(),
     isActive: z.number().default(1),
   })).mutation(async ({ input }) => {
+    if (!isLoanEditPasswordValid(input.editPassword)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
+    }
     const db = await getDb() as any;
     if (input.id) {
       await db.execute(drizzleSql`UPDATE loanPixConfig SET pixKey=${input.pixKey}, pixKeyType=${input.pixKeyType}, pixName=${input.pixName}, bankName=${input.bankName || null}, isActive=${input.isActive}, updatedAt=NOW() WHERE id=${input.id}`);
@@ -668,7 +672,10 @@ export const loanRouter = router({
     return { ok: true };
   }),
 
-  deletePixConfig: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+  deletePixConfig: adminProcedure.input(z.object({ id: z.number(), editPassword: z.string().min(1) })).mutation(async ({ input }) => {
+    if (!isLoanEditPasswordValid(input.editPassword)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
+    }
     const db = await getDb() as any;
     await db.execute(drizzleSql`DELETE FROM loanPixConfig WHERE id=${input.id}`);
     return { ok: true };

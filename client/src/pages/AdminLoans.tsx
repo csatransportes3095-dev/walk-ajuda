@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
+import AdminActionPasswordDialog from "@/components/AdminActionPasswordDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -3409,16 +3410,26 @@ function PixTab() {
   const { data: configs = [], isLoading } = trpc.loans.getPixConfig.useQuery();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ pixKey: "", pixKeyType: "cpf", pixName: "", bankName: "" });
+  const [passwordAction, setPasswordAction] = useState<"save" | "delete" | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const save = trpc.loans.savePixConfig.useMutation({
-    onSuccess: () => { toast.success("PIX salvo!"); setShowForm(false); setForm({ pixKey: "", pixKeyType: "cpf", pixName: "", bankName: "" }); utils.loans.getPixConfig.invalidate(); },
+    onSuccess: () => { toast.success("PIX salvo!"); setShowForm(false); setPasswordAction(null); setForm({ pixKey: "", pixKeyType: "cpf", pixName: "", bankName: "" }); utils.loans.getPixConfig.invalidate(); },
     onError: (e) => toast.error(e.message),
   });
   const del = trpc.loans.deletePixConfig.useMutation({
-    onSuccess: () => { toast.success("PIX removido."); utils.loans.getPixConfig.invalidate(); },
+    onSuccess: () => { toast.success("PIX removido."); setPasswordAction(null); setDeleteId(null); utils.loans.getPixConfig.invalidate(); },
     onError: (e) => toast.error(e.message),
   });
+
+  const confirmPixAction = (password: string) => {
+    if (passwordAction === "save") {
+      save.mutate({ ...form, pixKeyType: form.pixKeyType as any, editPassword: password });
+    } else if (passwordAction === "delete" && deleteId !== null) {
+      del.mutate({ id: deleteId, editPassword: password });
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -3443,7 +3454,7 @@ function PixTab() {
                 <p className="text-xs text-muted-foreground">{c.pixName}{c.bankName ? ` · ${c.bankName}` : ""} · {c.pixKeyType.toUpperCase()}</p>
               </div>
               <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-300"
-                onClick={() => { if (confirm("Remover esta chave PIX?")) del.mutate({ id: c.id }); }}>
+                onClick={() => { if (confirm("Remover esta chave PIX?")) { setDeleteId(c.id); setPasswordAction("delete"); } }}>
                 <XCircle className="w-4 h-4" />
               </Button>
             </div>
@@ -3479,12 +3490,20 @@ function PixTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-            <Button onClick={() => save.mutate({ ...form, pixKeyType: form.pixKeyType as any })} disabled={!form.pixKey || !form.pixName || save.isPending}>
+            <Button onClick={() => setPasswordAction("save")} disabled={!form.pixKey || !form.pixName || save.isPending}>
               {save.isPending ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AdminActionPasswordDialog
+        open={passwordAction !== null}
+        description={passwordAction === "delete" ? "Digite a senha para excluir esta chave PIX." : "Digite a senha para cadastrar esta chave PIX."}
+        onCancel={() => { setPasswordAction(null); setDeleteId(null); }}
+        onConfirm={confirmPixAction}
+        isPending={save.isPending || del.isPending}
+      />
     </div>
   );
 }

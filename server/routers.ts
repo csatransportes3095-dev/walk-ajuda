@@ -53,6 +53,7 @@ import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfter
 import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
 import { isRecoveredCustomerName } from "../shared/customerProfile";
+import { isLoanEditPasswordValid } from "./loanEditAuthorization";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "./_core/sendMailDirect";
@@ -7122,12 +7123,22 @@ export const appRouter = router({
 
   // === CONTAS PIX ===
   pix: router({
+    authorize: adminProcedure
+      .input(z.object({ password: z.string().min(1) }))
+      .mutation(({ input }) => {
+        if (!isLoanEditPasswordValid(input.password)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
+        }
+        return { ok: true };
+      }),
+
     list: adminProcedure.query(async () => await listPixAccounts()),
 
     getActive: publicProcedure.query(async () => await getActivePixAccount()),
 
     create: adminProcedure
       .input(z.object({
+        editPassword: z.string().min(1),
         label: z.string().min(1),
         pixKey: z.string().min(1),
         pixType: z.string().min(1),
@@ -7135,13 +7146,18 @@ export const appRouter = router({
         pixBank: z.string().default(''),
       }))
       .mutation(async ({ input }) => {
-        const account = await createPixAccount(input);
+        if (!isLoanEditPasswordValid(input.editPassword)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
+        }
+        const { editPassword: _editPassword, ...data } = input;
+        const account = await createPixAccount(data);
         return { success: true, account };
       }),
 
     update: adminProcedure
       .input(z.object({
         id: z.number(),
+        editPassword: z.string().min(1),
         label: z.string().optional(),
         pixKey: z.string().optional(),
         pixType: z.string().optional(),
@@ -7149,21 +7165,30 @@ export const appRouter = router({
         pixBank: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        const { id, ...data } = input;
+        if (!isLoanEditPasswordValid(input.editPassword)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
+        }
+        const { id, editPassword: _editPassword, ...data } = input;
         await updatePixAccount(id, data);
         return { success: true };
       }),
 
     setActive: adminProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number(), editPassword: z.string().min(1) }))
       .mutation(async ({ input }) => {
+        if (!isLoanEditPasswordValid(input.editPassword)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
+        }
         await setActivePixAccount(input.id);
         return { success: true };
       }),
 
     delete: adminProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number(), editPassword: z.string().min(1) }))
       .mutation(async ({ input }) => {
+        if (!isLoanEditPasswordValid(input.editPassword)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
+        }
         await deletePixAccount(input.id);
         return { success: true };
       }),

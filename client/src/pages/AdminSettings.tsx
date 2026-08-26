@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Save, Globe, CreditCard, Layout, MessageSquare, Star, Clock, LogIn, Upload, Trash2, Eye, EyeOff, Camera, ShieldCheck, Share2, ImageIcon, Plus, CheckCircle2, Circle, Pencil, X, Check, Smartphone, Info, RotateCcw, Wrench, DatabaseBackup } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
+import AdminActionPasswordDialog from "@/components/AdminActionPasswordDialog";
 import { ImageCropModal } from "@/components/ImageCropModal";
 import { HomeButtonsManager } from "@/components/HomeButtonsManager";
 import { SharePreviewSettings } from "@/components/SharePreviewSettings";
@@ -77,14 +78,28 @@ export default function AdminSettings() {
   // === PIX ACCOUNTS ===
   type PixAccount = { id: number; label: string; pixKey: string; pixType: string; pixName: string; pixBank: string; isActive: number; createdAt: Date };
   const { data: pixAccounts = [], refetch: refetchPix } = trpc.pix.list.useQuery();
-  const createPixMut = trpc.pix.create.useMutation({ onSuccess: () => { toast.success('Conta PIX criada!'); refetchPix(); setShowNewPixForm(false); setNewPix({ label: '', pixKey: '', pixType: 'TELEFONE', pixName: '', pixBank: '' }); }, onError: () => toast.error('Erro ao criar conta PIX') });
-  const updatePixMut = trpc.pix.update.useMutation({ onSuccess: () => { toast.success('Conta PIX atualizada!'); refetchPix(); setEditingPixId(null); }, onError: () => toast.error('Erro ao atualizar') });
-  const setActivePixMut = trpc.pix.setActive.useMutation({ onSuccess: () => { toast.success('Conta PIX ativada!'); refetchPix(); }, onError: () => toast.error('Erro ao ativar') });
-  const deletePixMut = trpc.pix.delete.useMutation({ onSuccess: () => { toast.success('Conta PIX removida!'); refetchPix(); }, onError: () => toast.error('Erro ao remover') });
   const [showNewPixForm, setShowNewPixForm] = useState(false);
   const [newPix, setNewPix] = useState({ label: '', pixKey: '', pixType: 'TELEFONE', pixName: '', pixBank: '' });
   const [editingPixId, setEditingPixId] = useState<number | null>(null);
   const [editPix, setEditPix] = useState<{ label: string; pixKey: string; pixType: string; pixName: string; pixBank: string }>({ label: '', pixKey: '', pixType: 'TELEFONE', pixName: '', pixBank: '' });
+  const [pixPasswordAction, setPixPasswordAction] = useState<'create' | 'update' | 'activate' | 'delete' | null>(null);
+  const [pixActionId, setPixActionId] = useState<number | null>(null);
+  const clearPixPasswordAction = () => { setPixPasswordAction(null); setPixActionId(null); };
+  const createPixMut = trpc.pix.create.useMutation({ onSuccess: () => { toast.success('Conta PIX criada!'); refetchPix(); setShowNewPixForm(false); setNewPix({ label: '', pixKey: '', pixType: 'TELEFONE', pixName: '', pixBank: '' }); clearPixPasswordAction(); }, onError: (error) => toast.error(error.message) });
+  const updatePixMut = trpc.pix.update.useMutation({ onSuccess: () => { toast.success('Conta PIX atualizada!'); refetchPix(); setEditingPixId(null); clearPixPasswordAction(); }, onError: (error) => toast.error(error.message) });
+  const setActivePixMut = trpc.pix.setActive.useMutation({ onSuccess: () => { toast.success('Conta PIX ativada!'); refetchPix(); clearPixPasswordAction(); }, onError: (error) => toast.error(error.message) });
+  const deletePixMut = trpc.pix.delete.useMutation({ onSuccess: () => { toast.success('Conta PIX removida!'); refetchPix(); clearPixPasswordAction(); }, onError: (error) => toast.error(error.message) });
+  const confirmPixPassword = (password: string) => {
+    if (pixPasswordAction === 'create') {
+      createPixMut.mutate({ ...newPix, editPassword: password });
+    } else if (pixPasswordAction === 'update' && pixActionId !== null) {
+      updatePixMut.mutate({ id: pixActionId, ...editPix, editPassword: password });
+    } else if (pixPasswordAction === 'activate' && pixActionId !== null) {
+      setActivePixMut.mutate({ id: pixActionId, editPassword: password });
+    } else if (pixPasswordAction === 'delete' && pixActionId !== null) {
+      deletePixMut.mutate({ id: pixActionId, editPassword: password });
+    }
+  };
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"page" | "login" | "pix" | "contact" | "features" | "advanced" | "photo" | "security" | "og" | "trackingForm" | "whatsappOrder" | "whatsappLogin" | "apk" | "maintenance">("page");
@@ -1162,7 +1177,7 @@ export default function AdminSettings() {
                   </div>
                 </div>
                 <div className="flex gap-2 pt-1">
-                  <Button onClick={() => createPixMut.mutate(newPix)} disabled={createPixMut.isPending || !newPix.label || !newPix.pixKey || !newPix.pixName} className="bg-green-600 hover:bg-green-700 text-white text-xs px-4 py-2 h-auto flex items-center gap-1">
+                  <Button onClick={() => setPixPasswordAction('create')} disabled={createPixMut.isPending || !newPix.label || !newPix.pixKey || !newPix.pixName} className="bg-green-600 hover:bg-green-700 text-white text-xs px-4 py-2 h-auto flex items-center gap-1">
                     <Check className="w-3.5 h-3.5" /> {createPixMut.isPending ? 'Salvando...' : 'Salvar'}
                   </Button>
                   <Button onClick={() => setShowNewPixForm(false)} className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-4 py-2 h-auto flex items-center gap-1">
@@ -1191,14 +1206,14 @@ export default function AdminSettings() {
                   </div>
                   <div className="flex items-center gap-1">
                     {acc.isActive !== 1 && (
-                      <Button onClick={() => setActivePixMut.mutate({ id: acc.id })} disabled={setActivePixMut.isPending} className="bg-green-600/20 hover:bg-green-600/40 text-green-400 text-xs px-2 py-1 h-auto border border-green-500/30">
+                      <Button onClick={() => { setPixActionId(acc.id); setPixPasswordAction('activate'); }} disabled={setActivePixMut.isPending} className="bg-green-600/20 hover:bg-green-600/40 text-green-400 text-xs px-2 py-1 h-auto border border-green-500/30">
                         Ativar
                       </Button>
                     )}
                     <Button onClick={() => { setEditingPixId(acc.id); setEditPix({ label: acc.label, pixKey: acc.pixKey, pixType: acc.pixType, pixName: acc.pixName, pixBank: acc.pixBank }); }} className="bg-white/5 hover:bg-white/10 text-gray-300 text-xs px-2 py-1 h-auto">
                       <Pencil className="w-3 h-3" />
                     </Button>
-                    <Button onClick={() => { if (confirm('Remover esta conta PIX?')) deletePixMut.mutate({ id: acc.id }); }} disabled={deletePixMut.isPending} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs px-2 py-1 h-auto">
+                    <Button onClick={() => { if (confirm('Remover esta conta PIX?')) { setPixActionId(acc.id); setPixPasswordAction('delete'); } }} disabled={deletePixMut.isPending} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs px-2 py-1 h-auto">
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -1244,7 +1259,7 @@ export default function AdminSettings() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={() => updatePixMut.mutate({ id: acc.id, ...editPix })} disabled={updatePixMut.isPending} className="bg-green-600 hover:bg-green-700 text-white text-xs px-4 py-2 h-auto flex items-center gap-1">
+                      <Button onClick={() => { setPixActionId(acc.id); setPixPasswordAction('update'); }} disabled={updatePixMut.isPending} className="bg-green-600 hover:bg-green-700 text-white text-xs px-4 py-2 h-auto flex items-center gap-1">
                         <Check className="w-3.5 h-3.5" /> {updatePixMut.isPending ? 'Salvando...' : 'Salvar'}
                       </Button>
                       <Button onClick={() => setEditingPixId(null)} className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-4 py-2 h-auto flex items-center gap-1">
@@ -1657,6 +1672,14 @@ export default function AdminSettings() {
           </Button>
         </div>
         )}
+
+        <AdminActionPasswordDialog
+          open={pixPasswordAction !== null}
+          description={pixPasswordAction === 'create' ? 'Digite a senha para cadastrar esta conta PIX.' : pixPasswordAction === 'update' ? 'Digite a senha para salvar a alteração desta conta PIX.' : pixPasswordAction === 'activate' ? 'Digite a senha para ativar esta conta PIX.' : 'Digite a senha para excluir esta conta PIX.'}
+          onCancel={clearPixPasswordAction}
+          onConfirm={confirmPixPassword}
+          isPending={createPixMut.isPending || updatePixMut.isPending || setActivePixMut.isPending || deletePixMut.isPending}
+        />
       </div>
     </div>
   );
