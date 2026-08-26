@@ -9,6 +9,7 @@ import {
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { isValidCPF, normalizeCpf } from '@shared/cpf';
+import { ReferralAccessManifest } from '@/components/ReferralAccessManifest';
 
 interface GastosLoginPageProps {
   onLoginSuccess: (token: string, clientId: number, clientName: string) => void;
@@ -21,7 +22,8 @@ type CheckRoute = Exclude<AccessRoute, 'acompanhar'>;
 
 type Step =
   | 'phone'             // Etapa 1: digitar telefone
-  | 'register'          // Etapa 1b: cadastro completo (não encontrado)
+  | 'referral'          // Etapa 1b: indicação obrigatória para cadastro novo
+  | 'register'          // Etapa 1c: cadastro completo (não encontrado)
   | 'register_done'     // Cadastro concluído — aguardar senha
   | 'create_password'   // Etapa 2: criar senha
   | 'enter_password'    // Etapa 2b: digitar senha existente
@@ -88,6 +90,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   const [regUf, setRegUf] = useState('');
   const [regPhoto, setRegPhoto] = useState<File | null>(null);
   const [regPhotoPreview, setRegPhotoPreview] = useState<string | null>(null);
+  const [regReferralPhone, setRegReferralPhone] = useState('');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -159,9 +162,11 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
       switch (result.status) {
         case 'not_found':
           setProfileUpdateLookup(null);
-          // Pré-preencher o telefone no formulário de cadastro novo.
+          setRegReferralPhone('');
+          setRegCpf(cleanCpf);
+          // O novo cadastro usa o mesmo gate de indicação das demais rotas.
           setRegPhone(cleanPhone);
-          setStep('register');
+          setStep('referral');
           break;
         case 'blocked':
           setStep('blocked');
@@ -225,6 +230,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
 
     const cleanPhone = regPhone.replace(/\D/g, '');
     const cleanCpf = regCpf.replace(/\D/g, '');
+    const cleanReferralPhone = normalizePhone(regReferralPhone);
 
     if (!regName.trim()) { setError('Informe seu nome completo'); return; }
     if (cleanPhone.length < 10) { setError('Informe um telefone válido'); return; }
@@ -232,6 +238,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
     if (!regEmail.trim() || !regEmail.includes('@')) { setError('Informe um e-mail válido'); return; }
     if (!profileUpdateLookup && !regCity.trim()) { setError('Informe sua cidade'); return; }
     if (!profileUpdateLookup && (!regUf.trim() || regUf.length !== 2)) { setError('Informe o estado (UF) com 2 letras'); return; }
+    if (!profileUpdateLookup && cleanReferralPhone.length < 10) { setError('Informe o telefone com DDD de quem indicou você'); return; }
     if (isMissingProfileField('photo') && !regPhoto) { setError('Selecione uma foto de perfil'); return; }
 
     setIsLoading(true);
@@ -260,7 +267,13 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
       };
       const result = profileUpdateLookup
         ? await completeProfileMutation.mutateAsync({ ...payload, lookupIdentifier: profileUpdateLookup.identifier, lookupIsCpf: profileUpdateLookup.isCpf })
-        : await registerMutation.mutateAsync({ ...payload, city: regCity.trim(), uf: regUf.toUpperCase().slice(0, 2), sourceRoute: requestedCheckRoute });
+        : await registerMutation.mutateAsync({
+          ...payload,
+          city: regCity.trim(),
+          uf: regUf.toUpperCase().slice(0, 2),
+          referredByPhone: cleanReferralPhone,
+          sourceRoute: requestedCheckRoute,
+        });
 
       if ("blocked" in result && result.blocked) {
         setError(result.message || 'Cadastro não permitido.');
@@ -379,12 +392,27 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
     setConfirmPassword('');
     setError('');
     setPasswordCreated(false);
+    setRegReferralPhone('');
     setProfileUpdateLookup(null);
     setAllowedRoutes([]);
     setRestrictedPhone('');
   };
 
   const UF_LIST = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+
+  if (step === 'referral') {
+    return (
+      <ReferralAccessManifest
+        initialPhone={regPhone}
+        onGranted={({ phone: verifiedPhone, referralPhone }) => {
+          setRegPhone(verifiedPhone);
+          setRegReferralPhone(referralPhone || '');
+          setError('');
+          setStep('register');
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#070a16] via-[#0a0f22] to-[#070a16] text-foreground flex items-center justify-center p-4">
@@ -555,6 +583,8 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
                 />
               </div>}
 
+
+
               {/* Cidade + UF */}
               {!profileUpdateLookup && <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
@@ -584,7 +614,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
 
               <Button
                 type="submit"
-                disabled={isLoading || !regName || (isMissingProfileField('photo') && !regPhoto) || regPhone.replace(/\D/g,'').length < 10 || !regCpfValid || !regEmail || (!profileUpdateLookup && (!regCity || !regUf))}
+                disabled={isLoading || !regName || (isMissingProfileField('photo') && !regPhoto) || regPhone.replace(/\D/g,'').length < 10 || !regCpfValid || !regEmail || (!profileUpdateLookup && (!regCity || !regUf || regReferralPhone.replace(/\D/g, '').length < 10))}
                 className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg mt-1"
               >
                 {isLoading
