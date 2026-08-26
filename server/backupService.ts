@@ -16,6 +16,7 @@ const BACKUP_SOURCE_ROOT = process.env.BACKUP_SOURCE_ROOT?.trim() || process.cwd
 const MAX_CONCURRENT_BACKUPS = 1;
 const DUMPLING_BINARY = process.env.BACKUP_DUMPLING_BINARY?.trim() || "dumpling";
 const DUMPLING_FILE_SIZE = "256MiB";
+export const DEFAULT_DUMPLING_CA_PATH = "/etc/ssl/certs/ca-certificates.crt";
 
 type DatabaseConnectionInfo = {
   host: string;
@@ -182,12 +183,9 @@ async function runProcess(command: string, args: string[], env: NodeJS.ProcessEn
 }
 
 export function resolveDumplingTlsPaths(caRaw: string | undefined, certRaw: string | undefined, keyRaw: string | undefined) {
-  const caPath = caRaw?.trim() || "";
+  const caPath = caRaw?.trim() || DEFAULT_DUMPLING_CA_PATH;
   const certPath = certRaw?.trim() || "";
   const keyPath = keyRaw?.trim() || "";
-  if (!caPath) {
-    throw new Error("Dumpling com TLS exige BACKUP_DUMPLING_CA_PATH.");
-  }
   if ((certPath && !keyPath) || (!certPath && keyPath)) {
     throw new Error("BACKUP_DUMPLING_CERT_PATH e BACKUP_DUMPLING_KEY_PATH devem ser configurados em par.");
   }

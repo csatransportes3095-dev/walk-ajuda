@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { concatenateDumplingSqlFiles, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath } from "./backupService";
+import { concatenateDumplingSqlFiles, DEFAULT_DUMPLING_CA_PATH, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath } from "./backupService";
 import { getBackupDownloadName } from "./routers/backup";
 
 describe("backupService", () => {
@@ -32,6 +32,15 @@ describe("backupService", () => {
     });
   });
 
+  it("usa a CA do trust store do sistema quando não há CA customizada", () => {
+    expect(resolveDumplingTlsPaths(undefined, undefined, undefined)).toEqual({
+      caPath: DEFAULT_DUMPLING_CA_PATH,
+      certPath: "",
+      keyPath: "",
+      useEphemeralClientCertificate: true,
+    });
+  });
+
   it("aceita certificado e chave de cliente somente como par", () => {
     expect(resolveDumplingTlsPaths("/run/secrets/ca.pem", "/run/secrets/client.pem", "/run/secrets/client.key")).toMatchObject({
       caPath: "/run/secrets/ca.pem",
@@ -40,7 +49,6 @@ describe("backupService", () => {
       useEphemeralClientCertificate: false,
     });
     expect(() => resolveDumplingTlsPaths("/run/secrets/ca.pem", "/run/secrets/client.pem", undefined)).toThrow(/par/);
-    expect(() => resolveDumplingTlsPaths(undefined, undefined, undefined)).toThrow(/CA_PATH/);
   });
 
   it("ordena os arquivos SQL do Dumpling por dependência e ignora metadados não SQL", () => {
