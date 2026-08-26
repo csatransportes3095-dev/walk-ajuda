@@ -3,6 +3,7 @@ import { ArrowLeft, ShieldCheck, UserCheck, UsersRound } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 
 type Screen = 'phone' | 'referral' | 'blocked';
+type BlockedReason = 'customer_blocked' | 'invalid_referral';
 
 export type ReferralAccessResult = {
   phone: string;
@@ -41,6 +42,7 @@ export function ReferralAccessManifest({
   const [phone, setPhone] = useState(() => normalizeBrazilPhone(initialPhone));
   const [referralPhone, setReferralPhone] = useState('');
   const [message, setMessage] = useState('');
+  const [blockedReason, setBlockedReason] = useState<BlockedReason | null>(null);
   const start = trpc.onlineSupport.entryStartByPhone.useMutation();
 
   const validatePhone = async () => {
@@ -51,10 +53,12 @@ export function ReferralAccessManifest({
     }
     try {
       setMessage('');
+      setBlockedReason(null);
       const result = await start.mutateAsync({ phone: normalized });
       if (result.status === 'blocked') {
         setScreen('blocked');
-        setMessage('Este cadastro não possui acesso ao sistema.');
+        setBlockedReason('customer_blocked');
+        setMessage('Este cadastro foi bloqueado pelo administrador e não possui acesso às rotas do sistema.');
         return;
       }
       if (result.status === 'existing') {
@@ -79,29 +83,48 @@ export function ReferralAccessManifest({
       const result = await start.mutateAsync({ phone: digits(phone), referralPhone: normalizedReferral });
       if (result.status !== 'referral_valid') {
         setScreen('blocked');
+        setBlockedReason('invalid_referral');
         setMessage('Sem indicação válida, não é possível acessar o sistema.');
         return;
       }
       onGranted({ phone: result.phone, referralPhone: result.referralPhone });
     } catch {
       setScreen('blocked');
+      setBlockedReason('invalid_referral');
       setMessage('Sem indicação válida, não é possível acessar o sistema.');
     }
   };
 
   const retryReferral = () => {
+    if (blockedReason === 'customer_blocked') {
+      setScreen('phone');
+      setPhone('');
+      setReferralPhone('');
+      setMessage('');
+      setBlockedReason(null);
+      return;
+    }
     setScreen('referral');
     setMessage('');
     setReferralPhone('');
+    setBlockedReason(null);
   };
 
   const pending = start.isPending;
-  const title = screen === 'phone' ? 'Antes de continuar' : screen === 'referral' ? 'Quem indicou você?' : 'Acesso não liberado';
+  const title = screen === 'phone'
+    ? 'Antes de continuar'
+    : screen === 'referral'
+      ? 'Quem indicou você?'
+      : blockedReason === 'customer_blocked'
+        ? 'Cadastro bloqueado'
+        : 'Acesso não liberado';
   const description = screen === 'phone'
     ? 'Informe seu telefone com DDD para acessar o sistema.'
     : screen === 'referral'
       ? 'Para um novo acesso, informe o telefone com DDD de quem indicou você.'
-      : message || 'Sem indicação válida, não é possível acessar o sistema.';
+      : blockedReason === 'customer_blocked'
+        ? 'Este cadastro foi bloqueado pelo administrador. O acesso às rotas do sistema está suspenso.'
+        : message || 'Sem indicação válida, não é possível acessar o sistema.';
 
   return <div className="min-h-screen bg-[#0a0a1a] flex flex-col items-center justify-center relative overflow-hidden px-6 py-8">
     <div className="absolute inset-0 bg-gradient-to-br from-purple-900/15 via-transparent to-blue-900/15" />
@@ -132,7 +155,9 @@ export function ReferralAccessManifest({
 
         {screen === 'blocked' && <>
           <p className="text-red-200 text-sm text-center leading-relaxed">{description}</p>
-          <button onClick={retryReferral} className="mt-4 w-full rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 py-3.5 text-white font-black">Informar outra indicação</button>
+          <button onClick={retryReferral} className="mt-4 w-full rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 py-3.5 text-white font-black">
+            {blockedReason === 'customer_blocked' ? 'Voltar e informar outro telefone' : 'Informar outra indicação'}
+          </button>
         </>}
       </div>
       <p className="text-white/30 text-xs text-center mt-5">A indicação precisa pertencer a um cliente cadastrado e ativo.</p>

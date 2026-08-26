@@ -35,4 +35,13 @@ describe('padrão de indicação antes do cadastro', () => {
     expect(homeSource).toContain("sessionStorage.setItem('walk_home_referral_phone', referralPhone)");
     expect(homeSource).toContain("sessionStorage.setItem('walk_home_existing_phone', phone)");
   });
+
+  it('diferencia cadastro bloqueado pelo ADM de indicação inválida', () => {
+    expect(manifestSource).toContain("type BlockedReason = 'customer_blocked' | 'invalid_referral';");
+    expect(manifestSource).toContain("setBlockedReason('customer_blocked');");
+    expect(manifestSource).toContain("'Cadastro bloqueado'");
+    expect(manifestSource).toContain('Este cadastro foi bloqueado pelo administrador.');
+    expect(manifestSource).toContain('Voltar e informar outro telefone');
+    expect(manifestSource).not.toContain('Este cadastro não possui acesso ao sistema.');
+  });
 });
