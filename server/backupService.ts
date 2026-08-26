@@ -3,7 +3,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, open, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { Readable, Transform, type TransformCallback } from "node:stream";
+import { PassThrough, Readable, Transform, type TransformCallback } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createConnection } from "mysql2/promise";
 import { and, desc, eq, inArray } from "drizzle-orm";
@@ -359,19 +359,27 @@ async function createSourceSnapshot(destination: string): Promise<{ bytes: numbe
   return { bytes: fileInfo.size, sha256 };
 }
 
-async function encryptTarDirectory(
+type EncryptedArchiveStream = {
+  stream: PassThrough;
+  completion: Promise<{ bytes: number; sha256: string }>;
+  cancel: (error?: Error) => void;
+};
+
+export function createEncryptedArchiveStream(
   sourceDirectory: string,
-  encryptedFile: string,
   signal?: AbortSignal,
   onBytes?: (bytes: number) => void,
-): Promise<void> {
+): EncryptedArchiveStream {
   throwIfBackupAborted(signal);
   const key = getEncryptionKey();
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const output = createWriteStream(encryptedFile, { flags: "wx" });
-  output.write(Buffer.from("WJBACK1\n", "utf8"));
-  output.write(iv);
+  const output = new PassThrough();
+  const artifactCounter = new HashingTransform();
+  const header = Buffer.concat([Buffer.from("WJBACK1\n", "utf8"), iv]);
+  artifactCounter.hash.update(header);
+  artifactCounter.bytes = header.length;
+  output.write(header);
 
   const tar = spawn("tar", ["-cf", "-", "-C", sourceDirectory, "."], {
     cwd: BACKUP_SOURCE_ROOT,
@@ -381,7 +389,10 @@ async function encryptTarDirectory(
   let stderr = "";
   let processedBytes = 0;
   let timedOut = false;
-  const stopTar = () => { tar.kill("SIGTERM"); };
+  let cancelled = false;
+  const stopTar = () => {
+    if (!tar.killed) tar.kill("SIGTERM");
+  };
   let idleTimeout = setTimeout(() => {
     timedOut = true;
     stopTar();
@@ -396,34 +407,50 @@ async function encryptTarDirectory(
   tar.stdout?.on("data", resetIdleTimeout);
   const progressCounter = new Transform({
     transform(chunk, _encoding, callback) {
-      processedBytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk));
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      processedBytes += buffer.length;
       onBytes?.(processedBytes);
-      callback(null, chunk);
+      callback(null, buffer);
     },
   });
+  artifactCounter.pipe(output, { end: false });
   signal?.addEventListener("abort", stopTar, { once: true });
   tar.stderr?.on("data", (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-4000); });
-  try {
-    await pipeline(tar.stdout!, progressCounter, cipher, output);
-    const exitCode = await new Promise<number>((resolve, reject) => {
-      tar.once("error", reject);
-      tar.once("close", (code) => resolve(code ?? 1));
-    });
-    if (timedOut) throw new Error("Cifragem do pacote ficou sem progresso por 10 minutos.");
-    throwIfBackupAborted(signal);
-    if (exitCode !== 0) throw new Error(`tar terminou com código ${exitCode}: ${stderr.slice(-800)}`);
-    const authTag = cipher.getAuthTag();
-    await writeFile(encryptedFile, authTag, { flag: "a" });
-  } catch (error) {
+  const exitPromise = new Promise<number>((resolve, reject) => {
+    tar.once("error", reject);
+    tar.once("close", (code) => resolve(code ?? 1));
+  });
+  const cancel = (error = new Error("Backup encerrado antes da conclusão; nenhum artefato foi validado.")) => {
+    if (cancelled) return;
+    cancelled = true;
     stopTar();
-    await rm(encryptedFile, { force: true }).catch(() => undefined);
-    throw error;
-  } finally {
-    clearTimeout(idleTimeout);
-    tar.stdout?.removeListener("data", resetIdleTimeout);
-    progressCounter.destroy();
-    signal?.removeEventListener("abort", stopTar);
-  }
+    progressCounter.destroy(error);
+    artifactCounter.destroy(error);
+    output.destroy(error);
+  };
+  const completion = (async () => {
+    try {
+      await pipeline(tar.stdout!, progressCounter, cipher, artifactCounter);
+      const exitCode = await exitPromise;
+      if (timedOut) throw new Error("Cifragem do pacote ficou sem progresso por 10 minutos.");
+      throwIfBackupAborted(signal);
+      if (exitCode !== 0) throw new Error(`tar terminou com código ${exitCode}: ${stderr.slice(-800)}`);
+      const authTag = cipher.getAuthTag();
+      artifactCounter.hash.update(authTag);
+      artifactCounter.bytes += authTag.length;
+      output.write(authTag);
+      output.end();
+      return { bytes: artifactCounter.bytes, sha256: artifactCounter.hash.digest("hex") };
+    } catch (error) {
+      cancel(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    } finally {
+      clearTimeout(idleTimeout);
+      tar.stdout?.removeListener("data", resetIdleTimeout);
+      signal?.removeEventListener("abort", stopTar);
+    }
+  })();
+  return { stream: output, completion, cancel };
 }
 
 async function sha256File(filePath: string): Promise<string> {
@@ -545,7 +572,6 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
   const workDirectory = path.join("/tmp", `walk-ajuda-backup-${id}`);
   const databaseFile = path.join(workDirectory, "database.sql");
   const sourceFile = path.join(workDirectory, "source.tar.gz");
-  const encryptedFile = path.join("/tmp", `walk-ajuda-backup-${id}.wajuda.enc`);
   const filesDirectory = path.join(workDirectory, "files");
   const manifestFile = path.join(workDirectory, "manifest.json");
 
@@ -632,33 +658,39 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
     await updateRun(id, { stage: "archive", progress: 88 });
     const archiveInputBytes = Math.max(database.bytes + source.bytes + totalR2Bytes + Buffer.byteLength(JSON.stringify(manifest)), 1);
     let lastArchiveProgressAt = 0;
-    await encryptTarDirectory(workDirectory, encryptedFile, signal, (processedBytes) => {
+    const encrypted = createEncryptedArchiveStream(workDirectory, signal, (processedBytes) => {
       const now = Date.now();
       if (now - lastArchiveProgressAt < 5_000) return;
       lastArchiveProgressAt = now;
       const progress = 88 + Math.min(6, Math.floor((processedBytes / archiveInputBytes) * 6));
       void updateRun(id, { stage: "archive", progress }).catch(() => undefined);
     });
-    await updateRun(id, { stage: "archive", progress: 94 });
-    const archiveInfo = await stat(encryptedFile);
-    const archiveSha256 = await sha256File(encryptedFile);
     const artifactKey = `${BACKUP_ARTIFACT_PREFIX}${id}.wajuda.enc`;
-    await updateRun(id, {
-      stage: "upload",
-      progress: 95,
-      artifactKey,
-      fileSize: archiveInfo.size,
-      archiveSha256,
-      manifestJson: summaryFromManifest(manifest, archiveInfo.size, archiveSha256),
-    });
-    await r2PutObjectStream(artifactKey, createReadStream(encryptedFile), "application/octet-stream", archiveInfo.size);
+    const uploadOutcome = r2PutObjectStream(artifactKey, encrypted.stream, "application/octet-stream").then(
+      () => null,
+      (error) => {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        encrypted.cancel(failure);
+        return failure;
+      },
+    );
+    let archiveInfo: { bytes: number; sha256: string };
+    try {
+      archiveInfo = await encrypted.completion;
+      await updateRun(id, { stage: "upload", progress: 95, artifactKey, fileSize: archiveInfo.bytes, archiveSha256: archiveInfo.sha256, manifestJson: summaryFromManifest(manifest, archiveInfo.bytes, archiveInfo.sha256) });
+      const uploadError = await uploadOutcome;
+      if (uploadError) throw uploadError;
+    } catch (error) {
+      await uploadOutcome;
+      throw error;
+    }
     throwIfBackupAborted(signal);
     await updateRun(id, {
       status: "completed",
       stage: "completed",
       progress: 100,
       completedAt: new Date(),
-      manifestJson: summaryFromManifest(manifest, archiveInfo.size, archiveSha256),
+      manifestJson: summaryFromManifest(manifest, archiveInfo.bytes, archiveInfo.sha256),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha desconhecida no backup.";
@@ -672,7 +704,6 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
     clearInterval(heartbeat);
     activeBackupControllers.delete(id);
     await rm(workDirectory, { recursive: true, force: true }).catch(() => undefined);
-    await rm(encryptedFile, { force: true }).catch(() => undefined);
   }
 }
 

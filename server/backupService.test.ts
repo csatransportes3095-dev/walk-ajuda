@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { BACKUP_STALE_AFTER_MS, concatenateDumplingSqlFiles, DEFAULT_DUMPLING_CA_PATH, isBackupStale, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath } from "./backupService";
+import { BACKUP_STALE_AFTER_MS, concatenateDumplingSqlFiles, createEncryptedArchiveStream, DEFAULT_DUMPLING_CA_PATH, isBackupStale, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath } from "./backupService";
 import { getBackupDownloadName } from "./routers/backup";
 
 describe("backupService", () => {
@@ -84,6 +85,29 @@ describe("backupService", () => {
       expect(sql.indexOf("CREATE TABLE `pedidos`")).toBeLessThan(sql.indexOf("INSERT INTO pedidos"));
       expect(sql.indexOf("INSERT INTO pedidos")).toBeLessThan(sql.indexOf("CREATE INDEX idx_pedidos"));
     } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("cifra uma fixture por streaming e retorna bytes/hash sem arquivo de pacote local", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "wajuda-archive-test-"));
+    const previousKey = process.env.BACKUP_ENCRYPTION_KEY;
+    process.env.BACKUP_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("hex");
+    try {
+      await mkdir(path.join(directory, "files"), { recursive: true });
+      await writeFile(path.join(directory, "database.sql"), "CREATE TABLE teste (id INT);\n");
+      await writeFile(path.join(directory, "manifest.json"), '{"formatVersion":1}\n');
+      const archive = createEncryptedArchiveStream(directory);
+      const chunks: Buffer[] = [];
+      for await (const chunk of archive.stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const result = await archive.completion;
+      const body = Buffer.concat(chunks);
+      expect(result.bytes).toBe(body.length);
+      expect(result.sha256).toBe(createHash("sha256").update(body).digest("hex"));
+      expect(result.bytes).toBeGreaterThan(32);
+    } finally {
+      if (previousKey === undefined) delete process.env.BACKUP_ENCRYPTION_KEY;
+      else process.env.BACKUP_ENCRYPTION_KEY = previousKey;
       await rm(directory, { recursive: true, force: true });
     }
   });
