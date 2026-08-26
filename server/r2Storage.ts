@@ -1,5 +1,5 @@
-import { DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { Readable, Transform } from "node:stream";
+import { AbortMultipartUploadCommand, CompleteMultipartUploadCommand, CreateMultipartUploadCommand, DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, UploadPartCommand } from "@aws-sdk/client-s3";
+import { Readable } from "node:stream";
 import { ENV } from "./_core/env";
 
 function validateR2Config() {
@@ -18,6 +18,7 @@ function getR2Client() {
     region: "auto",
     endpoint,
     forcePathStyle: true,
+    maxAttempts: 3,
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
     credentials: {
@@ -76,7 +77,19 @@ export async function r2PutObject(key: string, body: Buffer | Uint8Array | strin
   return { key: normalizedKey, url: buildR2PublicUrl(normalizedKey) };
 }
 
-/** Uploada artefatos grandes sem materializar todo o conteúdo na memória. */
+const R2_MULTIPART_PART_SIZE = 8 * 1024 * 1024;
+const R2_MULTIPART_MAX_ATTEMPTS = 3;
+
+function isRetryableR2UploadError(error: unknown): boolean {
+  const candidate = error as { code?: string; name?: string; $metadata?: { httpStatusCode?: number } } | null;
+  const code = candidate?.code || candidate?.name;
+  const status = candidate?.$metadata?.httpStatusCode;
+  return code === "ECONNRESET" || code === "ECONNREFUSED" || code === "ETIMEDOUT" || code === "TimeoutError" || (typeof status === "number" && status >= 500);
+}
+
+const waitForR2Retry = (delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+
+/** Faz upload grande em multipart: cada parte tem tamanho conhecido e é repetível sem materializar o pacote inteiro. */
 export async function r2PutObjectStream(
   key: string,
   body: Readable,
@@ -88,13 +101,8 @@ export async function r2PutObjectStream(
   const normalizedKey = normalizeKey(key);
   const startedAt = Date.now();
   let bytesSent = 0;
-  const countedBody = body.pipe(new Transform({
-    transform(chunk, _encoding, callback) {
-      bytesSent += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk));
-      callback(null, chunk);
-    },
-  }));
-  body.once("error", (error) => countedBody.destroy(error));
+  let uploadId: string | undefined;
+  const parts: Array<{ PartNumber: number; ETag: string }> = [];
   const logUpload = (event: string, metadata: { httpStatus?: number | null; etag?: string | null; error?: unknown } = {}) => {
     if (!diagnostic) return;
     const message = metadata.error instanceof Error ? metadata.error.message : metadata.error === undefined ? "" : String(metadata.error);
@@ -103,17 +111,80 @@ export async function r2PutObjectStream(
       .replace(/(password|secret|token|authorization|cookie|database_url|r2_[a-z_]+|backup_encryption_key)[^\s]*/gi, "$1=<redacted>")
       .replace(/[\r\n]+/g, " ")
       .slice(0, 500);
-    console.log(`[BACKUP-DIAG][R2-UPLOAD] backupId=${diagnostic.backupId} stage=${diagnostic.stage || "r2-upload"} timestamp=${new Date().toISOString()} elapsedMs=${Date.now() - startedAt} event=${event} bytesSent=${bytesSent} completed=${event === "completed"} httpStatus=${metadata.httpStatus ?? "null"} etag=${metadata.etag ?? "null"}${safeMessage ? ` error=${safeMessage}` : ""}`);
+    console.log(`[BACKUP-DIAG][R2-UPLOAD] backupId=${diagnostic.backupId} stage=${diagnostic.stage || "r2-upload"} timestamp=${new Date().toISOString()} elapsedMs=${Date.now() - startedAt} event=${event} bytesSent=${bytesSent} expectedBytes=${contentLength ?? "unknown"} completed=${event === "completed"} httpStatus=${metadata.httpStatus ?? "null"} etag=${metadata.etag ?? "null"}${safeMessage ? ` error=${safeMessage}` : ""}`);
+  };
+  const sendPart = async (partBody: Buffer, partNumber: number) => {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= R2_MULTIPART_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const response = await client.send(new UploadPartCommand({
+          Bucket: ENV.r2BucketName.trim(),
+          Key: normalizedKey,
+          UploadId: uploadId,
+          PartNumber: partNumber,
+          Body: partBody,
+          ContentLength: partBody.length,
+        }));
+        const etag = response.ETag;
+        if (!etag) throw new Error(`R2 não retornou ETag para a parte ${partNumber}.`);
+        return etag;
+      } catch (error) {
+        lastError = error;
+        if (attempt >= R2_MULTIPART_MAX_ATTEMPTS || !isRetryableR2UploadError(error)) throw error;
+        logUpload("part-retry", { error });
+        await waitForR2Retry(250 * attempt);
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   };
   logUpload("started", { httpStatus: null, etag: null });
   try {
-    const response = await client.send(new PutObjectCommand({
+    const created = await client.send(new CreateMultipartUploadCommand({
       Bucket: ENV.r2BucketName.trim(),
       Key: normalizedKey,
-      Body: countedBody,
       ContentType: contentType,
-      ...(contentLength === undefined ? {} : { ContentLength: contentLength }),
       CacheControl: "private, no-store",
+    }));
+    uploadId = created.UploadId;
+    if (!uploadId) throw new Error("R2 não retornou UploadId para o multipart.");
+
+    let partBuffer = Buffer.allocUnsafe(R2_MULTIPART_PART_SIZE);
+    let partBytes = 0;
+    let partNumber = 1;
+    const flushPart = async () => {
+      if (partBytes === 0) return;
+      const currentBytes = partBytes;
+      const etag = await sendPart(partBuffer.subarray(0, currentBytes), partNumber);
+      parts.push({ PartNumber: partNumber, ETag: etag });
+      bytesSent += currentBytes;
+      partNumber += 1;
+      partBuffer = Buffer.allocUnsafe(R2_MULTIPART_PART_SIZE);
+      partBytes = 0;
+      logUpload("part-completed", { etag });
+    };
+
+    for await (const chunk of body) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+      let offset = 0;
+      while (offset < buffer.length) {
+        const copied = Math.min(buffer.length - offset, R2_MULTIPART_PART_SIZE - partBytes);
+        buffer.copy(partBuffer, partBytes, offset, offset + copied);
+        partBytes += copied;
+        offset += copied;
+        if (partBytes === R2_MULTIPART_PART_SIZE) await flushPart();
+      }
+    }
+    await flushPart();
+    if (parts.length === 0) throw new Error("R2 multipart recebeu um corpo vazio inesperado.");
+    if (contentLength !== undefined && bytesSent !== contentLength) {
+      throw new Error(`Content-Length divergente no multipart: esperado ${contentLength}, enviado ${bytesSent}.`);
+    }
+
+    const response = await client.send(new CompleteMultipartUploadCommand({
+      Bucket: ENV.r2BucketName.trim(),
+      Key: normalizedKey,
+      UploadId: uploadId,
+      MultipartUpload: { Parts: parts },
     }));
     logUpload("completed", {
       httpStatus: response.$metadata?.httpStatusCode ?? null,
@@ -127,6 +198,18 @@ export async function r2PutObjectStream(
       bytesSent,
     };
   } catch (error) {
+    if (uploadId) {
+      try {
+        await client.send(new AbortMultipartUploadCommand({
+          Bucket: ENV.r2BucketName.trim(),
+          Key: normalizedKey,
+          UploadId: uploadId,
+        }));
+        logUpload("aborted", { httpStatus: null, etag: null });
+      } catch (abortError) {
+        logUpload("abort-failed", { error: abortError, httpStatus: null, etag: null });
+      }
+    }
     logUpload("failed", { error, httpStatus: null, etag: null });
     throw error;
   }
