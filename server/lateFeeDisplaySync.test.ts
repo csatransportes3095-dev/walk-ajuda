@@ -75,15 +75,12 @@ describe("sincronização da tela /gastos", () => {
     expect(clientLoans).toContain('refetchInterval: 15000');
   });
 
-  it("mantém o card da taxa visível e desabilitado antes do vencimento", () => {
-    expect(adminLoans).toContain('title="A taxa de atraso fica disponível após o vencimento da parcela."');
-    expect(adminLoans).toContain('Após vencimento');
-    expect(adminLoans).toContain('disabled\n                                  title="A taxa de atraso fica disponível após o vencimento da parcela."');
-  });
-
-  it("mantém o botão +Taxa funcional somente para parcelas vencidas", () => {
-    expect(adminLoans).toContain(') : inst.isOverdue ? (');
-    expect(adminLoans).toContain('>\n                                  +Taxa\n                                </button>');
+  it("mantém a taxa manual original com seus horários no modal do ADM", () => {
+    expect(adminLoans).toContain(') : (');
+    expect(adminLoans).toContain('+Taxa');
+    expect(adminLoans).toContain('Taxa 18h–20h');
+    expect(adminLoans).toContain('Taxa 20h–23:59 (acumulada)');
+    expect(adminLoans).toContain('Taxa após meia-noite');
     expect(loansRouter).toContain("if (dueDate >= getBrazilToday())");
   });
 });
