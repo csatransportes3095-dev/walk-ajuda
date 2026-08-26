@@ -3427,7 +3427,8 @@ function PixTab() {
     if (passwordAction === "save") {
       save.mutate({ ...form, pixKeyType: form.pixKeyType as any, editPassword: password });
     } else if (passwordAction === "delete" && deleteId !== null) {
-      del.mutate({ id: deleteId, editPassword: password });
+      if (confirm("Remover esta chave PIX?")) del.mutate({ id: deleteId, editPassword: password });
+      else { setPasswordAction(null); setDeleteId(null); }
     }
   };
 
@@ -3454,7 +3455,7 @@ function PixTab() {
                 <p className="text-xs text-muted-foreground">{c.pixName}{c.bankName ? ` · ${c.bankName}` : ""} · {c.pixKeyType.toUpperCase()}</p>
               </div>
               <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-300"
-                onClick={() => { if (confirm("Remover esta chave PIX?")) { setDeleteId(c.id); setPasswordAction("delete"); } }}>
+                onClick={() => { setDeleteId(c.id); setPasswordAction("delete"); }}>
                 <XCircle className="w-4 h-4" />
               </Button>
             </div>
