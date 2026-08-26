@@ -77,6 +77,7 @@ describe("sincronização da tela /gastos", () => {
 
   it("mantém a taxa manual original com seus horários no modal do ADM", () => {
     expect(adminLoans).toContain(') : (');
+    expect(adminLoans.match(/data-testid="manual-late-fee-button"/g) || []).toHaveLength(2);
     expect(adminLoans).toContain('+Taxa');
     expect(adminLoans).toContain('Taxa 18h–20h');
     expect(adminLoans).toContain('Taxa 20h–23:59 (acumulada)');

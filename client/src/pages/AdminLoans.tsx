@@ -1275,7 +1275,8 @@ function LoansTab() {
                               ) : (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
-                                  onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}>
+                                  onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}
+                                  data-testid="manual-late-fee-button">
                                   <AlertTriangle className="w-4 h-4" />
                                   +Taxa
                                 </button>
@@ -1316,7 +1317,8 @@ function LoansTab() {
                               ) : (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
-                                  onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}>
+                                  onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}
+                                  data-testid="manual-late-fee-button">
                                   <AlertTriangle className="w-4 h-4" />
                                   +Taxa
                                 </button>
