@@ -16,6 +16,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { execSync } from "child_process";
+import { isLoanEditPasswordValid } from "../loanEditAuthorization";
 
 // ââ€â‚¬ââ€â‚¬ââ€â‚¬ Helper: obter data de hoje em UTC-3 (Brasil) ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
 function getBrazilClock(now = new Date()): { today: string; date: string; hour: number } {
@@ -2372,9 +2373,20 @@ export const loanRouter = router({
     return { fixed, message: `${fixed} parcela(s) corrigida(s) de domingo para segunda-feira` };
   }),
 
+  // Confirma a senha adicional antes de abrir a edição no ADM.
+  authorizeLoanEdit: adminProcedure
+    .input(z.object({ password: z.string().min(1) }))
+    .mutation(({ input }) => {
+      if (!isLoanEditPasswordValid(input.password)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
+      }
+      return { ok: true };
+    }),
+
   // Edita um empréstimo ativo: recalcula juros, total e parcelas pendentes
   editLoan: adminProcedure.input(z.object({
     id: z.number(),
+    editPassword: z.string().min(1),
     amount: z.number().positive(),
     interestRate: z.number().min(0),
     days: z.number().positive(),
@@ -2386,6 +2398,10 @@ export const loanRouter = router({
     status: z.enum(["pendente", "aprovado", "reprovado", "cancelado", "pago"]).optional(),
     rejectedReason: z.string().optional(),
   })).mutation(async ({ input }) => {
+    if (!isLoanEditPasswordValid(input.editPassword)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
+    }
+
     const db = await getDb() as any;
     const loans = await qRows(db, drizzleSql`SELECT * FROM loans WHERE id=${input.id}`);
     if (!loans.length) throw new TRPCError({ code: "NOT_FOUND", message: "Empréstimo não encontrado" });

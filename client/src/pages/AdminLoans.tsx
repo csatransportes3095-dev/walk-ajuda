@@ -15,7 +15,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, Users, AlertTriangle, Clock,
   Plus, Search, Eye, CheckCircle, XCircle, ChevronDown, ChevronUp,
   Settings, Banknote, RefreshCw, ExternalLink, Trash2, RotateCcw,
-  Paperclip, Download, Pencil, ImageIcon, FileText, X, Calendar
+  Paperclip, Download, Pencil, ImageIcon, FileText, X, Calendar, KeyRound
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -403,7 +403,8 @@ function LoansTab() {
   const [rejectEmailInput, setRejectEmailInput] = useState("");
   const [rejectEmailSending, setRejectEmailSending] = useState(false);
   const [rejectWaSending, setRejectWaSending] = useState(false);
-  const [editLoanData, setEditLoanData] = useState<any | null>(null);
+  const [editLoanData, setEditLoanData] = useState<{ loan: any; password: string } | null>(null);
+  const [loanEditPasswordPrompt, setLoanEditPasswordPrompt] = useState<any | null>(null);
   const [approvalNotifyModal, setApprovalNotifyModal] = useState<any | null>(null); // loan object
   const [pixConfirmLoan, setPixConfirmLoan] = useState<any | null>(null);
   const [pixSendNote, setPixSendNote] = useState("");
@@ -457,6 +458,15 @@ function LoansTab() {
   const [deleteReason, setDeleteReason] = useState("");
 
   const utils = trpc.useUtils();
+  const authorizeLoanEdit = trpc.loans.authorizeLoanEdit.useMutation({
+    onSuccess: (_data, variables) => {
+      if (!loanEditPasswordPrompt) return;
+      setEditLoanData({ loan: loanEditPasswordPrompt, password: variables.password });
+      setLoanEditPasswordPrompt(null);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   // Mapeia a aba selecionada para o filtro de status
   const tabStatusFilter = loanTab;
   const { data: loans = [], isLoading } = trpc.loans.listLoans.useQuery({ search, status: tabStatusFilter });
@@ -1122,7 +1132,7 @@ function LoansTab() {
 
                       {/* Editar - visível para todos os status */}
                       <button
-                        onClick={() => setEditLoanData(loan)}
+                        onClick={() => setLoanEditPasswordPrompt(loan)}
                         className="flex flex-col items-center gap-1 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 py-3 px-2 text-center transition-all active:scale-95"
                       >
                         <span className="text-xl">✏️</span>
@@ -1374,7 +1384,22 @@ function LoansTab() {
       {showCreate && <CreateLoanModal onClose={() => setShowCreate(false)} onSuccess={() => { setShowCreate(false); utils.loans.listLoans.invalidate(); utils.loans.getDashboard.invalidate(); }} />}
 
       {/* Modal editar empréstimo */}
-      {editLoanData && <EditLoanModal loan={editLoanData} onClose={() => setEditLoanData(null)} onSuccess={() => { setEditLoanData(null); utils.loans.listLoans.invalidate(); utils.loans.getDashboard.invalidate(); }} />}
+      {loanEditPasswordPrompt && (
+        <LoanEditPasswordDialog
+          loan={loanEditPasswordPrompt}
+          onClose={() => setLoanEditPasswordPrompt(null)}
+          onAuthorized={(password) => authorizeLoanEdit.mutate({ password })}
+          isPending={authorizeLoanEdit.isPending}
+        />
+      )}
+      {editLoanData && (
+        <EditLoanModal
+          loan={editLoanData.loan}
+          editPassword={editLoanData.password}
+          onClose={() => setEditLoanData(null)}
+          onSuccess={() => { setEditLoanData(null); utils.loans.listLoans.invalidate(); utils.loans.getDashboard.invalidate(); }}
+        />
+      )}
 
       {/* Modal reagendar parcelas */}
       {rescheduleModal && (
@@ -2702,8 +2727,52 @@ function CreateLoanModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 }
 
 
+// ─── Confirmação adicional para editar empréstimo ─────────────────────────────
+function LoanEditPasswordDialog({ loan, onClose, onAuthorized, isPending }: { loan: any; onClose: () => void; onAuthorized: (password: string) => void; isPending: boolean }) {
+  const [password, setPassword] = useState("");
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!password) {
+      toast.error("Digite a senha interna para continuar.");
+      return;
+    }
+    onAuthorized(password);
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5 text-yellow-400" /> Autorizar edição</DialogTitle>
+          <p className="text-sm text-muted-foreground">Empréstimo de {loan.clientName || "cliente"}</p>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <p className="text-sm text-amber-300/90">Digite a senha interna para abrir a edição. Nenhum dado será alterado nesta etapa.</p>
+          <div className="space-y-2">
+            <Label htmlFor="loan-edit-password">Senha interna</Label>
+            <Input
+              id="loan-edit-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="off"
+              autoFocus
+              placeholder="Digite a senha interna"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" disabled={!password || isPending}>{isPending ? "Verificando..." : "Continuar"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Modal editar empréstimo ──────────────────────────────────────────────────
-function EditLoanModal({ loan, onClose, onSuccess }: { loan: any; onClose: () => void; onSuccess: () => void }) {
+function EditLoanModal({ loan, editPassword, onClose, onSuccess }: { loan: any; editPassword: string; onClose: () => void; onSuccess: () => void }) {
   const [amount, setAmount] = useState(String(loan.amount || ""));
   const [interestRate, setInterestRate] = useState(String(loan.interestRate || ""));
   const [days, setDays] = useState(String(loan.days || ""));
@@ -2873,7 +2942,7 @@ function EditLoanModal({ loan, onClose, onSuccess }: { loan: any; onClose: () =>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button
-            onClick={() => editLoan.mutate({ id: loan.id, amount: amountNum, interestRate: rateNum, days: daysNum, paymentType, workDays: workDays as "seg_sab" | "seg_dom" | "custom", customInstallments: workDays === "custom" ? (parseInt(customInstallments) || 1) : undefined, releaseDate, notes, status, rejectedReason: status === 'reprovado' ? rejectedReason : undefined })}
+            onClick={() => editLoan.mutate({ id: loan.id, editPassword, amount: amountNum, interestRate: rateNum, days: daysNum, paymentType, workDays: workDays as "seg_sab" | "seg_dom" | "custom", customInstallments: workDays === "custom" ? (parseInt(customInstallments) || 1) : undefined, releaseDate, notes, status, rejectedReason: status === 'reprovado' ? rejectedReason : undefined })}
             disabled={!amount || amountNum <= 0 || editLoan.isPending}>
             {editLoan.isPending ? "Salvando..." : "Salvar alterações"}
           </Button>
