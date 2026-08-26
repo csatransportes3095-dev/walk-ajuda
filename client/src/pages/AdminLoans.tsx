@@ -42,6 +42,21 @@ function fmtDate(d: string | null | undefined) {
 function todayBRTDate() {
   return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
+function brazilClock() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const valueOf = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "0";
+  return {
+    date: `${valueOf("year")}-${valueOf("month")}-${valueOf("day")}`,
+    hour: Number(valueOf("hour")),
+  };
+}
 function civilDate(value: unknown) {
   if (typeof value === "string") return value.slice(0, 10);
   const parsed = new Date(value as Date);
@@ -628,9 +643,17 @@ function LoansTab() {
   const [feeCustomAmount, setFeeCustomAmount] = useState("");
   const handleOpenLateFee = useCallback((inst: any, loanId: number) => {
     const dueDate = civilDate(inst.dueDate);
-    if (!dueDate || dueDate >= todayBRTDate()) {
-      const dueLabel = dueDate ? ` (vencimento: ${fmtDate(dueDate)})` : "";
-      toast.info(`A parcela #${inst.installmentNumber} ainda não venceu${dueLabel}. A taxa de atraso só pode ser aplicada após o vencimento.`);
+    const clock = brazilClock();
+    if (!dueDate) {
+      toast.error(`A parcela #${inst.installmentNumber} não possui um vencimento válido.`);
+      return;
+    }
+    if (dueDate > clock.date) {
+      toast.info(`A parcela #${inst.installmentNumber} ainda não venceu (vencimento: ${fmtDate(dueDate)}). A taxa de atraso só pode ser aplicada após o vencimento.`);
+      return;
+    }
+    if (dueDate === clock.date && clock.hour < 18) {
+      toast.info(`A parcela #${inst.installmentNumber} vence hoje (${fmtDate(dueDate)}). A taxa de atraso fica disponível após 18h.`);
       return;
     }
     setFeeModal({ inst, loanId });
@@ -1886,12 +1909,16 @@ function LoansTab() {
           {feeModal && (() => {
             const inst = feeModal.inst;
             const originalAmt = parseFloat(inst.amount);
+            const dueDate = civilDate(inst.dueDate);
+            const clock = brazilClock();
             const cfg = lateFeeConfig;
             const feeAfter18h = cfg ? parseFloat(String(cfg.fee_after_18h)) || 0 : 10;
             const feeAfter20h = cfg ? parseFloat(String(cfg.fee_after_20h)) || 0 : 10;
             const feeMidnightPct = cfg ? parseFloat(String(cfg.fee_after_midnight_pct)) || 100 : 100;
             const feeTotal18_20 = feeAfter18h + feeAfter20h;
             const feeMidnight = Math.round(originalAmt * (feeMidnightPct / 100) * 100) / 100;
+            const feeAfterMidnight = Math.max(feeTotal18_20, feeMidnight);
+            const activeTier = dueDate < clock.date ? "after_midnight" : clock.hour >= 20 ? "after_20" : "after_18";
             const customFee = parseFloat(feeCustomAmount) || 0;
             return (
               <div className="space-y-4">
@@ -1905,26 +1932,26 @@ function LoansTab() {
                     <button
                       className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-left transition-colors"
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeAfter18h })}
-                      disabled={applyLateFee.isPending}
+                      disabled={activeTier !== "after_18" || applyLateFee.isPending}
                     >
-                      <span className="text-sm text-amber-300">Taxa 18h–20h</span>
+                      <span className="text-sm text-amber-300">Taxa 18h–20h{activeTier === "after_18" ? " (faixa atual)" : ""}</span>
                       <span className="text-sm font-bold text-amber-400">+R$ {feeAfter18h.toFixed(2).replace('.', ',')}</span>
                     </button>
                     <button
                       className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-left transition-colors"
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeTotal18_20 })}
-                      disabled={applyLateFee.isPending}
+                      disabled={activeTier !== "after_20" || applyLateFee.isPending}
                     >
-                      <span className="text-sm text-orange-300">Taxa 20h–23:59 (acumulada)</span>
+                      <span className="text-sm text-orange-300">Taxa 20h–23:59 (acumulada){activeTier === "after_20" ? " (faixa atual)" : ""}</span>
                       <span className="text-sm font-bold text-orange-400">+R$ {feeTotal18_20.toFixed(2).replace('.', ',')}</span>
                     </button>
                     <button
                       className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-left transition-colors"
-                      onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeMidnight })}
-                      disabled={applyLateFee.isPending}
+                      onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeAfterMidnight })}
+                      disabled={activeTier !== "after_midnight" || applyLateFee.isPending}
                     >
-                      <span className="text-sm text-red-300">Taxa após meia-noite ({feeMidnightPct}%)</span>
-                      <span className="text-sm font-bold text-red-400">+R$ {feeMidnight.toFixed(2).replace('.', ',')}</span>
+                      <span className="text-sm text-red-300">Taxa após meia-noite ({feeMidnightPct}%){activeTier === "after_midnight" ? " (faixa atual)" : ""}</span>
+                      <span className="text-sm font-bold text-red-400">+R$ {feeAfterMidnight.toFixed(2).replace('.', ',')}</span>
                     </button>
                   </div>
                 </div>

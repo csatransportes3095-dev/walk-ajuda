@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { calculateLateFeeForInstallment } from "./loans/lateFee";
+import { calculateLateFeeForInstallment, isLateFeeWindowOpen } from "./loans/lateFee";
 
 const config = {
   enabled: 1,
@@ -20,6 +20,13 @@ function fee(dueDate: string, hour: number, amount = 16.8, enabled = 1) {
 }
 
 describe("taxa de atraso exibida ao cliente", () => {
+  it("abre a janela manual às 18h no dia do vencimento", () => {
+    expect(isLateFeeWindowOpen({ dueDate: "2026-08-21", clock: { today: "2026-08-21", hour: 17 } })).toBe(false);
+    expect(isLateFeeWindowOpen({ dueDate: "2026-08-21", clock: { today: "2026-08-21", hour: 18 } })).toBe(true);
+    expect(isLateFeeWindowOpen({ dueDate: "2026-08-22", clock: { today: "2026-08-21", hour: 23 } })).toBe(false);
+    expect(isLateFeeWindowOpen({ dueDate: "2026-08-20", clock: { today: "2026-08-21", hour: 0 } })).toBe(true);
+  });
+
   it("não cobra antes das 18h no dia do vencimento", () => {
     expect(fee("2026-08-21", 17)).toBe(0);
   });
@@ -59,8 +66,8 @@ describe("sincronização da tela /gastos", () => {
   });
 
   it("bloqueia no servidor a taxa manual antes do vencimento", () => {
-    expect(loansRouter).toContain("if (dueDate >= getBrazilToday())");
-    expect(loansRouter).toContain("Taxa de atraso só pode ser aplicada após o vencimento da parcela.");
+    expect(loansRouter).toContain("isLateFeeWindowOpen({ dueDate, clock })");
+    expect(loansRouter).toContain("A taxa de atraso desta parcela fica disponível após 18h no dia do vencimento.");
   });
 
   it("permite pagar somente juros antes do vencimento, sem somar multa", () => {
@@ -82,12 +89,13 @@ describe("sincronização da tela /gastos", () => {
     expect(adminLoans).toContain('Taxa 18h–20h');
     expect(adminLoans).toContain('Taxa 20h–23:59 (acumulada)');
     expect(adminLoans).toContain('Taxa após meia-noite');
-    expect(loansRouter).toContain("if (dueDate >= getBrazilToday())");
+    expect(loansRouter).toContain("isLateFeeWindowOpen({ dueDate, clock })");
   });
 
   it("bloqueia a abertura do modal manual antes do vencimento e informa o motivo", () => {
     expect(adminLoans).toContain("const handleOpenLateFee = useCallback");
-    expect(adminLoans).toContain("dueDate >= todayBRTDate()");
+    expect(adminLoans).toContain("dueDate > clock.date");
+    expect(adminLoans).toContain("dueDate === clock.date && clock.hour < 18");
     expect(adminLoans).toContain("ainda não venceu");
     expect(adminLoans.match(/onClick=\{\(\) => handleOpenLateFee\(inst, loan\.id\)\}/g) || []).toHaveLength(2);
   });

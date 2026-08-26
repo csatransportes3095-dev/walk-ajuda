@@ -25,6 +25,13 @@ function asDate(value: unknown): string {
  * Calcula a taxa aplicável em um instante específico, sem gravar no banco.
  * A gravação continua sendo responsabilidade do fluxo de envio do comprovante.
  */
+export function isLateFeeWindowOpen(input: { dueDate: unknown; clock: LateFeeClock; openingHour?: number }): boolean {
+  const dueDate = asDate(input.dueDate);
+  if (!dueDate || !input.clock.today) return false;
+  const openingHour = input.openingHour ?? 18;
+  return dueDate < input.clock.today || (dueDate === input.clock.today && input.clock.hour >= openingHour);
+}
+
 export function calculateLateFeeForInstallment(input: {
   dueDate: unknown;
   amount: unknown;

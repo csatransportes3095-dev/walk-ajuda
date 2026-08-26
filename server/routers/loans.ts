@@ -8,7 +8,7 @@ import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
-import { calculateLateFeeForInstallment } from "../loans/lateFee";
+import { calculateLateFeeForInstallment, isLateFeeWindowOpen } from "../loans/lateFee";
 import PDFDocument from "pdfkit";
 import { sendMailDirect } from "../_core/sendMailDirect";
 import sharp from "sharp";
@@ -3278,11 +3278,12 @@ export const loanRouter = router({
     const dueDate = typeof dueDateValue === 'string'
       ? dueDateValue.slice(0, 10)
       : new Date(dueDateValue).toISOString().slice(0, 10);
-    if (dueDate >= getBrazilToday()) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'Taxa de atraso só pode ser aplicada após o vencimento da parcela.',
-      });
+    const clock = getBrazilClock();
+    if (!isLateFeeWindowOpen({ dueDate, clock })) {
+      const message = dueDate === clock.date
+        ? 'A taxa de atraso desta parcela fica disponível após 18h no dia do vencimento.'
+        : 'Taxa de atraso só pode ser aplicada após o vencimento da parcela.';
+      throw new TRPCError({ code: 'BAD_REQUEST', message });
     }
     // Salva o valor original se ainda não foi salvo
     const originalAmount = current.originalAmount != null ? parseFloat(current.originalAmount) : parseFloat(current.amount);
