@@ -101,7 +101,8 @@ async function repairLoanCustomerPhotos(db: any) {
     if (!phone) continue;
 
     try {
-      const keys = await r2ListObjects(`profile-photos/${phone}`);
+      const listedKeys = await r2ListObjects(`profile-photos/${phone}`);
+      const keys = Array.isArray(listedKeys) ? listedKeys : [];
       const imageKeys = keys
         .filter((key) => /\.(jpg|jpeg|png|webp)$/i.test(String(key)))
         .sort();

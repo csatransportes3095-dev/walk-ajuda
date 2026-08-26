@@ -22,9 +22,39 @@ import { getSharePreviewProfile, sharePreviewProxyPath, type SharePreviewProfile
 import { publicSiteUrl } from "../../shared/publicLinks";
 import { bootstrapCardInvoices } from "../cardsBilling";
 import { getBackupDownload, getBackupDownloadName } from "../routers/backup";
-import { reconcileBackupsAfterRestart } from "../backupService";
+import { logProcessDiagnostic, reconcileBackupsAfterRestart } from "../backupService";
 import path from "path";
 import fs from "fs";
+
+let fatalProcessExitScheduled = false;
+
+function scheduleFatalProcessExit() {
+  if (fatalProcessExitScheduled) return;
+  fatalProcessExitScheduled = true;
+  process.exitCode = 1;
+  setTimeout(() => process.exit(1), 0).unref?.();
+}
+
+function registerProcessDiagnostics() {
+  process.on("uncaughtException", (error) => {
+    logProcessDiagnostic("uncaughtException", { error: error instanceof Error ? error.stack || error.message : String(error) });
+    scheduleFatalProcessExit();
+  });
+  process.on("unhandledRejection", (reason) => {
+    logProcessDiagnostic("unhandledRejection", { error: reason instanceof Error ? reason.stack || reason.message : String(reason) });
+    scheduleFatalProcessExit();
+  });
+  for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+    const handler = () => {
+      logProcessDiagnostic("signal", { signal });
+      process.removeListener(signal, handler);
+      process.kill(process.pid, signal);
+    };
+    process.on(signal, handler);
+  }
+}
+
+registerProcessDiagnostics();
 
 /** Extrai o IP real do cliente, respeitando proxies (Cloudflare, Cloud Run) */
 export function getClientIp(req: express.Request): string {
@@ -570,4 +600,7 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+startServer().catch((error) => {
+  logProcessDiagnostic("startServer-failed", { error: error instanceof Error ? error.stack || error.message : String(error) });
+  scheduleFatalProcessExit();
+});

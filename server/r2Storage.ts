@@ -1,5 +1,5 @@
-import { S3Client, PutObjectCommand, DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
-import { Readable } from "stream";
+import { DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { Readable, Transform } from "node:stream";
 import { ENV } from "./_core/env";
 
 function validateR2Config() {
@@ -13,30 +13,6 @@ function getR2Client() {
   const endpoint = ENV.r2Endpoint.replace(/[\r\n\s]+/g, "").replace(/\/+$/, "");
   const accessKeyId = ENV.r2AccessKeyId.replace(/[\r\n\s]+/g, "");
   const secretAccessKey = ENV.r2SecretAccessKey.replace(/[\r\n\s]+/g, "");
-
-  // --- R2 Diagnostic safe logs (DO NOT LOG SECRET CONTENT) ---
-  try {
-    const endpointRaw = ENV.r2Endpoint || "";
-    const bucketRaw = ENV.r2BucketName || "";
-    const accessRaw = ENV.r2AccessKeyId || "";
-    const secretRaw = ENV.r2SecretAccessKey || "";
-    const accessTrimmed = accessRaw.trim();
-    const secretTrimmed = secretRaw.trim();
-
-    // Log only non-sensitive diagnostics
-    console.log('[R2 DIAG] endpoint:', endpointRaw);
-    console.log('[R2 DIAG] bucket:', bucketRaw);
-    console.log('[R2 DIAG] accessKeyLength:', accessTrimmed.length);
-    console.log('[R2 DIAG] secretKeyLength:', secretTrimmed.length);
-    console.log('[R2 DIAG] accessKeyStartsWith_cfat:', accessTrimmed.startsWith('cfat_'));
-    console.log('[R2 DIAG] accessKeyContainsQuotes:', /["\']/.test(accessRaw));
-    console.log('[R2 DIAG] secretKeyContainsQuotes:', /["\']/.test(secretRaw));
-    console.log('[R2 DIAG] accessKeyHasSpacesOrNewline:', /[ \t\n\r]/.test(accessRaw));
-    console.log('[R2 DIAG] secretKeyHasSpacesOrNewline:', /[ \t\n\r]/.test(secretRaw));
-  } catch (diagErr) {
-    // Never throw from diagnostics
-    try { console.error('[R2 DIAG] error while diagnosing R2 env:', String(diagErr)); } catch {}
-  }
 
   return new S3Client({
     region: "auto",
@@ -106,19 +82,68 @@ export async function r2PutObjectStream(
   body: Readable,
   contentType: string,
   contentLength?: number,
+  diagnostic?: { backupId: string; stage?: string },
 ) {
   const client = getR2Client();
   const normalizedKey = normalizeKey(key);
-  const command = new PutObjectCommand({
+  const startedAt = Date.now();
+  let bytesSent = 0;
+  const countedBody = body.pipe(new Transform({
+    transform(chunk, _encoding, callback) {
+      bytesSent += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk));
+      callback(null, chunk);
+    },
+  }));
+  body.once("error", (error) => countedBody.destroy(error));
+  const logUpload = (event: string, metadata: { httpStatus?: number | null; etag?: string | null; error?: unknown } = {}) => {
+    if (!diagnostic) return;
+    const message = metadata.error instanceof Error ? metadata.error.message : metadata.error === undefined ? "" : String(metadata.error);
+    const safeMessage = message
+      .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s]+/gi, "<url-redacted>")
+      .replace(/(password|secret|token|authorization|cookie|database_url|r2_[a-z_]+|backup_encryption_key)[^\s]*/gi, "$1=<redacted>")
+      .replace(/[\r\n]+/g, " ")
+      .slice(0, 500);
+    console.log(`[BACKUP-DIAG][R2-UPLOAD] backupId=${diagnostic.backupId} stage=${diagnostic.stage || "r2-upload"} timestamp=${new Date().toISOString()} elapsedMs=${Date.now() - startedAt} event=${event} bytesSent=${bytesSent} completed=${event === "completed"} httpStatus=${metadata.httpStatus ?? "null"} etag=${metadata.etag ?? "null"}${safeMessage ? ` error=${safeMessage}` : ""}`);
+  };
+  logUpload("started", { httpStatus: null, etag: null });
+  try {
+    const response = await client.send(new PutObjectCommand({
+      Bucket: ENV.r2BucketName.trim(),
+      Key: normalizedKey,
+      Body: countedBody,
+      ContentType: contentType,
+      ...(contentLength === undefined ? {} : { ContentLength: contentLength }),
+      CacheControl: "private, no-store",
+    }));
+    logUpload("completed", {
+      httpStatus: response.$metadata?.httpStatusCode ?? null,
+      etag: response.ETag ?? null,
+    });
+    return {
+      key: normalizedKey,
+      url: buildR2PublicUrl(normalizedKey),
+      httpStatus: response.$metadata?.httpStatusCode ?? null,
+      etag: response.ETag ?? null,
+      bytesSent,
+    };
+  } catch (error) {
+    logUpload("failed", { error, httpStatus: null, etag: null });
+    throw error;
+  }
+}
+
+export async function r2HeadObject(key: string) {
+  const client = getR2Client();
+  const normalizedKey = normalizeKey(key);
+  const response = await client.send(new HeadObjectCommand({
     Bucket: ENV.r2BucketName.trim(),
     Key: normalizedKey,
-    Body: body,
-    ContentType: contentType,
-    ...(contentLength === undefined ? {} : { ContentLength: contentLength }),
-    CacheControl: "private, no-store",
-  });
-  await client.send(command);
-  return { key: normalizedKey, url: buildR2PublicUrl(normalizedKey) };
+  }));
+  return {
+    contentLength: response.ContentLength ?? null,
+    httpStatus: response.$metadata?.httpStatusCode ?? null,
+    etag: response.ETag ?? null,
+  };
 }
 
 export async function r2GetObjectBuffer(key: string) {
@@ -158,7 +183,7 @@ export async function r2DeleteObjects(keys: string[]) {
   await client.send(command);
 }
 
-export async function r2ListObjects(prefix: string) {
+export async function r2ListObjects(prefix: string): Promise<string[]> {
   const client = getR2Client();
   const normalizedPrefix = normalizeKey(prefix);
   const command = new ListObjectsV2Command({
@@ -166,7 +191,9 @@ export async function r2ListObjects(prefix: string) {
     Prefix: normalizedPrefix,
   });
   const response = await client.send(command);
-  return response.Contents?.map((item) => item.Key).filter(Boolean) as string[];
+  return (response.Contents || [])
+    .map((item) => item.Key)
+    .filter((key): key is string => Boolean(key));
 }
 
 export type R2ObjectInfo = {

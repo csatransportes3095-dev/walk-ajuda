@@ -1,14 +1,15 @@
 import { createHash, createCipheriv, randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, open, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, rm, stat, statfs, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { PassThrough, Readable, Transform, type TransformCallback } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createConnection } from "mysql2/promise";
+import { monitorEventLoopDelay, type IntervalHistogram } from "node:perf_hooks";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "./db";
-import { r2GetObjectStream, r2ListObjectsPage, r2PutObjectStream, type R2ObjectInfo } from "./r2Storage";
+import { r2GetObjectStream, r2HeadObject, r2ListObjectsPage, r2PutObjectStream, type R2ObjectInfo } from "./r2Storage";
 import { systemBackups, type InsertSystemBackup } from "../drizzle/schema";
 
 export const BACKUP_ARTIFACT_PREFIX = "system-backups/";
@@ -20,6 +21,109 @@ export const BACKUP_STALE_AFTER_MS = 10 * 60_000;
 const DUMPLING_BINARY = process.env.BACKUP_DUMPLING_BINARY?.trim() || "dumpling";
 const DUMPLING_FILE_SIZE = "256MiB";
 export const DEFAULT_DUMPLING_CA_PATH = "/etc/ssl/certs/ca-certificates.crt";
+
+type BackupDiagnosticContext = {
+  backupId: string;
+  stage: string;
+  startedAt: number;
+};
+
+const activeBackupDiagnostics = new Map<string, BackupDiagnosticContext>();
+
+function sanitizeDiagnosticValue(value: unknown): string {
+  const message = value instanceof Error ? value.message : String(value ?? "");
+  return message
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s]+/gi, "<url-redacted>")
+    .replace(/(password|secret|token|authorization|cookie|database_url|r2_[a-z_]+|backup_encryption_key)[^\s]*/gi, "$1=<redacted>")
+    .replace(/[\r\n]+/g, " ")
+    .slice(0, 800);
+}
+
+function logBackupDiagnostic(context: BackupDiagnosticContext, event: string, details: Record<string, string | number | boolean | null | undefined> = {}) {
+  const fields = Object.entries(details)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${typeof value === "string" ? sanitizeDiagnosticValue(value) : String(value)}`)
+    .join(" ");
+  console.log(`[BACKUP-DIAG] backupId=${context.backupId} stage=${context.stage} timestamp=${new Date().toISOString()} elapsedMs=${Date.now() - context.startedAt} event=${event}${fields ? ` ${fields}` : ""}`);
+}
+
+function logMemoryDiagnostic(context: BackupDiagnosticContext, event = "memory") {
+  const memory = process.memoryUsage();
+  logBackupDiagnostic(context, event, {
+    rss: memory.rss,
+    heapUsed: memory.heapUsed,
+    heapTotal: memory.heapTotal,
+    external: memory.external,
+    arrayBuffers: memory.arrayBuffers,
+  });
+}
+
+function logEventLoopDiagnostic(context: BackupDiagnosticContext, delayMs: number) {
+  console.warn(`[BACKUP-DIAG][EVENT_LOOP] backupId=${context.backupId} stage=${context.stage} timestamp=${new Date().toISOString()} elapsedMs=${Date.now() - context.startedAt} delayMs=${delayMs}`);
+}
+
+async function getDirectoryBytes(directory: string): Promise<number> {
+  let total = 0;
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) total += await getDirectoryBytes(fullPath);
+    else if (entry.isFile()) {
+      try { total += (await stat(fullPath)).size; } catch { /* execução pode estar limpando o arquivo */ }
+    }
+  }
+  return total;
+}
+
+async function logDiskDiagnostic(context: BackupDiagnosticContext, workDirectory: string, stage: string) {
+  const databaseBytes = await getFileBytes(path.join(workDirectory, "database.sql"));
+  const r2FilesBytes = await getDirectoryBytes(path.join(workDirectory, "files"));
+  const sourceSnapshotBytes = await getFileBytes(path.join(workDirectory, "source.tar.gz"));
+  const manifestBytes = await getFileBytes(path.join(workDirectory, "manifest.json"));
+  let freeBytes: number | null = null;
+  let totalBytes: number | null = null;
+  let usedBytes: number | null = null;
+  try {
+    const filesystem = await statfs(workDirectory).catch(() => statfs(path.dirname(workDirectory)));
+    totalBytes = Number(filesystem.blocks) * Number(filesystem.bsize);
+    freeBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
+    usedBytes = Math.max(totalBytes - Number(filesystem.bfree) * Number(filesystem.bsize), 0);
+  } catch { /* statfs não disponível ou diretório ainda inexistente */ }
+  logBackupDiagnostic({ ...context, stage }, "disk", {
+    workspaceBytes: databaseBytes + r2FilesBytes + sourceSnapshotBytes + manifestBytes,
+    databaseBytes,
+    r2FilesBytes,
+    sourceSnapshotBytes,
+    manifestBytes,
+    freeBytes,
+    totalBytes,
+    usedBytes,
+  });
+}
+
+async function getFileBytes(filePath: string): Promise<number> {
+  try { return (await stat(filePath)).size; } catch { return 0; }
+}
+
+function getActiveBackupDiagnostic(): BackupDiagnosticContext | null {
+  const active = activeBackupDiagnostics.values().next().value as BackupDiagnosticContext | undefined;
+  return active ? { ...active } : null;
+}
+
+export function logProcessDiagnostic(event: string, details: Record<string, string | number | boolean | null | undefined> = {}) {
+  const active = getActiveBackupDiagnostic();
+  const context = active || { backupId: "none", stage: "idle", startedAt: Date.now() };
+  const fields = Object.entries(details)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${typeof value === "string" ? sanitizeDiagnosticValue(value) : String(value)}`)
+    .join(" ");
+  console.error(`[PROCESS-DIAG] backupRunning=${Boolean(active)} backupId=${context.backupId} stage=${context.stage} timestamp=${new Date().toISOString()} elapsedMs=${Date.now() - context.startedAt} event=${event}${fields ? ` ${fields}` : ""}`);
+}
 
 type DatabaseConnectionInfo = {
   host: string;
@@ -160,7 +264,16 @@ async function downloadR2Object(key: string, destination: string, expectedSize: 
   return { bytes: hasher.bytes, sha256: hasher.hash.digest("hex") };
 }
 
-async function runProcess(command: string, args: string[], env: NodeJS.ProcessEnv, stdoutFile?: string): Promise<void> {
+async function runProcess(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  stdoutFile?: string,
+  diagnostic?: BackupDiagnosticContext,
+): Promise<void> {
+  const commandName = path.basename(command);
+  const processStartedAt = Date.now();
+  if (diagnostic) logBackupDiagnostic(diagnostic, "process-start", { commandName });
   const child = spawn(command, args, {
     cwd: BACKUP_SOURCE_ROOT,
     env,
@@ -175,10 +288,26 @@ async function runProcess(command: string, args: string[], env: NodeJS.ProcessEn
     ? pipeline(child.stdout, createWriteStream(stdoutFile, { flags: "wx" }))
     : Promise.resolve();
   const exitPromise = new Promise<void>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code) => {
+    let settled = false;
+    const finish = (event: string, code: number | null, signal: NodeJS.Signals | null, error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      if (diagnostic) logBackupDiagnostic(diagnostic, event, {
+        commandName,
+        durationMs: Date.now() - processStartedAt,
+        exitCode: code,
+        signal,
+        stderr: error || code !== 0 ? sanitizeDiagnosticValue(error || stderr.slice(-800)) : undefined,
+      });
+    };
+    child.once("error", (error) => {
+      finish("process-failed", null, null, error);
+      reject(error);
+    });
+    child.once("close", (code, signal) => {
+      finish(code === 0 ? "process-end" : "process-failed", code, signal);
       if (code === 0) resolve();
-      else reject(new Error(`${command} terminou com código ${code ?? "desconhecido"}: ${stderr.replace(/[\r\n]+/g, " ").slice(-800)}`));
+      else reject(new Error(`${commandName} terminou com código ${code ?? "desconhecido"}${signal ? ` por ${signal}` : ""}: ${sanitizeDiagnosticValue(stderr.slice(-800))}`));
     });
   });
 
@@ -202,7 +331,7 @@ export function resolveDumplingTlsPaths(caRaw: string | undefined, certRaw: stri
 
 // Dumpling v8.5.7 exige um par PEM mesmo quando o servidor usa TLS de mão única.
 // Este certificado não é uma credencial: é descartável e removido antes de continuar o backup.
-async function createEphemeralDumplingClientCertificate(directory: string): Promise<{ certPath: string; keyPath: string }> {
+async function createEphemeralDumplingClientCertificate(directory: string, diagnostic?: BackupDiagnosticContext): Promise<{ certPath: string; keyPath: string }> {
   const certPath = path.join(directory, "client.crt.pem");
   const keyPath = path.join(directory, "client.key.pem");
   await mkdir(directory, { recursive: true });
@@ -218,7 +347,7 @@ async function createEphemeralDumplingClientCertificate(directory: string): Prom
     "1",
     "-subj",
     "/CN=walk-ajuda-backup-ephemeral",
-  ], { PATH: process.env.PATH ?? "/usr/bin:/bin" });
+  ], { PATH: process.env.PATH ?? "/usr/bin:/bin" }, undefined, diagnostic);
   return { certPath, keyPath };
 }
 
@@ -269,7 +398,7 @@ export async function concatenateDumplingSqlFiles(outputDirectory: string, datab
   }
 }
 
-async function dumpDatabase(databaseFile: string): Promise<{ info: DatabaseConnectionInfo; tables: Array<{ name: string; estimatedRows: number | null }>; bytes: number; sha256: string }> {
+async function dumpDatabase(databaseFile: string, diagnostic?: BackupDiagnosticContext): Promise<{ info: DatabaseConnectionInfo; tables: Array<{ name: string; estimatedRows: number | null }>; bytes: number; sha256: string }> {
   const rawUrl = process.env.DATABASE_URL?.trim();
   if (!rawUrl) throw new Error("DATABASE_URL não configurada para criar o backup.");
   const info = parseDatabaseUrl(rawUrl);
@@ -320,14 +449,14 @@ async function dumpDatabase(databaseFile: string): Promise<{ info: DatabaseConne
       process.env.BACKUP_DUMPLING_KEY_PATH,
     );
     const clientCertificate = tls.useEphemeralClientCertificate
-      ? await createEphemeralDumplingClientCertificate(tlsDirectory)
+      ? await createEphemeralDumplingClientCertificate(tlsDirectory, diagnostic)
       : { certPath: tls.certPath, keyPath: tls.keyPath };
     args.push(`--ca=${tls.caPath}`, `--cert=${clientCertificate.certPath}`, `--key=${clientCertificate.keyPath}`);
   }
 
   try {
     await mkdir(outputDirectory, { recursive: true });
-    await runProcess(DUMPLING_BINARY, args, { ...process.env });
+    await runProcess(DUMPLING_BINARY, args, { ...process.env }, undefined, diagnostic);
     await concatenateDumplingSqlFiles(outputDirectory, databaseFile, info.database);
   } finally {
     await rm(outputDirectory, { recursive: true, force: true }).catch(() => undefined);
@@ -340,7 +469,7 @@ async function dumpDatabase(databaseFile: string): Promise<{ info: DatabaseConne
   return { info, tables, bytes: fileInfo.size, sha256 };
 }
 
-async function createSourceSnapshot(destination: string): Promise<{ bytes: number; sha256: string }> {
+async function createSourceSnapshot(destination: string, diagnostic?: BackupDiagnosticContext): Promise<{ bytes: number; sha256: string }> {
   const args = [
     "-czf",
     destination,
@@ -353,7 +482,7 @@ async function createSourceSnapshot(destination: string): Promise<{ bytes: numbe
     "--exclude=*.key",
     ".",
   ];
-  await runProcess("tar", args, { ...process.env });
+  await runProcess("tar", args, { ...process.env }, undefined, diagnostic);
   const fileInfo = await stat(destination);
   const sha256 = await sha256File(destination);
   return { bytes: fileInfo.size, sha256 };
@@ -369,6 +498,8 @@ export function createEncryptedArchiveStream(
   sourceDirectory: string,
   signal?: AbortSignal,
   onBytes?: (bytes: number) => void,
+  diagnostic?: BackupDiagnosticContext,
+  idleTimeoutMs = BACKUP_ARCHIVE_IDLE_TIMEOUT_MS,
 ): EncryptedArchiveStream {
   throwIfBackupAborted(signal);
   const key = getEncryptionKey();
@@ -381,6 +512,8 @@ export function createEncryptedArchiveStream(
   artifactCounter.bytes = header.length;
   output.write(header);
 
+  if (diagnostic) logBackupDiagnostic(diagnostic, "archive-start", { commandName: "tar" });
+  const processStartedAt = Date.now();
   const tar = spawn("tar", ["-cf", "-", "-C", sourceDirectory, "."], {
     cwd: BACKUP_SOURCE_ROOT,
     env: process.env,
@@ -395,14 +528,16 @@ export function createEncryptedArchiveStream(
   };
   let idleTimeout = setTimeout(() => {
     timedOut = true;
+    if (diagnostic) logBackupDiagnostic(diagnostic, "archive-timeout", { timeoutMs: idleTimeoutMs });
     stopTar();
-  }, BACKUP_ARCHIVE_IDLE_TIMEOUT_MS);
+  }, idleTimeoutMs);
   const resetIdleTimeout = () => {
     clearTimeout(idleTimeout);
     idleTimeout = setTimeout(() => {
       timedOut = true;
+      if (diagnostic) logBackupDiagnostic(diagnostic, "archive-timeout", { timeoutMs: idleTimeoutMs });
       stopTar();
-    }, BACKUP_ARCHIVE_IDLE_TIMEOUT_MS);
+    }, idleTimeoutMs);
   };
   tar.stdout?.on("data", resetIdleTimeout);
   const progressCounter = new Transform({
@@ -414,15 +549,26 @@ export function createEncryptedArchiveStream(
     },
   });
   artifactCounter.pipe(output, { end: false });
-  signal?.addEventListener("abort", stopTar, { once: true });
+  const onAbort = () => {
+    if (diagnostic) logBackupDiagnostic(diagnostic, "archive-aborted");
+    stopTar();
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
   tar.stderr?.on("data", (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-4000); });
   const exitPromise = new Promise<number>((resolve, reject) => {
-    tar.once("error", reject);
-    tar.once("close", (code) => resolve(code ?? 1));
+    tar.once("error", (error) => {
+      if (diagnostic) logBackupDiagnostic(diagnostic, "process-failed", { commandName: "tar", durationMs: Date.now() - processStartedAt, exitCode: null, signal: null, stderr: sanitizeDiagnosticValue(error) });
+      reject(error);
+    });
+    tar.once("close", (code, signal) => {
+      if (diagnostic) logBackupDiagnostic(diagnostic, code === 0 ? "process-end" : "process-failed", { commandName: "tar", durationMs: Date.now() - processStartedAt, exitCode: code ?? 1, signal, stderr: code === 0 ? undefined : sanitizeDiagnosticValue(stderr.slice(-800)) });
+      resolve(code ?? 1);
+    });
   });
   const cancel = (error = new Error("Backup encerrado antes da conclusão; nenhum artefato foi validado.")) => {
     if (cancelled) return;
     cancelled = true;
+    if (diagnostic) logBackupDiagnostic(diagnostic, "archive-cancelled", { reason: error?.message || "unknown" });
     stopTar();
     progressCounter.destroy(error);
     artifactCounter.destroy(error);
@@ -430,9 +576,10 @@ export function createEncryptedArchiveStream(
   };
   const completion = (async () => {
     try {
+      if (diagnostic) logBackupDiagnostic(diagnostic, "encryption-start", { algorithm: "aes-256-gcm" });
       await pipeline(tar.stdout!, progressCounter, cipher, artifactCounter);
       const exitCode = await exitPromise;
-      if (timedOut) throw new Error("Cifragem do pacote ficou sem progresso por 10 minutos.");
+      if (timedOut) throw new Error(`Cifragem do pacote ficou sem progresso por ${idleTimeoutMs} ms.`);
       throwIfBackupAborted(signal);
       if (exitCode !== 0) throw new Error(`tar terminou com código ${exitCode}: ${stderr.slice(-800)}`);
       const authTag = cipher.getAuthTag();
@@ -440,14 +587,17 @@ export function createEncryptedArchiveStream(
       artifactCounter.bytes += authTag.length;
       output.write(authTag);
       output.end();
-      return { bytes: artifactCounter.bytes, sha256: artifactCounter.hash.digest("hex") };
+      const result = { bytes: artifactCounter.bytes, sha256: artifactCounter.hash.digest("hex") };
+      if (diagnostic) logBackupDiagnostic(diagnostic, "encryption-end", { bytes: result.bytes, sha256: result.sha256 });
+      return result;
     } catch (error) {
+      if (diagnostic) logBackupDiagnostic(diagnostic, "archive-failed", { error: sanitizeDiagnosticValue(error) });
       cancel(error instanceof Error ? error : new Error(String(error)));
       throw error;
     } finally {
       clearTimeout(idleTimeout);
       tar.stdout?.removeListener("data", resetIdleTimeout);
-      signal?.removeEventListener("abort", stopTar);
+      signal?.removeEventListener("abort", onAbort);
     }
   })();
   return { stream: output, completion, cancel };
@@ -492,7 +642,7 @@ export async function reconcileStaleSystemBackups(now = new Date()): Promise<num
       status: "failed",
       stage: "failed",
       progress: 0,
-      errorMessage: "Execução encerrada por falta de atualização; nenhum artefato foi validado.",
+      errorMessage: `Execução encerrada por falta de atualização. Último estágio persistido: ${row.stage}. Último progresso persistido: ${row.progress}%. Causa do encerramento não determinada pelo processo recuperado; nenhum artefato foi validado.`,
     }).where(eq(systemBackups.id, row.id));
   }
   return staleRows.length;
@@ -517,7 +667,7 @@ export async function reconcileBackupsAfterRestart(): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
   const activeRows = await db
-    .select({ id: systemBackups.id })
+    .select({ id: systemBackups.id, stage: systemBackups.stage, progress: systemBackups.progress })
     .from(systemBackups)
     .where(inArray(systemBackups.status, ["queued", "running"]));
   for (const row of activeRows) {
@@ -525,7 +675,7 @@ export async function reconcileBackupsAfterRestart(): Promise<number> {
       status: "failed",
       stage: "failed",
       progress: 0,
-      errorMessage: "Execução interrompida após reinício do serviço; nenhum artefato foi validado.",
+      errorMessage: `Execução interrompida após reinício do serviço. Último estágio persistido: ${row.stage}. Último progresso persistido: ${row.progress}%. Causa do encerramento da instância não determinada pelo processo recuperado; nenhum artefato foi validado.`,
     }).where(eq(systemBackups.id, row.id));
   }
   return activeRows.length;
@@ -565,11 +715,32 @@ function summaryFromManifest(manifest: BackupManifest, archiveBytes: number, arc
 }
 
 async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
+  const diagnostic: BackupDiagnosticContext = { backupId: id, stage: "queued", startedAt: Date.now() };
+  activeBackupDiagnostics.set(id, diagnostic);
   const heartbeat = setInterval(() => {
     void updateRun(id, { updatedAt: new Date() }).catch(() => undefined);
   }, BACKUP_HEARTBEAT_INTERVAL_MS);
   heartbeat.unref?.();
   const workDirectory = path.join("/tmp", `walk-ajuda-backup-${id}`);
+  let diskMeasurementActive = false;
+  const eventLoopMonitor: IntervalHistogram = monitorEventLoopDelay({ resolution: 20 });
+  eventLoopMonitor.enable();
+  const eventLoopHeartbeat = setInterval(() => {
+    const delayMs = Math.round(eventLoopMonitor.max / 1_000_000);
+    if (delayMs >= 500) logEventLoopDiagnostic(diagnostic, delayMs);
+    eventLoopMonitor.reset();
+  }, BACKUP_HEARTBEAT_INTERVAL_MS);
+  eventLoopHeartbeat.unref?.();
+  const resourceHeartbeat = setInterval(() => {
+    logMemoryDiagnostic(diagnostic, "heartbeat");
+    if (diagnostic.stage === "r2-upload" && !diskMeasurementActive) {
+      diskMeasurementActive = true;
+      void logDiskDiagnostic(diagnostic, workDirectory, diagnostic.stage)
+        .catch(() => undefined)
+        .finally(() => { diskMeasurementActive = false; });
+    }
+  }, BACKUP_HEARTBEAT_INTERVAL_MS);
+  resourceHeartbeat.unref?.();
   const databaseFile = path.join(workDirectory, "database.sql");
   const sourceFile = path.join(workDirectory, "source.tar.gz");
   const filesDirectory = path.join(workDirectory, "files");
@@ -579,12 +750,27 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
     getEncryptionKey();
     throwIfBackupAborted(signal);
     await mkdir(filesDirectory, { recursive: true });
+    logBackupDiagnostic(diagnostic, "start", { sourceRoot: "configured", tempRoot: "backup-workspace" });
+    logMemoryDiagnostic(diagnostic, "start");
+    await logDiskDiagnostic(diagnostic, workDirectory, "queued");
+    diagnostic.stage = "database";
+    logBackupDiagnostic(diagnostic, "stage-start", { progress: 5 });
+    logMemoryDiagnostic(diagnostic);
     await updateRun(id, { status: "running", stage: "database", progress: 5, startedAt: new Date(), errorMessage: null });
-    const database = await dumpDatabase(databaseFile);
-    await updateRun(id, { stage: "r2", progress: 20 });
+    const database = await dumpDatabase(databaseFile, diagnostic);
+    logBackupDiagnostic(diagnostic, "stage-end", { stageName: "database", bytes: database.bytes, tableCount: database.tables.length });
+    logMemoryDiagnostic(diagnostic);
+    await logDiskDiagnostic(diagnostic, workDirectory, "database");
+    diagnostic.stage = "r2-list";
+    logBackupDiagnostic(diagnostic, "stage-start", { progress: 20 });
+    await updateRun(id, { stage: "r2-list", progress: 20 });
     throwIfBackupAborted(signal);
-
     const r2Objects = await listAllR2Objects();
+    logBackupDiagnostic(diagnostic, "stage-end", { stageName: "r2-list", objectCount: r2Objects.length });
+    logMemoryDiagnostic(diagnostic);
+    diagnostic.stage = "r2-download";
+    logBackupDiagnostic(diagnostic, "stage-start", { progress: 20, objectCount: r2Objects.length });
+    await updateRun(id, { stage: "r2-download", progress: 20 });
     const r2Entries: BackupR2Entry[] = [];
     let totalR2Bytes = 0;
     for (let index = 0; index < r2Objects.length; index += 1) {
@@ -596,15 +782,26 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
       totalR2Bytes += result.bytes;
       const progress = 20 + Math.floor(((index + 1) / Math.max(r2Objects.length, 1)) * 55);
       if (index === 0 || index % 10 === 0 || index === r2Objects.length - 1) {
-        await updateRun(id, { stage: "r2", progress });
+        await updateRun(id, { stage: "r2-download", progress });
       }
     }
+    logBackupDiagnostic(diagnostic, "stage-end", { stageName: "r2-download", objectCount: r2Entries.length, bytes: totalR2Bytes });
+    logMemoryDiagnostic(diagnostic);
+    await logDiskDiagnostic(diagnostic, workDirectory, "r2-download");
 
-    await updateRun(id, { stage: "source", progress: 80 });
+    diagnostic.stage = "source-snapshot";
+    logBackupDiagnostic(diagnostic, "stage-start", { progress: 80 });
+    await updateRun(id, { stage: "source-snapshot", progress: 80 });
     throwIfBackupAborted(signal);
-    const source = await createSourceSnapshot(sourceFile);
+    const source = await createSourceSnapshot(sourceFile, diagnostic);
+    logBackupDiagnostic(diagnostic, "stage-end", { stageName: "source-snapshot", bytes: source.bytes });
+    logMemoryDiagnostic(diagnostic);
+    await logDiskDiagnostic(diagnostic, workDirectory, "source-snapshot");
     const sourceCommit = process.env.RENDER_GIT_COMMIT?.trim() || process.env.COMMIT_SHA?.trim() || "unknown";
     const generatedAt = new Date().toISOString();
+    diagnostic.stage = "manifest";
+    logBackupDiagnostic(diagnostic, "stage-start", { progress: 84 });
+    await updateRun(id, { stage: "manifest", progress: 84 });
     const manifest: BackupManifest = {
       formatVersion: 1,
       backupId: id,
@@ -653,9 +850,14 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
       },
     };
     await writeFile(manifestFile, JSON.stringify(manifest, null, 2), "utf8");
+    logBackupDiagnostic(diagnostic, "stage-end", { stageName: "manifest", bytes: await getFileBytes(manifestFile) });
+    logMemoryDiagnostic(diagnostic);
+    await logDiskDiagnostic(diagnostic, workDirectory, "manifest");
     throwIfBackupAborted(signal);
 
-    await updateRun(id, { stage: "archive", progress: 88 });
+    diagnostic.stage = "archive";
+    logBackupDiagnostic(diagnostic, "stage-start", { progress: 88 });
+    await logDiskDiagnostic(diagnostic, workDirectory, "archive");
     const archiveInputBytes = Math.max(database.bytes + source.bytes + totalR2Bytes + Buffer.byteLength(JSON.stringify(manifest)), 1);
     let lastArchiveProgressAt = 0;
     const encrypted = createEncryptedArchiveStream(workDirectory, signal, (processedBytes) => {
@@ -664,26 +866,51 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
       lastArchiveProgressAt = now;
       const progress = 88 + Math.min(6, Math.floor((processedBytes / archiveInputBytes) * 6));
       void updateRun(id, { stage: "archive", progress }).catch(() => undefined);
-    });
+    }, diagnostic);
     const artifactKey = `${BACKUP_ARTIFACT_PREFIX}${id}.wajuda.enc`;
-    const uploadOutcome = r2PutObjectStream(artifactKey, encrypted.stream, "application/octet-stream").then(
-      () => null,
+    const uploadOutcome = r2PutObjectStream(artifactKey, encrypted.stream, "application/octet-stream", undefined, { backupId: id, stage: "r2-upload" }).then(
+      (result) => ({ result, error: null as Error | null }),
       (error) => {
         const failure = error instanceof Error ? error : new Error(String(error));
         encrypted.cancel(failure);
-        return failure;
+        return { result: null, error: failure };
       },
     );
     let archiveInfo: { bytes: number; sha256: string };
     try {
       archiveInfo = await encrypted.completion;
-      await updateRun(id, { stage: "upload", progress: 95, artifactKey, fileSize: archiveInfo.bytes, archiveSha256: archiveInfo.sha256, manifestJson: summaryFromManifest(manifest, archiveInfo.bytes, archiveInfo.sha256) });
-      const uploadError = await uploadOutcome;
-      if (uploadError) throw uploadError;
+      diagnostic.stage = "r2-upload";
+      logBackupDiagnostic(diagnostic, "stage-start", { progress: 95, expectedBytes: archiveInfo.bytes });
+      await updateRun(id, { stage: "r2-upload", progress: 95 });
+      const uploadOutcomeResult = await uploadOutcome;
+      if (uploadOutcomeResult.error) throw uploadOutcomeResult.error;
+      logBackupDiagnostic(diagnostic, "stage-end", {
+        stageName: "r2-upload",
+        bytesSent: uploadOutcomeResult.result?.bytesSent ?? archiveInfo.bytes,
+        httpStatus: uploadOutcomeResult.result?.httpStatus ?? null,
+        etag: uploadOutcomeResult.result?.etag ?? null,
+      });
     } catch (error) {
       await uploadOutcome;
       throw error;
     }
+    throwIfBackupAborted(signal);
+    diagnostic.stage = "verification";
+    logBackupDiagnostic(diagnostic, "stage-start", { progress: 98, expectedBytes: archiveInfo.bytes });
+    await updateRun(id, { stage: "verification", progress: 98 });
+    const finalObject = await r2HeadObject(artifactKey);
+    if (finalObject.contentLength !== archiveInfo.bytes) {
+      throw new Error(`Tamanho final do objeto R2 divergente: esperado ${archiveInfo.bytes}, recebido ${finalObject.contentLength ?? "desconhecido"}.`);
+    }
+    logBackupDiagnostic(diagnostic, "stage-end", {
+      stageName: "verification",
+      objectExists: true,
+      expectedBytes: archiveInfo.bytes,
+      actualBytes: finalObject.contentLength,
+      httpStatus: finalObject.httpStatus,
+      etag: finalObject.etag,
+    });
+    await updateRun(id, { artifactKey, fileSize: archiveInfo.bytes, archiveSha256: archiveInfo.sha256, manifestJson: summaryFromManifest(manifest, archiveInfo.bytes, archiveInfo.sha256) });
     throwIfBackupAborted(signal);
     await updateRun(id, {
       status: "completed",
@@ -692,8 +919,11 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
       completedAt: new Date(),
       manifestJson: summaryFromManifest(manifest, archiveInfo.bytes, archiveInfo.sha256),
     });
+    logBackupDiagnostic(diagnostic, "completed", { archiveBytes: archiveInfo.bytes, archiveSha256: archiveInfo.sha256 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha desconhecida no backup.";
+    const message = sanitizeDiagnosticValue(error) || "Falha desconhecida no backup.";
+    logBackupDiagnostic(diagnostic, "failed", { error: message });
+    logMemoryDiagnostic(diagnostic, "failed-memory");
     await updateRun(id, {
       status: "failed",
       stage: "failed",
@@ -702,8 +932,14 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
     }).catch(() => undefined);
   } finally {
     clearInterval(heartbeat);
-    activeBackupControllers.delete(id);
+    clearInterval(resourceHeartbeat);
+    clearInterval(eventLoopHeartbeat);
+    eventLoopMonitor.disable();
     await rm(workDirectory, { recursive: true, force: true }).catch(() => undefined);
+    await logDiskDiagnostic(diagnostic, workDirectory, "cleanup").catch(() => undefined);
+    logMemoryDiagnostic(diagnostic, "cleanup-memory");
+    activeBackupControllers.delete(id);
+    activeBackupDiagnostics.delete(id);
   }
 }
 

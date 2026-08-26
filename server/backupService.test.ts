@@ -1,12 +1,23 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { BACKUP_STALE_AFTER_MS, concatenateDumplingSqlFiles, createEncryptedArchiveStream, DEFAULT_DUMPLING_CA_PATH, isBackupStale, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath } from "./backupService";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BACKUP_STALE_AFTER_MS, concatenateDumplingSqlFiles, createEncryptedArchiveStream, DEFAULT_DUMPLING_CA_PATH, isBackupStale, logProcessDiagnostic, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath } from "./backupService";
 import { getBackupDownloadName } from "./routers/backup";
 
+const TEST_BACKUP_KEY = Buffer.alloc(32, 7).toString("hex");
+const originalBackupKey = process.env.BACKUP_ENCRYPTION_KEY;
+
 describe("backupService", () => {
+  beforeEach(() => {
+    process.env.BACKUP_ENCRYPTION_KEY = TEST_BACKUP_KEY;
+  });
+
+  afterEach(() => {
+    if (originalBackupKey === undefined) delete process.env.BACKUP_ENCRYPTION_KEY;
+    else process.env.BACKUP_ENCRYPTION_KEY = originalBackupKey;
+  });
   it("interpreta uma conexão MySQL/TiDB sem expor o valor completo", () => {
     const result = parseDatabaseUrl("mysql://backup-user:p%40ss@example.test:4000/walk_ajuda?ssl=true");
     expect(result).toMatchObject({
@@ -109,6 +120,77 @@ describe("backupService", () => {
       if (previousKey === undefined) delete process.env.BACKUP_ENCRYPTION_KEY;
       else process.env.BACKUP_ENCRYPTION_KEY = previousKey;
       await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejeita timeout de inatividade da cifra e limpa o subprocesso", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "wajuda-archive-timeout-test-"));
+    const binDirectory = await mkdtemp(path.join(os.tmpdir(), "wajuda-tar-timeout-bin-"));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeTar = path.join(binDirectory, "tar");
+      await writeFile(fakeTar, "#!/bin/sh\nsleep 1\n", "utf8");
+      await chmod(fakeTar, 0o755);
+      process.env.PATH = `${binDirectory}:${previousPath || ""}`;
+      const archive = createEncryptedArchiveStream(directory, undefined, undefined, { backupId: "backup-test", stage: "archive", startedAt: Date.now() }, 25);
+      archive.stream.on("error", () => undefined);
+      await expect(archive.completion).rejects.toThrow(/sem progresso/);
+    } finally {
+      process.env.PATH = previousPath;
+      await rm(directory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejeita subprocesso tar com código diferente de zero", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "wajuda-archive-exit-test-"));
+    const binDirectory = await mkdtemp(path.join(os.tmpdir(), "wajuda-tar-exit-bin-"));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeTar = path.join(binDirectory, "tar");
+      await writeFile(fakeTar, "#!/bin/sh\necho 'synthetic tar failure' >&2\nexit 7\n", "utf8");
+      await chmod(fakeTar, 0o755);
+      process.env.PATH = `${binDirectory}:${previousPath || ""}`;
+      const archive = createEncryptedArchiveStream(directory, undefined, undefined, { backupId: "backup-test", stage: "archive", startedAt: Date.now() }, 500);
+      archive.stream.on("error", () => undefined);
+      await expect(archive.completion).rejects.toThrow(/código 7/);
+    } finally {
+      process.env.PATH = previousPath;
+      await rm(directory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("propaga cancelamento do stream sem concluir", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "wajuda-archive-cancel-test-"));
+    const binDirectory = await mkdtemp(path.join(os.tmpdir(), "wajuda-tar-cancel-bin-"));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeTar = path.join(binDirectory, "tar");
+      await writeFile(fakeTar, "#!/bin/sh\nsleep 1\n", "utf8");
+      await chmod(fakeTar, 0o755);
+      process.env.PATH = `${binDirectory}:${previousPath || ""}`;
+      const archive = createEncryptedArchiveStream(directory, undefined, undefined, { backupId: "backup-test", stage: "archive", startedAt: Date.now() }, 500);
+      archive.stream.on("error", () => undefined);
+      archive.cancel(new Error("synthetic cancellation"));
+      await expect(archive.completion).rejects.toThrow("synthetic cancellation");
+    } finally {
+      process.env.PATH = previousPath;
+      await rm(directory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("sanitiza logs de processo sem expor URL ou token", () => {
+    const logSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      logProcessDiagnostic("synthetic", { error: "request https://user:secret@example.invalid/path token=hidden" });
+      const output = logSpy.mock.calls.flat().join(" ");
+      expect(output).not.toContain("user:secret");
+      expect(output).not.toContain("token=hidden");
+      expect(output).toContain("event=synthetic");
+    } finally {
+      logSpy.mockRestore();
     }
   });
 
