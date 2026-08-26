@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-dejavu-core \
     mariadb-client \
+    openssl \
     && rm -rf /var/lib/apt/lists/*
 
 # Dumpling oficial para exportação lógica compatível com TiDB/MySQL.

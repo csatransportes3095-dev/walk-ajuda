@@ -181,6 +181,46 @@ async function runProcess(command: string, args: string[], env: NodeJS.ProcessEn
   await Promise.all([outputPromise, exitPromise]);
 }
 
+export function resolveDumplingTlsPaths(caRaw: string | undefined, certRaw: string | undefined, keyRaw: string | undefined) {
+  const caPath = caRaw?.trim() || "";
+  const certPath = certRaw?.trim() || "";
+  const keyPath = keyRaw?.trim() || "";
+  if (!caPath) {
+    throw new Error("Dumpling com TLS exige BACKUP_DUMPLING_CA_PATH.");
+  }
+  if ((certPath && !keyPath) || (!certPath && keyPath)) {
+    throw new Error("BACKUP_DUMPLING_CERT_PATH e BACKUP_DUMPLING_KEY_PATH devem ser configurados em par.");
+  }
+  return {
+    caPath,
+    certPath,
+    keyPath,
+    useEphemeralClientCertificate: !certPath && !keyPath,
+  } as const;
+}
+
+// Dumpling v8.5.7 exige um par PEM mesmo quando o servidor usa TLS de mão única.
+// Este certificado não é uma credencial: é descartável e removido antes de continuar o backup.
+async function createEphemeralDumplingClientCertificate(directory: string): Promise<{ certPath: string; keyPath: string }> {
+  const certPath = path.join(directory, "client.crt.pem");
+  const keyPath = path.join(directory, "client.key.pem");
+  await mkdir(directory, { recursive: true });
+  await runProcess("openssl", [
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    `-keyout=${keyPath}`,
+    `-out=${certPath}`,
+    "-days",
+    "1",
+    "-subj",
+    "/CN=walk-ajuda-backup-ephemeral",
+  ], { PATH: process.env.PATH ?? "/usr/bin:/bin" });
+  return { certPath, keyPath };
+}
+
 function quoteSqlIdentifier(value: string): string {
   if (!value || /[\0\r\n]/.test(value)) throw new Error("Nome de banco inválido para o dump.");
   return `\`${value.replace(/`/g, "``")}\``;
@@ -255,6 +295,7 @@ async function dumpDatabase(databaseFile: string): Promise<{ info: DatabaseConne
   }
 
   const outputDirectory = `${databaseFile}.dumpling`;
+  const tlsDirectory = path.join(path.dirname(databaseFile), "dumpling-tls");
   const args = [
     `--host=${info.host}`,
     `--port=${info.port}`,
@@ -272,13 +313,15 @@ async function dumpDatabase(databaseFile: string): Promise<{ info: DatabaseConne
     "--loglevel=warn",
   ];
   if (info.useTls) {
-    const caPath = process.env.BACKUP_DUMPLING_CA_PATH?.trim();
-    const certPath = process.env.BACKUP_DUMPLING_CERT_PATH?.trim();
-    const keyPath = process.env.BACKUP_DUMPLING_KEY_PATH?.trim();
-    if (!caPath || !certPath || !keyPath) {
-      throw new Error("Dumpling com TLS exige BACKUP_DUMPLING_CA_PATH, BACKUP_DUMPLING_CERT_PATH e BACKUP_DUMPLING_KEY_PATH.");
-    }
-    args.push(`--ca=${caPath}`, `--cert=${certPath}`, `--key=${keyPath}`);
+    const tls = resolveDumplingTlsPaths(
+      process.env.BACKUP_DUMPLING_CA_PATH,
+      process.env.BACKUP_DUMPLING_CERT_PATH,
+      process.env.BACKUP_DUMPLING_KEY_PATH,
+    );
+    const clientCertificate = tls.useEphemeralClientCertificate
+      ? await createEphemeralDumplingClientCertificate(tlsDirectory)
+      : { certPath: tls.certPath, keyPath: tls.keyPath };
+    args.push(`--ca=${tls.caPath}`, `--cert=${clientCertificate.certPath}`, `--key=${clientCertificate.keyPath}`);
   }
 
   try {
@@ -287,6 +330,7 @@ async function dumpDatabase(databaseFile: string): Promise<{ info: DatabaseConne
     await concatenateDumplingSqlFiles(outputDirectory, databaseFile, info.database);
   } finally {
     await rm(outputDirectory, { recursive: true, force: true }).catch(() => undefined);
+    await rm(tlsDirectory, { recursive: true, force: true }).catch(() => undefined);
   }
 
   const fileInfo = await stat(databaseFile);
