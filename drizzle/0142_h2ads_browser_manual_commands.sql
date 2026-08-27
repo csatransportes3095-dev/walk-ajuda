@@ -1,3 +1,4 @@
--- Amplia somente os comandos manuais permitidos pela fila H2 Ads. Reaplicar a mesma definição é seguro.
+-- Adiciona a ação manual sem alterar o ENUM já publicado da fila de preparação.
+-- As linhas existentes permanecem em prepare_browser pelo valor padrão.
 ALTER TABLE `h2ads_worker_commands`
-  MODIFY COLUMN `command` ENUM('prepare_browser', 'launch_browser', 'close_browser') NOT NULL;
+  ADD COLUMN `commandAction` VARCHAR(32) NOT NULL DEFAULT 'prepare_browser' AFTER `command`;

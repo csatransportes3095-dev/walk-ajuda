@@ -65,4 +65,14 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(statements.join("\n")).toContain("h2ads_worker_commands");
     expect(statements.join("\n")).not.toMatch(/\b(clients|orders|loans|expenses|cards)\b/i);
   });
+
+  it("evolui comandos manuais por coluna aditiva e idempotente, sem alterar o enum publicado", () => {
+    const migration = read("drizzle/0142_h2ads_browser_manual_commands.sql");
+    const runner = read("scripts/apply-h2ads-browser-manual-commands-migration.ts");
+    expect(migration).toContain("ADD COLUMN `commandAction`");
+    expect(migration).not.toContain("MODIFY COLUMN");
+    expect(migration).toContain("h2ads_worker_commands");
+    expect(runner).toContain("information_schema.COLUMNS");
+    expect(runner).toContain("commandAction");
+  });
 });

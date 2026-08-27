@@ -9,6 +9,11 @@ async function main() {
   const sql = await readFile(migrationPath, "utf8");
   const connection = await createConnection(databaseUrl);
   try {
+    const [existingColumns] = await connection.query(
+      "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1",
+      ["h2ads_worker_commands", "commandAction"],
+    );
+    if (Array.isArray(existingColumns) && existingColumns.length > 0) return;
     await connection.query(sql);
   } finally {
     await connection.end();
