@@ -10,6 +10,7 @@ import {
   getH2AdsProxyCredential,
   listH2AdsDashboard,
   recordH2AdsNetworkValidation,
+  requestH2AdsBrowserPreparation,
   revokeH2AdsBrowserWorker,
   assignH2AdsInstanceWorker,
   saveH2AdsProxyCredential,
@@ -105,6 +106,10 @@ export const h2AdsRevokeWorkerSchema = z.object({
   workerId: z.number().int().positive(),
 }).strict();
 
+export const h2AdsPrepareBrowserSchema = z.object({
+  instanceId: z.number().int().positive(),
+}).strict();
+
 async function requireWritableGroup(groupId: number) {
   const group = await getH2AdsGroup(groupId);
   if (!group) {
@@ -152,6 +157,16 @@ export const h2AdsRouter = {
       throw new TRPCError({ code: "CONFLICT", message });
     }
     return { success: true };
+  }),
+
+  prepareBrowser: adminProcedure.input(h2AdsPrepareBrowserSchema).mutation(async ({ input }) => {
+    await requireConfigurableInstance(input.instanceId);
+    try {
+      return { success: true, ...(await requestH2AdsBrowserPreparation(input.instanceId)) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível preparar o browser desta instância.";
+      throw new TRPCError({ code: "CONFLICT", message });
+    }
   }),
 
   createGroup: adminProcedure.input(h2AdsCreateGroupSchema).mutation(async ({ input }) => {

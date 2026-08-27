@@ -1,15 +1,19 @@
 param(
   [switch]$Install,
   [switch]$Run,
+  [switch]$Update,
   [string]$PanelUrl = "https://h2colombiano.com",
   [string]$PairingCode
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.0.0"
+$AgentVersion = "1.1.0"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
+$RunnerPath = Join-Path $WorkerDirectory "browser-runner.mjs"
+$ProfilesDirectory = Join-Path $WorkerDirectory "profiles"
+$PackagePath = Join-Path $WorkerDirectory "package.json"
 $TaskName = "H2 Ads Browser Worker"
 
 function Get-ComputerLabel {
@@ -57,6 +61,48 @@ function Invoke-WorkerHeartbeat([object]$Config) {
   Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/heartbeat" -Headers $headers -ContentType "application/json" -Body $body | Out-Null
 }
 
+function Get-WorkerHeaders([object]$Config) {
+  return @{ Authorization = "Bearer $(Get-WorkerToken $Config)"; "X-H2ADS-Worker-Key" = $Config.workerKey }
+}
+
+function Ensure-BrowserPreparationComponent([object]$Config) {
+  if (!(Get-Command node.exe -ErrorAction SilentlyContinue)) { throw "Node.js não está disponível neste Worker." }
+  if (!(Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw "npm não está disponível neste Worker." }
+  Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-runner.mjs" -OutFile $RunnerPath
+  @{ name = "h2ads-worker-local"; private = $true; type = "module"; dependencies = @{ "proxy-chain" = "3.0.0" } } | ConvertTo-Json -Compress | Set-Content -Path $PackagePath -Encoding UTF8 -NoNewline
+  & npm.cmd install --omit=dev --ignore-scripts --no-audit --no-fund --prefix $WorkerDirectory | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Não foi possível preparar o relay local deste Worker." }
+}
+
+function Initialize-InstanceProfile([int]$InstanceId) {
+  $profileDirectory = Join-Path $ProfilesDirectory "instance-$InstanceId"
+  New-Item -ItemType Directory -Force -Path $profileDirectory | Out-Null
+  @{ instanceId = $InstanceId; profileVersion = 1; createdAt = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json -Compress | Set-Content -Path (Join-Path $profileDirectory "h2ads-profile.json") -Encoding UTF8 -NoNewline
+}
+
+function Invoke-PendingBrowserPreparation([object]$Config) {
+  $headers = Get-WorkerHeaders $Config
+  try {
+    $response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/next" -Headers $headers
+    if ($response.StatusCode -eq 204 -or [string]::IsNullOrWhiteSpace($response.Content)) { return }
+    $payload = $response.Content | ConvertFrom-Json
+    if ($payload.command.command -ne "prepare_browser") { return }
+    Ensure-BrowserPreparationComponent $Config
+    $runnerInput = @{ command = $payload.command.command; proxy = $payload.proxy } | ConvertTo-Json -Depth 5 -Compress
+    $runnerOutput = $runnerInput | & node.exe $RunnerPath
+    $result = $runnerOutput | ConvertFrom-Json
+    if ($result.state -eq "proxy_verified" -and ![string]::IsNullOrWhiteSpace($result.observedIp)) {
+      Initialize-InstanceProfile ([int]$payload.command.instanceId)
+      $resultBody = @{ state = "proxy_verified"; observedIp = $result.observedIp } | ConvertTo-Json -Compress
+    } else {
+      $resultBody = @{ state = "blocked"; errorCategory = "proxy_unavailable" } | ConvertTo-Json -Compress
+    }
+    Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($payload.command.id)/result" -Headers $headers -ContentType "application/json" -Body $resultBody | Out-Null
+  } catch {
+    # Falhas locais ou da rota não são gravadas no terminal nem reenviadas com detalhes sensíveis.
+  }
+}
+
 if ($Install) {
   New-Item -ItemType Directory -Force -Path $WorkerDirectory | Out-Null
   $validatedPairingCode = Read-PairingCode
@@ -73,11 +119,21 @@ if ($Install) {
   exit 0
 }
 
+if ($Update) {
+  if (!(Test-Path $ConfigPath)) { throw "Configuração do Worker não encontrada. Faça o pareamento primeiro." }
+  $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
+  Invoke-WebRequest -UseBasicParsing -Uri "$($config.panelUrl)/api/h2ads/worker/windows-agent.ps1" -OutFile $InstalledScriptPath
+  Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run" -WindowStyle Hidden
+  Write-Output "Agente H2 Ads atualizado e iniciado."
+  exit 0
+}
+
 if ($Run) {
   if (!(Test-Path $ConfigPath)) { throw "Configuração do Worker não encontrada. Faça o pareamento primeiro." }
   $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
   while ($true) {
     try { Invoke-WorkerHeartbeat $config } catch { }
+    try { Invoke-PendingBrowserPreparation $config } catch { }
     Start-Sleep -Seconds 20
   }
 }

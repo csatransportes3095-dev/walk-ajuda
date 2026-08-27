@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { claimH2AdsWorker, recordH2AdsWorkerHeartbeat } = vi.hoisted(() => ({
+const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsWorkerHeartbeat } = vi.hoisted(() => ({
+  authenticateH2AdsWorker: vi.fn(),
   claimH2AdsWorker: vi.fn(),
+  claimNextH2AdsWorkerCommand: vi.fn(),
+  completeH2AdsWorkerPreparation: vi.fn(),
+  getH2AdsProxyCredential: vi.fn(),
   recordH2AdsWorkerHeartbeat: vi.fn(),
 }));
 
-vi.mock("./h2ads", () => ({ claimH2AdsWorker, recordH2AdsWorkerHeartbeat }));
+vi.mock("./h2ads", () => ({ authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsWorkerHeartbeat }));
+vi.mock("./h2adsProxySecurity", () => ({ decryptH2AdsProxy: vi.fn() }));
 
 import { registerH2AdsWorkerRoute } from "./h2adsWorkerRoute";
 
@@ -69,5 +74,13 @@ describe("endpoints do Browser Worker H2 Ads", () => {
     expect(recordH2AdsWorkerHeartbeat).toHaveBeenCalledWith({ workerKey: "h2w_synthetic", workerToken: "h2wt_synthetic", computerName: "WORKSTATION", agentVersion: "1.0.0" });
     expect(accepted.state.statusCode).toBe(204);
     expect(accepted.state.ended).toBe(true);
+  });
+
+  it("não entrega comandos de preparação sem Worker autenticado", async () => {
+    const routes = setupRoutes();
+    const { res, state } = response();
+    await routes["POST /api/h2ads/worker/commands/next"]({ body: {}, header: () => undefined }, res);
+    expect(state.statusCode).toBe(401);
+    expect(claimNextH2AdsWorkerCommand).not.toHaveBeenCalled();
   });
 });

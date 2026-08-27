@@ -6,6 +6,7 @@ import {
   h2AdsAssignWorkerSchema,
   h2AdsGroupStatusSchema,
   h2AdsInstanceStatusSchema,
+  h2AdsPrepareBrowserSchema,
   h2AdsRevokeWorkerSchema,
   h2AdsSaveProxyCredentialSchema,
   h2AdsSaveNetworkProfileSchema,
@@ -72,5 +73,11 @@ describe("contrato administrativo H2 Ads", () => {
     expect(h2AdsAssignWorkerSchema.safeParse({ instanceId: 1, workerId: 2 }).success).toBe(true);
     expect(h2AdsAssignWorkerSchema.safeParse({ instanceId: 1, workerId: 2, browserWSEndpoint: "ws://blocked" }).success).toBe(false);
     expect(h2AdsRevokeWorkerSchema.safeParse({ workerId: 2 }).success).toBe(true);
+  });
+
+  it("aceita preparação somente pelo identificador da instância", () => {
+    expect(h2AdsPrepareBrowserSchema.safeParse({ instanceId: 1 }).success).toBe(true);
+    expect(h2AdsPrepareBrowserSchema.safeParse({ instanceId: 1, proxyUrl: "http://blocked" }).success).toBe(false);
+    expect(h2AdsPrepareBrowserSchema.safeParse({ instanceId: 1, launch: true }).success).toBe(false);
   });
 });

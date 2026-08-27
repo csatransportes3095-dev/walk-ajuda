@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, asc, eq, gt, isNull } from "drizzle-orm";
-import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment } from "../drizzle/schema";
+import { and, asc, desc, eq, gt, isNull } from "drizzle-orm";
+import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceBrowserRuns, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsWorkerCommands, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceBrowserRun, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment, type H2AdsWorkerCommand } from "../drizzle/schema";
 import { getDb } from "./db";
 
 export type H2AdsDashboard = {
@@ -10,10 +10,12 @@ export type H2AdsDashboard = {
   proxyCredentialStatuses: Array<{ instanceId: number; updatedAt: Date }>;
   browserWorkers: H2AdsBrowserWorkerSummary[];
   instanceWorkerAssignments: H2AdsInstanceWorkerAssignmentSummary[];
+  instanceBrowserRuns: H2AdsInstanceBrowserRunSummary[];
 };
 
 export type H2AdsBrowserWorkerSummary = Omit<H2AdsBrowserWorker, "tokenHash"> & { connectionStatus: "online" | "offline" | "revoked" };
 export type H2AdsInstanceWorkerAssignmentSummary = Pick<H2AdsInstanceWorkerAssignment, "instanceId" | "workerId" | "profileState" | "profileVersion" | "lastSnapshotAt" | "assignedAt" | "updatedAt">;
+export type H2AdsInstanceBrowserRunSummary = Pick<H2AdsInstanceBrowserRun, "instanceId" | "workerId" | "state" | "observedIp" | "lastErrorCategory" | "preparedAt" | "lastChangedAt">;
 export const H2ADS_WORKER_ONLINE_WINDOW_MS = 70_000;
 
 async function requireH2AdsDb() {
@@ -24,13 +26,14 @@ async function requireH2AdsDb() {
 
 export async function listH2AdsDashboard(): Promise<H2AdsDashboard> {
   const db = await requireH2AdsDb();
-  const [groups, instances, networkProfiles, proxyCredentialStatuses, browserWorkers, instanceWorkerAssignments] = await Promise.all([
+  const [groups, instances, networkProfiles, proxyCredentialStatuses, browserWorkers, instanceWorkerAssignments, instanceBrowserRuns] = await Promise.all([
     db.select().from(h2AdsGroups).orderBy(asc(h2AdsGroups.sortOrder), asc(h2AdsGroups.id)),
     db.select().from(h2AdsInstances).orderBy(asc(h2AdsInstances.groupId), asc(h2AdsInstances.sortOrder), asc(h2AdsInstances.id)),
     db.select().from(h2AdsInstanceNetworkProfiles).orderBy(asc(h2AdsInstanceNetworkProfiles.instanceId)),
     db.select({ instanceId: h2AdsInstanceProxyCredentials.instanceId, updatedAt: h2AdsInstanceProxyCredentials.updatedAt }).from(h2AdsInstanceProxyCredentials).orderBy(asc(h2AdsInstanceProxyCredentials.instanceId)),
     db.select({ id: h2AdsBrowserWorkers.id, workerKey: h2AdsBrowserWorkers.workerKey, name: h2AdsBrowserWorkers.name, operatingSystem: h2AdsBrowserWorkers.operatingSystem, status: h2AdsBrowserWorkers.status, capacity: h2AdsBrowserWorkers.capacity, computerName: h2AdsBrowserWorkers.computerName, agentVersion: h2AdsBrowserWorkers.agentVersion, lastSeenAt: h2AdsBrowserWorkers.lastSeenAt, revokedAt: h2AdsBrowserWorkers.revokedAt, createdAt: h2AdsBrowserWorkers.createdAt, updatedAt: h2AdsBrowserWorkers.updatedAt }).from(h2AdsBrowserWorkers).orderBy(asc(h2AdsBrowserWorkers.name), asc(h2AdsBrowserWorkers.id)),
     db.select({ instanceId: h2AdsInstanceWorkerAssignments.instanceId, workerId: h2AdsInstanceWorkerAssignments.workerId, profileState: h2AdsInstanceWorkerAssignments.profileState, profileVersion: h2AdsInstanceWorkerAssignments.profileVersion, lastSnapshotAt: h2AdsInstanceWorkerAssignments.lastSnapshotAt, assignedAt: h2AdsInstanceWorkerAssignments.assignedAt, updatedAt: h2AdsInstanceWorkerAssignments.updatedAt }).from(h2AdsInstanceWorkerAssignments).orderBy(asc(h2AdsInstanceWorkerAssignments.instanceId)),
+    db.select({ instanceId: h2AdsInstanceBrowserRuns.instanceId, workerId: h2AdsInstanceBrowserRuns.workerId, state: h2AdsInstanceBrowserRuns.state, observedIp: h2AdsInstanceBrowserRuns.observedIp, lastErrorCategory: h2AdsInstanceBrowserRuns.lastErrorCategory, preparedAt: h2AdsInstanceBrowserRuns.preparedAt, lastChangedAt: h2AdsInstanceBrowserRuns.lastChangedAt }).from(h2AdsInstanceBrowserRuns).orderBy(asc(h2AdsInstanceBrowserRuns.instanceId)),
   ]);
   const now = Date.now();
   return {
@@ -40,6 +43,7 @@ export async function listH2AdsDashboard(): Promise<H2AdsDashboard> {
     proxyCredentialStatuses,
     browserWorkers: browserWorkers.map(worker => ({ ...worker, connectionStatus: worker.status === "revoked" ? "revoked" : worker.lastSeenAt && now - worker.lastSeenAt.getTime() <= H2ADS_WORKER_ONLINE_WINDOW_MS ? "online" : "offline" })),
     instanceWorkerAssignments,
+    instanceBrowserRuns,
   };
 }
 
@@ -189,9 +193,15 @@ async function getH2AdsBrowserWorkerByKey(workerKey: string): Promise<H2AdsBrows
   return rows[0];
 }
 
+export async function authenticateH2AdsWorker(workerKey: string, workerToken: string): Promise<Pick<H2AdsBrowserWorker, "id" | "workerKey" | "name" | "status" | "capacity"> | null> {
+  const worker = await getH2AdsBrowserWorkerByKey(workerKey);
+  if (!worker || worker.status !== "active" || !isH2AdsWorkerSecretValid(workerToken, worker.tokenHash)) return null;
+  return { id: worker.id, workerKey: worker.workerKey, name: worker.name, status: worker.status, capacity: worker.capacity };
+}
+
 export async function recordH2AdsWorkerHeartbeat(input: { workerKey: string; workerToken: string; computerName: string; agentVersion: string }): Promise<boolean> {
-  const worker = await getH2AdsBrowserWorkerByKey(input.workerKey);
-  if (!worker || worker.status !== "active" || !isH2AdsWorkerSecretValid(input.workerToken, worker.tokenHash)) return false;
+  const worker = await authenticateH2AdsWorker(input.workerKey, input.workerToken);
+  if (!worker) return false;
   const db = await requireH2AdsDb();
   const updated = await db.update(h2AdsBrowserWorkers).set({ computerName: input.computerName, agentVersion: input.agentVersion, lastSeenAt: new Date() }).where(eq(h2AdsBrowserWorkers.id, worker.id));
   return Number(updated[0].affectedRows) === 1;
@@ -216,4 +226,62 @@ export async function assignH2AdsInstanceWorker(instanceId: number, workerId: nu
   if (current.workerId === workerId) return;
   if (current.profileState !== "not_started") throw new Error("A transferência de perfil desta instância ainda não está pronta. Pare e crie um snapshot íntegro antes de mover o Worker.");
   await db.update(h2AdsInstanceWorkerAssignments).set({ workerId, assignedAt: new Date() }).where(eq(h2AdsInstanceWorkerAssignments.id, current.id));
+}
+
+export type H2AdsBrowserPreparationRequest = { commandId: number; instanceId: number; workerId: number };
+export type H2AdsClaimedWorkerCommand = Pick<H2AdsWorkerCommand, "id" | "instanceId" | "workerId" | "command">;
+
+async function upsertH2AdsBrowserRun(instanceId: number, workerId: number, input: Pick<H2AdsInstanceBrowserRun, "state"> & Partial<Pick<H2AdsInstanceBrowserRun, "observedIp" | "lastErrorCategory" | "preparedAt">>): Promise<void> {
+  const db = await requireH2AdsDb();
+  const rows = await db.select({ id: h2AdsInstanceBrowserRuns.id }).from(h2AdsInstanceBrowserRuns).where(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId)).limit(1);
+  if (rows[0]) {
+    await db.update(h2AdsInstanceBrowserRuns).set({ workerId, ...input, lastChangedAt: new Date() }).where(eq(h2AdsInstanceBrowserRuns.id, rows[0].id));
+    return;
+  }
+  await db.insert(h2AdsInstanceBrowserRuns).values({ instanceId, workerId, ...input });
+}
+
+export async function requestH2AdsBrowserPreparation(instanceId: number): Promise<H2AdsBrowserPreparationRequest> {
+  const db = await requireH2AdsDb();
+  const assignments = await db.select().from(h2AdsInstanceWorkerAssignments).where(eq(h2AdsInstanceWorkerAssignments.instanceId, instanceId)).limit(1);
+  const assignment = assignments[0];
+  if (!assignment) throw new Error("A instância precisa ter um Worker atribuído antes da preparação.");
+  const workers = await db.select().from(h2AdsBrowserWorkers).where(and(eq(h2AdsBrowserWorkers.id, assignment.workerId), eq(h2AdsBrowserWorkers.status, "active"))).limit(1);
+  const worker = workers[0];
+  if (!worker || !worker.lastSeenAt || Date.now() - worker.lastSeenAt.getTime() > H2ADS_WORKER_ONLINE_WINDOW_MS) throw new Error("O Worker atribuído precisa estar online antes da preparação.");
+  const credentials = await db.select({ id: h2AdsInstanceProxyCredentials.id }).from(h2AdsInstanceProxyCredentials).where(eq(h2AdsInstanceProxyCredentials.instanceId, instanceId)).limit(1);
+  if (!credentials[0]) throw new Error("A instância não possui uma rota protegida para validar.");
+  const networkProfiles = await db.select({ healthStatus: h2AdsInstanceNetworkProfiles.healthStatus }).from(h2AdsInstanceNetworkProfiles).where(eq(h2AdsInstanceNetworkProfiles.instanceId, instanceId)).limit(1);
+  if (networkProfiles[0]?.healthStatus !== "healthy") throw new Error("A rota precisa estar aprovada antes da preparação do browser.");
+  const latestCommand = await db.select({ id: h2AdsWorkerCommands.id, status: h2AdsWorkerCommands.status }).from(h2AdsWorkerCommands).where(and(eq(h2AdsWorkerCommands.instanceId, instanceId), eq(h2AdsWorkerCommands.command, "prepare_browser"))).orderBy(desc(h2AdsWorkerCommands.id)).limit(1);
+  if (latestCommand[0] && (latestCommand[0].status === "queued" || latestCommand[0].status === "claimed")) return { commandId: latestCommand[0].id, instanceId, workerId: worker.id };
+  await upsertH2AdsBrowserRun(instanceId, worker.id, { state: "queued", observedIp: null, lastErrorCategory: null, preparedAt: null });
+  const inserted = await db.insert(h2AdsWorkerCommands).values({ workerId: worker.id, instanceId, command: "prepare_browser" });
+  return { commandId: Number(inserted[0].insertId), instanceId, workerId: worker.id };
+}
+
+export async function claimNextH2AdsWorkerCommand(workerId: number): Promise<H2AdsClaimedWorkerCommand | null> {
+  const db = await requireH2AdsDb();
+  return db.transaction(async (tx) => {
+    const rows = await tx.select({ id: h2AdsWorkerCommands.id, workerId: h2AdsWorkerCommands.workerId, instanceId: h2AdsWorkerCommands.instanceId, command: h2AdsWorkerCommands.command }).from(h2AdsWorkerCommands).where(and(eq(h2AdsWorkerCommands.workerId, workerId), eq(h2AdsWorkerCommands.status, "queued"))).orderBy(asc(h2AdsWorkerCommands.id)).limit(1);
+    const command = rows[0];
+    if (!command) return null;
+    const marked = await tx.update(h2AdsWorkerCommands).set({ status: "claimed", claimedAt: new Date() }).where(and(eq(h2AdsWorkerCommands.id, command.id), eq(h2AdsWorkerCommands.status, "queued")));
+    if (Number(marked[0].affectedRows) !== 1) return null;
+    await tx.update(h2AdsInstanceBrowserRuns).set({ state: "preparing", lastChangedAt: new Date() }).where(eq(h2AdsInstanceBrowserRuns.instanceId, command.instanceId));
+    return command;
+  });
+}
+
+export async function completeH2AdsWorkerPreparation(input: { workerId: number; commandId: number; state: "proxy_verified" | "blocked"; observedIp?: string | null; errorCategory?: string | null }): Promise<boolean> {
+  const db = await requireH2AdsDb();
+  const commands = await db.select().from(h2AdsWorkerCommands).where(and(eq(h2AdsWorkerCommands.id, input.commandId), eq(h2AdsWorkerCommands.workerId, input.workerId), eq(h2AdsWorkerCommands.command, "prepare_browser"), eq(h2AdsWorkerCommands.status, "claimed"))).limit(1);
+  const command = commands[0];
+  if (!command) return false;
+  await db.update(h2AdsWorkerCommands).set({ status: input.state === "proxy_verified" ? "succeeded" : "failed", errorCategory: input.errorCategory ?? null, completedAt: new Date() }).where(eq(h2AdsWorkerCommands.id, command.id));
+  await upsertH2AdsBrowserRun(command.instanceId, input.workerId, { state: input.state, observedIp: input.observedIp ?? null, lastErrorCategory: input.errorCategory ?? null, preparedAt: input.state === "proxy_verified" ? new Date() : null });
+  if (input.state === "proxy_verified") {
+    await db.update(h2AdsInstanceWorkerAssignments).set({ profileState: "local_only", profileVersion: 1, updatedAt: new Date() }).where(and(eq(h2AdsInstanceWorkerAssignments.instanceId, command.instanceId), eq(h2AdsInstanceWorkerAssignments.workerId, input.workerId)));
+  }
+  return true;
 }

@@ -32,6 +32,7 @@ describe("fundação multi-Worker H2 Ads", () => {
 
   it("prepara o agente Windows sem iniciar ou automatizar browsers", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
+    const runner = read("workers/windows/browser-runner.mjs");
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
@@ -39,8 +40,23 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(script).toContain("Código de pareamento inválido");
     expect(script).toContain("Register-ScheduledTask");
     expect(script).toContain("/api/h2ads/worker/heartbeat");
+    expect(script).toContain("/api/h2ads/worker/commands/next");
+    expect(script).toContain("Initialize-InstanceProfile");
+    expect(runner).toContain('host: "127.0.0.1"');
+    expect(runner).toContain("https://api.ipify.org?format=json");
+    expect(runner).not.toContain("console.log");
     for (const prohibited of ["chrome.exe", "msedge.exe", "playwright", "selenium", "puppeteer", "Start-Process.*chrome"]) {
       expect(script.toLowerCase()).not.toContain(prohibited.toLowerCase());
+      expect(runner.toLowerCase()).not.toContain(prohibited.toLowerCase());
     }
+  });
+
+  it("mantém a fila de preparação em tabelas H2 Ads idempotentes e isoladas", () => {
+    const statements = read("drizzle/0141_h2ads_browser_preparation.sql").split("--> statement-breakpoint").map(item => item.trim()).filter(Boolean);
+    expect(statements).toHaveLength(2);
+    statements.forEach(assertH2AdsSchemaStatementSafe);
+    expect(statements.join("\n")).toContain("h2ads_instance_browser_runs");
+    expect(statements.join("\n")).toContain("h2ads_worker_commands");
+    expect(statements.join("\n")).not.toMatch(/\b(clients|orders|loans|expenses|cards)\b/i);
   });
 });

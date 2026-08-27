@@ -2768,3 +2768,39 @@ export const h2AdsInstanceWorkerAssignments = mysqlTable("h2ads_instance_worker_
 }));
 export type H2AdsInstanceWorkerAssignment = typeof h2AdsInstanceWorkerAssignments.$inferSelect;
 export type InsertH2AdsInstanceWorkerAssignment = typeof h2AdsInstanceWorkerAssignments.$inferInsert;
+
+// Estado operacional separado por instância. Não contém credenciais, URLs de navegação ou dados de clientes.
+export const h2AdsInstanceBrowserRuns = mysqlTable("h2ads_instance_browser_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  instanceId: int("instanceId").notNull(),
+  workerId: int("workerId").notNull(),
+  state: mysqlEnum("state", ["not_prepared", "queued", "preparing", "proxy_verified", "blocked", "browser_open", "closed"]).notNull().default("not_prepared"),
+  observedIp: varchar("observedIp", { length: 64 }),
+  lastErrorCategory: varchar("lastErrorCategory", { length: 64 }),
+  preparedAt: timestamp("preparedAt"),
+  lastChangedAt: timestamp("lastChangedAt").defaultNow().notNull(),
+}, (table) => ({
+  instanceUnique: uniqueIndex("h2ads_browser_run_instance_uq").on(table.instanceId),
+  workerIndex: index("h2ads_browser_run_worker_idx").on(table.workerId),
+  stateIndex: index("h2ads_browser_run_state_idx").on(table.state),
+}));
+export type H2AdsInstanceBrowserRun = typeof h2AdsInstanceBrowserRuns.$inferSelect;
+export type InsertH2AdsInstanceBrowserRun = typeof h2AdsInstanceBrowserRuns.$inferInsert;
+
+// Fila de comandos manualmente iniciados pelo ADM. O conteúdo sensível é obtido só no momento de entrega ao Worker autenticado.
+export const h2AdsWorkerCommands = mysqlTable("h2ads_worker_commands", {
+  id: int("id").autoincrement().primaryKey(),
+  workerId: int("workerId").notNull(),
+  instanceId: int("instanceId").notNull(),
+  command: mysqlEnum("command", ["prepare_browser"]).notNull(),
+  status: mysqlEnum("status", ["queued", "claimed", "succeeded", "failed", "cancelled"]).notNull().default("queued"),
+  errorCategory: varchar("errorCategory", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  claimedAt: timestamp("claimedAt"),
+  completedAt: timestamp("completedAt"),
+}, (table) => ({
+  workerStatusIndex: index("h2ads_worker_command_worker_status_idx").on(table.workerId, table.status),
+  instanceStatusIndex: index("h2ads_worker_command_instance_status_idx").on(table.instanceId, table.status),
+}));
+export type H2AdsWorkerCommand = typeof h2AdsWorkerCommands.$inferSelect;
+export type InsertH2AdsWorkerCommand = typeof h2AdsWorkerCommands.$inferInsert;
