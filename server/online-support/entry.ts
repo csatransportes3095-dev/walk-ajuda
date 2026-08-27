@@ -3,6 +3,7 @@ import { getDb } from "../db";
 import { storagePut } from "../storage";
 import { registerH2ScoreSubmission } from "../loans/h2Score";
 import { hasRouteAccess, type CustomerRoute } from "../customerAccess";
+import { getCustomerProfileUpdateState } from "../customerProfileUpdatePolicy";
 
 export type OnlineEntrySession = {
   customerId: number;
@@ -12,6 +13,8 @@ export type OnlineEntrySession = {
   cpf: string | null;
   email: string | null;
   profilePhotoUrl: string | null;
+  profileUpdateRequired: boolean;
+  profileUpdateFields: string[];
 };
 
 function resultRows(result: any): any[] {
@@ -22,14 +25,14 @@ function resultRows(result: any): any[] {
  * Valida o token emitido pelo login oficial do cliente. O Atendimento Online
  * não recebe, armazena nem devolve a senha; apenas usa a sessão já validada.
  */
-export async function requireOnlineEntrySession(token: string): Promise<OnlineEntrySession> {
+export async function requireOnlineEntrySession(token: string, options?: { allowProfileUpdate?: boolean }): Promise<OnlineEntrySession> {
   const db = await getDb() as any;
   if (!db) throw new Error("Banco indisponível");
   const safeToken = String(token || "").trim();
   if (!safeToken) throw new Error("Sessão inválida");
 
   const rows = resultRows(await db.execute(sql`
-    SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.profilePhotoUrl, c.blocked,
+    SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.city, c.uf, c.profilePhotoUrl, c.blocked,
            s.expiresAt
     FROM customerPasswordSessions s
     INNER JOIN customers c ON c.phone = s.phone
@@ -41,6 +44,10 @@ export async function requireOnlineEntrySession(token: string): Promise<OnlineEn
     throw new Error("Sessão expirada. Informe telefone e senha novamente.");
   }
   if (Number(session.blocked) === 1) throw new Error("Acesso bloqueado. Entre em contato com o administrador.");
+  const profileUpdateState = await getCustomerProfileUpdateState(session);
+  if (profileUpdateState.pending && !options?.allowProfileUpdate) {
+    throw new Error("Atualização cadastral obrigatória pelo administrador. Conclua os campos solicitados para continuar.");
+  }
 
   return {
     customerId: Number(session.id),
@@ -50,6 +57,8 @@ export async function requireOnlineEntrySession(token: string): Promise<OnlineEn
     cpf: session.cpf ? String(session.cpf).replace(/\D/g, '') : null,
     email: session.email ? String(session.email) : null,
     profilePhotoUrl: session.profilePhotoUrl ? String(session.profilePhotoUrl) : null,
+    profileUpdateRequired: profileUpdateState.pending,
+    profileUpdateFields: profileUpdateState.effectiveFields,
   };
 }
 

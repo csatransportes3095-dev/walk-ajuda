@@ -3,6 +3,7 @@ import { SpreadsheetPage } from './SpreadsheetPage';
 import { GastosLoginPage } from './GastosLoginPage';
 import { trpc } from '@/lib/trpc';
 import { PostLoginReferralManifest } from '@/components/PostLoginReferralManifest';
+import { useLocation } from 'wouter';
 
 const TOKEN_KEY = 'gastos_token';
 const CLIENT_ID_KEY = 'gastos_clientId';
@@ -51,6 +52,7 @@ export function GastosPage() {
   const [clientName, setClientName] = useState<string | null>(null);
   const [requiredProfilePhone, setRequiredProfilePhone] = useState<string>('');
   const [manifestCompleted, setManifestCompleted] = useState(false);
+  const [, navigate] = useLocation();
   const [savedToken] = useState<string>(() => localStorage.getItem(TOKEN_KEY) || '');
   const [isLoading, setIsLoading] = useState<boolean>(() => !!localStorage.getItem(TOKEN_KEY));
 
@@ -70,7 +72,17 @@ export function GastosPage() {
   useEffect(() => {
     if (!savedToken) { setIsLoading(false); return; }
     if (verifyQuery.isLoading) return;
-    if (verifyQuery.data?.valid && verifyQuery.data.profileIncomplete) {
+    if (verifyQuery.data?.valid && verifyQuery.data.profileUpdateRequired) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(CLIENT_ID_KEY);
+      localStorage.removeItem(CLIENT_NAME_KEY);
+      setRequiredProfilePhone(verifyQuery.data.clientPhone || '');
+      setToken(null);
+      setClientName(null);
+      setIsLoggedIn(false);
+      setIsLoading(false);
+      navigate('/atualizarcadastro');
+    } else if (verifyQuery.data?.valid && verifyQuery.data.profileIncomplete) {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(CLIENT_ID_KEY);
       localStorage.removeItem(CLIENT_NAME_KEY);

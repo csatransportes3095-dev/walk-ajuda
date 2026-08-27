@@ -184,6 +184,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const [cpwdShowNew, setCpwdShowNew] = useState(false);
   const [cpwdShowConfirm, setCpwdShowConfirm] = useState(false);
   const [cpwdIsCreating, setCpwdIsCreating] = useState(false);
+  const [profileUpdateRequiredAfterPasswordSetup, setProfileUpdateRequiredAfterPasswordSetup] = useState(false);
   const customerCheckQuery = trpc.customers.checkByPhone.useQuery(
     { phone: getPhoneDigits(clientPhone) },
     { enabled: false }
@@ -339,6 +340,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           localStorage.setItem(SESSION_PHONE_KEY, phone);
           setClientPhone(phone);
         }
+        if (cpwdCheckSessionQuery.data.profileUpdateRequired) {
+          setAccessGranted(false);
+          if (phone) localStorage.setItem('customer_update_phone_hint', phone);
+          if (window.location.pathname !== '/atualizarcadastro') navigate('/atualizarcadastro');
+          return;
+        }
         setAccessGranted(true);
         setAccessType('customer');
       } else if (!accessGranted) {
@@ -431,10 +438,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       return;
     }
     setIsCheckingPhone(true);
+    setProfileUpdateRequiredAfterPasswordSetup(false);
     try {
       // Verificar status da senha (aceita telefone ou CPF)
       const cpwdStatus = await cpwdCheckStatusMutation.mutateAsync({ phone: inputDigits, isCpf: phoneDigits.length !== 11 && cpfDigits.length === 11 });
       const status = cpwdStatus?.status;
+      setProfileUpdateRequiredAfterPasswordSetup(!!(cpwdStatus as any)?.profileUpdateRequired);
 
       // Se o backend resolveu um telefone diferente (cliente entrou com CPF), guardar
       const canonical = (cpwdStatus as any)?.phone || inputDigits;
@@ -955,6 +964,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         // Verificar status da senha para decidir próximo step
         const cpwdStatus = await cpwdCheckStatusMutation.mutateAsync({ phone: getPhoneDigits(clientPhone) });
         const st = cpwdStatus?.status;
+        setProfileUpdateRequiredAfterPasswordSetup(!!(cpwdStatus as any)?.profileUpdateRequired);
         if (st === 'active') {
           setGateStep("password");
         } else if (st === 'pending_approval') {
@@ -1037,6 +1047,13 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         localStorage.setItem(CP_TOKEN_KEY, result.token);
         localStorage.setItem(SESSION_PHONE_KEY, getCanonicalPhone());
         setCpToken(result.token); // estabilizar token em state
+        if (result.profileUpdateRequired) {
+          localStorage.setItem('customer_update_phone_hint', getCanonicalPhone());
+          setAccessGranted(false);
+          toast.info("Atualização cadastral obrigatória pelo administrador.");
+          navigate('/atualizarcadastro');
+          return;
+        }
         setAccessGranted(true);
         setAccessType('customer');
         setTimeRemaining(null);
@@ -1088,6 +1105,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           localStorage.setItem(CP_TOKEN_KEY, result.token);
           localStorage.setItem(SESSION_PHONE_KEY, getCanonicalPhone());
           setCpToken(result.token); // estabilizar token em state
+          if (profileUpdateRequiredAfterPasswordSetup) {
+            setAccessGranted(false);
+            toast.info("Atualização cadastral obrigatória pelo administrador.");
+            navigate('/atualizarcadastro');
+            return;
+          }
           setAccessGranted(true);
           setAccessType('customer');
           setTimeRemaining(null);

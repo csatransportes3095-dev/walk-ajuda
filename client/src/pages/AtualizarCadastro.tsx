@@ -161,10 +161,11 @@ export default function AtualizarCadastro() {
 
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
-    if (!isValidCPF(normalizeCpf(cpf))) return toast.error("Digite um CPF válido.");
+    if (isRequired("phone") && normalizePhone(phone).length < 10) return toast.error("Digite um telefone válido.");
+    if (isRequired("cpf") && !isValidCPF(normalizeCpf(cpf))) return toast.error("Digite um CPF válido.");
     if (!photoUrl) return toast.error("Envie sua foto de perfil.");
     try {
-      await saveMutation.mutateAsync({ token, name, email, cpf, city, uf });
+      await saveMutation.mutateAsync({ token, phone: normalizePhone(phone), name, email, cpf, city, uf });
       localStorage.removeItem(TOKEN_KEY);
       setToken("");
       setStep("done");
@@ -187,6 +188,17 @@ export default function AtualizarCadastro() {
     setStep("phone");
   }
 
+  const requiredFields = profileQuery.data?.requiredFields || [];
+  const isRequired = (field: string) => requiredFields.includes(field as never);
+  const requiredLabels = requiredFields.map((field) => ({
+    name: "Nome completo",
+    phone: "Telefone",
+    email: "E-mail",
+    cpf: "CPF",
+    city: "Cidade",
+    uf: "Estado (UF)",
+    profilePhotoUrl: "Foto de perfil",
+  } as Record<string, string>)[field] || field);
   const busy = statusMutation.isPending || loginMutation.isPending || createPasswordMutation.isPending || profileQuery.isLoading;
 
   return (
@@ -237,16 +249,17 @@ export default function AtualizarCadastro() {
           {step === "profile" && profileQuery.data && (
             <form onSubmit={saveProfile} className="space-y-5">
               <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">Complete seus dados</h2><p className="text-xs text-slate-400">Telefone confirmado: {formatPhone(profileQuery.data.phone)}</p></div><button type="button" onClick={restart} className="text-xs font-bold text-violet-300">Trocar telefone</button></div>
-              {profileQuery.data.missing.length > 0 ? <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100">Encontramos {profileQuery.data.missing.length} dado(s) faltando. Confira todos os campos.</p> : <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs text-emerald-100">Seu cadastro está completo. Você ainda pode corrigir os dados abaixo.</p>}
+              {requiredFields.length > 0 ? <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100"><p className="font-black">Atualização cadastral obrigatória pelo administrador.</p><p className="mt-1">Revise: {requiredLabels.join(", ")}.</p></div> : <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs text-emerald-100">Confira os dados abaixo para concluir sua atualização.</p>}
               <label className="block cursor-pointer rounded-2xl border border-dashed border-violet-400/50 bg-violet-400/5 p-4 text-center hover:bg-violet-400/10">
                 {photoUrl ? <img src={photoUrl} alt="Foto de perfil" className="mx-auto h-24 w-24 rounded-full object-cover ring-2 ring-violet-400" /> : <Upload className="mx-auto h-9 w-9 text-violet-300" />}
                 <span className="mt-2 block text-sm font-bold">{uploadPhotoMutation.isPending ? "Enviando foto..." : photoUrl ? "Trocar foto de perfil" : "Enviar foto de perfil"}</span>
-                <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" className="hidden" disabled={uploadPhotoMutation.isPending} onChange={(e) => uploadPhoto(e.target.files?.[0])} />
+                <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" className="hidden" disabled={uploadPhotoMutation.isPending || !isRequired("profilePhotoUrl")} onChange={(e) => uploadPhoto(e.target.files?.[0])} />
               </label>
-              <Field label="Nome completo"><input value={name} onChange={(e) => setName(e.target.value)} className={INPUT_CLASS} required minLength={2} autoComplete="name" /></Field>
-              <Field label="E-mail"><input value={email} onChange={(e) => setEmail(e.target.value)} className={INPUT_CLASS} required type="email" inputMode="email" autoComplete="email" /></Field>
-              <Field label="CPF"><input value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))} className={INPUT_CLASS} required inputMode="numeric" placeholder="000.000.000-00" /></Field>
-              <div className="grid grid-cols-[1fr_92px] gap-3"><Field label="Cidade"><input value={city} onChange={(e) => setCity(e.target.value)} className={INPUT_CLASS} required /></Field><Field label="UF"><select value={uf} onChange={(e) => setUf(e.target.value)} className={INPUT_CLASS} required><option value="">UF</option>{UFS.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field></div>
+              <Field label={`Telefone${isRequired("phone") ? " · obrigatório nesta revisão" : ""}`}><input value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} className={INPUT_CLASS} required={isRequired("phone")} readOnly={!isRequired("phone")} inputMode="tel" autoComplete="tel" /></Field>
+              <Field label={`Nome completo${isRequired("name") ? " · obrigatório nesta revisão" : ""}`}><input value={name} onChange={(e) => setName(e.target.value)} className={`${INPUT_CLASS} ${!isRequired("name") ? "bg-slate-200/80" : ""}`} required={isRequired("name")} readOnly={!isRequired("name")} minLength={2} autoComplete="name" /></Field>
+              <Field label={`E-mail${isRequired("email") ? " · obrigatório nesta revisão" : ""}`}><input value={email} onChange={(e) => setEmail(e.target.value)} className={`${INPUT_CLASS} ${!isRequired("email") ? "bg-slate-200/80" : ""}`} required={isRequired("email")} readOnly={!isRequired("email")} type="email" inputMode="email" autoComplete="email" /></Field>
+              <Field label={`CPF${isRequired("cpf") ? " · obrigatório nesta revisão" : ""}`}><input value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))} className={`${INPUT_CLASS} ${!isRequired("cpf") ? "bg-slate-200/80" : ""}`} required={isRequired("cpf")} readOnly={!isRequired("cpf")} inputMode="numeric" placeholder="000.000.000-00" /></Field>
+              <div className="grid grid-cols-[1fr_92px] gap-3"><Field label={`Cidade${isRequired("city") ? " · obrigatório nesta revisão" : ""}`}><input value={city} onChange={(e) => setCity(e.target.value)} className={`${INPUT_CLASS} ${!isRequired("city") ? "bg-slate-200/80" : ""}`} required={isRequired("city")} readOnly={!isRequired("city")} /></Field><Field label={`UF${isRequired("uf") ? " · obrigatório nesta revisão" : ""}`}><select value={uf} onChange={(e) => setUf(e.target.value)} className={INPUT_CLASS} required={isRequired("uf")} disabled={!isRequired("uf")}><option value="">UF</option>{UFS.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field></div>
               <PrimaryButton busy={saveMutation.isPending || uploadPhotoMutation.isPending}>SALVAR EM TODO O SISTEMA</PrimaryButton>
             </form>
           )}

@@ -18,6 +18,7 @@ export default function SchedulePage() {
   const [authStep, setAuthStep] = useState<"identity" | "password">("identity");
   const [needsPasswordCreation, setNeedsPasswordCreation] = useState(false);
   const [profileName, setProfileName] = useState("");
+  const [profilePhone, setProfilePhone] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
   const [profileCpf, setProfileCpf] = useState("");
   const [profileCity, setProfileCity] = useState("");
@@ -107,6 +108,21 @@ export default function SchedulePage() {
       setSelectedSlot(null);
     },
   });
+
+  const loadedProfile = data && "profile" in data ? data.profile : null;
+
+  useEffect(() => {
+    const profile = loadedProfile;
+    if (profile) {
+      setProfileName(profile.name || "");
+      setProfilePhone(profile.phone || "");
+      setProfileEmail(profile.email || "");
+      setProfileCpf(profile.cpf || "");
+      setProfileCity(profile.city || "");
+      setProfileUf(profile.uf || "");
+      setProfilePhoto(profile.profilePhotoUrl || "");
+    }
+  }, [loadedProfile?.name, loadedProfile?.phone, loadedProfile?.email, loadedProfile?.cpf, loadedProfile?.city, loadedProfile?.uf, loadedProfile?.profilePhotoUrl]);
 
   useEffect(() => {
     if (!isError || !accessToken) return;
@@ -285,7 +301,9 @@ export default function SchedulePage() {
         missingFields={missingFields}
         updateRequired={profileUpdateRequired}
         name={profileName}
+        phone={profilePhone}
         setName={setProfileName}
+        setPhone={setProfilePhone}
         email={profileEmail}
         setEmail={setProfileEmail}
         cpf={profileCpf}
@@ -314,6 +332,7 @@ export default function SchedulePage() {
             token,
             accessToken,
             ...(missingFields.includes("name") ? { name: profileName } : {}),
+            ...(missingFields.includes("phone") ? { phone: profilePhone } : {}),
             ...(missingFields.includes("email") ? { email: profileEmail } : {}),
             ...(missingFields.includes("cpf") ? { cpf: profileCpf } : {}),
             ...(missingFields.includes("city") ? { city: profileCity } : {}),
@@ -899,6 +918,8 @@ function ScheduleMissingProfileGate({
   updateRequired,
   name,
   setName,
+  phone,
+  setPhone,
   email,
   setEmail,
   cpf,
@@ -918,6 +939,8 @@ function ScheduleMissingProfileGate({
   updateRequired: boolean;
   name: string;
   setName: TextSetter;
+  phone: string;
+  setPhone: TextSetter;
   email: string;
   setEmail: TextSetter;
   cpf: string;
@@ -943,7 +966,7 @@ function ScheduleMissingProfileGate({
           </div>
           <div className="flex items-center justify-between gap-3"><p className="text-xs font-black tracking-[.2em] text-violet-300">WALK AJUDA</p><button type="button" onClick={onLogout} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/5">Sair</button></div>
           <h1 className="mt-2 text-3xl font-black">{updateRequired ? "Atualização cadastral obrigatória" : "Complete apenas o que falta"}</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-400">{updateRequired ? "Para continuar o agendamento, o cadastro principal precisa ter todos os dados obrigatórios e uma foto de perfil." : `Encontramos ${missingFields.length} dado(s) incompleto(s) no cadastro principal. Os demais dados não serão alterados.`}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{updateRequired ? "Atualização cadastral obrigatória pelo administrador. Conclua os campos solicitados e a foto antes de continuar." : `Encontramos ${missingFields.length} dado(s) incompleto(s) no cadastro principal. Os demais dados não serão alterados.`}</p>
         </header>
         <form onSubmit={onSubmit} className="space-y-5 rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl backdrop-blur sm:p-7">
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
@@ -957,6 +980,7 @@ function ScheduleMissingProfileGate({
               <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" className="hidden" disabled={uploading} onChange={(event) => onPhoto(event.target.files?.[0])} />
             </label>
           )}
+          {has("phone") && <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Telefone</span><input value={phone} onChange={(event) => setPhone(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none focus:border-violet-500" required inputMode="tel" autoComplete="tel" /></label>}
           {has("name") && <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Nome completo</span><input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none focus:border-violet-500" required minLength={2} autoComplete="name" /></label>}
           {has("email") && <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">E-mail</span><input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none focus:border-violet-500" required type="email" autoComplete="email" /></label>}
           {has("cpf") && <label className="block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">CPF</span><input value={cpf} onChange={(event) => setCpf(event.target.value)} className="w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none focus:border-violet-500" required inputMode="numeric" placeholder="000.000.000-00" /></label>}

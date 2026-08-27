@@ -53,6 +53,7 @@ import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfter
 import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
 import { isRecoveredCustomerName } from "../shared/customerProfile";
+import { getCustomerProfileUpdatePolicy, getCustomerProfileUpdateState, hasCustomerProfilePhotoSubmission, markCustomerProfilePhotoSubmitted, markCustomerProfileUpdateCompleted, saveCustomerProfileUpdatePolicy } from "./customerProfileUpdatePolicy";
 import { isLoanEditPasswordValid } from "./loanEditAuthorization";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
@@ -2029,6 +2030,42 @@ export const appRouter = router({
         return { success: true, route: input.route, mode };
       }),
 
+    getProfileUpdatePolicy: adminProcedure
+      .input(z.object({ customerId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const db = await (await import('./db')).getDb() as any;
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
+        const customerRows = await db.execute(sql`SELECT id, name, phone, email, cpf, city, uf, profilePhotoUrl FROM customers WHERE id=${input.customerId} AND deletedAt IS NULL LIMIT 1`);
+        const customer = (customerRows[0] as any[])?.[0];
+        if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado.' });
+        return {
+          policy: await getCustomerProfileUpdatePolicy(input.customerId),
+          state: await getCustomerProfileUpdateState(customer),
+        };
+      }),
+
+    setProfileUpdatePolicy: adminProcedure
+      .input(z.object({
+        customerId: z.number().int().positive(),
+        enabled: z.boolean(),
+        fields: z.array(z.enum(['name', 'phone', 'cpf', 'email', 'city', 'uf', 'profilePhotoUrl'])).max(7),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await (await import('./db')).getDb() as any;
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
+        const customerRows = await db.execute(sql`SELECT id, name, phone, email, cpf, city, uf, profilePhotoUrl FROM customers WHERE id=${input.customerId} AND deletedAt IS NULL LIMIT 1`);
+        const customer = (customerRows[0] as any[])?.[0];
+        if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado.' });
+        const updatedBy = (ctx as any)?.user?.name || (ctx as any)?.user?.username || 'Administrador';
+        let policy;
+        try {
+          policy = await saveCustomerProfileUpdatePolicy({ ...input, updatedBy });
+        } catch (error: any) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: error?.message || 'Não foi possível salvar a exigência.' });
+        }
+        return { success: true, policy, state: await getCustomerProfileUpdateState(customer) };
+      }),
+
     // O H2 Score pertence ao customerId do cadastro principal. Nenhum cadastro paralelo é criado aqui.
     getH2ScoreDirectory: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb() as any;
@@ -2194,6 +2231,8 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         await ensureCustomerIdentityInfrastructure();
+        const db = await (await import('./db')).getDb() as any;
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
         const lookupPhone = input.lookupIsCpf ? '' : normalizeCustomerPhone(input.lookupIdentifier);
         const lookupCpf = input.lookupIsCpf ? normalizeCustomerCpf(input.lookupIdentifier) : '';
         if (input.lookupIsCpf && !isValidCPF(lookupCpf)) {
@@ -2219,8 +2258,46 @@ export const appRouter = router({
         if (conflict && conflict.id !== current.id) {
           return { success: false, message: 'Os dados informados já pertencem a outro cadastro. Entre em contato com o administrador.' };
         }
+        const profileUpdateState = await getCustomerProfileUpdateState(current);
+        if (profileUpdateState.enabled && profileUpdateState.effectiveFields.includes('profilePhotoUrl') && !(await hasCustomerProfilePhotoSubmission(Number(current.id), profileUpdateState.revision))) {
+          return { success: false, message: 'Envie uma nova foto de perfil para concluir esta atualização.' };
+        }
+        const oldPhone = normalizeCustomerPhone(current.phone);
         const updated = await updateCustomer(current.id, profile);
+        if (profile.phone !== oldPhone) {
+          const registrationRows = await db.execute(sql`SELECT id FROM accessCodePhones WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`);
+          const registrationIds = ((registrationRows?.[0] || []) as Array<{ id: number }>).map((row) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0);
+          const propagationQueries = [
+            sql`UPDATE customerPasswordSessions SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+            sql`UPDATE customerPasswords SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+            sql`UPDATE customerLoginHistory SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+            sql`UPDATE customerPins SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+            sql`UPDATE spreadsheetClients SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+            sql`UPDATE loanClients SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+            sql`UPDATE accessCodes SET accessedByPhone=${profile.phone} WHERE REGEXP_REPLACE(accessedByPhone, '[^0-9]', '')=${oldPhone}`,
+            sql`UPDATE accessCodePhones SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+          ];
+          for (const query of propagationQueries) { try { await db.execute(query); } catch (error: any) { console.warn('[customers.completeProfile] sincronização de telefone não aplicada:', error?.message); } }
+          if (registrationIds.length) {
+            const registrationList = sql.join(registrationIds.map((registrationId) => sql`${registrationId}`), sql`, `);
+            const orderQueries = [
+              sql`UPDATE orderStatusHistory SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE orderFiles SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE orderLoginData SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE scheduleAppointments SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE docRequests SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE uploadSessions SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE hiddenSubOrders SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
+            ];
+            for (const query of orderQueries) { try { await db.execute(query); } catch (error: any) { console.warn('[customers.completeProfile] sincronização do pedido não aplicada:', error?.message); } }
+          }
+        }
         if (!updated) return { success: false, message: 'Não foi possível atualizar o cadastro.' };
+        if (profileUpdateState.enabled) {
+          const updatedState = await getCustomerProfileUpdateState(updated);
+          const photoSubmitted = !profileUpdateState.effectiveFields.includes('profilePhotoUrl') || await hasCustomerProfilePhotoSubmission(Number(current.id), profileUpdateState.revision);
+          if (updatedState.missingFields.length === 0 && photoSubmitted) await markCustomerProfileUpdateCompleted(Number(current.id), profileUpdateState.revision);
+        }
         return { success: true, customer: updated };
       }),
 
@@ -2426,9 +2503,10 @@ export const appRouter = router({
           registrationId: Number(row.registrationId),
         });
       }
-      return (rows[0] as unknown as Array<Record<string, unknown>>).map(r => {
+      return await Promise.all((rows[0] as unknown as Array<Record<string, unknown>>).map(async r => {
         const cleanPhone = String(r.phone || '').replace(/[^0-9]/g, '');
         const openOrders = openOrdersByPhone[cleanPhone] || [];
+        const profileUpdatePolicy = await getCustomerProfileUpdateState(r);
         return {
           ...r,
           hasOrder: Number(r.hasOrder) === 1,
@@ -2439,8 +2517,9 @@ export const appRouter = router({
           createdAt: r.createdAtMs ? Number(r.createdAtMs) : (r.createdAt ? Number(new Date(r.createdAt as string)) : null),
           // Pedidos em aberto (excluindo entregues e cancelados)
           openOrders,
+          profileUpdatePolicy,
         };
-      });
+      }));
     }),
 
     update: adminProcedure
@@ -2726,6 +2805,8 @@ export const appRouter = router({
         const customer = await getCustomerByPhone(input.phone);
         if (customer) {
           await updateCustomer(customer.id, { profilePhotoUrl: url });
+          const profileUpdateState = await getCustomerProfileUpdateState(customer);
+          await markCustomerProfilePhotoSubmitted(Number(customer.id), profileUpdateState.revision);
         }
         // Notificação: início do cadastro (telefone + foto)
         // IMPORTANTE: enviar o e-mail em segundo plano (sem await) para NAO bloquear

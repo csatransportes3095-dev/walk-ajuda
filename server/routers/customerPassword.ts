@@ -17,6 +17,7 @@ import {
 import { eq, and, sql, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { ensureCustomerIdentityInfrastructure, getRouteAccess, setCustomerRoutePermissions, type CustomerRoute } from "../customerAccess";
+import { getCustomerProfileUpdateState } from "../customerProfileUpdatePolicy";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 
@@ -132,12 +133,14 @@ export const customerPasswordRouter = router({
       if ((cust as any).blocked === 1) return { status: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
 
       const pwd = await getActivePassword(resolvedPhone);
-      if (!pwd) return { status: "no_password" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name };
-      if (pwd.pendingApproval === 1) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name };
-      if (!pwd.expiresAt) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name };
-      if (new Date(pwd.expiresAt) < new Date()) return { status: "expired" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name };
+      const profileUpdateState = await getCustomerProfileUpdateState(cust);
+      const profileUpdateMeta = { profileUpdateRequired: profileUpdateState.pending, profileUpdateFields: profileUpdateState.effectiveFields };
+      if (!pwd) return { status: "no_password" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
+      if (pwd.pendingApproval === 1) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
+      if (!pwd.expiresAt) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
+      if (new Date(pwd.expiresAt) < new Date()) return { status: "expired" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
 
-      return { status: "active" as const, name: cust.name, phone: resolvedPhone, hasCpf: !!(cust.cpf) };
+      return { status: "active" as const, name: cust.name, phone: resolvedPhone, hasCpf: !!(cust.cpf), ...profileUpdateMeta };
     }),
 
   // â”€â”€ Verificar status da senha (mutation para uso dinâmico) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -151,12 +154,14 @@ export const customerPasswordRouter = router({
       if ((cust as any).blocked === 1) return { status: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
 
       const pwd = await getActivePassword(resolvedPhone);
-      if (!pwd) return { status: "no_password" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name };
-      if (pwd.pendingApproval === 1) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name };
-      if (!pwd.expiresAt) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name };
-      if (new Date(pwd.expiresAt) < new Date()) return { status: "expired" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name };
+      const profileUpdateState = await getCustomerProfileUpdateState(cust);
+      const profileUpdateMeta = { profileUpdateRequired: profileUpdateState.pending, profileUpdateFields: profileUpdateState.effectiveFields };
+      if (!pwd) return { status: "no_password" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
+      if (pwd.pendingApproval === 1) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
+      if (!pwd.expiresAt) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
+      if (new Date(pwd.expiresAt) < new Date()) return { status: "expired" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
 
-      return { status: "active" as const, name: cust.name, phone: resolvedPhone, hasCpf: !!(cust.cpf) };
+      return { status: "active" as const, name: cust.name, phone: resolvedPhone, hasCpf: !!(cust.cpf), ...profileUpdateMeta };
     }),
 
   // â”€â”€ Salvar CPF do cliente (obrigatório antes de criar senha) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -337,6 +342,9 @@ export const customerPasswordRouter = router({
         lastAccessAt: new Date(),
       });
 
+      const customer = await getCustomerByCleanPhone(cleanPhone);
+      const profileUpdateState = customer ? await getCustomerProfileUpdateState(customer) : null;
+
       // Registrar no histórico de logins
       try {
         await db.insert(customerLoginHistory).values({
@@ -345,7 +353,12 @@ export const customerPasswordRouter = router({
         });
       } catch {}
 
-      return { success: true, token };
+      return {
+        success: true,
+        token,
+        profileUpdateRequired: !!profileUpdateState?.pending,
+        profileUpdateFields: profileUpdateState?.effectiveFields || [],
+      };
     }),
 
   // â”€â”€ Verificar sessão â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -364,13 +377,15 @@ export const customerPasswordRouter = router({
       if (!session) return { valid: false };
       if (new Date(session.expiresAt) < new Date()) return { valid: false };
       // Verificar se o cliente foi bloqueado após criar a sessão
+      let customerForSession: any = null;
       try {
         const custRows2 = await db.select().from(customers).where(eq(customers.phone, session.phone)).limit(1);
-        const custForBlock2 = custRows2?.[0];
-        if (custForBlock2 && (custForBlock2 as any).blocked === 1) {
-          return { valid: false, blocked: true, blockReason: (custForBlock2 as any).blockReason || 'Acesso bloqueado' };
+        customerForSession = custRows2?.[0] || null;
+        if (customerForSession && (customerForSession as any).blocked === 1) {
+          return { valid: false, blocked: true, blockReason: (customerForSession as any).blockReason || 'Acesso bloqueado' };
         }
       } catch {}
+      const profileUpdateState = customerForSession ? await getCustomerProfileUpdateState(customerForSession) : null;
       // Renovar sessão
       try {
         const newExpiry = new Date(Date.now() + SESSION_DURATION_MS);
@@ -382,7 +397,12 @@ export const customerPasswordRouter = router({
             .where(eq(customerPasswordSessions.token, input.token.trim()));
         }
       } catch {}
-      return { valid: true, phone: session.phone };
+      return {
+        valid: true,
+        phone: session.phone,
+        profileUpdateRequired: !!profileUpdateState?.pending,
+        profileUpdateFields: profileUpdateState?.effectiveFields || [],
+      };
     }),
 
   // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

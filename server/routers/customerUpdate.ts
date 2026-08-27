@@ -16,6 +16,7 @@ import {
 } from "../customerAccess";
 import { syncUnifiedCustomerRegistry } from "../customerIdentity";
 import { storagePut } from "../storage";
+import { getCustomerProfileUpdateState, hasCustomerProfilePhotoSubmission, markCustomerProfilePhotoSubmitted, markCustomerProfileUpdateCompleted } from "../customerProfileUpdatePolicy";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000;
 const PASSWORD_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -63,9 +64,16 @@ async function ensureCustomerUpdateCompletionInfrastructure(db: any) {
 }
 
 async function customerUpdateAlreadyCompleted(db: any, customer: any) {
-  // Cadastros que já estão completos também não precisam entrar novamente no formulário.
-  // Isso cobre quem concluiu a atualização antes da criação do registro de conclusão.
+  const policyState = await getCustomerProfileUpdateState(customer);
+  if (policyState.pending) return false;
+  if (policyState.enabled) return true;
+
+  // A foto ausente nunca pode ser ignorada por uma conclusão legada.
+  if (!String(customer?.profilePhotoUrl || "").trim()) return false;
+  // Cadastros completos também não precisam entrar novamente no formulário.
   if (missingFields(customer).length === 0) return true;
+
+  // Compatibilidade com conclusões registradas antes da política individual.
   await ensureCustomerUpdateCompletionInfrastructure(db);
   const phone = normalizeCustomerPhone(customer?.phone);
   const completed = await rows(db, sql`
@@ -173,8 +181,14 @@ export const customerUpdateRouter = router({
     .query(async ({ input }) => {
       const { db, customer } = await requireCustomerSession(input.token);
       const name = String(customer.name || "").trim();
+      const policyState = await getCustomerProfileUpdateState(customer);
+      const requiredFields = Array.from(new Set([...missingFields(customer), ...policyState.effectiveFields]));
       return {
         completed: await customerUpdateAlreadyCompleted(db, customer),
+        policyEnabled: policyState.enabled,
+        requiredFields,
+        pendingFields: requiredFields,
+        policyRevision: policyState.revision,
         customerNumber: customer.customerNumber || null,
         phone: normalizeCustomerPhone(customer.phone),
         name: isRecoveredCustomerName(name) ? "" : name,
@@ -183,7 +197,7 @@ export const customerUpdateRouter = router({
         city: String(customer.city || "").trim(),
         uf: String(customer.uf || "").trim().toUpperCase(),
         profilePhotoUrl: String(customer.profilePhotoUrl || "").trim(),
-        missing: missingFields(customer),
+        missing: requiredFields,
       };
     }),
 
@@ -192,6 +206,7 @@ export const customerUpdateRouter = router({
     .mutation(async ({ input }) => {
       const { db, customer } = await requireCustomerSession(input.token);
       if (await customerUpdateAlreadyCompleted(db, customer)) throw alreadyUpdatedError();
+      const policyState = await getCustomerProfileUpdateState(customer);
       const comma = input.imageBase64.indexOf(",");
       const pureBase64 = (comma >= 0 ? input.imageBase64.slice(comma + 1) : input.imageBase64).trim();
       const buffer = Buffer.from(pureBase64, "base64");
@@ -208,34 +223,48 @@ export const customerUpdateRouter = router({
       const fileKey = `profile-photos/${phone}-${Date.now()}.${ext}`;
       const { url } = await storagePut(fileKey, buffer, mime);
       await db.execute(sql`UPDATE customers SET profilePhotoUrl=${url}, updatedAt=NOW() WHERE id=${customer.id}`);
+      await markCustomerProfilePhotoSubmitted(Number(customer.id), policyState.revision);
       return { success: true, url };
     }),
 
   save: publicProcedure
     .input(z.object({
       token: z.string().min(32).max(255),
-      name: z.string().trim().min(2).max(128),
-      email: z.string().trim().email().max(320),
-      cpf: z.string().min(11).max(18),
-      city: z.string().trim().min(2).max(128),
-      uf: z.string().trim().length(2),
+      phone: z.string().min(10).max(32).optional(),
+      name: z.string().trim().max(128).optional(),
+      email: z.string().trim().max(320).optional(),
+      cpf: z.string().max(18).optional(),
+      city: z.string().trim().max(128).optional(),
+      uf: z.string().trim().max(2).optional(),
     }))
     .mutation(async ({ input }) => {
       const { db, customer } = await requireCustomerSession(input.token);
       if (await customerUpdateAlreadyCompleted(db, customer)) throw alreadyUpdatedError();
+      const policyState = await getCustomerProfileUpdateState(customer);
+      const selected = new Set([...missingFields(customer), ...policyState.effectiveFields]);
       await ensureCustomerIdentityInfrastructure(db);
-      const name = input.name.trim().replace(/\s+/g, " ");
-      const email = normalizeCustomerEmail(input.email);
-      const cpf = normalizeCustomerCpf(input.cpf);
-      const city = input.city.trim().replace(/\s+/g, " ");
-      const uf = input.uf.trim().toUpperCase();
-      if (isRecoveredCustomerName(name)) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo, sem a indicação de cadastro recuperado." });
-      if (!email) throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
-      if (!cpf || !isValidCPF(cpf)) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido." });
-      if (!/^[A-Z]{2}$/.test(uf)) throw new TRPCError({ code: "BAD_REQUEST", message: "UF inválida." });
+      const name = selected.has("name") ? String(input.name || "").trim().replace(/\s+/g, " ") : String(customer.name || "").trim();
+      const phone = selected.has("phone") ? normalizeCustomerPhone(input.phone || "") : normalizeCustomerPhone(customer.phone);
+      const email = selected.has("email") ? normalizeCustomerEmail(input.email || "") : normalizeCustomerEmail(customer.email);
+      const cpf = selected.has("cpf") ? normalizeCustomerCpf(input.cpf || "") : normalizeCustomerCpf(customer.cpf);
+      const city = selected.has("city") ? String(input.city || "").trim().replace(/\s+/g, " ") : String(customer.city || "").trim();
+      const uf = selected.has("uf") ? String(input.uf || "").trim().toUpperCase() : String(customer.uf || "").trim().toUpperCase();
+      if (selected.has("name") && (name.length < 2 || isRecoveredCustomerName(name))) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo, sem a indicação de cadastro recuperado." });
+      if (selected.has("phone") && (!phone || phone.length < 10 || phone.length > 11)) throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone inválido." });
+      if (selected.has("email") && !email) throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
+      if (selected.has("cpf") && (!cpf || !isValidCPF(cpf))) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido." });
+      if (selected.has("city") && city.length < 2) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe sua cidade." });
+      if (selected.has("uf") && !/^[A-Z]{2}$/.test(uf)) throw new TRPCError({ code: "BAD_REQUEST", message: "UF inválida." });
       const photoRows = await rows(db, sql`SELECT profilePhotoUrl FROM customers WHERE id=${customer.id} LIMIT 1`);
       if (!String(photoRows[0]?.profilePhotoUrl || "").trim()) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Envie sua foto de perfil." });
+      }
+      if (policyState.enabled && selected.has("profilePhotoUrl") && !(await hasCustomerProfilePhotoSubmission(Number(customer.id), policyState.revision))) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Envie uma nova foto de perfil para concluir esta atualização." });
+      }
+      const phoneConflict = await findMainCustomerByIdentity({ phone }, db);
+      if (phoneConflict && Number(phoneConflict.id) !== Number(customer.id)) {
+        throw new TRPCError({ code: "CONFLICT", message: "Telefone já pertence a outro cadastro." });
       }
       const cpfConflict = await findMainCustomerByIdentity({ cpf }, db);
       const emailConflict = await findMainCustomerByIdentity({ email }, db);
@@ -243,19 +272,53 @@ export const customerUpdateRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "CPF ou e-mail já pertence a outro cadastro." });
       }
       const previousIdentity = { phone: customer.phone, cpf: customer.cpf };
+      const oldPhone = normalizeCustomerPhone(customer.phone);
       await db.execute(sql`
         UPDATE customers SET
-          name=${name}, email=${email}, cpf=${cpf}, city=${city}, uf=${uf},
-          normalizedPhone=${normalizeCustomerPhone(customer.phone)},
+          name=${name}, phone=${phone}, email=${email}, cpf=${cpf}, city=${city}, uf=${uf},
+          normalizedPhone=${phone},
           normalizedCpf=${cpf}, normalizedEmail=${email}, updatedAt=NOW()
         WHERE id=${customer.id} AND deletedAt IS NULL
       `);
+      if (phone !== oldPhone) {
+        const registrationRows = await rows(db, sql`SELECT id FROM accessCodePhones WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`);
+        const registrationIds = registrationRows.map((row: any) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0);
+        const propagationQueries = [
+          sql`UPDATE customerPasswordSessions SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+          sql`UPDATE customerPasswords SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+          sql`UPDATE customerLoginHistory SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+          sql`UPDATE customerPins SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+          sql`UPDATE spreadsheetClients SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+          sql`UPDATE loanClients SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+          sql`UPDATE accessCodes SET accessedByPhone=${phone} WHERE REGEXP_REPLACE(accessedByPhone, '[^0-9]', '')=${oldPhone}`,
+          sql`UPDATE accessCodePhones SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+        ];
+        for (const query of propagationQueries) {
+          try { await db.execute(query); } catch (error: any) { console.warn('[customerUpdate.save] sincronização de telefone não aplicada:', error?.message); }
+        }
+        if (registrationIds.length) {
+          const registrationList = sql.join(registrationIds.map((registrationId) => sql`${registrationId}`), sql`, `);
+          const orderQueries = [
+            sql`UPDATE orderStatusHistory SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
+            sql`UPDATE orderFiles SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
+            sql`UPDATE orderLoginData SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
+            sql`UPDATE scheduleAppointments SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
+            sql`UPDATE docRequests SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
+            sql`UPDATE uploadSessions SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
+            sql`UPDATE hiddenSubOrders SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
+          ];
+          for (const query of orderQueries) {
+            try { await db.execute(query); } catch (error: any) { console.warn('[customerUpdate.save] sincronização do pedido não aplicada:', error?.message); }
+          }
+        }
+      }
       const synchronization = await syncUnifiedCustomerRegistry([previousIdentity]);
       await db.execute(sql`
         INSERT INTO customerProfileUpdateCompletions (customerId, phone, completedAt)
-        VALUES (${customer.id}, ${normalizeCustomerPhone(customer.phone)}, NOW())
-        ON DUPLICATE KEY UPDATE completedAt=completedAt
+        VALUES (${customer.id}, ${phone}, NOW())
+        ON DUPLICATE KEY UPDATE phone=${phone}, completedAt=completedAt
       `);
+      if (policyState.enabled) await markCustomerProfileUpdateCompleted(Number(customer.id), policyState.revision);
       return { success: true, synchronization };
     }),
 });

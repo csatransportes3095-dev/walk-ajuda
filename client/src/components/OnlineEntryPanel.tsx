@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, BarChart3, KeyRound, LogOut, Package, WalletCards } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BarChart3, KeyRound, LogOut, Package, WalletCards } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 const ENTRY_TOKEN_KEY = "walk_online_entry_token";
@@ -24,13 +24,13 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   const passwordModeQ = trpc.customerPassword.getMode.useQuery(undefined, { enabled: !!passwordSetupPhone, retry: false });
   const createPasswordAutoMut = trpc.customerPassword.clientCreateAuto.useMutation();
   const createPasswordManualMut = trpc.customerPassword.clientCreateManual.useMutation();
-  const ordersQ = trpc.onlineSupport.entryOrders.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated, retry: false });
+  const ordersQ = trpc.onlineSupport.entryOrders.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated && !sessionQ.data?.customer?.profileUpdateRequired, retry: false });
   const orderDetailsQ = trpc.onlineSupport.entryOrderDetails.useQuery(
     { token, registrationId: selectedOrderId || 0 },
-    { enabled: !!token && !!selectedOrderId && !!sessionQ.data?.authenticated && !!sessionQ.data?.access && (!sessionQ.data.access.restricted || sessionQ.data.access.routes.includes('acompanhar')), retry: false }
+    { enabled: !!token && !!selectedOrderId && !!sessionQ.data?.authenticated && !sessionQ.data?.customer?.profileUpdateRequired && !!sessionQ.data?.access && (!sessionQ.data.access.restricted || sessionQ.data.access.routes.includes('acompanhar')), retry: false }
   );
-  const loansQ = trpc.onlineSupport.entryLoans.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated && !!sessionQ.data?.access && (!sessionQ.data.access.restricted || sessionQ.data.access.routes.includes('emprestimo')), retry: false });
-  const installmentsQ = trpc.onlineSupport.entryLoanInstallments.useQuery({ token, loanId: selectedLoanId || 0 }, { enabled: !!token && !!selectedLoanId && !!sessionQ.data?.authenticated && !!sessionQ.data?.access && (!sessionQ.data.access.restricted || sessionQ.data.access.routes.includes('emprestimo')), retry: false });
+  const loansQ = trpc.onlineSupport.entryLoans.useQuery({ token }, { enabled: !!token && !!sessionQ.data?.authenticated && !sessionQ.data?.customer?.profileUpdateRequired && !!sessionQ.data?.access && (!sessionQ.data.access.restricted || sessionQ.data.access.routes.includes('emprestimo')), retry: false });
+  const installmentsQ = trpc.onlineSupport.entryLoanInstallments.useQuery({ token, loanId: selectedLoanId || 0 }, { enabled: !!token && !!selectedLoanId && !!sessionQ.data?.authenticated && !sessionQ.data?.customer?.profileUpdateRequired && !!sessionQ.data?.access && (!sessionQ.data.access.restricted || sessionQ.data.access.routes.includes('emprestimo')), retry: false });
   const logoutMut = trpc.customerPassword.logout.useMutation();
   const routeMut = trpc.onlineSupport.entryRequestRoute.useMutation();
   const proofMut = trpc.onlineSupport.entrySubmitInstallmentProof.useMutation();
@@ -199,6 +199,16 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   };
 
   const customer = sessionQ.data?.authenticated ? sessionQ.data.customer : null;
+  if (customer?.profileUpdateRequired) return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ ...cardStyle, border: '1px solid rgba(245,158,11,.35)' }}>
+      <AlertTriangle size={21} color="#fbbf24" />
+      <h3 style={{ margin: '8px 0 4px', color: '#fff', fontSize: 16 }}>Atualização cadastral obrigatória</h3>
+      <p style={{ margin: '0 0 10px', color: 'rgba(255,255,255,.68)', fontSize: 12, lineHeight: 1.45 }}>O administrador solicitou a revisão de alguns dados. Conclua a atualização para voltar a consultar pedidos e empréstimos.</p>
+      <p style={{ margin: 0, color: '#fcd34d', fontSize: 12 }}>Campos: {(customer.profileUpdateFields || []).map((field: string) => ({ name: 'nome', phone: 'telefone', email: 'e-mail', cpf: 'CPF', city: 'cidade', uf: 'UF', profilePhotoUrl: 'foto' } as Record<string, string>)[field] || field).join(', ')}</p>
+    </div>
+    <button type="button" onClick={() => window.location.assign('/atualizarcadastro')} style={primaryStyle}>Atualizar cadastro</button>
+    <button type="button" onClick={logout} style={backStyle}>Sair</button>
+  </div>;
   if (!customer && passwordSetupPhone) return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <button onClick={() => { setPasswordSetupPhone(''); setError(''); }} style={backStyle}><ArrowLeft size={15} /> Voltar</button>
     <div style={cardStyle}>

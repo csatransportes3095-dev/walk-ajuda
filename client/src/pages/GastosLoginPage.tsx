@@ -74,8 +74,13 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [passwordCreated, setPasswordCreated] = useState(false);
-  const [profileUpdateLookup, setProfileUpdateLookup] = useState<{ identifier: string; isCpf: boolean; missingFields?: string[]; profile?: any } | null>(null);
-  const isMissingProfileField = (field: string) => !profileUpdateLookup || (profileUpdateLookup.missingFields || ['name', 'phone', 'cpf', 'email', 'photo']).includes(field);
+  const [profileUpdateLookup, setProfileUpdateLookup] = useState<{ identifier: string; isCpf: boolean; missingFields?: string[]; requiredFields?: string[]; profile?: any } | null>(null);
+  const isMissingProfileField = (field: string) => {
+    if (!profileUpdateLookup) return true;
+    const canonicalField = field === 'photo' ? 'profilePhotoUrl' : field;
+    const fields = profileUpdateLookup.missingFields || ['name', 'phone', 'cpf', 'email', 'profilePhotoUrl'];
+    return fields.includes(field) || fields.includes(canonicalField);
+  };
   const [allowedRoutes, setAllowedRoutes] = useState<string[]>([]);
   const [restrictedPhone, setRestrictedPhone] = useState('');
 
@@ -98,7 +103,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   useEffect(() => {
     const phoneToComplete = normalizePhone(requiredProfilePhone || '');
     if (!phoneToComplete) return;
-    setProfileUpdateLookup({ identifier: phoneToComplete, isCpf: false, missingFields: ['name', 'phone', 'cpf', 'email', 'photo'] });
+    setProfileUpdateLookup({ identifier: phoneToComplete, isCpf: false, missingFields: ['name', 'phone', 'cpf', 'email', 'profilePhotoUrl'] });
     setPhone(phoneToComplete);
     setRegPhone(phoneToComplete);
     setError('Atualize obrigatoriamente foto, e-mail, CPF e telefone para continuar.');
@@ -179,8 +184,8 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
           break;
         case 'profile_incomplete': {
           const existingProfile = (result as any).profile || {};
-          const missingFields = (result as any).missingFields || ['name', 'phone', 'cpf', 'email', 'photo'];
-          setProfileUpdateLookup({ identifier: cleanId, isCpf: useCpf, missingFields, profile: existingProfile });
+          const missingFields = (result as any).requiredFields || (result as any).missingFields || ['name', 'phone', 'cpf', 'email', 'profilePhotoUrl'];
+          setProfileUpdateLookup({ identifier: cleanId, isCpf: useCpf, missingFields, requiredFields: (result as any).requiredFields || missingFields, profile: existingProfile });
           setRegName(existingProfile.name || '');
           setRegPhone(existingProfile.phone || cleanPhone);
           setRegCpf(existingProfile.cpf || cleanCpf);
@@ -233,12 +238,12 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
     const cleanCpf = regCpf.replace(/\D/g, '');
     const cleanReferralPhone = normalizePhone(regReferralPhone);
 
-    if (!regName.trim()) { setError('Informe seu nome completo'); return; }
-    if (cleanPhone.length < 10) { setError('Informe um telefone válido'); return; }
-    if (!isValidCPF(cleanCpf)) { setError('CPF inválido. Digite um CPF válido para continuar.'); return; }
-    if (!regEmail.trim() || !regEmail.includes('@')) { setError('Informe um e-mail válido'); return; }
-    if (!profileUpdateLookup && !regCity.trim()) { setError('Informe sua cidade'); return; }
-    if (!profileUpdateLookup && (!regUf.trim() || regUf.length !== 2)) { setError('Informe o estado (UF) com 2 letras'); return; }
+    if (isMissingProfileField('name') && !regName.trim()) { setError('Informe seu nome completo'); return; }
+    if (isMissingProfileField('phone') && cleanPhone.length < 10) { setError('Informe um telefone válido'); return; }
+    if (isMissingProfileField('cpf') && !isValidCPF(cleanCpf)) { setError('CPF inválido. Digite um CPF válido para continuar.'); return; }
+    if (isMissingProfileField('email') && (!regEmail.trim() || !regEmail.includes('@'))) { setError('Informe um e-mail válido'); return; }
+    if (isMissingProfileField('city') && !regCity.trim()) { setError('Informe sua cidade'); return; }
+    if (isMissingProfileField('uf') && (!regUf.trim() || regUf.length !== 2)) { setError('Informe o estado (UF) com 2 letras'); return; }
     if (!profileUpdateLookup && cleanReferralPhone.length < 10) { setError('Informe o telefone com DDD de quem indicou você'); return; }
     if (isMissingProfileField('photo') && !regPhoto) { setError('Selecione uma foto de perfil'); return; }
 
@@ -250,7 +255,8 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
       if (regPhoto) {
         setIsUploadingPhoto(true);
         const base64 = await fileToBase64(regPhoto);
-        const uploadResult = await uploadPhotoMutation.mutateAsync({ imageBase64: base64, phone: cleanPhone });
+        const photoLookupPhone = profileUpdateLookup?.profile?.phone || cleanPhone;
+        const uploadResult = await uploadPhotoMutation.mutateAsync({ imageBase64: base64, phone: photoLookupPhone });
         setIsUploadingPhoto(false);
         if (!uploadResult?.url) { setError('Erro ao enviar foto. Tente novamente.'); setIsLoading(false); return; }
         profilePhotoUrl = uploadResult.url;
@@ -496,7 +502,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
             <form onSubmit={handleRegister} className="space-y-3">
               <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg mb-1">
                 <p className="text-sm text-blue-300 font-medium">{profileUpdateLookup ? '🔒 Atualização obrigatória de cadastro' : '📋 Novo cadastro'}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{profileUpdateLookup ? `Complete somente o que falta: ${(profileUpdateLookup.missingFields || []).map((field) => ({ name: 'nome', phone: 'telefone', cpf: 'CPF', email: 'e-mail', photo: 'foto' } as Record<string, string>)[field] || field).join(', ')}. Nenhum novo cadastro será criado.` : 'Preencha seus dados para criar sua conta.'}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{profileUpdateLookup ? `Revise os campos solicitados: ${(profileUpdateLookup.requiredFields || profileUpdateLookup.missingFields || []).map((field) => ({ name: 'nome', phone: 'telefone', cpf: 'CPF', email: 'e-mail', city: 'cidade', uf: 'UF', photo: 'foto', profilePhotoUrl: 'foto' } as Record<string, string>)[field] || field).join(', ')}. Nenhum novo cadastro será criado.` : 'Preencha seus dados para criar sua conta.'}</p>
               </div>
               {error && (
                 <div className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">

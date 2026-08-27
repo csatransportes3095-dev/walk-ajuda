@@ -100,7 +100,7 @@ export const onlineSupportRouter = router({
     .input(z.object({ token: z.string().min(1) }))
     .query(async ({ input }) => {
       try {
-        const session = await requireOnlineEntrySession(input.token);
+        const session = await requireOnlineEntrySession(input.token, { allowProfileUpdate: true });
         const access = await getRouteAccess(session.customerId);
         const routeStates = await getCustomerRouteStates(session.customerId);
         return { authenticated: true, customer: session, access, routeStates };

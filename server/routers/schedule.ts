@@ -13,6 +13,7 @@ import { isRecoveredCustomerName } from "../../shared/customerProfile";
 import { findMainCustomerByIdentity, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone } from "../customerAccess";
 import { syncUnifiedCustomerRegistry } from "../customerIdentity";
 import { storagePut } from "../storage";
+import { getCustomerProfileUpdateState, hasCustomerProfilePhotoSubmission, markCustomerProfilePhotoSubmitted, markCustomerProfileUpdateCompleted } from "../customerProfileUpdatePolicy";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -183,13 +184,24 @@ async function isCompleteProfileRequiredForSchedule(): Promise<boolean> {
 function rejectIncompleteScheduleProfile() {
   throw new TRPCError({
     code: "FORBIDDEN",
-    message: "Conclua a atualização cadastral com todos os dados obrigatórios e a foto de perfil antes de continuar.",
+    message: "Atualização cadastral obrigatória pelo administrador. Conclua os campos solicitados e a foto de perfil antes de continuar.",
   });
+}
+
+async function shouldBlockScheduleForCustomer(customer: any): Promise<boolean> {
+  const profileUpdateState = await getCustomerProfileUpdateState(customer);
+  return profileUpdateState.pending || (await isCompleteProfileRequiredForSchedule() && missingCustomerFields(customer).length > 0);
 }
 
 async function buildAuthenticatedScheduleData(appt: any, customer: any) {
   const cfg = await getScheduleConfig();
   const requireCompleteProfile = await isCompleteProfileRequiredForSchedule();
+  const profileUpdateState = await getCustomerProfileUpdateState(customer);
+  const missing = Array.from(new Set([
+    ...profileUpdateState.missingFields,
+    ...(profileUpdateState.enabled ? profileUpdateState.effectiveFields : []),
+  ]));
+  const updateRequired = profileUpdateState.pending || (requireCompleteProfile && missingCustomerFields(customer).length > 0);
   const slots = await listAvailableScheduleSlots(appt.templateId ?? null);
   const orderStatus = await getPublicOrderContext(Number(appt.registrationId));
   return {
@@ -199,8 +211,16 @@ async function buildAuthenticatedScheduleData(appt: any, customer: any) {
     config: cfg,
     slots,
     profile: {
-      missing: missingCustomerFields(customer),
-      updateRequired: requireCompleteProfile,
+      missing,
+      requiredFields: profileUpdateState.effectiveFields,
+      name: isRecoveredCustomerName(String(customer.name || '').trim()) ? '' : String(customer.name || '').trim(),
+      phone: normalizeCustomerPhone(customer.phone),
+      email: normalizeCustomerEmail(customer.email),
+      cpf: normalizeCustomerCpf(customer.cpf),
+      city: String(customer.city || '').trim(),
+      uf: String(customer.uf || '').trim().toUpperCase(),
+      profilePhotoUrl: String(customer.profilePhotoUrl || '').trim(),
+      updateRequired,
     },
     order: {
       registrationId: Number(appt.registrationId),
@@ -684,6 +704,7 @@ export const scheduleRouter = router({
     .input(z.object({
       token: z.string().min(32).max(64),
       accessToken: z.string().min(32).max(512),
+      phone: z.string().min(10).max(32).optional(),
       name: z.string().trim().min(2).max(128).optional(),
       email: z.string().trim().email().max(320).optional(),
       cpf: z.string().min(11).max(18).optional(),
@@ -692,8 +713,13 @@ export const scheduleRouter = router({
     }))
     .mutation(async ({ input }) => {
       const { db, appt, customer } = await requireScheduleAccess(input.token, input.accessToken);
-      const missing = missingCustomerFields(customer);
+      const policyState = await getCustomerProfileUpdateState(customer);
+      const missing = Array.from(new Set([
+        ...policyState.missingFields,
+        ...(policyState.enabled ? policyState.effectiveFields : []),
+      ]));
       const name = input.name?.trim().replace(/\s+/g, " ");
+      const phone = input.phone ? normalizeCustomerPhone(input.phone) : "";
       const email = input.email ? normalizeCustomerEmail(input.email) : "";
       const cpf = input.cpf ? normalizeCustomerCpf(input.cpf) : "";
       const city = input.city?.trim().replace(/\s+/g, " ");
@@ -710,14 +736,19 @@ export const scheduleRouter = router({
       if (missing.includes("uf") && input.uf !== undefined && !uf?.match(/^[A-Z]{2}$/)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Informe uma UF válida." });
       }
+      if (missing.includes("phone") && (!phone || phone.length < 10 || phone.length > 11)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um telefone válido." });
+      }
+      const phoneConflict = phone && missing.includes("phone") ? await findMainCustomerByIdentity({ phone }, db) : null;
       const cpfConflict = cpf && missing.includes("cpf") ? await findMainCustomerByIdentity({ cpf }, db) : null;
       const emailConflict = email && missing.includes("email") ? await findMainCustomerByIdentity({ email }, db) : null;
-      if ((cpfConflict && Number(cpfConflict.id) !== Number(customer.id)) || (emailConflict && Number(emailConflict.id) !== Number(customer.id))) {
+      if ((phoneConflict && Number(phoneConflict.id) !== Number(customer.id)) || (cpfConflict && Number(cpfConflict.id) !== Number(customer.id)) || (emailConflict && Number(emailConflict.id) !== Number(customer.id))) {
         throw new TRPCError({ code: "CONFLICT", message: "CPF ou e-mail já pertence a outro cadastro." });
       }
       const previousIdentity = { phone: customer.phone, cpf: customer.cpf };
       const updates: any[] = [];
       if (missing.includes("name") && name) updates.push(sql`name=${name}`);
+      if (missing.includes("phone") && phone) updates.push(sql`phone=${phone}, normalizedPhone=${phone}`);
       if (missing.includes("email") && email) updates.push(sql`email=${email}, normalizedEmail=${email}`);
       if (missing.includes("cpf") && cpf) updates.push(sql`cpf=${cpf}, normalizedCpf=${cpf}`);
       if (missing.includes("city") && city) updates.push(sql`city=${city}`);
@@ -729,7 +760,10 @@ export const scheduleRouter = router({
       }
       const refreshed = await loadMainCustomerById(db, Number(customer.id));
       if (!refreshed) throw new TRPCError({ code: "NOT_FOUND", message: "Cadastro não encontrado." });
-      return { success: true as const, remaining: missingCustomerFields(refreshed), data: await buildAuthenticatedScheduleData(appt, refreshed) };
+      const refreshedState = await getCustomerProfileUpdateState(refreshed);
+      const photoSubmitted = !policyState.effectiveFields.includes('profilePhotoUrl') || await hasCustomerProfilePhotoSubmission(Number(customer.id), policyState.revision);
+      if (policyState.enabled && refreshedState.missingFields.length === 0 && photoSubmitted) await markCustomerProfileUpdateCompleted(Number(customer.id), policyState.revision);
+      return { success: true as const, remaining: refreshedState.missingFields, data: await buildAuthenticatedScheduleData(appt, refreshed) };
     }),
 
   // Atualiza a foto somente quando ela estiver faltante no cadastro principal.
@@ -737,7 +771,8 @@ export const scheduleRouter = router({
     .input(z.object({ token: z.string().min(32).max(64), accessToken: z.string().min(32).max(512), imageBase64: z.string().min(100).max(8_000_000) }))
     .mutation(async ({ input }) => {
       const { db, appt, customer } = await requireScheduleAccess(input.token, input.accessToken);
-      if (!missingCustomerFields(customer).includes("profilePhotoUrl")) return { success: true as const, remaining: missingCustomerFields(customer), data: await buildAuthenticatedScheduleData(appt, customer) };
+      const policyState = await getCustomerProfileUpdateState(customer);
+      if (!policyState.pending || !policyState.effectiveFields.includes("profilePhotoUrl")) return { success: true as const, remaining: policyState.missingFields, data: await buildAuthenticatedScheduleData(appt, customer) };
       const comma = input.imageBase64.indexOf(",");
       const pureBase64 = (comma >= 0 ? input.imageBase64.slice(comma + 1) : input.imageBase64).trim();
       const buffer = Buffer.from(pureBase64, "base64");
@@ -750,8 +785,13 @@ export const scheduleRouter = router({
       const phone = normalizeCustomerPhone(customer.phone);
       const { url } = await storagePut(`profile-photos/${phone}-${Date.now()}.${ext}`, buffer, mime);
       await db.execute(sql`UPDATE customers SET profilePhotoUrl=${url}, updatedAt=NOW() WHERE id=${customer.id} AND deletedAt IS NULL`);
+      await markCustomerProfilePhotoSubmitted(Number(customer.id), policyState.revision);
       const refreshed = await loadMainCustomerById(db, Number(customer.id));
-      return { success: true as const, remaining: refreshed ? missingCustomerFields(refreshed) : [], data: refreshed ? await buildAuthenticatedScheduleData(appt, refreshed) : null };
+      if (refreshed && policyState.enabled) {
+        const refreshedState = await getCustomerProfileUpdateState(refreshed);
+        if (refreshedState.missingFields.length === 0) await markCustomerProfileUpdateCompleted(Number(customer.id), policyState.revision);
+      }
+      return { success: true as const, remaining: refreshed ? (await getCustomerProfileUpdateState(refreshed)).missingFields : [], data: refreshed ? await buildAuthenticatedScheduleData(appt, refreshed) : null };
     }),
 
   // Cliente confirma o horário escolhido (reserva exclusiva)
@@ -759,7 +799,7 @@ export const scheduleRouter = router({
     .input(z.object({ token: z.string().min(32).max(64), accessToken: z.string().min(32).max(512), slotId: z.number() }))
     .mutation(async ({ input }) => {
       const { customer } = await requireScheduleAccess(input.token, input.accessToken);
-      if (shouldBlockScheduleCompletion(await isCompleteProfileRequiredForSchedule(), customer)) {
+      if (await shouldBlockScheduleForCustomer(customer)) {
         rejectIncompleteScheduleProfile();
       }
       const result = await confirmAppointment(input.token, input.slotId);
@@ -806,7 +846,7 @@ export const scheduleRouter = router({
     .input(z.object({ token: z.string().min(32).max(64), accessToken: z.string().min(32).max(512) }))
     .mutation(async ({ input }) => {
       const { customer } = await requireScheduleAccess(input.token, input.accessToken);
-      if (shouldBlockScheduleCompletion(await isCompleteProfileRequiredForSchedule(), customer)) {
+      if (await shouldBlockScheduleForCustomer(customer)) {
         rejectIncompleteScheduleProfile();
       }
       const appt = await getAppointmentByToken(input.token);

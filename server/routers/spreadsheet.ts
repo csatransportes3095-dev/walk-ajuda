@@ -16,6 +16,7 @@ import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsh
 import { eq, and } from "drizzle-orm";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { resolveReferralDeclaration } from "../referral";
+import { getCustomerProfileUpdateState } from "../customerProfileUpdatePolicy";
 
 // Resolve o clientId a partir do token de sessão da planilha.
 // Lança UNAUTHORIZED se o token for inválido ou expirado.
@@ -426,8 +427,10 @@ export const spreadsheetRouter = router({
             await requireCompleteMainCustomerProfile(db, { phone: mainCustomer.phone || '', cpf: mainCustomer.cpf || '' });
           } catch (profileError: any) {
             const profile = { name: mainCustomer.name || '', phone: mainCustomer.phone || '', cpf: mainCustomer.cpf || '', email: mainCustomer.email || '', city: mainCustomer.city || '', uf: mainCustomer.uf || '', profilePhotoUrl: mainCustomer.profilePhotoUrl || '' };
-            const missingFields = [!profile.name && 'name', !profile.phone && 'phone', !profile.cpf && 'cpf', !profile.email && 'email', !profile.profilePhotoUrl && 'photo'].filter(Boolean);
-            return { status: 'profile_incomplete' as const, clientName: mainCustomer.name, message: profileError?.message || 'Atualize os dados pendentes para continuar.', profile, missingFields };
+            const policyState = await getCustomerProfileUpdateState(mainCustomer);
+            const baseMissingFields = [!profile.name && 'name', !profile.phone && 'phone', !profile.cpf && 'cpf', !profile.email && 'email', !profile.profilePhotoUrl && 'photo'].filter(Boolean) as string[];
+            const missingFields = Array.from(new Set([...baseMissingFields, ...policyState.effectiveFields]));
+            return { status: 'profile_incomplete' as const, clientName: mainCustomer.name, message: profileError?.message || 'Atualize os dados pendentes para continuar.', profile, missingFields, requiredFields: missingFields };
           }
           const canonicalPhone = normalizeCustomerPhone(mainCustomer.phone);
           const existingTechnical = await db.select().from(spreadsheetClients)
@@ -550,8 +553,10 @@ export const spreadsheetRouter = router({
         } catch (profileError: any) {
           const mainProfile = await findMainCustomerByIdentity({ phone: client.phone || normalizedPhone || undefined, cpf: client.cpf || normalizedCpf || undefined }, db);
           const profile = { name: mainProfile?.name || client.name || '', phone: mainProfile?.phone || client.phone || normalizedPhone || '', cpf: mainProfile?.cpf || client.cpf || normalizedCpf || '', email: mainProfile?.email || '', city: mainProfile?.city || '', uf: mainProfile?.uf || '', profilePhotoUrl: mainProfile?.profilePhotoUrl || '' };
-          const missingFields = [!profile.name && 'name', !profile.phone && 'phone', !profile.cpf && 'cpf', !profile.email && 'email', !profile.profilePhotoUrl && 'photo'].filter(Boolean);
-          return { status: 'profile_incomplete' as const, clientName: profile.name, message: profileError?.message || 'Atualize os dados pendentes para continuar.', profile, missingFields };
+          const policyState = mainProfile ? await getCustomerProfileUpdateState(mainProfile) : null;
+          const baseMissingFields = [!profile.name && 'name', !profile.phone && 'phone', !profile.cpf && 'cpf', !profile.email && 'email', !profile.profilePhotoUrl && 'photo'].filter(Boolean) as string[];
+          const missingFields = Array.from(new Set([...baseMissingFields, ...(policyState?.effectiveFields || [])]));
+          return { status: 'profile_incomplete' as const, clientName: profile.name, message: profileError?.message || 'Atualize os dados pendentes para continuar.', profile, missingFields, requiredFields: missingFields };
         }
 
         if (client.status === 'blocked') {
@@ -560,6 +565,20 @@ export const spreadsheetRouter = router({
 
         const accessCustomer = await findMainCustomerByIdentity({ phone: client.phone || normalizedPhone || undefined, cpf: client.cpf || normalizedCpf || undefined }, db);
         const requestedRoute = input.requestedRoute || 'gastos';
+        if (accessCustomer) {
+          const profileUpdateState = await getCustomerProfileUpdateState(accessCustomer);
+          if (profileUpdateState.pending) {
+            const profile = { name: accessCustomer.name || '', phone: accessCustomer.phone || '', cpf: accessCustomer.cpf || '', email: accessCustomer.email || '', city: accessCustomer.city || '', uf: accessCustomer.uf || '', profilePhotoUrl: accessCustomer.profilePhotoUrl || '' };
+            return {
+              status: 'profile_incomplete' as const,
+              clientName: accessCustomer.name,
+              message: 'Atualização cadastral obrigatória pelo administrador. Conclua os campos solicitados para continuar.',
+              profile,
+              missingFields: profileUpdateState.effectiveFields,
+              requiredFields: profileUpdateState.effectiveFields,
+            };
+          }
+        }
         if (accessCustomer) {
           const access = await getRouteAccess(accessCustomer.id, db);
           if (access.restricted && !access.routes.includes(requestedRoute)) {
@@ -978,6 +997,22 @@ export const spreadsheetRouter = router({
         
                 const client = clientResult?.[0] || null;
         if (!client) return { valid: false };
+        const mainCustomer = await findMainCustomerByIdentity({ phone: client.phone || undefined, cpf: client.cpf || undefined }, db);
+        if (mainCustomer) {
+          const profileUpdateState = await getCustomerProfileUpdateState(mainCustomer);
+          if (profileUpdateState.pending) {
+            return {
+              valid: true,
+              profileIncomplete: true,
+              profileUpdateRequired: true,
+              profileUpdateFields: profileUpdateState.effectiveFields,
+              clientId: session.clientId,
+              clientName: client.name,
+              clientPhone: client.phone,
+              message: 'Atualização cadastral obrigatória pelo administrador. Conclua os campos solicitados para continuar.',
+            };
+          }
+        }
         try {
           await requireCompleteMainCustomerProfile(db, { phone: client.phone || '', cpf: client.cpf || '' });
         } catch (profileError: any) {
