@@ -34,6 +34,9 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
+    expect(script).toContain("Read-Host");
+    expect(script).toContain("AsSecureString");
+    expect(script).toContain("Código de pareamento inválido");
     expect(script).toContain("Register-ScheduledTask");
     expect(script).toContain("/api/h2ads/worker/heartbeat");
     for (const prohibited of ["chrome.exe", "msedge.exe", "playwright", "selenium", "puppeteer", "Start-Process.*chrome"]) {

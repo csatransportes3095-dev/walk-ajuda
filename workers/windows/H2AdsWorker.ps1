@@ -18,6 +18,19 @@ function Get-ComputerLabel {
   return $name.Trim()
 }
 
+function Read-PairingCode {
+  if ([string]::IsNullOrWhiteSpace($PairingCode)) {
+    $securePairingCode = Read-Host "Cole o código temporário criado no painel H2 Ads" -AsSecureString
+    $credential = [System.Management.Automation.PSCredential]::new("pairing", $securePairingCode)
+    $PairingCode = $credential.GetNetworkCredential().Password
+  }
+  $candidate = $PairingCode.Trim()
+  if ($candidate -notmatch '^H2W-[A-Za-z0-9_-]{24}$') {
+    throw "Código de pareamento inválido. Crie um novo código no painel e cole somente o código solicitado pelo agente."
+  }
+  return $candidate
+}
+
 function Save-WorkerConfig([object]$Claimed) {
   $secureToken = ConvertTo-SecureString -String $Claimed.workerToken -AsPlainText -Force
   $protectedToken = ConvertFrom-SecureString -SecureString $secureToken
@@ -45,9 +58,10 @@ function Invoke-WorkerHeartbeat([object]$Config) {
 }
 
 if ($Install) {
-  if ([string]::IsNullOrWhiteSpace($PairingCode)) { throw "Informe o código temporário criado no painel H2 Ads." }
   New-Item -ItemType Directory -Force -Path $WorkerDirectory | Out-Null
-  $claimBody = @{ pairingCode = $PairingCode.Trim(); computerName = Get-ComputerLabel; agentVersion = $AgentVersion } | ConvertTo-Json -Compress
+  $validatedPairingCode = Read-PairingCode
+  $claimBody = @{ pairingCode = $validatedPairingCode; computerName = Get-ComputerLabel; agentVersion = $AgentVersion } | ConvertTo-Json -Compress
+  Remove-Variable -Name validatedPairingCode -ErrorAction SilentlyContinue
   $claimed = Invoke-RestMethod -Method Post -Uri "$($PanelUrl.TrimEnd('/'))/api/h2ads/worker/claim" -ContentType "application/json" -Body $claimBody
   Save-WorkerConfig $claimed
   Copy-Item -Path $PSCommandPath -Destination $InstalledScriptPath -Force
@@ -68,4 +82,4 @@ if ($Run) {
   }
 }
 
-Write-Output "Use -Install -PairingCode <código> para parear este Windows com o H2 Ads."
+Write-Output "Use -Install para iniciar o pareamento. O agente solicitará o código temporário de forma oculta."
