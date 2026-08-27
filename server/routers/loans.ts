@@ -1798,7 +1798,6 @@ export const loanRouter = router({
         creditLimit: Number(profile.creditLimit || 0),
       }));
 
-    const mainCustomer = await findMainCustomerByIdentity({ phone: session.phone, cpf: session.cpf }, db);
     // O saldo é do cadastro principal do cliente; os IDs técnicos de empréstimo não criam outra conta de Score.
     const h2Score = mainCustomer
       ? await getCustomerH2ScoreSummary(db, Number(mainCustomer.id), Number(client.id))
