@@ -21,6 +21,7 @@ import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl
 import { getOperationalBucket } from "@shared/orderBuckets";
 import { repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
 import { selectWhatsappTemplateForStatus } from "@shared/whatsappTemplateSelection";
+import { snapshotUnicodeText } from "@shared/whatsappUnicodeDiagnostics";
 
 type OrderStatus = "recebido" | "pagamento_recebido" | "em_andamento" | "em_montagem" | "documentos_aprovados" | "conta_ativa" | "aguardando_ativa" | "pedido_entregue" | "cancelado";
 
@@ -7989,6 +7990,16 @@ export default function AdminOrders() {
                   </div>
                 );
               })()}
+
+              <details className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-amber-50/85">
+                <summary className="cursor-pointer font-semibold text-amber-100">Diagnóstico temporário — payload real antes de abrir wa.me</summary>
+                <pre className="mt-3 max-h-52 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify({
+                  selectedTemplateId: waModalSelectedId,
+                  payload: snapshotUnicodeText(waModalMsg),
+                  url: `https://wa.me/${waModalOrder.waPhone}?text=${encodeURIComponent(waModalMsg)}`,
+                  decodedUrlPayload: snapshotUnicodeText(new URL(`https://wa.me/${waModalOrder.waPhone}?text=${encodeURIComponent(waModalMsg)}`).searchParams.get("text") ?? ""),
+                }, null, 2)}</pre>
+              </details>
 
               {/* Botões de ação */}
               <div className="flex gap-3 pt-2">

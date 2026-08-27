@@ -25,4 +25,14 @@ describe("instrumentação Unicode de WhatsApp", () => {
     expect(settings).not.toContain("createWhatsappMessageUrl(digits, isolatedUnicodeMessage)");
     expect(settings).not.toContain("fetch(\"https://wa.me");
   });
+
+  it("expõe o payload real e a URL do modal de pedidos apenas para diagnóstico", () => {
+    const orders = fs.readFileSync(path.join(projectRoot, "client/src/pages/AdminOrders.tsx"), "utf8");
+
+    expect(orders).toContain("Diagnóstico temporário — payload real antes de abrir wa.me");
+    expect(orders).toContain("payload: snapshotUnicodeText(waModalMsg)");
+    expect(orders).toContain("decodedUrlPayload: snapshotUnicodeText");
+    expect(orders).toContain('href={`https://wa.me/${waModalOrder.waPhone}?text=${encodeURIComponent(waModalMsg)}`}');
+    expect(orders).not.toContain("fetch(\"https://wa.me");
+  });
 });
