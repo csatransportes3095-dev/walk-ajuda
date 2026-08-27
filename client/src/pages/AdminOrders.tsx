@@ -19,6 +19,7 @@ import { AuthenticatorQrAdminField, type PendingQr } from "@/components/Authenti
 import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
 import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl, publicTrackingShareUrl } from "@shared/publicLinks";
 import { getOperationalBucket } from "@shared/orderBuckets";
+import { selectWhatsappTemplateForStatus } from "@shared/whatsappTemplateSelection";
 
 type OrderStatus = "recebido" | "pagamento_recebido" | "em_andamento" | "em_montagem" | "documentos_aprovados" | "conta_ativa" | "aguardando_ativa" | "pedido_entregue" | "cancelado";
 
@@ -5961,11 +5962,8 @@ export default function AdminOrders() {
                           <button
                             onClick={() => {
                               // Encontrar template padrão para o status atual
-                              const currentStatus = order.latestStatus || '';
-                              const defaultTemplate = (waTemplates as any[]).find((t: any) => t.statusKey === currentStatus && t.isDefault === 1)
-                                || (waTemplates as any[]).find((t: any) => t.statusKey === currentStatus)
-                                || null;
-                              setWaModalOrder({ ...order, waPhone, defaultMsg: msg });
+                              const defaultTemplate = selectWhatsappTemplateForStatus(waTemplates as any[], currentStatus);
+                              setWaModalOrder({ ...order, latestStatus: currentStatus, waPhone, defaultMsg: msg });
                               if (defaultTemplate) {
                                 const baseMsg2 = normalizePublicSiteLinks(defaultTemplate.message
                                   .replace(/\{nome\}/gi, order.customerName || order.codeClientName || '')
@@ -8018,4 +8016,3 @@ export default function AdminOrders() {
     </div>
   );
 }
-
