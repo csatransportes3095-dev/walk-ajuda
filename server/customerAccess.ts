@@ -15,6 +15,8 @@ type MainCustomer = {
   profilePhotoUrl?: string | null;
   city?: string | null;
   uf?: string | null;
+  referredBy?: string | null;
+  referredByPhone?: string | null;
   blocked?: number | boolean | null;
   deletedAt?: Date | string | null;
 };
@@ -68,7 +70,7 @@ export async function findMainCustomerByIdentity(identity: IdentityInput, dbArg?
   if (!phone && !cpf && !email) return null;
 
   const candidates = await rows(db, sql`
-    SELECT id, customerNumber, name, phone, cpf, email, city, uf, profilePhotoUrl, blocked, deletedAt
+    SELECT id, customerNumber, name, phone, cpf, email, city, uf, referredBy, referredByPhone, profilePhotoUrl, blocked, deletedAt
     FROM customers
     WHERE deletedAt IS NULL
   `);

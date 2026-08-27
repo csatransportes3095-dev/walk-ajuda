@@ -1689,6 +1689,7 @@ export const loanRouter = router({
     }
 
     const storedClient = clients[0];
+    const mainCustomer = await findMainCustomerByIdentity({ phone: session.phone, cpf: session.cpf }, db);
     // Mantém a compatibilidade dos clientes antigos que já possuíam chave PIX
     // antes dos campos específicos de recebimento. Não altera registros aqui.
     const client = {
@@ -1696,6 +1697,8 @@ export const loanRouter = router({
       client_pix_key: String(storedClient.client_pix_key || storedClient.pixKey || '').trim(),
       client_pix_name: String(storedClient.client_pix_name || storedClient.pixName || '').trim(),
       client_pix_bank: String(storedClient.client_pix_bank || '').trim(),
+      referredBy: mainCustomer?.referredBy ? String(mainCustomer.referredBy).trim() : null,
+      referredByPhone: mainCustomer?.referredByPhone ? String(mainCustomer.referredByPhone).trim() : null,
     };
     try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
       console.warn('[loans.getClientLoanInfo] sincronização unificada não aplicada:', error?.message);

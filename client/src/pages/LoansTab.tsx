@@ -11,7 +11,7 @@ import {
   Banknote, Clock, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp,
   Upload, Copy, RefreshCw, Send, CalendarDays, Info, ClipboardCheck,
   Zap, AlertCircle, RotateCcw, Wallet, Flag, Calendar, TrendingUp,
-  ShieldAlert, CircleDollarSign, CheckCheck, Timer
+  ShieldAlert, CircleDollarSign, CheckCheck, Timer, UsersRound
 } from "lucide-react";
 
 interface LoansTabProps { token: string; }
@@ -530,6 +530,19 @@ export function LoansTab({ token }: LoansTabProps) {
   const [pixNameInput, setPixNameInput] = useState("");
   const [pixBankInput, setPixBankInput] = useState("");
   const [editingPix, setEditingPix] = useState(false);
+  const [copiedPix, setCopiedPix] = useState<"recebimento" | "pagamento" | null>(null);
+
+  const copyPixKey = async (value: string, kind: "recebimento" | "pagamento") => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedPix(kind);
+      toast.success("Chave PIX copiada!");
+      window.setTimeout(() => setCopiedPix((current) => current === kind ? null : current), 1800);
+    } catch {
+      toast.error("Não foi possível copiar a chave PIX.");
+    }
+  };
 
   const savePixKey = trpc.loans.saveClientPixKey.useMutation({
     onSuccess: () => { toast.success("Chave PIX salva!"); setEditingPix(false); refetch(); },
@@ -805,6 +818,28 @@ export function LoansTab({ token }: LoansTabProps) {
           </div>
       </div>
 
+      {/* Quem indicou — somente leitura, vindo do cadastro principal */}
+      <section className="relative overflow-hidden rounded-2xl border-2 border-fuchsia-400/55 bg-gradient-to-br from-fuchsia-950/75 via-violet-950/65 to-slate-950/85 p-4 shadow-[0_12px_34px_rgba(192,38,211,0.18)] backdrop-blur-xl">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-fuchsia-400/15 blur-2xl" aria-hidden="true" />
+        <div className="relative flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-fuchsia-300/45 bg-fuchsia-400/20 shadow-lg shadow-fuchsia-500/20">
+            <UsersRound className="h-5 w-5 text-fuchsia-100" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-fuchsia-100">Quem indicou você</p>
+            {client.referredBy ? (
+              <>
+                <p className="mt-1 truncate text-base font-black text-white">{client.referredBy}</p>
+                {client.referredByPhone && <p className="mt-0.5 text-xs font-semibold text-fuchsia-100/80">Telefone do indicador: {client.referredByPhone}</p>}
+              </>
+            ) : (
+              <p className="mt-1 text-sm font-semibold text-fuchsia-100/75">Indicação não informada no cadastro principal.</p>
+            )}
+          </div>
+          <span className="shrink-0 rounded-full border border-fuchsia-300/35 bg-fuchsia-400/15 px-2 py-1 text-[10px] font-black uppercase text-fuchsia-100">Cadastro</span>
+        </div>
+      </section>
+
       {hasActive && h2Score.promotionEvent && (
         <div className="flex items-start gap-3 rounded-2xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-3">
           <span className="text-xl">{h2Score.promotionEvent.level?.icon || h2Level.icon}</span>
@@ -816,26 +851,32 @@ export function LoansTab({ token }: LoansTabProps) {
       {(() => {
         const hasPixKey = !!client?.client_pix_key;
         return (
-          <div className={`rounded-2xl border-2 p-4 ${hasPixKey ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/50 bg-amber-500/10"}`}>
-            <div className="flex items-start gap-3">
-              <div className="text-2xl shrink-0">{hasPixKey ? "💳" : "⚠️"}</div>
+          <div className={`relative overflow-hidden rounded-2xl border-2 p-4 shadow-[0_12px_34px_rgba(16,185,129,0.16)] backdrop-blur-xl ${hasPixKey ? "border-emerald-300/65 bg-gradient-to-br from-emerald-950/85 via-teal-950/70 to-slate-950/90" : "border-amber-300/65 bg-gradient-to-br from-amber-950/80 via-orange-950/60 to-slate-950/90"}`}>
+            <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-300/15 blur-2xl" aria-hidden="true" />
+            <div className="relative flex items-start gap-3">
+              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border shadow-lg ${hasPixKey ? "border-emerald-200/50 bg-emerald-400/20 shadow-emerald-500/20" : "border-amber-200/50 bg-amber-400/20 shadow-amber-500/20"}`}><span className="text-2xl">{hasPixKey ? "💳" : "⚠️"}</span></div>
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-bold mb-1 ${hasPixKey ? "text-emerald-300" : "text-amber-300"}`}>
+                <p className={`text-sm font-black uppercase tracking-wide mb-1 ${hasPixKey ? "text-emerald-100" : "text-amber-100"}`}>
                   {hasPixKey ? "Sua chave PIX para recebimento" : "Cadastre sua chave PIX"}
                 </p>
                 {!hasPixKey && (
                   <p className="text-xs text-muted-foreground mb-3">Necessário para receber o empréstimo aprovado.</p>
                 )}
                 {hasPixKey && !editingPix ? (
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-muted-foreground">Chave:</span>
-                      <span className="text-sm font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 break-all">{client.client_pix_key}</span>
+                  <div className="space-y-2">
+                    <div className="rounded-xl border-2 border-emerald-200/40 bg-black/30 p-3 shadow-inner shadow-emerald-500/10">
+                      <p className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-200/80">Chave cadastrada</p>
+                      <p className="break-all font-mono text-base font-black tracking-wide text-white">{client.client_pix_key}</p>
                     </div>
-                    {client.client_pix_name && <div className="text-xs text-muted-foreground">Titular: <span className="text-foreground">{client.client_pix_name}</span></div>}
-                    {(client as any).client_pix_bank && <div className="text-xs text-muted-foreground">Banco: <span className="text-foreground">{(client as any).client_pix_bank}</span></div>}
-                    <button onClick={() => { setPixKeyInput(client.client_pix_key || ""); setPixNameInput((client as any).client_pix_name || ""); setPixBankInput((client as any).client_pix_bank || ""); setEditingPix(true); }}
-                      className="text-xs text-muted-foreground hover:text-foreground mt-1 underline">Alterar</button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button onClick={() => copyPixKey(client.client_pix_key, "recebimento")} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200/55 bg-emerald-400/25 px-3 py-2 text-xs font-black text-emerald-50 shadow-lg shadow-emerald-500/15 transition-all hover:bg-emerald-400/35 active:scale-95" aria-label="Copiar chave PIX de recebimento">
+                        {copiedPix === "recebimento" ? <CheckCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copiedPix === "recebimento" ? "Chave copiada" : "Copiar chave PIX"}
+                      </button>
+                      <button onClick={() => { setPixKeyInput(client.client_pix_key || ""); setPixNameInput((client as any).client_pix_name || ""); setPixBankInput((client as any).client_pix_bank || ""); setEditingPix(true); }} className="text-xs font-semibold text-emerald-100/80 underline decoration-emerald-300/40 underline-offset-2 hover:text-white">Alterar</button>
+                    </div>
+                    {client.client_pix_name && <div className="text-xs text-emerald-50/75">Titular: <span className="font-semibold text-white">{client.client_pix_name}</span></div>}
+                    {(client as any).client_pix_bank && <div className="text-xs text-emerald-50/75">Banco: <span className="font-semibold text-white">{(client as any).client_pix_bank}</span></div>}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -865,19 +906,26 @@ export function LoansTab({ token }: LoansTabProps) {
 
       {/* PIX para pagamento */}
       {pixConfig && hasActive && (
-        <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-950/40 to-slate-900/80 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Info className="w-4 h-4 text-blue-400" />
-            <p className="text-sm font-bold text-blue-300">Chave PIX para pagamento</p>
+        <div className="relative overflow-hidden rounded-2xl border-2 border-cyan-300/70 bg-gradient-to-br from-cyan-950/90 via-blue-950/80 to-violet-950/90 p-4 shadow-[0_14px_38px_rgba(34,211,238,0.22)] backdrop-blur-xl">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-cyan-300/20 blur-2xl" aria-hidden="true" />
+          <div className="relative flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-200/55 bg-cyan-400/20 shadow-lg shadow-cyan-500/20"><Info className="h-5 w-5 text-cyan-100" /></div>
+              <div><p className="text-sm font-black uppercase tracking-wide text-cyan-50">PIX para pagamento</p><p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200/75">Copie a chave para pagar</p></div>
+            </div>
+            <span className="rounded-full border border-cyan-200/45 bg-cyan-300/15 px-2 py-1 text-[10px] font-black uppercase text-cyan-50">Destacado</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="flex-1 text-sm font-mono bg-blue-500/10 px-3 py-2.5 rounded-xl border border-blue-500/20 break-all">{pixConfig.pixKey}</span>
-            <button onClick={() => { navigator.clipboard.writeText(pixConfig.pixKey); toast.success("Chave PIX copiada!"); }}
-              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-2.5 rounded-xl text-sm transition-all active:scale-95 shrink-0">
-              <Copy className="w-3.5 h-3.5" /> Copiar
+          <div className="relative space-y-2">
+            <div className="rounded-xl border-2 border-cyan-200/55 bg-black/35 p-3 shadow-inner shadow-cyan-500/10">
+              <p className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200/80">Chave PIX</p>
+              <p className="break-all font-mono text-base font-black tracking-wide text-white">{pixConfig.pixKey}</p>
+            </div>
+            <button onClick={() => copyPixKey(pixConfig.pixKey, "pagamento")} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-cyan-100/70 bg-cyan-400 px-4 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-400/25 transition-all hover:bg-cyan-300 active:scale-[0.98]" aria-label="Copiar chave PIX para pagamento">
+              {copiedPix === "pagamento" ? <CheckCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copiedPix === "pagamento" ? "Chave copiada" : "Copiar chave PIX"}
             </button>
           </div>
-          {pixConfig.pixName && <p className="text-xs text-muted-foreground mt-2">{pixConfig.pixName}{pixConfig.bankName ? ` · ${pixConfig.bankName}` : ""}</p>}
+          {pixConfig.pixName && <p className="relative mt-2 text-xs font-semibold text-cyan-50/80">Titular: {pixConfig.pixName}{pixConfig.bankName ? ` · ${pixConfig.bankName}` : ""}</p>}
         </div>
       )}
 
