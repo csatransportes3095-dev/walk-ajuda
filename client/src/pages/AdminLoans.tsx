@@ -16,7 +16,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, Users, AlertTriangle, Clock,
   Plus, Search, Eye, CheckCircle, XCircle, ChevronDown, ChevronUp,
   Settings, Banknote, RefreshCw, ExternalLink, Trash2, RotateCcw,
-  Paperclip, Download, Pencil, ImageIcon, FileText, X, Calendar, KeyRound
+  Paperclip, Download, Pencil, ImageIcon, FileText, X, Calendar, KeyRound, Copy, CheckCheck
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -411,6 +411,54 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
+function ClientInfoCard({
+  icon,
+  label,
+  value,
+  copyValue,
+  copyField,
+  copiedField,
+  onCopy,
+  tone,
+  meta,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  copyValue?: string;
+  copyField?: string;
+  copiedField: string | null;
+  onCopy?: (field: string, value: string, label: string) => void;
+  tone: string;
+  meta?: string;
+}) {
+  const hasValue = Boolean(String(value || '').trim());
+  const canCopy = Boolean(copyField && copyValue && onCopy);
+  const isCopied = copyField === copiedField;
+  return (
+    <div className={`min-w-0 rounded-2xl border bg-white/[0.045] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_24px_rgba(0,0,0,0.16)] backdrop-blur-md ${tone}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-white/75">{icon} {label}</span>
+        {canCopy && (
+          <button
+            type="button"
+            onClick={() => onCopy?.(copyField!, copyValue!, label)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-2 py-1 text-[11px] font-bold text-white transition-all hover:bg-white/20 active:scale-95"
+            aria-label={`Copiar ${label}`}
+          >
+            {isCopied ? <CheckCheck className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
+            {isCopied ? 'Copiado' : 'Copiar'}
+          </button>
+        )}
+      </div>
+      <p className={`mt-2 break-all text-sm font-semibold ${hasValue ? 'text-white' : 'text-white/45'}`}>
+        {hasValue ? value : 'Não informado'}
+      </p>
+      {meta && <p className="mt-1 break-words text-xs text-white/65">{meta}</p>}
+    </div>
+  );
+}
+
 // ─── Empréstimos ─────────────────────────────────────────────────────────────
 function LoansTab() {
   const [search, setSearch] = useState("");
@@ -419,6 +467,7 @@ function LoansTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [expandedLoan, setExpandedLoan] = useState<number | null>(null);
   const [expandedH2ScoreLoan, setExpandedH2ScoreLoan] = useState<number | null>(null);
+  const [copiedClientField, setCopiedClientField] = useState<string | null>(null);
   const [rejectDialog, setRejectDialog] = useState<{ id: number; clientName: string; clientPhone?: string; clientEmail?: string } | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectEmailInput, setRejectEmailInput] = useState("");
@@ -437,6 +486,17 @@ function LoansTab() {
   const [rescheduleWorkDays, setRescheduleWorkDays] = useState<"seg_sab" | "seg_dom">("seg_sab");
   const [rescheduleResult, setRescheduleResult] = useState<{ rescheduled: number; preview: any[] } | null>(null);
   const rescheduleInstallments = trpc.loans.rescheduleInstallments.useMutation();
+
+  const copyClientField = async (field: string, value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedClientField(field);
+      toast.success(`${label} copiado.`);
+      window.setTimeout(() => setCopiedClientField((current) => current === field ? null : current), 1800);
+    } catch {
+      toast.error(`Não foi possível copiar ${label.toLowerCase()}.`);
+    }
+  };
 
   // Modal de Cobrar Juros por parcela individual
   const [interestOnlyInstModal, setInterestOnlyInstModal] = useState<{ inst: any; loan: any } | null>(null);
@@ -851,6 +911,13 @@ function LoansTab() {
           const stLabel = LOAN_STATUS_LABELS[effectiveStatus] || effectiveStatus;
           const isExpanded = expandedLoan === loan.id;
           const cpfDisplay = loan.clientCpf || loan.customerCpf;
+          const phoneDisplay = String(loan.clientPhone || '').trim();
+          const cpfDigits = String(cpfDisplay || '').replace(/\D/g, '');
+          const cpfFormatted = cpfDigits.length === 11 ? `${cpfDigits.slice(0, 3)}.${cpfDigits.slice(3, 6)}.${cpfDigits.slice(6, 9)}-${cpfDigits.slice(9)}` : String(cpfDisplay || '');
+          const phoneDigits = phoneDisplay.replace(/\D/g, '');
+          const phoneFormatted = phoneDigits.length === 11 ? `(${phoneDigits.slice(0, 2)}) ${phoneDigits.slice(2, 7)}-${phoneDigits.slice(7)}` : phoneDisplay;
+          const referrerName = String(loan.clientReferredBy || '').trim();
+          const referrerPhone = String(loan.clientReferredByPhone || '').trim();
           const photoUrl = loan.clientPhoto;
           const initials = (loan.clientName || "?").split(" ").slice(0, 2).map((w: string) => w[0]).join("").toUpperCase();
           const paymentLabel = loan.paymentType === "diario" ? "Diário" : loan.paymentType === "semanal" ? "Semanal" : loan.paymentType === "quinzenal" ? "Quinzenal" : "Mensal";
@@ -903,41 +970,75 @@ function LoansTab() {
 
                   {/* Conteúdo principal */}
                   <div className="flex-1 min-w-0 w-full">
-                    {/* Cabeçalho: nome + badges */}
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="font-bold text-base">{loan.clientName}</span>
+                    {/* Identidade do cliente: cada dado fica em card próprio para leitura e cópia */}
+                    <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <ClientInfoCard
+                        icon="👤"
+                        label="Nome do cliente"
+                        value={String(loan.clientName || '')}
+                        copiedField={copiedClientField}
+                        tone="border-violet-400/45 bg-violet-500/15"
+                      />
+                      <div className="min-w-0 rounded-2xl border border-orange-400/45 bg-orange-500/15 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_24px_rgba(0,0,0,0.16)] backdrop-blur-md">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wide text-orange-100">⚡ H2 Score / nível</span>
+                          <button type="button" onClick={() => setExpandedH2ScoreLoan(h2IsExpanded ? null : loan.id)} className="inline-flex items-center gap-1 rounded-lg border border-orange-200/25 bg-white/10 px-2 py-1 text-[11px] font-bold text-orange-100 transition-all hover:bg-white/20 active:scale-95" title="Ver detalhamento do H2 Score">
+                            {h2IsExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            Detalhes
+                          </button>
+                        </div>
+                        <p className="mt-2 break-words text-sm font-bold text-white">{h2TotalPoints} pontos · {h2Level?.icon || '🥉'} {h2Level?.label || 'Bronze'}</p>
+                      </div>
+                      <ClientInfoCard
+                        icon="📱"
+                        label="Telefone"
+                        value={phoneFormatted}
+                        copyValue={phoneDigits || phoneDisplay}
+                        copyField={`${loan.id}-phone`}
+                        copiedField={copiedClientField}
+                        onCopy={copyClientField}
+                        tone="border-emerald-400/45 bg-emerald-500/15"
+                      />
+                      <ClientInfoCard
+                        icon="🪪"
+                        label="CPF"
+                        value={cpfFormatted}
+                        copyValue={cpfDigits || String(cpfDisplay || '')}
+                        copyField={`${loan.id}-cpf`}
+                        copiedField={copiedClientField}
+                        onCopy={copyClientField}
+                        tone="border-sky-400/45 bg-sky-500/15"
+                      />
+                      <ClientInfoCard
+                        icon="💠"
+                        label="Chave PIX do cliente"
+                        value={String(loan.clientPixKey || '')}
+                        copyValue={String(loan.clientPixKey || '')}
+                        copyField={`${loan.id}-pix`}
+                        copiedField={copiedClientField}
+                        onCopy={copyClientField}
+                        tone="border-cyan-400/50 bg-cyan-500/15 sm:col-span-2"
+                        meta={[loan.clientPixName ? `Titular: ${loan.clientPixName}` : '', loan.clientPixBank ? `Banco: ${loan.clientPixBank}` : ''].filter(Boolean).join(' · ') || 'Sem chave PIX cadastrada'}
+                      />
+                      <ClientInfoCard
+                        icon="🤝"
+                        label="Quem indicou"
+                        value={referrerName || 'Não informado'}
+                        meta={referrerPhone ? `Telefone do indicador: ${referrerPhone}` : 'Indicador não informado no cadastro principal'}
+                        copiedField={copiedClientField}
+                        tone="border-fuchsia-400/45 bg-fuchsia-500/15 sm:col-span-2"
+                      />
+                    </div>
+
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
                       <Badge variant="outline" className={`text-xs ${st}`}>{stLabel}</Badge>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedH2ScoreLoan(h2IsExpanded ? null : loan.id)}
-                        className="inline-flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-200 transition-colors hover:bg-cyan-500/20"
-                        title="Ver detalhamento do H2 Score"
-                      >
-                        ⚡ H2 Score: {h2TotalPoints} pontos {h2Level?.label ? `· ${h2Level.icon || ''} ${h2Level.label}` : ''}
-                        {h2IsExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      </button>
                       {loan.isOverdue && (
                         <Badge variant="outline" className="text-xs bg-red-500/20 text-red-300 border-red-500/30 gap-1">
                           <AlertTriangle className="w-3 h-3" />Atrasado
                         </Badge>
                       )}
                       {loan.clientProfile && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground capitalize">{loan.clientProfile}</span>
-                      )}
-                    </div>
-
-                    {/* Dados de identificação */}
-                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground mb-3">
-                      {loan.clientPhone && <span>📱 {loan.clientPhone}</span>}
-                      {cpfDisplay && <span>🪪 CPF: {cpfDisplay}</span>}
-                      {loan.clientPixKey ? (
-                        <span className="flex items-center gap-1 text-green-400">
-                          💠 PIX: <span className="font-mono">{loan.clientPixKey}</span>
-                          {loan.clientPixName && <span className="text-muted-foreground">· {loan.clientPixName}</span>}
-                          {loan.clientPixBank && <span className="text-muted-foreground">· {loan.clientPixBank}</span>}
-                        </span>
-                      ) : (
-                        <span className="text-amber-400">⚠️ Sem chave PIX cadastrada</span>
+                        <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-muted-foreground capitalize">Perfil: {loan.clientProfile}</span>
                       )}
                     </div>
 

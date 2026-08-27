@@ -920,6 +920,7 @@ export const loanRouter = router({
         COALESCE(NULLIF(lc.client_pix_name, ''), NULLIF(lc.pixName, '')) as clientPixName,
         lc.client_pix_bank as clientPixBank,
         c.id as customerId, c.profilePhotoUrl as clientPhoto, c.cpf as customerCpf, c.email as clientEmail,
+        c.referredBy as clientReferredBy, c.referredByPhone as clientReferredByPhone,
         lp.defaultPaymentTypes as profileAllowedModes,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='em_analise') as pendingProofs,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='pago') as paidInstallments,
