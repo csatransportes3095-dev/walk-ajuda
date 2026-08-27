@@ -81,6 +81,7 @@ import AdminCartoesUsers from "./pages/AdminCartoesUsers";
 import AdminOnlineSupport from "./pages/AdminOnlineSupport";
 import AdminChatFlow from "./pages/AdminChatFlow";
 import AdminAuthenticator from "./pages/AdminAuthenticator";
+import H2Ads from "./pages/H2Ads";
 import AdminReferrals from "./pages/AdminReferrals";
 import AdminPreRegistrations from "./pages/AdminPreRegistrations";
 import AdminPreCadastroQuestions from "./pages/AdminPreCadastroQuestions";
@@ -120,6 +121,7 @@ import { useAntiPrint } from "./hooks/useAntiPrint";
 import { trpc } from "@/lib/trpc";
 import { MaintenanceManifestGate } from "@/components/MaintenanceManifestGate";
 import { isMaintenanceManifestActiveForPath } from "@shared/maintenanceManifest";
+import { isH2AdsPath } from "@shared/h2adsRoute";
 
 // Guard para rotas admin — redireciona para /admin/login se não autenticado
 function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -142,6 +144,23 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Guard próprio para o módulo H2 Ads, separado dos gates públicos de cliente.
+function H2AdsGuard({ children }: { children: React.ReactNode }) {
+  const { isAdmin, isLoading } = useAdminAuth();
+  useAdminIdleLogout(isAdmin);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#06070A] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#F5B800] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAdmin) return <Redirect to="/admin/login" />;
+  return <>{children}</>;
+}
+
 function Router() {
   const [location, navigate] = useLocation();
   // Normalizar URL para minúscula se for /sorteio, /foto ou /acompanhar
@@ -158,6 +177,9 @@ function Router() {
   return (
     <Switch>
       <Route path={"/admin/login"} component={AdminLogin} />
+      <Route path={"/h2ads"}>
+        <H2AdsGuard><H2Ads /></H2AdsGuard>
+      </Route>
       <Route path={"/admin/authenticator"}>
         <AdminGuard><AdminAuthenticator /></AdminGuard>
       </Route>
@@ -342,6 +364,7 @@ function ClientInstallGate({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const [location] = useLocation();
   const isAdminRoute = location.startsWith("/admin");
+  const isH2AdsRoute = isH2AdsPath(location);
   const isTrackingRoute = location === "/acompanhar";
   const isLoginRoute = location === "/login";
   const isRaffleRoute = location === "/sorteio";
@@ -361,9 +384,9 @@ function AppContent() {
   const isLocadoraRoute = location === "/locadora" || location === "/locadora/";
   const isLocadoraBrandRoute = location === "/locadora" || location.startsWith("/locadora/") || location.startsWith("/admin/locadora");
   const maintenanceManifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
-    enabled: !isAdminRoute,
+    enabled: !isAdminRoute && !isH2AdsRoute,
     staleTime: 15_000,
-    refetchInterval: !isAdminRoute ? 30_000 : false,
+    refetchInterval: !isAdminRoute && !isH2AdsRoute ? 30_000 : false,
     refetchOnWindowFocus: true,
   });
   const maintenanceManifest = maintenanceManifestQuery.data;
@@ -373,7 +396,7 @@ function AppContent() {
 
   // Proteção anti-print para rotas de cliente
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || undefined : undefined;
-  const { WarningOverlay } = useAntiPrint(!isAdminRoute ? clientPhone : undefined);
+  const { WarningOverlay } = useAntiPrint(!isAdminRoute && !isH2AdsRoute ? clientPhone : undefined);
 
   // Mantém identidades instaláveis isoladas por módulo e usa o emblema H2 nas rotas gerais.
   useEffect(() => {
@@ -386,6 +409,12 @@ function AppContent() {
     const h2AppleIcon = "/h2-brand-180.png";
     const h2Favicon16 = "/h2-brand-16.png";
     const h2Favicon32 = "/h2-brand-32.png";
+    if (isH2AdsRoute) {
+      if (manifest) manifest.href = "/manifest-admin.json";
+      if (theme) theme.content = "#06070A";
+      document.title = "H2 ADS — H2 Colombia";
+      return;
+    }
     if (isLocadoraBrandRoute) {
       if (manifest) manifest.href = "/locadora/manifest-v1.webmanifest";
       if (theme) theme.content = "#b98a2d";
@@ -407,20 +436,20 @@ function AppContent() {
     appleIcons.forEach((link) => { link.href = h2AppleIcon; });
     favicons.forEach((link) => { link.href = link.sizes.value === "16x16" ? h2Favicon16 : h2Favicon32; });
     document.title = "H2 COLOMBIANO";
-  }, [isAdminRoute, isCartoesRoute, isLocadoraBrandRoute]);
+  }, [isAdminRoute, isCartoesRoute, isH2AdsRoute, isLocadoraBrandRoute]);
 
   // Redirect de rotas com maiúsculas para minúsculas (DEVE ficar após todos os hooks)
   if (location !== location.toLowerCase() && !isAdminRoute) {
     return <Redirect to={location.toLowerCase()} />;
   }
 
-  if (isAdminRoute) {
+  if (isAdminRoute || isH2AdsRoute) {
     return (
       <>
         <div className="min-h-screen pb-24 sm:pb-0">
           <Router />
         </div>
-        {location !== "/admin/login" && <AdminPWABanner />}
+        {isAdminRoute && location !== "/admin/login" && <AdminPWABanner />}
       </>
     );
   }
