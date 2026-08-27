@@ -6,7 +6,7 @@ vi.mock("axios", () => ({ default: { get: axiosGet } }));
 vi.mock("node:dns/promises", () => ({ default: { lookup } }));
 vi.mock("socks-proxy-agent", () => ({ SocksProxyAgent: socksProxyAgent }));
 
-import { classifyH2AdsRouteFailure, validateH2AdsProxyRoute } from "./h2adsProxyValidation";
+import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "./h2adsProxyValidation";
 
 describe("validação pontual de rota H2 Ads", () => {
   beforeEach(() => {
@@ -43,6 +43,14 @@ describe("validação pontual de rota H2 Ads", () => {
     await validateH2AdsProxyRoute({ protocol: "https", host: "edge.example", port: 8443, username: "user_test", password: "pass_test" });
     expect(axiosGet).toHaveBeenCalledWith("https://ipapi.co/json/", expect.objectContaining({ proxy: expect.objectContaining({ protocol: "https", host: "8.8.8.8", port: 8443, auth: { username: "user_test", password: "pass_test" } }) }));
     expect(socksProxyAgent).not.toHaveBeenCalled();
+  });
+
+  it("mantém o país retornado pela rota como dado observado, sem comparação manual", () => {
+    const mismatches = getH2AdsRouteMismatches(
+      { ip: "203.0.113.45", countryCode: "CO", city: "Bogotá", asn: "AS64500", isp: "ISP de teste", latencyMs: 120 },
+      { expectedIsp: null, expectedAsn: null },
+    );
+    expect(mismatches).toEqual([]);
   });
 
   it("classifica timeout, autenticação e conexão recusada sem devolver dados da rota", () => {

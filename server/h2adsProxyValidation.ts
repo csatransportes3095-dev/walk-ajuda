@@ -96,10 +96,9 @@ export async function validateH2AdsProxyRoute(proxy: ParsedH2AdsProxy): Promise<
   };
 }
 
-export function getH2AdsRouteMismatches(observed: H2AdsObservedRoute, expected: { targetCountryCode: string | null; expectedIsp: string | null; expectedAsn: string | null }) {
+export function getH2AdsRouteMismatches(observed: H2AdsObservedRoute, expected: { expectedIsp: string | null; expectedAsn: string | null }) {
   const normalized = (value: string | null) => value?.trim().toLowerCase() ?? "";
   const mismatches: string[] = [];
-  if (expected.targetCountryCode && normalized(observed.countryCode) !== normalized(expected.targetCountryCode)) mismatches.push("país");
   if (expected.expectedIsp && normalized(observed.isp) !== normalized(expected.expectedIsp)) mismatches.push("ISP");
   if (expected.expectedAsn && normalized(observed.asn) !== normalized(expected.expectedAsn)) mismatches.push("ASN");
   return mismatches;

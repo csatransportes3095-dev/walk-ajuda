@@ -168,7 +168,6 @@ export const h2AdsRouter = {
     try {
       const observed = await validateH2AdsProxyRoute(decryptH2AdsProxy(encryptedPayload));
       const mismatches = getH2AdsRouteMismatches(observed, {
-        targetCountryCode: profile?.targetCountryCode ?? null,
         expectedIsp: profile?.expectedIsp ?? null,
         expectedAsn: profile?.expectedAsn ?? null,
       });
