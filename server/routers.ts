@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { snapshotUnicodeText } from "@shared/whatsappUnicodeDiagnostics";
 import {
   listZohoUsers,
   listAllZohoUsersGrouped,
@@ -1207,6 +1208,62 @@ export const appRouter = router({
         await upsertSetting('whatsapp_login_template', input.template);
         return { success: true };
       }),
+    getWhatsappUnicodeDiagnostics: adminProcedure.query(async () => {
+      const template = await getSetting('whatsapp_login_template') ?? '';
+      const db = await (await import('./db')).getDb() as any;
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível para diagnóstico Unicode.' });
+
+      const [sessionRows] = await db.execute(sql`
+        SELECT
+          @@character_set_client AS characterSetClient,
+          @@character_set_connection AS characterSetConnection,
+          @@character_set_results AS characterSetResults,
+          @@character_set_database AS characterSetDatabase,
+          @@collation_connection AS collationConnection,
+          @@collation_database AS collationDatabase
+      `) as any;
+      const [tableRows] = await db.execute(sql`
+        SELECT TABLE_NAME AS tableName, TABLE_COLLATION AS tableCollation
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME IN ('siteSettings', 'whatsappTemplates')
+        ORDER BY TABLE_NAME
+      `) as any;
+      const [columnRows] = await db.execute(sql`
+        SELECT
+          TABLE_NAME AS tableName,
+          COLUMN_NAME AS columnName,
+          CHARACTER_SET_NAME AS characterSet,
+          COLLATION_NAME AS collation,
+          COLUMN_TYPE AS columnType
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND (
+            (TABLE_NAME = 'siteSettings' AND COLUMN_NAME = 'settingValue')
+            OR (TABLE_NAME = 'whatsappTemplates' AND COLUMN_NAME = 'message')
+          )
+        ORDER BY TABLE_NAME, COLUMN_NAME
+      `) as any;
+      const [storedRows] = await db.execute(sql`
+        SELECT
+          CHAR_LENGTH(settingValue) AS characterLength,
+          LENGTH(settingValue) AS byteLength,
+          HEX(settingValue) AS utf8BytesHex
+        FROM siteSettings
+        WHERE settingKey = 'whatsapp_login_template'
+        LIMIT 1
+      `) as any;
+
+      return {
+        template: snapshotUnicodeText(template),
+        mysql: {
+          session: sessionRows?.[0] ?? null,
+          tables: tableRows ?? [],
+          columns: columnRows ?? [],
+          storedTemplate: storedRows?.[0] ?? null,
+        },
+      };
+    }),
   }),
   // === UPLOADS / ENVIO DE PEDIDO ===
   uploads: router({
@@ -9054,4 +9111,3 @@ export const appRouter = router({
   }),
 });
 export type AppRouter = typeof appRouter;
-
