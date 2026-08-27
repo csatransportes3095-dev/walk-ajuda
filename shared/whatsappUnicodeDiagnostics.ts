@@ -26,15 +26,27 @@ export function createWhatsappMessageUrl(phone: string, message: string): string
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
+export function normalizeBrazilianDiagnosticPhone(phone: string): string {
+  const digits = String(phone).replace(/\D/g, "");
+  const localNumber = digits.startsWith("55") && (digits.length === 12 || digits.length === 13)
+    ? digits.slice(2)
+    : digits;
+
+  if (localNumber.length === 10 || localNumber.length === 11) return `55${localNumber}`;
+  return digits;
+}
+
 export function readWhatsappMessageFromUrl(urlValue: string): string {
   return new URL(urlValue).searchParams.get("text") ?? "";
 }
 
 export function snapshotWhatsappUrl(phone: string, message: string) {
-  const url = createWhatsappMessageUrl(phone, message);
+  const normalizedPhone = normalizeBrazilianDiagnosticPhone(phone);
+  const url = createWhatsappMessageUrl(normalizedPhone, message);
   const encodedText = url.split("?text=")[1] ?? "";
 
   return {
+    normalizedPhone,
     url,
     encodedText,
     decodedPayload: snapshotUnicodeText(readWhatsappMessageFromUrl(url)),

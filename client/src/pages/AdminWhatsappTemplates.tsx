@@ -211,7 +211,7 @@ export default function AdminWhatsappTemplates() {
           <p className="mt-1 text-xs text-amber-100/70">Somente leitura. Mede o pré-molde vinculado ao status, sem salvar, alterar ou enviar mensagem automaticamente.</p>
         </div>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
-          <Input value={unicodeTestPhone} onChange={event => setUnicodeTestPhone(event.target.value)} inputMode="numeric" placeholder="Número que receberá o teste UTF-8" className="border-amber-400/30 bg-zinc-950/40" />
+          <Input value={unicodeTestPhone} onChange={event => setUnicodeTestPhone(event.target.value)} inputMode="numeric" placeholder="DDD + número; 55 é opcional" className="border-amber-400/30 bg-zinc-950/40" />
           <Button onClick={openIsolatedUnicodeTest} className="bg-green-600 hover:bg-green-700">Abrir teste UTF-8</Button>
         </div>
         <div className="flex flex-wrap items-center gap-3">

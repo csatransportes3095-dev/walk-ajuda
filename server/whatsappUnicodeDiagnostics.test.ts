@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createWhatsappMessageUrl,
+  normalizeBrazilianDiagnosticPhone,
   readWhatsappMessageFromUrl,
   snapshotUnicodeText,
   snapshotWhatsappUrl,
@@ -43,13 +44,19 @@ describe("diagnóstico Unicode do payload WhatsApp", () => {
   });
 
   it("expõe o payload percent-encoded antes da abertura do wa.me", () => {
-    const diagnosticUrl = snapshotWhatsappUrl("5511999999999", testMessage);
+    const diagnosticUrl = snapshotWhatsappUrl("11999999999", testMessage);
 
+    expect(diagnosticUrl.normalizedPhone).toBe("5511999999999");
     expect(diagnosticUrl.encodedText).toContain("%F0%9F%94%90");
     expect(diagnosticUrl.encodedText).toContain("%E2%9A%A0%EF%B8%8F");
     expect(diagnosticUrl.decodedPayload).toMatchObject({
       value: testMessage,
       hasReplacementCharacter: false,
     });
+  });
+
+  it("normaliza telefone brasileiro local somente para o teste diagnóstico", () => {
+    expect(normalizeBrazilianDiagnosticPhone("(11) 97830-7371")).toBe("5511978307371");
+    expect(normalizeBrazilianDiagnosticPhone("55 11 97830-7371")).toBe("5511978307371");
   });
 });
