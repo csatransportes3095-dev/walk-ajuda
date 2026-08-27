@@ -3,6 +3,7 @@ import {
   createWhatsappMessageUrl,
   readWhatsappMessageFromUrl,
   snapshotUnicodeText,
+  snapshotWhatsappUrl,
 } from "../shared/whatsappUnicodeDiagnostics";
 
 const testMessage = "TESTE UTF-8 🔐 ⚠️ 🎥 📱 ✅ ❌ ℹ️";
@@ -27,7 +28,7 @@ describe("diagnóstico Unicode do payload WhatsApp", () => {
     const url = createWhatsappMessageUrl("5511999999999", testMessage);
     const payload = readWhatsappMessageFromUrl(url);
 
-    expect(url).toContain("text=TESTE+UTF-8");
+    expect(url).toContain("text=TESTE%20UTF-8");
     expect(snapshotUnicodeText(payload)).toMatchObject({
       value: testMessage,
       hasReplacementCharacter: false,
@@ -39,5 +40,16 @@ describe("diagnóstico Unicode do payload WhatsApp", () => {
 
     expect(corrupted.hasReplacementCharacter).toBe(true);
     expect(corrupted.codePoints).toContain("U+FFFD");
+  });
+
+  it("expõe o payload percent-encoded antes da abertura do wa.me", () => {
+    const diagnosticUrl = snapshotWhatsappUrl("5511999999999", testMessage);
+
+    expect(diagnosticUrl.encodedText).toContain("%F0%9F%94%90");
+    expect(diagnosticUrl.encodedText).toContain("%E2%9A%A0%EF%B8%8F");
+    expect(diagnosticUrl.decodedPayload).toMatchObject({
+      value: testMessage,
+      hasReplacementCharacter: false,
+    });
   });
 });

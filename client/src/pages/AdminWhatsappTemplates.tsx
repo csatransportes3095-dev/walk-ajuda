@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { createWhatsappMessageUrl, snapshotUnicodeText } from "@shared/whatsappUnicodeDiagnostics";
+import { createWhatsappMessageUrl, snapshotUnicodeText, snapshotWhatsappUrl } from "@shared/whatsappUnicodeDiagnostics";
 
 interface Template {
   id: number;
@@ -177,6 +177,7 @@ export default function AdminWhatsappTemplates() {
   const isolatedUnicodeMessage = "TESTE UTF-8 🔐 ⚠️ 🎥 📱 ✅ ❌ ℹ️";
   const selectedTemplate = (templates as Template[]).find(template => template.statusKey === "pedido_entregue" || template.statusKey === "entregue") ?? null;
   const selectedTemplateSnapshot = snapshotUnicodeText(selectedTemplate?.message ?? "");
+  const isolatedUrlSnapshot = snapshotWhatsappUrl(unicodeTestPhone, isolatedUnicodeMessage);
   function openIsolatedUnicodeTest() {
     const digits = unicodeTestPhone.replace(/\D/g, "");
     if (digits.length < 10) return toast.error("Informe o número que receberá o teste UTF-8.");
@@ -222,6 +223,10 @@ export default function AdminWhatsappTemplates() {
         <details className="rounded-xl border border-amber-100/15 bg-zinc-950/30 p-3 text-xs text-amber-50/85">
           <summary className="cursor-pointer font-semibold">Snapshot local do pré-molde selecionado</summary>
           <pre className="mt-3 max-h-52 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(selectedTemplateSnapshot, null, 2)}</pre>
+        </details>
+        <details className="rounded-xl border border-amber-100/15 bg-zinc-950/30 p-3 text-xs text-amber-50/85">
+          <summary className="cursor-pointer font-semibold">Payload e URL imediatamente antes de abrir wa.me</summary>
+          <pre className="mt-3 max-h-52 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(isolatedUrlSnapshot, null, 2)}</pre>
         </details>
         {unicodeDiagnosticsQuery.data && (
           <details open className="rounded-xl border border-amber-100/15 bg-zinc-950/30 p-3 text-xs text-amber-50/85">

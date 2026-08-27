@@ -23,11 +23,20 @@ export function snapshotUnicodeText(value: string): UnicodeTextSnapshot {
 
 export function createWhatsappMessageUrl(phone: string, message: string): string {
   const digits = String(phone).replace(/\D/g, "");
-  const url = new URL(`https://wa.me/${digits}`);
-  url.searchParams.set("text", message);
-  return url.toString();
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
 export function readWhatsappMessageFromUrl(urlValue: string): string {
   return new URL(urlValue).searchParams.get("text") ?? "";
+}
+
+export function snapshotWhatsappUrl(phone: string, message: string) {
+  const url = createWhatsappMessageUrl(phone, message);
+  const encodedText = url.split("?text=")[1] ?? "";
+
+  return {
+    url,
+    encodedText,
+    decodedPayload: snapshotUnicodeText(readWhatsappMessageFromUrl(url)),
+  };
 }
