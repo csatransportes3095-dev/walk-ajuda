@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { ensureWhatsappTemplateTitleColumns, type SqlQueryable } from "./whatsappTemplateSchemaMigration";
+import { ensureWhatsappTemplateTitleColumns, ensureWhatsappTemplateUtf8mb4, type SqlQueryable } from "./whatsappTemplateSchemaMigration";
 
-function createConnectionWithColumns(existingColumns: string[]): { connection: SqlQueryable; statements: string[] } {
+function createConnectionWithColumns(existingColumns: string[], collation = "utf8mb4_unicode_ci"): { connection: SqlQueryable; statements: string[] } {
   const statements: string[] = [];
   const connection: SqlQueryable = {
     query: async (statement, values) => {
       statements.push(statement);
+      if (statement.startsWith("SHOW TABLE STATUS")) {
+        return [[{ Collation: collation }], []];
+      }
       if (statement.startsWith("SHOW COLUMNS")) {
         const column = values?.[0];
         return [existingColumns.includes(column as string) ? [{ Field: column }] : [], []];
@@ -34,5 +37,16 @@ describe("whatsapp template schema migration", () => {
 
     expect(statements).toHaveLength(2);
     expect(statements.every(statement => statement.startsWith("SHOW COLUMNS"))).toBe(true);
+  });
+
+  it("converte a tabela para utf8mb4 somente quando a collation ainda não suporta emojis", async () => {
+    const legacy = createConnectionWithColumns([], "utf8_general_ci");
+    const current = createConnectionWithColumns([], "utf8mb4_unicode_ci");
+
+    await expect(ensureWhatsappTemplateUtf8mb4(legacy.connection)).resolves.toBe(true);
+    await expect(ensureWhatsappTemplateUtf8mb4(current.connection)).resolves.toBe(false);
+
+    expect(legacy.statements).toContain("ALTER TABLE `whatsappTemplates` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    expect(current.statements).toHaveLength(1);
   });
 });

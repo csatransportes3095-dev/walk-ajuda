@@ -19,6 +19,7 @@ import { AuthenticatorQrAdminField, type PendingQr } from "@/components/Authenti
 import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
 import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl, publicTrackingShareUrl } from "@shared/publicLinks";
 import { getOperationalBucket } from "@shared/orderBuckets";
+import { repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
 import { selectWhatsappTemplateForStatus } from "@shared/whatsappTemplateSelection";
 
 type OrderStatus = "recebido" | "pagamento_recebido" | "em_andamento" | "em_montagem" | "documentos_aprovados" | "conta_ativa" | "aguardando_ativa" | "pedido_entregue" | "cancelado";
@@ -5977,7 +5978,7 @@ export default function AdminOrders() {
                                 if ((defaultTemplate as any).imageUrl) mediaLines2.push(normalizePublicSiteLinks((defaultTemplate as any).imageUrl));
                                 if ((defaultTemplate as any).videoUrl) mediaLines2.push(normalizePublicSiteLinks((defaultTemplate as any).videoUrl));
                                 if ((defaultTemplate as any).mediaFileUrl) mediaLines2.push(normalizePublicSiteLinks((defaultTemplate as any).mediaFileUrl));
-                                setWaModalMsg(mediaLines2.length > 0 ? baseMsg2 + '\n\n' + mediaLines2.join('\n') : baseMsg2);
+                                setWaModalMsg(repairWhatsappReplacementIcons(mediaLines2.length > 0 ? baseMsg2 + '\n\n' + mediaLines2.join('\n') : baseMsg2));
                               } else {
                                 setWaModalMsg(msg);
                               }
@@ -7909,7 +7910,7 @@ export default function AdminOrders() {
                           if (t.imageUrl) mediaLines.push(t.imageUrl);
                           if (t.videoUrl) mediaLines.push(t.videoUrl);
                           if (t.mediaFileUrl) mediaLines.push(t.mediaFileUrl);
-                          setWaModalMsg(mediaLines.length > 0 ? baseMsg + '\n\n' + mediaLines.join('\n') : baseMsg);
+                          setWaModalMsg(repairWhatsappReplacementIcons(mediaLines.length > 0 ? baseMsg + '\n\n' + mediaLines.join('\n') : baseMsg));
                         }}
                         className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-all ${
                           waModalSelectedId === t.id
