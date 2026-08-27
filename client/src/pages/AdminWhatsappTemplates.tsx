@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { createWhatsappMessageUrl, snapshotUnicodeText, snapshotWhatsappUrl } from "@shared/whatsappUnicodeDiagnostics";
+import { snapshotUnicodeText, snapshotWhatsappUrl } from "@shared/whatsappUnicodeDiagnostics";
 
 interface Template {
   id: number;
@@ -181,7 +181,7 @@ export default function AdminWhatsappTemplates() {
   function openIsolatedUnicodeTest() {
     const digits = unicodeTestPhone.replace(/\D/g, "");
     if (digits.length < 10) return toast.error("Informe o número que receberá o teste UTF-8.");
-    window.open(createWhatsappMessageUrl(digits, isolatedUnicodeMessage), "_blank", "noopener,noreferrer");
+    window.open(isolatedUrlSnapshot.url, "_blank", "noopener,noreferrer");
   }
 
   return (

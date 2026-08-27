@@ -20,8 +20,9 @@ describe("instrumentação Unicode de WhatsApp", () => {
     const settings = fs.readFileSync(path.join(projectRoot, "client/src/pages/AdminWhatsappTemplates.tsx"), "utf8");
 
     expect(settings).toContain('const isolatedUnicodeMessage = "TESTE UTF-8 🔐 ⚠️ 🎥 📱 ✅ ❌ ℹ️"');
-    expect(settings).toContain("createWhatsappMessageUrl(digits, isolatedUnicodeMessage)");
-    expect(settings).toContain("window.open(createWhatsappMessageUrl");
+    expect(settings).toContain("const isolatedUrlSnapshot = snapshotWhatsappUrl(unicodeTestPhone, isolatedUnicodeMessage)");
+    expect(settings).toContain("window.open(isolatedUrlSnapshot.url");
+    expect(settings).not.toContain("createWhatsappMessageUrl(digits, isolatedUnicodeMessage)");
     expect(settings).not.toContain("fetch(\"https://wa.me");
   });
 });
