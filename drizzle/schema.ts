@@ -2793,7 +2793,6 @@ export const h2AdsWorkerCommands = mysqlTable("h2ads_worker_commands", {
   workerId: int("workerId").notNull(),
   instanceId: int("instanceId").notNull(),
   command: mysqlEnum("command", ["prepare_browser"]).notNull(),
-  commandAction: varchar("commandAction", { length: 32 }).notNull().default("prepare_browser"),
   status: mysqlEnum("status", ["queued", "claimed", "succeeded", "failed", "cancelled"]).notNull().default("queued"),
   errorCategory: varchar("errorCategory", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -2805,3 +2804,21 @@ export const h2AdsWorkerCommands = mysqlTable("h2ads_worker_commands", {
 }));
 export type H2AdsWorkerCommand = typeof h2AdsWorkerCommands.$inferSelect;
 export type InsertH2AdsWorkerCommand = typeof h2AdsWorkerCommands.$inferInsert;
+
+// Fila separada de comandos de sessão manual. Não altera a enum da fila de preparação já publicada.
+export const h2AdsWorkerBrowserCommands = mysqlTable("h2ads_worker_browser_commands", {
+  id: int("id").autoincrement().primaryKey(),
+  workerId: int("workerId").notNull(),
+  instanceId: int("instanceId").notNull(),
+  command: mysqlEnum("command", ["launch_browser", "close_browser"]).notNull(),
+  status: mysqlEnum("status", ["queued", "claimed", "succeeded", "failed", "cancelled"]).notNull().default("queued"),
+  errorCategory: varchar("errorCategory", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  claimedAt: timestamp("claimedAt"),
+  completedAt: timestamp("completedAt"),
+}, (table) => ({
+  workerStatusIndex: index("h2ads_browser_command_worker_status_idx").on(table.workerId, table.status),
+  instanceStatusIndex: index("h2ads_browser_command_instance_status_idx").on(table.instanceId, table.status),
+}));
+export type H2AdsWorkerBrowserCommand = typeof h2AdsWorkerBrowserCommands.$inferSelect;
+export type InsertH2AdsWorkerBrowserCommand = typeof h2AdsWorkerBrowserCommands.$inferInsert;

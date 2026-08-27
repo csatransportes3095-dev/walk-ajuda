@@ -1,20 +1,18 @@
-import { createConnection } from "mysql2/promise";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { createConnection } from "mysql2/promise";
+import { assertH2AdsSchemaStatementSafe } from "../server/h2adsSchemaMigration";
+
+const migrationPath = path.resolve(process.cwd(), "drizzle", "0142_h2ads_browser_manual_commands.sql");
 
 async function main() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) throw new Error("DATABASE_URL não configurada.");
-  const migrationPath = path.resolve(process.cwd(), "drizzle", "0142_h2ads_browser_manual_commands.sql");
-  const sql = await readFile(migrationPath, "utf8");
-  const connection = await createConnection(databaseUrl);
+  if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL não configurada para a migration de comandos manuais H2 Ads.");
+  const statements = (await readFile(migrationPath, "utf8")).split("--> statement-breakpoint").map(statement => statement.trim()).filter(Boolean);
+  if (statements.length !== 1) throw new Error("A migration de comandos manuais H2 Ads precisa conter exatamente uma tabela isolada.");
+  statements.forEach(assertH2AdsSchemaStatementSafe);
+  const connection = await createConnection(process.env.DATABASE_URL);
   try {
-    const [existingColumns] = await connection.query(
-      "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1",
-      ["h2ads_worker_commands", "commandAction"],
-    );
-    if (Array.isArray(existingColumns) && existingColumns.length > 0) return;
-    await connection.query(sql);
+    for (const statement of statements) await connection.query(statement);
   } finally {
     await connection.end();
   }
