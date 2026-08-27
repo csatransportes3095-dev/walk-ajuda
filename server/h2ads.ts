@@ -1,5 +1,6 @@
-import { asc, eq } from "drizzle-orm";
-import { h2AdsGroups, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceNetworkProfile } from "../drizzle/schema";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { and, asc, eq, gt, isNull } from "drizzle-orm";
+import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment } from "../drizzle/schema";
 import { getDb } from "./db";
 
 export type H2AdsDashboard = {
@@ -7,7 +8,13 @@ export type H2AdsDashboard = {
   instances: H2AdsInstance[];
   networkProfiles: H2AdsInstanceNetworkProfile[];
   proxyCredentialStatuses: Array<{ instanceId: number; updatedAt: Date }>;
+  browserWorkers: H2AdsBrowserWorkerSummary[];
+  instanceWorkerAssignments: H2AdsInstanceWorkerAssignmentSummary[];
 };
+
+export type H2AdsBrowserWorkerSummary = Omit<H2AdsBrowserWorker, "tokenHash"> & { connectionStatus: "online" | "offline" | "revoked" };
+export type H2AdsInstanceWorkerAssignmentSummary = Pick<H2AdsInstanceWorkerAssignment, "instanceId" | "workerId" | "profileState" | "profileVersion" | "lastSnapshotAt" | "assignedAt" | "updatedAt">;
+export const H2ADS_WORKER_ONLINE_WINDOW_MS = 70_000;
 
 async function requireH2AdsDb() {
   const db = await getDb();
@@ -17,13 +24,23 @@ async function requireH2AdsDb() {
 
 export async function listH2AdsDashboard(): Promise<H2AdsDashboard> {
   const db = await requireH2AdsDb();
-  const [groups, instances, networkProfiles, proxyCredentialStatuses] = await Promise.all([
+  const [groups, instances, networkProfiles, proxyCredentialStatuses, browserWorkers, instanceWorkerAssignments] = await Promise.all([
     db.select().from(h2AdsGroups).orderBy(asc(h2AdsGroups.sortOrder), asc(h2AdsGroups.id)),
     db.select().from(h2AdsInstances).orderBy(asc(h2AdsInstances.groupId), asc(h2AdsInstances.sortOrder), asc(h2AdsInstances.id)),
     db.select().from(h2AdsInstanceNetworkProfiles).orderBy(asc(h2AdsInstanceNetworkProfiles.instanceId)),
     db.select({ instanceId: h2AdsInstanceProxyCredentials.instanceId, updatedAt: h2AdsInstanceProxyCredentials.updatedAt }).from(h2AdsInstanceProxyCredentials).orderBy(asc(h2AdsInstanceProxyCredentials.instanceId)),
+    db.select({ id: h2AdsBrowserWorkers.id, workerKey: h2AdsBrowserWorkers.workerKey, name: h2AdsBrowserWorkers.name, operatingSystem: h2AdsBrowserWorkers.operatingSystem, status: h2AdsBrowserWorkers.status, capacity: h2AdsBrowserWorkers.capacity, computerName: h2AdsBrowserWorkers.computerName, agentVersion: h2AdsBrowserWorkers.agentVersion, lastSeenAt: h2AdsBrowserWorkers.lastSeenAt, revokedAt: h2AdsBrowserWorkers.revokedAt, createdAt: h2AdsBrowserWorkers.createdAt, updatedAt: h2AdsBrowserWorkers.updatedAt }).from(h2AdsBrowserWorkers).orderBy(asc(h2AdsBrowserWorkers.name), asc(h2AdsBrowserWorkers.id)),
+    db.select({ instanceId: h2AdsInstanceWorkerAssignments.instanceId, workerId: h2AdsInstanceWorkerAssignments.workerId, profileState: h2AdsInstanceWorkerAssignments.profileState, profileVersion: h2AdsInstanceWorkerAssignments.profileVersion, lastSnapshotAt: h2AdsInstanceWorkerAssignments.lastSnapshotAt, assignedAt: h2AdsInstanceWorkerAssignments.assignedAt, updatedAt: h2AdsInstanceWorkerAssignments.updatedAt }).from(h2AdsInstanceWorkerAssignments).orderBy(asc(h2AdsInstanceWorkerAssignments.instanceId)),
   ]);
-  return { groups, instances, networkProfiles, proxyCredentialStatuses };
+  const now = Date.now();
+  return {
+    groups,
+    instances,
+    networkProfiles,
+    proxyCredentialStatuses,
+    browserWorkers: browserWorkers.map(worker => ({ ...worker, connectionStatus: worker.status === "revoked" ? "revoked" : worker.lastSeenAt && now - worker.lastSeenAt.getTime() <= H2ADS_WORKER_ONLINE_WINDOW_MS ? "online" : "offline" })),
+    instanceWorkerAssignments,
+  };
 }
 
 export async function getH2AdsGroup(id: number): Promise<H2AdsGroup | undefined> {
@@ -113,4 +130,90 @@ export type H2AdsNetworkValidationResult = Pick<H2AdsInstanceNetworkProfile, "he
 
 export async function recordH2AdsNetworkValidation(instanceId: number, result: H2AdsNetworkValidationResult): Promise<void> {
   await saveH2AdsNetworkProfile(instanceId, { ...result, lastCheckedAt: new Date(), setupStatus: result.healthStatus === "blocked" || result.healthStatus === "failed" ? "blocked" : "metadata_ready" });
+}
+
+const hashH2AdsWorkerSecret = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
+
+function isH2AdsWorkerSecretValid(received: string, expectedHash: string): boolean {
+  const receivedHash = Buffer.from(hashH2AdsWorkerSecret(received), "utf8");
+  const storedHash = Buffer.from(expectedHash, "utf8");
+  return receivedHash.length === storedHash.length && timingSafeEqual(receivedHash, storedHash);
+}
+
+export type H2AdsWorkerPairingRequest = { name: string; capacity: number };
+export type H2AdsWorkerPairingResult = { pairingCode: string; expiresAt: Date };
+export type H2AdsWorkerClaimInput = { pairingCode: string; computerName: string; agentVersion: string };
+export type H2AdsWorkerClaimResult = { workerKey: string; workerToken: string; workerName: string; capacity: number };
+
+export async function createH2AdsWorkerPairingCode(input: H2AdsWorkerPairingRequest): Promise<H2AdsWorkerPairingResult> {
+  const db = await requireH2AdsDb();
+  const pairingCode = `H2W-${randomBytes(18).toString("base64url")}`;
+  const expiresAt = new Date(Date.now() + 15 * 60_000);
+  await db.insert(h2AdsWorkerPairingCodes).values({
+    codeHash: hashH2AdsWorkerSecret(pairingCode),
+    requestedName: input.name,
+    requestedCapacity: input.capacity,
+    expiresAt,
+  });
+  return { pairingCode, expiresAt };
+}
+
+export async function claimH2AdsWorker(input: H2AdsWorkerClaimInput): Promise<H2AdsWorkerClaimResult> {
+  const db = await requireH2AdsDb();
+  const codeHash = hashH2AdsWorkerSecret(input.pairingCode);
+  const now = new Date();
+  return db.transaction(async (tx) => {
+    const rows = await tx.select().from(h2AdsWorkerPairingCodes).where(and(eq(h2AdsWorkerPairingCodes.codeHash, codeHash), isNull(h2AdsWorkerPairingCodes.usedAt), gt(h2AdsWorkerPairingCodes.expiresAt, now))).limit(1);
+    const pairing = rows[0];
+    if (!pairing) throw new Error("Código de pareamento inválido ou expirado.");
+    const workerKey = `h2w_${randomBytes(16).toString("hex")}`;
+    const workerToken = `h2wt_${randomBytes(32).toString("base64url")}`;
+    await tx.insert(h2AdsBrowserWorkers).values({
+      workerKey,
+      name: pairing.requestedName,
+      capacity: pairing.requestedCapacity,
+      tokenHash: hashH2AdsWorkerSecret(workerToken),
+      computerName: input.computerName,
+      agentVersion: input.agentVersion,
+      lastSeenAt: now,
+    });
+    const marked = await tx.update(h2AdsWorkerPairingCodes).set({ usedAt: now }).where(and(eq(h2AdsWorkerPairingCodes.id, pairing.id), isNull(h2AdsWorkerPairingCodes.usedAt)));
+    if (Number(marked[0].affectedRows) !== 1) throw new Error("Código de pareamento já foi utilizado.");
+    return { workerKey, workerToken, workerName: pairing.requestedName, capacity: pairing.requestedCapacity };
+  });
+}
+
+async function getH2AdsBrowserWorkerByKey(workerKey: string): Promise<H2AdsBrowserWorker | undefined> {
+  const db = await requireH2AdsDb();
+  const rows = await db.select().from(h2AdsBrowserWorkers).where(eq(h2AdsBrowserWorkers.workerKey, workerKey)).limit(1);
+  return rows[0];
+}
+
+export async function recordH2AdsWorkerHeartbeat(input: { workerKey: string; workerToken: string; computerName: string; agentVersion: string }): Promise<boolean> {
+  const worker = await getH2AdsBrowserWorkerByKey(input.workerKey);
+  if (!worker || worker.status !== "active" || !isH2AdsWorkerSecretValid(input.workerToken, worker.tokenHash)) return false;
+  const db = await requireH2AdsDb();
+  const updated = await db.update(h2AdsBrowserWorkers).set({ computerName: input.computerName, agentVersion: input.agentVersion, lastSeenAt: new Date() }).where(eq(h2AdsBrowserWorkers.id, worker.id));
+  return Number(updated[0].affectedRows) === 1;
+}
+
+export async function revokeH2AdsBrowserWorker(workerId: number): Promise<boolean> {
+  const db = await requireH2AdsDb();
+  const updated = await db.update(h2AdsBrowserWorkers).set({ status: "revoked", revokedAt: new Date() }).where(and(eq(h2AdsBrowserWorkers.id, workerId), eq(h2AdsBrowserWorkers.status, "active")));
+  return Number(updated[0].affectedRows) === 1;
+}
+
+export async function assignH2AdsInstanceWorker(instanceId: number, workerId: number): Promise<void> {
+  const db = await requireH2AdsDb();
+  const workers = await db.select().from(h2AdsBrowserWorkers).where(and(eq(h2AdsBrowserWorkers.id, workerId), eq(h2AdsBrowserWorkers.status, "active"))).limit(1);
+  if (!workers[0]) throw new Error("Worker H2 Ads indisponível para atribuição.");
+  const assignments = await db.select().from(h2AdsInstanceWorkerAssignments).where(eq(h2AdsInstanceWorkerAssignments.instanceId, instanceId)).limit(1);
+  const current = assignments[0];
+  if (!current) {
+    await db.insert(h2AdsInstanceWorkerAssignments).values({ instanceId, workerId });
+    return;
+  }
+  if (current.workerId === workerId) return;
+  if (current.profileState !== "not_started") throw new Error("A transferência de perfil desta instância ainda não está pronta. Pare e crie um snapshot íntegro antes de mover o Worker.");
+  await db.update(h2AdsInstanceWorkerAssignments).set({ workerId, assignedAt: new Date() }).where(eq(h2AdsInstanceWorkerAssignments.id, current.id));
 }

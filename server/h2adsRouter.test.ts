@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   h2AdsCreateGroupSchema,
   h2AdsCreateInstanceSchema,
+  h2AdsCreateWorkerPairingSchema,
+  h2AdsAssignWorkerSchema,
   h2AdsGroupStatusSchema,
   h2AdsInstanceStatusSchema,
+  h2AdsRevokeWorkerSchema,
   h2AdsSaveProxyCredentialSchema,
   h2AdsSaveNetworkProfileSchema,
   h2AdsValidateProxySchema,
@@ -38,14 +41,11 @@ describe("contrato administrativo H2 Ads", () => {
       instanceId: 1,
       providerName: "Fornecedor autorizado",
       routeLabel: "Rota SP 01",
-      targetCountryCode: "br",
-      targetCity: "São Paulo",
       expectedIsp: "ISP esperado",
       expectedAsn: "AS12345",
       setupStatus: "metadata_ready",
     });
     expect(profile.success).toBe(true);
-    if (profile.success) expect(profile.data.targetCountryCode).toBe("BR");
     expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready" }).success).toBe(false);
     expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", proxyUrl: "http://blocked" }).success).toBe(false);
     expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", browserWSEndpoint: "ws://blocked" }).success).toBe(false);
@@ -62,5 +62,15 @@ describe("contrato administrativo H2 Ads", () => {
     expect(h2AdsSaveProxyCredentialSchema.safeParse({ instanceId: 1, proxyHost: "edge.example" }).success).toBe(false);
     expect(h2AdsValidateProxySchema.safeParse({ instanceId: 1 }).success).toBe(true);
     expect(h2AdsValidateProxySchema.safeParse({ instanceId: 1, force: true }).success).toBe(false);
+  });
+
+  it("aceita apenas pareamento, atribuição e revogação de Workers com identificadores estritos", () => {
+    expect(h2AdsCreateWorkerPairingSchema.safeParse({ name: "Computador principal", capacity: 2 }).success).toBe(true);
+    expect(h2AdsCreateWorkerPairingSchema.safeParse({ name: "PC", capacity: 0 }).success).toBe(false);
+    expect(h2AdsCreateWorkerPairingSchema.safeParse({ name: "PC", capacity: 21 }).success).toBe(false);
+    expect(h2AdsCreateWorkerPairingSchema.safeParse({ name: "PC", capacity: 1, token: "não permitido" }).success).toBe(false);
+    expect(h2AdsAssignWorkerSchema.safeParse({ instanceId: 1, workerId: 2 }).success).toBe(true);
+    expect(h2AdsAssignWorkerSchema.safeParse({ instanceId: 1, workerId: 2, browserWSEndpoint: "ws://blocked" }).success).toBe(false);
+    expect(h2AdsRevokeWorkerSchema.safeParse({ workerId: 2 }).success).toBe(true);
   });
 });

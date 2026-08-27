@@ -6,9 +6,11 @@ const projectRoot = path.resolve(import.meta.dirname, "..");
 const h2AdsSources = [
   "server/h2ads.ts",
   "server/routers/h2ads.ts",
+  "server/h2adsWorkerRoute.ts",
   "client/src/pages/H2Ads.tsx",
   "drizzle/0137_h2ads_base.sql",
   "drizzle/0138_h2ads_network_metadata.sql",
+  "drizzle/0140_h2ads_browser_workers.sql",
 ].map(file => fs.readFileSync(path.join(projectRoot, file), "utf8")).join("\n");
 
 describe("isolamento da base H2 Ads", () => {
@@ -20,7 +22,7 @@ describe("isolamento da base H2 Ads", () => {
     }
   });
 
-  it("não declara proxy, credencial, worker ou browser remoto", () => {
+  it("não declara endpoints de browser remoto, nem credenciais de proxy em texto aberto", () => {
     for (const prohibitedField of ["proxyUrl", "proxyPassword", "browserWSEndpoint", "playwright", "chromium", "firefox", "worker_threads"]) {
       expect(h2AdsSources).not.toContain(prohibitedField);
     }

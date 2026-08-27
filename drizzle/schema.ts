@@ -2708,3 +2708,63 @@ export const h2AdsInstanceProxyCredentials = mysqlTable("h2ads_instance_proxy_cr
 }));
 export type H2AdsInstanceProxyCredential = typeof h2AdsInstanceProxyCredentials.$inferSelect;
 export type InsertH2AdsInstanceProxyCredential = typeof h2AdsInstanceProxyCredentials.$inferInsert;
+
+// Computadores autorizados a executar browsers H2 Ads. O token de pareamento é guardado somente como hash.
+export const h2AdsBrowserWorkers = mysqlTable("h2ads_browser_workers", {
+  id: int("id").autoincrement().primaryKey(),
+  workerKey: varchar("workerKey", { length: 64 }).notNull(),
+  name: varchar("name", { length: 128 }).notNull(),
+  operatingSystem: mysqlEnum("operatingSystem", ["windows"]).notNull().default("windows"),
+  status: mysqlEnum("status", ["active", "revoked"]).notNull().default("active"),
+  capacity: int("capacity").notNull().default(1),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+  computerName: varchar("computerName", { length: 128 }),
+  agentVersion: varchar("agentVersion", { length: 32 }),
+  lastSeenAt: timestamp("lastSeenAt"),
+  revokedAt: timestamp("revokedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  workerKeyUnique: uniqueIndex("h2ads_browser_worker_key_uq").on(table.workerKey),
+  statusIndex: index("h2ads_browser_worker_status_idx").on(table.status),
+  lastSeenIndex: index("h2ads_browser_worker_last_seen_idx").on(table.lastSeenAt),
+}));
+export type H2AdsBrowserWorker = typeof h2AdsBrowserWorkers.$inferSelect;
+export type InsertH2AdsBrowserWorker = typeof h2AdsBrowserWorkers.$inferInsert;
+
+// Código temporário usado uma única vez para vincular um novo Worker Windows ao painel administrativo.
+export const h2AdsWorkerPairingCodes = mysqlTable("h2ads_worker_pairing_codes", {
+  id: int("id").autoincrement().primaryKey(),
+  codeHash: varchar("codeHash", { length: 64 }).notNull(),
+  requestedName: varchar("requestedName", { length: 128 }).notNull(),
+  requestedCapacity: int("requestedCapacity").notNull().default(1),
+  expiresAt: timestamp("expiresAt").notNull(),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  codeHashUnique: uniqueIndex("h2ads_worker_pairing_code_hash_uq").on(table.codeHash),
+  expiresIndex: index("h2ads_worker_pairing_code_expires_idx").on(table.expiresAt),
+}));
+export type H2AdsWorkerPairingCode = typeof h2AdsWorkerPairingCodes.$inferSelect;
+export type InsertH2AdsWorkerPairingCode = typeof h2AdsWorkerPairingCodes.$inferInsert;
+
+// Uma instância H2 Ads pode ter somente um Worker atribuído. O perfil permanece portátil por versão e hash.
+export const h2AdsInstanceWorkerAssignments = mysqlTable("h2ads_instance_worker_assignments", {
+  id: int("id").autoincrement().primaryKey(),
+  instanceId: int("instanceId").notNull(),
+  workerId: int("workerId").notNull(),
+  profileState: mysqlEnum("profileState", ["not_started", "local_only", "snapshot_ready", "transferring", "restore_failed"]).notNull().default("not_started"),
+  profileVersion: int("profileVersion").notNull().default(0),
+  snapshotKey: varchar("snapshotKey", { length: 512 }),
+  integrityHash: varchar("integrityHash", { length: 64 }),
+  snapshotSizeBytes: int("snapshotSizeBytes"),
+  lastSnapshotAt: timestamp("lastSnapshotAt"),
+  assignedAt: timestamp("assignedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  instanceUnique: uniqueIndex("h2ads_instance_worker_assignment_instance_uq").on(table.instanceId),
+  workerIndex: index("h2ads_instance_worker_assignment_worker_idx").on(table.workerId),
+  profileStateIndex: index("h2ads_instance_worker_assignment_profile_state_idx").on(table.profileState),
+}));
+export type H2AdsInstanceWorkerAssignment = typeof h2AdsInstanceWorkerAssignments.$inferSelect;
+export type InsertH2AdsInstanceWorkerAssignment = typeof h2AdsInstanceWorkerAssignments.$inferInsert;

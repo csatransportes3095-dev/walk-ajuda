@@ -28,6 +28,7 @@
     "db:migrate:h2ads": "tsx scripts/apply-h2ads-base-migration.ts",
     "db:migrate:h2ads-network": "tsx scripts/apply-h2ads-network-metadata-migration.ts",
     "db:migrate:h2ads-proxy-credentials": "tsx scripts/apply-h2ads-proxy-credentials-migration.ts",
+    "db:migrate:h2ads-browser-workers": "tsx scripts/apply-h2ads-browser-workers-migration.ts",
     "backup:verify": "tsx scripts/verify-system-backup.ts",
     "restore:isolated": "tsx server/isolatedRestore.ts",
     "db:migrate:loans-recovery": "tsx scripts/apply-loans-recovery-migration.ts",

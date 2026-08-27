@@ -34,6 +34,9 @@ describe("H2 Ads entry route isolation", () => {
     expect(pageSource).toContain("trpc.h2Ads.saveProxyCredential");
     expect(pageSource).toContain("trpc.h2Ads.validateProxy");
     expect(pageSource).toContain("trpc.h2Ads.proxySecurityStatus");
+    expect(pageSource).toContain("trpc.h2Ads.createWorkerPairing");
+    expect(pageSource).toContain("trpc.h2Ads.assignWorker");
+    expect(pageSource).toContain("Browser Workers");
     expect(pageSource).toContain("showNewRoute");
     expect(pageSource).toContain('"Mostrar"');
     expect(pageSource).toContain('"Ocultar"');

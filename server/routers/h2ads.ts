@@ -3,12 +3,15 @@ import { z } from "zod";
 import {
   createH2AdsGroup,
   createH2AdsInstance,
+  createH2AdsWorkerPairingCode,
   getH2AdsGroup,
   getH2AdsInstance,
   getH2AdsNetworkProfile,
   getH2AdsProxyCredential,
   listH2AdsDashboard,
   recordH2AdsNetworkValidation,
+  revokeH2AdsBrowserWorker,
+  assignH2AdsInstanceWorker,
   saveH2AdsProxyCredential,
   saveH2AdsNetworkProfile,
   updateH2AdsGroup,
@@ -74,8 +77,8 @@ export const h2AdsSaveNetworkProfileSchema = z.object({
   setupStatus: h2AdsNetworkSetupStatusSchema,
 }).strict().refine(({ instanceId: _instanceId, ...changes }) => Object.values(changes).some(value => value !== undefined), {
   message: "Informe ao menos um metadado de conectividade para salvar.",
-}).refine((input) => input.setupStatus !== "metadata_ready" || Boolean(input.providerName && input.routeLabel && input.targetCountryCode && input.targetCity), {
-  message: "Para marcar metadados como prontos, informe fornecedor, rótulo, país e cidade planejados.",
+}).refine((input) => input.setupStatus !== "metadata_ready" || Boolean(input.providerName && input.routeLabel), {
+  message: "Para marcar metadados como prontos, informe fornecedor e rótulo administrativo.",
 });
 
 export const h2AdsSaveProxyCredentialSchema = z.object({
@@ -86,6 +89,20 @@ export const h2AdsSaveProxyCredentialSchema = z.object({
 
 export const h2AdsValidateProxySchema = z.object({
   instanceId: z.number().int().positive(),
+}).strict();
+
+export const h2AdsCreateWorkerPairingSchema = z.object({
+  name: z.string().trim().min(2).max(128),
+  capacity: z.number().int().min(1).max(20).default(1),
+}).strict();
+
+export const h2AdsAssignWorkerSchema = z.object({
+  instanceId: z.number().int().positive(),
+  workerId: z.number().int().positive(),
+}).strict();
+
+export const h2AdsRevokeWorkerSchema = z.object({
+  workerId: z.number().int().positive(),
 }).strict();
 
 async function requireWritableGroup(groupId: number) {
@@ -114,6 +131,28 @@ async function requireConfigurableInstance(instanceId: number) {
 export const h2AdsRouter = {
   listDashboard: adminProcedure.query(async () => listH2AdsDashboard()),
   proxySecurityStatus: adminProcedure.query(() => ({ encryptionReady: isH2AdsProxyEncryptionReady() })),
+
+  createWorkerPairing: adminProcedure.input(h2AdsCreateWorkerPairingSchema).mutation(async ({ input }) => {
+    const pairing = await createH2AdsWorkerPairingCode(input);
+    return { success: true, pairingCode: pairing.pairingCode, expiresAt: pairing.expiresAt };
+  }),
+
+  revokeWorker: adminProcedure.input(h2AdsRevokeWorkerSchema).mutation(async ({ input }) => {
+    const revoked = await revokeH2AdsBrowserWorker(input.workerId);
+    if (!revoked) throw new TRPCError({ code: "NOT_FOUND", message: "Worker H2 Ads não encontrado ou já revogado." });
+    return { success: true };
+  }),
+
+  assignWorker: adminProcedure.input(h2AdsAssignWorkerSchema).mutation(async ({ input }) => {
+    await requireConfigurableInstance(input.instanceId);
+    try {
+      await assignH2AdsInstanceWorker(input.instanceId, input.workerId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível atribuir o Worker à instância.";
+      throw new TRPCError({ code: "CONFLICT", message });
+    }
+    return { success: true };
+  }),
 
   createGroup: adminProcedure.input(h2AdsCreateGroupSchema).mutation(async ({ input }) => {
     const id = await createH2AdsGroup(input);

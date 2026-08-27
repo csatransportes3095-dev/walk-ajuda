@@ -36,11 +36,11 @@ describe("segurança da configuração de proxy H2 Ads", () => {
     await expect(resolvePublicProxyAddress("127.0.0.1")).rejects.toThrow("não é público");
   });
 
-  it("identifica divergências sem expor dados de autenticação", () => {
+  it("ignora país administrativo e identifica apenas divergências de ISP e ASN", () => {
     const mismatches = getH2AdsRouteMismatches(
       { ip: "198.51.100.10", countryCode: "US", city: "Test City", asn: "AS64500", isp: "Test ISP", latencyMs: 120 },
-      { targetCountryCode: "BR", expectedIsp: "Other ISP", expectedAsn: "AS64501" },
+      { expectedIsp: "Other ISP", expectedAsn: "AS64501" },
     );
-    expect(mismatches).toEqual(["país", "ISP", "ASN"]);
+    expect(mismatches).toEqual(["ISP", "ASN"]);
   });
 });

@@ -16,6 +16,7 @@ import { serveStatic, setupVite } from "./vite";
 import { isIpBlocked, getSetting } from "../db";
 import { broadcastEmailHandler } from "../broadcastEmailHandler";
 import { registerPingRoute } from "./pingRoute";
+import { registerH2AdsWorkerRoute } from "../h2adsWorkerRoute";
 import { sendMail } from "./mailer";
 import { ensureCustomerIdentityInfrastructure, reconcileLegacyLoanPermissions } from "../customerAccess";
 import { getSharePreviewProfile, sharePreviewProxyPath, type SharePreviewProfileId } from "../sharePreviewProfiles";
@@ -162,6 +163,7 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "200mb" }));
   app.use(express.urlencoded({ limit: "200mb", extended: true }));
+  registerH2AdsWorkerRoute(app);
   // Garantir charset UTF-8 em todas as respostas para evitar quebra de encoding
   app.use((_req, res, next) => {
     const origJson = res.json.bind(res);
