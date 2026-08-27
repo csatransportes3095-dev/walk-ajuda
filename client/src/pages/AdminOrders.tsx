@@ -5913,7 +5913,7 @@ export default function AdminOrders() {
                         // Usar template editável se disponível, senão usar mensagem padrão
                         let msg: string;
                         if (waOrderTemplate) {
-                          msg = normalizeWhatsAppTrackingLinks(waOrderTemplate
+                          msg = repairWhatsappReplacementIcons(normalizeWhatsAppTrackingLinks(waOrderTemplate
                             .replace(/\{nome\}/gi, clientName)
                             .replace(/\{status\}/gi, statusLabel)
                             .replace(/\{descricao_status\}/gi, cleanDesc)
@@ -5926,7 +5926,7 @@ export default function AdminOrders() {
                             .replace(/\{observacao\}/gi, observacao)
                             .replace(/\{DIA\}/g, dia)
                             .replace(/\{MES\}/g, mes)
-                            .replace(/\{ANO\}/g, ano));
+                            .replace(/\{ANO\}/g, ano)));
                         } else {
                           // Mensagem padrão (fallback)
                           const linhas: string[] = [];
@@ -6013,13 +6013,13 @@ export default function AdminOrders() {
                           const ANO = String(now.getFullYear());
                           // Usar template do banco se disponível
                           if (waLoginTemplate) {
-                            return normalizeWhatsAppTrackingLinks(waLoginTemplate
+                            return repairWhatsappReplacementIcons(normalizeWhatsAppTrackingLinks(waLoginTemplate
                               .replace(/\{nome\}/g, nome)
                               .replace(/\{senha\}/g, pinLogin)
                               .replace(/\{telefone\}/g, telefone)
                               .replace(/\{DIA\}/g, DIA)
                               .replace(/\{MES\}/g, MES)
-                              .replace(/\{ANO\}/g, ANO));
+                              .replace(/\{ANO\}/g, ANO)));
                           }
                           // Fallback: mensagem padrão hardcoded
                           const linhas: string[] = [];
