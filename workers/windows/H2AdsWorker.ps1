@@ -7,11 +7,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.1.0"
+$AgentVersion = "1.2.0"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
 $RunnerPath = Join-Path $WorkerDirectory "browser-runner.mjs"
+$SessionRunnerPath = Join-Path $WorkerDirectory "browser-session.mjs"
 $ProfilesDirectory = Join-Path $WorkerDirectory "profiles"
 $PackagePath = Join-Path $WorkerDirectory "package.json"
 $TaskName = "H2 Ads Browser Worker"
@@ -69,9 +70,39 @@ function Ensure-BrowserPreparationComponent([object]$Config) {
   if (!(Get-Command node.exe -ErrorAction SilentlyContinue)) { throw "Node.js não está disponível neste Worker." }
   if (!(Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw "npm não está disponível neste Worker." }
   Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-runner.mjs" -OutFile $RunnerPath
+  Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-session.mjs" -OutFile $SessionRunnerPath
   @{ name = "h2ads-worker-local"; private = $true; type = "module"; dependencies = @{ "proxy-chain" = "3.0.0" } } | ConvertTo-Json -Compress | Set-Content -Path $PackagePath -Encoding UTF8 -NoNewline
   & npm.cmd install --omit=dev --ignore-scripts --no-audit --no-fund --prefix $WorkerDirectory | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "Não foi possível preparar o relay local deste Worker." }
+}
+
+function Invoke-BrowserSession([object]$Config, [object]$Payload) {
+  $profileDirectory = Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)"
+  if (!(Test-Path (Join-Path $profileDirectory "h2ads-profile.json"))) { throw "Perfil local não preparado." }
+  $env:H2ADS_PANEL_URL = $Config.panelUrl
+  $env:H2ADS_WORKER_KEY = $Config.workerKey
+  $env:H2ADS_WORKER_TOKEN = Get-WorkerToken $Config
+  $env:H2ADS_INSTANCE_ID = [string]$Payload.command.instanceId
+  $env:H2ADS_COMMAND_ID = [string]$Payload.command.id
+  $env:H2ADS_PROXY_JSON = ($Payload.proxy | ConvertTo-Json -Compress)
+  $env:H2ADS_PROFILE_DIRECTORY = $profileDirectory
+  try {
+    Start-Process -FilePath "node.exe" -ArgumentList "`"$SessionRunnerPath`"" -WindowStyle Hidden | Out-Null
+  } finally {
+    Remove-Item Env:H2ADS_PANEL_URL, Env:H2ADS_WORKER_KEY, Env:H2ADS_WORKER_TOKEN, Env:H2ADS_INSTANCE_ID, Env:H2ADS_COMMAND_ID, Env:H2ADS_PROXY_JSON, Env:H2ADS_PROFILE_DIRECTORY -ErrorAction SilentlyContinue
+  }
+}
+
+function Close-BrowserSession([object]$Config, [object]$Payload) {
+  $profileDirectory = Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)"
+  $sessionPath = Join-Path $profileDirectory "h2ads-browser-session.json"
+  if (Test-Path $sessionPath) {
+    $session = Get-Content -Raw -Path $sessionPath | ConvertFrom-Json
+    if ($session.nodePid) { & taskkill.exe /PID $session.nodePid /T /F | Out-Null }
+    Remove-Item -Force $sessionPath -ErrorAction SilentlyContinue
+  }
+  $body = @{ command = "close_browser"; state = "closed" } | ConvertTo-Json -Compress
+  Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($Payload.command.id)/result" -Headers (Get-WorkerHeaders $Config) -ContentType "application/json" -Body $body | Out-Null
 }
 
 function Initialize-InstanceProfile([int]$InstanceId) {
@@ -86,18 +117,22 @@ function Invoke-PendingBrowserPreparation([object]$Config) {
     $response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/next" -Headers $headers
     if ($response.StatusCode -eq 204 -or [string]::IsNullOrWhiteSpace($response.Content)) { return }
     $payload = $response.Content | ConvertFrom-Json
-    if ($payload.command.command -ne "prepare_browser") { return }
     Ensure-BrowserPreparationComponent $Config
-    $runnerInput = @{ command = $payload.command.command; proxy = $payload.proxy } | ConvertTo-Json -Depth 5 -Compress
-    $runnerOutput = $runnerInput | & node.exe $RunnerPath
-    $result = $runnerOutput | ConvertFrom-Json
-    if ($result.state -eq "proxy_verified" -and ![string]::IsNullOrWhiteSpace($result.observedIp)) {
-      Initialize-InstanceProfile ([int]$payload.command.instanceId)
-      $resultBody = @{ state = "proxy_verified"; observedIp = $result.observedIp } | ConvertTo-Json -Compress
-    } else {
-      $resultBody = @{ state = "blocked"; errorCategory = "proxy_unavailable" } | ConvertTo-Json -Compress
+    if ($payload.command.command -eq "prepare_browser") {
+      $runnerInput = @{ command = $payload.command.command; proxy = $payload.proxy } | ConvertTo-Json -Depth 5 -Compress
+      $runnerOutput = $runnerInput | & node.exe $RunnerPath
+      $result = $runnerOutput | ConvertFrom-Json
+      if ($result.state -eq "proxy_verified" -and ![string]::IsNullOrWhiteSpace($result.observedIp)) {
+        Initialize-InstanceProfile ([int]$payload.command.instanceId)
+        $resultBody = @{ command = "prepare_browser"; state = "proxy_verified"; observedIp = $result.observedIp } | ConvertTo-Json -Compress
+      } else {
+        $resultBody = @{ command = "prepare_browser"; state = "blocked"; errorCategory = "proxy_unavailable" } | ConvertTo-Json -Compress
+      }
+      Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($payload.command.id)/result" -Headers $headers -ContentType "application/json" -Body $resultBody | Out-Null
+      return
     }
-    Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($payload.command.id)/result" -Headers $headers -ContentType "application/json" -Body $resultBody | Out-Null
+    if ($payload.command.command -eq "launch_browser") { Invoke-BrowserSession $Config $payload; return }
+    if ($payload.command.command -eq "close_browser") { Close-BrowserSession $Config $payload; return }
   } catch {
     # Falhas locais ou da rota não são gravadas no terminal nem reenviadas com detalhes sensíveis.
   }

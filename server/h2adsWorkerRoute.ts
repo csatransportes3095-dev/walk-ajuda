@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import path from "node:path";
-import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsWorkerHeartbeat } from "./h2ads";
+import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 
 const MAX_NAME_LENGTH = 128;
@@ -43,6 +43,14 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     const runnerPath = path.resolve(process.cwd(), "workers", "windows", "browser-runner.mjs");
     res.download(runnerPath, "browser-runner.mjs", (error) => {
       if (error && !res.headersSent) res.status(404).json({ error: "Componente de preparação não disponível." });
+    });
+  });
+
+  app.get("/api/h2ads/worker/windows-browser-session.mjs", (_req: Request, res: Response) => {
+    noStore(res);
+    const sessionPath = path.resolve(process.cwd(), "workers", "windows", "browser-session.mjs");
+    res.download(sessionPath, "browser-session.mjs", (error) => {
+      if (error && !res.headersSent) res.status(404).json({ error: "Componente de sessão não disponível." });
     });
   });
 
@@ -92,12 +100,17 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       return;
     }
     try {
+      if (command.command === "close_browser") {
+        res.status(200).json({ command: { id: command.id, instanceId: command.instanceId, command: command.command } });
+        return;
+      }
       const encryptedPayload = await getH2AdsProxyCredential(command.instanceId);
       if (!encryptedPayload) throw new Error("Rota protegida ausente.");
       const proxy = decryptH2AdsProxy(encryptedPayload);
       res.status(200).json({ command: { id: command.id, instanceId: command.instanceId, command: command.command }, proxy });
     } catch (_error) {
-      await completeH2AdsWorkerPreparation({ workerId: worker.id, commandId: command.id, state: "blocked", errorCategory: "route_unavailable" });
+      if (command.command === "prepare_browser") await completeH2AdsWorkerPreparation({ workerId: worker.id, commandId: command.id, state: "blocked", errorCategory: "route_unavailable" });
+      else await completeH2AdsWorkerBrowserCommand({ workerId: worker.id, commandId: command.id, command: "launch_browser", state: "blocked", errorCategory: "route_unavailable" });
       res.status(409).json({ error: "A rota protegida da instância não está disponível." });
     }
   });
@@ -107,16 +120,36 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
     const commandId = Number(req.params.commandId);
-    const state = req.body?.state === "proxy_verified" || req.body?.state === "blocked" ? req.body.state : null;
+    const command = req.body?.command === "prepare_browser" || req.body?.command === "launch_browser" || req.body?.command === "close_browser" ? req.body.command : null;
+    const state = req.body?.state === "proxy_verified" || req.body?.state === "browser_open" || req.body?.state === "closed" || req.body?.state === "blocked" ? req.body.state : null;
     const observedIp = workerString(req.body?.observedIp, 64);
     const errorCategory = workerString(req.body?.errorCategory, 64);
-    if (!Number.isInteger(commandId) || commandId < 1 || !state || (state === "proxy_verified" && !observedIp)) {
+    if (!Number.isInteger(commandId) || commandId < 1 || !command || !state || (state === "proxy_verified" && !observedIp)) {
       res.status(400).json({ error: "Resultado de preparação inválido." });
       return;
     }
-    const completed = await completeH2AdsWorkerPreparation({ workerId: worker.id, commandId, state, observedIp, errorCategory });
+    const completed = command === "prepare_browser"
+      ? (state === "proxy_verified" || state === "blocked") && await completeH2AdsWorkerPreparation({ workerId: worker.id, commandId, state, observedIp, errorCategory })
+      : (state === "browser_open" || state === "closed" || state === "blocked") && await completeH2AdsWorkerBrowserCommand({ workerId: worker.id, commandId, command, state, errorCategory });
     if (!completed) {
       res.status(409).json({ error: "Comando não disponível para este Worker." });
+      return;
+    }
+    res.status(204).end();
+  });
+
+  app.post("/api/h2ads/worker/runs/:instanceId/state", async (req: Request, res: Response) => {
+    noStore(res);
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    if (!Number.isInteger(instanceId) || instanceId < 1 || req.body?.state !== "closed") {
+      res.status(400).json({ error: "Estado de execução inválido." });
+      return;
+    }
+    const updated = await recordH2AdsBrowserRuntimeState({ workerId: worker.id, instanceId, state: "closed" });
+    if (!updated) {
+      res.status(409).json({ error: "Execução não disponível para este Worker." });
       return;
     }
     res.status(204).end();

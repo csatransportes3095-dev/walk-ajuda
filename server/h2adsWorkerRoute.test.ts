@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsWorkerHeartbeat } = vi.hoisted(() => ({
+const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } = vi.hoisted(() => ({
   authenticateH2AdsWorker: vi.fn(),
   claimH2AdsWorker: vi.fn(),
   claimNextH2AdsWorkerCommand: vi.fn(),
+  completeH2AdsWorkerBrowserCommand: vi.fn(),
   completeH2AdsWorkerPreparation: vi.fn(),
   getH2AdsProxyCredential: vi.fn(),
+  recordH2AdsBrowserRuntimeState: vi.fn(),
   recordH2AdsWorkerHeartbeat: vi.fn(),
 }));
 
-vi.mock("./h2ads", () => ({ authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsWorkerHeartbeat }));
+vi.mock("./h2ads", () => ({ authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat }));
 vi.mock("./h2adsProxySecurity", () => ({ decryptH2AdsProxy: vi.fn() }));
 
 import { registerH2AdsWorkerRoute } from "./h2adsWorkerRoute";
@@ -82,5 +84,22 @@ describe("endpoints do Browser Worker H2 Ads", () => {
     await routes["POST /api/h2ads/worker/commands/next"]({ body: {}, header: () => undefined }, res);
     expect(state.statusCode).toBe(401);
     expect(claimNextH2AdsWorkerCommand).not.toHaveBeenCalled();
+  });
+
+  it("entrega encerramento sem carregar a rota e registra estado fechado apenas para Worker autenticado", async () => {
+    authenticateH2AdsWorker.mockResolvedValue({ id: 7, workerKey: "h2w_synthetic", name: "Windows", status: "active", capacity: 1 });
+    claimNextH2AdsWorkerCommand.mockResolvedValue({ id: 9, workerId: 7, instanceId: 32, command: "close_browser" });
+    const routes = setupRoutes();
+    const next = response();
+    await routes["POST /api/h2ads/worker/commands/next"]({ body: {}, header: (name: string) => name === "authorization" ? "Bearer h2wt_synthetic" : "h2w_synthetic" }, next.res);
+    expect(next.state.statusCode).toBe(200);
+    expect(next.state.body).toEqual({ command: { id: 9, instanceId: 32, command: "close_browser" } });
+    expect(getH2AdsProxyCredential).not.toHaveBeenCalled();
+
+    recordH2AdsBrowserRuntimeState.mockResolvedValue(true);
+    const closed = response();
+    await routes["POST /api/h2ads/worker/runs/:instanceId/state"]({ params: { instanceId: "32" }, body: { state: "closed" }, header: (name: string) => name === "authorization" ? "Bearer h2wt_synthetic" : "h2w_synthetic" }, closed.res);
+    expect(recordH2AdsBrowserRuntimeState).toHaveBeenCalledWith({ workerId: 7, instanceId: 32, state: "closed" });
+    expect(closed.state.statusCode).toBe(204);
   });
 });

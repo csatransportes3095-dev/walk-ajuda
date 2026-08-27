@@ -12,7 +12,9 @@ const h2AdsSources = [
   "drizzle/0138_h2ads_network_metadata.sql",
   "drizzle/0140_h2ads_browser_workers.sql",
   "drizzle/0141_h2ads_browser_preparation.sql",
+  "drizzle/0142_h2ads_browser_manual_commands.sql",
   "workers/windows/browser-runner.mjs",
+  "workers/windows/browser-session.mjs",
 ].map(file => fs.readFileSync(path.join(projectRoot, file), "utf8")).join("\n");
 
 describe("isolamento da base H2 Ads", () => {

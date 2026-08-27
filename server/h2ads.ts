@@ -285,3 +285,56 @@ export async function completeH2AdsWorkerPreparation(input: { workerId: number; 
   }
   return true;
 }
+
+async function getAssignedOnlineWorker(instanceId: number) {
+  const db = await requireH2AdsDb();
+  const assignments = await db.select().from(h2AdsInstanceWorkerAssignments).where(eq(h2AdsInstanceWorkerAssignments.instanceId, instanceId)).limit(1);
+  const assignment = assignments[0];
+  if (!assignment) throw new Error("A instância precisa ter um Worker atribuído.");
+  const workers = await db.select().from(h2AdsBrowserWorkers).where(and(eq(h2AdsBrowserWorkers.id, assignment.workerId), eq(h2AdsBrowserWorkers.status, "active"))).limit(1);
+  const worker = workers[0];
+  if (!worker || !worker.lastSeenAt || Date.now() - worker.lastSeenAt.getTime() > H2ADS_WORKER_ONLINE_WINDOW_MS) throw new Error("O Worker atribuído precisa estar online.");
+  return { db, assignment, worker };
+}
+
+export async function requestH2AdsBrowserLaunch(instanceId: number): Promise<{ commandId: number; instanceId: number; workerId: number }> {
+  const { db, assignment, worker } = await getAssignedOnlineWorker(instanceId);
+  if (assignment.profileState !== "local_only" && assignment.profileState !== "snapshot_ready") throw new Error("O perfil local precisa estar preparado antes da abertura.");
+  const runs = await db.select().from(h2AdsInstanceBrowserRuns).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId), eq(h2AdsInstanceBrowserRuns.workerId, worker.id))).limit(1);
+  if (runs[0]?.state !== "proxy_verified" && runs[0]?.state !== "closed") throw new Error("A rota precisa ser confirmada pelo Worker antes da abertura.");
+  const pending = await db.select({ id: h2AdsWorkerCommands.id, status: h2AdsWorkerCommands.status }).from(h2AdsWorkerCommands).where(and(eq(h2AdsWorkerCommands.instanceId, instanceId), eq(h2AdsWorkerCommands.command, "launch_browser"))).orderBy(desc(h2AdsWorkerCommands.id)).limit(1);
+  if (pending[0] && (pending[0].status === "queued" || pending[0].status === "claimed")) return { commandId: pending[0].id, instanceId, workerId: worker.id };
+  const inserted = await db.insert(h2AdsWorkerCommands).values({ workerId: worker.id, instanceId, command: "launch_browser" });
+  return { commandId: Number(inserted[0].insertId), instanceId, workerId: worker.id };
+}
+
+export async function requestH2AdsBrowserClose(instanceId: number): Promise<{ commandId: number; instanceId: number; workerId: number }> {
+  const { db, worker } = await getAssignedOnlineWorker(instanceId);
+  const runs = await db.select().from(h2AdsInstanceBrowserRuns).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId), eq(h2AdsInstanceBrowserRuns.workerId, worker.id))).limit(1);
+  if (runs[0]?.state !== "browser_open") throw new Error("Não há browser aberto para encerrar nesta instância.");
+  const pending = await db.select({ id: h2AdsWorkerCommands.id, status: h2AdsWorkerCommands.status }).from(h2AdsWorkerCommands).where(and(eq(h2AdsWorkerCommands.instanceId, instanceId), eq(h2AdsWorkerCommands.command, "close_browser"))).orderBy(desc(h2AdsWorkerCommands.id)).limit(1);
+  if (pending[0] && (pending[0].status === "queued" || pending[0].status === "claimed")) return { commandId: pending[0].id, instanceId, workerId: worker.id };
+  const inserted = await db.insert(h2AdsWorkerCommands).values({ workerId: worker.id, instanceId, command: "close_browser" });
+  return { commandId: Number(inserted[0].insertId), instanceId, workerId: worker.id };
+}
+
+export async function completeH2AdsWorkerBrowserCommand(input: { workerId: number; commandId: number; command: "launch_browser" | "close_browser"; state: "browser_open" | "closed" | "blocked"; errorCategory?: string | null }): Promise<boolean> {
+  const db = await requireH2AdsDb();
+  const commands = await db.select().from(h2AdsWorkerCommands).where(and(eq(h2AdsWorkerCommands.id, input.commandId), eq(h2AdsWorkerCommands.workerId, input.workerId), eq(h2AdsWorkerCommands.command, input.command), eq(h2AdsWorkerCommands.status, "claimed"))).limit(1);
+  const command = commands[0];
+  if (!command) return false;
+  if ((input.command === "launch_browser" && input.state !== "browser_open" && input.state !== "blocked") || (input.command === "close_browser" && input.state !== "closed" && input.state !== "blocked")) return false;
+  await db.update(h2AdsWorkerCommands).set({ status: input.state === "blocked" ? "failed" : "succeeded", errorCategory: input.errorCategory ?? null, completedAt: new Date() }).where(eq(h2AdsWorkerCommands.id, command.id));
+  await upsertH2AdsBrowserRun(command.instanceId, input.workerId, { state: input.state, lastErrorCategory: input.errorCategory ?? null });
+  return true;
+}
+
+export async function recordH2AdsBrowserRuntimeState(input: { workerId: number; instanceId: number; state: "closed" }): Promise<boolean> {
+  const db = await requireH2AdsDb();
+  const assignments = await db.select().from(h2AdsInstanceWorkerAssignments).where(and(eq(h2AdsInstanceWorkerAssignments.instanceId, input.instanceId), eq(h2AdsInstanceWorkerAssignments.workerId, input.workerId))).limit(1);
+  if (!assignments[0]) return false;
+  const runs = await db.select({ id: h2AdsInstanceBrowserRuns.id, state: h2AdsInstanceBrowserRuns.state }).from(h2AdsInstanceBrowserRuns).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, input.instanceId), eq(h2AdsInstanceBrowserRuns.workerId, input.workerId))).limit(1);
+  if (!runs[0] || runs[0].state !== "browser_open") return false;
+  await db.update(h2AdsInstanceBrowserRuns).set({ state: "closed", lastErrorCategory: null, lastChangedAt: new Date() }).where(eq(h2AdsInstanceBrowserRuns.id, runs[0].id));
+  return true;
+}

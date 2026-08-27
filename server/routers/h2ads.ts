@@ -10,6 +10,8 @@ import {
   getH2AdsProxyCredential,
   listH2AdsDashboard,
   recordH2AdsNetworkValidation,
+  requestH2AdsBrowserClose,
+  requestH2AdsBrowserLaunch,
   requestH2AdsBrowserPreparation,
   revokeH2AdsBrowserWorker,
   assignH2AdsInstanceWorker,
@@ -110,6 +112,10 @@ export const h2AdsPrepareBrowserSchema = z.object({
   instanceId: z.number().int().positive(),
 }).strict();
 
+export const h2AdsBrowserManualCommandSchema = z.object({
+  instanceId: z.number().int().positive(),
+}).strict();
+
 async function requireWritableGroup(groupId: number) {
   const group = await getH2AdsGroup(groupId);
   if (!group) {
@@ -165,6 +171,26 @@ export const h2AdsRouter = {
       return { success: true, ...(await requestH2AdsBrowserPreparation(input.instanceId)) };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Não foi possível preparar o browser desta instância.";
+      throw new TRPCError({ code: "CONFLICT", message });
+    }
+  }),
+
+  launchBrowser: adminProcedure.input(h2AdsBrowserManualCommandSchema).mutation(async ({ input }) => {
+    await requireConfigurableInstance(input.instanceId);
+    try {
+      return { success: true, ...(await requestH2AdsBrowserLaunch(input.instanceId)) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível solicitar a abertura manual do browser.";
+      throw new TRPCError({ code: "CONFLICT", message });
+    }
+  }),
+
+  closeBrowser: adminProcedure.input(h2AdsBrowserManualCommandSchema).mutation(async ({ input }) => {
+    await requireConfigurableInstance(input.instanceId);
+    try {
+      return { success: true, ...(await requestH2AdsBrowserClose(input.instanceId)) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível solicitar o encerramento manual do browser.";
       throw new TRPCError({ code: "CONFLICT", message });
     }
   }),

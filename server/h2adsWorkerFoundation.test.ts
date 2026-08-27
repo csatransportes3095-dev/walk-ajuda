@@ -30,9 +30,10 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(route).not.toContain("console.log");
   });
 
-  it("prepara o agente Windows sem iniciar ou automatizar browsers", () => {
+  it("permite somente sessão local manual e continua sem automação de sites", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
+    const session = read("workers/windows/browser-session.mjs");
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
@@ -45,9 +46,14 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(runner).toContain('host: "127.0.0.1"');
     expect(runner).toContain("https://api.ipify.org?format=json");
     expect(runner).not.toContain("console.log");
-    for (const prohibited of ["chrome.exe", "msedge.exe", "playwright", "selenium", "puppeteer", "Start-Process.*chrome"]) {
+    expect(session).toContain('"about:blank"');
+    expect(session).toContain("--proxy-server=http://127.0.0.1:");
+    expect(session).toContain("--user-data-dir=");
+    expect(session).toContain("/api/h2ads/worker/runs/");
+    for (const prohibited of ["playwright", "selenium", "puppeteer", "page.goto", "browser.newpage", "console.log"]) {
       expect(script.toLowerCase()).not.toContain(prohibited.toLowerCase());
       expect(runner.toLowerCase()).not.toContain(prohibited.toLowerCase());
+      expect(session.toLowerCase()).not.toContain(prohibited.toLowerCase());
     }
   });
 
