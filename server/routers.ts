@@ -48,6 +48,7 @@ import { mercadoRouter } from "./routers/mercado";
 import { privateTransportRouter } from "./routers/privateTransport";
 import { locadoraRouter } from "./routers/locadora";
 import { h2AssistantRouter } from "./routers/h2Assistant";
+import { h2AdsRouter } from "./routers/h2ads";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
 import { backupRouter } from "./routers/backup";
@@ -326,6 +327,7 @@ export const appRouter = router({
   privateTransport: privateTransportRouter,
   locadora: locadoraRouter,
   h2Assistant: h2AssistantRouter,
+  h2Ads: h2AdsRouter,
   loans: loanRouter,
   apk: apkRouter,
   customerPassword: customerPasswordRouter,

@@ -24,12 +24,14 @@ describe("H2 Ads entry route isolation", () => {
     expect(adminSource).toContain("href: '/h2ads'");
   });
 
-  it("keeps the initial H2 Ads page isolated from current business data and proxy secrets", () => {
+  it("keeps the H2 Ads page tied only to its own router, without business data or proxy secrets", () => {
     const pageSource = fs.readFileSync(path.join(projectRoot, "client/src/pages/H2Ads.tsx"), "utf8");
 
     expect(pageSource).toContain("H2 ADS");
     expect(pageSource).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663911003862/NUtvqlTplGBXXVCr.png");
-    expect(pageSource).not.toContain("trpc.");
+    expect(pageSource).toContain("trpc.h2Ads.listDashboard");
+    expect(pageSource).not.toContain("trpc.orders");
+    expect(pageSource).not.toContain("trpc.customers");
     expect(pageSource).not.toContain("proxyPassword");
     expect(pageSource).not.toContain("browserWSEndpoint");
   });

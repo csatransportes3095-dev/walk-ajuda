@@ -2630,3 +2630,37 @@ export const systemBackups = mysqlTable("systemBackups", {
 }));
 export type SystemBackup = typeof systemBackups.$inferSelect;
 export type InsertSystemBackup = typeof systemBackups.$inferInsert;
+
+// H2 Ads: módulo administrativo isolado. Não possui relação com clientes, pedidos ou domínios existentes.
+export const h2AdsGroups = mysqlTable("h2ads_groups", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  description: text("description"),
+  status: mysqlEnum("status", ["active", "archived"]).notNull().default("active"),
+  sortOrder: int("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  statusIndex: index("h2ads_groups_status_idx").on(table.status),
+  sortIndex: index("h2ads_groups_sort_idx").on(table.sortOrder),
+}));
+export type H2AdsGroup = typeof h2AdsGroups.$inferSelect;
+export type InsertH2AdsGroup = typeof h2AdsGroups.$inferInsert;
+
+// Registro administrativo de instância. A execução de browser e a configuração de proxy ficam fora desta fase.
+export const h2AdsInstances = mysqlTable("h2ads_instances", {
+  id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
+  name: varchar("name", { length: 128 }).notNull(),
+  status: mysqlEnum("status", ["draft", "paused", "archived"]).notNull().default("draft"),
+  notes: text("notes"),
+  sortOrder: int("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  groupIndex: index("h2ads_instances_group_idx").on(table.groupId),
+  statusIndex: index("h2ads_instances_status_idx").on(table.status),
+  groupSortIndex: index("h2ads_instances_group_sort_idx").on(table.groupId, table.sortOrder),
+}));
+export type H2AdsInstance = typeof h2AdsInstances.$inferSelect;
+export type InsertH2AdsInstance = typeof h2AdsInstances.$inferInsert;
