@@ -55,6 +55,10 @@ describe("contrato administrativo H2 Ads", () => {
 
   it("aceita credencial somente como entrada protegida e não aceita campos de conexão avulsos", () => {
     expect(h2AdsSaveProxyCredentialSchema.safeParse({ instanceId: 1, proxyConfig: "edge.example:3128:user:pass" }).success).toBe(true);
+    expect(h2AdsSaveProxyCredentialSchema.safeParse({ instanceId: 1, proxyConfig: "edge.example:3128:user:pass", proxyProtocol: "http" }).success).toBe(true);
+    expect(h2AdsSaveProxyCredentialSchema.safeParse({ instanceId: 1, proxyConfig: "edge.example:3128:user:pass", proxyProtocol: "https" }).success).toBe(true);
+    expect(h2AdsSaveProxyCredentialSchema.safeParse({ instanceId: 1, proxyConfig: "edge.example:3128:user:pass", proxyProtocol: "socks5" }).success).toBe(true);
+    expect(h2AdsSaveProxyCredentialSchema.safeParse({ instanceId: 1, proxyConfig: "edge.example:3128:user:pass", proxyProtocol: "socks4" }).success).toBe(false);
     expect(h2AdsSaveProxyCredentialSchema.safeParse({ instanceId: 1, proxyHost: "edge.example" }).success).toBe(false);
     expect(h2AdsValidateProxySchema.safeParse({ instanceId: 1 }).success).toBe(true);
     expect(h2AdsValidateProxySchema.safeParse({ instanceId: 1, force: true }).success).toBe(false);

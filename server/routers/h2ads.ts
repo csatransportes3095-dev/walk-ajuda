@@ -81,6 +81,7 @@ export const h2AdsSaveNetworkProfileSchema = z.object({
 export const h2AdsSaveProxyCredentialSchema = z.object({
   instanceId: z.number().int().positive(),
   proxyConfig: z.string().trim().min(8).max(2_048),
+  proxyProtocol: z.enum(["http", "https", "socks5"]).default("http"),
 }).strict();
 
 export const h2AdsValidateProxySchema = z.object({
@@ -150,7 +151,7 @@ export const h2AdsRouter = {
   saveProxyCredential: adminProcedure.input(h2AdsSaveProxyCredentialSchema).mutation(async ({ input }) => {
     await requireConfigurableInstance(input.instanceId);
     try {
-      const encryptedPayload = encryptH2AdsProxy(parseH2AdsProxyInput(input.proxyConfig));
+      const encryptedPayload = encryptH2AdsProxy(parseH2AdsProxyInput(input.proxyConfig, input.proxyProtocol));
       await saveH2AdsProxyCredential(input.instanceId, encryptedPayload);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Não foi possível proteger a configuração de proxy.";

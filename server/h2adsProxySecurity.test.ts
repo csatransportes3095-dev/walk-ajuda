@@ -22,8 +22,9 @@ describe("segurança da configuração de proxy H2 Ads", () => {
 
   it("interpreta o formato permitido e cifra sem manter texto aberto", () => {
     const input = ["edge.example", "3128", "user_test", "pass_test"].join(":");
-    const parsed = parseH2AdsProxyInput(input);
+    const parsed = parseH2AdsProxyInput(input, "socks5");
     const encrypted = encryptH2AdsProxy(parsed);
+    expect(parsed).toMatchObject({ protocol: "socks5", host: "edge.example", port: 3128, username: "user_test" });
     expect(encrypted).not.toContain(input);
     expect(encrypted).not.toContain(parsed.password);
     expect(decryptH2AdsProxy(encrypted)).toEqual(parsed);

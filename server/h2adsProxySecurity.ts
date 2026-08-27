@@ -1,13 +1,10 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { parseH2AdsProxyInput, type ParsedH2AdsProxy } from "../shared/h2adsProxyInput";
+
+export { parseH2AdsProxyInput } from "../shared/h2adsProxyInput";
+export type { H2AdsProxyProtocol, ParsedH2AdsProxy } from "../shared/h2adsProxyInput";
 
 const CIPHER_VERSION = "v1";
-
-export type ParsedH2AdsProxy = {
-  host: string;
-  port: number;
-  username: string;
-  password: string;
-};
 
 function getEncryptionKey() {
   const value = process.env.H2ADS_PROXY_ENCRYPTION_KEY?.trim();
@@ -27,18 +24,6 @@ export function isH2AdsProxyEncryptionReady() {
   }
 }
 
-export function parseH2AdsProxyInput(input: string): ParsedH2AdsProxy {
-  const value = input.trim();
-  if (!value || /\s/.test(value)) throw new Error("Informe uma configuração de proxy válida, sem espaços.");
-  const [host, portText, username, ...passwordParts] = value.split(":");
-  const password = passwordParts.join(":");
-  const port = Number(portText);
-  if (!host || !/^[a-zA-Z0-9.-]+$/.test(host) || !Number.isInteger(port) || port < 1 || port > 65535 || !username || !password) {
-    throw new Error("Formato de proxy inválido. Use host:porta:utilizador:palavra-passe.");
-  }
-  return { host: host.toLowerCase(), port, username, password };
-}
-
 export function encryptH2AdsProxy(proxy: ParsedH2AdsProxy) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
@@ -55,7 +40,7 @@ export function decryptH2AdsProxy(encryptedPayload: string): ParsedH2AdsProxy {
     decipher.setAuthTag(Buffer.from(tagText, "base64"));
     const decrypted = Buffer.concat([decipher.update(Buffer.from(contentText, "base64")), decipher.final()]).toString("utf8");
     const value = JSON.parse(decrypted) as ParsedH2AdsProxy;
-    return parseH2AdsProxyInput(`${value.host}:${value.port}:${value.username}:${value.password}`);
+    return parseH2AdsProxyInput(`${value.host}:${value.port}:${value.username}:${value.password}`, value.protocol ?? "http");
   } catch {
     throw new Error("Não foi possível abrir a credencial protegida de proxy.");
   }

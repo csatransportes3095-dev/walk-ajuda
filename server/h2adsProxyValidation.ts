@@ -1,6 +1,7 @@
 import dns from "node:dns/promises";
 import net from "node:net";
 import axios from "axios";
+import { SocksProxyAgent } from "socks-proxy-agent";
 import type { ParsedH2AdsProxy } from "./h2adsProxySecurity";
 
 type IpLocationResponse = {
@@ -62,17 +63,27 @@ export async function resolvePublicProxyAddress(host: string) {
 export async function validateH2AdsProxyRoute(proxy: ParsedH2AdsProxy): Promise<H2AdsObservedRoute> {
   const address = await resolvePublicProxyAddress(proxy.host);
   const start = Date.now();
-  const response = await axios.get<IpLocationResponse>("https://ipapi.co/json/", {
+  const request = {
     timeout: 15_000,
-    proxy: {
-      protocol: "http",
-      host: address,
-      port: proxy.port,
-      auth: { username: proxy.username, password: proxy.password },
-    },
     headers: { "User-Agent": "WalkAjuda-H2Ads-RouteCheck/1.0", Accept: "application/json" },
-    validateStatus: status => status >= 200 && status < 300,
-  });
+    validateStatus: (status: number) => status >= 200 && status < 300,
+  };
+  const response = proxy.protocol === "socks5"
+    ? await axios.get<IpLocationResponse>("https://ipapi.co/json/", {
+      ...request,
+      proxy: false,
+      httpAgent: new SocksProxyAgent(`socks5://${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@${address}:${proxy.port}`),
+      httpsAgent: new SocksProxyAgent(`socks5://${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@${address}:${proxy.port}`),
+    })
+    : await axios.get<IpLocationResponse>("https://ipapi.co/json/", {
+      ...request,
+      proxy: {
+        protocol: proxy.protocol,
+        host: address,
+        port: proxy.port,
+        auth: { username: proxy.username, password: proxy.password },
+      },
+    });
   const data = response.data;
   if (data.error || !data.ip) throw new Error("A rota não retornou um IP público válido.");
   return {
