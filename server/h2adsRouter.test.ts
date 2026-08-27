@@ -4,7 +4,9 @@ import {
   h2AdsCreateInstanceSchema,
   h2AdsGroupStatusSchema,
   h2AdsInstanceStatusSchema,
+  h2AdsSaveProxyCredentialSchema,
   h2AdsSaveNetworkProfileSchema,
+  h2AdsValidateProxySchema,
   h2AdsUpdateGroupSchema,
   h2AdsUpdateInstanceSchema,
 } from "./routers/h2ads";
@@ -48,5 +50,12 @@ describe("contrato administrativo H2 Ads", () => {
     expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", proxyUrl: "http://blocked" }).success).toBe(false);
     expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", browserWSEndpoint: "ws://blocked" }).success).toBe(false);
     expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", healthStatus: "healthy" }).success).toBe(false);
+  });
+
+  it("aceita credencial somente como entrada protegida e não aceita campos de conexão avulsos", () => {
+    expect(h2AdsSaveProxyCredentialSchema.safeParse({ instanceId: 1, proxyConfig: "edge.example:3128:user:pass" }).success).toBe(true);
+    expect(h2AdsSaveProxyCredentialSchema.safeParse({ instanceId: 1, proxyHost: "edge.example" }).success).toBe(false);
+    expect(h2AdsValidateProxySchema.safeParse({ instanceId: 1 }).success).toBe(true);
+    expect(h2AdsValidateProxySchema.safeParse({ instanceId: 1, force: true }).success).toBe(false);
   });
 });

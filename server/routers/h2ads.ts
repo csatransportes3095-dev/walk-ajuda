@@ -5,12 +5,18 @@ import {
   createH2AdsInstance,
   getH2AdsGroup,
   getH2AdsInstance,
+  getH2AdsNetworkProfile,
+  getH2AdsProxyCredential,
   listH2AdsDashboard,
+  recordH2AdsNetworkValidation,
+  saveH2AdsProxyCredential,
   saveH2AdsNetworkProfile,
   updateH2AdsGroup,
   updateH2AdsInstance,
 } from "../h2ads";
 import { adminProcedure } from "../_core/trpc";
+import { decryptH2AdsProxy, encryptH2AdsProxy, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "../h2adsProxySecurity";
+import { getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "../h2adsProxyValidation";
 
 export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
 export const h2AdsInstanceStatusSchema = z.enum(["draft", "paused", "archived"]);
@@ -69,6 +75,15 @@ export const h2AdsSaveNetworkProfileSchema = z.object({
   message: "Para marcar metadados como prontos, informe fornecedor, rótulo, país e cidade planejados.",
 });
 
+export const h2AdsSaveProxyCredentialSchema = z.object({
+  instanceId: z.number().int().positive(),
+  proxyConfig: z.string().trim().min(8).max(2_048),
+}).strict();
+
+export const h2AdsValidateProxySchema = z.object({
+  instanceId: z.number().int().positive(),
+}).strict();
+
 async function requireWritableGroup(groupId: number) {
   const group = await getH2AdsGroup(groupId);
   if (!group) {
@@ -94,6 +109,7 @@ async function requireConfigurableInstance(instanceId: number) {
 
 export const h2AdsRouter = {
   listDashboard: adminProcedure.query(async () => listH2AdsDashboard()),
+  proxySecurityStatus: adminProcedure.query(() => ({ encryptionReady: isH2AdsProxyEncryptionReady() })),
 
   createGroup: adminProcedure.input(h2AdsCreateGroupSchema).mutation(async ({ input }) => {
     const id = await createH2AdsGroup(input);
@@ -126,5 +142,58 @@ export const h2AdsRouter = {
     await requireConfigurableInstance(instanceId);
     await saveH2AdsNetworkProfile(instanceId, profile);
     return { success: true };
+  }),
+
+  saveProxyCredential: adminProcedure.input(h2AdsSaveProxyCredentialSchema).mutation(async ({ input }) => {
+    await requireConfigurableInstance(input.instanceId);
+    try {
+      const encryptedPayload = encryptH2AdsProxy(parseH2AdsProxyInput(input.proxyConfig));
+      await saveH2AdsProxyCredential(input.instanceId, encryptedPayload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível proteger a configuração de proxy.";
+      throw new TRPCError({ code: "BAD_REQUEST", message });
+    }
+    return { success: true, summary: proxyCredentialSummary() };
+  }),
+
+  validateProxy: adminProcedure.input(h2AdsValidateProxySchema).mutation(async ({ input }) => {
+    await requireConfigurableInstance(input.instanceId);
+    const encryptedPayload = await getH2AdsProxyCredential(input.instanceId);
+    if (!encryptedPayload) throw new TRPCError({ code: "NOT_FOUND", message: "Nenhuma credencial protegida foi configurada para esta instância." });
+    const profile = await getH2AdsNetworkProfile(input.instanceId);
+    try {
+      const observed = await validateH2AdsProxyRoute(decryptH2AdsProxy(encryptedPayload));
+      const mismatches = getH2AdsRouteMismatches(observed, {
+        targetCountryCode: profile?.targetCountryCode ?? null,
+        expectedIsp: profile?.expectedIsp ?? null,
+        expectedAsn: profile?.expectedAsn ?? null,
+      });
+      const blocked = mismatches.length > 0;
+      await recordH2AdsNetworkValidation(input.instanceId, {
+        healthStatus: blocked ? "blocked" : "healthy",
+        observedIp: observed.ip,
+        observedCountryCode: observed.countryCode,
+        observedCity: observed.city,
+        observedIsp: observed.isp,
+        observedAsn: observed.asn,
+        latencyMs: observed.latencyMs,
+        lastCheckMessage: blocked ? `Divergência em ${mismatches.join(", ")}.` : "Validação concluída.",
+      });
+      if (blocked) throw new TRPCError({ code: "CONFLICT", message: "A rota diverge dos metadados esperados; a instância foi bloqueada." });
+      return { success: true, observed };
+    } catch (error) {
+      if (error instanceof TRPCError) throw error;
+      await recordH2AdsNetworkValidation(input.instanceId, {
+        healthStatus: "failed",
+        observedIp: null,
+        observedCountryCode: null,
+        observedCity: null,
+        observedIsp: null,
+        observedAsn: null,
+        latencyMs: null,
+        lastCheckMessage: "Falha na validação da rota.",
+      });
+      throw new TRPCError({ code: "CONFLICT", message: "A validação da rota falhou; a instância foi bloqueada." });
+    }
   }),
 };

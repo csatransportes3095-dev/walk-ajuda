@@ -2694,3 +2694,17 @@ export const h2AdsInstanceNetworkProfiles = mysqlTable("h2ads_instance_network_p
 }));
 export type H2AdsInstanceNetworkProfile = typeof h2AdsInstanceNetworkProfiles.$inferSelect;
 export type InsertH2AdsInstanceNetworkProfile = typeof h2AdsInstanceNetworkProfiles.$inferInsert;
+
+// Credencial cifrada de rota por instância H2 Ads. A configuração original nunca é armazenada em texto aberto.
+export const h2AdsInstanceProxyCredentials = mysqlTable("h2ads_instance_proxy_credentials", {
+  id: int("id").autoincrement().primaryKey(),
+  instanceId: int("instanceId").notNull(),
+  cipherVersion: varchar("cipherVersion", { length: 16 }).notNull().default("v1"),
+  encryptedPayload: text("encryptedPayload").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  instanceUnique: uniqueIndex("h2ads_proxy_credential_instance_uq").on(table.instanceId),
+}));
+export type H2AdsInstanceProxyCredential = typeof h2AdsInstanceProxyCredentials.$inferSelect;
+export type InsertH2AdsInstanceProxyCredential = typeof h2AdsInstanceProxyCredentials.$inferInsert;
