@@ -39,7 +39,7 @@ describe("H2 Ads entry route isolation", () => {
     expect(pageSource).toContain('"Ocultar"');
     expect(pageSource).toContain("parseH2AdsProxyInput");
     expect(pageSource).toContain("SOCKS5");
-    expect(pageSource).toContain("Verificar se está viva");
+    expect(pageSource).toContain("Verificar rota");
     expect(pageSource).toContain("Uma rota por instância, sem confusão.");
     expect(pageSource).not.toContain("trpc.orders");
     expect(pageSource).not.toContain("trpc.customers");
