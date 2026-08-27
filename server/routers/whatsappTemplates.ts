@@ -3,12 +3,74 @@ import { sql } from "drizzle-orm";
 import { adminProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 import { storagePut } from "../storage";
+import { snapshotUnicodeText } from "../../shared/whatsappUnicodeDiagnostics";
 
 export const whatsappTemplatesRouter = {
   list: adminProcedure.query(async () => {
     const db = await getDb() as any;
     const rows = await db.execute(sql`SELECT * FROM whatsappTemplates ORDER BY sortOrder ASC, createdAt ASC`);
     return (rows[0] as any[]) || [];
+  }),
+
+  unicodeDiagnostics: adminProcedure.query(async () => {
+    const db = await getDb() as any;
+    if (!db) throw new Error("Banco indisponível para diagnóstico Unicode.");
+
+    const [sessionRows] = await db.execute(sql`
+      SELECT
+        @@character_set_client AS characterSetClient,
+        @@character_set_connection AS characterSetConnection,
+        @@character_set_results AS characterSetResults,
+        @@character_set_database AS characterSetDatabase,
+        @@collation_connection AS collationConnection,
+        @@collation_database AS collationDatabase
+    `) as any;
+    const [tableRows] = await db.execute(sql`
+      SELECT TABLE_NAME AS tableName, TABLE_COLLATION AS tableCollation
+      FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'whatsappTemplates'
+    `) as any;
+    const [columnRows] = await db.execute(sql`
+      SELECT
+        COLUMN_NAME AS columnName,
+        CHARACTER_SET_NAME AS characterSet,
+        COLLATION_NAME AS collation,
+        COLUMN_TYPE AS columnType
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'whatsappTemplates'
+        AND COLUMN_NAME = 'message'
+    `) as any;
+    const [templateRows] = await db.execute(sql`
+      SELECT id, title, statusKey, isDefault, sortOrder, message,
+        CHAR_LENGTH(message) AS characterLength,
+        LENGTH(message) AS byteLength,
+        HEX(message) AS utf8BytesHex
+      FROM whatsappTemplates
+      WHERE statusKey IN ('pedido_entregue', 'entregue')
+      ORDER BY isDefault DESC, sortOrder ASC, id ASC
+    `) as any;
+
+    return {
+      mysql: {
+        session: sessionRows?.[0] ?? null,
+        table: tableRows?.[0] ?? null,
+        column: columnRows?.[0] ?? null,
+      },
+      templates: (templateRows ?? []).map((template: any) => ({
+        id: template.id,
+        title: template.title,
+        statusKey: template.statusKey,
+        isDefault: template.isDefault,
+        sortOrder: template.sortOrder,
+        database: {
+          characterLength: template.characterLength,
+          byteLength: template.byteLength,
+          utf8BytesHex: template.utf8BytesHex,
+        },
+        message: snapshotUnicodeText(String(template.message ?? "")),
+      })),
+    };
   }),
 
   create: adminProcedure

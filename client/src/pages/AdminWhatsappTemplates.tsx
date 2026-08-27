@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { createWhatsappMessageUrl, snapshotUnicodeText } from "@shared/whatsappUnicodeDiagnostics";
 
 interface Template {
   id: number;
@@ -43,11 +44,13 @@ export default function AdminWhatsappTemplates() {
   const utils = trpc.useUtils();
   const { data: templates = [], isLoading } = trpc.whatsappTemplates.list.useQuery();
   const { data: statusTypesData = [] } = trpc.statusTypes.list.useQuery();
+  const unicodeDiagnosticsQuery = trpc.whatsappTemplates.unicodeDiagnostics.useQuery(undefined, { enabled: false });
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [unicodeTestPhone, setUnicodeTestPhone] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
 
@@ -171,6 +174,14 @@ export default function AdminWhatsappTemplates() {
   }
 
   const isSaving = createMut.isPending || updateMut.isPending;
+  const isolatedUnicodeMessage = "TESTE UTF-8 🔐 ⚠️ 🎥 📱 ✅ ❌ ℹ️";
+  const selectedTemplate = (templates as Template[]).find(template => template.statusKey === "pedido_entregue" || template.statusKey === "entregue") ?? null;
+  const selectedTemplateSnapshot = snapshotUnicodeText(selectedTemplate?.message ?? "");
+  function openIsolatedUnicodeTest() {
+    const digits = unicodeTestPhone.replace(/\D/g, "");
+    if (digits.length < 10) return toast.error("Informe o número que receberá o teste UTF-8.");
+    window.open(createWhatsappMessageUrl(digits, isolatedUnicodeMessage), "_blank", "noopener,noreferrer");
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a14] text-white p-4 md:p-6">
@@ -191,6 +202,34 @@ export default function AdminWhatsappTemplates() {
             <Plus className="w-4 h-4" /> Nova Mensagem
           </Button>
         </div>
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-amber-200">Diagnóstico temporário de Unicode — Pedido Entregue</h2>
+          <p className="mt-1 text-xs text-amber-100/70">Somente leitura. Mede o pré-molde vinculado ao status, sem salvar, alterar ou enviar mensagem automaticamente.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+          <Input value={unicodeTestPhone} onChange={event => setUnicodeTestPhone(event.target.value)} inputMode="numeric" placeholder="Número que receberá o teste UTF-8" className="border-amber-400/30 bg-zinc-950/40" />
+          <Button onClick={openIsolatedUnicodeTest} className="bg-green-600 hover:bg-green-700">Abrir teste UTF-8</Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={() => unicodeDiagnosticsQuery.refetch()} disabled={unicodeDiagnosticsQuery.isFetching} className="border-amber-400/40 text-amber-100 hover:bg-amber-400/10">
+            {unicodeDiagnosticsQuery.isFetching ? "Lendo diagnóstico..." : "Ler diagnóstico UTF-8"}
+          </Button>
+          <span className="text-xs text-amber-100/70">Teste isolado: {isolatedUnicodeMessage}</span>
+        </div>
+        <details className="rounded-xl border border-amber-100/15 bg-zinc-950/30 p-3 text-xs text-amber-50/85">
+          <summary className="cursor-pointer font-semibold">Snapshot local do pré-molde selecionado</summary>
+          <pre className="mt-3 max-h-52 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(selectedTemplateSnapshot, null, 2)}</pre>
+        </details>
+        {unicodeDiagnosticsQuery.data && (
+          <details open className="rounded-xl border border-amber-100/15 bg-zinc-950/30 p-3 text-xs text-amber-50/85">
+            <summary className="cursor-pointer font-semibold">Diagnóstico do backend e MySQL</summary>
+            <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(unicodeDiagnosticsQuery.data, null, 2)}</pre>
+          </details>
+        )}
+        {unicodeDiagnosticsQuery.error && <p className="text-xs text-red-300">Falha de leitura: {unicodeDiagnosticsQuery.error.message}</p>}
       </div>
 
       {/* Formulário */}

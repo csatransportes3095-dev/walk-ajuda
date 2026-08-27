@@ -10,7 +10,6 @@ import { ImageCropModal } from "@/components/ImageCropModal";
 import { HomeButtonsManager } from "@/components/HomeButtonsManager";
 import { SharePreviewSettings } from "@/components/SharePreviewSettings";
 import { MaintenanceManifestSettings } from "@/components/MaintenanceManifestSettings";
-import { createWhatsappMessageUrl, snapshotUnicodeText } from "@shared/whatsappUnicodeDiagnostics";
 
 
 // Lista de fontes com estilos bem distintos
@@ -2316,7 +2315,6 @@ const WA_LOGIN_VARS = [
 function WhatsappLoginTemplateTab() {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.settings.getWhatsappLoginTemplate.useQuery();
-  const unicodeDiagnosticsQuery = trpc.settings.getWhatsappUnicodeDiagnostics.useQuery(undefined, { enabled: false });
   const saveMut = trpc.settings.saveWhatsappLoginTemplate.useMutation({
     onSuccess: () => { toast.success("✅ Template de login salvo com sucesso!"); utils.settings.getWhatsappLoginTemplate.invalidate(); },
     onError: () => toast.error("Erro ao salvar template"),
@@ -2324,7 +2322,6 @@ function WhatsappLoginTemplateTab() {
   const [template, setTemplate] = useState(DEFAULT_WA_LOGIN_TEMPLATE);
   const [showPreview, setShowPreview] = useState(true);
   const [expandedGroup, setExpandedGroup] = useState<string | null>("👤 Cliente");
-  const [unicodeTestPhone, setUnicodeTestPhone] = useState("");
 
   useEffect(() => {
     if (data?.template) setTemplate(data.template);
@@ -2346,16 +2343,6 @@ function WhatsappLoginTemplateTab() {
     .replace(/\{DIA\}/g, String(new Date().getDate()).padStart(2, '0'))
     .replace(/\{MES\}/g, String(new Date().getMonth() + 1).padStart(2, '0'))
     .replace(/\{ANO\}/g, String(new Date().getFullYear()));
-  const isolatedUnicodeMessage = "TESTE UTF-8 🔐 ⚠️ 🎥 📱 ✅ ❌ ℹ️";
-  const clientSnapshot = snapshotUnicodeText(template);
-  const openIsolatedUnicodeTest = () => {
-    const digits = unicodeTestPhone.replace(/\D/g, "");
-    if (digits.length < 10) {
-      toast.error("Informe o número que receberá o teste UTF-8.");
-      return;
-    }
-    window.open(createWhatsappMessageUrl(digits, isolatedUnicodeMessage), "_blank", "noopener,noreferrer");
-  };
 
   return (
     <div className="space-y-6">
@@ -2371,46 +2358,6 @@ function WhatsappLoginTemplateTab() {
             </p>
           </div>
         </div>
-      </div>
-
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5 space-y-4">
-        <div>
-          <h3 className="text-sm font-bold text-amber-200">Diagnóstico temporário de Unicode</h3>
-          <p className="text-xs text-amber-100/70 mt-1">Somente leitura. Não salva o modelo nem envia mensagem automaticamente.</p>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3">
-          <input
-            value={unicodeTestPhone}
-            onChange={event => setUnicodeTestPhone(event.target.value)}
-            inputMode="numeric"
-            placeholder="Número que receberá o teste UTF-8"
-            className="w-full rounded-lg border border-amber-400/30 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/30"
-          />
-          <button onClick={openIsolatedUnicodeTest} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500">
-            Abrir teste UTF-8
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => unicodeDiagnosticsQuery.refetch()}
-            disabled={unicodeDiagnosticsQuery.isFetching}
-            className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-300/10 disabled:opacity-60"
-          >
-            {unicodeDiagnosticsQuery.isFetching ? "Lendo diagnóstico..." : "Ler diagnóstico UTF-8"}
-          </button>
-          <span className="self-center text-xs text-amber-100/70">Teste: {isolatedUnicodeMessage}</span>
-        </div>
-        <details className="rounded-lg border border-amber-200/15 bg-black/20 p-3 text-xs text-amber-50/85">
-          <summary className="cursor-pointer font-semibold">Snapshot local do editor</summary>
-          <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(clientSnapshot, null, 2)}</pre>
-        </details>
-        {unicodeDiagnosticsQuery.data && (
-          <details open className="rounded-lg border border-amber-200/15 bg-black/20 p-3 text-xs text-amber-50/85">
-            <summary className="cursor-pointer font-semibold">Diagnóstico do backend e MySQL</summary>
-            <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(unicodeDiagnosticsQuery.data, null, 2)}</pre>
-          </details>
-        )}
-        {unicodeDiagnosticsQuery.error && <p className="text-xs text-red-300">Falha de leitura: {unicodeDiagnosticsQuery.error.message}</p>}
       </div>
 
       {/* Layout: Editor + Preview */}
