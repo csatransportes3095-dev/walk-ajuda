@@ -22,6 +22,23 @@ export type H2AdsObservedRoute = {
   latencyMs: number;
 };
 
+export type H2AdsRouteFailure = {
+  code: "proxy_authentication" | "proxy_timeout" | "proxy_unreachable" | "proxy_dns" | "invalid_route_response" | "route_check_failed";
+  message: string;
+};
+
+export function classifyH2AdsRouteFailure(error: unknown): H2AdsRouteFailure {
+  const source = error && typeof error === "object" ? error as { code?: unknown; response?: { status?: unknown } } : {};
+  const code = typeof source.code === "string" ? source.code : "";
+  const status = typeof source.response?.status === "number" ? source.response.status : 0;
+  if (status === 407 || status === 401 || status === 403) return { code: "proxy_authentication", message: "O proxy recusou a autenticação. Atualize a rota desta instância." };
+  if (code === "ETIMEDOUT" || code === "ECONNABORTED") return { code: "proxy_timeout", message: "A conexão com o proxy excedeu o tempo de espera." };
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return { code: "proxy_dns", message: "Não foi possível resolver o endereço do proxy." };
+  if (code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EHOSTUNREACH" || code === "ENETUNREACH") return { code: "proxy_unreachable", message: "O proxy recusou ou não permitiu a conexão." };
+  if (error instanceof Error && /não retornou um ip público válido|endereço público elegível/i.test(error.message)) return { code: "invalid_route_response", message: "A rota não devolveu um IP público válido para verificação." };
+  return { code: "route_check_failed", message: "Não foi possível validar a rota. Confirme o formato e tente novamente." };
+}
+
 function isPrivateAddress(address: string) {
   const version = net.isIP(address);
   if (version === 4) {

@@ -5,7 +5,7 @@ const { axiosGet, lookup } = vi.hoisted(() => ({ axiosGet: vi.fn(), lookup: vi.f
 vi.mock("axios", () => ({ default: { get: axiosGet } }));
 vi.mock("node:dns/promises", () => ({ default: { lookup } }));
 
-import { validateH2AdsProxyRoute } from "./h2adsProxyValidation";
+import { classifyH2AdsRouteFailure, validateH2AdsProxyRoute } from "./h2adsProxyValidation";
 
 describe("validação pontual de rota H2 Ads", () => {
   beforeEach(() => {
@@ -27,5 +27,11 @@ describe("validação pontual de rota H2 Ads", () => {
   it("rejeita uma resposta sem IP público observado", async () => {
     axiosGet.mockResolvedValue({ data: { error: true } });
     await expect(validateH2AdsProxyRoute({ host: "edge.example", port: 3128, username: "user_test", password: "pass_test" })).rejects.toThrow("não retornou um IP público válido");
+  });
+
+  it("classifica timeout, autenticação e conexão recusada sem devolver dados da rota", () => {
+    expect(classifyH2AdsRouteFailure({ code: "ETIMEDOUT" })).toEqual({ code: "proxy_timeout", message: "A conexão com o proxy excedeu o tempo de espera." });
+    expect(classifyH2AdsRouteFailure({ response: { status: 407 } })).toEqual({ code: "proxy_authentication", message: "O proxy recusou a autenticação. Atualize a rota desta instância." });
+    expect(classifyH2AdsRouteFailure({ code: "ECONNREFUSED" })).toEqual({ code: "proxy_unreachable", message: "O proxy recusou ou não permitiu a conexão." });
   });
 });

@@ -16,7 +16,7 @@ import {
 } from "../h2ads";
 import { adminProcedure } from "../_core/trpc";
 import { decryptH2AdsProxy, encryptH2AdsProxy, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "../h2adsProxySecurity";
-import { getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "../h2adsProxyValidation";
+import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "../h2adsProxyValidation";
 
 export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
 export const h2AdsInstanceStatusSchema = z.enum(["draft", "paused", "archived"]);
@@ -186,6 +186,7 @@ export const h2AdsRouter = {
       return { success: true, observed };
     } catch (error) {
       if (error instanceof TRPCError) throw error;
+      const failure = classifyH2AdsRouteFailure(error);
       await recordH2AdsNetworkValidation(input.instanceId, {
         healthStatus: "failed",
         observedIp: null,
@@ -194,9 +195,9 @@ export const h2AdsRouter = {
         observedIsp: null,
         observedAsn: null,
         latencyMs: null,
-        lastCheckMessage: "Falha na validação da rota.",
+        lastCheckMessage: failure.message,
       });
-      throw new TRPCError({ code: "CONFLICT", message: "A validação da rota falhou; a instância foi bloqueada." });
+      throw new TRPCError({ code: "CONFLICT", message: `${failure.message} A instância foi bloqueada.` });
     }
   }),
 };
