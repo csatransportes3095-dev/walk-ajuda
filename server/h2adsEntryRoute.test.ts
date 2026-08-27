@@ -30,8 +30,10 @@ describe("H2 Ads entry route isolation", () => {
     expect(pageSource).toContain("H2 ADS");
     expect(pageSource).toContain("https://files.manuscdn.com/user_upload_by_module/session_file/310519663911003862/NUtvqlTplGBXXVCr.png");
     expect(pageSource).toContain("trpc.h2Ads.listDashboard");
+    expect(pageSource).toContain("trpc.h2Ads.saveNetworkProfile");
     expect(pageSource).not.toContain("trpc.orders");
     expect(pageSource).not.toContain("trpc.customers");
+    expect(pageSource).not.toContain("proxyUrl");
     expect(pageSource).not.toContain("proxyPassword");
     expect(pageSource).not.toContain("browserWSEndpoint");
   });

@@ -8,6 +8,7 @@ const h2AdsSources = [
   "server/routers/h2ads.ts",
   "client/src/pages/H2Ads.tsx",
   "drizzle/0137_h2ads_base.sql",
+  "drizzle/0138_h2ads_network_metadata.sql",
 ].map(file => fs.readFileSync(path.join(projectRoot, file), "utf8")).join("\n");
 
 describe("isolamento da base H2 Ads", () => {

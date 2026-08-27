@@ -2664,3 +2664,33 @@ export const h2AdsInstances = mysqlTable("h2ads_instances", {
 }));
 export type H2AdsInstance = typeof h2AdsInstances.$inferSelect;
 export type InsertH2AdsInstance = typeof h2AdsInstances.$inferInsert;
+
+// Configuração administrativa de conectividade por instância H2 Ads. Não armazena endpoint nem segredo de proxy.
+export const h2AdsInstanceNetworkProfiles = mysqlTable("h2ads_instance_network_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  instanceId: int("instanceId").notNull(),
+  providerName: varchar("providerName", { length: 128 }),
+  routeLabel: varchar("routeLabel", { length: 128 }),
+  targetCountryCode: varchar("targetCountryCode", { length: 2 }),
+  targetCity: varchar("targetCity", { length: 128 }),
+  expectedIsp: varchar("expectedIsp", { length: 256 }),
+  expectedAsn: varchar("expectedAsn", { length: 32 }),
+  setupStatus: mysqlEnum("setupStatus", ["not_configured", "metadata_ready", "blocked"]).notNull().default("not_configured"),
+  healthStatus: mysqlEnum("healthStatus", ["not_checked", "healthy", "degraded", "failed", "blocked"]).notNull().default("not_checked"),
+  observedIp: varchar("observedIp", { length: 64 }),
+  observedCountryCode: varchar("observedCountryCode", { length: 2 }),
+  observedCity: varchar("observedCity", { length: 128 }),
+  observedIsp: varchar("observedIsp", { length: 256 }),
+  observedAsn: varchar("observedAsn", { length: 32 }),
+  latencyMs: int("latencyMs"),
+  lastCheckedAt: timestamp("lastCheckedAt"),
+  lastCheckMessage: varchar("lastCheckMessage", { length: 512 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  instanceUnique: uniqueIndex("h2ads_network_profile_instance_uq").on(table.instanceId),
+  setupIndex: index("h2ads_network_profile_setup_idx").on(table.setupStatus),
+  healthIndex: index("h2ads_network_profile_health_idx").on(table.healthStatus),
+}));
+export type H2AdsInstanceNetworkProfile = typeof h2AdsInstanceNetworkProfiles.$inferSelect;
+export type InsertH2AdsInstanceNetworkProfile = typeof h2AdsInstanceNetworkProfiles.$inferInsert;

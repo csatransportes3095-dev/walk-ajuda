@@ -4,6 +4,7 @@ import {
   h2AdsCreateInstanceSchema,
   h2AdsGroupStatusSchema,
   h2AdsInstanceStatusSchema,
+  h2AdsSaveNetworkProfileSchema,
   h2AdsUpdateGroupSchema,
   h2AdsUpdateInstanceSchema,
 } from "./routers/h2ads";
@@ -28,5 +29,24 @@ describe("contrato administrativo H2 Ads", () => {
     expect(h2AdsUpdateGroupSchema.safeParse({ id: 1 }).success).toBe(false);
     expect(h2AdsUpdateInstanceSchema.safeParse({ id: 1 }).success).toBe(false);
     expect(h2AdsUpdateInstanceSchema.safeParse({ id: 1, status: "paused" }).success).toBe(true);
+  });
+
+  it("aceita somente metadados administrativos de conectividade", () => {
+    const profile = h2AdsSaveNetworkProfileSchema.safeParse({
+      instanceId: 1,
+      providerName: "Fornecedor autorizado",
+      routeLabel: "Rota SP 01",
+      targetCountryCode: "br",
+      targetCity: "São Paulo",
+      expectedIsp: "ISP esperado",
+      expectedAsn: "AS12345",
+      setupStatus: "metadata_ready",
+    });
+    expect(profile.success).toBe(true);
+    if (profile.success) expect(profile.data.targetCountryCode).toBe("BR");
+    expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready" }).success).toBe(false);
+    expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", proxyUrl: "http://blocked" }).success).toBe(false);
+    expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", browserWSEndpoint: "ws://blocked" }).success).toBe(false);
+    expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", healthStatus: "healthy" }).success).toBe(false);
   });
 });

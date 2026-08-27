@@ -4,7 +4,9 @@ import {
   createH2AdsGroup,
   createH2AdsInstance,
   getH2AdsGroup,
+  getH2AdsInstance,
   listH2AdsDashboard,
+  saveH2AdsNetworkProfile,
   updateH2AdsGroup,
   updateH2AdsInstance,
 } from "../h2ads";
@@ -12,6 +14,9 @@ import { adminProcedure } from "../_core/trpc";
 
 export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
 export const h2AdsInstanceStatusSchema = z.enum(["draft", "paused", "archived"]);
+export const h2AdsNetworkSetupStatusSchema = z.enum(["not_configured", "metadata_ready", "blocked"]);
+
+const optionalMetadata = (max: number) => z.string().trim().max(max).nullable().optional();
 
 export const h2AdsCreateGroupSchema = z.object({
   name: z.string().trim().min(2).max(128),
@@ -49,6 +54,21 @@ export const h2AdsUpdateInstanceSchema = z.object({
   message: "Informe ao menos um campo para atualizar a instância.",
 });
 
+export const h2AdsSaveNetworkProfileSchema = z.object({
+  instanceId: z.number().int().positive(),
+  providerName: optionalMetadata(128),
+  routeLabel: optionalMetadata(128),
+  targetCountryCode: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).nullable().optional(),
+  targetCity: optionalMetadata(128),
+  expectedIsp: optionalMetadata(256),
+  expectedAsn: optionalMetadata(32),
+  setupStatus: h2AdsNetworkSetupStatusSchema,
+}).strict().refine(({ instanceId: _instanceId, ...changes }) => Object.values(changes).some(value => value !== undefined), {
+  message: "Informe ao menos um metadado de conectividade para salvar.",
+}).refine((input) => input.setupStatus !== "metadata_ready" || Boolean(input.providerName && input.routeLabel && input.targetCountryCode && input.targetCity), {
+  message: "Para marcar metadados como prontos, informe fornecedor, rótulo, país e cidade planejados.",
+});
+
 async function requireWritableGroup(groupId: number) {
   const group = await getH2AdsGroup(groupId);
   if (!group) {
@@ -58,6 +78,18 @@ async function requireWritableGroup(groupId: number) {
     throw new TRPCError({ code: "CONFLICT", message: "Não é possível adicionar ou mover instâncias para um grupo arquivado." });
   }
   return group;
+}
+
+async function requireConfigurableInstance(instanceId: number) {
+  const instance = await getH2AdsInstance(instanceId);
+  if (!instance) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Instância H2 Ads não encontrada." });
+  }
+  if (instance.status === "archived") {
+    throw new TRPCError({ code: "CONFLICT", message: "Não é possível configurar uma instância arquivada." });
+  }
+  await requireWritableGroup(instance.groupId);
+  return instance;
 }
 
 export const h2AdsRouter = {
@@ -86,6 +118,13 @@ export const h2AdsRouter = {
     if (groupId !== undefined) await requireWritableGroup(groupId);
     const updated = await updateH2AdsInstance(id, { ...changes, ...(groupId === undefined ? {} : { groupId }) });
     if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Instância H2 Ads não encontrada." });
+    return { success: true };
+  }),
+
+  saveNetworkProfile: adminProcedure.input(h2AdsSaveNetworkProfileSchema).mutation(async ({ input }) => {
+    const { instanceId, ...profile } = input;
+    await requireConfigurableInstance(instanceId);
+    await saveH2AdsNetworkProfile(instanceId, profile);
     return { success: true };
   }),
 };

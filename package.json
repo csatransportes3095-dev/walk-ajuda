@@ -26,6 +26,7 @@
     "db:migrate:system-backups": "tsx scripts/apply-system-backups-migration.ts",
     "db:migrate:whatsapp-templates": "tsx scripts/apply-whatsapp-templates-media-titles-migration.ts",
     "db:migrate:h2ads": "tsx scripts/apply-h2ads-base-migration.ts",
+    "db:migrate:h2ads-network": "tsx scripts/apply-h2ads-network-metadata-migration.ts",
     "backup:verify": "tsx scripts/verify-system-backup.ts",
     "restore:isolated": "tsx server/isolatedRestore.ts",
     "db:migrate:loans-recovery": "tsx scripts/apply-loans-recovery-migration.ts",
