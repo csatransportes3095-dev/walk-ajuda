@@ -13,6 +13,13 @@ describe("segurança da configuração de proxy H2 Ads", () => {
     expect(isH2AdsProxyEncryptionReady()).toBe(false);
   });
 
+  it("aceita uma chave aleatória longa gerada pelo Render e deriva uma chave AES de 32 bytes", () => {
+    process.env.H2ADS_PROXY_ENCRYPTION_KEY = "render_generated_random_value_for_h2ads_123456789";
+    const parsed = parseH2AdsProxyInput("edge.example:3128:user_test:pass_test");
+    expect(isH2AdsProxyEncryptionReady()).toBe(true);
+    expect(decryptH2AdsProxy(encryptH2AdsProxy(parsed))).toEqual(parsed);
+  });
+
   it("interpreta o formato permitido e cifra sem manter texto aberto", () => {
     const input = ["edge.example", "3128", "user_test", "pass_test"].join(":");
     const parsed = parseH2AdsProxyInput(input);

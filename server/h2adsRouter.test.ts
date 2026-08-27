@@ -50,6 +50,7 @@ describe("contrato administrativo H2 Ads", () => {
     expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", proxyUrl: "http://blocked" }).success).toBe(false);
     expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", browserWSEndpoint: "ws://blocked" }).success).toBe(false);
     expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, setupStatus: "metadata_ready", healthStatus: "healthy" }).success).toBe(false);
+    expect(h2AdsSaveNetworkProfileSchema.safeParse({ instanceId: 1, providerName: "edge.example:3128:user:pass", setupStatus: "not_configured" }).success).toBe(false);
   });
 
   it("aceita credencial somente como entrada protegida e não aceita campos de conexão avulsos", () => {

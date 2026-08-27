@@ -22,7 +22,10 @@ export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
 export const h2AdsInstanceStatusSchema = z.enum(["draft", "paused", "archived"]);
 export const h2AdsNetworkSetupStatusSchema = z.enum(["not_configured", "metadata_ready", "blocked"]);
 
-const optionalMetadata = (max: number) => z.string().trim().max(max).nullable().optional();
+const hasProxyConfigurationFormat = (value: string) => /^[a-zA-Z0-9.-]+:\d{1,5}:[^:\s]+:.+$/.test(value.trim());
+const optionalMetadata = (max: number) => z.string().trim().max(max).refine(value => !hasProxyConfigurationFormat(value), {
+  message: "Não cole configuração de proxy em campos administrativos visíveis; use o campo protegido da rota.",
+}).nullable().optional();
 
 export const h2AdsCreateGroupSchema = z.object({
   name: z.string().trim().min(2).max(128),

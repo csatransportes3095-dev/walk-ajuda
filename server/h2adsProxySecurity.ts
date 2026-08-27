@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 const CIPHER_VERSION = "v1";
 
@@ -10,11 +10,12 @@ export type ParsedH2AdsProxy = {
 };
 
 function getEncryptionKey() {
-  const value = process.env.H2ADS_PROXY_ENCRYPTION_KEY;
+  const value = process.env.H2ADS_PROXY_ENCRYPTION_KEY?.trim();
   if (!value) throw new Error("A chave segura de proxy ainda não está configurada no ambiente.");
-  const key = Buffer.from(value, "base64");
-  if (key.length !== 32) throw new Error("A chave segura de proxy do ambiente é inválida.");
-  return key;
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.length === 32) return decoded;
+  if (value.length < 32) throw new Error("A chave segura de proxy do ambiente precisa ter pelo menos 32 caracteres.");
+  return createHash("sha256").update(value, "utf8").digest();
 }
 
 export function isH2AdsProxyEncryptionReady() {
