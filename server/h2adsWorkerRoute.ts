@@ -1,13 +1,14 @@
 import type { Express, Request, Response } from "express";
 import path from "node:path";
 import { and, eq, lt } from "drizzle-orm";
-import { h2AdsWorkerBrowserCommands } from "../drizzle/schema";
+import { h2AdsWorkerBrowserCommands, h2AdsWorkerCommands } from "../drizzle/schema";
 import { getDb } from "./db";
 import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 
 const MAX_NAME_LENGTH = 128;
 const STALE_BROWSER_COMMAND_MS = 30_000;
+const STALE_PREPARATION_COMMAND_MS = 120_000;
 
 function workerString(value: unknown, maxLength = MAX_NAME_LENGTH): string | null {
   return typeof value === "string" && value.trim().length > 0 && value.trim().length <= maxLength ? value.trim() : null;
@@ -33,15 +34,23 @@ async function authenticateRequest(req: Request, res: Response) {
   return worker;
 }
 
-async function requeueStaleBrowserCommands(workerId: number): Promise<void> {
+async function requeueStaleWorkerCommands(workerId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  const now = Date.now();
   await db.update(h2AdsWorkerBrowserCommands)
     .set({ status: "queued", claimedAt: null })
     .where(and(
       eq(h2AdsWorkerBrowserCommands.workerId, workerId),
       eq(h2AdsWorkerBrowserCommands.status, "claimed"),
-      lt(h2AdsWorkerBrowserCommands.claimedAt, new Date(Date.now() - STALE_BROWSER_COMMAND_MS)),
+      lt(h2AdsWorkerBrowserCommands.claimedAt, new Date(now - STALE_BROWSER_COMMAND_MS)),
+    ));
+  await db.update(h2AdsWorkerCommands)
+    .set({ status: "queued", claimedAt: null })
+    .where(and(
+      eq(h2AdsWorkerCommands.workerId, workerId),
+      eq(h2AdsWorkerCommands.status, "claimed"),
+      lt(h2AdsWorkerCommands.claimedAt, new Date(now - STALE_PREPARATION_COMMAND_MS)),
     ));
 }
 
@@ -116,7 +125,7 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       return;
     }
     try {
-      await requeueStaleBrowserCommands(worker.id);
+      await requeueStaleWorkerCommands(worker.id);
     } catch (_error) {
       // A recuperação é auxiliar; a fila normal continua disponível.
     }
