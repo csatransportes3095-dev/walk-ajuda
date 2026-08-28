@@ -1,0 +1,645 @@
+name: Apply H2 Ads improvements
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - ".github/workflows/h2ads-apply-improvements.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: h2ads-apply-improvements
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Apply controlled H2 Ads patch
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace_once(file: str, old: str, new: str) -> None:
+              path = Path(file)
+              text = path.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"Trecho esperado não encontrado em {file}: {old[:120]!r}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          Path("server/h2adsProxySecurity.ts").write_text('''import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+          import { parseH2AdsProxyInput, type ParsedH2AdsProxy } from "../shared/h2adsProxyInput";
+
+          export { parseH2AdsProxyInput } from "../shared/h2adsProxyInput";
+          export type { H2AdsProxyProtocol, ParsedH2AdsProxy } from "../shared/h2adsProxyInput";
+
+          const CIPHER_VERSION = "v1";
+          export const H2ADS_PROXY_ROTATION_MINUTES_MIN = 1;
+          export const H2ADS_PROXY_ROTATION_MINUTES_MAX = 1_440;
+
+          export type H2AdsProtectedProxy = ParsedH2AdsProxy & {
+            rotationMinutes: number | null;
+          };
+
+          function getEncryptionKey() {
+            const value = process.env.H2ADS_PROXY_ENCRYPTION_KEY?.trim();
+            if (!value) throw new Error("A chave segura de proxy ainda não está configurada no ambiente.");
+            const decoded = Buffer.from(value, "base64");
+            if (decoded.length === 32) return decoded;
+            if (value.length < 32) throw new Error("A chave segura de proxy do ambiente precisa ter pelo menos 32 caracteres.");
+            return createHash("sha256").update(value, "utf8").digest();
+          }
+
+          function normalizeRotationMinutes(value: unknown): number | null {
+            if (value === null || value === undefined || value === "") return null;
+            const number = Number(value);
+            if (!Number.isInteger(number) || number < H2ADS_PROXY_ROTATION_MINUTES_MIN || number > H2ADS_PROXY_ROTATION_MINUTES_MAX) {
+              throw new Error(`O tempo de rotação deve ficar entre ${H2ADS_PROXY_ROTATION_MINUTES_MIN} e ${H2ADS_PROXY_ROTATION_MINUTES_MAX} minutos.`);
+            }
+            return number;
+          }
+
+          export function isH2AdsProxyEncryptionReady() {
+            try {
+              getEncryptionKey();
+              return true;
+            } catch {
+              return false;
+            }
+          }
+
+          export function encryptH2AdsProxy(proxy: ParsedH2AdsProxy, rotationMinutes: number | null = null) {
+            const iv = randomBytes(12);
+            const cipher = createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
+            const content = Buffer.from(JSON.stringify({
+              protocol: proxy.protocol,
+              host: proxy.host,
+              port: proxy.port,
+              username: proxy.username,
+              password: proxy.password,
+              rotationMinutes: normalizeRotationMinutes(rotationMinutes),
+            }), "utf8");
+            const encrypted = Buffer.concat([cipher.update(content), cipher.final()]);
+            return [CIPHER_VERSION, iv.toString("base64"), cipher.getAuthTag().toString("base64"), encrypted.toString("base64")].join(".");
+          }
+
+          export function decryptH2AdsProxy(encryptedPayload: string): H2AdsProtectedProxy {
+            const [version, ivText, tagText, contentText, ...extra] = encryptedPayload.split(".");
+            if (version !== CIPHER_VERSION || !ivText || !tagText || !contentText || extra.length > 0) throw new Error("Credencial de proxy protegida em formato inválido.");
+            try {
+              const decipher = createDecipheriv("aes-256-gcm", getEncryptionKey(), Buffer.from(ivText, "base64"));
+              decipher.setAuthTag(Buffer.from(tagText, "base64"));
+              const decrypted = Buffer.concat([decipher.update(Buffer.from(contentText, "base64")), decipher.final()]).toString("utf8");
+              const value = JSON.parse(decrypted) as ParsedH2AdsProxy & { rotationMinutes?: unknown };
+              const proxy = parseH2AdsProxyInput(`${value.host}:${value.port}:${value.username}:${value.password}`, value.protocol ?? "http");
+              return { ...proxy, rotationMinutes: normalizeRotationMinutes(value.rotationMinutes) };
+            } catch {
+              throw new Error("Não foi possível abrir a credencial protegida de proxy.");
+            }
+          }
+
+          export function proxyCredentialSummary() {
+            return "Credencial protegida";
+          }
+          ''', encoding="utf-8")
+
+          replace_once(
+              "server/h2ads.ts",
+              'import { getDb } from "./db";\n',
+              'import { getDb } from "./db";\nimport { decryptH2AdsProxy } from "./h2adsProxySecurity";\n',
+          )
+          replace_once(
+              "server/h2ads.ts",
+              '  proxyCredentialStatuses: Array<{ instanceId: number; updatedAt: Date }>;',
+              '  proxyCredentialStatuses: Array<{ instanceId: number; updatedAt: Date; rotationMinutes: number | null }>;',
+          )
+          replace_once(
+              "server/h2ads.ts",
+              '    db.select({ instanceId: h2AdsInstanceProxyCredentials.instanceId, updatedAt: h2AdsInstanceProxyCredentials.updatedAt }).from(h2AdsInstanceProxyCredentials).orderBy(asc(h2AdsInstanceProxyCredentials.instanceId)),',
+              '    db.select({ instanceId: h2AdsInstanceProxyCredentials.instanceId, updatedAt: h2AdsInstanceProxyCredentials.updatedAt, encryptedPayload: h2AdsInstanceProxyCredentials.encryptedPayload }).from(h2AdsInstanceProxyCredentials).orderBy(asc(h2AdsInstanceProxyCredentials.instanceId)),',
+          )
+          replace_once(
+              "server/h2ads.ts",
+              '    proxyCredentialStatuses,\n',
+              '''    proxyCredentialStatuses: proxyCredentialStatuses.map(({ encryptedPayload, ...credential }) => {
+                try {
+                  return { ...credential, rotationMinutes: decryptH2AdsProxy(encryptedPayload).rotationMinutes };
+                } catch {
+                  return { ...credential, rotationMinutes: null };
+                }
+              }),
+          ''',
+          )
+
+          replace_once(
+              "server/routers/h2ads.ts",
+              'import { decryptH2AdsProxy, encryptH2AdsProxy, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "../h2adsProxySecurity";',
+              'import { decryptH2AdsProxy, encryptH2AdsProxy, H2ADS_PROXY_ROTATION_MINUTES_MAX, H2ADS_PROXY_ROTATION_MINUTES_MIN, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "../h2adsProxySecurity";',
+          )
+          replace_once(
+              "server/routers/h2ads.ts",
+              '''export const h2AdsSaveProxyCredentialSchema = z.object({
+            instanceId: z.number().int().positive(),
+            proxyConfig: z.string().trim().min(8).max(2_048),
+            proxyProtocol: z.enum(["http", "https", "socks5"]).default("http"),
+          }).strict();
+          ''',
+              '''export const h2AdsSaveProxyCredentialSchema = z.object({
+            instanceId: z.number().int().positive(),
+            proxyConfig: z.string().trim().min(8).max(2_048),
+            proxyProtocol: z.enum(["http", "https", "socks5"]).default("http"),
+            rotationMinutes: z.number().int().min(H2ADS_PROXY_ROTATION_MINUTES_MIN).max(H2ADS_PROXY_ROTATION_MINUTES_MAX).nullable().optional(),
+          }).strict();
+
+          export const h2AdsUpdateProxyRotationSchema = z.object({
+            instanceId: z.number().int().positive(),
+            rotationMinutes: z.number().int().min(H2ADS_PROXY_ROTATION_MINUTES_MIN).max(H2ADS_PROXY_ROTATION_MINUTES_MAX).nullable(),
+          }).strict();
+          ''',
+          )
+          replace_once(
+              "server/routers/h2ads.ts",
+              '''  saveProxyCredential: adminProcedure.input(h2AdsSaveProxyCredentialSchema).mutation(async ({ input }) => {
+            await requireConfigurableInstance(input.instanceId);
+            try {
+              const encryptedPayload = encryptH2AdsProxy(parseH2AdsProxyInput(input.proxyConfig, input.proxyProtocol));
+              await saveH2AdsProxyCredential(input.instanceId, encryptedPayload);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Não foi possível proteger a configuração de proxy.";
+              throw new TRPCError({ code: "BAD_REQUEST", message });
+            }
+            return { success: true, summary: proxyCredentialSummary() };
+          }),
+          ''',
+              '''  saveProxyCredential: adminProcedure.input(h2AdsSaveProxyCredentialSchema).mutation(async ({ input }) => {
+            await requireConfigurableInstance(input.instanceId);
+            try {
+              const encryptedPayload = encryptH2AdsProxy(parseH2AdsProxyInput(input.proxyConfig, input.proxyProtocol), input.rotationMinutes ?? null);
+              await saveH2AdsProxyCredential(input.instanceId, encryptedPayload);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Não foi possível proteger a configuração de proxy.";
+              throw new TRPCError({ code: "BAD_REQUEST", message });
+            }
+            return { success: true, summary: proxyCredentialSummary(), rotationMinutes: input.rotationMinutes ?? null };
+          }),
+
+          updateProxyRotation: adminProcedure.input(h2AdsUpdateProxyRotationSchema).mutation(async ({ input }) => {
+            await requireConfigurableInstance(input.instanceId);
+            const encryptedPayload = await getH2AdsProxyCredential(input.instanceId);
+            if (!encryptedPayload) throw new TRPCError({ code: "NOT_FOUND", message: "Nenhuma credencial protegida foi configurada para esta instância." });
+            try {
+              const protectedProxy = decryptH2AdsProxy(encryptedPayload);
+              await saveH2AdsProxyCredential(input.instanceId, encryptH2AdsProxy(protectedProxy, input.rotationMinutes));
+              return { success: true, rotationMinutes: input.rotationMinutes };
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Não foi possível atualizar o tempo de rotação.";
+              throw new TRPCError({ code: "BAD_REQUEST", message });
+            }
+          }),
+          ''',
+          )
+
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '  const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();',
+              '  const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();\n  const updateProxyRotation = trpc.h2Ads.updateProxyRotation.useMutation();',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '  const [proxyProtocol, setProxyProtocol] = useState<H2AdsProxyProtocol>("http");',
+              '  const [proxyProtocol, setProxyProtocol] = useState<H2AdsProxyProtocol>("http");\n  const [proxyRotationMinutes, setProxyRotationMinutes] = useState("");',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '  const saving = createGroup.isPending || updateGroup.isPending || createInstance.isPending || updateInstance.isPending || saveNetworkProfile.isPending || saveProxyCredential.isPending || validateProxy.isPending || createWorkerPairing.isPending || assignWorker.isPending || revokeWorker.isPending || prepareBrowser.isPending || launchBrowser.isPending || closeBrowser.isPending;',
+              '  const saving = createGroup.isPending || updateGroup.isPending || createInstance.isPending || updateInstance.isPending || saveNetworkProfile.isPending || saveProxyCredential.isPending || updateProxyRotation.isPending || validateProxy.isPending || createWorkerPairing.isPending || assignWorker.isPending || revokeWorker.isPending || prepareBrowser.isPending || launchBrowser.isPending || closeBrowser.isPending;',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '  const refresh = () => utils.h2Ads.listDashboard.invalidate();',
+              '''  const refresh = () => utils.h2Ads.listDashboard.invalidate();
+            const refreshCommandState = () => {
+              void refresh();
+              for (const delay of [600, 1_400, 2_600, 4_200]) window.setTimeout(() => { void refresh(); }, delay);
+            };''',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '''    setProxyConfig("");
+            setProxyProtocol("http");
+            setShowNewRoute(false);
+          };''',
+              '''    setProxyConfig("");
+            setProxyProtocol("http");
+            setProxyRotationMinutes(String(credentialByInstance.get(instanceId)?.rotationMinutes ?? ""));
+            setShowNewRoute(false);
+          };''',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '  const closeRouteEditor = () => { setNetworkForm(null); setProxyConfig(""); setProxyProtocol("http"); setShowNewRoute(false); };',
+              '  const closeRouteEditor = () => { setNetworkForm(null); setProxyConfig(""); setProxyProtocol("http"); setProxyRotationMinutes(""); setShowNewRoute(false); };',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '''  const replaceRoute = async () => {
+            if (!networkForm) return;
+            if (!encryptionReady) { toast.error("A chave segura não está disponível no ambiente."); return; }
+            if (!proxyConfig.trim()) { toast.error("Cole uma rota nova antes de salvar."); return; }
+            try {
+              await saveProxyCredential.mutateAsync({ instanceId: networkForm.instanceId, proxyConfig: proxyConfig.trim(), proxyProtocol });
+              setProxyConfig(""); setShowNewRoute(false); toast.success("Rota vinculada a esta instância."); await refresh();
+            } catch (error) { toast.error(errorText(error, "Não foi possível salvar a rota.")); }
+          };
+          ''',
+              '''  const replaceRoute = async () => {
+            if (!networkForm) return;
+            if (!encryptionReady) { toast.error("A chave segura não está disponível no ambiente."); return; }
+            if (!proxyConfig.trim()) { toast.error("Cole uma rota nova antes de salvar."); return; }
+            const rotationMinutes = proxyRotationMinutes.trim() ? Number(proxyRotationMinutes) : null;
+            if (rotationMinutes !== null && (!Number.isInteger(rotationMinutes) || rotationMinutes < 1 || rotationMinutes > 1_440)) { toast.error("Informe um tempo de rotação entre 1 e 1440 minutos."); return; }
+            try {
+              await saveProxyCredential.mutateAsync({ instanceId: networkForm.instanceId, proxyConfig: proxyConfig.trim(), proxyProtocol, rotationMinutes });
+              setProxyConfig(""); setShowNewRoute(false); toast.success("Rota vinculada a esta instância."); await refresh();
+            } catch (error) { toast.error(errorText(error, "Não foi possível salvar a rota.")); }
+          };
+
+          const saveRotation = async () => {
+            if (!networkForm || !credentialByInstance.has(networkForm.instanceId)) return;
+            const rotationMinutes = proxyRotationMinutes.trim() ? Number(proxyRotationMinutes) : null;
+            if (rotationMinutes !== null && (!Number.isInteger(rotationMinutes) || rotationMinutes < 1 || rotationMinutes > 1_440)) { toast.error("Informe um tempo de rotação entre 1 e 1440 minutos."); return; }
+            try {
+              await updateProxyRotation.mutateAsync({ instanceId: networkForm.instanceId, rotationMinutes });
+              toast.success(rotationMinutes ? `Rotação ajustada para ${rotationMinutes} minuto(s).` : "Rotação automática desativada.");
+              await refresh();
+            } catch (error) { toast.error(errorText(error, "Não foi possível atualizar o tempo de rotação.")); }
+          };
+          ''',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '''  const requestBrowserClose = async (instanceId: number) => {
+            try {
+              await closeBrowser.mutateAsync({ instanceId });
+              toast.success("Encerramento manual enviado ao Worker.");
+              await refresh();
+            } catch (error) { toast.error(errorText(error, "Não foi possível solicitar o encerramento do browser.")); }
+          };''',
+              '''  const requestBrowserClose = async (instanceId: number) => {
+            try {
+              await closeBrowser.mutateAsync({ instanceId });
+              toast.success("Encerrando browser...");
+              refreshCommandState();
+            } catch (error) { toast.error(errorText(error, "Não foi possível solicitar o encerramento do browser.")); }
+          };''',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              'max-w-7xl',
+              'max-w-[1800px]',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              'max-w-7xl',
+              'max-w-[1800px]',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              'className="grid gap-3 p-3 lg:grid-cols-2"',
+              'className="grid gap-3 p-3 lg:grid-cols-2 2xl:grid-cols-4"',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              'proxyProtocol={proxyProtocol} setProxyProtocol={setProxyProtocol} showNewRoute={showNewRoute}',
+              'proxyProtocol={proxyProtocol} setProxyProtocol={setProxyProtocol} rotationMinutes={proxyRotationMinutes} setRotationMinutes={setProxyRotationMinutes} showNewRoute={showNewRoute}',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              'onSaveRoute={replaceRoute} onValidate={validateRoute}',
+              'onSaveRoute={replaceRoute} onSaveRotation={saveRotation} onValidate={validateRoute}',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '''function RouteEditor({ instance, profile, hasCredential, form, setForm, proxyConfig, setProxyConfig, proxyProtocol, setProxyProtocol, showNewRoute, setShowNewRoute, encryptionReady, saving, onSaveRoute, onValidate, onSaveMetadata, onClose }: { instance: { id: number; name: string; status: "draft" | "paused" | "archived" }; profile?: NetworkProfile; hasCredential: boolean; form: NetworkProfileForm; setForm: (next: NetworkProfileForm) => void; proxyConfig: string; setProxyConfig: (value: string) => void; proxyProtocol: H2AdsProxyProtocol; setProxyProtocol: (value: H2AdsProxyProtocol) => void; showNewRoute: boolean; setShowNewRoute: (value: boolean) => void; encryptionReady: boolean; saving: boolean; onSaveRoute: () => void; onValidate: () => void; onSaveMetadata: (event: FormEvent<HTMLFormElement>) => void; onClose: () => void }) {''',
+              '''function RouteEditor({ instance, profile, hasCredential, form, setForm, proxyConfig, setProxyConfig, proxyProtocol, setProxyProtocol, rotationMinutes, setRotationMinutes, showNewRoute, setShowNewRoute, encryptionReady, saving, onSaveRoute, onSaveRotation, onValidate, onSaveMetadata, onClose }: { instance: { id: number; name: string; status: "draft" | "paused" | "archived" }; profile?: NetworkProfile; hasCredential: boolean; form: NetworkProfileForm; setForm: (next: NetworkProfileForm) => void; proxyConfig: string; setProxyConfig: (value: string) => void; proxyProtocol: H2AdsProxyProtocol; setProxyProtocol: (value: H2AdsProxyProtocol) => void; rotationMinutes: string; setRotationMinutes: (value: string) => void; showNewRoute: boolean; setShowNewRoute: (value: boolean) => void; encryptionReady: boolean; saving: boolean; onSaveRoute: () => void; onSaveRotation: () => void; onValidate: () => void; onSaveMetadata: (event: FormEvent<HTMLFormElement>) => void; onClose: () => void }) {''',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '  const protocols: { value: H2AdsProxyProtocol; label: string }[] = [{ value: "http", label: "HTTP" }, { value: "https", label: "HTTPS" }, { value: "socks5", label: "SOCKS5" }];',
+              '  const protocols: { value: H2AdsProxyProtocol; label: string }[] = [{ value: "http", label: "HTTP" }, { value: "https", label: "HTTPS" }, { value: "socks5", label: "SOCKS5" }];\n  const rotationNumber = rotationMinutes.trim() ? Number(rotationMinutes) : null;\n  const rotationValid = rotationNumber === null || (Number.isInteger(rotationNumber) && rotationNumber >= 1 && rotationNumber <= 1_440);',
+          )
+          replace_once(
+              "client/src/pages/H2Ads.tsx",
+              '<p className="text-xs leading-5 text-slate-500">A palavra-passe fica somente nesta entrada temporária e não é exibida na conferência.</p>{proxyConfig.trim() && !parsedRoute && <p className="rounded-xl border border-rose-400/25 bg-rose-400/[0.08] px-3 py-2.5 text-xs font-semibold text-rose-100">Formato inválido. Use <span className="font-mono">host:porta:utilizador:palavra-passe</span>.</p>}</div>',
+              '<p className="text-xs leading-5 text-slate-500">A palavra-passe fica somente nesta entrada temporária e não é exibida na conferência.</p>{proxyConfig.trim() && !parsedRoute && <p className="rounded-xl border border-rose-400/25 bg-rose-400/[0.08] px-3 py-2.5 text-xs font-semibold text-rose-100">Formato inválido. Use <span className="font-mono">host:porta:utilizador:palavra-passe</span>.</p>}<label className="grid gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Tempo de rotação (minutos)<div className="flex flex-col gap-2 sm:flex-row"><input type="number" min="1" max="1440" inputMode="numeric" value={rotationMinutes} onChange={event => setRotationMinutes(event.target.value)} placeholder="Ex.: 30" className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-sm font-bold text-white outline-none focus:border-[#148CFF]/55 focus:ring-2 focus:ring-[#148CFF]/15" />{hasCredential && <button type="button" disabled={saving || !rotationValid} onClick={onSaveRotation} className="rounded-xl border border-[#148CFF]/35 bg-[#148CFF]/10 px-4 py-2.5 text-xs font-black normal-case tracking-normal text-[#8CC8FF] disabled:cursor-not-allowed disabled:opacity-45">Salvar tempo</button>}</div><span className="normal-case tracking-normal text-slate-500">Deixe vazio para desativar. O proxy continua cifrado; somente este tempo volta para o ADM. A mudança entra na próxima abertura do browser.</span></label></div>',
+          )
+
+          replace_once("workers/windows/H2AdsWorker.ps1", '$AgentVersion = "1.3.2"', '$AgentVersion = "1.3.3"')
+          replace_once(
+              "workers/windows/H2AdsWorker.ps1",
+              '''  try {
+              while ($true) {
+                try { Invoke-WorkerHeartbeat $config } catch { }
+                try { Invoke-PendingBrowserCommand $config } catch { }
+                Start-Sleep -Seconds 10
+              }
+            } finally {''',
+              '''  $nextHeartbeatAt = Get-Date
+            try {
+              while ($true) {
+                $now = Get-Date
+                if ($now -ge $nextHeartbeatAt) {
+                  try { Invoke-WorkerHeartbeat $config } catch { }
+                  $nextHeartbeatAt = $now.AddSeconds(20)
+                }
+                try { Invoke-PendingBrowserCommand $config } catch { }
+                Start-Sleep -Seconds 2
+              }
+            } finally {''',
+          )
+
+          Path("workers/windows/browser-session.mjs").write_text('''import { spawn } from "node:child_process";
+          import { existsSync, readFileSync, writeFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { Server } from "proxy-chain";
+
+          const required = ["H2ADS_PANEL_URL", "H2ADS_WORKER_KEY", "H2ADS_WORKER_TOKEN", "H2ADS_INSTANCE_ID", "H2ADS_COMMAND_ID", "H2ADS_PROXY_JSON", "H2ADS_PROFILE_DIRECTORY"];
+          if (required.some((key) => !process.env[key])) process.exit(2);
+
+          const panelUrl = process.env.H2ADS_PANEL_URL;
+          const workerKey = process.env.H2ADS_WORKER_KEY;
+          const workerToken = process.env.H2ADS_WORKER_TOKEN;
+          const instanceId = Number(process.env.H2ADS_INSTANCE_ID);
+          const commandId = Number(process.env.H2ADS_COMMAND_ID);
+          const profileDirectory = process.env.H2ADS_PROFILE_DIRECTORY;
+          const proxy = JSON.parse(process.env.H2ADS_PROXY_JSON);
+          const sessionPath = join(profileDirectory, "h2ads-browser-session.json");
+          const parsedRotationMinutes = Number(proxy.rotationMinutes);
+          const rotationMinutes = Number.isInteger(parsedRotationMinutes) && parsedRotationMinutes >= 1 && parsedRotationMinutes <= 1_440 ? parsedRotationMinutes : null;
+
+          let relay;
+          let relayPort;
+          let browser;
+          let rotationTimer;
+          let rotationInProgress = false;
+
+          function upstreamUrl() {
+            const protocol = proxy.protocol === "socks5" ? "socks5" : proxy.protocol === "https" ? "https" : "http";
+            return `${protocol}://${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@${proxy.host}:${proxy.port}`;
+          }
+
+          function createRelay(port = 0) {
+            return new Server({ host: "127.0.0.1", port, verbose: false, prepareRequestFunction: () => ({ upstreamProxyUrl: upstreamUrl() }) });
+          }
+
+          function chromeExecutable() {
+            const roots = [process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter(Boolean);
+            const candidates = roots.map((root) => join(root, "Google", "Chrome", "Application", "chrome.exe"));
+            return candidates.find(existsSync);
+          }
+
+          function headers() {
+            return { Authorization: `Bearer ${workerToken}`, "X-H2ADS-Worker-Key": workerKey, "Content-Type": "application/json" };
+          }
+
+          async function post(path, body) {
+            await fetch(`${panelUrl.replace(/\/$/, "")}${path}`, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+          }
+
+          function writeSession(extra = {}) {
+            let current = {};
+            if (existsSync(sessionPath)) {
+              try { current = JSON.parse(readFileSync(sessionPath, "utf8")); } catch { current = {}; }
+            }
+            writeFileSync(sessionPath, JSON.stringify({
+              ...current,
+              instanceId,
+              nodePid: process.pid,
+              browserPid: browser?.pid ?? current.browserPid,
+              rotationMinutes,
+              ...extra,
+            }), { encoding: "utf8", mode: 0o600 });
+          }
+
+          async function rotateRelay() {
+            if (!relay || !relayPort || rotationInProgress) return;
+            rotationInProgress = true;
+            try {
+              const previousRelay = relay;
+              await previousRelay.close(true);
+              const nextRelay = createRelay(relayPort);
+              await nextRelay.listen();
+              relay = nextRelay;
+              writeSession({ lastRotationAt: new Date().toISOString() });
+            } catch {
+              try {
+                const recoveryRelay = createRelay(relayPort);
+                await recoveryRelay.listen();
+                relay = recoveryRelay;
+              } catch { }
+            } finally {
+              rotationInProgress = false;
+            }
+          }
+
+          async function run() {
+            try {
+              const executable = chromeExecutable();
+              if (!executable) throw new Error("browser_not_found");
+              relay = createRelay();
+              await relay.listen();
+              relayPort = relay.port;
+              browser = spawn(executable, [`--user-data-dir=${profileDirectory}`, `--proxy-server=http://127.0.0.1:${relayPort}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { detached: false, stdio: "ignore", windowsHide: false });
+              writeSession({ startedAt: new Date().toISOString() });
+              if (rotationMinutes) {
+                rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
+                rotationTimer.unref?.();
+              }
+              await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "browser_open" });
+              browser.once("exit", async () => {
+                try {
+                  if (rotationTimer) clearInterval(rotationTimer);
+                  const manifestPath = join(profileDirectory, "h2ads-profile.json");
+                  const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
+                  writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: new Date().toISOString() }), "utf8");
+                  await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "closed" });
+                } finally {
+                  if (relay) await relay.close(true).catch(() => undefined);
+                }
+              });
+            } catch (error) {
+              if (rotationTimer) clearInterval(rotationTimer);
+              const category = error instanceof Error && error.message === "browser_not_found" ? "browser_not_found" : "browser_launch_failed";
+              await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "blocked", errorCategory: category }).catch(() => undefined);
+              if (relay) await relay.close(true).catch(() => undefined);
+            }
+          }
+
+          run();
+          ''', encoding="utf-8")
+
+          Path("server/h2adsProxySecurity.test.ts").write_text('''import { beforeEach, describe, expect, it } from "vitest";
+          import { decryptH2AdsProxy, encryptH2AdsProxy, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "./h2adsProxySecurity";
+          import { getH2AdsRouteMismatches, resolvePublicProxyAddress } from "./h2adsProxyValidation";
+
+          describe("segurança da configuração de proxy H2 Ads", () => {
+            beforeEach(() => {
+              process.env.H2ADS_PROXY_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+            });
+
+            it("informa somente se a chave de cifra está pronta, sem devolver seu valor", () => {
+              expect(isH2AdsProxyEncryptionReady()).toBe(true);
+              delete process.env.H2ADS_PROXY_ENCRYPTION_KEY;
+              expect(isH2AdsProxyEncryptionReady()).toBe(false);
+            });
+
+            it("aceita uma chave aleatória longa gerada pelo Render e deriva uma chave AES de 32 bytes", () => {
+              process.env.H2ADS_PROXY_ENCRYPTION_KEY = "render_generated_random_value_for_h2ads_123456789";
+              const parsed = parseH2AdsProxyInput("edge.example:3128:user_test:pass_test");
+              expect(isH2AdsProxyEncryptionReady()).toBe(true);
+              expect(decryptH2AdsProxy(encryptH2AdsProxy(parsed))).toEqual({ ...parsed, rotationMinutes: null });
+            });
+
+            it("cifra credencial e tempo de rotação sem devolver senha no painel", () => {
+              const input = ["edge.example", "3128", "user_test", "pass_test"].join(":");
+              const parsed = parseH2AdsProxyInput(input, "socks5");
+              const encrypted = encryptH2AdsProxy(parsed, 30);
+              expect(encrypted).not.toContain(input);
+              expect(encrypted).not.toContain(parsed.password);
+              expect(decryptH2AdsProxy(encrypted)).toEqual({ ...parsed, rotationMinutes: 30 });
+              expect(proxyCredentialSummary()).toBe("Credencial protegida");
+            });
+
+            it("rejeita rotação fora do limite e mantém payload antigo compatível", () => {
+              const parsed = parseH2AdsProxyInput("edge.example:3128:user_test:pass_test");
+              expect(() => encryptH2AdsProxy(parsed, 0)).toThrow("tempo de rotação");
+              expect(() => encryptH2AdsProxy(parsed, 1_441)).toThrow("tempo de rotação");
+              expect(decryptH2AdsProxy(encryptH2AdsProxy(parsed))).toEqual({ ...parsed, rotationMinutes: null });
+            });
+
+            it("rejeita formato inválido e destinos de rede local", async () => {
+              expect(() => parseH2AdsProxyInput("invalid")).toThrow("Formato de proxy inválido");
+              await expect(resolvePublicProxyAddress("127.0.0.1")).rejects.toThrow("não é público");
+            });
+
+            it("ignora país administrativo e identifica apenas divergências de ISP e ASN", () => {
+              const mismatches = getH2AdsRouteMismatches(
+                { ip: "198.51.100.10", countryCode: "US", city: "Test City", asn: "AS64500", isp: "Test ISP", latencyMs: 120 },
+                { expectedIsp: "Other ISP", expectedAsn: "AS64501" },
+              );
+              expect(mismatches).toEqual(["ISP", "ASN"]);
+            });
+          });
+          ''', encoding="utf-8")
+
+          replace_once("server/h2adsWorkerFoundation.test.ts", 'expect(script).toContain(\'$AgentVersion = "1.3.2"\');', 'expect(script).toContain(\'$AgentVersion = "1.3.3"\');')
+          replace_once(
+              "server/h2adsWorkerFoundation.test.ts",
+              '    expect(script).toContain("Initialize-InstanceProfile");',
+              '    expect(script).toContain("Initialize-InstanceProfile");\n    expect(script).toContain("Start-Sleep -Seconds 2");\n    expect(session).toContain("rotationMinutes");\n    expect(session).toContain("relay.close(true)");',
+          )
+
+          Path("server/h2adsDesktopRotation.test.ts").write_text('''import fs from "node:fs";
+          import path from "node:path";
+          import { describe, expect, it } from "vitest";
+
+          const projectRoot = path.resolve(import.meta.dirname, "..");
+          const read = (file: string) => fs.readFileSync(path.join(projectRoot, file), "utf8");
+
+          describe("melhorias operacionais H2 Ads", () => {
+            it("usa quatro instâncias por linha em desktop largo e amplia a área útil", () => {
+              const source = read("client/src/pages/H2Ads.tsx");
+              expect(source).toContain("2xl:grid-cols-4");
+              expect(source.match(/max-w-\\[1800px\\]/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+            });
+
+            it("edita somente a rotação sem devolver credenciais protegidas ao navegador", () => {
+              const ui = read("client/src/pages/H2Ads.tsx");
+              const router = read("server/routers/h2ads.ts");
+              const service = read("server/h2ads.ts");
+              expect(ui).toContain("Tempo de rotação (minutos)");
+              expect(ui).toContain("updateProxyRotation");
+              expect(router).toContain("updateProxyRotation: adminProcedure");
+              expect(router).toContain("h2AdsUpdateProxyRotationSchema");
+              expect(service).toContain("rotationMinutes");
+              for (const operation of ["listDashboard", "saveProxyCredential", "updateProxyRotation", "validateProxy"]) {
+                expect(router).toContain(`${operation}: adminProcedure`);
+              }
+            });
+
+            it("reduz a espera do comando local e mantém rotação por reconexão do relay", () => {
+              const worker = read("workers/windows/H2AdsWorker.ps1");
+              const session = read("workers/windows/browser-session.mjs");
+              expect(worker).toContain("Start-Sleep -Seconds 2");
+              expect(worker).toContain('$AgentVersion = "1.3.3"');
+              expect(session).toContain("setInterval");
+              expect(session).toContain("rotationMinutes * 60_000");
+              expect(session).toContain("relay.close(true)");
+            });
+          });
+          ''', encoding="utf-8")
+
+          replace_once(
+              ".github/workflows/h2ads-validate.yml",
+              '      - "server/h2ads*"\n',
+              '      - "server/h2ads*"\n      - "server/routers/h2ads.ts"\n      - "client/src/pages/H2Ads.tsx"\n',
+          )
+          replace_once(
+              ".github/workflows/h2ads-validate.yml",
+              '        run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts',
+              '        run: pnpm vitest run server/h2adsProxySecurity.test.ts server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsDesktopRotation.test.ts',
+          )
+          replace_once(
+              ".github/workflows/h2ads-validate.yml",
+              '''      - name: Verify production worker version
+                  run: node -e "fetch('https://h2colombiano.com/api/h2ads/worker/windows-agent.ps1').then(async response => { if (!response.ok) throw new Error('HTTP ' + response.status); const text = await response.text(); if (!text.includes('AgentVersion = \\\"1.3.2\\\"')) throw new Error('Production worker is not 1.3.2'); console.log('Production worker 1.3.2 confirmed'); })"
+          ''',
+              '''      - name: Verify packaged worker version
+                  run: node -e "const fs=require('node:fs');const text=fs.readFileSync('workers/windows/H2AdsWorker.ps1','utf8');if(!text.includes('AgentVersion = \\\"1.3.3\\\"'))throw new Error('Packaged worker is not 1.3.3');"
+          ''',
+          )
+          PY
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run focused tests
+        run: pnpm vitest run server/h2adsProxySecurity.test.ts server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsDesktopRotation.test.ts
+
+      - name: TypeScript check
+        run: pnpm check
+
+      - name: Build production bundle
+        run: pnpm build
+
+      - name: Commit validated improvements
+        shell: bash
+        run: |
+          rm -f .github/workflows/h2ads-apply-improvements.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --stat
+          git commit -m "feat(h2ads): improve desktop layout, rotation and close response"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
