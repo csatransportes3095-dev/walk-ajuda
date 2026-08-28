@@ -1,4 +1,4 @@
-name: Validate protected backup restore
+name: Validate total disaster recovery kit
 
 on:
   push:
@@ -20,8 +20,8 @@ jobs:
         with:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
-      - name: Apply protected restore flow
-        run: python scripts/apply-protected-backup-restore.py
+      - name: Apply total disaster recovery kit
+        run: python scripts/apply-total-disaster-recovery.py
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
@@ -31,16 +31,16 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Backup and restore tests
-        run: pnpm vitest run server/backupService.test.ts server/backupRestoreService.test.ts
+      - name: Backup recovery tests
+        run: pnpm vitest run server/backupService.test.ts server/backupRestoreService.test.ts server/disasterRecoveryKit.test.ts
       - name: TypeScript check
         run: pnpm check
       - name: Build
         run: pnpm build
-      - name: Commit validated protected restore
+      - name: Commit validated total recovery kit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .env.example server/backupService.ts server/backupRestoreService.ts server/backupRestoreService.test.ts server/routers/backup.ts server/_core/trpc.ts client/src/pages/AdminBackup.tsx
-          git commit -m "feat(backup): add protected restore flow"
+          git add server/backupService.ts server/disasterRecoveryKit.ts server/disasterRecoveryKit.test.ts client/src/pages/AdminBackup.tsx recovery/h2-recovery-bootstrap.mjs recovery/H2_TOTAL_RECOVERY_GUIDE.txt
+          git commit -m "feat(backup): add total disaster recovery kit"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
