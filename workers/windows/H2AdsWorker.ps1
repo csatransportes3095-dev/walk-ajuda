@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.3.0"
+$AgentVersion = "1.3.1"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -120,8 +120,8 @@ function Invoke-PendingBrowserCommand([object]$Config) {
     $response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/next" -Headers $headers
     if ($response.StatusCode -eq 204 -or [string]::IsNullOrWhiteSpace($response.Content)) { return }
     $payload = $response.Content | ConvertFrom-Json
-    Ensure-BrowserPreparationComponent $Config
     if ($payload.command.command -eq "prepare_browser") {
+      Ensure-BrowserPreparationComponent $Config
       $runnerInput = @{ command = $payload.command.command; proxy = $payload.proxy } | ConvertTo-Json -Depth 5 -Compress
       $runnerOutput = $runnerInput | & node.exe $RunnerPath
       $result = $runnerOutput | ConvertFrom-Json
@@ -134,8 +134,15 @@ function Invoke-PendingBrowserCommand([object]$Config) {
       Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($payload.command.id)/result" -Headers $headers -ContentType "application/json" -Body $resultBody | Out-Null
       return
     }
-    if ($payload.command.command -eq "launch_browser") { Invoke-BrowserSession $Config $payload; return }
-    if ($payload.command.command -eq "close_browser") { Close-BrowserSession $Config $payload; return }
+    if ($payload.command.command -eq "launch_browser") {
+      Ensure-BrowserPreparationComponent $Config
+      Invoke-BrowserSession $Config $payload
+      return
+    }
+    if ($payload.command.command -eq "close_browser") {
+      Close-BrowserSession $Config $payload
+      return
+    }
   } catch {
     # Falhas locais ou da rota não são gravadas no terminal nem reenviadas com detalhes sensíveis.
   }
@@ -205,6 +212,7 @@ if ($Run) {
   $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
   $workerMutex = Acquire-WorkerMutex $config
   if ($null -eq $workerMutex) { exit 0 }
+  Stop-ExistingWorkerProcesses
   try {
     while ($true) {
       try { Invoke-WorkerHeartbeat $config } catch { }
