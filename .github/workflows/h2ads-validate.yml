@@ -1,0 +1,46 @@
+name: H2 Ads validation
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "server/h2ads*"
+      - "workers/windows/**"
+      - "drizzle/0140_h2ads_browser_workers.sql"
+      - "drizzle/0141_h2ads_browser_preparation.sql"
+      - "drizzle/0142_h2ads_browser_manual_commands.sql"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/h2ads-validate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run H2 Ads tests
+        run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts
+
+      - name: Build production bundle
+        run: pnpm build
