@@ -26,11 +26,18 @@ async function ensureOnlineSupportBotAvatarColumn() {
   if (onlineSupportBotAvatarColumnReady) return;
   const db = await getDb();
   if (!db) return;
-  try {
-    await db.execute(sql.raw("ALTER TABLE onlineSupportConfig ADD COLUMN IF NOT EXISTS botAvatar VARCHAR(1024) NULL"));
-  } catch {
-    try { await db.execute(sql.raw("ALTER TABLE onlineSupportConfig ADD COLUMN botAvatar VARCHAR(1024) NULL")); } catch { /* coluna já existe */ }
-  }
+
+  const ensureColumn = async (definition: string) => {
+    try {
+      await db.execute(sql.raw(`ALTER TABLE onlineSupportConfig ADD COLUMN IF NOT EXISTS ${definition}`));
+    } catch {
+      try { await db.execute(sql.raw(`ALTER TABLE onlineSupportConfig ADD COLUMN ${definition}`)); } catch { /* coluna já existe */ }
+    }
+  };
+
+  await ensureColumn("buttonSortOrder INT NOT NULL DEFAULT 3");
+  await ensureColumn("customStatusText VARCHAR(128) NULL");
+  await ensureColumn("botAvatar VARCHAR(1024) NULL");
   onlineSupportBotAvatarColumnReady = true;
 }
 

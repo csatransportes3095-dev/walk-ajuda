@@ -423,7 +423,13 @@ export default function AdminOnlineSupport() {
 
   // ── Config ──
   const configMut = trpc.onlineSupport.adminConfigUpdate.useMutation({
-    onSuccess: () => { configQ.refetch(); toast.success("Configurações salvas!"); }
+    onSuccess: async () => {
+      await configQ.refetch();
+      toast.success("Configurações salvas!");
+    },
+    onError: (error) => {
+      toast.error(error?.message || "Não foi possível salvar as configurações do bot.");
+    },
   });
   const uploadBotAvatarMut = trpc.uploads.uploadBotAvatar.useMutation();
   const botAvatarInputRef = useRef<HTMLInputElement>(null);
@@ -866,10 +872,11 @@ export default function AdminOnlineSupport() {
                 </button>
               </div>
               <button
-                onClick={() => configMut.mutate({ buttonLabel: cfgLabel, welcomeMessage: cfgWelcome, buttonColor: cfgColor, botAvatar: cfgBotAvatar || null, chatEnabled: cfgEnabled, customStatusText: cfgStatusText, buttonSortOrder: cfgSortOrder } as any)}
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors"
+                onClick={() => configMut.mutate({ buttonLabel: cfgLabel.trim() || "ATENDIMENTO ONLINE", welcomeMessage: cfgWelcome, buttonColor: cfgColor, botAvatar: cfgBotAvatar || null, chatEnabled: cfgEnabled, customStatusText: cfgStatusText.trim(), buttonSortOrder: cfgSortOrder } as any)}
+                disabled={configMut.isPending}
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-sm transition-colors"
               >
-                Salvar Configurações
+                {configMut.isPending ? "Salvando..." : "Salvar Configurações"}
               </button>
             </div>
           </div>
