@@ -13,7 +13,7 @@ permissions:
 jobs:
   repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,6 +24,8 @@ jobs:
         run: python scripts/finalize-backup-integrity.py
       - name: Repair AES-GCM TypeScript typing
         run: python scripts/fix-backup-gcm-typing.py
+      - name: Apply protected restore flow
+        run: python scripts/apply-protected-backup-restore.py
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
@@ -33,16 +35,16 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Backup tests
-        run: pnpm vitest run server/backupService.test.ts
+      - name: Backup and restore tests
+        run: pnpm vitest run server/backupService.test.ts server/backupRestoreService.test.ts
       - name: TypeScript check
         run: pnpm check
       - name: Build
         run: pnpm build
-      - name: Commit validated backup integrity
+      - name: Commit validated protected restore
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/backupService.ts server/routers/backup.ts client/src/pages/AdminBackup.tsx server/backupService.test.ts
-          git commit -m "fix(backup): add deep stored artifact verification"
+          git add .env.example server/backupService.ts server/backupRestoreService.ts server/backupRestoreService.test.ts server/routers/backup.ts server/_core/trpc.ts client/src/pages/AdminBackup.tsx
+          git commit -m "feat(backup): add protected restore flow"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
