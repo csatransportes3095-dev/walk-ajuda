@@ -3,7 +3,7 @@ import path from "node:path";
 import { and, eq, lt } from "drizzle-orm";
 import { h2AdsWorkerBrowserCommands, h2AdsWorkerCommands } from "../drizzle/schema";
 import { getDb } from "./db";
-import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
+import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 
 const MAX_NAME_LENGTH = 128;
@@ -142,7 +142,12 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       const encryptedPayload = await getH2AdsProxyCredential(command.instanceId);
       if (!encryptedPayload) throw new Error("Rota protegida ausente.");
       const proxy = decryptH2AdsProxy(encryptedPayload);
-      res.status(200).json({ command: { id: command.id, instanceId: command.instanceId, command: command.command }, proxy });
+      const instance = await getH2AdsInstance(command.instanceId);
+      const instanceName = workerString(instance?.name) ?? `Instância ${command.instanceId}`;
+      res.status(200).json({
+        command: { id: command.id, instanceId: command.instanceId, command: command.command },
+        proxy: { ...proxy, instanceName },
+      });
     } catch (_error) {
       if (command.command === "prepare_browser") await completeH2AdsWorkerPreparation({ workerId: worker.id, commandId: command.id, state: "blocked", errorCategory: "route_unavailable" });
       else await completeH2AdsWorkerBrowserCommand({ workerId: worker.id, commandId: command.id, command: "launch_browser", state: "blocked", errorCategory: "route_unavailable" });

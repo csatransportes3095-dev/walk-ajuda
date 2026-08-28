@@ -1,19 +1,24 @@
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat, getDb } = vi.hoisted(() => ({
+const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, decryptH2AdsProxy, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat, getDb } = vi.hoisted(() => ({
   authenticateH2AdsWorker: vi.fn(),
   claimH2AdsWorker: vi.fn(),
   claimNextH2AdsWorkerCommand: vi.fn(),
   completeH2AdsWorkerBrowserCommand: vi.fn(),
   completeH2AdsWorkerPreparation: vi.fn(),
+  decryptH2AdsProxy: vi.fn(),
+  getH2AdsInstance: vi.fn(),
   getH2AdsProxyCredential: vi.fn(),
   recordH2AdsBrowserRuntimeState: vi.fn(),
   recordH2AdsWorkerHeartbeat: vi.fn(),
   getDb: vi.fn(),
 }));
 
-vi.mock("./h2ads", () => ({ authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat }));
-vi.mock("./h2adsProxySecurity", () => ({ decryptH2AdsProxy: vi.fn() }));
+vi.mock("./h2ads", () => ({ authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat }));
+vi.mock("./h2adsProxySecurity", () => ({ decryptH2AdsProxy }));
 vi.mock("./db", () => ({ getDb }));
 
 import { registerH2AdsWorkerRoute } from "./h2adsWorkerRoute";
@@ -106,6 +111,36 @@ describe("endpoints do Browser Worker H2 Ads", () => {
     expect(outdated.state.statusCode).toBe(426);
     expect(outdated.state.body).toEqual({ error: "Atualize o agente H2 Ads para executar comandos de navegador." });
     expect(claimNextH2AdsWorkerCommand).not.toHaveBeenCalled();
+  });
+
+  it("envia o nome da instância junto da rota protegida para rotular a janela do browser", async () => {
+    authenticateH2AdsWorker.mockResolvedValue({ id: 7, workerKey: "h2w_synthetic", name: "Windows", status: "active", capacity: 1 });
+    claimNextH2AdsWorkerCommand.mockResolvedValue({ id: 10, workerId: 7, instanceId: 32, command: "launch_browser" });
+    getH2AdsProxyCredential.mockResolvedValue("encrypted-proxy");
+    decryptH2AdsProxy.mockReturnValue({ protocol: "http", host: "127.0.0.1", port: 8080, username: "worker", password: "secret", rotationMinutes: null });
+    getH2AdsInstance.mockResolvedValue({ id: 32, name: "460 LEANDRO DE MORAES DOS SANTOS" });
+    const routes = setupRoutes();
+    const next = response();
+
+    await routes["POST /api/h2ads/worker/commands/next"]({ body: {}, header: (name: string) => workerHeader(name) }, next.res);
+
+    expect(next.state.statusCode).toBe(200);
+    expect(next.state.body).toMatchObject({
+      command: { id: 10, instanceId: 32, command: "launch_browser" },
+      proxy: { instanceName: "460 LEANDRO DE MORAES DOS SANTOS" },
+    });
+    expect(getH2AdsInstance).toHaveBeenCalledWith(32);
+  });
+
+  it("mantém o componente de sessão válido e fixa o título H2ADS no Chrome local", () => {
+    const sessionPath = path.resolve(import.meta.dirname, "..", "workers", "windows", "browser-session.mjs");
+    const syntax = spawnSync(process.execPath, ["--check", sessionPath], { encoding: "utf8" });
+    expect(syntax.status, syntax.stderr).toBe(0);
+    const source = fs.readFileSync(sessionPath, "utf8");
+    expect(source).toContain("instanceWindowTitle");
+    expect(source).toContain("Page.addScriptToEvaluateOnNewDocument");
+    expect(source).toContain("--remote-debugging-address=127.0.0.1");
+    expect(source).toContain("--remote-debugging-port=0");
   });
 
   it("entrega encerramento sem carregar a rota e registra estado fechado apenas para Worker atualizado", async () => {
