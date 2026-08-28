@@ -1,0 +1,234 @@
+name: Apply bot three-flow entry
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - ".github/workflows/bot-three-flows-apply.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Apply controlled patch
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace_once(file, old, new):
+              p = Path(file)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Expected snippet not found in {file}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # OnlineEntryPanel: accept the chosen protected destination.
+          replace_once(
+              'client/src/components/OnlineEntryPanel.tsx',
+              'type Props = { onBack: () => void; onOpenCadastro: () => void };\n\nexport function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {',
+              'type ProtectedRoute = \'gastos\' | \'emprestimo\';\ntype Props = { onBack: () => void; onOpenCadastro: () => void; intendedRoute?: ProtectedRoute | null };\n\nexport function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null }: Props) {'
+          )
+          replace_once(
+              'client/src/components/OnlineEntryPanel.tsx',
+              '  const [passwordCreatedPending, setPasswordCreatedPending] = useState(false);',
+              '  const [passwordCreatedPending, setPasswordCreatedPending] = useState(false);\n  const [autoRouteHandled, setAutoRouteHandled] = useState(false);'
+          )
+          replace_once(
+              'client/src/components/OnlineEntryPanel.tsx',
+              '''  const inspectPasswordStatus = async () => {
+    const cleanPhone = phone.replace(/\\D/g, "");
+    if (cleanPhone.length < 10) return;
+    try {
+      const result = await passwordStatusMut.mutateAsync({ phone: cleanPhone });
+      if (result.status === 'no_password') openPasswordSetup(result.phone);
+    } catch { /* A validação final continua protegida pelo endpoint de login. */ }
+  };''',
+              '''  const inspectPasswordStatus = async () => {
+    const cleanPhone = phone.replace(/\\D/g, "");
+    if (cleanPhone.length < 10) return;
+    try {
+      const result = await passwordStatusMut.mutateAsync({ phone: cleanPhone });
+      if (result.status === 'not_found') {
+        setError('Cadastro não localizado. Para continuar, faça seu cadastro primeiro.');
+        return;
+      }
+      if (result.status === 'no_password') openPasswordSetup(result.phone);
+    } catch { /* A validação final continua protegida pelo endpoint de login. */ }
+  };'''
+          )
+          replace_once(
+              'client/src/components/OnlineEntryPanel.tsx',
+              '''  const login = async () => {
+    setError("");
+    const result = await loginMut.mutateAsync({ phone: phone.replace(/\\D/g, ""), password });
+    if (!result.success || !result.token) {
+      if (result.error === 'no_password') { openPasswordSetup(); return; }
+      setError(result.error === 'wrong_password' ? 'Senha incorreta.' : result.error === 'pending_approval' ? 'Sua senha está aguardando liberação do administrador.' : result.error === 'expired' ? 'Sua senha venceu. Crie uma nova senha.' : 'Não foi possível entrar.');
+      if (result.error === 'expired') openPasswordSetup();
+      return;
+    }
+    localStorage.setItem(ENTRY_TOKEN_KEY, result.token);
+    // /acompanhar usa a mesma autenticação oficial; reutiliza o token, sem pedir senha novamente.
+    localStorage.setItem('cp_token', result.token);
+    setToken(result.token);
+    setPassword("");
+  };''',
+              '''  const login = async () => {
+    setError("");
+    const cleanPhone = phone.replace(/\\D/g, "");
+    if (cleanPhone.length < 10) { setError('Informe seu telefone com DDD.'); return; }
+    try {
+      const status = await passwordStatusMut.mutateAsync({ phone: cleanPhone });
+      if (status.status === 'not_found') {
+        setError('Cadastro não localizado. Você precisa se cadastrar antes de acessar esta área.');
+        onOpenCadastro();
+        return;
+      }
+      if (status.status === 'no_password') { openPasswordSetup(status.phone); return; }
+      if (status.status === 'pending_approval') { setError('Sua senha está aguardando liberação do administrador.'); return; }
+      if (status.status === 'expired') { openPasswordSetup(status.phone); return; }
+      if (status.status === 'blocked') { setError(status.blockReason || 'Seu acesso está bloqueado.'); return; }
+    } catch { /* O endpoint de login continua sendo a validação final. */ }
+
+    const result = await loginMut.mutateAsync({ phone: cleanPhone, password });
+    if (!result.success || !result.token) {
+      if (result.error === 'no_password') { openPasswordSetup(); return; }
+      setError(result.error === 'wrong_password' ? 'Senha incorreta.' : result.error === 'pending_approval' ? 'Sua senha está aguardando liberação do administrador.' : result.error === 'expired' ? 'Sua senha venceu. Crie uma nova senha.' : result.error === 'blocked' ? (result.blockReason || 'Seu acesso está bloqueado.') : 'Não foi possível entrar.');
+      if (result.error === 'expired') openPasswordSetup();
+      return;
+    }
+    localStorage.setItem(ENTRY_TOKEN_KEY, result.token);
+    localStorage.setItem('cp_token', result.token);
+    setToken(result.token);
+    setPassword("");
+  };'''
+          )
+          replace_once(
+              'client/src/components/OnlineEntryPanel.tsx',
+              '''  const sendProof = async (installmentId: number, file: File) => {
+    try { setError(''); const fileBase64 = await fileToBase64(file); await proofMut.mutateAsync({ token, installmentId, fileBase64, fileName: file.name, mimeType: file.type || 'application/octet-stream' }); await installmentsQ.refetch(); }
+    catch (e: any) { setError(e?.message || 'Não foi possível enviar o comprovante.'); }
+  };
+
+  const customer = sessionQ.data?.authenticated ? sessionQ.data.customer : null;''',
+              '''  const sendProof = async (installmentId: number, file: File) => {
+    try { setError(''); const fileBase64 = await fileToBase64(file); await proofMut.mutateAsync({ token, installmentId, fileBase64, fileName: file.name, mimeType: file.type || 'application/octet-stream' }); await installmentsQ.refetch(); }
+    catch (e: any) { setError(e?.message || 'Não foi possível enviar o comprovante.'); }
+  };
+
+  useEffect(() => {
+    setAutoRouteHandled(false);
+  }, [intendedRoute]);
+
+  useEffect(() => {
+    if (!intendedRoute || autoRouteHandled || !sessionQ.data?.authenticated || sessionQ.data?.customer?.profileUpdateRequired) return;
+    setAutoRouteHandled(true);
+    const state = routeState(intendedRoute);
+    if (state.allowed) {
+      openRoute(intendedRoute);
+      return;
+    }
+    if (state.pending) {
+      setError('Seu acesso a esta área já está em análise pelo administrador.');
+      return;
+    }
+    if (state.denied && state.daysRemaining > 0) {
+      const date = state.retryAtMs ? new Date(state.retryAtMs).toLocaleDateString('pt-BR') : '';
+      setError(`Seu acesso foi reprovado. Você poderá solicitar novamente em ${date}.`);
+      return;
+    }
+    void requestRoute(intendedRoute);
+  }, [intendedRoute, autoRouteHandled, sessionQ.data?.authenticated, sessionQ.data?.customer?.profileUpdateRequired, sessionQ.data?.access, sessionQ.data?.routeStates]);
+
+  const customer = sessionQ.data?.authenticated ? sessionQ.data.customer : null;'''
+          )
+          replace_once(
+              'client/src/components/OnlineEntryPanel.tsx',
+              '''      <h3 style={{ margin: '8px 0 4px', color: '#fff', fontSize: 16 }}>Entrar no meu atendimento</h3>
+      <p style={{ margin: '0 0 14px', color: 'rgba(255,255,255,.6)', fontSize: 12, lineHeight: 1.45 }}>Informe seu telefone e sua senha. O bot nunca salva sua senha.</p>''',
+              '''      <h3 style={{ margin: '8px 0 4px', color: '#fff', fontSize: 16 }}>{intendedRoute === 'gastos' ? 'Acessar Controle de Gastos' : intendedRoute === 'emprestimo' ? 'Acessar Empréstimos' : 'Entrar no meu atendimento'}</h3>
+      <p style={{ margin: '0 0 14px', color: 'rgba(255,255,255,.6)', fontSize: 12, lineHeight: 1.45 }}>Informe seu telefone e sua senha. Primeiro confirmamos seu cadastro; depois validamos a permissão da área escolhida.</p>'''
+          )
+          replace_once(
+              'client/src/components/OnlineEntryPanel.tsx',
+              '''    <button onClick={onOpenCadastro} style={secondaryStyle}>Ainda não tenho cadastro</button>''',
+              '''    <button onClick={onOpenCadastro} style={secondaryStyle}>Ainda não tenho cadastro — Fazer cadastro</button>'''
+          )
+
+          # OnlineRegistrationPanel: preserve the route that led the customer into registration.
+          replace_once(
+              'client/src/components/OnlineRegistrationPanel.tsx',
+              "import { useMemo, useState } from \"react\";",
+              "import { useMemo, useState } from \"react\";"
+          )
+          replace_once(
+              'client/src/components/OnlineRegistrationPanel.tsx',
+              "type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void };",
+              "type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void; initialRoute?: 'gastos' | 'emprestimo' | null };"
+          )
+          replace_once(
+              'client/src/components/OnlineRegistrationPanel.tsx',
+              "export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone }: Props) {\n  const [index, setIndex] = useState(0);\n  const [route, setRoute] = useState<Route>('site');",
+              "export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone, initialRoute = null }: Props) {\n  const [index, setIndex] = useState(initialRoute ? 1 : 0);\n  const [route, setRoute] = useState<Route>(initialRoute || 'site');"
+          )
+
+          # Widget passes the selected route into registration.
+          replace_once(
+              'client/src/components/OnlineSupportWidget.tsx',
+              '<OnlineRegistrationPanel conversationId={registrationDraftId} visitorId={visitorId} onBack={goHome} onDone={() => setPhase(intendedRoute ? "entry" : "home")} />',
+              '<OnlineRegistrationPanel conversationId={registrationDraftId} visitorId={visitorId} initialRoute={intendedRoute} onBack={goHome} onDone={() => setPhase(intendedRoute ? "entry" : "home")} />'
+          )
+
+          # The root page must show the configured bot whenever Chat is enabled, even if a restored hidden flag was lost.
+          replace_once(
+              'server/online-support/service.ts',
+              '    welcomeButtonEnabled: config.welcomeButtonEnabled === 1,',
+              '    welcomeButtonEnabled: pathname === "/" && config.chatEnabled === 1 ? true : config.welcomeButtonEnabled === 1,'
+          )
+          replace_once(
+              'server/online-support/service.ts',
+              '    showOnPage: allowedPages.length === 0 || allowedPages.includes(pathname),',
+              '    showOnPage: pathname === "/" && config.chatEnabled === 1 ? true : allowedPages.length === 0 || allowedPages.includes(pathname),'
+          )
+          PY
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript check
+        run: pnpm check
+
+      - name: Build
+        run: pnpm build
+
+      - name: Commit validated flow
+        shell: bash
+        run: |
+          rm -f .github/workflows/bot-three-flows-apply.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --stat
+          git commit -m "feat(bot): protect gastos and emprestimo behind customer access"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
