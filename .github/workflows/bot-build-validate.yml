@@ -22,6 +22,8 @@ jobs:
           fetch-depth: 0
       - name: Apply backup deep integrity finalizer
         run: python scripts/finalize-backup-integrity.py
+      - name: Repair AES-GCM TypeScript typing
+        run: python scripts/fix-backup-gcm-typing.py
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
