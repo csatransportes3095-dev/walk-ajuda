@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.3.1"
+$AgentVersion = "1.3.2"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -15,6 +15,7 @@ $RunnerPath = Join-Path $WorkerDirectory "browser-runner.mjs"
 $SessionRunnerPath = Join-Path $WorkerDirectory "browser-session.mjs"
 $ProfilesDirectory = Join-Path $WorkerDirectory "profiles"
 $PackagePath = Join-Path $WorkerDirectory "package.json"
+$ProxyChainPackagePath = Join-Path $WorkerDirectory "node_modules\proxy-chain\package.json"
 $TaskName = "H2 Ads Browser Worker"
 
 function Get-ComputerLabel {
@@ -75,8 +76,10 @@ function Ensure-BrowserPreparationComponent([object]$Config) {
   Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-runner.mjs" -OutFile $RunnerPath
   Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-session.mjs" -OutFile $SessionRunnerPath
   @{ name = "h2ads-worker-local"; private = $true; type = "module"; dependencies = @{ "proxy-chain" = "3.0.0" } } | ConvertTo-Json -Compress | Set-Content -Path $PackagePath -Encoding UTF8 -NoNewline
-  & npm.cmd install --omit=dev --ignore-scripts --no-audit --no-fund --prefix $WorkerDirectory | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "Não foi possível preparar o relay local deste Worker." }
+  if (!(Test-Path $ProxyChainPackagePath)) {
+    & npm.cmd install --omit=dev --ignore-scripts --no-audit --no-fund --prefix $WorkerDirectory | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Não foi possível preparar o relay local deste Worker." }
+  }
 }
 
 function Invoke-BrowserSession([object]$Config, [object]$Payload) {
@@ -114,8 +117,28 @@ function Initialize-InstanceProfile([int]$InstanceId) {
   @{ instanceId = $InstanceId; profileVersion = 1; createdAt = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json -Compress | Set-Content -Path (Join-Path $profileDirectory "h2ads-profile.json") -Encoding UTF8 -NoNewline
 }
 
+function Get-WorkerErrorCategory([object]$ErrorRecord) {
+  $message = [string]$ErrorRecord.Exception.Message
+  if ($message -like "*Node.js*") { return "node_missing" }
+  if ($message -like "*npm*") { return "npm_missing" }
+  if ($message -like "*Perfil local*") { return "profile_missing" }
+  if ($message -like "*relay local*") { return "relay_setup_failed" }
+  return "worker_execution_failed"
+}
+
+function Complete-LocalCommandFailure([object]$Config, [object]$Payload, [string]$ErrorCategory) {
+  if ($null -eq $Payload -or $null -eq $Payload.command) { return }
+  $commandName = [string]$Payload.command.command
+  if ($commandName -notin @("prepare_browser", "launch_browser", "close_browser")) { return }
+  $body = @{ command = $commandName; state = "blocked"; errorCategory = $ErrorCategory } | ConvertTo-Json -Compress
+  try {
+    Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($Payload.command.id)/result" -Headers (Get-WorkerHeaders $Config) -ContentType "application/json" -Body $body | Out-Null
+  } catch { }
+}
+
 function Invoke-PendingBrowserCommand([object]$Config) {
   $headers = Get-WorkerHeaders $Config
+  $payload = $null
   try {
     $response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/next" -Headers $headers
     if ($response.StatusCode -eq 204 -or [string]::IsNullOrWhiteSpace($response.Content)) { return }
@@ -144,7 +167,7 @@ function Invoke-PendingBrowserCommand([object]$Config) {
       return
     }
   } catch {
-    # Falhas locais ou da rota não são gravadas no terminal nem reenviadas com detalhes sensíveis.
+    Complete-LocalCommandFailure $Config $payload (Get-WorkerErrorCategory $_)
   }
 }
 
