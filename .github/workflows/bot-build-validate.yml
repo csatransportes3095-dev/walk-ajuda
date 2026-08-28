@@ -1,4 +1,4 @@
-name: Validate bot custom status
+name: Validate bot public state resilience
 
 on:
   push:
@@ -20,8 +20,8 @@ jobs:
         with:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
-      - name: Apply custom status display fix
-        run: python scripts/fix-online-support-custom-status.py
+      - name: Apply public state resilience fix
+        run: python scripts/fix-online-support-public-state-resilience.py
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
@@ -35,10 +35,10 @@ jobs:
         run: pnpm check
       - name: Build
         run: pnpm build
-      - name: Commit validated status fix
+      - name: Commit validated public state fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/src/components/WelcomeScreen.tsx
-          git commit -m "fix(bot): respect custom status text on home card"
+          git add server/online-support/service.ts client/src/components/WelcomeScreen.tsx
+          git commit -m "fix(bot): make public config authoritative on home"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
