@@ -1,4 +1,4 @@
-name: Validate backup deep integrity
+name: Validate protected backup restore
 
 on:
   push:
@@ -20,10 +20,6 @@ jobs:
         with:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
-      - name: Apply backup deep integrity finalizer
-        run: python scripts/finalize-backup-integrity.py
-      - name: Repair AES-GCM TypeScript typing
-        run: python scripts/fix-backup-gcm-typing.py
       - name: Apply protected restore flow
         run: python scripts/apply-protected-backup-restore.py
       - name: Setup pnpm
