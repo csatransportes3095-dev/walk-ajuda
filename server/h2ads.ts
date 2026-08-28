@@ -109,6 +109,29 @@ export async function updateH2AdsInstance(id: number, input: Partial<Pick<H2AdsI
   return Number(result[0].affectedRows) > 0;
 }
 
+export async function deleteH2AdsInstance(id: number): Promise<boolean> {
+  const db = await requireH2AdsDb();
+  const existing = await db.select({ id: h2AdsInstances.id }).from(h2AdsInstances).where(eq(h2AdsInstances.id, id)).limit(1);
+  if (!existing[0]) return false;
+
+  return db.transaction(async (tx) => {
+    const run = await tx.select({ state: h2AdsInstanceBrowserRuns.state }).from(h2AdsInstanceBrowserRuns).where(eq(h2AdsInstanceBrowserRuns.instanceId, id)).limit(1);
+    if (run[0]?.state === "browser_open") {
+      throw new Error("Encerre o browser desta instância antes de excluí-la.");
+    }
+
+    // Remove somente dados pertencentes à instância escolhida. Worker e grupo permanecem intactos.
+    await tx.delete(h2AdsWorkerBrowserCommands).where(eq(h2AdsWorkerBrowserCommands.instanceId, id));
+    await tx.delete(h2AdsWorkerCommands).where(eq(h2AdsWorkerCommands.instanceId, id));
+    await tx.delete(h2AdsInstanceBrowserRuns).where(eq(h2AdsInstanceBrowserRuns.instanceId, id));
+    await tx.delete(h2AdsInstanceWorkerAssignments).where(eq(h2AdsInstanceWorkerAssignments.instanceId, id));
+    await tx.delete(h2AdsInstanceProxyCredentials).where(eq(h2AdsInstanceProxyCredentials.instanceId, id));
+    await tx.delete(h2AdsInstanceNetworkProfiles).where(eq(h2AdsInstanceNetworkProfiles.instanceId, id));
+    const deleted = await tx.delete(h2AdsInstances).where(eq(h2AdsInstances.id, id));
+    return Number(deleted[0].affectedRows) === 1;
+  });
+}
+
 export type H2AdsNetworkProfileInput = Partial<Pick<H2AdsInstanceNetworkProfile, "providerName" | "routeLabel" | "targetCountryCode" | "targetCity" | "expectedIsp" | "expectedAsn" | "setupStatus" | "healthStatus" | "observedIp" | "observedCountryCode" | "observedCity" | "observedIsp" | "observedAsn" | "latencyMs" | "lastCheckedAt" | "lastCheckMessage">>;
 
 export async function saveH2AdsNetworkProfile(instanceId: number, input: H2AdsNetworkProfileInput): Promise<void> {

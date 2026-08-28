@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   createH2AdsGroup,
   createH2AdsInstance,
+  deleteH2AdsInstance,
   createH2AdsWorkerPairingCode,
   getH2AdsGroup,
   getH2AdsInstance,
@@ -68,6 +69,10 @@ export const h2AdsUpdateInstanceSchema = z.object({
 }).strict().refine(({ id: _id, ...changes }) => Object.values(changes).some(value => value !== undefined), {
   message: "Informe ao menos um campo para atualizar a instância.",
 });
+
+export const h2AdsDeleteInstanceSchema = z.object({
+  id: z.number().int().positive(),
+}).strict();
 
 export const h2AdsSaveNetworkProfileSchema = z.object({
   instanceId: z.number().int().positive(),
@@ -225,6 +230,18 @@ export const h2AdsRouter = {
     const updated = await updateH2AdsInstance(id, { ...changes, ...(groupId === undefined ? {} : { groupId }) });
     if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Instância H2 Ads não encontrada." });
     return { success: true };
+  }),
+
+  deleteInstance: adminProcedure.input(h2AdsDeleteInstanceSchema).mutation(async ({ input }) => {
+    try {
+      const deleted = await deleteH2AdsInstance(input.id);
+      if (!deleted) throw new TRPCError({ code: "NOT_FOUND", message: "Instância H2 Ads não encontrada." });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof TRPCError) throw error;
+      const message = error instanceof Error ? error.message : "Não foi possível excluir a instância.";
+      throw new TRPCError({ code: "CONFLICT", message });
+    }
   }),
 
   saveNetworkProfile: adminProcedure.input(h2AdsSaveNetworkProfileSchema).mutation(async ({ input }) => {
