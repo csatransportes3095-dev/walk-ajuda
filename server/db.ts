@@ -842,7 +842,7 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
   if (!db) throw new Error('Database not available');
   const required = validateMainCustomerProfile(data);
   // Gerar número de cadastro sequencial
-  const [maxRow] = await db.execute(sql`SELECT COALESCE(MAX(customerNumber), 0) + 1 AS nextNum FROM customers`) as unknown as Array<Array<{ nextNum: number }>>;
+  const [maxRow] = await db.execute(sql`SELECT COALESCE(MAX(CASE WHEN customerNumber <> 99999 THEN customerNumber END), 451) + 1 AS nextNum FROM customers`) as unknown as Array<Array<{ nextNum: number }>>;
   const nextNum = maxRow[0]?.nextNum ?? 1;
   await db.insert(customers).values({
     customerNumber: nextNum,
