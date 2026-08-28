@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.2.0"
+$AgentVersion = "1.3.0"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -56,14 +56,17 @@ function Get-WorkerToken([object]$Config) {
   return $credential.GetNetworkCredential().Password
 }
 
-function Invoke-WorkerHeartbeat([object]$Config) {
-  $headers = @{ Authorization = "Bearer $(Get-WorkerToken $Config)"; "X-H2ADS-Worker-Key" = $Config.workerKey }
-  $body = @{ computerName = Get-ComputerLabel; agentVersion = $AgentVersion } | ConvertTo-Json -Compress
-  Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/heartbeat" -Headers $headers -ContentType "application/json" -Body $body | Out-Null
+function Get-WorkerHeaders([object]$Config) {
+  return @{
+    Authorization = "Bearer $(Get-WorkerToken $Config)"
+    "X-H2ADS-Worker-Key" = $Config.workerKey
+    "X-H2ADS-Agent-Version" = $AgentVersion
+  }
 }
 
-function Get-WorkerHeaders([object]$Config) {
-  return @{ Authorization = "Bearer $(Get-WorkerToken $Config)"; "X-H2ADS-Worker-Key" = $Config.workerKey }
+function Invoke-WorkerHeartbeat([object]$Config) {
+  $body = @{ computerName = Get-ComputerLabel; agentVersion = $AgentVersion } | ConvertTo-Json -Compress
+  Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/heartbeat" -Headers (Get-WorkerHeaders $Config) -ContentType "application/json" -Body $body | Out-Null
 }
 
 function Ensure-BrowserPreparationComponent([object]$Config) {
@@ -111,7 +114,7 @@ function Initialize-InstanceProfile([int]$InstanceId) {
   @{ instanceId = $InstanceId; profileVersion = 1; createdAt = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json -Compress | Set-Content -Path (Join-Path $profileDirectory "h2ads-profile.json") -Encoding UTF8 -NoNewline
 }
 
-function Invoke-PendingBrowserPreparation([object]$Config) {
+function Invoke-PendingBrowserCommand([object]$Config) {
   $headers = Get-WorkerHeaders $Config
   try {
     $response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/next" -Headers $headers
@@ -138,6 +141,34 @@ function Invoke-PendingBrowserPreparation([object]$Config) {
   }
 }
 
+function Stop-ExistingWorkerProcesses {
+  try {
+    $processes = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" | Where-Object {
+      $_.ProcessId -ne $PID -and
+      $_.CommandLine -like "*$InstalledScriptPath*" -and
+      $_.CommandLine -match '(?i)(?:^|\s)-Run(?:\s|$)'
+    }
+    foreach ($process in $processes) {
+      Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+  } catch { }
+}
+
+function Start-InstalledWorker {
+  Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run" -WindowStyle Hidden
+}
+
+function Acquire-WorkerMutex([object]$Config) {
+  $safeWorkerKey = ([string]$Config.workerKey) -replace '[^A-Za-z0-9_-]', '_'
+  $createdNew = $false
+  $mutex = New-Object System.Threading.Mutex($true, "Local\H2AdsWorker-$safeWorkerKey", [ref]$createdNew)
+  if (!$createdNew) {
+    $mutex.Dispose()
+    return $null
+  }
+  return $mutex
+}
+
 if ($Install) {
   New-Item -ItemType Directory -Force -Path $WorkerDirectory | Out-Null
   $validatedPairingCode = Read-PairingCode
@@ -148,29 +179,42 @@ if ($Install) {
   Copy-Item -Path $PSCommandPath -Destination $InstalledScriptPath -Force
   $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run"
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Description "Presença autenticada do H2 Ads Browser Worker" -Force | Out-Null
-  Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run" -WindowStyle Hidden
-  Write-Output "Worker H2 Ads pareado e iniciado. Este agente apenas comunica presença; não abre browsers nesta fase."
+  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Description "Presença autenticada e controle local do H2 Ads Browser Worker" -Force | Out-Null
+  Stop-ExistingWorkerProcesses
+  Start-InstalledWorker
+  Write-Output "Worker H2 Ads pareado e iniciado."
   exit 0
 }
 
 if ($Update) {
   if (!(Test-Path $ConfigPath)) { throw "Configuração do Worker não encontrada. Faça o pareamento primeiro." }
   $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
-  Invoke-WebRequest -UseBasicParsing -Uri "$($config.panelUrl)/api/h2ads/worker/windows-agent.ps1" -OutFile $InstalledScriptPath
-  Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run" -WindowStyle Hidden
-  Write-Output "Agente H2 Ads atualizado e iniciado."
+  $downloadPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1.download"
+  Invoke-WebRequest -UseBasicParsing -Uri "$($config.panelUrl)/api/h2ads/worker/windows-agent.ps1" -OutFile $downloadPath
+  if (!(Test-Path $downloadPath) -or (Get-Item $downloadPath).Length -lt 1000) { throw "O agente atualizado não foi baixado corretamente." }
+  Stop-ExistingWorkerProcesses
+  Copy-Item -Path $downloadPath -Destination $InstalledScriptPath -Force
+  Remove-Item -Force $downloadPath -ErrorAction SilentlyContinue
+  Start-InstalledWorker
+  Write-Output "Agente H2 Ads atualizado para a versão publicada e iniciado."
   exit 0
 }
 
 if ($Run) {
   if (!(Test-Path $ConfigPath)) { throw "Configuração do Worker não encontrada. Faça o pareamento primeiro." }
   $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
-  while ($true) {
-    try { Invoke-WorkerHeartbeat $config } catch { }
-    try { Invoke-PendingBrowserPreparation $config } catch { }
-    Start-Sleep -Seconds 20
+  $workerMutex = Acquire-WorkerMutex $config
+  if ($null -eq $workerMutex) { exit 0 }
+  try {
+    while ($true) {
+      try { Invoke-WorkerHeartbeat $config } catch { }
+      try { Invoke-PendingBrowserCommand $config } catch { }
+      Start-Sleep -Seconds 10
+    }
+  } finally {
+    try { $workerMutex.ReleaseMutex() } catch { }
+    $workerMutex.Dispose()
   }
 }
 
-Write-Output "Use -Install para iniciar o pareamento. O agente solicitará o código temporário de forma oculta."
+Write-Output "Use -Install para iniciar o pareamento ou -Update para atualizar um Worker já pareado."
