@@ -26,6 +26,9 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(route).toContain("/api/h2ads/worker/claim");
     expect(route).toContain("/api/h2ads/worker/heartbeat");
     expect(route).toContain("/api/h2ads/worker/windows-agent.ps1");
+    expect(route).toContain("X-H2ADS-Agent-Version".toLowerCase());
+    expect(route.toLowerCase()).toContain("x-h2ads-agent-version");
+    expect(route).toContain("STALE_BROWSER_COMMAND_MS");
     expect(route).toContain("Cache-Control");
     expect(route).not.toContain("console.log");
   });
@@ -34,6 +37,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
     const session = read("workers/windows/browser-session.mjs");
+    expect(script).toContain('$AgentVersion = "1.3.1"');
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
@@ -42,6 +46,9 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(script).toContain("Register-ScheduledTask");
     expect(script).toContain("/api/h2ads/worker/heartbeat");
     expect(script).toContain("/api/h2ads/worker/commands/next");
+    expect(script).toContain("X-H2ADS-Agent-Version");
+    expect(script).toContain("Acquire-WorkerMutex");
+    expect(script).toContain("Stop-ExistingWorkerProcesses");
     expect(script).toContain("Initialize-InstanceProfile");
     expect(runner).toContain('host: "127.0.0.1"');
     expect(runner).toContain("https://api.ipify.org?format=json");
