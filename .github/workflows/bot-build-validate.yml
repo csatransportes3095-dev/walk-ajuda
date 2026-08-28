@@ -20,105 +20,8 @@ jobs:
         with:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
-
-      - name: Apply bot config repair
-        shell: bash
-        run: |
-          python <<'PY'
-          from pathlib import Path
-
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text(encoding='utf-8')
-              if old not in text:
-                  raise SystemExit(f'expected snippet not found in {path}')
-              p.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          service = Path('server/online-support/service.ts')
-          text = service.read_text(encoding='utf-8')
-          old = '''async function ensureOnlineSupportBotAvatarColumn() {
-  if (onlineSupportBotAvatarColumnReady) return;
-  const db = await getDb();
-  if (!db) return;
-  try {
-    await db.execute(sql.raw("ALTER TABLE onlineSupportConfig ADD COLUMN IF NOT EXISTS botAvatar VARCHAR(1024) NULL"));
-  } catch {
-    try { await db.execute(sql.raw("ALTER TABLE onlineSupportConfig ADD COLUMN botAvatar VARCHAR(1024) NULL")); } catch { /* coluna já existe */ }
-  }
-  onlineSupportBotAvatarColumnReady = true;
-}'''
-          new = '''async function ensureOnlineSupportBotAvatarColumn() {
-  if (onlineSupportBotAvatarColumnReady) return;
-  const db = await getDb();
-  if (!db) return;
-
-  const ensureColumn = async (definition: string) => {
-    try {
-      await db.execute(sql.raw(`ALTER TABLE onlineSupportConfig ADD COLUMN IF NOT EXISTS ${definition}`));
-    } catch {
-      try { await db.execute(sql.raw(`ALTER TABLE onlineSupportConfig ADD COLUMN ${definition}`)); } catch { /* coluna já existe */ }
-    }
-  };
-
-  // Compatibilidade com bancos restaurados de versões antigas do atendimento online.
-  await ensureColumn("buttonSortOrder INT NOT NULL DEFAULT 3");
-  await ensureColumn("customStatusText VARCHAR(128) NULL");
-  await ensureColumn("botAvatar VARCHAR(1024) NULL");
-  onlineSupportBotAvatarColumnReady = true;
-}'''
-          if old not in text:
-              raise SystemExit('service repair snippet not found')
-          service.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          admin = Path('client/src/pages/AdminOnlineSupport.tsx')
-          text = admin.read_text(encoding='utf-8')
-          old = '''  const configMut = trpc.onlineSupport.adminConfigUpdate.useMutation({
-    onSuccess: () => { configQ.refetch(); toast.success("Configurações salvas!"); }
-  });'''
-          new = '''  const configMut = trpc.onlineSupport.adminConfigUpdate.useMutation({
-    onSuccess: async () => {
-      await configQ.refetch();
-      toast.success("Configurações salvas!");
-    },
-    onError: (error) => {
-      toast.error(error?.message || "Não foi possível salvar as configurações do bot.");
-    },
-  });'''
-          if old not in text:
-              raise SystemExit('admin mutation snippet not found')
-          text = text.replace(old, new, 1)
-          old_btn = '''              <button
-                onClick={() => configMut.mutate({ buttonLabel: cfgLabel, welcomeMessage: cfgWelcome, buttonColor: cfgColor, botAvatar: cfgBotAvatar || null, chatEnabled: cfgEnabled, customStatusText: cfgStatusText, buttonSortOrder: cfgSortOrder } as any)}
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors"
-              >
-                Salvar Configurações
-              </button>'''
-          new_btn = '''              <button
-                onClick={() => configMut.mutate({ buttonLabel: cfgLabel.trim() || "ATENDIMENTO ONLINE", welcomeMessage: cfgWelcome, buttonColor: cfgColor, botAvatar: cfgBotAvatar || null, chatEnabled: cfgEnabled, customStatusText: cfgStatusText.trim(), buttonSortOrder: cfgSortOrder } as any)}
-                disabled={configMut.isPending}
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-sm transition-colors"
-              >
-                {configMut.isPending ? "Salvando..." : "Salvar Configurações"}
-              </button>'''
-          if old_btn not in text:
-              raise SystemExit('admin save button snippet not found')
-          admin.write_text(text.replace(old_btn, new_btn, 1), encoding='utf-8')
-
-          welcome = Path('client/src/components/WelcomeScreen.tsx')
-          text = welcome.read_text(encoding='utf-8')
-          old = '''  const supportVisible =
-    !!onlineSupportState?.chatEnabled &&
-    !!onlineSupportState?.welcomeButtonEnabled &&
-    !!onlineSupportState?.showOnPage;'''
-          new = '''  const supportVisible = location === "/"
-    ? !!onlineSupportState?.chatEnabled
-    : !!onlineSupportState?.chatEnabled &&
-      !!onlineSupportState?.welcomeButtonEnabled &&
-      !!onlineSupportState?.showOnPage;'''
-          if old in text:
-              welcome.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
-
+      - name: Apply repair
+        run: python scripts/repair-online-support-config.py
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
@@ -132,9 +35,7 @@ jobs:
         run: pnpm check
       - name: Build
         run: pnpm build
-
       - name: Commit validated repair
-        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
