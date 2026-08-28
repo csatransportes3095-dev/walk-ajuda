@@ -1,9 +1,13 @@
 import type { Express, Request, Response } from "express";
 import path from "node:path";
+import { and, eq, lt } from "drizzle-orm";
+import { h2AdsWorkerBrowserCommands } from "../drizzle/schema";
+import { getDb } from "./db";
 import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 
 const MAX_NAME_LENGTH = 128;
+const STALE_BROWSER_COMMAND_MS = 30_000;
 
 function workerString(value: unknown, maxLength = MAX_NAME_LENGTH): string | null {
   return typeof value === "string" && value.trim().length > 0 && value.trim().length <= maxLength ? value.trim() : null;
@@ -27,6 +31,18 @@ async function authenticateRequest(req: Request, res: Response) {
     return null;
   }
   return worker;
+}
+
+async function requeueStaleBrowserCommands(workerId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(h2AdsWorkerBrowserCommands)
+    .set({ status: "queued", claimedAt: null })
+    .where(and(
+      eq(h2AdsWorkerBrowserCommands.workerId, workerId),
+      eq(h2AdsWorkerBrowserCommands.status, "claimed"),
+      lt(h2AdsWorkerBrowserCommands.claimedAt, new Date(Date.now() - STALE_BROWSER_COMMAND_MS)),
+    ));
 }
 
 export function registerH2AdsWorkerRoute(app: Express): void {
@@ -94,6 +110,16 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     noStore(res);
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
+    const agentVersion = workerString(req.header("x-h2ads-agent-version"), 32);
+    if (!agentVersion) {
+      res.status(426).json({ error: "Atualize o agente H2 Ads para executar comandos de navegador." });
+      return;
+    }
+    try {
+      await requeueStaleBrowserCommands(worker.id);
+    } catch (_error) {
+      // A recuperação é auxiliar; a fila normal continua disponível.
+    }
     const command = await claimNextH2AdsWorkerCommand(worker.id);
     if (!command) {
       res.status(204).end();
