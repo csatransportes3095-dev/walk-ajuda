@@ -20,6 +20,7 @@ import {
   type DisasterRecoveryManifest,
   type RecoveryDriveKitState,
 } from "./disasterRecoveryKit";
+import { uploadGoogleDriveResumableFile } from "./googleDriveResumableUpload";
 
 export const BACKUP_ARTIFACT_PREFIX = "system-backups/";
 const BACKUP_SOURCE_ROOT = process.env.BACKUP_SOURCE_ROOT?.trim() || process.cwd();
@@ -1412,19 +1413,12 @@ export async function uploadSystemBackupToGoogleDrive(id: string) {
     });
     const uploadUrl = sessionResponse.headers.get("location");
     if (!sessionResponse.ok || !uploadUrl) throw new Error("Google Drive não criou a sessão de upload.");
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/octet-stream",
-        "Content-Length": String(artifact.size),
-      },
-      body: createReadStream(tempFile),
-      duplex: "half",
-    } as unknown as RequestInit & { duplex: "half" });
-    if (!uploadResponse.ok) throw new Error(`Google Drive falhou no upload (HTTP ${uploadResponse.status}).`);
-    const uploaded = await uploadResponse.json() as { id?: string };
-    if (!uploaded.id) throw new Error("Google Drive não devolveu o ID do arquivo.");
+    const uploaded = await uploadGoogleDriveResumableFile({
+      uploadUrl,
+      accessToken,
+      filePath: tempFile,
+      totalBytes: artifact.size,
+    });
     await updateRun(id, { driveStatus: "completed", driveFileId: uploaded.id, driveUploadedAt: new Date(), driveError: null });
     try {
       if (!artifact.archiveSha256) throw new Error("Backup sem SHA-256 para montar o kit de recuperação total.");
