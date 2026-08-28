@@ -169,7 +169,7 @@ export default function AdminBackup() {
               <p className="text-[11px] font-black tracking-[0.2em] text-cyan-200">PROTEÇÃO DE DADOS</p>
               <h2 className="mt-2 text-2xl sm:text-3xl font-black tracking-tight">Backup real, não apenas estrutura</h2>
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                O processo copia os registos reais de todas as tabelas do banco, fotos e ficheiros do R2, código e migrações. O pacote é cifrado antes de ser guardado e só fica disponível para download após conclusão e verificação.
+                O processo copia os registos reais de todas as tabelas do banco, fotos e ficheiros do R2, código, migrações e um cofre de recuperação total. O pacote é cifrado antes de ser guardado e só fica disponível para download após conclusão e verificação.
               </p>
             </div>
             <div className="flex min-w-[240px] flex-col items-stretch gap-2">
@@ -197,7 +197,7 @@ export default function AdminBackup() {
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-white/10 bg-[#111128] p-4">
             <ShieldCheck className="h-5 w-5 text-emerald-300" />
             <h3 className="mt-3 text-sm font-bold">Pacote cifrado</h3>
@@ -212,6 +212,11 @@ export default function AdminBackup() {
             <Clock3 className="h-5 w-5 text-amber-300" />
             <h3 className="mt-3 text-sm font-bold">Snapshot do momento</h3>
             <p className="mt-1 text-xs leading-5 text-slate-400">Cada execução é uma fotografia do sistema naquele instante; ela não sincroniza alterações futuras.</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-[#111128] p-4">
+            <ShieldAlert className="h-5 w-5 text-violet-300" />
+            <h3 className="mt-3 text-sm font-bold">Recuperação do zero</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-400">Novos backups levam cofre cifrado de configuração, ferramenta independente e guia para reconstruir o sistema sem depender do GitHub.</p>
           </div>
         </section>
 
@@ -300,6 +305,11 @@ export default function AdminBackup() {
                       <p className="mt-1 text-xs text-slate-400">Criado em {formatDate(backup.createdAt)} · Tamanho: {formatBytes(backup.fileSize)}</p>
                       {backup.archiveSha256 && <p className="mt-1 break-all font-mono text-[10px] text-cyan-300/70">SHA-256: {backup.archiveSha256}</p>}
                       {backup.status === "completed" && <p className="mt-1 text-xs text-slate-500">Google Drive: {backup.driveStatus === "completed" ? `enviado em ${formatDate(backup.driveUploadedAt)}` : backup.driveStatus === "uploading" ? "enviando..." : backup.driveStatus === "failed" ? "falhou" : backupConfigQuery.data?.driveConfigured ? "não enviado" : "não configurado"}</p>}
+                      {backup.status === "completed" && (
+                        <p className={`mt-1 text-xs ${backup.disasterRecoveryReady ? "text-violet-200" : backup.disasterRecoveryVersion ? "text-amber-300" : "text-slate-500"}`}>
+                          Recuperação total: {backup.disasterRecoveryReady ? backup.recoveryDriveKitStatus === "completed" ? "pronta · cofre cifrado + ferramenta no Drive" : backup.recoveryDriveKitStatus === "failed" ? "cofre pronto · ferramenta do Drive falhou" : "cofre cifrado incluído · envie ao Drive para completar o kit externo" : backup.disasterRecoveryVersion ? `incompleta · ${backup.recoveryMissingCriticalVariables.length} configuração(ões) essencial(is) ausente(s)` : "backup antigo · gere um novo backup para incluir o kit"}
+                        </p>
+                      )}
                       {backup.status === "completed" && (
                         <p className={`mt-1 text-xs ${backup.integrityStatus === "verified" ? "text-emerald-300" : backup.integrityStatus === "failed" ? "text-red-300" : backup.integrityStatus === "verifying" ? "text-amber-300" : "text-slate-500"}`}>
                           Integridade profunda: {backup.integrityStatus === "verified" ? `verificada${backup.integrityVerifiedAt ? ` em ${formatDate(backup.integrityVerifiedAt)}` : ""}` : backup.integrityStatus === "verifying" ? "verificando o arquivo armazenado..." : backup.integrityStatus === "failed" ? "falhou" : "pendente"}

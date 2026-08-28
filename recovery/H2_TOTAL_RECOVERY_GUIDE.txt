@@ -1,0 +1,64 @@
+H2 COLOMBIANO / WALK AJUDA - GUIA DE RECUPERACAO TOTAL
+==========================================================
+
+OBJETIVO
+Este kit existe para recuperar o sistema mesmo se Render, banco, R2 e GitHub precisarem ser reconstruidos.
+O arquivo .wajuda.enc contem banco, arquivos R2, codigo e um cofre de configuracao protegido pela cifra AES-256-GCM.
+
+REGRA MAIS IMPORTANTE
+A BACKUP_ENCRYPTION_KEY NAO fica no backup, no Google Drive nem no GitHub.
+Guarde essa chave separadamente (cofre de senhas e/ou midia offline). Sem ela o .wajuda.enc nao pode ser aberto.
+
+ARQUIVOS PARA GUARDAR FORA DA INFRAESTRUTURA
+1. walk-ajuda-backup-<ID>.wajuda.enc
+2. walk-ajuda-backup-<ID>.wajuda.enc.sha256.txt
+3. H2_RECOVERY_TOOL-<ID>.mjs
+4. H2_RECOVERY_GUIDE-<ID>.txt
+5. H2_RECOVERY_INDEX-<ID>.json
+6. BACKUP_ENCRYPTION_KEY em local DIFERENTE dos arquivos acima
+
+RECUPERACAO EM UM COMPUTADOR WINDOWS
+1. Instale Node.js 22 se ainda nao existir.
+2. Confirme que o comando tar existe (Windows 10/11 normalmente ja possui).
+3. Abra PowerShell na pasta dos arquivos.
+4. Defina temporariamente a chave:
+   $env:BACKUP_ENCRYPTION_KEY="COLE_AQUI_A_CHAVE_DE_64_CARACTERES"
+5. Execute:
+   node .\H2_RECOVERY_TOOL-<ID>.mjs .\walk-ajuda-backup-<ID>.wajuda.enc .\H2-RECUPERADO
+6. Ao terminar, apague a chave da sessao:
+   Remove-Item Env:BACKUP_ENCRYPTION_KEY
+
+O QUE APARECE EM H2-RECUPERADO
+- database.sql                     dados reais do banco
+- files/                           fotos/documentos/objetos do R2
+- source.tar.gz                    snapshot original do codigo
+- source-restored/                 codigo pronto para ser usado
+- manifest.json                    inventario e hashes
+- recovery/environment.json        cofre com variaveis reais do ambiente antigo
+- recovery/tls/                    certificados customizados, quando existiam
+
+ORDEM PARA LEVANTAR DO ZERO
+1. Crie um NOVO banco MySQL/TiDB vazio.
+2. Crie ou confirme um bucket R2 e obtenha novas credenciais, se as antigas nao existirem mais.
+3. Use source-restored/ para criar o novo repositorio/servico. O Dockerfile ja instala Node 22, mariadb-client e Dumpling.
+4. Importe database.sql no novo banco.
+5. Reponha os arquivos de files/ no novo bucket R2 preservando exatamente as chaves/caminhos.
+6. Configure as variaveis do novo servico usando recovery/environment.json COMO REFERENCIA.
+   - DATABASE_URL deve apontar para o NOVO banco se o antigo foi perdido.
+   - R2_* devem apontar para o NOVO bucket se o antigo foi perdido.
+   - Credenciais externas que tenham sido revogadas devem ser geradas novamente.
+   - BACKUP_ENCRYPTION_KEY deve ser recolocada manualmente a partir da copia externa.
+7. Faça deploy do codigo recuperado.
+8. Teste login ADM, pedidos, fotos, emails, emprestimos e rotas criticas antes de apontar o dominio.
+9. Reconfigure DNS/Cloudflare do h2colombiano.com para o novo servico somente depois dos testes.
+10. Gere imediatamente um novo backup completo e valide SHA-256/Integridade OK.
+
+LIMITES QUE NENHUM BACKUP LOCAL CONSEGUE ELIMINAR
+- Voce ainda precisa ter acesso as contas externas (registrador do dominio, Cloudflare, Google, Zoho etc.).
+- Se uma credencial de um provedor externo tiver sido revogada, ela precisa ser recriada nesse provedor.
+- O backup recupera configuracao e dados; ele nao recria sua conta comercial em fornecedores externos.
+
+SEGURANCA
+- recovery/environment.json contem segredos. Nao envie por WhatsApp, email ou GitHub.
+- Nunca guarde BACKUP_ENCRYPTION_KEY dentro do mesmo pacote/pasta do backup.
+- Nunca restaure primeiro em producao se houver opcao de usar ambiente temporario.

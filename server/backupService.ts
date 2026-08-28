@@ -11,6 +11,15 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "./db";
 import { r2GetObjectStream, r2HeadObject, r2ListObjectsPage, r2PutObjectStream, type R2ObjectInfo } from "./r2Storage";
 import { systemBackups, type InsertSystemBackup } from "../drizzle/schema";
+import {
+  createDisasterRecoveryKitFiles,
+  getBackupManifestSourceCommit,
+  getDisasterRecoveryState,
+  mergeRecoveryDriveKitState,
+  uploadDisasterRecoverySidecarsToGoogleDrive,
+  type DisasterRecoveryManifest,
+  type RecoveryDriveKitState,
+} from "./disasterRecoveryKit";
 
 export const BACKUP_ARTIFACT_PREFIX = "system-backups/";
 const BACKUP_SOURCE_ROOT = process.env.BACKUP_SOURCE_ROOT?.trim() || process.cwd();
@@ -168,6 +177,7 @@ export type BackupManifest = {
     bytes: number;
     sha256: string;
   };
+  disasterRecovery: DisasterRecoveryManifest;
   encryption: {
     algorithm: "aes-256-gcm";
     keyRequired: true;
@@ -977,6 +987,12 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
     await logDiskDiagnostic(diagnostic, workDirectory, "source-snapshot");
     const sourceCommit = process.env.RENDER_GIT_COMMIT?.trim() || process.env.COMMIT_SHA?.trim() || "unknown";
     const generatedAt = new Date().toISOString();
+    const disasterRecovery = await createDisasterRecoveryKitFiles({
+      workDirectory,
+      sourceRoot: BACKUP_SOURCE_ROOT,
+      backupId: id,
+      generatedAt,
+    });
     diagnostic.stage = "manifest";
     logBackupDiagnostic(diagnostic, "stage-start", { progress: 84 });
     await updateRun(id, { stage: "manifest", progress: 84 });
@@ -1008,6 +1024,7 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
         bytes: source.bytes,
         sha256: source.sha256,
       },
+      disasterRecovery,
       encryption: {
         algorithm: "aes-256-gcm",
         keyRequired: true,
@@ -1021,6 +1038,8 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
           "todos os objetos R2 paginados e comparados por tamanho",
           "SHA-256 calculado para cada objeto R2",
           "snapshot do código criado sem .env, chaves privadas, node_modules ou dist",
+          "cofre de recuperação total criado dentro do pacote cifrado sem armazenar BACKUP_ENCRYPTION_KEY",
+          "ferramenta independente e guia de recuperação incluídos no pacote",
           "artefato cifrado com AES-256-GCM",
         ],
         archiveSha256: null,
@@ -1199,6 +1218,7 @@ export async function listSystemBackups(limit = 20) {
     integrityStatus: getBackupRemoteVerification(row.manifestJson).status,
     integrityVerifiedAt: getBackupRemoteVerification(row.manifestJson).verifiedAt,
     integrityError: getBackupRemoteVerification(row.manifestJson).error,
+    ...getDisasterRecoveryState(row.manifestJson),
     errorMessage: row.status === "failed" ? row.errorMessage : null,
   }));
 }
@@ -1228,6 +1248,7 @@ export async function getSystemBackup(id: string) {
     integrityStatus: getBackupRemoteVerification(row.manifestJson).status,
     integrityVerifiedAt: getBackupRemoteVerification(row.manifestJson).verifiedAt,
     integrityError: getBackupRemoteVerification(row.manifestJson).error,
+    ...getDisasterRecoveryState(row.manifestJson),
     errorMessage: row.status === "failed" ? row.errorMessage : null,
   };
 }
@@ -1236,7 +1257,7 @@ export async function getCompletedSystemBackup(id: string) {
   const db = await getDb();
   if (!db) return null;
   const rows = await db
-    .select({ id: systemBackups.id, status: systemBackups.status, artifactKey: systemBackups.artifactKey, fileSize: systemBackups.fileSize, archiveSha256: systemBackups.archiveSha256 })
+    .select({ id: systemBackups.id, status: systemBackups.status, artifactKey: systemBackups.artifactKey, fileSize: systemBackups.fileSize, archiveSha256: systemBackups.archiveSha256, manifestJson: systemBackups.manifestJson })
     .from(systemBackups)
     .where(and(eq(systemBackups.id, id), eq(systemBackups.status, "completed")))
     .limit(1);
@@ -1244,6 +1265,16 @@ export async function getCompletedSystemBackup(id: string) {
 }
 
 const activeStoredBackupVerifications = new Set<string>();
+
+async function updateStoredRecoveryDriveKit(id: string, state: RecoveryDriveKitState) {
+  const db = await getDb();
+  if (!db) throw new Error("Banco indisponível para atualizar o kit de recuperação do Drive.");
+  const [row] = await db.select({ manifestJson: systemBackups.manifestJson }).from(systemBackups).where(eq(systemBackups.id, id)).limit(1);
+  if (!row) throw new Error("Backup não encontrado.");
+  await db.update(systemBackups).set({
+    manifestJson: mergeRecoveryDriveKitState(row.manifestJson, state),
+  }).where(eq(systemBackups.id, id));
+}
 
 async function updateStoredBackupVerification(id: string, verification: BackupRemoteVerification) {
   const db = await getDb();
@@ -1395,7 +1426,35 @@ export async function uploadSystemBackupToGoogleDrive(id: string) {
     const uploaded = await uploadResponse.json() as { id?: string };
     if (!uploaded.id) throw new Error("Google Drive não devolveu o ID do arquivo.");
     await updateRun(id, { driveStatus: "completed", driveFileId: uploaded.id, driveUploadedAt: new Date(), driveError: null });
-    return { id: uploaded.id };
+    try {
+      if (!artifact.archiveSha256) throw new Error("Backup sem SHA-256 para montar o kit de recuperação total.");
+      const sidecars = await uploadDisasterRecoverySidecarsToGoogleDrive({
+        accessToken,
+        folderId,
+        sourceRoot: BACKUP_SOURCE_ROOT,
+        backupId: id,
+        archiveFileName: `walk-ajuda-backup-${id}.wajuda.enc`,
+        archiveBytes: artifact.size,
+        archiveSha256: artifact.archiveSha256,
+        sourceCommit: getBackupManifestSourceCommit(artifact.manifestJson),
+      });
+      await updateStoredRecoveryDriveKit(id, {
+        status: "completed",
+        uploadedAt: new Date().toISOString(),
+        files: sidecars,
+        error: null,
+      });
+      return { id: uploaded.id, recoveryKit: true as const };
+    } catch (sidecarError) {
+      const sidecarMessage = sanitizeDiagnosticValue(sidecarError) || "Falha ao enviar arquivos auxiliares de recuperação total.";
+      await updateStoredRecoveryDriveKit(id, {
+        status: "failed",
+        uploadedAt: null,
+        files: [],
+        error: sidecarMessage.slice(0, 1000),
+      }).catch(() => undefined);
+      return { id: uploaded.id, recoveryKit: false as const, warning: sidecarMessage };
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha desconhecida no Google Drive.";
     await updateRun(id, { driveStatus: "failed", driveError: message.slice(0, 1000) }).catch(() => undefined);
