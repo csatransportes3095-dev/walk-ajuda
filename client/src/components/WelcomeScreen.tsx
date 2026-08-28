@@ -496,7 +496,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   const supportDescription = onlineSupportState?.buttonDescription || "Tire suas dúvidas, receba instruções e fale com nossa equipe.";
   const supportColor = onlineSupportState?.buttonColor || "#2563eb";
   const supportVisible = location === "/"
-    ? !!onlineSupportState?.chatEnabled
+    ? (onlineSupportState ? !!onlineSupportState.chatEnabled : true)
     : !!onlineSupportState?.chatEnabled &&
       !!onlineSupportState?.welcomeButtonEnabled &&
       !!onlineSupportState?.showOnPage;
