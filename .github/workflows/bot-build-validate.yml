@@ -1,4 +1,4 @@
-name: Validate total disaster recovery kit
+name: Validate resilient Google Drive backup upload
 
 on:
   push:
@@ -20,39 +20,35 @@ jobs:
         with:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
-      - name: Apply total disaster recovery kit
-        run: python scripts/apply-total-disaster-recovery.py
-      - name: Include backup manifest metadata for Drive recovery kit
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('server/backupService.ts')
-          text = path.read_text(encoding='utf-8')
-          old = '.select({ id: systemBackups.id, status: systemBackups.status, artifactKey: systemBackups.artifactKey, fileSize: systemBackups.fileSize, archiveSha256: systemBackups.archiveSha256 })'
-          new = '.select({ id: systemBackups.id, status: systemBackups.status, artifactKey: systemBackups.artifactKey, fileSize: systemBackups.fileSize, archiveSha256: systemBackups.archiveSha256, manifestJson: systemBackups.manifestJson })'
-          if old not in text:
-              raise SystemExit('getCompletedSystemBackup select anchor not found')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
+
+      - name: Apply resilient Drive upload repair
+        run: python scripts/apply-google-drive-resumable-chunks.py
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Backup recovery tests
-        run: pnpm vitest run server/backupService.test.ts server/backupRestoreService.test.ts server/disasterRecoveryKit.test.ts
+
+      - name: Backup and Drive tests
+        run: pnpm vitest run server/backupService.test.ts server/backupRestoreService.test.ts server/disasterRecoveryKit.test.ts server/googleDriveResumableUpload.test.ts
+
       - name: TypeScript check
         run: pnpm check
+
       - name: Build
         run: pnpm build
-      - name: Commit validated total recovery kit
+
+      - name: Commit validated Drive upload repair
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/backupService.ts server/disasterRecoveryKit.ts server/disasterRecoveryKit.test.ts client/src/pages/AdminBackup.tsx recovery/h2-recovery-bootstrap.mjs recovery/H2_TOTAL_RECOVERY_GUIDE.txt
-          git commit -m "feat(backup): add total disaster recovery kit"
+          git add server/backupService.ts server/googleDriveResumableUpload.ts server/googleDriveResumableUpload.test.ts client/src/pages/AdminBackup.tsx
+          git commit -m "fix(backup): make Google Drive upload resumable"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
