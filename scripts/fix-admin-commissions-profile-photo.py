@@ -19,7 +19,7 @@ old_all = '''  const all = commissionsQuery.data ?? [];
 
   // Filtrar por status de pagamento'''
 new_all = '''  const all = commissionsQuery.data ?? [];
-  const mainCustomers = (customersQuery.data ?? []) as Array<{ phone: string; profilePhotoUrl?: string | null }>;
+  const mainCustomers = (customersQuery.data ?? []) as unknown as Array<{ phone: string; profilePhotoUrl?: string | null }>;
   const normalizePhoneKey = (phone?: string | null) => String(phone || "").replace(/\\D/g, "");
   const profilePhotoByPhone = new Map(
     mainCustomers
