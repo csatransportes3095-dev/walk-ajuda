@@ -106,7 +106,7 @@ function attachTitleSocket(target) {
 async function refreshInstanceTitles() {
   if (!browser || browser.exitCode !== null || !existsSync(devToolsActivePortPath)) return;
   try {
-    const [portText] = readFileSync(devToolsActivePort, "utf8").split(/\r\n?\/n);
+    const [portText] = readFileSync(devToolsActivePortPath, "utf8").split(/\r?\n/);
     const port = Number(portText);
     if (!Number.isInteger(port) || port < 1 || port > 65_535) return;
     const response = await fetch(`http://127.0.0.1:${port}/json/list`);
