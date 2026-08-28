@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { AlertTriangle, CheckCircle2, Clock3, CloudUpload, DatabaseBackup, Download, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, Clock3, CloudUpload, DatabaseBackup, Download, Loader2, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
 import { trpc } from "@/lib/trpc";
@@ -48,6 +48,39 @@ function stageLabel(stage: string) {
   return labels[stage] || stage;
 }
 
+function restoreStageLabel(stage: string) {
+  const labels: Record<string, string> = {
+    "safety-backup": "Criando backup de segurança atual",
+    validating: "Validando e abrindo o pacote",
+    database: "Restaurando banco de dados",
+    "r2-upload": "Restaurando fotos e arquivos",
+    "r2-prune": "Sincronizando snapshot do R2",
+    completed: "Restauração concluída",
+    failed: "Restauração interrompida",
+  };
+  return labels[stage] || stage;
+}
+
+type RestorePreview = {
+  token: string;
+  expiresAt: string;
+  confirmationPhrase: string;
+  restoreEnabled: boolean;
+  backup: {
+    id: string;
+    createdAt: Date | string;
+    fileSize: number | null;
+    archiveSha256: string;
+    sourceCommit: string;
+    sourceCommitMatchesCurrent: boolean | null;
+    currentCommit: string;
+    tableCount: number | null;
+    r2ObjectCount: number | null;
+    r2TotalBytes: number | null;
+    driveAvailable: boolean;
+  };
+};
+
 export default function AdminBackup() {
   const backupsQuery = trpc.backup.list.useQuery({ limit: 20 }, { refetchInterval: 4000 });
   const backupConfigQuery = trpc.backup.config.useQuery();
@@ -75,6 +108,32 @@ export default function AdminBackup() {
     onError: (error) => toast.error(error.message || "Não foi possível verificar o arquivo armazenado."),
   });
 
+  const restoreConfigQuery = trpc.backup.restoreConfig.useQuery(undefined, { refetchInterval: 5000 });
+  const restoreStatusQuery = trpc.backup.restoreStatus.useQuery(undefined, { refetchInterval: 2000 });
+  const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
+  const [restoreConfirmation, setRestoreConfirmation] = useState("");
+  const [restoreChecks, setRestoreChecks] = useState({ safety: false, destructive: false, code: false });
+
+  const prepareRestoreMut = trpc.backup.prepareRestore.useMutation({
+    onSuccess: (data) => {
+      setRestorePreview(data as RestorePreview);
+      setRestoreConfirmation("");
+      setRestoreChecks({ safety: false, destructive: false, code: false });
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível preparar a restauração."),
+  });
+
+  const startRestoreMut = trpc.backup.startRestore.useMutation({
+    onSuccess: () => {
+      toast.success("Restauração protegida iniciada. Primeiro será criado um backup de segurança do estado atual.");
+      setRestorePreview(null);
+      setRestoreConfirmation("");
+      void restoreStatusQuery.refetch();
+      void backupsQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível iniciar a restauração."),
+  });
+
   const cancelMut = trpc.backup.cancel.useMutation({
     onSuccess: ({ cancelled }) => {
       toast.success(cancelled ? "Execução encerrada. O registro foi mantido e nenhum artefato foi validado." : "Essa execução já não está ativa.");
@@ -88,8 +147,10 @@ export default function AdminBackup() {
     [backupsQuery.data],
   );
 
+  const restoreStatus = restoreStatusQuery.data;
+  const restoreActive = Boolean(restoreStatus && restoreStatus.stage !== "completed" && restoreStatus.stage !== "failed");
   const isStarting = startMut.isPending;
-  const isBusy = Boolean(activeBackup) || isStarting;
+  const isBusy = Boolean(activeBackup) || isStarting || restoreActive;
   const encryptionConfigured = backupConfigQuery.data?.encryptionConfigured === true;
   const backupButtonDisabled = isBusy || backupConfigQuery.isLoading || !encryptionConfigured;
 
@@ -188,6 +249,29 @@ export default function AdminBackup() {
           </section>
         )}
 
+        {restoreStatus && (
+          <section className={`rounded-2xl border p-5 ${restoreStatus.stage === "failed" ? "border-red-300/30 bg-red-300/10" : restoreStatus.stage === "completed" ? "border-emerald-300/30 bg-emerald-300/10" : "border-violet-300/30 bg-violet-300/10"}`}>
+            <div className="flex items-start gap-3">
+              {restoreActive ? <Loader2 className="mt-0.5 h-5 w-5 animate-spin text-violet-200" /> : restoreStatus.stage === "completed" ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-200" /> : <ShieldAlert className="mt-0.5 h-5 w-5 text-red-200" />}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div><p className="text-sm font-black">{restoreStageLabel(restoreStatus.stage)}</p><p className="mt-1 text-xs text-slate-300">{restoreStatus.message}</p></div>
+                  <span className="text-2xl font-black">{restoreStatus.progress}%</span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-violet-300 transition-all" style={{ width: `${Math.max(0, Math.min(100, restoreStatus.progress))}%` }} /></div>
+                <div className="mt-3 grid gap-1 text-[11px] text-slate-300 sm:grid-cols-2">
+                  <span>Backup restaurado: <strong className="font-mono">{restoreStatus.backupId.slice(-12)}</strong></span>
+                  <span>Backup de segurança: <strong className="font-mono">{restoreStatus.safetyBackupId ? restoreStatus.safetyBackupId.slice(-12) : "aguardando"}</strong></span>
+                  {restoreStatus.artifactSource && <span>Fonte do pacote: <strong>{restoreStatus.artifactSource === "r2" ? "R2" : "Google Drive"}</strong></span>}
+                  {restoreStatus.sourceCommit && <span>Commit do snapshot: <strong className="font-mono">{restoreStatus.sourceCommit.slice(0, 12)}</strong></span>}
+                </div>
+                {restoreStatus.sourceCommitMatchesCurrent === false && restoreStatus.stage === "completed" && <p className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/10 p-3 text-xs text-amber-100">Os dados foram restaurados, mas o snapshot pertence a outro commit. Faça o rollback do código no Render/GitHub para o commit mostrado antes de considerar a recuperação encerrada.</p>}
+                {restoreStatus.error && <p className="mt-3 flex items-start gap-2 text-xs text-red-200"><AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />{restoreStatus.error}</p>}
+              </div>
+            </div>
+          </section>
+        )}
+
         <section className="rounded-2xl border border-white/10 bg-[#111128] p-5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -249,6 +333,16 @@ export default function AdminBackup() {
                           {driveMut.isPending && driveMut.variables?.id === backup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
                           {backup.driveStatus === "completed" ? "No Drive" : "Enviar ao Drive"}
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => prepareRestoreMut.mutate({ id: backup.id })}
+                          disabled={backup.integrityStatus !== "verified" || prepareRestoreMut.isPending || restoreActive}
+                          className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 py-2.5 text-xs font-black text-amber-100 hover:bg-amber-300/20 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={backup.integrityStatus === "verified" ? "Abrir restauração protegida em múltiplas etapas" : "Faça a verificação profunda antes de restaurar"}
+                        >
+                          {prepareRestoreMut.isPending && prepareRestoreMut.variables?.id === backup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                          Restaurar backup
+                        </button>
                       </div>
                     )}
                   </div>
@@ -261,8 +355,57 @@ export default function AdminBackup() {
         </section>
 
         <section className="rounded-xl border border-blue-300/15 bg-blue-300/5 p-4 text-xs leading-5 text-blue-100/75">
-          <strong className="text-blue-100">Google Drive:</strong> o botão envia somente um backup cifrado já concluído para a pasta privada configurada no ambiente seguro. As credenciais não ficam no pacote, no banco ou no GitHub. A restauração será uma função separada e nunca substituirá o banco atual com um clique.
+          <strong className="text-blue-100">Recuperação protegida:</strong> o Google Drive mantém uma segunda cópia do pacote cifrado. A restauração tenta o R2 primeiro e pode usar a cópia do Drive se o artefato principal estiver indisponível. Nenhum clique simples substitui dados: é exigida Integridade OK, backup automático de segurança, três confirmações, frase vinculada ao ID e a trava de emergência do Render.
         </section>
+        {restorePreview && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+            <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-amber-300/30 bg-[#101024] p-5 shadow-2xl sm:p-6">
+              <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+                <div><p className="text-[11px] font-black tracking-[0.18em] text-amber-200">RESTAURAÇÃO PROTEGIDA</p><h2 className="mt-1 text-xl font-black">Restaurar este backup</h2><p className="mt-1 text-xs text-slate-400">Esta janela não altera nada até todas as travas abaixo serem atendidas.</p></div>
+                <button type="button" onClick={() => setRestorePreview(null)} className="rounded-lg border border-white/10 p-2 text-slate-400 hover:bg-white/5 hover:text-white"><X className="h-4 w-4" /></button>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-red-300/25 bg-red-300/10 p-4 text-sm text-red-100">
+                <div className="flex gap-2"><ShieldAlert className="mt-0.5 h-5 w-5 flex-none" /><div><strong>Operação destrutiva.</strong><p className="mt-1 text-xs leading-5 text-red-100/80">Depois da validação, o banco atual e os arquivos ativos do R2 serão substituídos pelo snapshot. Os próprios backups e auditorias de restauração nunca são apagados.</p></div></div>
+              </div>
+
+              <div className="mt-4 grid gap-3 rounded-xl border border-white/10 bg-black/20 p-4 text-xs sm:grid-cols-2">
+                <span>Data: <strong>{formatDate(restorePreview.backup.createdAt)}</strong></span>
+                <span>Tamanho: <strong>{formatBytes(restorePreview.backup.fileSize)}</strong></span>
+                <span>Tabelas: <strong>{restorePreview.backup.tableCount ?? "—"}</strong></span>
+                <span>Arquivos R2: <strong>{restorePreview.backup.r2ObjectCount ?? "—"}</strong></span>
+                <span>Commit do backup: <strong className="font-mono">{restorePreview.backup.sourceCommit.slice(0, 12)}</strong></span>
+                <span>Commit atual: <strong className="font-mono">{restorePreview.backup.currentCommit.slice(0, 12)}</strong></span>
+                <span className="sm:col-span-2">Cópia no Drive: <strong>{restorePreview.backup.driveAvailable ? "disponível" : "não registrada"}</strong></span>
+              </div>
+
+              {restorePreview.backup.sourceCommitMatchesCurrent === false && <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100"><strong>Atenção ao código:</strong> este backup foi criado em outro commit. O botão restaura banco + R2; o código do Render não é trocado automaticamente. Após recuperar os dados, faça rollback do código para o commit do snapshot.</div>}
+
+              {!restorePreview.restoreEnabled && <div className="mt-4 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-3 text-xs leading-5 text-cyan-100"><strong>Trava de emergência ativa.</strong> Para liberar o último botão somente quando houver necessidade real, crie no Render <code className="rounded bg-black/30 px-1.5 py-0.5">BACKUP_RESTORE_ENABLED=true</code> e faça o deploy. No uso normal deixe ausente/false.</div>}
+
+              <div className="mt-5 space-y-3">
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs leading-5 text-slate-200"><input type="checkbox" checked={restoreChecks.safety} onChange={(event) => setRestoreChecks((current) => ({ ...current, safety: event.target.checked }))} className="mt-1" /><span><strong>Backup de segurança automático:</strong> entendo que antes de apagar qualquer dado o sistema criará e verificará uma nova cópia do estado atual; se ela falhar, a restauração será cancelada.</span></label>
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs leading-5 text-slate-200"><input type="checkbox" checked={restoreChecks.destructive} onChange={(event) => setRestoreChecks((current) => ({ ...current, destructive: event.target.checked }))} className="mt-1" /><span><strong>Banco e arquivos:</strong> entendo que tabelas atuais serão substituídas e arquivos do R2 que não existiam no snapshot serão removidos, exceto os diretórios protegidos de backup.</span></label>
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs leading-5 text-slate-200"><input type="checkbox" checked={restoreChecks.code} onChange={(event) => setRestoreChecks((current) => ({ ...current, code: event.target.checked }))} className="mt-1" /><span><strong>Código:</strong> entendo que o Render/GitHub não é alterado automaticamente e, se o commit for diferente, farei o rollback do código separadamente.</span></label>
+              </div>
+
+              <label className="mt-5 block"><span className="text-xs font-bold text-slate-300">Digite exatamente <strong className="font-mono text-amber-200">{restorePreview.confirmationPhrase}</strong></span><input value={restoreConfirmation} onChange={(event) => setRestoreConfirmation(event.target.value)} autoComplete="off" className="mt-2 w-full rounded-xl border border-white/15 bg-black/30 px-3 py-3 font-mono text-sm text-white outline-none focus:border-amber-300/60" /></label>
+
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => setRestorePreview(null)} className="rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 hover:bg-white/5">Cancelar</button>
+                <button
+                  type="button"
+                  onClick={() => startRestoreMut.mutate({ id: restorePreview.backup.id, token: restorePreview.token, confirmation: restoreConfirmation })}
+                  disabled={!restorePreview.restoreEnabled || !restoreChecks.safety || !restoreChecks.destructive || !restoreChecks.code || restoreConfirmation.trim().toUpperCase() !== restorePreview.confirmationPhrase || startRestoreMut.isPending || restoreActive}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-35"
+                >
+                  {startRestoreMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                  {startRestoreMut.isPending ? "Iniciando proteção..." : "Confirmar restauração protegida"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

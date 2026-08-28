@@ -816,7 +816,7 @@ async function listAllR2Objects(): Promise<R2ObjectInfo[]> {
   let continuationToken: string | undefined;
   do {
     const page = await r2ListObjectsPage("", continuationToken);
-    objects.push(...page.objects.filter((object) => !object.key.startsWith(BACKUP_ARTIFACT_PREFIX)));
+    objects.push(...page.objects.filter((object) => !object.key.startsWith(BACKUP_ARTIFACT_PREFIX) && !object.key.startsWith("system-restores/")));
     continuationToken = page.nextContinuationToken || undefined;
   } while (continuationToken);
   return objects;

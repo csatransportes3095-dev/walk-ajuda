@@ -5,6 +5,7 @@ import type { TrpcContext } from "./context";
 import { parse as parseCookieHeader } from "cookie";
 import jwt from "jsonwebtoken";
 import { getAdminJwtSecret } from "../adminJwt";
+import { isSystemRestoreLocked } from "../backupRestoreService";
 
 // Verifica se o request tem um cookie JWT admin válido (login independente)
 function isAdminJwtValid(req: TrpcContext["req"]): boolean {
@@ -27,7 +28,15 @@ const t = initTRPC.context<TrpcContext>().create({
 });
 
 export const router = t.router;
-export const publicProcedure = t.procedure;
+
+const blockDuringSystemRestore = t.middleware(async ({ next }) => {
+  if (isSystemRestoreLocked()) {
+    throw new TRPCError({ code: "CONFLICT", message: "Sistema temporariamente bloqueado enquanto uma restauração protegida está em andamento." });
+  }
+  return next();
+});
+
+export const publicProcedure = t.procedure.use(blockDuringSystemRestore);
 
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
@@ -44,7 +53,7 @@ const requireUser = t.middleware(async opts => {
   });
 });
 
-export const protectedProcedure = t.procedure.use(requireUser);
+export const protectedProcedure = t.procedure.use(blockDuringSystemRestore).use(requireUser);
 
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {

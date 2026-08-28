@@ -18,6 +18,13 @@ import {
   streamSystemBackupArtifact,
   uploadSystemBackupToGoogleDrive,
 } from "../backupService";
+import {
+  getSystemBackupRestoreStatus,
+  isBackupRestoreEnabled,
+  isSystemRestoreLocked,
+  prepareSystemBackupRestore,
+  startProtectedSystemBackupRestore,
+} from "../backupRestoreService";
 
 export function isAdminBackupRequest(req: Request): boolean {
   try {
@@ -62,6 +69,25 @@ export const backupRouter = router({
   verifyStored: adminProcedure
     .input(z.object({ id: z.string().regex(/^[a-f0-9]{48}$/i) }))
     .mutation(({ input }) => startStoredSystemBackupVerification(input.id)),
+
+  restoreConfig: adminProcedure.query(() => ({
+    enabled: isBackupRestoreEnabled(),
+    locked: isSystemRestoreLocked(),
+  })),
+
+  restoreStatus: adminProcedure.query(() => getSystemBackupRestoreStatus()),
+
+  prepareRestore: adminProcedure
+    .input(z.object({ id: z.string().regex(/^[a-f0-9]{48}$/i) }))
+    .mutation(({ input }) => prepareSystemBackupRestore(input.id)),
+
+  startRestore: adminProcedure
+    .input(z.object({
+      id: z.string().regex(/^[a-f0-9]{48}$/i),
+      token: z.string().min(32).max(128),
+      confirmation: z.string().min(1).max(80),
+    }))
+    .mutation(({ input }) => startProtectedSystemBackupRestore({ backupId: input.id, token: input.token, confirmation: input.confirmation })),
 
   start: adminProcedure.mutation(async () => {
     const result = await startSystemBackup("admin");
