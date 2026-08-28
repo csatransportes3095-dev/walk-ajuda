@@ -1,0 +1,36 @@
+name: Bot flow validation
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "client/src/components/OnlineSupportWidget.tsx"
+      - "client/src/components/OnlineEntryPanel.tsx"
+      - "client/src/components/OnlineRegistrationPanel.tsx"
+      - "server/online-support/**"
+      - ".github/workflows/bot-build-validate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: TypeScript check
+        run: pnpm check
+      - name: Build
+        run: pnpm build
