@@ -162,32 +162,48 @@ export async function listZohoUsersForConfig(config: any, limit = 50): Promise<Z
   }
 }
 
-// Listar utilizadores de TODOS os servidores ativos, agrupados por servidor
-export async function listAllZohoUsersGrouped(limit = 50): Promise<{ serverId: number; serverName: string; domain: string; users: ZohoUser[] }[]> {
-  let configs = await getAllActiveConfigs();
+// Listar utilizadores de TODOS os servidores ativos, agrupados por servidor.
+// Esta função lê as configurações diretamente do banco para que a tela de e-mail
+// nunca fique divergente da tela de Configuração Zoho.
+export async function listAllZohoUsersGrouped(limit = 50): Promise<{ serverId: number; serverName: string; domain: string; users: ZohoUser[]; error: string | null }[]> {
+  let configs: any[] = [];
+  try {
+    const { listZohoOAuthConfigs } = await import('./db');
+    const all = await listZohoOAuthConfigs();
+    configs = (all || []).filter((config: any) => Number(config.isActive) === 1);
+  } catch (error) {
+    console.error('[Zoho] falha ao ler servidores ativos:', error);
+  }
+
   if (configs.length === 0) {
     try {
-      // Recuperação pós-restauração: se a tabela zohoOAuthConfigs voltou vazia,
-      // continua usando as credenciais que já existem no ambiente do Render.
       configs = [await getPrimaryConfig()];
     } catch (error) {
-      console.warn("Nenhuma configuração Zoho ativa no DB ou no ambiente:", error);
+      console.error('[Zoho] nenhum servidor ativo disponível:', error);
       return [];
     }
   }
-  const results = await Promise.all(
-    configs.map(async (config: any) => {
-      const users = await listZohoUsersForConfig(config, limit);
-      const inferredDomain = config.domain || users.find((user) => user.primaryEmailAddress?.includes("@"))?.primaryEmailAddress.split("@")[1] || 'h2colombiano.com';
-      return {
-        serverId: config.id,
-        serverName: config.name,
-        domain: inferredDomain,
-        users,
-      };
-    })
-  );
-  return results;
+
+  return Promise.all(configs.map(async (config: any) => {
+    let users: ZohoUser[] = [];
+    let errorMessage: string | null = null;
+    try {
+      const data = await zohoRequestForConfig<ZohoUser[]>(config, 'GET', `/accounts?limit=${limit}`);
+      users = Array.isArray(data) ? data : [];
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[Zoho] servidor ${config.name} ativo, mas a listagem de contas falhou:`, errorMessage);
+    }
+
+    const inferredDomain = config.domain || users.find((user) => user.primaryEmailAddress?.includes('@'))?.primaryEmailAddress.split('@')[1] || 'h2colombiano.com';
+    return {
+      serverId: Number(config.id),
+      serverName: String(config.name || 'Servidor Zoho'),
+      domain: String(inferredDomain),
+      users,
+      error: errorMessage,
+    };
+  }));
 }
 
 // Listar todos os utilizadores de todos os servidores (lista plana com info do servidor)

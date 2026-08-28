@@ -56,6 +56,7 @@ interface ServerGroup {
   serverName: string;
   domain: string;
   users: ZohoUser[];
+  error?: string | null;
 }
 
 const FIRST_NAMES = ["Ana","Bruno","Carlos","Daniel","Eduardo","Fernanda","Gabriel","Helena","Igor","Julia","Kevin","Lucas","Marcos","Natalia","Olivia","Paulo","Rafael","Sandra","Thiago","Vanessa","William","Xavier","Yasmin","Zeca","Adriana","Beatriz","Camila","Diego","Elisa","Felipe"];
@@ -94,7 +95,7 @@ type ModalStep = 'select-server' | 'fill-form';
 
 export default function AdminEmail() {
   const utils = trpc.useUtils();
-  const { data: groups = [], isLoading, refetch } = trpc.email.list.useQuery(undefined, { staleTime: 0, refetchInterval: 2_000, refetchIntervalInBackground: true, refetchOnWindowFocus: true });
+  const { data: groups = [], isLoading, error: listError, refetch } = trpc.email.list.useQuery(undefined, { staleTime: 0, refetchInterval: 2_000, refetchIntervalInBackground: true, refetchOnWindowFocus: true });
 
   const [search, setSearch] = useState("");
   const [modalStep, setModalStep] = useState<ModalStep | null>(null);
@@ -241,8 +242,12 @@ export default function AdminEmail() {
         <div className="space-y-6">
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Carregando contas...</div>
+          ) : listError ? (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-center text-sm text-red-300">
+              Erro ao carregar servidores: {listError.message}
+            </div>
           ) : (groups as ServerGroup[]).length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">Nenhuma conta cadastrada</div>
+            <div className="text-center py-8 text-muted-foreground">Nenhum servidor Zoho ativo encontrado</div>
           ) : (
             filteredGroups.map((group, idx) => {
               const colors = SERVER_COLORS[idx % SERVER_COLORS.length];
@@ -265,6 +270,11 @@ export default function AdminEmail() {
                     )}
                   </div>
 
+                  {group.error && (
+                    <div className="border-t border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                      Servidor conectado, mas a API Zoho recusou a listagem: {group.error}
+                    </div>
+                  )}
                   <div className="divide-y divide-gray-800">
                     {principalEmails.length > 0 && (
                       <div>

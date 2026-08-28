@@ -8770,35 +8770,36 @@ export const appRouter = router({
   // === ZOHO MAIL - GERENCIAMENTO DE EMAILS ===
   email: router({
     list: adminProcedure.query(async () => {
-      let grouped = await listAllZohoUsersGrouped(200);
-      const { listEmailAccounts, upsertEmailAccount } = await import('../server/db');
+      const grouped = await listAllZohoUsersGrouped(200);
       const protectedPrincipal = new Set(['walkajuda@walkajuda.com', 'h2@h2colombiano.com']);
+      let typeMap: Record<string, 'principal' | 'membro'> = {};
 
-      // Recria somente o metadado perdido pela restauração. Não recria caixas nem senhas.
-      const foundProtected = grouped.flatMap(group => group.users)
-        .map(user => String(user.primaryEmailAddress || '').trim().toLowerCase())
-        .filter(email => protectedPrincipal.has(email));
-      await Promise.all([...new Set(foundProtected)].map(email => upsertEmailAccount(email, 'principal')));
-
-      // As duas contas principais devem permanecer ativas. Se a API indicar uma delas
-      // como desativada, reativa e refaz a leitura uma única vez.
-      const disabledProtected = grouped.flatMap(group => group.users)
-        .filter(user => protectedPrincipal.has(String(user.primaryEmailAddress || '').trim().toLowerCase()) && user.enabled === false);
-      if (disabledProtected.length > 0) {
-        await Promise.all(disabledProtected.map(user => toggleZohoUser(user.primaryEmailAddress, true)));
-        grouped = await listAllZohoUsersGrouped(200);
+      // Metadados locais são auxiliares. Uma restauração incompleta desta tabela
+      // jamais pode esconder os servidores/contas que vieram do Zoho.
+      try {
+        const { listEmailAccounts, upsertEmailAccount } = await import('../server/db');
+        const foundProtected = grouped.flatMap(group => group.users)
+          .map(user => String(user.primaryEmailAddress || '').trim().toLowerCase())
+          .filter(email => protectedPrincipal.has(email));
+        await Promise.all([...new Set(foundProtected)].map(email => upsertEmailAccount(email, 'principal')));
+        const accountTypes = await listEmailAccounts();
+        typeMap = Object.fromEntries(accountTypes.map((account: any) => [String(account.emailAddress || '').trim().toLowerCase(), account.type]));
+      } catch (error) {
+        console.error('[Email] metadados locais indisponíveis; mantendo listagem Zoho:', error);
       }
 
-      const accountTypes = await listEmailAccounts();
-      const typeMap = Object.fromEntries(accountTypes.map((a: any) => [String(a.emailAddress || '').trim().toLowerCase(), a.type]));
       return grouped.map(group => ({
         serverId: group.serverId,
         serverName: group.serverName,
-        domain: (group as any).domain || 'h2colombiano.com',
-        users: group.users.map(user => ({
-          ...user,
-          type: typeMap[String(user.primaryEmailAddress || '').trim().toLowerCase()] || (protectedPrincipal.has(String(user.primaryEmailAddress || '').trim().toLowerCase()) ? 'principal' : 'membro'),
-        })),
+        domain: group.domain || 'h2colombiano.com',
+        error: group.error || null,
+        users: group.users.map(user => {
+          const normalized = String(user.primaryEmailAddress || '').trim().toLowerCase();
+          return {
+            ...user,
+            type: typeMap[normalized] || (protectedPrincipal.has(normalized) ? 'principal' : 'membro'),
+          };
+        }),
       }));
     }),
 

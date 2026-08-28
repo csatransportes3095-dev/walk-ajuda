@@ -3927,9 +3927,23 @@ export async function getBroadcastByTaskUid(taskUid: string): Promise<Broadcast 
 
 // ========== EMAIL ACCOUNTS (ZOHO) ==========
 
+let _emailAccountsInfrastructureReady = false;
+async function ensureEmailAccountsInfrastructure(db: any): Promise<void> {
+  if (_emailAccountsInfrastructureReady) return;
+  await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS emailAccounts (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    emailAddress VARCHAR(320) NOT NULL UNIQUE,
+    type ENUM('principal','membro') NOT NULL DEFAULT 'membro',
+    createdAt BIGINT NOT NULL DEFAULT 0,
+    updatedAt BIGINT NOT NULL DEFAULT 0
+  )`));
+  _emailAccountsInfrastructureReady = true;
+}
+
 export async function upsertEmailAccount(emailAddress: string, type: 'principal' | 'membro' = 'membro') {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
+  await ensureEmailAccountsInfrastructure(db);
   const existing = await db.select().from(emailAccounts).where(eq(emailAccounts.emailAddress, emailAddress)).limit(1);
   const now = Date.now();
   if (existing.length > 0) {
@@ -3963,6 +3977,7 @@ export async function releaseEmailAccountReservation(emailAddress: string): Prom
 export async function getEmailAccountType(emailAddress: string): Promise<'principal' | 'membro' | null> {
   const db = await getDb();
   if (!db) return null;
+  await ensureEmailAccountsInfrastructure(db);
   const rows = await db.select().from(emailAccounts).where(eq(emailAccounts.emailAddress, emailAddress)).limit(1);
   return rows[0]?.type || null;
 }
@@ -3970,12 +3985,14 @@ export async function getEmailAccountType(emailAddress: string): Promise<'princi
 export async function deleteEmailAccount(emailAddress: string): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  await ensureEmailAccountsInfrastructure(db);
   await db.delete(emailAccounts).where(eq(emailAccounts.emailAddress, emailAddress));
 }
 
 export async function listEmailAccounts(): Promise<Array<{ emailAddress: string; type: 'principal' | 'membro' }>> {
   const db = await getDb();
   if (!db) return [];
+  await ensureEmailAccountsInfrastructure(db);
   const rows = await db.select().from(emailAccounts);
   return rows.map(r => ({ emailAddress: r.emailAddress, type: r.type }));
 }
