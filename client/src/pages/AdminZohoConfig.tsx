@@ -13,7 +13,7 @@ type Config = {
   id: number; name: string; zohoOrgId: string;
   zohoClientId: string; zohoClientSecret: string;
   zohoRefreshToken: string; isActive: number;
-  status: string; createdAt: number;
+  status: string; createdAt: number; domain: string;
 };
 
 const EMPTY_FORM = { name: "", zohoOrgId: "", zohoClientId: "", zohoClientSecret: "", zohoRefreshToken: "", domain: "" };
@@ -40,13 +40,13 @@ export default function AdminZohoConfig() {
   const activeConfig = configs.find((c: Config) => c.isActive === 1);
 
   async function handleAutoToken() {
-    if (!form.name || !form.zohoOrgId || !form.zohoClientId || !form.zohoClientSecret) {
-      toast.error("Preencha Nome, Org ID, Client ID e Client Secret antes.");
+    if (!form.name || !form.zohoOrgId || !form.domain || !form.zohoClientId || !form.zohoClientSecret) {
+      toast.error("Preencha Nome, Org ID, Domínio, Client ID e Client Secret antes.");
       return;
     }
     try {
       const res = await getAuthUrlMut.mutateAsync({
-        name: form.name, zohoOrgId: form.zohoOrgId,
+        name: form.name, zohoOrgId: form.zohoOrgId, domain: form.domain.trim().toLowerCase().replace(/^@+/, ''),
         zohoClientId: form.zohoClientId, zohoClientSecret: form.zohoClientSecret,
       });
       window.open(res.authUrl, "_blank");
@@ -296,7 +296,7 @@ export default function AdminZohoConfig() {
                       {statusBadge(c.status, c.isActive)}
                     </div>
                     <p className="text-xs text-gray-500 mt-1 truncate">
-                      Org: {c.zohoOrgId} · Client: {c.zohoClientId.slice(0, 24)}...
+                      Org: {c.zohoOrgId} · Domínio: @{c.domain || 'não definido'} · Client: {c.zohoClientId.slice(0, 24)}...
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">

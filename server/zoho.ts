@@ -1,4 +1,5 @@
 import { ENV } from "./_core/env";
+import { buildZohoCreateUserPayload, describeZohoApiError, resolveZohoProvisioningDomain } from "./zohoProvisioning";
 
 const ZOHO_TOKEN_URL = "https://accounts.zoho.com/oauth/v2/token";
 const ZOHO_API_BASE = "https://mail.zoho.com/api";
@@ -90,28 +91,24 @@ async function zohoRequestForConfig<T>(
     method,
     headers: {
       Authorization: `Zoho-oauthtoken ${token}`,
+      "Accept": "application/json",
       "Content-Type": "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const json = (await res.json()) as {
-    status?: { code: number; description: string };
-    data?: T;
-    error?: string;
-  };
+  const rawResponse = await res.text();
+  let json: any = {};
+  try { json = rawResponse ? JSON.parse(rawResponse) : {}; } catch { json = { error: rawResponse.slice(0, 500) }; }
+  const apiStatus = Number(json?.status?.code || res.status);
 
-  if (!res.ok || (json.status && json.status.code >= 400)) {
-    const errorCode = (json.data as any)?.errorCode ?? "";
-    let message = json.status?.description ?? json.error ?? "unknown";
-    if (errorCode === "EMAILADDRESS_ALREADY_EXISTS") message = "Este email já existe no Zoho Mail";
-    else if (errorCode === "INVALID_PASSWORD") message = "Senha inválida â€” use pelo menos 8 caracteres com letras e números";
-    else if (errorCode === "ACCOUNT_LIMIT_EXCEEDED") message = "Limite de contas atingido neste servidor (máx. 5 no plano FREE)";
-    else if (errorCode === "INVALID_EMAILADDRESS") message = "Endereço de email inválido";
-    throw new Error(message);
+  if (!res.ok || apiStatus >= 400) {
+    const detail = describeZohoApiError(json, res.status);
+    console.error(`[Zoho API] server=${String(config.name || 'unknown')} method=${method} path=${path} http=${res.status} apiStatus=${apiStatus} errorCode=${detail.errorCode || '-'} message=${detail.message}`);
+    throw new Error(`Zoho ${String(config.name || 'servidor')}: HTTP ${res.status} - ${detail.message}`);
   }
 
-  return (json.data ?? json) as T;
+  return (json?.data ?? json) as T;
 }
 
 // Request para o servidor primário (compatibilidade com código existente)
@@ -195,7 +192,7 @@ export async function listAllZohoUsersGrouped(limit = 50): Promise<{ serverId: n
       console.error(`[Zoho] servidor ${config.name} ativo, mas a listagem de contas falhou:`, errorMessage);
     }
 
-    const inferredDomain = config.domain || users.find((user) => user.primaryEmailAddress?.includes('@'))?.primaryEmailAddress.split('@')[1] || 'h2colombiano.com';
+    const inferredDomain = resolveZohoProvisioningDomain(config.domain, users) || 'h2colombiano.com';
     return {
       serverId: Number(config.id),
       serverName: String(config.name || 'Servidor Zoho'),
@@ -222,13 +219,7 @@ export async function findZohoUserByEmail(emailAddress: string): Promise<ZohoUse
 
 // Criar utilizador num servidor específico
 export async function createZohoUserInConfig(config: any, input: CreateUserInput): Promise<ZohoUser> {
-  return zohoRequestForConfig<ZohoUser>(config, "POST", "/accounts", {
-    primaryEmailAddress: input.primaryEmailAddress,
-    displayName: input.displayName,
-    password: input.password,
-    firstName: input.firstName ?? "",
-    lastName: input.lastName ?? "",
-  });
+  return zohoRequestForConfig<ZohoUser>(config, "POST", "/accounts", buildZohoCreateUserPayload(input));
 }
 
 // Criar utilizador no servidor com menos contas (distribuição automática)
@@ -240,13 +231,7 @@ export async function createZohoUser(input: CreateUserInput): Promise<ZohoUser> 
   let lastError: Error | null = null;
   for (const config of configs) {
     try {
-      const result = await zohoRequestForConfig<ZohoUser>(config, "POST", "/accounts", {
-        primaryEmailAddress: input.primaryEmailAddress,
-        displayName: input.displayName,
-        password: input.password,
-        firstName: input.firstName ?? "",
-        lastName: input.lastName ?? "",
-      });
+      const result = await zohoRequestForConfig<ZohoUser>(config, "POST", "/accounts", buildZohoCreateUserPayload(input));
       return result;
     } catch (err: any) {
       if (err.message.includes("Limite de contas atingido")) {

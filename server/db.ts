@@ -4096,7 +4096,7 @@ export async function setActiveZohoOAuthConfig(id: number) {
 }
 
 // Salvar config pendente para OAuth callback (troca de código por token)
-export async function savePendingZohoOAuth(sessionId: string, data: { name: string; zohoOrgId: string; zohoClientId: string; zohoClientSecret: string; redirectUri: string }) {
+export async function savePendingZohoOAuth(sessionId: string, data: { name: string; zohoOrgId: string; zohoClientId: string; zohoClientSecret: string; domain: string; redirectUri: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const key = `__zoho_oauth_${sessionId}`;

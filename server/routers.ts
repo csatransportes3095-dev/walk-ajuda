@@ -14,6 +14,7 @@ import {
   markMessageRead,
   listFolders,
 } from "./zoho";
+import { resolveZohoProvisioningDomain } from "./zohoProvisioning";
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
@@ -8819,11 +8820,19 @@ export const appRouter = router({
         let remoteCreated = false;
         try {
           let emailDomain = 'h2colombiano.com';
+          let selectedConfig: any | null = null;
+          let selectedServerUsers: any[] = [];
           if (input.serverId) {
             const { listZohoOAuthConfigs: getConfigs } = await import('../server/db');
             const allCfgs = await getConfigs();
             const cfg = allCfgs.find((c: any) => Number(c.id) === Number(input.serverId));
-            if (cfg?.domain) emailDomain = cfg.domain;
+            if (!cfg) throw new Error(`Servidor não encontrado (id=${input.serverId})`);
+            if (Number(cfg.isActive) !== 1) throw new Error(`Servidor ${cfg.name} não está ativo.`);
+            selectedServerUsers = await listZohoUsersForConfig(cfg, 10);
+            if (selectedServerUsers.length >= 5) throw new Error(`Servidor ${cfg.name} está lotado (5/5 contas). Escolha outro servidor.`);
+            emailDomain = resolveZohoProvisioningDomain(cfg.domain, selectedServerUsers);
+            if (!emailDomain) throw new Error(`Não foi possível identificar o domínio real do servidor ${cfg.name}. Revise a configuração Zoho.`);
+            selectedConfig = cfg;
           }
           primaryEmailAddress = `${input.username.toLowerCase()}@${emailDomain}`.trim().toLowerCase();
           const { reserveEmailAccount, releaseEmailAccountReservation, upsertEmailAccount } = await import('../server/db');
@@ -8836,15 +8845,8 @@ export const appRouter = router({
           if (existingRemote) throw new Error(`O e-mail ${primaryEmailAddress} já existe no servidor ${existingRemote.serverName}.`);
 
           let user;
-          if (input.serverId) {
-            const { listZohoOAuthConfigs } = await import('../server/db');
-            const allConfigs = await listZohoOAuthConfigs();
-            const config = allConfigs.find((c: any) => Number(c.id) === Number(input.serverId));
-            if (!config) throw new Error(`Servidor não encontrado (id=${input.serverId})`);
-            if (Number(config.isActive) !== 1) throw new Error(`Servidor ${config.name} não está ativo.`);
-            const existingUsers = await listZohoUsersForConfig(config, 10);
-            if (existingUsers.length >= 5) throw new Error(`Servidor ${config.name} está lotado (5/5 contas). Escolha outro servidor.`);
-            user = await createZohoUserInConfig(config, { primaryEmailAddress, displayName: input.displayName, password: input.password, firstName: input.firstName, lastName: input.lastName });
+          if (selectedConfig) {
+            user = await createZohoUserInConfig(selectedConfig, { primaryEmailAddress, displayName: input.displayName, password: input.password, firstName: input.firstName, lastName: input.lastName });
           } else {
             user = await createZohoUser({ primaryEmailAddress, displayName: input.displayName, password: input.password, firstName: input.firstName, lastName: input.lastName });
           }
@@ -8860,7 +8862,7 @@ export const appRouter = router({
           }
           const msg = err?.message || String(err);
           console.error('[email.create] Erro:', msg);
-          throw new TRPCError({ code: 'BAD_REQUEST', message: `Erro ao criar conta: ${msg}` });
+          throw new TRPCError({ code: 'BAD_REQUEST', message: msg });
         }
       }),
 
@@ -8949,6 +8951,7 @@ export const appRouter = router({
         zohoOrgId: z.string().min(1),
         zohoClientId: z.string().min(1),
         zohoClientSecret: z.string().min(1),
+        domain: z.string().trim().min(3).max(255),
       }))
       .mutation(async ({ input }) => {
         const { savePendingZohoOAuth, getPendingZohoOAuth } = await import('../server/db');
@@ -8962,6 +8965,7 @@ export const appRouter = router({
           zohoOrgId: input.zohoOrgId,
           zohoClientId: input.zohoClientId,
           zohoClientSecret: input.zohoClientSecret,
+          domain: input.domain.trim().toLowerCase().replace(/^@+/, ''),
           redirectUri,
         };
         

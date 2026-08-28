@@ -423,6 +423,7 @@ async function startServer() {
           zohoClientId: pending.zohoClientId,
           zohoClientSecret: pending.zohoClientSecret,
           zohoRefreshToken: tokenData.refresh_token,
+          domain: String(pending.domain || '').trim().toLowerCase().replace(/^@+/, ''),
         });
         console.log('[ZohoOAuth] Configuração salva com sucesso');
       } catch (e) {
@@ -453,6 +454,7 @@ async function startServer() {
         zohoOrgId: '931276368',
         zohoClientId: '1000.G5IJGPRDWJB7OI7OCMBW23R5B4LU1X',
         zohoClientSecret: '3d7bc5d567aa563b34476c838dcfabd97d117f5b0a',
+        domain: 'walkajuda.com',
         redirectUri: 'https://h2colombiano.com/api/zoho-oauth-callback',
       };
 
