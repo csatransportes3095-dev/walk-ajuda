@@ -175,9 +175,24 @@ export async function isInWorkingHours() {
 
 export async function getPublicState(pathname: string) {
   const config = await getOrCreateConfig();
-  const menuItems = await listMenuItems(true);
   const notifications = config.notificationsEnabled === 1;
   const allowedPages = parseJson<string[]>(config.allowedPages, ["/"]);
+
+  // A configuracao principal do ADM nunca deve deixar de chegar ao cliente
+  // por falha em tabelas auxiliares restauradas (menu/horarios).
+  let menuItems: Awaited<ReturnType<typeof listMenuItems>> = [];
+  try {
+    menuItems = await listMenuItems(true);
+  } catch (error) {
+    console.error("[online-support] falha ao carregar menu publico", error);
+  }
+
+  let onlineNow = false;
+  try {
+    onlineNow = await isInWorkingHours();
+  } catch (error) {
+    console.error("[online-support] falha ao carregar horario publico", error);
+  }
 
   return {
     chatEnabled: config.chatEnabled === 1,
@@ -199,7 +214,7 @@ export async function getPublicState(pathname: string) {
     allowedPages,
     showOnPage: pathname === "/" && config.chatEnabled === 1 ? true : allowedPages.length === 0 || allowedPages.includes(pathname),
     menuItems,
-    onlineNow: await isInWorkingHours(),
+    onlineNow,
   };
 }
 
