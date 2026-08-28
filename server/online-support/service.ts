@@ -97,7 +97,7 @@ export async function getOrCreateConfig() {
   if (!db) throw new Error("Banco indisponivel");
   await ensureOnlineSupportBotAvatarColumn();
 
-  const rows = await db.select().from(onlineSupportConfig).limit(1);
+  const rows = await db.select().from(onlineSupportConfig).orderBy(desc(onlineSupportConfig.id)).limit(1);
   if (rows[0]) return rows[0];
 
   await db.insert(onlineSupportConfig).values({
@@ -132,7 +132,7 @@ export async function getOrCreateConfig() {
     updatedBy: "system",
   });
 
-  const afterInsert = await db.select().from(onlineSupportConfig).limit(1);
+  const afterInsert = await db.select().from(onlineSupportConfig).orderBy(desc(onlineSupportConfig.id)).limit(1);
   return afterInsert[0];
 }
 
