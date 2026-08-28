@@ -1,4 +1,4 @@
-name: Validate restored Zoho email accounts
+name: Validate restored Zoho schema
 
 on:
   push:
@@ -20,8 +20,8 @@ jobs:
         with:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
-      - name: Apply email restoration bootstrap
-        run: python scripts/fix-email-restoration-bootstrap.py
+      - name: Apply Zoho schema repair
+        run: python scripts/fix-zoho-restored-schema.py
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
@@ -35,10 +35,10 @@ jobs:
         run: pnpm check
       - name: Build
         run: pnpm build
-      - name: Commit validated email restoration
+      - name: Commit validated Zoho schema repair
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/zoho.ts server/routers.ts
-          git commit -m "fix(email): restore Zoho accounts from environment fallback"
+          git add server/_core/index.ts
+          git commit -m "fix(zoho): repair restored oauth config schema"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
