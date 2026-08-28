@@ -24,6 +24,29 @@ jobs:
       - name: Apply Zoho email provisioning fix
         run: python scripts/apply-zoho-email-create-fix.py
 
+      - name: Complete internal OAuth test fixture
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('server/_core/index.ts')
+          text = path.read_text(encoding='utf-8')
+          marker = "const testData = {"
+          start = text.find(marker)
+          if start < 0:
+              raise SystemExit('internal Zoho test fixture not found')
+          end = text.find('};', start)
+          if end < 0:
+              raise SystemExit('internal Zoho test fixture end not found')
+          block = text[start:end]
+          if 'domain:' not in block:
+              redirect = "        redirectUri: 'https://h2colombiano.com/api/zoho-oauth-callback',"
+              if redirect not in block:
+                  raise SystemExit('internal Zoho test fixture redirectUri not found')
+              block = block.replace(redirect, "        domain: 'walkajuda.com',\n" + redirect, 1)
+              text = text[:start] + block + text[end:]
+              path.write_text(text, encoding='utf-8')
+          PY
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
