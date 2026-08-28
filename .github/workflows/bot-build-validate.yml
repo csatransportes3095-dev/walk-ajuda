@@ -1,4 +1,4 @@
-name: Validate H2 ADS live UI v3
+name: Validate automatic customer numbering
 
 on:
   push:
@@ -20,8 +20,8 @@ jobs:
         with:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
-      - name: Apply H2 ADS live UI v3
-        run: python scripts/apply-h2ads-live-ui-v3.py
+      - name: Apply customer number sequence fix
+        run: python scripts/fix-auto-customer-number-sequence.py
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
@@ -35,10 +35,10 @@ jobs:
         run: pnpm check
       - name: Build
         run: pnpm build
-      - name: Commit validated H2 ADS live UI
+      - name: Commit validated customer numbering fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/src/pages/H2Ads.tsx
-          git commit -m "feat(h2ads): enlarge cards and sync actions live"
+          git add server/db.ts
+          git commit -m "fix(customers): keep automatic registration sequence after 451"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
