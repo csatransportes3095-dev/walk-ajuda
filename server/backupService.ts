@@ -1,4 +1,4 @@
-import { createHash, createCipheriv, randomBytes } from "node:crypto";
+import { createHash, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, open, readdir, rm, stat, statfs, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -637,6 +637,93 @@ async function sha256File(filePath: string): Promise<string> {
   return hash.digest("hex");
 }
 
+export async function verifyEncryptedArchiveStreamContent(
+  body: Readable,
+  expectedBytes: number,
+  expectedSha256: string,
+  signal?: AbortSignal,
+): Promise<{ bytes: number; sha256: string }> {
+  const magic = Buffer.from("WJBACK1\n", "utf8");
+  const hash = createHash("sha256");
+  let bytes = 0;
+  let header = Buffer.alloc(0);
+  let tail = Buffer.alloc(0);
+  let decipher: any = null; // createDecipheriv(aes-256-gcm) exposes setAuthTag at runtime; Node typings widen the return type.
+
+  for await (const chunkValue of body) {
+    throwIfBackupAborted(signal);
+    const raw = Buffer.isBuffer(chunkValue) ? chunkValue : Buffer.from(chunkValue as Uint8Array);
+    hash.update(raw);
+    bytes += raw.length;
+
+    let chunk = raw;
+    if (!decipher) {
+      header = Buffer.concat([header, chunk]);
+      if (header.length < BACKUP_ARCHIVE_HEADER_BYTES) continue;
+      if (!header.subarray(0, magic.length).equals(magic)) {
+        throw new Error("Cabeçalho do backup cifrado é inválido.");
+      }
+      const iv = header.subarray(magic.length, BACKUP_ARCHIVE_HEADER_BYTES);
+      decipher = createDecipheriv("aes-256-gcm", getEncryptionKey(), iv);
+      chunk = header.subarray(BACKUP_ARCHIVE_HEADER_BYTES);
+      header = Buffer.alloc(0);
+    }
+
+    if (chunk.length > 0) {
+      const combined = tail.length > 0 ? Buffer.concat([tail, chunk]) : chunk;
+      if (combined.length > BACKUP_ARCHIVE_AUTH_TAG_BYTES) {
+        const splitAt = combined.length - BACKUP_ARCHIVE_AUTH_TAG_BYTES;
+        decipher.update(combined.subarray(0, splitAt));
+        tail = Buffer.from(combined.subarray(splitAt));
+      } else {
+        tail = Buffer.from(combined);
+      }
+    }
+  }
+
+  throwIfBackupAborted(signal);
+  const sha256 = hash.digest("hex");
+  if (bytes !== expectedBytes) {
+    throw new Error(`Tamanho remoto divergente: esperado ${expectedBytes}, recebido ${bytes}.`);
+  }
+  if (sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+    throw new Error("SHA-256 remoto divergente do pacote criado.");
+  }
+  if (!decipher || tail.length !== BACKUP_ARCHIVE_AUTH_TAG_BYTES) {
+    throw new Error("Pacote cifrado incompleto para validação AES-GCM.");
+  }
+  try {
+    decipher.setAuthTag(tail);
+    decipher.final();
+  } catch {
+    throw new Error("Falha de autenticação AES-GCM: o pacote armazenado não pode ser validado com a chave atual.");
+  }
+  return { bytes, sha256 };
+}
+
+async function verifyStoredBackupObject(
+  artifactKey: string,
+  expectedBytes: number,
+  expectedSha256: string,
+  signal?: AbortSignal,
+): Promise<{ bytes: number; sha256: string }> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    throwIfBackupAborted(signal);
+    try {
+      const body = toNodeReadable(await r2GetObjectStream(artifactKey));
+      return await verifyEncryptedArchiveStreamContent(body, expectedBytes, expectedSha256, signal);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const deterministic = /SHA-256 remoto divergente|Tamanho remoto divergente|Cabeçalho do backup|AES-GCM|Pacote cifrado incompleto/i.test(message);
+      if (deterministic || attempt >= 3 || signal?.aborted) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 function throwIfBackupAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new Error("Backup encerrado antes da conclusão; nenhum artefato foi validado.");
 }
@@ -705,7 +792,23 @@ export async function reconcileBackupsAfterRestart(): Promise<number> {
       errorMessage: `Execução interrompida após reinício do serviço. Último estágio persistido: ${row.stage}. Último progresso persistido: ${row.progress}%. Causa do encerramento da instância não determinada pelo processo recuperado; nenhum artefato foi validado.`,
     }).where(eq(systemBackups.id, row.id));
   }
-  return activeRows.length;
+  const completedRows = await db
+    .select({ id: systemBackups.id, manifestJson: systemBackups.manifestJson })
+    .from(systemBackups)
+    .where(eq(systemBackups.status, "completed"));
+  let interruptedVerifications = 0;
+  for (const row of completedRows) {
+    if (getBackupRemoteVerification(row.manifestJson).status !== "verifying") continue;
+    interruptedVerifications += 1;
+    await updateStoredBackupVerification(row.id, {
+      status: "failed",
+      verifiedAt: null,
+      bytes: null,
+      sha256: null,
+      error: "Verificação profunda interrompida após reinício do serviço. Execute a verificação novamente.",
+    });
+  }
+  return activeRows.length + interruptedVerifications;
 }
 
 async function listAllR2Objects(): Promise<R2ObjectInfo[]> {
@@ -717,6 +820,54 @@ async function listAllR2Objects(): Promise<R2ObjectInfo[]> {
     continuationToken = page.nextContinuationToken || undefined;
   } while (continuationToken);
   return objects;
+}
+
+export type BackupRemoteVerificationStatus = "not_verified" | "verifying" | "verified" | "failed";
+export type BackupRemoteVerification = {
+  status: BackupRemoteVerificationStatus;
+  verifiedAt: string | null;
+  bytes: number | null;
+  sha256: string | null;
+  error: string | null;
+};
+
+const DEFAULT_REMOTE_VERIFICATION: BackupRemoteVerification = {
+  status: "not_verified",
+  verifiedAt: null,
+  bytes: null,
+  sha256: null,
+  error: null,
+};
+
+export function getBackupRemoteVerification(manifestJson: string | null | undefined): BackupRemoteVerification {
+  if (!manifestJson) return { ...DEFAULT_REMOTE_VERIFICATION };
+  try {
+    const parsed = JSON.parse(manifestJson) as { remoteVerification?: Partial<BackupRemoteVerification> };
+    const candidate = parsed.remoteVerification;
+    if (!candidate || !["not_verified", "verifying", "verified", "failed"].includes(String(candidate.status))) {
+      return { ...DEFAULT_REMOTE_VERIFICATION };
+    }
+    return {
+      status: candidate.status as BackupRemoteVerificationStatus,
+      verifiedAt: typeof candidate.verifiedAt === "string" ? candidate.verifiedAt : null,
+      bytes: typeof candidate.bytes === "number" ? candidate.bytes : null,
+      sha256: typeof candidate.sha256 === "string" ? candidate.sha256 : null,
+      error: typeof candidate.error === "string" ? candidate.error : null,
+    };
+  } catch {
+    return { ...DEFAULT_REMOTE_VERIFICATION };
+  }
+}
+
+function withBackupRemoteVerification(manifestJson: string | null | undefined, verification: BackupRemoteVerification): string {
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = manifestJson ? JSON.parse(manifestJson) as Record<string, unknown> : {};
+  } catch {
+    parsed = {};
+  }
+  parsed.remoteVerification = verification;
+  return JSON.stringify(parsed);
 }
 
 function summaryFromManifest(manifest: BackupManifest, archiveBytes: number, archiveSha256: string) {
@@ -943,22 +1094,36 @@ async function executeBackup(id: string, signal: AbortSignal): Promise<void> {
     if (finalObject.contentLength !== archiveInfo.bytes) {
       throw new Error(`Tamanho final do objeto R2 divergente: esperado ${archiveInfo.bytes}, recebido ${finalObject.contentLength ?? "desconhecido"}.`);
     }
+    const remoteVerification = await verifyStoredBackupObject(artifactKey, archiveInfo.bytes, archiveInfo.sha256, signal);
+    const verifiedAt = new Date().toISOString();
+    const finalSummary = withBackupRemoteVerification(
+      summaryFromManifest(manifest, archiveInfo.bytes, archiveInfo.sha256),
+      {
+        status: "verified",
+        verifiedAt,
+        bytes: remoteVerification.bytes,
+        sha256: remoteVerification.sha256,
+        error: null,
+      },
+    );
     logBackupDiagnostic(diagnostic, "stage-end", {
       stageName: "verification",
       objectExists: true,
       expectedBytes: archiveInfo.bytes,
       actualBytes: finalObject.contentLength,
+      remoteSha256: remoteVerification.sha256,
+      aesGcmAuthenticated: true,
       httpStatus: finalObject.httpStatus,
       etag: finalObject.etag,
     });
-    await updateRun(id, { artifactKey, fileSize: archiveInfo.bytes, archiveSha256: archiveInfo.sha256, manifestJson: summaryFromManifest(manifest, archiveInfo.bytes, archiveInfo.sha256) });
+    await updateRun(id, { artifactKey, fileSize: archiveInfo.bytes, archiveSha256: archiveInfo.sha256, manifestJson: finalSummary });
     throwIfBackupAborted(signal);
     await updateRun(id, {
       status: "completed",
       stage: "completed",
       progress: 100,
       completedAt: new Date(),
-      manifestJson: summaryFromManifest(manifest, archiveInfo.bytes, archiveInfo.sha256),
+      manifestJson: finalSummary,
     });
     logBackupDiagnostic(diagnostic, "completed", { archiveBytes: archiveInfo.bytes, archiveSha256: archiveInfo.sha256 });
   } catch (error) {
@@ -1031,6 +1196,9 @@ export async function listSystemBackups(limit = 20) {
     driveStatus: row.driveStatus,
     driveUploadedAt: row.driveUploadedAt,
     driveError: row.driveStatus === "failed" ? row.driveError : null,
+    integrityStatus: getBackupRemoteVerification(row.manifestJson).status,
+    integrityVerifiedAt: getBackupRemoteVerification(row.manifestJson).verifiedAt,
+    integrityError: getBackupRemoteVerification(row.manifestJson).error,
     errorMessage: row.status === "failed" ? row.errorMessage : null,
   }));
 }
@@ -1057,6 +1225,9 @@ export async function getSystemBackup(id: string) {
     driveStatus: row.driveStatus,
     driveUploadedAt: row.driveUploadedAt,
     driveError: row.driveStatus === "failed" ? row.driveError : null,
+    integrityStatus: getBackupRemoteVerification(row.manifestJson).status,
+    integrityVerifiedAt: getBackupRemoteVerification(row.manifestJson).verifiedAt,
+    integrityError: getBackupRemoteVerification(row.manifestJson).error,
     errorMessage: row.status === "failed" ? row.errorMessage : null,
   };
 }
@@ -1070,6 +1241,68 @@ export async function getCompletedSystemBackup(id: string) {
     .where(and(eq(systemBackups.id, id), eq(systemBackups.status, "completed")))
     .limit(1);
   return rows[0] || null;
+}
+
+const activeStoredBackupVerifications = new Set<string>();
+
+async function updateStoredBackupVerification(id: string, verification: BackupRemoteVerification) {
+  const db = await getDb();
+  if (!db) throw new Error("Banco indisponível para atualizar a verificação do backup.");
+  const [row] = await db.select({ manifestJson: systemBackups.manifestJson }).from(systemBackups).where(eq(systemBackups.id, id)).limit(1);
+  if (!row) throw new Error("Backup não encontrado.");
+  await db.update(systemBackups).set({
+    manifestJson: withBackupRemoteVerification(row.manifestJson, verification),
+  }).where(eq(systemBackups.id, id));
+}
+
+export async function startStoredSystemBackupVerification(id: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Banco indisponível para verificar o backup.");
+  const [row] = await db.select({
+    status: systemBackups.status,
+    artifactKey: systemBackups.artifactKey,
+    fileSize: systemBackups.fileSize,
+    archiveSha256: systemBackups.archiveSha256,
+    manifestJson: systemBackups.manifestJson,
+  }).from(systemBackups).where(eq(systemBackups.id, id)).limit(1);
+  if (!row || row.status !== "completed" || !row.artifactKey || row.fileSize === null || row.fileSize === undefined || !row.archiveSha256) {
+    throw new Error("Somente backups concluídos com tamanho e SHA-256 podem ser verificados.");
+  }
+  if (activeStoredBackupVerifications.has(id) || getBackupRemoteVerification(row.manifestJson).status === "verifying") {
+    return { accepted: false as const, id };
+  }
+  activeStoredBackupVerifications.add(id);
+  await updateStoredBackupVerification(id, {
+    status: "verifying",
+    verifiedAt: null,
+    bytes: null,
+    sha256: null,
+    error: null,
+  });
+  void (async () => {
+    try {
+      const verified = await verifyStoredBackupObject(row.artifactKey!, Number(row.fileSize), row.archiveSha256!);
+      await updateStoredBackupVerification(id, {
+        status: "verified",
+        verifiedAt: new Date().toISOString(),
+        bytes: verified.bytes,
+        sha256: verified.sha256,
+        error: null,
+      });
+    } catch (error) {
+      const message = sanitizeDiagnosticValue(error) || "Falha desconhecida na verificação profunda.";
+      await updateStoredBackupVerification(id, {
+        status: "failed",
+        verifiedAt: null,
+        bytes: null,
+        sha256: null,
+        error: message.slice(0, 1000),
+      }).catch(() => undefined);
+    } finally {
+      activeStoredBackupVerifications.delete(id);
+    }
+  })();
+  return { accepted: true as const, id };
 }
 
 export async function streamSystemBackupArtifact(id: string) {

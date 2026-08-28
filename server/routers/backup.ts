@@ -13,6 +13,7 @@ import {
   listSystemBackups,
   reconcileStaleSystemBackups,
   startSystemBackup,
+  startStoredSystemBackupVerification,
   type BackupManifest,
   streamSystemBackupArtifact,
   uploadSystemBackupToGoogleDrive,
@@ -57,6 +58,10 @@ export const backupRouter = router({
   sendToDrive: adminProcedure
     .input(z.object({ id: z.string().regex(/^[a-f0-9]{48}$/i) }))
     .mutation(({ input }) => uploadSystemBackupToGoogleDrive(input.id)),
+
+  verifyStored: adminProcedure
+    .input(z.object({ id: z.string().regex(/^[a-f0-9]{48}$/i) }))
+    .mutation(({ input }) => startStoredSystemBackupVerification(input.id)),
 
   start: adminProcedure.mutation(async () => {
     const result = await startSystemBackup("admin");

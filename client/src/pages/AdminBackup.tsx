@@ -67,6 +67,14 @@ export default function AdminBackup() {
     onError: (error) => toast.error(error.message || "Não foi possível enviar para o Google Drive."),
   });
 
+  const verifyMut = trpc.backup.verifyStored.useMutation({
+    onSuccess: ({ accepted }) => {
+      toast.success(accepted ? "Verificação profunda iniciada. A página acompanhará automaticamente." : "Este backup já está sendo verificado.");
+      void backupsQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível verificar o arquivo armazenado."),
+  });
+
   const cancelMut = trpc.backup.cancel.useMutation({
     onSuccess: ({ cancelled }) => {
       toast.success(cancelled ? "Execução encerrada. O registro foi mantido e nenhum artefato foi validado." : "Essa execução já não está ativa.");
@@ -208,10 +216,26 @@ export default function AdminBackup() {
                       <p className="mt-1 text-xs text-slate-400">Criado em {formatDate(backup.createdAt)} · Tamanho: {formatBytes(backup.fileSize)}</p>
                       {backup.archiveSha256 && <p className="mt-1 break-all font-mono text-[10px] text-cyan-300/70">SHA-256: {backup.archiveSha256}</p>}
                       {backup.status === "completed" && <p className="mt-1 text-xs text-slate-500">Google Drive: {backup.driveStatus === "completed" ? `enviado em ${formatDate(backup.driveUploadedAt)}` : backup.driveStatus === "uploading" ? "enviando..." : backup.driveStatus === "failed" ? "falhou" : backupConfigQuery.data?.driveConfigured ? "não enviado" : "não configurado"}</p>}
+                      {backup.status === "completed" && (
+                        <p className={`mt-1 text-xs ${backup.integrityStatus === "verified" ? "text-emerald-300" : backup.integrityStatus === "failed" ? "text-red-300" : backup.integrityStatus === "verifying" ? "text-amber-300" : "text-slate-500"}`}>
+                          Integridade profunda: {backup.integrityStatus === "verified" ? `verificada${backup.integrityVerifiedAt ? ` em ${formatDate(backup.integrityVerifiedAt)}` : ""}` : backup.integrityStatus === "verifying" ? "verificando o arquivo armazenado..." : backup.integrityStatus === "failed" ? "falhou" : "pendente"}
+                        </p>
+                      )}
+                      {backup.integrityError && <p className="mt-2 flex items-start gap-1.5 text-xs text-red-300"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" /> {backup.integrityError}</p>}
                       {backup.errorMessage && <p className="mt-2 flex items-start gap-1.5 text-xs text-red-300"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" /> {backup.errorMessage}</p>}
                     </div>
                     {backup.status === "completed" && (
-                      <div className="flex flex-col gap-2 sm:flex-row">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => verifyMut.mutate({ id: backup.id })}
+                          disabled={verifyMut.isPending || backup.integrityStatus === "verifying" || backup.integrityStatus === "verified"}
+                          className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-4 py-2.5 text-xs font-black text-emerald-100 hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-40"
+                          title="Lê novamente o arquivo inteiro no R2, confere tamanho, SHA-256 e autenticação AES-GCM"
+                        >
+                          {verifyMut.isPending && verifyMut.variables?.id === backup.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                          {backup.integrityStatus === "verified" ? "Integridade OK" : backup.integrityStatus === "verifying" ? "Verificando..." : backup.integrityStatus === "failed" ? "Verificar novamente" : "Verificar arquivo"}
+                        </button>
                         <a href={`/api/admin/backups/${backup.id}/download`} className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 py-2.5 text-xs font-black text-cyan-100 hover:bg-cyan-300/20">
                           <Download className="h-4 w-4" /> Baixar para o computador
                         </a>
