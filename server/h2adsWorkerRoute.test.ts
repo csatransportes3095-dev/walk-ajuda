@@ -132,15 +132,17 @@ describe("endpoints do Browser Worker H2 Ads", () => {
     expect(getH2AdsInstance).toHaveBeenCalledWith(32);
   });
 
-  it("mantém o componente de sessão válido e fixa o título H2ADS no Chrome local", () => {
+  it("mantém o componente de sessão válido e identifica a instância sem instrumentar páginas externas", () => {
     const sessionPath = path.resolve(import.meta.dirname, "..", "workers", "windows", "browser-session.mjs");
     const syntax = spawnSync(process.execPath, ["--check", sessionPath], { encoding: "utf8" });
     expect(syntax.status, syntax.stderr).toBe(0);
     const source = fs.readFileSync(sessionPath, "utf8");
     expect(source).toContain("instanceWindowTitle");
-    expect(source).toContain("Page.addScriptToEvaluateOnNewDocument");
-    expect(source).toContain("--remote-debugging-address=127.0.0.1");
-    expect(source).toContain("--remote-debugging-port=0");
+    expect(source).toContain("h2ads-instance-label.html");
+    expect(source).toContain("pathToFileURL");
+    expect(source).not.toContain("MutationObserver");
+    expect(source).not.toContain("Page.addScriptToEvaluateOnNewDocument");
+    expect(source).not.toContain("--remote-debugging-port");
   });
 
   it("entrega encerramento sem carregar a rota e registra estado fechado apenas para Worker atualizado", async () => {
