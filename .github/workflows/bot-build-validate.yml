@@ -1,4 +1,4 @@
-name: Validate resilient Google Drive backup upload
+name: Validate Zoho email provisioning fix
 
 on:
   push:
@@ -21,8 +21,8 @@ jobs:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
 
-      - name: Apply resilient Drive upload repair
-        run: python scripts/apply-google-drive-resumable-chunks.py
+      - name: Apply Zoho email provisioning fix
+        run: python scripts/apply-zoho-email-create-fix.py
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -36,8 +36,8 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Backup and Drive tests
-        run: pnpm vitest run server/backupService.test.ts server/backupRestoreService.test.ts server/disasterRecoveryKit.test.ts server/googleDriveResumableUpload.test.ts
+      - name: Zoho provisioning tests
+        run: pnpm vitest run server/zohoProvisioning.test.ts
 
       - name: TypeScript check
         run: pnpm check
@@ -45,10 +45,10 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Commit validated Drive upload repair
+      - name: Commit validated Zoho email provisioning fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/backupService.ts server/googleDriveResumableUpload.ts server/googleDriveResumableUpload.test.ts client/src/pages/AdminBackup.tsx
-          git commit -m "fix(backup): make Google Drive upload resumable"
+          git add server/zoho.ts server/zohoProvisioning.ts server/zohoProvisioning.test.ts server/routers.ts server/db.ts server/_core/index.ts client/src/pages/AdminEmail.tsx client/src/pages/AdminZohoConfig.tsx
+          git commit -m "fix(zoho): make email provisioning domain-safe"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
