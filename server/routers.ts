@@ -8770,17 +8770,34 @@ export const appRouter = router({
   // === ZOHO MAIL - GERENCIAMENTO DE EMAILS ===
   email: router({
     list: adminProcedure.query(async () => {
-      const grouped = await listAllZohoUsersGrouped(200);
-      const { listEmailAccounts } = await import('../server/db');
+      let grouped = await listAllZohoUsersGrouped(200);
+      const { listEmailAccounts, upsertEmailAccount } = await import('../server/db');
+      const protectedPrincipal = new Set(['walkajuda@walkajuda.com', 'h2@h2colombiano.com']);
+
+      // Recria somente o metadado perdido pela restauração. Não recria caixas nem senhas.
+      const foundProtected = grouped.flatMap(group => group.users)
+        .map(user => String(user.primaryEmailAddress || '').trim().toLowerCase())
+        .filter(email => protectedPrincipal.has(email));
+      await Promise.all([...new Set(foundProtected)].map(email => upsertEmailAccount(email, 'principal')));
+
+      // As duas contas principais devem permanecer ativas. Se a API indicar uma delas
+      // como desativada, reativa e refaz a leitura uma única vez.
+      const disabledProtected = grouped.flatMap(group => group.users)
+        .filter(user => protectedPrincipal.has(String(user.primaryEmailAddress || '').trim().toLowerCase()) && user.enabled === false);
+      if (disabledProtected.length > 0) {
+        await Promise.all(disabledProtected.map(user => toggleZohoUser(user.primaryEmailAddress, true)));
+        grouped = await listAllZohoUsersGrouped(200);
+      }
+
       const accountTypes = await listEmailAccounts();
-      const typeMap = Object.fromEntries(accountTypes.map((a: any) => [a.emailAddress, a.type]));
+      const typeMap = Object.fromEntries(accountTypes.map((a: any) => [String(a.emailAddress || '').trim().toLowerCase(), a.type]));
       return grouped.map(group => ({
         serverId: group.serverId,
         serverName: group.serverName,
         domain: (group as any).domain || 'h2colombiano.com',
         users: group.users.map(user => ({
           ...user,
-          type: typeMap[user.primaryEmailAddress] || 'membro',
+          type: typeMap[String(user.primaryEmailAddress || '').trim().toLowerCase()] || (protectedPrincipal.has(String(user.primaryEmailAddress || '').trim().toLowerCase()) ? 'principal' : 'membro'),
         })),
       }));
     }),

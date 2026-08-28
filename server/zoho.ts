@@ -164,15 +164,28 @@ export async function listZohoUsersForConfig(config: any, limit = 50): Promise<Z
 
 // Listar utilizadores de TODOS os servidores ativos, agrupados por servidor
 export async function listAllZohoUsersGrouped(limit = 50): Promise<{ serverId: number; serverName: string; domain: string; users: ZohoUser[] }[]> {
-  const configs = await getAllActiveConfigs();
-  if (configs.length === 0) return [];
+  let configs = await getAllActiveConfigs();
+  if (configs.length === 0) {
+    try {
+      // Recuperação pós-restauração: se a tabela zohoOAuthConfigs voltou vazia,
+      // continua usando as credenciais que já existem no ambiente do Render.
+      configs = [await getPrimaryConfig()];
+    } catch (error) {
+      console.warn("Nenhuma configuração Zoho ativa no DB ou no ambiente:", error);
+      return [];
+    }
+  }
   const results = await Promise.all(
-    configs.map(async (config: any) => ({
-      serverId: config.id,
-      serverName: config.name,
-      domain: config.domain || 'h2colombiano.com',
-      users: await listZohoUsersForConfig(config, limit),
-    }))
+    configs.map(async (config: any) => {
+      const users = await listZohoUsersForConfig(config, limit);
+      const inferredDomain = config.domain || users.find((user) => user.primaryEmailAddress?.includes("@"))?.primaryEmailAddress.split("@")[1] || 'h2colombiano.com';
+      return {
+        serverId: config.id,
+        serverName: config.name,
+        domain: inferredDomain,
+        users,
+      };
+    })
   );
   return results;
 }
