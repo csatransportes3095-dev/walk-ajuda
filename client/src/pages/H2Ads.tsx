@@ -15,9 +15,13 @@ const visualColorKey = (kind: "group" | "instance", id: number) => `${kind}:${id
 const readVisualColors = (): VisualColors => {
   if (typeof window === "undefined") return {};
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(H2ADS_VISUAL_COLORS_KEY) || "{}");
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(H2ADS_VISUAL_COLORS_KEY) || "{}");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    return Object.fromEntries(Object.entries(parsed).filter(([, value]) => typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)));
+    const colors: VisualColors = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)) colors[key] = value.toUpperCase();
+    }
+    return colors;
   } catch { return {}; }
 };
 const colorBackground = (hex: string) => `${hex}22`;
