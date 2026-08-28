@@ -13,7 +13,7 @@ import { registerApkDownloadRoute, ensureApkTable } from "../routers/apk";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { isIpBlocked, getSetting } from "../db";
+import { isIpBlocked, getSetting, getDb } from "../db";
 import { broadcastEmailHandler } from "../broadcastEmailHandler";
 import { registerPingRoute } from "./pingRoute";
 import { registerH2AdsWorkerRoute } from "../h2adsWorkerRoute";
@@ -34,6 +34,50 @@ function scheduleFatalProcessExit() {
   fatalProcessExitScheduled = true;
   process.exitCode = 1;
   setTimeout(() => process.exit(1), 0).unref?.();
+}
+
+async function ensureZohoOAuthInfrastructure() {
+  const db = await getDb();
+  if (!db) return;
+  const { sql } = await import("drizzle-orm");
+
+  // Bancos restaurados podem conter uma versao antiga/incompleta desta tabela.
+  await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS zohoOAuthConfigs (
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    zohoOrgId VARCHAR(64) NOT NULL,
+    zohoClientId VARCHAR(256) NOT NULL,
+    zohoClientSecret VARCHAR(256) NOT NULL,
+    zohoRefreshToken VARCHAR(512) NOT NULL,
+    domain VARCHAR(255) NOT NULL DEFAULT 'h2colombiano.com',
+    isActive INT NOT NULL DEFAULT 1,
+    status ENUM('active','inactive','error') NOT NULL DEFAULT 'inactive',
+    lastError TEXT NULL,
+    lastTestAt BIGINT NULL,
+    createdAt BIGINT NOT NULL DEFAULT 0,
+    updatedAt BIGINT NOT NULL DEFAULT 0
+  )`));
+
+  const columns = [
+    "domain VARCHAR(255) NOT NULL DEFAULT 'h2colombiano.com'",
+    "isActive INT NOT NULL DEFAULT 1",
+    "status ENUM('active','inactive','error') NOT NULL DEFAULT 'inactive'",
+    "lastError TEXT NULL",
+    "lastTestAt BIGINT NULL",
+    "createdAt BIGINT NOT NULL DEFAULT 0",
+    "updatedAt BIGINT NOT NULL DEFAULT 0",
+  ];
+
+  for (const definition of columns) {
+    try {
+      await db.execute(sql.raw(`ALTER TABLE zohoOAuthConfigs ADD COLUMN IF NOT EXISTS ${definition}`));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/duplicate column|already exists/i.test(message)) {
+        console.warn(`[ZohoOAuth] nao foi possivel garantir coluna ${definition.split(" ")[0]}:`, message);
+      }
+    }
+  }
 }
 
 function registerProcessDiagnostics() {
@@ -117,6 +161,11 @@ async function startServer() {
     await ensureCustomerIdentityInfrastructure();
   } catch (error) {
     console.error('[CustomerIdentity] infraestrutura não inicializada:', error);
+  }
+  try {
+    await ensureZohoOAuthInfrastructure();
+  } catch (error) {
+    console.error('[ZohoOAuth] infraestrutura nao reparada:', error);
   }
   // A migração de cartões cria primeiro cópias de backup e só depois prepara faturas históricas.
   // Ela é executada sem bloquear a abertura da API; as rotas de cartão também aguardam a mesma
