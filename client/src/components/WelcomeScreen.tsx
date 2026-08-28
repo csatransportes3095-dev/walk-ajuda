@@ -501,7 +501,8 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
       !!onlineSupportState?.welcomeButtonEnabled &&
       !!onlineSupportState?.showOnPage;
   const supportSortOrder = Number(onlineSupportState?.buttonSortOrder || 3);
-  const supportStatusText = (onlineSupportState as any)?.customStatusText || (onlineSupportState?.onlineNow ? "online" : "fora do horário");
+  const supportCustomStatusText = String((onlineSupportState as any)?.customStatusText || "").trim();
+  const supportStatusText = supportCustomStatusText || (onlineSupportState?.onlineNow ? "online" : "fora do horário");
 
   // Estilo elegante padrão para todos os botões (DM Sans, sem borda grossa)
   const elegantBtnStyle = (color: string, extraStyle: React.CSSProperties = {}): React.CSSProperties => ({
@@ -539,10 +540,12 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-extrabold uppercase tracking-tight text-white">{supportLabel}</span>
           <span className="mt-0.5 block line-clamp-2 text-xs font-medium leading-snug text-white/80">{supportSecondaryText}</span>
-          <span className="mt-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-white/75">
-            <span className={`h-1.5 w-1.5 rounded-full ${onlineSupportState?.onlineNow ? "bg-lime-300 animate-pulse" : "bg-white/40"}`} />
-            {onlineSupportState?.onlineNow ? "Atendimento online" : "Atendimento disponível"}
-          </span>
+          {!supportCustomStatusText && (
+            <span className="mt-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-white/75">
+              <span className={`h-1.5 w-1.5 rounded-full ${onlineSupportState?.onlineNow ? "bg-lime-300 animate-pulse" : "bg-white/40"}`} />
+              {onlineSupportState?.onlineNow ? "Atendimento online" : "Fora do horário"}
+            </span>
+          )}
         </span>
         <span className="text-2xl font-light leading-none text-white/75" aria-hidden="true">›</span>
       </button>
