@@ -1,0 +1,92 @@
+name: Apply H2 Ads improvements v3
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - ".github/workflows/h2ads-apply-improvements-v3.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: h2ads-apply-improvements-v3
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Reapply controlled improvements and repair generated files
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          workflow_path = Path('.github/workflows/h2ads-apply-improvements-v2.yml')
+          lines = workflow_path.read_text(encoding='utf-8').splitlines()
+          start = next(index for index, line in enumerate(lines) if line.strip() == "python <<'PY'") + 1
+          end = next(index for index in range(start, len(lines)) if lines[index].strip() == 'PY')
+          code_lines = []
+          for line in lines[start:end]:
+              code_lines.append(line[10:] if line.startswith('          ') else line)
+          code = '\n'.join(code_lines)
+          compile(code, str(workflow_path), 'exec')
+          exec(code, {'__name__': '__main__'})
+
+          generated = [
+              Path('server/h2adsProxySecurity.ts'),
+              Path('server/h2adsProxySecurity.test.ts'),
+              Path('server/h2adsDesktopRotation.test.ts'),
+              Path('workers/windows/browser-session.mjs'),
+          ]
+          for path in generated:
+              text = path.read_text(encoding='utf-8')
+              if text.startswith('\\\n'):
+                  text = text[2:]
+              elif text.startswith('\\'):
+                  text = text[1:]
+                  if text.startswith('\n'):
+                      text = text[1:]
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run focused tests
+        run: pnpm vitest run server/h2adsProxySecurity.test.ts server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsDesktopRotation.test.ts
+
+      - name: TypeScript check
+        run: pnpm check
+
+      - name: Build production bundle
+        run: pnpm build
+
+      - name: Commit validated improvements
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/h2ads.ts server/h2adsProxySecurity.ts server/h2ads*.test.ts server/routers/h2ads.ts client/src/pages/H2Ads.tsx workers/windows/H2AdsWorker.ps1 workers/windows/browser-session.mjs .github/workflows/h2ads-validate.yml
+          git diff --cached --stat
+          git commit -m "feat(h2ads): improve desktop layout, rotation and close response"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
