@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.3.2"
+$AgentVersion = "1.3.3"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -236,13 +236,18 @@ if ($Run) {
   $workerMutex = Acquire-WorkerMutex $config
   if ($null -eq $workerMutex) { exit 0 }
   Stop-ExistingWorkerProcesses
-  try {
-    while ($true) {
+$nextHeartbeatAt = Get-Date
+try {
+  while ($true) {
+    $now = Get-Date
+    if ($now -ge $nextHeartbeatAt) {
       try { Invoke-WorkerHeartbeat $config } catch { }
-      try { Invoke-PendingBrowserCommand $config } catch { }
-      Start-Sleep -Seconds 10
+      $nextHeartbeatAt = $now.AddSeconds(20)
     }
-  } finally {
+    try { Invoke-PendingBrowserCommand $config } catch { }
+    Start-Sleep -Seconds 2
+  }
+} finally {
     try { $workerMutex.ReleaseMutex() } catch { }
     $workerMutex.Dispose()
   }

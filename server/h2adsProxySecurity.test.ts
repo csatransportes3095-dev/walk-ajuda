@@ -17,18 +17,24 @@ describe("segurança da configuração de proxy H2 Ads", () => {
     process.env.H2ADS_PROXY_ENCRYPTION_KEY = "render_generated_random_value_for_h2ads_123456789";
     const parsed = parseH2AdsProxyInput("edge.example:3128:user_test:pass_test");
     expect(isH2AdsProxyEncryptionReady()).toBe(true);
-    expect(decryptH2AdsProxy(encryptH2AdsProxy(parsed))).toEqual(parsed);
+    expect(decryptH2AdsProxy(encryptH2AdsProxy(parsed))).toEqual({ ...parsed, rotationMinutes: null });
   });
 
-  it("interpreta o formato permitido e cifra sem manter texto aberto", () => {
+  it("cifra credencial e tempo de rotação sem devolver senha no painel", () => {
     const input = ["edge.example", "3128", "user_test", "pass_test"].join(":");
     const parsed = parseH2AdsProxyInput(input, "socks5");
-    const encrypted = encryptH2AdsProxy(parsed);
-    expect(parsed).toMatchObject({ protocol: "socks5", host: "edge.example", port: 3128, username: "user_test" });
+    const encrypted = encryptH2AdsProxy(parsed, 30);
     expect(encrypted).not.toContain(input);
     expect(encrypted).not.toContain(parsed.password);
-    expect(decryptH2AdsProxy(encrypted)).toEqual(parsed);
+    expect(decryptH2AdsProxy(encrypted)).toEqual({ ...parsed, rotationMinutes: 30 });
     expect(proxyCredentialSummary()).toBe("Credencial protegida");
+  });
+
+  it("rejeita rotação fora do limite e mantém payload antigo compatível", () => {
+    const parsed = parseH2AdsProxyInput("edge.example:3128:user_test:pass_test");
+    expect(() => encryptH2AdsProxy(parsed, 0)).toThrow("tempo de rotação");
+    expect(() => encryptH2AdsProxy(parsed, 1_441)).toThrow("tempo de rotação");
+    expect(decryptH2AdsProxy(encryptH2AdsProxy(parsed))).toEqual({ ...parsed, rotationMinutes: null });
   });
 
   it("rejeita formato inválido e destinos de rede local", async () => {

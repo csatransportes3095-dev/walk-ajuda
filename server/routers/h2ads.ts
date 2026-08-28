@@ -21,7 +21,7 @@ import {
   updateH2AdsInstance,
 } from "../h2ads";
 import { adminProcedure } from "../_core/trpc";
-import { decryptH2AdsProxy, encryptH2AdsProxy, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "../h2adsProxySecurity";
+import { decryptH2AdsProxy, encryptH2AdsProxy, H2ADS_PROXY_ROTATION_MINUTES_MAX, H2ADS_PROXY_ROTATION_MINUTES_MIN, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "../h2adsProxySecurity";
 import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "../h2adsProxyValidation";
 
 export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
@@ -88,6 +88,12 @@ export const h2AdsSaveProxyCredentialSchema = z.object({
   instanceId: z.number().int().positive(),
   proxyConfig: z.string().trim().min(8).max(2_048),
   proxyProtocol: z.enum(["http", "https", "socks5"]).default("http"),
+  rotationMinutes: z.number().int().min(H2ADS_PROXY_ROTATION_MINUTES_MIN).max(H2ADS_PROXY_ROTATION_MINUTES_MAX).nullable().optional(),
+}).strict();
+
+export const h2AdsUpdateProxyRotationSchema = z.object({
+  instanceId: z.number().int().positive(),
+  rotationMinutes: z.number().int().min(H2ADS_PROXY_ROTATION_MINUTES_MIN).max(H2ADS_PROXY_ROTATION_MINUTES_MAX).nullable(),
 }).strict();
 
 export const h2AdsValidateProxySchema = z.object({
@@ -231,16 +237,31 @@ export const h2AdsRouter = {
   saveProxyCredential: adminProcedure.input(h2AdsSaveProxyCredentialSchema).mutation(async ({ input }) => {
     await requireConfigurableInstance(input.instanceId);
     try {
-      const encryptedPayload = encryptH2AdsProxy(parseH2AdsProxyInput(input.proxyConfig, input.proxyProtocol));
+      const encryptedPayload = encryptH2AdsProxy(parseH2AdsProxyInput(input.proxyConfig, input.proxyProtocol), input.rotationMinutes ?? null);
       await saveH2AdsProxyCredential(input.instanceId, encryptedPayload);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Não foi possível proteger a configuração de proxy.";
       throw new TRPCError({ code: "BAD_REQUEST", message });
     }
-    return { success: true, summary: proxyCredentialSummary() };
+    return { success: true, summary: proxyCredentialSummary(), rotationMinutes: input.rotationMinutes ?? null };
   }),
 
-  validateProxy: adminProcedure.input(h2AdsValidateProxySchema).mutation(async ({ input }) => {
+updateProxyRotation: adminProcedure.input(h2AdsUpdateProxyRotationSchema).mutation(async ({ input }) => {
+  await requireConfigurableInstance(input.instanceId);
+  const encryptedPayload = await getH2AdsProxyCredential(input.instanceId);
+  if (!encryptedPayload) throw new TRPCError({ code: "NOT_FOUND", message: "Nenhuma credencial protegida foi configurada para esta instância." });
+  try {
+    const protectedProxy = decryptH2AdsProxy(encryptedPayload);
+    await saveH2AdsProxyCredential(input.instanceId, encryptH2AdsProxy(protectedProxy, input.rotationMinutes));
+    return { success: true, rotationMinutes: input.rotationMinutes };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Não foi possível atualizar o tempo de rotação.";
+    throw new TRPCError({ code: "BAD_REQUEST", message });
+  }
+}),
+
+validateProxy: adminProcedure.input(h2AdsValidateProxySchema).mutation(async ({ input }) => {
+
     await requireConfigurableInstance(input.instanceId);
     const encryptedPayload = await getH2AdsProxyCredential(input.instanceId);
     if (!encryptedPayload) throw new TRPCError({ code: "NOT_FOUND", message: "Nenhuma credencial protegida foi configurada para esta instância." });

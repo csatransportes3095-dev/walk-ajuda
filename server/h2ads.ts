@@ -2,12 +2,13 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, asc, desc, eq, gt, isNull } from "drizzle-orm";
 import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceBrowserRuns, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsWorkerBrowserCommands, h2AdsWorkerCommands, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceBrowserRun, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment } from "../drizzle/schema";
 import { getDb } from "./db";
+import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 
 export type H2AdsDashboard = {
   groups: H2AdsGroup[];
   instances: H2AdsInstance[];
   networkProfiles: H2AdsInstanceNetworkProfile[];
-  proxyCredentialStatuses: Array<{ instanceId: number; updatedAt: Date }>;
+  proxyCredentialStatuses: Array<{ instanceId: number; updatedAt: Date; rotationMinutes: number | null }>;
   browserWorkers: H2AdsBrowserWorkerSummary[];
   instanceWorkerAssignments: H2AdsInstanceWorkerAssignmentSummary[];
   instanceBrowserRuns: H2AdsInstanceBrowserRunSummary[];
@@ -30,7 +31,7 @@ export async function listH2AdsDashboard(): Promise<H2AdsDashboard> {
     db.select().from(h2AdsGroups).orderBy(asc(h2AdsGroups.sortOrder), asc(h2AdsGroups.id)),
     db.select().from(h2AdsInstances).orderBy(asc(h2AdsInstances.groupId), asc(h2AdsInstances.sortOrder), asc(h2AdsInstances.id)),
     db.select().from(h2AdsInstanceNetworkProfiles).orderBy(asc(h2AdsInstanceNetworkProfiles.instanceId)),
-    db.select({ instanceId: h2AdsInstanceProxyCredentials.instanceId, updatedAt: h2AdsInstanceProxyCredentials.updatedAt }).from(h2AdsInstanceProxyCredentials).orderBy(asc(h2AdsInstanceProxyCredentials.instanceId)),
+    db.select({ instanceId: h2AdsInstanceProxyCredentials.instanceId, updatedAt: h2AdsInstanceProxyCredentials.updatedAt, encryptedPayload: h2AdsInstanceProxyCredentials.encryptedPayload }).from(h2AdsInstanceProxyCredentials).orderBy(asc(h2AdsInstanceProxyCredentials.instanceId)),
     db.select({ id: h2AdsBrowserWorkers.id, workerKey: h2AdsBrowserWorkers.workerKey, name: h2AdsBrowserWorkers.name, operatingSystem: h2AdsBrowserWorkers.operatingSystem, status: h2AdsBrowserWorkers.status, capacity: h2AdsBrowserWorkers.capacity, computerName: h2AdsBrowserWorkers.computerName, agentVersion: h2AdsBrowserWorkers.agentVersion, lastSeenAt: h2AdsBrowserWorkers.lastSeenAt, revokedAt: h2AdsBrowserWorkers.revokedAt, createdAt: h2AdsBrowserWorkers.createdAt, updatedAt: h2AdsBrowserWorkers.updatedAt }).from(h2AdsBrowserWorkers).orderBy(asc(h2AdsBrowserWorkers.name), asc(h2AdsBrowserWorkers.id)),
     db.select({ instanceId: h2AdsInstanceWorkerAssignments.instanceId, workerId: h2AdsInstanceWorkerAssignments.workerId, profileState: h2AdsInstanceWorkerAssignments.profileState, profileVersion: h2AdsInstanceWorkerAssignments.profileVersion, lastSnapshotAt: h2AdsInstanceWorkerAssignments.lastSnapshotAt, assignedAt: h2AdsInstanceWorkerAssignments.assignedAt, updatedAt: h2AdsInstanceWorkerAssignments.updatedAt }).from(h2AdsInstanceWorkerAssignments).orderBy(asc(h2AdsInstanceWorkerAssignments.instanceId)),
     db.select({ instanceId: h2AdsInstanceBrowserRuns.instanceId, workerId: h2AdsInstanceBrowserRuns.workerId, state: h2AdsInstanceBrowserRuns.state, observedIp: h2AdsInstanceBrowserRuns.observedIp, lastErrorCategory: h2AdsInstanceBrowserRuns.lastErrorCategory, preparedAt: h2AdsInstanceBrowserRuns.preparedAt, lastChangedAt: h2AdsInstanceBrowserRuns.lastChangedAt }).from(h2AdsInstanceBrowserRuns).orderBy(asc(h2AdsInstanceBrowserRuns.instanceId)),
@@ -40,7 +41,13 @@ export async function listH2AdsDashboard(): Promise<H2AdsDashboard> {
     groups,
     instances,
     networkProfiles,
-    proxyCredentialStatuses,
+proxyCredentialStatuses: proxyCredentialStatuses.map(({ encryptedPayload, ...credential }) => {
+  try {
+    return { ...credential, rotationMinutes: decryptH2AdsProxy(encryptedPayload).rotationMinutes };
+  } catch {
+    return { ...credential, rotationMinutes: null };
+  }
+}),
     browserWorkers: browserWorkers.map(worker => ({ ...worker, connectionStatus: worker.status === "revoked" ? "revoked" : worker.lastSeenAt && now - worker.lastSeenAt.getTime() <= H2ADS_WORKER_ONLINE_WINDOW_MS ? "online" : "offline" })),
     instanceWorkerAssignments,
     instanceBrowserRuns,
