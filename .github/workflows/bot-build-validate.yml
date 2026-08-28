@@ -1,4 +1,4 @@
-name: Bot flow finalizer
+name: Fix bot public visibility
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  finalize:
+  fix:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -21,47 +21,25 @@ jobs:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
 
-      - name: Finalize bot flow
+      - name: Force root bot visibility from Chat enabled
         shell: bash
         run: |
           python <<'PY'
           from pathlib import Path
-
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text(encoding='utf-8')
-              if old not in text:
-                  raise SystemExit(f'expected snippet not found: {path}')
-              p.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          replace_once(
-              'server/online-support/service.ts',
-              '    welcomeButtonEnabled: config.welcomeButtonEnabled === 1,',
-              '    welcomeButtonEnabled: pathname === "/" && config.chatEnabled === 1 ? true : config.welcomeButtonEnabled === 1,'
-          )
-          replace_once(
-              'server/online-support/service.ts',
-              '    showOnPage: allowedPages.length === 0 || allowedPages.includes(pathname),',
-              '    showOnPage: pathname === "/" && config.chatEnabled === 1 ? true : allowedPages.length === 0 || allowedPages.includes(pathname),'
-          )
-
-          replace_once(
-              'client/src/components/OnlineRegistrationPanel.tsx',
-              "type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void };",
-              "type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void; initialRoute?: 'gastos' | 'emprestimo' | null };",
-          )
-          replace_once(
-              'client/src/components/OnlineRegistrationPanel.tsx',
-              "export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone }: Props) {\n  const [index, setIndex] = useState(0);\n  const [route, setRoute] = useState<Route>('site');",
-              "export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone, initialRoute = null }: Props) {\n  const [index, setIndex] = useState(initialRoute ? 1 : 0);\n  const [route, setRoute] = useState<Route>(initialRoute || 'site');",
-          )
-          replace_once(
-              'client/src/components/OnlineSupportWidget.tsx',
-              '<OnlineRegistrationPanel conversationId={registrationDraftId} visitorId={visitorId} onBack={goHome} onDone={() => setPhase(intendedRoute ? "entry" : "home")} />',
-              '<OnlineRegistrationPanel conversationId={registrationDraftId} visitorId={visitorId} initialRoute={intendedRoute} onBack={goHome} onDone={() => setPhase(intendedRoute ? "entry" : "home")} />',
-          )
-
-          Path('.github/workflows/bot-three-flows-apply.yml').unlink(missing_ok=True)
+          p = Path('client/src/components/WelcomeScreen.tsx')
+          text = p.read_text(encoding='utf-8')
+          old = '''  const supportVisible =
+    !!onlineSupportState?.chatEnabled &&
+    !!onlineSupportState?.welcomeButtonEnabled &&
+    !!onlineSupportState?.showOnPage;'''
+          new = '''  const supportVisible = location === "/"
+    ? !!onlineSupportState?.chatEnabled
+    : !!onlineSupportState?.chatEnabled &&
+      !!onlineSupportState?.welcomeButtonEnabled &&
+      !!onlineSupportState?.showOnPage;'''
+          if old not in text:
+              raise SystemExit('supportVisible snippet not found')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
 
       - name: Setup pnpm
@@ -78,11 +56,11 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Commit final bot flow
+      - name: Commit validated fix
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/online-support/service.ts client/src/components/OnlineRegistrationPanel.tsx client/src/components/OnlineSupportWidget.tsx .github/workflows/bot-three-flows-apply.yml
-          git commit -m "feat(bot): finalize registration gastos and loan flow [skip ci]"
+          git add client/src/components/WelcomeScreen.tsx
+          git commit -m "fix(bot): show public button whenever chat is enabled"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
