@@ -174,7 +174,7 @@ export async function getPublicState(pathname: string) {
 
   return {
     chatEnabled: config.chatEnabled === 1,
-    welcomeButtonEnabled: config.welcomeButtonEnabled === 1,
+    welcomeButtonEnabled: pathname === "/" && config.chatEnabled === 1 ? true : config.welcomeButtonEnabled === 1,
     floatingBubbleEnabled: config.floatingBubbleEnabled === 1,
     maintenanceMode: config.maintenanceMode === 1,
     buttonLabel: config.buttonLabel,
@@ -190,7 +190,7 @@ export async function getPublicState(pathname: string) {
     outOfHoursMessage: config.outOfHoursMessage,
     notificationsEnabled: notifications,
     allowedPages,
-    showOnPage: allowedPages.length === 0 || allowedPages.includes(pathname),
+    showOnPage: pathname === "/" && config.chatEnabled === 1 ? true : allowedPages.length === 0 || allowedPages.includes(pathname),
     menuItems,
     onlineNow: await isInWorkingHours(),
   };

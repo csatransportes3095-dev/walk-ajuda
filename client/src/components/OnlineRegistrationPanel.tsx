@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc";
 const steps = ['route', 'name', 'phone', 'cpf', 'email', 'cep', 'city', 'uf', 'referrer', 'photo', 'confirm', 'password'] as const;
 type Step = typeof steps[number];
 type Route = 'site' | 'acompanhar' | 'gastos' | 'emprestimo';
-type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void };
+type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void; initialRoute?: 'gastos' | 'emprestimo' | null };
 
 function toBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -16,9 +16,9 @@ function toBase64(file: File) {
   });
 }
 
-export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone }: Props) {
-  const [index, setIndex] = useState(0);
-  const [route, setRoute] = useState<Route>('site');
+export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone, initialRoute = null }: Props) {
+  const [index, setIndex] = useState(initialRoute ? 1 : 0);
+  const [route, setRoute] = useState<Route>(initialRoute || 'site');
   const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', city: '', uf: '', referrerPhone: '', profilePhotoUrl: '' });
   const [value, setValue] = useState('');
   const [file, setFile] = useState<File | null>(null);

@@ -82,7 +82,7 @@ export function OnlineSupportWidget({ isOpen, onClose, onMinimize, onBack, openM
       </main>}
 
       {phase === "entry" && <main style={{ flex: 1, overflowY: "auto", padding: 16 }}><OnlineEntryPanel intendedRoute={intendedRoute} onBack={goHome} onOpenCadastro={() => setPhase("register")} /></main>}
-      {phase === "register" && <main style={{ flex: 1, overflowY: "auto", padding: 16 }}><OnlineRegistrationPanel conversationId={registrationDraftId} visitorId={visitorId} onBack={goHome} onDone={() => setPhase(intendedRoute ? "entry" : "home")} /></main>}
+      {phase === "register" && <main style={{ flex: 1, overflowY: "auto", padding: 16 }}><OnlineRegistrationPanel conversationId={registrationDraftId} visitorId={visitorId} initialRoute={intendedRoute} onBack={goHome} onDone={() => setPhase(intendedRoute ? "entry" : "home")} /></main>}
     </div>
   </div>;
 }
