@@ -108,6 +108,17 @@ export default function SchedulePage() {
       setSelectedSlot(null);
     },
   });
+  const requestRescheduleMut = trpc.schedule.requestReschedule.useMutation({
+    onSuccess: () => {
+      toast.success("Horário liberado. Escolha uma nova data e horário.");
+      setSelectedDate(null);
+      setSelectedSlot(null);
+      setPeriodFilter('all');
+      setShowChangeDate(true);
+      utils.schedule.getByToken.invalidate({ token, accessToken });
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível liberar este horário."),
+  });
 
   const loadedProfile = data && "profile" in data ? data.profile : null;
 
@@ -621,13 +632,18 @@ export default function SchedulePage() {
             </div>
           )}
 
-          {/* Botão alterar */}
+          {/* O horário atual é liberado antes de exibir a escolha de nova data. */}
           <button
-            onClick={() => setShowChangeDate(true)}
-            className="w-full px-4 py-3.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.98]"
+            onClick={() => {
+              if (window.confirm("Seu horário atual será liberado para você escolher uma nova data e horário. Deseja continuar?")) {
+                requestRescheduleMut.mutate({ token, accessToken });
+              }
+            }}
+            disabled={requestRescheduleMut.isPending}
+            className="w-full px-4 py-3.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             style={{ background: `linear-gradient(135deg, ${accent}, ${accent}cc)` }}>
-            <CalendarClock className="w-4 h-4" />
-            Alterar Data/Hora
+            {requestRescheduleMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
+            {requestRescheduleMut.isPending ? "Liberando horário..." : "Desmarcar e escolher novo horário"}
           </button>
 
         </div>

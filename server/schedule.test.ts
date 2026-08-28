@@ -8,6 +8,7 @@ import {
   createAppointment,
   getAppointmentByToken,
   confirmAppointment,
+  reopenAppointment,
   listAppointmentsByPhone,
 } from "./db";
 import { scheduleSlots, scheduleAppointments } from "../drizzle/schema";
@@ -168,5 +169,31 @@ describe("Sistema de agendamento — reserva exclusiva", () => {
     // segunda tentativa (em outro slot) deve falhar pois já está confirmado
     const second = await confirmAppointment(token, s2.id);
     expect(second.ok).toBe(false);
+  });
+
+  it("permite escolher um novo horário depois de liberar o próprio agendamento confirmado", async () => {
+    const db = await dbOrSkip();
+    if (!db) return expect(true).toBe(true);
+
+    await createScheduleSlots([
+      { slotDate: TEST_DATE, slotTime: "10:00", capacity: 1 },
+      { slotDate: TEST_DATE, slotTime: "10:30", capacity: 1 },
+    ]);
+    const allSlots = await listScheduleSlots();
+    const firstSlot = allSlots.find(s => s.slotDate === TEST_DATE && s.slotTime === "10:00")!;
+    const replacementSlot = allSlots.find(s => s.slotDate === TEST_DATE && s.slotTime === "10:30")!;
+    createdSlotIds.push(firstSlot.id, replacementSlot.id);
+
+    const token = crypto.randomBytes(8).toString("hex");
+    createdApptTokens.push(token);
+    const appointment = await createAppointment({ token, registrationId: REG_B, subOrderIndex: 6, customerPhone: "11999990004" });
+    expect((await confirmAppointment(token, firstSlot.id)).ok).toBe(true);
+
+    await reopenAppointment(appointment.id);
+    expect((await getAppointmentByToken(token))?.status).toBe("pending");
+
+    const replacement = await confirmAppointment(token, replacementSlot.id);
+    expect(replacement.ok).toBe(true);
+    expect(replacement.appointment?.slotTime).toBe("10:30");
   });
 });
