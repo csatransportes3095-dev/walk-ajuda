@@ -37,6 +37,10 @@ export default function AdminCommissions() {
   const [filterPaid, setFilterPaid] = useState<"all" | "pending" | "paid" | "invalid">("all");
 
   const commissionsQuery = trpc.orderStatus.listCommissions.useQuery();
+  const customersQuery = trpc.customers.list.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
   const statusTypesQuery = trpc.statusTypes.list.useQuery();
   const dynamicStatuses = statusTypesQuery.data ?? [];
   // Mapa dinâmico de status (prioriza banco, fallback para mapa estático)
@@ -93,6 +97,13 @@ export default function AdminCommissions() {
   });
 
   const all = commissionsQuery.data ?? [];
+  const mainCustomers = (customersQuery.data ?? []) as unknown as Array<{ phone: string; profilePhotoUrl?: string | null }>;
+  const normalizePhoneKey = (phone?: string | null) => String(phone || "").replace(/\D/g, "");
+  const profilePhotoByPhone = new Map(
+    mainCustomers
+      .filter(customer => normalizePhoneKey(customer.phone))
+      .map(customer => [normalizePhoneKey(customer.phone), customer.profilePhotoUrl || null] as const),
+  );
 
   // Filtrar por status de pagamento
   const filtered = all.filter(c => {
@@ -258,6 +269,9 @@ export default function AdminCommissions() {
             const invalidas = pedidos.filter(p => Boolean((p as any).referralInvalid)).length;
             const indicadorNome = pedidos[0]?.referredBy ?? "—";
             const indicadorPhone = pedidos[0]?.referredByPhone;
+            const indicadorPhotoUrl = indicadorPhone
+              ? (profilePhotoByPhone.get(normalizePhoneKey(indicadorPhone)) || null)
+              : null;
             const totalIndicacoes = pedidos[0]?.totalReferrals ?? pedidos.length;
             const totalPendenteValor = pedidos.filter(p => p.commissionPaid !== 1 && !(p as any).referralInvalid).reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
             const totalPagoValor = pedidos.filter(p => p.commissionPaid === 1 && !(p as any).referralInvalid).reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
@@ -271,18 +285,25 @@ export default function AdminCommissions() {
                     : "bg-green-500/5 border-green-500/15"
                 }`}>
                   <div className="flex-shrink-0">
-                    {pedidos[0]?.referrerPhotoUrl ? (
+                    {indicadorPhotoUrl ? (
                       <img
-                        src={pedidos[0].referrerPhotoUrl}
+                        src={indicadorPhotoUrl}
                         alt={indicadorNome}
                         className="w-12 h-12 rounded-full object-cover border-2 border-amber-400/40 shadow"
-                        title={indicadorNome}
+                        title={`${indicadorNome} — foto do cadastro principal`}
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                          const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
+                          if (fallback) fallback.style.display = "flex";
+                        }}
                       />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-amber-500/20 border-2 border-amber-400/30 flex items-center justify-center">
-                        <span className="text-amber-300 text-lg font-bold">{indicadorNome.charAt(0).toUpperCase()}</span>
-                      </div>
-                    )}
+                    ) : null}
+                    <div
+                      className="w-12 h-12 rounded-full bg-amber-500/20 border-2 border-amber-400/30 items-center justify-center"
+                      style={{ display: indicadorPhotoUrl ? "none" : "flex" }}
+                    >
+                      <span className="text-amber-300 text-lg font-bold">{indicadorNome.charAt(0).toUpperCase()}</span>
+                    </div>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
