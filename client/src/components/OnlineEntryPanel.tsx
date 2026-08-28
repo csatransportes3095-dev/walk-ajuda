@@ -5,9 +5,10 @@ import { trpc } from "@/lib/trpc";
 const ENTRY_TOKEN_KEY = "walk_online_entry_token";
 function fileToBase64(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); }); }
 
-type Props = { onBack: () => void; onOpenCadastro: () => void };
+type ProtectedRoute = 'gastos' | 'emprestimo';
+type Props = { onBack: () => void; onOpenCadastro: () => void; intendedRoute?: ProtectedRoute | null };
 
-export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
+export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null }: Props) {
   const [token, setToken] = useState(() => localStorage.getItem(ENTRY_TOKEN_KEY) || "");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -18,6 +19,7 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [passwordCreatedPending, setPasswordCreatedPending] = useState(false);
+  const [autoRouteHandled, setAutoRouteHandled] = useState(false);
   const sessionQ = trpc.onlineSupport.entrySession.useQuery({ token }, { enabled: !!token, retry: false, refetchInterval: token ? 10000 : false });
   const loginMut = trpc.customerPassword.login.useMutation();
   const passwordStatusMut = trpc.customerPassword.checkStatusMutation.useMutation();
@@ -57,6 +59,7 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
     if (cleanPhone.length < 10) return;
     try {
       const result = await passwordStatusMut.mutateAsync({ phone: cleanPhone });
+      if (result.status === 'not_found') { setError('Cadastro não localizado. Para continuar, faça seu cadastro primeiro.'); return; }
       if (result.status === 'no_password') openPasswordSetup(result.phone);
     } catch { /* A validação final continua protegida pelo endpoint de login. */ }
   };
@@ -85,15 +88,25 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
 
   const login = async () => {
     setError("");
-    const result = await loginMut.mutateAsync({ phone: phone.replace(/\D/g, ""), password });
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length < 10) { setError('Informe seu telefone com DDD.'); return; }
+    try {
+      const status = await passwordStatusMut.mutateAsync({ phone: cleanPhone });
+      if (status.status === 'not_found') { onOpenCadastro(); return; }
+      if (status.status === 'no_password') { openPasswordSetup(status.phone); return; }
+      if (status.status === 'pending_approval') { setError('Sua senha está aguardando liberação do administrador.'); return; }
+      if (status.status === 'expired') { openPasswordSetup(status.phone); return; }
+      if (status.status === 'blocked') { setError(status.blockReason || 'Seu acesso está bloqueado.'); return; }
+    } catch { /* O endpoint de login continua sendo a validação final. */ }
+
+    const result = await loginMut.mutateAsync({ phone: cleanPhone, password });
     if (!result.success || !result.token) {
       if (result.error === 'no_password') { openPasswordSetup(); return; }
-      setError(result.error === 'wrong_password' ? 'Senha incorreta.' : result.error === 'pending_approval' ? 'Sua senha está aguardando liberação do administrador.' : result.error === 'expired' ? 'Sua senha venceu. Crie uma nova senha.' : 'Não foi possível entrar.');
+      setError(result.error === 'wrong_password' ? 'Senha incorreta.' : result.error === 'pending_approval' ? 'Sua senha está aguardando liberação do administrador.' : result.error === 'expired' ? 'Sua senha venceu. Crie uma nova senha.' : result.error === 'blocked' ? (result.blockReason || 'Seu acesso está bloqueado.') : 'Não foi possível entrar.');
       if (result.error === 'expired') openPasswordSetup();
       return;
     }
     localStorage.setItem(ENTRY_TOKEN_KEY, result.token);
-    // /acompanhar usa a mesma autenticação oficial; reutiliza o token, sem pedir senha novamente.
     localStorage.setItem('cp_token', result.token);
     setToken(result.token);
     setPassword("");
@@ -198,6 +211,22 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
     catch (e: any) { setError(e?.message || 'Não foi possível enviar o comprovante.'); }
   };
 
+  useEffect(() => { setAutoRouteHandled(false); }, [intendedRoute]);
+
+  useEffect(() => {
+    if (!intendedRoute || autoRouteHandled || !sessionQ.data?.authenticated || sessionQ.data?.customer?.profileUpdateRequired) return;
+    setAutoRouteHandled(true);
+    const state = routeState(intendedRoute);
+    if (state.allowed) { openRoute(intendedRoute); return; }
+    if (state.pending) { setError('Seu acesso a esta área já está em análise pelo administrador.'); return; }
+    if (state.denied && state.daysRemaining > 0) {
+      const date = state.retryAtMs ? new Date(state.retryAtMs).toLocaleDateString('pt-BR') : '';
+      setError(`Seu acesso foi reprovado. Você poderá solicitar novamente em ${date}.`);
+      return;
+    }
+    void requestRoute(intendedRoute);
+  }, [intendedRoute, autoRouteHandled, sessionQ.data?.authenticated, sessionQ.data?.customer?.profileUpdateRequired, sessionQ.data?.access, sessionQ.data?.routeStates]);
+
   const customer = sessionQ.data?.authenticated ? sessionQ.data.customer : null;
   if (customer?.profileUpdateRequired) return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <div style={{ ...cardStyle, border: '1px solid rgba(245,158,11,.35)' }}>
@@ -228,14 +257,14 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro }: Props) {
     <button onClick={onBack} style={backStyle}><ArrowLeft size={15} /> Voltar</button>
     <div style={cardStyle}>
       <KeyRound size={21} color="#a78bfa" />
-      <h3 style={{ margin: '8px 0 4px', color: '#fff', fontSize: 16 }}>Entrar no meu atendimento</h3>
-      <p style={{ margin: '0 0 14px', color: 'rgba(255,255,255,.6)', fontSize: 12, lineHeight: 1.45 }}>Informe seu telefone e sua senha. O bot nunca salva sua senha.</p>
+      <h3 style={{ margin: '8px 0 4px', color: '#fff', fontSize: 16 }}>{intendedRoute === 'gastos' ? 'Acessar Controle de Gastos' : intendedRoute === 'emprestimo' ? 'Acessar Empréstimos' : 'Entrar no meu atendimento'}</h3>
+      <p style={{ margin: '0 0 14px', color: 'rgba(255,255,255,.6)', fontSize: 12, lineHeight: 1.45 }}>Informe seu telefone e sua senha. Primeiro confirmamos seu cadastro; depois validamos a permissão da área escolhida.</p>
       <input value={phone} onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setError(''); }} onBlur={inspectPasswordStatus} placeholder="Telefone com DDD" inputMode="numeric" style={inputStyle} />
       <input value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()} placeholder="Senha" type="password" style={{ ...inputStyle, marginTop: 8 }} />
       {error && <p style={{ margin: '8px 0 0', color: '#fca5a5', fontSize: 12 }}>{error}</p>}
-      <button disabled={loginMut.isPending || !phone || !password} onClick={login} style={primaryStyle}>{loginMut.isPending ? 'Entrando...' : 'Entrar com segurança'}</button>
+      <button disabled={loginMut.isPending || passwordStatusMut.isPending || !phone || !password} onClick={login} style={primaryStyle}>{loginMut.isPending || passwordStatusMut.isPending ? 'Verificando...' : 'Entrar com segurança'}</button>
     </div>
-    <button onClick={onOpenCadastro} style={secondaryStyle}>Ainda não tenho cadastro</button>
+    <button onClick={onOpenCadastro} style={secondaryStyle}>Ainda não tenho cadastro — Fazer cadastro</button>
   </div>;
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
