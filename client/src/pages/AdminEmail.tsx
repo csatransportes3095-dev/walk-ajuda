@@ -94,7 +94,7 @@ type ModalStep = 'select-server' | 'fill-form';
 
 export default function AdminEmail() {
   const utils = trpc.useUtils();
-  const { data: groups = [], isLoading, refetch } = trpc.email.list.useQuery();
+  const { data: groups = [], isLoading, refetch } = trpc.email.list.useQuery(undefined, { staleTime: 0, refetchInterval: 2_000, refetchIntervalInBackground: true, refetchOnWindowFocus: true });
 
   const [search, setSearch] = useState("");
   const [modalStep, setModalStep] = useState<ModalStep | null>(null);

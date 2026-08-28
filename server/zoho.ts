@@ -7,7 +7,7 @@ const ZOHO_USER_API_BASE = "https://mail.zoho.com/api";
 // Cache por servidor (configId -> token)
 const tokenCache = new Map<number, { token: string; expiresAt: number }>();
 
-// Cache de credenciais de todos os servidores ativos (expira em 30s)
+// Cache curto: servidor criado/ativado no ADM deve aparecer quase imediatamente
 let cachedActiveConfigs: any[] | null = null;
 let configCacheExpiresAt = 0;
 
@@ -19,8 +19,8 @@ async function getAllActiveConfigs(): Promise<any[]> {
   try {
     const { listZohoOAuthConfigs } = await import('./db');
     const all = await listZohoOAuthConfigs();
-    cachedActiveConfigs = all.filter((c: any) => c.isActive === 1);
-    configCacheExpiresAt = now + 30_000;
+    cachedActiveConfigs = all.filter((c: any) => Number(c.isActive) === 1);
+    configCacheExpiresAt = now + 1_000;
     return cachedActiveConfigs;
   } catch (err) {
     console.warn("Erro ao buscar configs Zoho:", err);
