@@ -1,26 +1,69 @@
-name: Bot flow validation
+name: Bot flow finalizer
 
 on:
   push:
     branches:
       - recovery/organizar-salvos-2026-08-24
     paths:
-      - "client/src/components/OnlineSupportWidget.tsx"
-      - "client/src/components/OnlineEntryPanel.tsx"
-      - "client/src/components/OnlineRegistrationPanel.tsx"
-      - "server/online-support/**"
       - ".github/workflows/bot-build-validate.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  validate:
+  finalize:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Finalize bot flow
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'expected snippet not found: {path}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'server/online-support/service.ts',
+              '    welcomeButtonEnabled: config.welcomeButtonEnabled === 1,',
+              '    welcomeButtonEnabled: pathname === "/" && config.chatEnabled === 1 ? true : config.welcomeButtonEnabled === 1,'
+          )
+          replace_once(
+              'server/online-support/service.ts',
+              '    showOnPage: allowedPages.length === 0 || allowedPages.includes(pathname),',
+              '    showOnPage: pathname === "/" && config.chatEnabled === 1 ? true : allowedPages.length === 0 || allowedPages.includes(pathname),'
+          )
+
+          replace_once(
+              'client/src/components/OnlineRegistrationPanel.tsx',
+              "type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void };",
+              "type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void; initialRoute?: 'gastos' | 'emprestimo' | null };",
+          )
+          replace_once(
+              'client/src/components/OnlineRegistrationPanel.tsx',
+              "export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone }: Props) {\n  const [index, setIndex] = useState(0);\n  const [route, setRoute] = useState<Route>('site');",
+              "export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone, initialRoute = null }: Props) {\n  const [index, setIndex] = useState(initialRoute ? 1 : 0);\n  const [route, setRoute] = useState<Route>(initialRoute || 'site');",
+          )
+          replace_once(
+              'client/src/components/OnlineSupportWidget.tsx',
+              '<OnlineRegistrationPanel conversationId={registrationDraftId} visitorId={visitorId} onBack={goHome} onDone={() => setPhase(intendedRoute ? "entry" : "home")} />',
+              '<OnlineRegistrationPanel conversationId={registrationDraftId} visitorId={visitorId} initialRoute={intendedRoute} onBack={goHome} onDone={() => setPhase(intendedRoute ? "entry" : "home")} />',
+          )
+
+          Path('.github/workflows/bot-three-flows-apply.yml').unlink(missing_ok=True)
+          PY
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
@@ -34,3 +77,12 @@ jobs:
         run: pnpm check
       - name: Build
         run: pnpm build
+
+      - name: Commit final bot flow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/online-support/service.ts client/src/components/OnlineRegistrationPanel.tsx client/src/components/OnlineSupportWidget.tsx .github/workflows/bot-three-flows-apply.yml
+          git commit -m "feat(bot): finalize registration gastos and loan flow [skip ci]"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
