@@ -1,4 +1,4 @@
-name: Validate commissions profile photos
+name: Validate commissions profile photos v2
 
 on:
   push:
