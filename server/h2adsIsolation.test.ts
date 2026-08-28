@@ -16,6 +16,7 @@ const h2AdsSources = [
   "workers/windows/browser-runner.mjs",
   "workers/windows/browser-session.mjs",
 ].map(file => fs.readFileSync(path.join(projectRoot, file), "utf8")).join("\n");
+const h2AdsVisualStyles = fs.readFileSync(path.join(projectRoot, "client/src/index.css"), "utf8");
 
 describe("isolamento da base H2 Ads", () => {
   it("usa somente tabelas próprias com prefixo h2ads_", () => {
@@ -30,5 +31,12 @@ describe("isolamento da base H2 Ads", () => {
     for (const prohibitedField of ["proxyUrl", "proxyPassword", "browserWSEndpoint", "playwright", "chromium", "firefox", "worker_threads"]) {
       expect(h2AdsSources).not.toContain(prohibitedField);
     }
+  });
+
+  it("mantém o aprimoramento de monitor grande restrito à raiz visual H2 Ads", () => {
+    expect(h2AdsSources).toContain('className="h2ads-workspace');
+    expect(h2AdsVisualStyles).toContain(".h2ads-workspace");
+    expect(h2AdsVisualStyles).toContain("@media (min-width: 1536px)");
+    expect(h2AdsVisualStyles).not.toContain(".h2ads-workspace button {\n    onClick");
   });
 });

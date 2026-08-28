@@ -243,7 +243,7 @@ const validateRoute = async () => {
     } catch (error) { toast.error(errorText(error, "Não foi possível solicitar o encerramento do browser.")); }
   };
 
-  return <div className="min-h-screen overflow-hidden bg-[#06070A] text-slate-100">
+  return <div className="h2ads-workspace min-h-screen overflow-hidden bg-[#06070A] text-slate-100">
     <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_-5%,rgba(245,184,0,0.18),transparent_28%),radial-gradient(circle_at_92%_10%,rgba(20,140,255,0.16),transparent_28%)]" />
     <header className="relative border-b border-white/10 bg-black/30 backdrop-blur-xl"><div className="mx-auto flex max-w-[1800px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
       <div className="flex min-w-0 items-center gap-3"><button type="button" onClick={() => setLocation("/admin/codes")} className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 hover:border-[#F5B800]/40 hover:text-[#FFE37A]" aria-label="Voltar ao painel administrativo"><ArrowLeft className="h-4 w-4" /></button><img src={H2ADS_LOGO} alt="H2 Colombia" className="h-11 w-11 rounded-xl border border-[#F5B800]/45 object-cover" /><div><p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#FFE37A]">H2 Colombia</p><h1 className="text-lg font-black text-white sm:text-xl">H2 ADS <span className="font-medium text-slate-400">· Instâncias</span></h1></div></div>
