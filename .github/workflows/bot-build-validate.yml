@@ -1,4 +1,4 @@
-name: Validate commissions profile photos v2
+name: Validate H2 ADS UX performance v2
 
 on:
   push:
@@ -20,8 +20,8 @@ jobs:
         with:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
-      - name: Apply commissions photo fix
-        run: python scripts/fix-admin-commissions-profile-photo.py
+      - name: Apply H2 ADS UX performance v2
+        run: python scripts/apply-h2ads-ux-performance-v2.py
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
@@ -35,10 +35,10 @@ jobs:
         run: pnpm check
       - name: Build
         run: pnpm build
-      - name: Commit validated commissions fix
+      - name: Commit validated H2 ADS changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/src/pages/AdminCommissions.tsx
-          git commit -m "fix(commissions): use main customer profile photo"
+          git add server/h2ads.ts server/routers/h2ads.ts client/src/pages/H2Ads.tsx
+          git commit -m "feat(h2ads): clarify instance controls and improve responsiveness"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
