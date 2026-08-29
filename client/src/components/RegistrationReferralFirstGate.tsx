@@ -38,6 +38,24 @@ function getReferralInput(section: HTMLElement): HTMLInputElement | null {
   return container?.querySelector<HTMLInputElement>('input[type="tel"]') || null;
 }
 
+function findBackButton(form: HTMLFormElement): HTMLButtonElement | null {
+  return Array.from(form.querySelectorAll<HTMLButtonElement>('button[type="button"]')).find((button) => {
+    const text = (button.textContent || "").trim().toLocaleUpperCase("pt-BR");
+    return text === "VOLTAR" || text.includes("ALTERAR NÚMERO");
+  }) || null;
+}
+
+function prepareBackButton(form: HTMLFormElement, referralSection: HTMLElement): HTMLButtonElement | null {
+  const button = findBackButton(form);
+  if (!button) return null;
+  button.textContent = "← Voltar para alterar número";
+  button.className = "w-full mt-3 px-4 py-3 rounded-xl border border-white/20 bg-white/5 text-white/80 text-sm font-bold hover:bg-white/10 hover:text-white transition-colors";
+  button.style.display = "block";
+  button.dataset.referralBackButton = "1";
+  referralSection.insertAdjacentElement("afterend", button);
+  return button;
+}
+
 function cleanReferralSection(section: HTMLElement) {
   const labels = Array.from(section.querySelectorAll("label"));
   const phoneLabel = labels.find((item) => (item.textContent || "").toLocaleUpperCase("pt-BR").includes("TELEFONE/WHATSAPP DE QUEM INDICOU"));
@@ -77,6 +95,10 @@ function getCustomerPhone(form: HTMLFormElement, referralInput: HTMLInputElement
 function setOtherFieldsVisible(form: HTMLFormElement, referralSection: HTMLElement, visible: boolean) {
   for (const child of Array.from(form.children) as HTMLElement[]) {
     if (child === referralSection) continue;
+    if (child.dataset.referralBackButton === "1") {
+      child.style.display = "block";
+      continue;
+    }
     if (visible) {
       if (child.dataset.referralGateDisplay !== undefined) {
         child.style.display = child.dataset.referralGateDisplay;
@@ -130,6 +152,7 @@ export default function RegistrationReferralFirstGate() {
       form.dataset.referralFirstGate = "1";
       cleanReferralSection(section);
       form.insertBefore(section, form.firstChild);
+      prepareBackButton(form, section);
       setOtherFieldsVisible(form, section, false);
 
       const status = ensureStatus(section);
