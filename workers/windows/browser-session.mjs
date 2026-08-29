@@ -1,9 +1,12 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { Server } from "proxy-chain";
 
+const execFileAsync = promisify(execFile);
+const IP_CHECK_INTERVAL_MS = 15_000;
 const required = ["H2ADS_PANEL_URL", "H2ADS_WORKER_KEY", "H2ADS_WORKER_TOKEN", "H2ADS_INSTANCE_ID", "H2ADS_COMMAND_ID", "H2ADS_PROXY_JSON", "H2ADS_PROFILE_DIRECTORY"];
 if (required.some((key) => !process.env[key])) process.exit(2);
 
@@ -25,7 +28,10 @@ let relay;
 let relayPort;
 let browser;
 let rotationTimer;
+let ipTimer;
 let rotationInProgress = false;
+let lastReportedIp = null;
+let ipCheckInProgress = false;
 
 function upstreamUrl() {
   const protocol = proxy.protocol === "socks5" ? "socks5" : proxy.protocol === "https" ? "https" : "http";
@@ -47,7 +53,34 @@ function headers() {
 }
 
 async function post(path, body) {
-  await fetch(`${panelUrl.replace(/\/$/, "")}${path}`, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+  const response = await fetch(`${panelUrl.replace(/\/$/, "")}${path}`, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+  if (!response.ok) throw new Error(`panel_http_${response.status}`);
+}
+
+async function checkIp() {
+  if (!relayPort) throw new Error("relay_unavailable");
+  const { stdout } = await execFileAsync("curl.exe", ["--silent", "--show-error", "--fail", "--max-time", "20", "--proxy", `http://127.0.0.1:${relayPort}`, "https://api.ipify.org?format=json"], { windowsHide: true, timeout: 25_000, maxBuffer: 8_192 });
+  const data = JSON.parse(stdout);
+  if (typeof data.ip !== "string" || data.ip.length < 3 || data.ip.length > 64) throw new Error("invalid_ip_response");
+  return data.ip.trim();
+}
+
+async function reportObservedIp() {
+  if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || ipCheckInProgress) return;
+  ipCheckInProgress = true;
+  try {
+    const observedIp = await checkIp();
+    const checkedAt = new Date().toISOString();
+    writeSession({ observedIp, lastIpCheckedAt: checkedAt });
+    if (observedIp === lastReportedIp) return;
+    await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp });
+    lastReportedIp = observedIp;
+    writeSession({ observedIp, lastIpReportedAt: checkedAt });
+  } catch {
+    // A medição de IP é auxiliar e nunca deve derrubar a sessão ativa.
+  } finally {
+    ipCheckInProgress = false;
+  }
 }
 
 function writeSession(extra = {}) {
@@ -118,6 +151,7 @@ async function rotateRelay() {
   } finally {
     rotationInProgress = false;
   }
+  void reportObservedIp();
 }
 
 async function run() {
@@ -141,9 +175,13 @@ async function run() {
       rotationTimer.unref?.();
     }
     await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "browser_open" });
+    void reportObservedIp();
+    ipTimer = setInterval(() => { void reportObservedIp(); }, IP_CHECK_INTERVAL_MS);
+    ipTimer.unref?.();
     browser.once("exit", async () => {
       try {
         if (rotationTimer) clearInterval(rotationTimer);
+        if (ipTimer) clearInterval(ipTimer);
         const manifestPath = join(profileDirectory, "h2ads-profile.json");
         const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
         writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: new Date().toISOString() }), "utf8");
@@ -154,6 +192,7 @@ async function run() {
     });
   } catch (error) {
     if (rotationTimer) clearInterval(rotationTimer);
+    if (ipTimer) clearInterval(ipTimer);
     const category = error instanceof Error && error.message === "browser_not_found" ? "browser_not_found" : "browser_launch_failed";
     await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "blocked", errorCategory: category }).catch(() => undefined);
     if (relay) await relay.close(true).catch(() => undefined);
