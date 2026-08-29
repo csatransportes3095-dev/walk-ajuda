@@ -5,10 +5,11 @@ const STYLE_ID = "h2-admin-products-question-tree-style";
 type AnchorState = {
   button: HTMLElement;
   label: string;
-  level: "sub" | "subsub";
+  level: "root" | "sub" | "subsub";
 };
 
-let activeAnchor: AnchorState | null = null;
+let activeCreateAnchor: AnchorState | null = null;
+let activeEditAnchor: AnchorState | null = null;
 
 const styles = `
 .h2-question-builder {
@@ -34,9 +35,12 @@ const styles = `
 .h2-q-smart-summary strong{color:#fff}.h2-q-smart-ok{color:#86efac;font-weight:900}.h2-q-smart-note{color:#67e8f9}
 .h2-q-inline-editor{z-index:80!important;border:1px solid rgba(217,70,239,.65)!important;border-radius:16px!important;background:linear-gradient(180deg,rgba(22,19,31,.995),rgba(9,10,17,.995))!important;box-shadow:0 22px 60px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.03) inset;padding:14px!important}
 .h2-q-inline-editor::before{content:attr(data-h2-context);display:block;margin-bottom:10px;color:#f0abfc;font-size:10px;line-height:1.3;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
-@media(min-width:900px){.h2-q-inline-editor{position:fixed!important;width:min(520px,calc(100vw - 36px));max-height:min(680px,calc(100vh - 30px));overflow-y:auto}}
-@media(max-width:899px){.h2-q-inline-editor{position:fixed!important;left:10px!important;right:10px!important;bottom:10px!important;top:auto!important;width:auto!important;max-height:78vh;overflow-y:auto}}
+.h2-q-edit-editor{border-color:rgba(56,189,248,.72)!important;box-shadow:0 22px 60px rgba(0,0,0,.68),0 0 32px rgba(56,189,248,.12)!important}
+.h2-q-edit-editor::before{color:#7dd3fc!important}
+@media(min-width:900px){.h2-q-inline-editor{position:fixed!important;width:min(560px,calc(100vw - 36px));max-height:min(760px,calc(100vh - 30px));overflow-y:auto}}
+@media(max-width:899px){.h2-q-inline-editor{position:fixed!important;left:10px!important;right:10px!important;bottom:10px!important;top:auto!important;width:auto!important;max-height:82vh;overflow-y:auto}}
 .h2-q-anchor-active{box-shadow:0 0 0 2px rgba(34,211,238,.65),0 0 22px rgba(34,211,238,.15)!important}
+.h2-q-edit-anchor-active{box-shadow:0 0 0 2px rgba(56,189,248,.82),0 0 26px rgba(56,189,248,.18)!important}
 @media(max-width:700px){.h2-q-sub-branch{margin-left:12px!important;padding-left:10px}.h2-q-subsub-card{margin-left:14px!important}.h2-q-root-card,.h2-q-sub-card,.h2-q-subsub-card{align-items:flex-start!important;flex-wrap:wrap}}
 `;
 
@@ -88,6 +92,17 @@ function findNewQuestionForm(builder: HTMLElement): HTMLElement | null {
   return null;
 }
 
+function findEditQuestionForm(builder: HTMLElement): HTMLElement | null {
+  const candidates = Array.from(builder.querySelectorAll<HTMLElement>("div"));
+  for (const element of candidates) {
+    const cls = element.className || "";
+    if (!cls.includes("border-purple-500/40") || !cls.includes("space-y-2")) continue;
+    const labels = Array.from(element.querySelectorAll("label")).map(textOf);
+    if (labels.includes("Pergunta") && labels.includes("Resposta")) return element;
+  }
+  return null;
+}
+
 function addSummary(builder: HTMLElement) {
   let summary = builder.querySelector<HTMLElement>(".h2-q-smart-summary");
   if (!summary) {
@@ -100,38 +115,76 @@ function addSummary(builder: HTMLElement) {
   const roots = builder.querySelectorAll(".h2-q-root-card").length;
   const subs = builder.querySelectorAll(".h2-q-sub-card").length;
   const subsubs = builder.querySelectorAll(".h2-q-subsub-card").length;
-  summary.innerHTML = `<span class="h2-q-smart-ok">✓ ÁRVORE ATIVA</span><span><strong>${roots}</strong> principais</span><span><strong>${subs}</strong> sub</span><span><strong>${subsubs}</strong> sub da sub</span><span class="h2-q-smart-note">Vínculo e condição são preenchidos automaticamente pelo ramo clicado.</span>`;
+  summary.innerHTML = `<span class="h2-q-smart-ok">✓ ÁRVORE ATIVA</span><span><strong>${roots}</strong> principais</span><span><strong>${subs}</strong> sub</span><span><strong>${subsubs}</strong> sub da sub</span><span class="h2-q-smart-note">Criar e editar usam o ramo clicado como contexto.</span>`;
 }
 
-function positionInlineEditor(form: HTMLElement) {
-  if (!activeAnchor || !document.body.contains(activeAnchor.button)) return;
-  const rect = activeAnchor.button.getBoundingClientRect();
-  const width = Math.min(520, window.innerWidth - 36);
+function anchorLevelLabel(level: AnchorState["level"]): string {
+  if (level === "subsub") return "SUB DA SUB";
+  if (level === "sub") return "SUB";
+  return "PERGUNTA";
+}
+
+function positionFloatingEditor(form: HTMLElement, anchor: AnchorState, mode: "create" | "edit") {
+  if (!document.body.contains(anchor.button)) return;
+  const rect = anchor.button.getBoundingClientRect();
+  const width = Math.min(560, window.innerWidth - 36);
   const left = Math.min(Math.max(18, rect.left), Math.max(18, window.innerWidth - width - 18));
-  const estimatedHeight = Math.min(680, window.innerHeight - 30);
+  const estimatedHeight = Math.min(760, window.innerHeight - 30);
   let top = rect.bottom + 8;
-  if (top + estimatedHeight > window.innerHeight - 12) top = Math.max(12, rect.top - Math.min(estimatedHeight, 560));
+  if (top + estimatedHeight > window.innerHeight - 12) top = Math.max(12, rect.top - Math.min(estimatedHeight, 620));
   form.style.left = `${left}px`;
   form.style.top = `${top}px`;
-  form.dataset.h2Context = `${activeAnchor.level === "subsub" ? "Nova sub da sub" : "Nova sub-pergunta"} · ${activeAnchor.label}`;
+  form.dataset.h2Context = `${mode === "edit" ? "EDITANDO" : "NOVA"} ${anchorLevelLabel(anchor.level)} · ${anchor.label}`;
   form.classList.add("h2-q-inline-editor");
-  activeAnchor.button.classList.add("h2-q-anchor-active");
+  form.classList.toggle("h2-q-edit-editor", mode === "edit");
+  anchor.button.classList.add(mode === "edit" ? "h2-q-edit-anchor-active" : "h2-q-anchor-active");
+}
+
+function clearFloatingEditor(form: HTMLElement | null) {
+  if (!form) return;
+  form.classList.remove("h2-q-inline-editor", "h2-q-edit-editor");
+  form.removeAttribute("data-h2-context");
+  form.style.left = "";
+  form.style.top = "";
+}
+
+function levelFromEditButton(button: HTMLElement): AnchorState["level"] {
+  const title = (button.getAttribute("title") || "").toLocaleLowerCase("pt-BR");
+  if (title.includes("sub-sub")) return "subsub";
+  if (title.includes("sub-pergunta")) return "sub";
+  return "root";
+}
+
+function editLabel(button: HTMLElement): string {
+  const card = button.closest<HTMLElement>(".h2-q-root-card,.h2-q-sub-card,.h2-q-subsub-card");
+  if (card) {
+    const spans = Array.from(card.querySelectorAll<HTMLElement>("span"));
+    const candidate = spans.find((span) => {
+      const value = textOf(span);
+      return value.length > 3 && !value.startsWith("↳") && !value.startsWith("se ") && !["select", "text", "audio", "textarea", "*"].includes(value.toLowerCase());
+    });
+    if (candidate) return textOf(candidate).slice(0, 70);
+  }
+  return (button.getAttribute("title") || "Pergunta").replace(/^Editar\s*/i, "");
 }
 
 function enhanceBuilder(builder: HTMLElement) {
   builder.classList.add("h2-question-builder");
   classifyTree(builder);
   addSummary(builder);
-  const form = findNewQuestionForm(builder);
-  if (form) {
-    form.classList.add("h2-q-new-form");
-    const isConditional = textOf(form).includes("Sub-pergunta de:") || textOf(form).includes("Sub-pergunta quando resposta =") || textOf(form).includes("Sub-sub-pergunta");
-    if (isConditional && activeAnchor) positionInlineEditor(form);
-    else {
-      form.classList.remove("h2-q-inline-editor");
-      form.removeAttribute("data-h2-context");
-      form.style.left = ""; form.style.top = "";
-    }
+
+  const newForm = findNewQuestionForm(builder);
+  if (newForm) {
+    newForm.classList.add("h2-q-new-form");
+    const isConditional = textOf(newForm).includes("Sub-pergunta de:") || textOf(newForm).includes("Sub-pergunta quando resposta =") || textOf(newForm).includes("Sub-sub-pergunta");
+    if (isConditional && activeCreateAnchor) positionFloatingEditor(newForm, activeCreateAnchor, "create");
+    else clearFloatingEditor(newForm);
+  }
+
+  const editForm = findEditQuestionForm(builder);
+  if (editForm) {
+    if (activeEditAnchor) positionFloatingEditor(editForm, activeEditAnchor, "edit");
+    else clearFloatingEditor(editForm);
   }
 }
 
@@ -154,18 +207,44 @@ export default function AdminProductsQuestionUXEnhancer() {
       });
     };
 
+    const clearCreateAnchor = () => {
+      activeCreateAnchor = null;
+      document.querySelectorAll(".h2-q-anchor-active").forEach((el) => el.classList.remove("h2-q-anchor-active"));
+    };
+    const clearEditAnchor = () => {
+      activeEditAnchor = null;
+      document.querySelectorAll(".h2-q-edit-anchor-active").forEach((el) => el.classList.remove("h2-q-edit-anchor-active"));
+    };
+
     const onClick = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target.closest<HTMLElement>("button") : null;
       if (!target) return;
       const label = textOf(target);
+      const title = target.getAttribute("title") || "";
+
       if (label.startsWith("+ sub-pergunta se") || label.startsWith("+ sub-sub se")) {
-        document.querySelectorAll(".h2-q-anchor-active").forEach((el) => el.classList.remove("h2-q-anchor-active"));
-        activeAnchor = { button: target, label: label.replace(/^\+\s*/, ""), level: label.startsWith("+ sub-sub") ? "subsub" : "sub" };
+        clearCreateAnchor();
+        activeCreateAnchor = { button: target, label: label.replace(/^\+\s*/, ""), level: label.startsWith("+ sub-sub") ? "subsub" : "sub" };
         setTimeout(run, 0);
+        return;
       }
-      if (label.includes("Cancelar") || label.includes("Pergunta criada")) {
-        activeAnchor = null;
-        document.querySelectorAll(".h2-q-anchor-active").forEach((el) => el.classList.remove("h2-q-anchor-active"));
+
+      if (title.startsWith("Editar pergunta") || title.startsWith("Editar sub-pergunta") || title.startsWith("Editar sub-sub-pergunta")) {
+        clearEditAnchor();
+        activeEditAnchor = { button: target, label: editLabel(target), level: levelFromEditButton(target) };
+        setTimeout(run, 0);
+        return;
+      }
+
+      const insideEdit = target.closest(".h2-q-edit-editor");
+      if (insideEdit && (label === "Cancelar" || label === "Salvar" || label === "Salvando...")) {
+        setTimeout(() => { clearEditAnchor(); run(); }, 0);
+        return;
+      }
+
+      if (!insideEdit && (label.includes("Cancelar") || label.includes("Pergunta criada"))) {
+        clearCreateAnchor();
+        setTimeout(run, 0);
       }
     };
 
