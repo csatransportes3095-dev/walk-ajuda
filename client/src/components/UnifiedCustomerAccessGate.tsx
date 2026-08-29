@@ -19,6 +19,7 @@ function isUnifiedCustomerRoute(pathname: string): boolean {
     path === "/gastos" ||
     path === "/emprestimo" ||
     path === "/acompanhar" ||
+    path === "/foto" ||
     path === "/cartoes" ||
     path.startsWith("/cartoes/")
   );
@@ -65,8 +66,6 @@ export default function UnifiedCustomerAccessGate({ children }: { children: Reac
   const [cpToken, setCpToken] = useState(() => localStorage.getItem(CP_TOKEN_KEY) || "");
   const [redirecting, setRedirecting] = useState(false);
 
-  // PasswordGate grava cp_token na própria aba; sincronizamos enquanto o acesso
-  // central ou uma rota protegida estiverem ativos.
   useEffect(() => {
     if (!isProtectedRoute && !isCentralLogin) return;
     const sync = () => {
@@ -88,8 +87,7 @@ export default function UnifiedCustomerAccessGate({ children }: { children: Reac
     },
   );
 
-  // Todas as áreas do cliente exigem a mesma sessão central. Sessões antigas não
-  // podem mais pular o cadastro/atualização obrigatório.
+  // Todas as áreas privadas do cliente usam uma única sessão central.
   useEffect(() => {
     if (!isProtectedRoute || redirecting) return;
 
@@ -122,8 +120,6 @@ export default function UnifiedCustomerAccessGate({ children }: { children: Reac
     }
   }, [cpToken, isProtectedRoute, redirecting, sessionQuery.data, sessionQuery.isLoading]);
 
-  // Sessão central inválida na própria /login deve cair no formulário normal,
-  // nunca ser aceita pelo legado.
   useEffect(() => {
     if (!isCentralLogin || !cpToken || sessionQuery.isLoading || sessionQuery.data === undefined) return;
     if (sessionQuery.data.valid) return;
@@ -132,7 +128,6 @@ export default function UnifiedCustomerAccessGate({ children }: { children: Reac
     setCpToken("");
   }, [cpToken, isCentralLogin, sessionQuery.data, sessionQuery.isLoading]);
 
-  // Após autenticar/cadastrar, retorna à rota originalmente solicitada.
   useEffect(() => {
     if (!isCentralLogin || redirecting || !cpToken) return;
     const returnTo = getSafeReturnTo();
