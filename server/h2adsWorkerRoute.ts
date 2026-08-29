@@ -4,6 +4,7 @@ import { and, eq, lt } from "drizzle-orm";
 import { h2AdsWorkerBrowserCommands, h2AdsWorkerCommands } from "../drizzle/schema";
 import { getDb } from "./db";
 import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
+import { recordH2AdsRuntimeIp } from "./h2adsIpHistory";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 
 const MAX_NAME_LENGTH = 128;
@@ -183,11 +184,15 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
     const instanceId = Number(req.params.instanceId);
-    if (!Number.isInteger(instanceId) || instanceId < 1 || req.body?.state !== "closed") {
+    const state = req.body?.state === "closed" || req.body?.state === "browser_open" ? req.body.state : null;
+    const observedIp = workerString(req.body?.observedIp, 64);
+    if (!Number.isInteger(instanceId) || instanceId < 1 || !state || (state === "browser_open" && !observedIp)) {
       res.status(400).json({ error: "Estado de execução inválido." });
       return;
     }
-    const updated = await recordH2AdsBrowserRuntimeState({ workerId: worker.id, instanceId, state: "closed" });
+    const updated = state === "browser_open"
+      ? await recordH2AdsRuntimeIp({ workerId: worker.id, instanceId, observedIp: observedIp! })
+      : await recordH2AdsBrowserRuntimeState({ workerId: worker.id, instanceId, state: "closed" });
     if (!updated) {
       res.status(409).json({ error: "Execução não disponível para este Worker." });
       return;
