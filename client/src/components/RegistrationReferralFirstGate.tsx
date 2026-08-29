@@ -7,6 +7,13 @@ function digits(value: string): string {
   return phone.slice(0, 11);
 }
 
+function findLegacyReferralForm(): HTMLFormElement | null {
+  return Array.from(document.querySelectorAll<HTMLFormElement>("form")).find((form) => {
+    const text = (form.textContent || "").toLocaleUpperCase("pt-BR");
+    return text.includes("INDICADOR OU CÓDIGO DE LIBERAÇÃO");
+  }) || null;
+}
+
 function findRegistrationForm(): HTMLFormElement | null {
   return Array.from(document.querySelectorAll<HTMLFormElement>("form")).find((form) => {
     const text = (form.textContent || "").toLocaleUpperCase("pt-BR");
@@ -20,12 +27,8 @@ function findReferralSection(form: HTMLFormElement): HTMLElement | null {
   if (!label) return null;
 
   let current: HTMLElement | null = label.parentElement;
-  while (current && current !== form) {
-    const text = (current.textContent || "").toLocaleUpperCase("pt-BR");
-    if (text.includes("ACESSO RESTRITO POR INDICAÇÃO") && text.includes("NOME DE QUEM INDICOU")) return current;
-    current = current.parentElement;
-  }
-  return null;
+  while (current && current.parentElement !== form) current = current.parentElement;
+  return current?.parentElement === form ? current : null;
 }
 
 function getReferralInput(section: HTMLElement): HTMLInputElement | null {
@@ -35,18 +38,39 @@ function getReferralInput(section: HTMLElement): HTMLInputElement | null {
   return container?.querySelector<HTMLInputElement>('input[type="tel"]') || null;
 }
 
+function cleanReferralSection(section: HTMLElement) {
+  const labels = Array.from(section.querySelectorAll("label"));
+  const phoneLabel = labels.find((item) => (item.textContent || "").toLocaleUpperCase("pt-BR").includes("TELEFONE/WHATSAPP DE QUEM INDICOU"));
+  const phoneContainer = phoneLabel?.parentElement as HTMLElement | null;
+  if (!phoneContainer) return;
+
+  // O usuário pediu somente o indicador no início do cadastro. Portanto removemos
+  // visualmente o manifesto amarelo, explicações e o campo opcional de nome.
+  for (const child of Array.from(section.children) as HTMLElement[]) {
+    if (child !== phoneContainer && !child.hasAttribute("data-referral-first-status")) {
+      child.style.display = "none";
+    }
+  }
+  for (const paragraph of Array.from(phoneContainer.querySelectorAll("p"))) {
+    paragraph.style.display = "none";
+  }
+
+  section.className = "rounded-xl border border-white/20 bg-white/5 p-4 space-y-2";
+}
+
 function getCustomerPhone(form: HTMLFormElement, referralInput: HTMLInputElement): string {
   const stored = digits(sessionStorage.getItem("reg_phone_temp") || "");
   if (stored.length >= 10) return stored;
 
   const phones = Array.from(form.querySelectorAll<HTMLInputElement>('input[type="tel"]'));
-  const ownPhone = phones.find((input) => input !== referralInput && !findReferralSection(form)?.contains(input));
+  const referralSection = findReferralSection(form);
+  const ownPhone = phones.find((input) => input !== referralInput && !referralSection?.contains(input));
   const visible = digits(ownPhone?.value || "");
   if (visible.length >= 10) return visible;
 
-  // A rota de pré-validação exige um telefone do novo cliente. Quando o fluxo
-  // começou por CPF e o telefone ainda não existe, usamos um valor neutro apenas
-  // para consultar o indicador; o cadastro final continua validando autorreferência.
+  // Quando o cadastro começou por CPF, o telefone próprio pode ainda não existir.
+  // Este valor neutro serve apenas para consultar o indicador; a validação final
+  // continua sendo feita no servidor no momento do cadastro.
   return "00000000000";
 }
 
@@ -70,7 +94,7 @@ function ensureStatus(section: HTMLElement): HTMLElement {
   if (status) return status;
   status = document.createElement("div");
   status.dataset.referralFirstStatus = "1";
-  status.className = "mt-3 rounded-xl border px-4 py-3 text-sm font-bold text-center";
+  status.style.display = "none";
   section.appendChild(status);
   return status;
 }
@@ -80,9 +104,22 @@ export default function RegistrationReferralFirstGate() {
   const lastCheckedRef = useRef("");
   const validPhoneRef = useRef("");
   const timerRef = useRef<number | null>(null);
+  const legacyProcessedRef = useRef<WeakSet<HTMLFormElement>>(new WeakSet());
 
   useEffect(() => {
+    const skipLegacyReferralGate = () => {
+      const legacyForm = findLegacyReferralForm();
+      if (!legacyForm || legacyProcessedRef.current.has(legacyForm)) return;
+      legacyProcessedRef.current.add(legacyForm);
+      legacyForm.style.display = "none";
+      queueMicrotask(() => {
+        if (document.body.contains(legacyForm)) legacyForm.requestSubmit();
+      });
+    };
+
     const wire = () => {
+      skipLegacyReferralGate();
+
       const form = findRegistrationForm();
       if (!form || form.dataset.referralFirstGate === "1") return;
       const section = findReferralSection(form);
@@ -91,21 +128,33 @@ export default function RegistrationReferralFirstGate() {
       if (!input) return;
 
       form.dataset.referralFirstGate = "1";
+      cleanReferralSection(section);
       form.insertBefore(section, form.firstChild);
       setOtherFieldsVisible(form, section, false);
 
       const status = ensureStatus(section);
-      status.className = "mt-3 rounded-xl border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 text-sm font-bold text-center text-yellow-200";
-      status.textContent = "Informe o indicador para liberar o cadastro.";
+
+      const showStatus = (className: string, text: string) => {
+        status.className = className;
+        status.textContent = text;
+        status.style.display = text ? "block" : "none";
+      };
 
       const validate = async () => {
         const referralPhone = digits(input.value);
 
         if (referralPhone.length !== 11) {
           validPhoneRef.current = "";
+          lastCheckedRef.current = "";
           setOtherFieldsVisible(form, section, false);
-          status.className = "mt-3 rounded-xl border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 text-sm font-bold text-center text-yellow-200";
-          status.textContent = referralPhone.length ? "Digite os 11 números do indicador." : "Informe o indicador para liberar o cadastro.";
+          if (referralPhone.length === 0) {
+            showStatus("", "");
+          } else {
+            showStatus(
+              "mt-3 rounded-xl border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 text-sm font-bold text-center text-yellow-200",
+              "Digite os 11 números do indicador.",
+            );
+          }
           return;
         }
 
@@ -113,8 +162,10 @@ export default function RegistrationReferralFirstGate() {
         lastCheckedRef.current = referralPhone;
         validPhoneRef.current = "";
         setOtherFieldsVisible(form, section, false);
-        status.className = "mt-3 rounded-xl border border-cyan-500/50 bg-cyan-500/10 px-4 py-3 text-sm font-bold text-center text-cyan-200";
-        status.textContent = "Verificando indicador...";
+        showStatus(
+          "mt-3 rounded-xl border border-cyan-500/50 bg-cyan-500/10 px-4 py-3 text-sm font-bold text-center text-cyan-200",
+          "Verificando indicador...",
+        );
 
         try {
           const result = await checkMutation.mutateAsync({
@@ -123,19 +174,25 @@ export default function RegistrationReferralFirstGate() {
           });
 
           if (result.status !== "referral_valid") {
-            status.className = "mt-3 rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm font-bold text-center text-red-300";
-            status.textContent = "INDICADOR INVÁLIDO. Este número não possui cadastro ativo e liberado no sistema.";
+            showStatus(
+              "mt-3 rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm font-bold text-center text-red-300",
+              "INDICADOR INVÁLIDO. Este número não possui cadastro ativo e liberado no sistema.",
+            );
             setOtherFieldsVisible(form, section, false);
             return;
           }
 
           validPhoneRef.current = referralPhone;
-          status.className = "mt-3 rounded-xl border border-green-500/60 bg-green-500/10 px-4 py-3 text-sm font-bold text-center text-green-300";
-          status.textContent = "✓ Indicador validado. Cadastro liberado.";
+          showStatus(
+            "mt-3 rounded-xl border border-green-500/60 bg-green-500/10 px-4 py-3 text-sm font-bold text-center text-green-300",
+            "✓ Indicador validado. Cadastro liberado.",
+          );
           setOtherFieldsVisible(form, section, true);
         } catch {
-          status.className = "mt-3 rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm font-bold text-center text-red-300";
-          status.textContent = "Não foi possível validar o indicador. Tente novamente.";
+          showStatus(
+            "mt-3 rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm font-bold text-center text-red-300",
+            "Não foi possível validar o indicador. Tente novamente.",
+          );
           setOtherFieldsVisible(form, section, false);
         }
       };
@@ -144,7 +201,7 @@ export default function RegistrationReferralFirstGate() {
         validPhoneRef.current = "";
         setOtherFieldsVisible(form, section, false);
         if (timerRef.current) window.clearTimeout(timerRef.current);
-        timerRef.current = window.setTimeout(() => void validate(), 250);
+        timerRef.current = window.setTimeout(() => void validate(), 150);
       };
 
       input.addEventListener("input", scheduleValidation);
