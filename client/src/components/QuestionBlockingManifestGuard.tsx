@@ -88,15 +88,12 @@ function findCurrentQuestion(questions: Question[]): Question | null {
     .map((el) => normalizeQuestionText(el.textContent || ""))
     .filter(Boolean);
 
-  // Perguntas maiores primeiro evitam que uma pergunta curta seja confundida com
-  // um texto auxiliar. O asterisco visual de obrigatoriedade é ignorado.
   const ordered = [...questions].sort((a, b) => b.question.length - a.question.length);
   for (const question of ordered) {
     const wanted = normalizeQuestionText(question.question);
     if (visibleTexts.some((text) => text === wanted)) return question;
   }
 
-  // Fallback estrito para layouts que acrescentam um marcador curto ao enunciado.
   for (const question of ordered) {
     const wanted = normalizeQuestionText(question.question);
     if (visibleTexts.some((text) => text.startsWith(`${wanted} `) && text.length <= wanted.length + 12)) return question;
@@ -155,8 +152,12 @@ export default function QuestionBlockingManifestGuard() {
 
     const onClickCapture = (event: MouseEvent) => {
       if (blocked) {
+        if (event.target instanceof Element && event.target.closest("[data-question-blocking-manifest]")) {
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         return;
       }
 
@@ -179,7 +180,6 @@ export default function QuestionBlockingManifestGuard() {
 
       if (!configured && !legacy) return;
 
-      // Interrompe o onClick do fluxo antes que o React avance para a próxima pergunta.
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
@@ -200,7 +200,7 @@ export default function QuestionBlockingManifestGuard() {
   if (!blocked) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-5 backdrop-blur-sm">
+    <div data-question-blocking-manifest className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-5 backdrop-blur-sm">
       <div className="w-full max-w-md overflow-hidden rounded-2xl border-2 border-amber-400/70 bg-[#050812] text-white shadow-[0_30px_100px_rgba(0,0,0,.75)]">
         <div className="border-b border-amber-400/20 bg-amber-500/10 px-6 py-5 text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-amber-300/40 bg-amber-400/10 text-3xl">⚠️</div>
