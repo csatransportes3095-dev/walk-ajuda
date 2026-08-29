@@ -107,8 +107,23 @@ export async function saveCustomerProfileUpdatePolicy(input: {
 }
 
 export async function markCustomerProfileUpdateCompleted(customerId: number, revision: number): Promise<void> {
-  const payload = completionSchema.parse({ revision: Math.max(1, Math.trunc(revision)), completedAt: new Date().toISOString() });
-  await upsertSetting(completionKey(Math.trunc(customerId)), JSON.stringify(payload));
+  const normalizedCustomerId = Math.trunc(customerId);
+  const completedRevision = Math.max(1, Math.trunc(revision));
+  const payload = completionSchema.parse({ revision: completedRevision, completedAt: new Date().toISOString() });
+  await upsertSetting(completionKey(normalizedCustomerId), JSON.stringify(payload));
+
+  // A exigência individual é de uso único: ao concluir a revisão atual ela deve
+  // ficar inativa. Não incrementamos a revisão aqui para não criar uma nova
+  // pendência imediatamente após o cliente finalizar o cadastro.
+  const current = await getCustomerProfileUpdatePolicy(normalizedCustomerId);
+  if (current.enabled && current.revision <= completedRevision) {
+    const completedPolicy: CustomerProfileUpdatePolicy = {
+      ...current,
+      enabled: false,
+      updatedAt: new Date().toISOString(),
+    };
+    await upsertSetting(policyKey(normalizedCustomerId), JSON.stringify(completedPolicy));
+  }
 }
 
 export async function markCustomerProfilePhotoSubmitted(customerId: number, revision: number): Promise<void> {
