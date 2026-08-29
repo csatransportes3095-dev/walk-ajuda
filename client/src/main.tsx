@@ -7,6 +7,7 @@ import superjson from "superjson";
 import App from "./App";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
 import OrderWhatsappQuestionTreeEnhancer from "./components/OrderWhatsappQuestionTreeEnhancer";
+import PublicQuestionFlowEnhancer from "./components/PublicQuestionFlowEnhancer";
 import "./index.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
@@ -90,6 +91,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <AdminProductsQuestionUXEnhancer />
       <OrderWhatsappQuestionTreeEnhancer />
+      <PublicQuestionFlowEnhancer />
       <App />
     </QueryClientProvider>
   </trpc.Provider>
