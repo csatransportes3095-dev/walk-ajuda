@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { getDb } from "./db";
+import { checkBlocklist, getDb } from "./db";
 
-export type ReferralIssue = "invalid_phone" | "self_referral";
+export type ReferralIssue = "invalid_phone" | "self_referral" | "blocked_referrer";
 
 export type ResolvedReferral = {
   declaredName: string | null;
@@ -14,8 +14,9 @@ export type ResolvedReferral = {
 export function restrictedReferralAccessError(referral: ResolvedReferral): string | null {
   if (referral.issue === 'invalid_phone') return 'Telefone do indicador inválido. Informe o número com DDD.';
   if (referral.issue === 'self_referral') return 'Você não pode indicar a si mesmo.';
+  if (referral.issue === 'blocked_referrer') return 'Este número não pode ser usado como indicador. O cadastro está bloqueado ou impedido no sistema.';
   if (!referral.declaredPhone) return 'Acesso restrito: informe o telefone com DDD de quem indicou você.';
-  if (!referral.linkedReferrer) return 'Indicador não localizado no sistema. Sem uma indicação válida, o acesso não é liberado.';
+  if (!referral.linkedReferrer) return 'Este número não serve como indicador. O indicador precisa ter cadastro ativo e liberado no sistema.';
   return null;
 }
 
@@ -36,9 +37,9 @@ export function normalizeReferralName(value: unknown): string | null {
 }
 
 /**
- * Preserva a indicação declarada e identifica, quando possível, o cliente que
- * corresponde ao telefone. Número não localizado não é erro de cadastro: fica
- * como origem declarada sem vínculo automático e nunca deve habilitar comissão.
+ * Resolve a indicação somente quando o telefone pertence a um cliente ativo,
+ * não excluído, não bloqueado e fora da blocklist. Esta função é a trava final
+ * do servidor e não pode depender apenas da validação visual do cadastro.
  */
 export async function resolveReferralDeclaration(input: {
   customerPhone: string;
@@ -60,6 +61,11 @@ export async function resolveReferralDeclaration(input: {
     return { declaredName, declaredPhone: null, linkedReferrer: null, issue: null };
   }
 
+  const blockResult = await checkBlocklist('', declaredPhone);
+  if (blockResult.blocked) {
+    return { declaredName, declaredPhone, linkedReferrer: null, issue: "blocked_referrer" };
+  }
+
   const db = await getDb();
   if (!db) return { declaredName, declaredPhone, linkedReferrer: null, issue: null };
 
@@ -67,6 +73,7 @@ export async function resolveReferralDeclaration(input: {
     SELECT id, name, phone
     FROM customers
     WHERE deletedAt IS NULL
+      AND COALESCE(blocked, 0) = 0
       AND REGEXP_REPLACE(phone, '[^0-9]', '') = ${declaredPhone}
     LIMIT 1
   `);

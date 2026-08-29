@@ -2,16 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./db', () => ({
   getDb: vi.fn(),
+  checkBlocklist: vi.fn(),
 }));
 
-import { getDb } from './db';
+import { checkBlocklist, getDb } from './db';
 import { normalizeReferralName, normalizeReferralPhone, resolveReferralDeclaration, restrictedReferralAccessError } from './referral';
 
 const getDbMock = vi.mocked(getDb);
+const checkBlocklistMock = vi.mocked(checkBlocklist);
 
 describe('regra central de indicação', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    checkBlocklistMock.mockResolvedValue({ blocked: false });
   });
 
   it('normaliza máscara e DDI +55 sem alterar o número brasileiro', () => {
@@ -32,9 +35,10 @@ describe('regra central de indicação', () => {
       issue: null,
     });
     expect(getDbMock).not.toHaveBeenCalled();
+    expect(checkBlocklistMock).not.toHaveBeenCalled();
   });
 
-  it('rejeita somente telefone estruturalmente inválido', async () => {
+  it('rejeita telefone estruturalmente inválido', async () => {
     const result = await resolveReferralDeclaration({
       customerPhone: '11988887777',
       referrerPhone: '12345',
@@ -51,7 +55,7 @@ describe('regra central de indicação', () => {
     expect(result.issue).toBe('self_referral');
   });
 
-  it('aceita telefone não localizado como origem declarada sem bloquear', async () => {
+  it('não vincula número inexistente e o primeiro acesso o rejeita', async () => {
     getDbMock.mockResolvedValue({ execute: vi.fn().mockResolvedValue([[]]) } as any);
     const result = await resolveReferralDeclaration({
       customerPhone: '11988887777',
@@ -64,6 +68,19 @@ describe('regra central de indicação', () => {
       linkedReferrer: null,
       issue: null,
     });
+    expect(restrictedReferralAccessError(result)).toContain('não serve como indicador');
+  });
+
+  it('rejeita número presente na blocklist antes de consultar o cadastro', async () => {
+    checkBlocklistMock.mockResolvedValue({ blocked: true, reason: 'bloqueado' });
+    const result = await resolveReferralDeclaration({
+      customerPhone: '11988887777',
+      referrerPhone: '11978307371',
+    });
+    expect(result.issue).toBe('blocked_referrer');
+    expect(result.linkedReferrer).toBeNull();
+    expect(getDbMock).not.toHaveBeenCalled();
+    expect(restrictedReferralAccessError(result)).toContain('não pode ser usado como indicador');
   });
 
   it('bloqueia o primeiro acesso sem telefone, com autorreferência ou sem indicador localizado', () => {
@@ -72,7 +89,7 @@ describe('regra central de indicação', () => {
     expect(restrictedReferralAccessError({ declaredName: 'Eu', declaredPhone: '11988887777', linkedReferrer: null, issue: 'self_referral' }))
       .toContain('não pode indicar a si mesmo');
     expect(restrictedReferralAccessError({ declaredName: 'Desconhecido', declaredPhone: '11999990000', linkedReferrer: null, issue: null }))
-      .toContain('Indicador não localizado');
+      .toContain('não serve como indicador');
   });
 
   it('libera o primeiro acesso somente quando o indicador existe e está vinculado', () => {
@@ -84,7 +101,7 @@ describe('regra central de indicação', () => {
     })).toBeNull();
   });
 
-  it('vincula o indicador encontrado pelo telefone normalizado', async () => {
+  it('vincula apenas indicador ativo retornado pela consulta do servidor', async () => {
     getDbMock.mockResolvedValue({
       execute: vi.fn().mockResolvedValue([[{ id: 41, name: 'ANA INDICADORA', phone: '(11) 99999-0000' }]]),
     } as any);
