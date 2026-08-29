@@ -14,6 +14,7 @@ import QuestionBlockingRulesManager from "./components/QuestionBlockingRulesMana
 import QuestionBlockingManifestGuard from "./components/QuestionBlockingManifestGuard";
 import RegistrationReferralFirstGate from "./components/RegistrationReferralFirstGate";
 import UnifiedCustomerAccessGate from "./components/UnifiedCustomerAccessGate";
+import UnifiedCustomerModuleBootstrap from "./components/UnifiedCustomerModuleBootstrap";
 import "./index.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
@@ -104,7 +105,9 @@ createRoot(document.getElementById("root")!).render(
       <PublicQuestionFlowEnhancer />
       <RegistrationReferralFirstGate />
       <UnifiedCustomerAccessGate>
-        <App />
+        <UnifiedCustomerModuleBootstrap>
+          <App />
+        </UnifiedCustomerModuleBootstrap>
       </UnifiedCustomerAccessGate>
     </QueryClientProvider>
   </trpc.Provider>
