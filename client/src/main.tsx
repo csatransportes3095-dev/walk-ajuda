@@ -8,11 +8,11 @@ import App from "./App";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
 import AdminQuestionEditOptionsEnhancer from "./components/AdminQuestionEditOptionsEnhancer";
 import AdminQuestionTreeOrderEnhancer from "./components/AdminQuestionTreeOrderEnhancer";
+import AdminQuestionCopyIntegrityEnhancer from "./components/AdminQuestionCopyIntegrityEnhancer";
 import OrderWhatsappQuestionTreeEnhancer from "./components/OrderWhatsappQuestionTreeEnhancer";
 import PublicQuestionFlowEnhancer from "./components/PublicQuestionFlowEnhancer";
 import QuestionBlockingRulesManager from "./components/QuestionBlockingRulesManager";
 import QuestionBlockingManifestGuard from "./components/QuestionBlockingManifestGuard";
-import QuestionManifestCopySync from "./components/QuestionManifestCopySync";
 import "./index.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
@@ -97,8 +97,8 @@ createRoot(document.getElementById("root")!).render(
       <AdminProductsQuestionUXEnhancer />
       <AdminQuestionEditOptionsEnhancer />
       <AdminQuestionTreeOrderEnhancer />
+      <AdminQuestionCopyIntegrityEnhancer />
       <QuestionBlockingRulesManager />
-      <QuestionManifestCopySync />
       <QuestionBlockingManifestGuard />
       <OrderWhatsappQuestionTreeEnhancer />
       <PublicQuestionFlowEnhancer />
