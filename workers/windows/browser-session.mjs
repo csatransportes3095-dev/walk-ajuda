@@ -65,6 +65,19 @@ async function checkIp() {
   return data.ip.trim();
 }
 
+async function privacyGuardPreflight() {
+  const observedIp = await checkIp();
+  if (!observedIp) throw new Error("privacy_guard_proxy_unavailable");
+  writeSession({
+    privacyGuard: "protected",
+    privacyGuardCheckedAt: new Date().toISOString(),
+    observedIp,
+    quicDisabled: true,
+    webrtcNonProxiedUdpDisabled: true,
+  });
+  return observedIp;
+}
+
 async function reportObservedIp() {
   if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || ipCheckInProgress) return;
   ipCheckInProgress = true;
@@ -112,21 +125,7 @@ function escapeHtml(value) {
 function createInstanceLabelPage() {
   const safeTitle = escapeHtml(instanceWindowTitle);
   const safeName = escapeHtml(instanceName);
-  const html = `<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${safeTitle}</title>
-<style>
-html,body{margin:0;min-height:100%;font-family:Arial,sans-serif;background:#0b1220;color:#e5eefc}
-main{min-height:100vh;display:grid;place-items:center;padding:32px;box-sizing:border-box}
-section{max-width:720px;text-align:center;border:1px solid #23324d;border-radius:20px;padding:32px;background:#101b2e}
-small{color:#7dd3fc;font-weight:700;letter-spacing:.14em}h1{font-size:32px;margin:12px 0}p{color:#a9bad3;margin:0}
-</style>
-</head>
-<body><main><section><small>H2 ADS · INSTÂNCIA LOCAL</small><h1>${safeName}</h1><p>Esta aba serve somente para identificar esta janela. Abra o site de trabalho em outra aba.</p></section></main></body>
-</html>`;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><style>html,body{margin:0;min-height:100%;font-family:Arial,sans-serif;background:#0b1220;color:#e5eefc}main{min-height:100vh;display:grid;place-items:center;padding:32px;box-sizing:border-box}section{max-width:720px;text-align:center;border:1px solid #23324d;border-radius:20px;padding:32px;background:#101b2e}small{color:#7dd3fc;font-weight:700;letter-spacing:.14em}h1{font-size:32px;margin:12px 0}p{color:#a9bad3;margin:0}</style></head><body><main><section><small>H2 ADS · INSTÂNCIA LOCAL</small><h1>${safeName}</h1><p>Privacy Guard ativo. Esta aba serve somente para identificar esta janela.</p></section></main></body></html>`;
   writeFileSync(labelPagePath, html, { encoding: "utf8", mode: 0o600 });
   return pathToFileURL(labelPagePath).href;
 }
@@ -141,8 +140,10 @@ async function rotateRelay() {
     const nextRelay = createRelay(relayPort);
     await nextRelay.listen();
     relay = nextRelay;
-    writeSession({ lastRotationAt: new Date().toISOString() });
+    const observedIp = await checkIp();
+    writeSession({ lastRotationAt: new Date().toISOString(), observedIp, privacyGuard: "protected" });
   } catch {
+    writeSession({ privacyGuard: "blocked", privacyGuardFailureAt: new Date().toISOString() });
     try {
       const recoveryRelay = createRelay(relayPort);
       await recoveryRelay.listen();
@@ -161,21 +162,28 @@ async function run() {
     relay = createRelay();
     await relay.listen();
     relayPort = relay.port;
+
+    // Fail closed: o Chrome so nasce depois que a saida pelo relay/proxy foi comprovada.
+    const initialIp = await privacyGuardPreflight();
+    lastReportedIp = initialIp;
     const labelPageUrl = createInstanceLabelPage();
     browser = spawn(executable, [
       `--user-data-dir=${profileDirectory}`,
       `--proxy-server=http://127.0.0.1:${relayPort}`,
+      "--proxy-bypass-list=<-loopback>",
+      "--disable-quic",
+      "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
       "--no-first-run",
       "--no-default-browser-check",
       labelPageUrl,
     ], { detached: false, stdio: "ignore", windowsHide: false });
-    writeSession({ startedAt: new Date().toISOString(), instanceLabelState: "static_tab" });
+    writeSession({ startedAt: new Date().toISOString(), instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected" });
     if (rotationMinutes) {
       rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
       rotationTimer.unref?.();
     }
     await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "browser_open" });
-    void reportObservedIp();
+    await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp: initialIp });
     ipTimer = setInterval(() => { void reportObservedIp(); }, IP_CHECK_INTERVAL_MS);
     ipTimer.unref?.();
     browser.once("exit", async () => {
@@ -193,7 +201,8 @@ async function run() {
   } catch (error) {
     if (rotationTimer) clearInterval(rotationTimer);
     if (ipTimer) clearInterval(ipTimer);
-    const category = error instanceof Error && error.message === "browser_not_found" ? "browser_not_found" : "browser_launch_failed";
+    writeSession({ privacyGuard: "blocked", privacyGuardFailureAt: new Date().toISOString() });
+    const category = error instanceof Error && error.message === "browser_not_found" ? "browser_not_found" : error instanceof Error && error.message.startsWith("privacy_guard_") ? "privacy_guard_blocked" : "browser_launch_failed";
     await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "blocked", errorCategory: category }).catch(() => undefined);
     if (relay) await relay.close(true).catch(() => undefined);
   }
