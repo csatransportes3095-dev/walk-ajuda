@@ -106,9 +106,28 @@ export async function saveCustomerProfileUpdatePolicy(input: {
   return next;
 }
 
+async function closeCompletedPolicy(customerId: number, policy: CustomerProfileUpdatePolicy, completedRevision: number): Promise<CustomerProfileUpdatePolicy> {
+  if (!policy.enabled || completedRevision < policy.revision) return policy;
+  const completedPolicy: CustomerProfileUpdatePolicy = {
+    ...policy,
+    enabled: false,
+    updatedAt: new Date().toISOString(),
+  };
+  await upsertSetting(policyKey(customerId), JSON.stringify(completedPolicy));
+  return completedPolicy;
+}
+
 export async function markCustomerProfileUpdateCompleted(customerId: number, revision: number): Promise<void> {
-  const payload = completionSchema.parse({ revision: Math.max(1, Math.trunc(revision)), completedAt: new Date().toISOString() });
-  await upsertSetting(completionKey(Math.trunc(customerId)), JSON.stringify(payload));
+  const normalizedCustomerId = Math.trunc(customerId);
+  const completedRevision = Math.max(1, Math.trunc(revision));
+  const payload = completionSchema.parse({ revision: completedRevision, completedAt: new Date().toISOString() });
+  await upsertSetting(completionKey(normalizedCustomerId), JSON.stringify(payload));
+
+  // A exigência individual é de uso único: ao concluir a revisão atual ela deve
+  // ficar inativa. A revisão não é incrementada aqui, evitando criar outra
+  // pendência imediatamente após o cliente finalizar o cadastro.
+  const current = await getCustomerProfileUpdatePolicy(normalizedCustomerId);
+  await closeCompletedPolicy(normalizedCustomerId, current, completedRevision);
 }
 
 export async function markCustomerProfilePhotoSubmitted(customerId: number, revision: number): Promise<void> {
@@ -163,8 +182,14 @@ export function evaluateCustomerProfileUpdateState(
 }
 
 export async function getCustomerProfileUpdateState(customer: any): Promise<CustomerProfileUpdateState> {
-  const policy = await getCustomerProfileUpdatePolicy(Number(customer?.id) || 0);
-  const completedRevision = await getCompletionRevision(Number(customer?.id) || 0);
+  const customerId = Number(customer?.id) || 0;
+  let policy = await getCustomerProfileUpdatePolicy(customerId);
+  const completedRevision = await getCompletionRevision(customerId);
+
+  // Repara automaticamente registros antigos em que a revisão já foi concluída,
+  // mas a flag enabled permaneceu gravada como true. Isso elimina o estado
+  // "ATIVA + sem pendência" sem exigir correção manual cliente por cliente.
+  policy = await closeCompletedPolicy(customerId, policy, completedRevision);
   return evaluateCustomerProfileUpdateState(customer, policy, completedRevision);
 }
 
