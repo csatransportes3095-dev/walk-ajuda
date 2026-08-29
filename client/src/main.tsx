@@ -12,6 +12,7 @@ import OrderWhatsappQuestionTreeEnhancer from "./components/OrderWhatsappQuestio
 import PublicQuestionFlowEnhancer from "./components/PublicQuestionFlowEnhancer";
 import QuestionBlockingRulesManager from "./components/QuestionBlockingRulesManager";
 import QuestionBlockingManifestGuard from "./components/QuestionBlockingManifestGuard";
+import RegistrationReferralFirstGate from "./components/RegistrationReferralFirstGate";
 import "./index.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
@@ -100,6 +101,7 @@ createRoot(document.getElementById("root")!).render(
       <QuestionBlockingManifestGuard />
       <OrderWhatsappQuestionTreeEnhancer />
       <PublicQuestionFlowEnhancer />
+      <RegistrationReferralFirstGate />
       <App />
     </QueryClientProvider>
   </trpc.Provider>
