@@ -1,17 +1,14 @@
-import { ReferralAccessManifest } from './ReferralAccessManifest';
+import { useEffect } from 'react';
 
+/**
+ * Compatibilidade temporária com o WelcomeScreen antigo.
+ * A etapa separada de indicação foi removida: a indicação agora pertence
+ * exclusivamente ao cadastro central (PasswordGate).
+ */
 export function HomeAccessManifest({ onGranted }: { onGranted: () => void }) {
-  return (
-    <ReferralAccessManifest
-      onGranted={({ phone, referralPhone }) => {
-        if (referralPhone) {
-          sessionStorage.setItem('walk_home_referral_phone', referralPhone);
-          sessionStorage.setItem('walk_home_new_phone', phone);
-        } else {
-          sessionStorage.setItem('walk_home_existing_phone', phone);
-        }
-        onGranted();
-      }}
-    />
-  );
+  useEffect(() => {
+    onGranted();
+  }, [onGranted]);
+
+  return null;
 }
