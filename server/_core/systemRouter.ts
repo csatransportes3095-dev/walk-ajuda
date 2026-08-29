@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { sendMail } from "./mailer";
+import {
+  auditOptionQuestionTree,
+  auditQuestionHistory,
+  copyOptionQuestionsSafely,
+  deleteQuestionBranchSafely,
+  restoreQuestionOptionFromBackupTable,
+} from "../questionIntegrity";
 
 const ADMIN_EMAIL = 'h2@h2colombiano.com';
 
@@ -35,7 +42,6 @@ export const systemRouter = router({
         input.userAgent ? `Navegador: ${input.userAgent}` : null,
         `Hora: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
       ].filter(Boolean).join('\n');
-      // Enviar apenas por e-mail (sem notificacao push Manus)
       const htmlBody = `<h2>${title}</h2><pre style="font-family:monospace;white-space:pre-wrap">${content}</pre>`;
       await sendOwnerEmail(title, htmlBody);
       return { received: true };
@@ -59,11 +65,48 @@ export const systemRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      // Enviar apenas por e-mail (sem notificacao push Manus)
       const htmlBody = `<h2>${input.title}</h2><pre style="font-family:monospace;white-space:pre-wrap">${input.content}</pre>`;
       await sendOwnerEmail(input.title, htmlBody);
       return {
         success: true,
       } as const;
     }),
+
+  questionTreeAudit: adminProcedure
+    .input(z.object({ optionId: z.number().int().positive() }))
+    .query(async ({ input }) => auditOptionQuestionTree(input.optionId)),
+
+  questionHistoryAudit: adminProcedure
+    .input(z.object({
+      productName: z.string().min(1),
+      optionLabel: z.string().min(1),
+      expectedCount: z.number().int().positive().nullable().optional(),
+    }))
+    .query(async ({ input }) => auditQuestionHistory(input)),
+
+  questionCopySafe: adminProcedure
+    .input(z.object({
+      fromOptionId: z.number().int().positive(),
+      toOptionId: z.number().int().positive(),
+      toProductId: z.number().int().positive(),
+      confirmation: z.literal("SUBSTITUIR 100%"),
+    }))
+    .mutation(async ({ input }) => copyOptionQuestionsSafely(input)),
+
+  questionDeleteBranch: adminProcedure
+    .input(z.object({
+      questionId: z.number().int().positive(),
+      confirmation: z.literal("EXCLUIR RAMO"),
+    }))
+    .mutation(async ({ input }) => deleteQuestionBranchSafely(input.questionId)),
+
+  questionRestoreHistory: adminProcedure
+    .input(z.object({
+      tableName: z.string().regex(/^productQuestions_backup_[A-Za-z0-9_]+$/),
+      productId: z.number().int().positive(),
+      optionId: z.number().int().positive(),
+      expectedCount: z.number().int().positive().nullable().optional(),
+      confirmation: z.literal("RESTAURAR PERGUNTAS"),
+    }))
+    .mutation(async ({ input }) => restoreQuestionOptionFromBackupTable(input)),
 });
