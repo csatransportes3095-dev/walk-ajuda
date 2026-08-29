@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
+import OrderWhatsappQuestionTreeEnhancer from "./components/OrderWhatsappQuestionTreeEnhancer";
 import "./index.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
@@ -88,6 +89,7 @@ createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
       <AdminProductsQuestionUXEnhancer />
+      <OrderWhatsappQuestionTreeEnhancer />
       <App />
     </QueryClientProvider>
   </trpc.Provider>
