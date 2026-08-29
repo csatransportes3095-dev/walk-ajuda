@@ -69,7 +69,12 @@ function asNumber(value: string | null | undefined) {
 }
 
 function shortText(value: string | null | undefined, limit = 172) {
-  const text = String(value || "").replace(/\s+/g, " ").trim();
+  const text = String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[\t ]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .trim();
   if (!text) return "Detalhes e requisitos confirmados durante o pedido.";
   return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
 }
@@ -94,12 +99,9 @@ export function StorefrontProductCard({
     const price = asNumber(effectivePrice);
     return original > price && price > 0 ? Math.round(((original - price) / original) * 100) : 0;
   }, [effectiveOriginalPrice, effectivePrice]);
-  // A opção só substitui a aparência quando o ADM salvar uma cor; sem isso, o card mantém o visual atual do produto.
   const productColor = item.product.cardColor || "#7c3aed";
   const borderColor = item.option.cardBorderColor || productColor;
   const accentColor = item.option.cardAccentColor || borderColor;
-  // Fundo e texto do produto pai não eram aplicados pelo card individual anterior.
-  // Portanto, só a configuração explícita da opção muda esses pontos e o padrão visual fica idêntico quando estiver vazio.
   const cardBackground = item.option.cardBgColor || undefined;
   const textColor = item.option.cardTextColor || undefined;
   const cartButtonColor = item.option.cardButtonColor || productColor;
@@ -141,7 +143,7 @@ export function StorefrontProductCard({
           </div>
         </div>
 
-        <p className="min-h-[43px] text-sm leading-relaxed text-white/75" style={textColor ? { color: `${textColor}cc` } : undefined}>{shortText(description)}</p>
+        <p className="min-h-[43px] whitespace-pre-wrap text-sm leading-relaxed text-white/75" style={textColor ? { color: `${textColor}cc` } : undefined}>{shortText(description)}</p>
 
         {tiers.length > 0 && (
           <label className="mt-4 block">
