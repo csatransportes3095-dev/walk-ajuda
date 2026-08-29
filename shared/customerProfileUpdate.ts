@@ -65,10 +65,14 @@ export function getEffectiveCustomerProfileUpdateFields(
   configuredFields: unknown,
   enabled: boolean,
 ): CustomerProfileUpdateField[] {
+  // O ADM pode exigir novamente campos específicos mesmo já preenchidos.
   const fields = enabled ? normalizeCustomerProfileUpdateFields(configuredFields) : [];
-  // Foto ausente é sempre obrigatória, independentemente da ativação manual do ADM.
-  if (customerProfileFieldIsMissing(customer, "profilePhotoUrl") && !fields.includes("profilePhotoUrl")) {
-    fields.push("profilePhotoUrl");
+
+  // Regra global: nenhum cadastro incompleto pode ser liberado. Todos os campos
+  // obrigatórios que estiverem ausentes/invalidos entram automaticamente na
+  // atualização, mesmo que o ADM tenha solicitado somente um campo ou nenhum.
+  for (const missingField of getDefaultIncompleteCustomerFields(customer)) {
+    if (!fields.includes(missingField)) fields.push(missingField);
   }
   return fields;
 }

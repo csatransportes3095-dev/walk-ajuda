@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { registerUnifiedCustomerSessionRoutes } from "../unifiedCustomerSessionRoutes";
 
 /**
  * Rota mínima usada exclusivamente por monitoramento externo.
@@ -13,4 +14,7 @@ export function registerPingRoute(app: Express): void {
     });
     res.status(200).json({ ok: true, ts: Date.now() });
   });
+
+  // Compatibilidade de módulos legados com a sessão única do cliente.
+  registerUnifiedCustomerSessionRoutes(app);
 }

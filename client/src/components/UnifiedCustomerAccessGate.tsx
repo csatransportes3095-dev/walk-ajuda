@@ -1,10 +1,11 @@
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 
 const CP_TOKEN_KEY = "cp_token";
-const LEGACY_ACCESS_KEY = "walk_access_granted";
 const RETURN_TO_KEY = "h2_customer_return_to";
+const LEGACY_KEYS = ["walk_access_granted", "walk_access_code", "walk_access_type", "walk_access_expires"] as const;
 
 function normalizePath(pathname: string): string {
   const lowered = String(pathname || "/").toLowerCase();
@@ -26,6 +27,10 @@ function isUnifiedCustomerRoute(pathname: string): boolean {
 function currentRelativeUrl(): string {
   if (typeof window === "undefined") return "/";
   return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+function clearLegacyAccess() {
+  for (const key of LEGACY_KEYS) localStorage.removeItem(key);
 }
 
 function getSafeReturnTo(): string | null {
@@ -52,26 +57,21 @@ function LoadingGate() {
   );
 }
 
-export default function UnifiedCustomerAccessGate({ children }: { children: React.ReactNode }) {
+export default function UnifiedCustomerAccessGate({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const normalizedLocation = useMemo(() => normalizePath(location), [location]);
   const isProtectedRoute = isUnifiedCustomerRoute(normalizedLocation);
   const isCentralLogin = normalizedLocation === "/login";
-
   const [cpToken, setCpToken] = useState(() => localStorage.getItem(CP_TOKEN_KEY) || "");
-  const [legacyGranted, setLegacyGranted] = useState(() => localStorage.getItem(LEGACY_ACCESS_KEY) === "true");
   const [redirecting, setRedirecting] = useState(false);
 
-  // PasswordGate grava a sessão no localStorage na mesma aba. O evento "storage"
-  // não dispara na própria aba, por isso sincronizamos rapidamente enquanto o gate
-  // ou a tela central de login estiverem ativos.
+  // PasswordGate grava cp_token na própria aba; sincronizamos enquanto o acesso
+  // central ou uma rota protegida estiverem ativos.
   useEffect(() => {
     if (!isProtectedRoute && !isCentralLogin) return;
     const sync = () => {
       const nextToken = localStorage.getItem(CP_TOKEN_KEY) || "";
-      const nextLegacy = localStorage.getItem(LEGACY_ACCESS_KEY) === "true";
       setCpToken((current) => current === nextToken ? current : nextToken);
-      setLegacyGranted((current) => current === nextLegacy ? current : nextLegacy);
     };
     sync();
     const interval = window.setInterval(sync, 300);
@@ -88,25 +88,26 @@ export default function UnifiedCustomerAccessGate({ children }: { children: Reac
     },
   );
 
-  // Toda rota de cliente protegida entra primeiro pela autenticação/cadastro central.
+  // Todas as áreas do cliente exigem a mesma sessão central. Sessões antigas não
+  // podem mais pular o cadastro/atualização obrigatório.
   useEffect(() => {
     if (!isProtectedRoute || redirecting) return;
 
-    if (!cpToken && !legacyGranted) {
+    if (!cpToken) {
+      clearLegacyAccess();
       sessionStorage.setItem(RETURN_TO_KEY, currentRelativeUrl());
       setRedirecting(true);
       window.location.replace("/login");
       return;
     }
 
-    if (!cpToken || sessionQuery.isLoading || sessionQuery.data === undefined) return;
+    if (sessionQuery.isLoading || sessionQuery.data === undefined) return;
 
     if (!sessionQuery.data.valid) {
       localStorage.removeItem(CP_TOKEN_KEY);
-      localStorage.removeItem(LEGACY_ACCESS_KEY);
+      clearLegacyAccess();
       sessionStorage.setItem(RETURN_TO_KEY, currentRelativeUrl());
       setCpToken("");
-      setLegacyGranted(false);
       setRedirecting(true);
       window.location.replace("/login");
       return;
@@ -119,38 +120,33 @@ export default function UnifiedCustomerAccessGate({ children }: { children: Reac
       setRedirecting(true);
       window.location.replace("/atualizarcadastro");
     }
-  }, [
-    cpToken,
-    isProtectedRoute,
-    legacyGranted,
-    redirecting,
-    sessionQuery.data,
-    sessionQuery.isLoading,
-  ]);
+  }, [cpToken, isProtectedRoute, redirecting, sessionQuery.data, sessionQuery.isLoading]);
 
-  // Depois que o PasswordGate concluir login/cadastro, retorna automaticamente
-  // para a rota que o cliente tentou abrir inicialmente.
+  // Sessão central inválida na própria /login deve cair no formulário normal,
+  // nunca ser aceita pelo legado.
   useEffect(() => {
-    if (!isCentralLogin || redirecting) return;
+    if (!isCentralLogin || !cpToken || sessionQuery.isLoading || sessionQuery.data === undefined) return;
+    if (sessionQuery.data.valid) return;
+    localStorage.removeItem(CP_TOKEN_KEY);
+    clearLegacyAccess();
+    setCpToken("");
+  }, [cpToken, isCentralLogin, sessionQuery.data, sessionQuery.isLoading]);
+
+  // Após autenticar/cadastrar, retorna à rota originalmente solicitada.
+  useEffect(() => {
+    if (!isCentralLogin || redirecting || !cpToken) return;
     const returnTo = getSafeReturnTo();
     if (!returnTo) return;
-
-    const authenticated = cpToken
-      ? sessionQuery.data?.valid === true && !sessionQuery.data?.profileUpdateRequired
-      : legacyGranted;
-
-    if (!authenticated) return;
+    if (sessionQuery.data?.valid !== true || sessionQuery.data?.profileUpdateRequired) return;
     sessionStorage.removeItem(RETURN_TO_KEY);
     setRedirecting(true);
     window.location.replace(returnTo);
-  }, [cpToken, isCentralLogin, legacyGranted, redirecting, sessionQuery.data]);
+  }, [cpToken, isCentralLogin, redirecting, sessionQuery.data]);
 
   if (isProtectedRoute) {
-    if (redirecting) return <LoadingGate />;
-    if (!cpToken && !legacyGranted) return <LoadingGate />;
-    if (cpToken && (sessionQuery.isLoading || sessionQuery.data === undefined)) return <LoadingGate />;
-    if (cpToken && sessionQuery.data?.valid !== true) return <LoadingGate />;
-    if (cpToken && sessionQuery.data?.profileUpdateRequired) return <LoadingGate />;
+    if (redirecting || !cpToken) return <LoadingGate />;
+    if (sessionQuery.isLoading || sessionQuery.data === undefined) return <LoadingGate />;
+    if (sessionQuery.data?.valid !== true || sessionQuery.data?.profileUpdateRequired) return <LoadingGate />;
   }
 
   return <>{children}</>;

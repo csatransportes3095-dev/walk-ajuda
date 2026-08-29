@@ -42,7 +42,31 @@ describe("customer profile update policy", () => {
     expect(state.pending).toBe(true);
   });
 
-  it("não cria pendência individual quando a política está desligada e a foto existe", () => {
+  it("não libera cadastro se o ADM pediu foto e ainda falta CPF", () => {
+    const state = evaluateCustomerProfileUpdateState(
+      { ...validCustomer, cpf: "" },
+      policy(true, ["profilePhotoUrl"], 5),
+      5,
+    );
+
+    expect(state.effectiveFields).toEqual(["profilePhotoUrl", "cpf"]);
+    expect(state.missingFields).toEqual(["cpf"]);
+    expect(state.pending).toBe(true);
+  });
+
+  it("exige todo dado obrigatório ausente mesmo sem solicitação do ADM", () => {
+    const state = evaluateCustomerProfileUpdateState(
+      { ...validCustomer, email: "", city: "", uf: "" },
+      policy(false, []),
+      0,
+    );
+
+    expect(state.effectiveFields).toEqual(["email", "city", "uf"]);
+    expect(state.missingFields).toEqual(["email", "city", "uf"]);
+    expect(state.pending).toBe(true);
+  });
+
+  it("não cria pendência individual quando a política está desligada e o cadastro está completo", () => {
     const state = evaluateCustomerProfileUpdateState(validCustomer, policy(false, []), 0);
 
     expect(state.effectiveFields).toEqual([]);
@@ -98,7 +122,7 @@ describe("customer profile update policy", () => {
     expect(state.pending).toBe(true);
   });
 
-  it("desativar a política remove a pendência de revisão sem apagar dados", () => {
+  it("desativar a política remove a pendência de revisão quando o cadastro está completo", () => {
     const state = evaluateCustomerProfileUpdateState(validCustomer, policy(false, [], 9), 1);
 
     expect(state.enabled).toBe(false);
