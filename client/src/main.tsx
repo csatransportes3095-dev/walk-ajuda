@@ -110,13 +110,16 @@ createRoot(document.getElementById("root")!).render(
   </trpc.Provider>
 );
 
-// Registrar Service Worker
+// Registrar Service Worker. updateViaCache:'none' evita que o próprio sw.js
+// fique preso no cache HTTP do navegador em celulares com versões antigas.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("/sw.js", { scope: "/" })
+      .register("/sw.js", { scope: "/", updateViaCache: "none" })
       .then((reg) => {
         console.log("[SW] Registrado:", reg.scope);
+        // Forçar uma checagem imediata por nova versão após cada carregamento.
+        void reg.update().catch(() => undefined);
         // Detectar quando um novo SW está instalado e recarregar automaticamente
         reg.addEventListener("updatefound", () => {
           const newWorker = reg.installing;
