@@ -8,7 +8,6 @@ import App from "./App";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
 import AdminQuestionEditOptionsEnhancer from "./components/AdminQuestionEditOptionsEnhancer";
 import AdminQuestionTreeOrderEnhancer from "./components/AdminQuestionTreeOrderEnhancer";
-import AdminQuestionCopyIntegrityEnhancer from "./components/AdminQuestionCopyIntegrityEnhancer";
 import OrderWhatsappQuestionTreeEnhancer from "./components/OrderWhatsappQuestionTreeEnhancer";
 import PublicQuestionFlowEnhancer from "./components/PublicQuestionFlowEnhancer";
 import QuestionBlockingRulesManager from "./components/QuestionBlockingRulesManager";
@@ -97,7 +96,6 @@ createRoot(document.getElementById("root")!).render(
       <AdminProductsQuestionUXEnhancer />
       <AdminQuestionEditOptionsEnhancer />
       <AdminQuestionTreeOrderEnhancer />
-      <AdminQuestionCopyIntegrityEnhancer />
       <QuestionBlockingRulesManager />
       <QuestionBlockingManifestGuard />
       <OrderWhatsappQuestionTreeEnhancer />
