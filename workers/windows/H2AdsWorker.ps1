@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.3.3"
+$AgentVersion = "1.3.4"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -17,6 +17,7 @@ $ProfilesDirectory = Join-Path $WorkerDirectory "profiles"
 $PackagePath = Join-Path $WorkerDirectory "package.json"
 $ProxyChainPackagePath = Join-Path $WorkerDirectory "node_modules\proxy-chain\package.json"
 $TaskName = "H2 Ads Browser Worker"
+$ShortcutName = "Iniciar H2Ads Worker.lnk"
 
 function Get-ComputerLabel {
   $name = $env:COMPUTERNAME
@@ -188,6 +189,20 @@ function Start-InstalledWorker {
   Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run" -WindowStyle Hidden
 }
 
+function Ensure-DesktopShortcut {
+  $desktop = [Environment]::GetFolderPath("Desktop")
+  if ([string]::IsNullOrWhiteSpace($desktop)) { return }
+  $shortcutPath = Join-Path $desktop $ShortcutName
+  $shell = New-Object -ComObject WScript.Shell
+  $shortcut = $shell.CreateShortcut($shortcutPath)
+  $shortcut.TargetPath = "powershell.exe"
+  $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run"
+  $shortcut.WorkingDirectory = $WorkerDirectory
+  $shortcut.Description = "Iniciar H2 Ads Browser Worker"
+  $shortcut.IconLocation = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
+  $shortcut.Save()
+}
+
 function Acquire-WorkerMutex([object]$Config) {
   $safeWorkerKey = ([string]$Config.workerKey) -replace '[^A-Za-z0-9_-]', '_'
   $createdNew = $false
@@ -233,6 +248,7 @@ if ($Update) {
 if ($Run) {
   if (!(Test-Path $ConfigPath)) { throw "Configuração do Worker não encontrada. Faça o pareamento primeiro." }
   $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
+  try { Ensure-DesktopShortcut } catch { }
   $workerMutex = Acquire-WorkerMutex $config
   if ($null -eq $workerMutex) { exit 0 }
   Stop-ExistingWorkerProcesses
