@@ -30,7 +30,16 @@ type Match = {
 };
 
 function normalize(value: string): string {
-  return value.replace(/\s+/g, " ").trim().toLocaleUpperCase("pt-BR");
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleUpperCase("pt-BR");
+}
+
+function normalizeQuestionText(value: string): string {
+  return normalize(value).replace(/\s*\*+\s*$/, "").trim();
 }
 
 function parseRules(raw: unknown): Rule[] {
@@ -74,14 +83,23 @@ function elementVisible(el: HTMLElement): boolean {
 }
 
 function findCurrentQuestion(questions: Question[]): Question | null {
-  const visibleTextNodes = Array.from(document.querySelectorAll<HTMLElement>("p,h1,h2,h3,h4,label,span"))
+  const visibleTexts = Array.from(document.querySelectorAll<HTMLElement>("p,h1,h2,h3,h4,label,span,div"))
     .filter(elementVisible)
-    .map((el) => ({ el, text: normalize(el.textContent || "") }))
-    .filter((item) => item.text.length > 0);
+    .map((el) => normalizeQuestionText(el.textContent || ""))
+    .filter(Boolean);
 
-  for (const question of questions) {
-    const wanted = normalize(question.question);
-    if (visibleTextNodes.some((item) => item.text === wanted)) return question;
+  // Perguntas maiores primeiro evitam que uma pergunta curta seja confundida com
+  // um texto auxiliar. O asterisco visual de obrigatoriedade é ignorado.
+  const ordered = [...questions].sort((a, b) => b.question.length - a.question.length);
+  for (const question of ordered) {
+    const wanted = normalizeQuestionText(question.question);
+    if (visibleTexts.some((text) => text === wanted)) return question;
+  }
+
+  // Fallback estrito para layouts que acrescentam um marcador curto ao enunciado.
+  for (const question of ordered) {
+    const wanted = normalizeQuestionText(question.question);
+    if (visibleTexts.some((text) => text.startsWith(`${wanted} `) && text.length <= wanted.length + 12)) return question;
   }
   return null;
 }
@@ -93,18 +111,20 @@ function answerFromButton(target: EventTarget | null): { button: HTMLButtonEleme
   const text = (button.textContent || "").replace(/\s+/g, " ").trim();
   if (!text) return null;
   const lower = text.toLocaleLowerCase("pt-BR");
-  if (lower.includes("continuar") || lower === "voltar" || lower.includes("próximo") || lower.includes("fechar")) return null;
+  if (lower.includes("continuar") || lower === "voltar" || lower.includes("proximo") || lower.includes("próximo") || lower.includes("fechar")) return null;
   return { button, answer: text };
 }
 
 export default function QuestionBlockingManifestGuard() {
   const { data: rawProducts } = trpc.products.listActive.useQuery(undefined, {
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
   });
   const { data: settings } = trpc.settings.getAll.useQuery(undefined, {
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnMount: true,
     refetchOnWindowFocus: true,
+    refetchInterval: 5_000,
   });
   const [blocked, setBlocked] = useState<Match | null>(null);
 
@@ -145,19 +165,28 @@ export default function QuestionBlockingManifestGuard() {
       const currentQuestion = findCurrentQuestion(questions);
       if (!currentQuestion) return;
 
-      const normalizedAnswer = normalize(answerHit.answer);
+      const options = parseOptionMeta(currentQuestion.options);
+      const clickedText = normalize(answerHit.answer);
+      const clickedOption = options.find((opt) => {
+        const optionText = normalize(opt.label);
+        return clickedText === optionText || clickedText.startsWith(`${optionText} `);
+      });
+      const canonicalAnswer = clickedOption?.label || answerHit.answer;
+      const normalizedAnswer = normalize(canonicalAnswer);
+
       const configured = rules.find((rule) => rule.questionId === currentQuestion.id && normalize(rule.answer) === normalizedAnswer);
-      const legacy = parseOptionMeta(currentQuestion.options).find((opt) => normalize(opt.label) === normalizedAnswer && opt.blocking === true);
+      const legacy = options.find((opt) => normalize(opt.label) === normalizedAnswer && opt.blocking === true);
 
       if (!configured && !legacy) return;
 
+      // Interrompe o onClick do fluxo antes que o React avance para a próxima pergunta.
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
 
       setBlocked({
         question: currentQuestion,
-        answer: configured?.answer || legacy?.label || answerHit.answer,
+        answer: configured?.answer || legacy?.label || canonicalAnswer,
         title: configured?.title || "Antes de continuar",
         message: configured?.message || legacy?.blockingMessage || "Esta resposta não permite continuar com este pedido. Se você mudar de ideia, volte e escolha outra opção para continuar.",
         buttonLabel: configured?.buttonLabel || "Voltar e alterar resposta",
