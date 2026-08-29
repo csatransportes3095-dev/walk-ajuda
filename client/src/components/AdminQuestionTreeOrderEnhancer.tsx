@@ -55,16 +55,15 @@ function rootCardText(card: HTMLElement): string {
 }
 
 function findOptionRoot(builder: HTMLElement): HTMLElement | null {
-  let current: HTMLElement | null = builder;
+  let current: HTMLElement | null = builder.parentElement;
   while (current && current !== document.body) {
-    const directLabel = Array.from(current.children)
+    const directHeader = Array.from(current.children)
       .filter((child): child is HTMLElement => child instanceof HTMLElement)
-      .flatMap((child) => Array.from(child.querySelectorAll<HTMLElement>("span.flex-1.text-sm.font-medium.truncate")))
-      .find((span) => {
-        const owner = span.closest<HTMLElement>("div.bg-black\/30.rounded-lg");
-        return owner === current;
-      });
-    if (directLabel) return current;
+      .find((child) => Array.from(child.children).some((grandchild) =>
+        grandchild instanceof HTMLElement &&
+        grandchild.matches("span.flex-1.text-sm.font-medium.truncate"),
+      ));
+    if (directHeader) return current;
     current = current.parentElement;
   }
   return null;
@@ -72,7 +71,13 @@ function findOptionRoot(builder: HTMLElement): HTMLElement | null {
 
 function optionLabelFromRoot(optionRoot: HTMLElement | null): string {
   if (!optionRoot) return "";
-  const span = optionRoot.querySelector<HTMLElement>("span.flex-1.text-sm.font-medium.truncate");
+  const header = Array.from(optionRoot.children)
+    .filter((child): child is HTMLElement => child instanceof HTMLElement)
+    .find((child) => Array.from(child.children).some((grandchild) =>
+      grandchild instanceof HTMLElement &&
+      grandchild.matches("span.flex-1.text-sm.font-medium.truncate"),
+    ));
+  const span = header?.querySelector<HTMLElement>("span.flex-1.text-sm.font-medium.truncate");
   return span?.textContent?.trim() || "";
 }
 
@@ -113,8 +118,6 @@ function resolveOption(
 
   if (scored.length === 0) return null;
   if (scored.length > 1 && scored[0].score === scored[1].score) {
-    // Em caso de formulários copiados idênticos, só aceita empate se produto + opção
-    // identificarem inequivocamente o contexto atual.
     const exact = scored.filter(({ option }) =>
       (!productName || normalize(option.productName) === productName) &&
       (!optionLabel || normalize(option.optionLabel) === optionLabel),
