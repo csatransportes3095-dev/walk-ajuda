@@ -1,16 +1,14 @@
-// Service Worker v105 — ícones H2 renovados, com PWA de Cartões preservado
-const CACHE_NAME = 'walk-ajuda-v105-h2brand';
+// Service Worker v106 — evita HTML antigo apontando para assets/CSS removidos
+const CACHE_NAME = 'walk-ajuda-v106-assets';
 const CARTOES_CACHE = 'meus-cartoes-v1';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      // Apenas cacheia a raiz e o manifesto dinâmico
-      // Os ícones PWA são carregados dinamicamente pelo manifesto do servidor
+      // Nunca pré-cachear páginas HTML/navegações. Depois de um deploy, um HTML
+      // antigo pode apontar para CSS/JS com hash que já não existe no servidor.
       return cache.addAll([
-        '/',
-        '/cartoes',
         '/manifest.json',
         '/manifest-admin.json',
         '/manifest.webmanifest',
@@ -24,7 +22,7 @@ self.addEventListener('install', (event) => {
         '/icon-512x512.png',
         '/apple-touch-icon.png',
       ]).catch(() => {
-        // Ignorar erros de pré-cache — o app ainda funciona online
+        // Ignorar erro de pré-cache. O site continua funcionando online.
       });
     })
   );
@@ -33,32 +31,52 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      // Remover caches antigos (versões anteriores)
       const cacheNames = await caches.keys();
       await Promise.all(
         cacheNames
           .filter(name => name !== CACHE_NAME && name !== CARTOES_CACHE)
           .map(name => caches.delete(name))
       );
+
+      // Limpar qualquer HTML que tenha ficado no cache preservado de Cartões.
+      try {
+        const cartoesCache = await caches.open(CARTOES_CACHE);
+        const keys = await cartoesCache.keys();
+        await Promise.all(keys.map((request) => {
+          if (request.mode === 'navigate' || new URL(request.url).pathname === '/cartoes') {
+            return cartoesCache.delete(request);
+          }
+          return Promise.resolve(false);
+        }));
+      } catch (_) {}
+
       await self.clients.claim();
     })()
   );
 });
 
-// Estratégia: Network First — sempre tenta a rede, cai para cache se offline
 self.addEventListener('fetch', (event) => {
-  // Ignorar requisições não-GET e de outras origens
   if (event.request.method !== 'GET') return;
   if (!event.request.url.startsWith(self.location.origin) && !event.request.url.includes('manus-storage')) return;
-
-  // Não cachear chamadas de API
   if (event.request.url.includes('/api/')) return;
-
-  // Não interceptar rotas de mídia pública (foto/video) — servidas pelo backend com OG tags
   if (event.request.url.includes('/foto/') || event.request.url.includes('/video/')) return;
 
-  // Cache First para ícones PWA e manifest
   const url = new URL(event.request.url);
+
+  // Navegação/HTML: sempre rede e nunca cache. Esse é o ponto principal da correção.
+  if (event.request.mode === 'navigate' || event.request.destination === 'document') {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' }).catch(() =>
+        new Response(
+          '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sem conexão</title></head><body><p>Sem conexão com o servidor. Verifique sua internet e tente novamente.</p></body></html>',
+          { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } },
+        )
+      )
+    );
+    return;
+  }
+
+  // Ícones e manifestos podem continuar em cache, pois não apontam para bundles versionados.
   if (
     url.pathname.endsWith('.webmanifest') ||
     url.pathname === '/manifest.json' ||
@@ -85,28 +103,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // CSS/JS e demais assets: rede primeiro. Cache só como fallback offline.
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-cache' })
       .then((response) => {
-        // Cachear resposta válida
         if (response && response.status === 200) {
           const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
         }
         return response;
       })
-      .catch(() => {
-        // Offline: retornar do cache
-        return caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          // Fallback para a página principal se for navegação
-          if (event.request.mode === 'navigate') {
-            return caches.match('/');
-          }
-          return new Response('Offline', { status: 503 });
-        });
-      })
+      .catch(() => caches.match(event.request).then((cached) => cached || new Response('Offline', { status: 503 })))
   );
 });
