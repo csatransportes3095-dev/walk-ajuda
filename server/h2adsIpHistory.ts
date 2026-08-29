@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { h2AdsInstanceBrowserRuns, h2AdsInstanceWorkerAssignments } from "../drizzle/schema";
 import { getDb } from "./db";
 
@@ -36,6 +36,14 @@ export type H2AdsIpHistoryEntry = {
   observedAt: Date;
 };
 
+async function insertHistory(instanceId: number, workerId: number, observedIp: string): Promise<void> {
+  const db = await requireDb();
+  await db.execute(sql`
+    INSERT INTO h2ads_instance_ip_history (instanceId, workerId, observedIp)
+    VALUES (${instanceId}, ${workerId}, ${observedIp})
+  `);
+}
+
 export async function recordH2AdsRuntimeIp(input: { workerId: number; instanceId: number; observedIp: string }): Promise<boolean> {
   const observedIp = input.observedIp.trim();
   if (!observedIp || observedIp.length > 64) return false;
@@ -49,8 +57,6 @@ export async function recordH2AdsRuntimeIp(input: { workerId: number; instanceId
   const run = runs[0];
   if (!run || run.state !== "browser_open") return false;
 
-  if (run.observedIp === observedIp) return true;
-
   const latest = await db.execute(sql`
     SELECT observedIp
     FROM h2ads_instance_ip_history
@@ -59,13 +65,20 @@ export async function recordH2AdsRuntimeIp(input: { workerId: number; instanceId
     LIMIT 1
   `);
   const latestRows = latest[0] as unknown as Array<{ observedIp: string }>;
+  const latestIp = latestRows[0]?.observedIp ?? null;
+
+  if (run.observedIp === observedIp) {
+    if (!latestIp) await insertHistory(input.instanceId, input.workerId, observedIp);
+    return true;
+  }
+
+  if (!latestIp && run.observedIp) {
+    await insertHistory(input.instanceId, input.workerId, run.observedIp);
+  }
 
   await db.update(h2AdsInstanceBrowserRuns).set({ observedIp, lastChangedAt: new Date() }).where(eq(h2AdsInstanceBrowserRuns.id, run.id));
-  if (latestRows[0]?.observedIp !== observedIp) {
-    await db.execute(sql`
-      INSERT INTO h2ads_instance_ip_history (instanceId, workerId, observedIp)
-      VALUES (${input.instanceId}, ${input.workerId}, ${observedIp})
-    `);
+  if (latestIp !== observedIp) {
+    await insertHistory(input.instanceId, input.workerId, observedIp);
   }
   return true;
 }
