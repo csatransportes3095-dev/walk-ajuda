@@ -7,7 +7,7 @@ import CartaoDespesasPage from "./CartaoDespesasPage";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
 function CartaoRoutes() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   // wouter retorna path relativo quando montado via Route /cartoes/:rest*
   // Usar window.location.pathname para obter o path absoluto real
   const fullPath = typeof window !== 'undefined' ? window.location.pathname : location;
@@ -31,17 +31,48 @@ function CartaoRoutes() {
     return <CartaoAuthPage />;
   }
 
+  let page = <CartaoDashboardPage />;
+
   // Roteamento manual usando path absoluto
   if (fullPath === "/cartoes/despesas") {
-    return <CartaoDespesasPage />;
+    page = <CartaoDespesasPage />;
+  } else {
+    const cartaoMatch = fullPath.match(/^\/cartoes\/cartao\/(\d+)$/);
+    if (cartaoMatch) {
+      page = <CartaoDetailPage />;
+    }
   }
 
-  const cartaoMatch = fullPath.match(/^\/cartoes\/cartao\/(\d+)$/);
-  if (cartaoMatch) {
-    return <CartaoDetailPage />;
-  }
-
-  return <CartaoDashboardPage />;
+  return (
+    <>
+      {page}
+      <button
+        type="button"
+        onClick={() => navigate("/gastos")}
+        aria-label="Voltar para Planilha de Gastos"
+        style={{
+          position: "fixed",
+          left: 16,
+          bottom: 112,
+          zIndex: 1000,
+          height: 44,
+          padding: "0 15px",
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.14)",
+          background: "rgba(20,16,35,0.94)",
+          color: "#fff",
+          fontSize: 13,
+          fontWeight: 800,
+          cursor: "pointer",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+        }}
+      >
+        ← Planilha
+      </button>
+    </>
+  );
 }
 
 export default function CartaoPage() {
