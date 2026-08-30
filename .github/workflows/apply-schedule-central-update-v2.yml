@@ -23,8 +23,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Preserve patch script
-        run: cp scripts/fix-schedule-central-update-v2.mjs /tmp/fix-schedule-central-update-v2.mjs
+      - name: Preserve and repair patch script
+        run: |
+          cp scripts/fix-schedule-central-update-v2.mjs /tmp/fix-schedule-central-update-v2.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/fix-schedule-central-update-v2.mjs')
+          s = p.read_text()
+          old = 'expect(page).toContain("const returnTo = `/agendar/${token}`");'
+          new = 'expect(page).toContain("const returnTo = \\`/agendar/\\${token}\\`");'
+          if old not in s:
+              raise SystemExit('embedded template assertion not found')
+          p.write_text(s.replace(old, new))
+          PY
 
       - name: Start clean branch from current production
         run: |
