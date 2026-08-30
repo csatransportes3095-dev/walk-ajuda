@@ -41,7 +41,11 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: TypeScript check
-        run: pnpm check
+        run: |
+          cp tsconfig.json /tmp/tsconfig.pr38.json
+          node -e "const fs=require('fs');const p='tsconfig.json';const s=fs.readFileSync(p,'utf8');fs.writeFileSync(p,s.replace('\"ignoreDeprecations\": \"6.0\"','\"ignoreDeprecations\": \"5.0\"'))"
+          pnpm check
+          mv /tmp/tsconfig.pr38.json tsconfig.json
 
       - name: Unit tests
         run: pnpm test
