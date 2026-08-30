@@ -6,8 +6,10 @@ import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
 const TOKEN_KEY = "customer_update_token";
+const CP_TOKEN_KEY = "cp_token";
 const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
 const INPUT_CLASS = "w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/15";
+const ALLOWED_RETURN_PATHS = new Set(["/", "/login", "/acompanhar", "/gastos", "/emprestimo"]);
 
 function normalizePhone(value: string) {
   let digits = value.replace(/\D/g, "");
@@ -31,11 +33,29 @@ function formatCpf(value: string) {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+function formatZipCode(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  return digits.length <= 5 ? digits : `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+function getSafeReturnPath() {
+  if (typeof window === "undefined") return "";
+  const raw = new URLSearchParams(window.location.search).get("returnTo") || "";
+  return ALLOWED_RETURN_PATHS.has(raw) ? raw : "";
+}
+
+function getInitialPhone() {
+  if (typeof window === "undefined") return "";
+  return normalizePhone(new URLSearchParams(window.location.search).get("phone") || "");
+}
+
 type Step = "phone" | "password" | "create_password" | "profile" | "done" | "already_done";
 
 export default function AtualizarCadastro() {
+  const returnTo = getSafeReturnPath();
+  const initialPhone = getInitialPhone();
   const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(() => formatPhone(initialPhone));
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -43,6 +63,11 @@ export default function AtualizarCadastro() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
+  const [zipCode, setZipCode] = useState("");
+  const [addressLine, setAddressLine] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [addressNumber, setAddressNumber] = useState("");
+  const [addressComplement, setAddressComplement] = useState("");
   const [city, setCity] = useState("");
   const [uf, setUf] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
@@ -58,6 +83,10 @@ export default function AtualizarCadastro() {
     { enabled: token.length >= 32, retry: false, refetchOnWindowFocus: false },
   );
 
+  const continueToOrigin = () => {
+    if (returnTo) window.location.assign(returnTo);
+  };
+
   useEffect(() => {
     const profile = profileQuery.data;
     if (!profile || loadedToken.current === token) return;
@@ -72,6 +101,11 @@ export default function AtualizarCadastro() {
     setName(profile.name || "");
     setEmail(profile.email || "");
     setCpf(formatCpf(profile.cpf || ""));
+    setZipCode(formatZipCode(profile.zipCode || ""));
+    setAddressLine(profile.addressLine || "");
+    setNeighborhood(profile.neighborhood || "");
+    setAddressNumber(profile.addressNumber || "");
+    setAddressComplement(profile.addressComplement || "");
     setCity(profile.city || "");
     setUf(profile.uf || "");
     setPhotoUrl(profile.profilePhotoUrl || "");
@@ -87,6 +121,7 @@ export default function AtualizarCadastro() {
 
   function acceptToken(nextToken: string) {
     localStorage.setItem(TOKEN_KEY, nextToken);
+    localStorage.setItem(CP_TOKEN_KEY, nextToken);
     loadedToken.current = "";
     setToken(nextToken);
     setPassword("");
@@ -103,7 +138,8 @@ export default function AtualizarCadastro() {
       if (result.status === "blocked") return toast.error("Cadastro bloqueado. Fale com o atendimento.");
       if (result.status === "completed") {
         localStorage.removeItem(TOKEN_KEY);
-        return setStep("already_done");
+        setStep("already_done");
+        return;
       }
       setStep(result.status === "password" ? "password" : "create_password");
     } catch (error: any) {
@@ -162,15 +198,30 @@ export default function AtualizarCadastro() {
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
     if (!isValidCPF(normalizeCpf(cpf))) return toast.error("Digite um CPF válido.");
+    if (zipCode.replace(/\D/g, "").length !== 8) return toast.error("Digite um CEP válido.");
     if (!photoUrl) return toast.error("Envie sua foto de perfil.");
     try {
-      await saveMutation.mutateAsync({ token, name, email, cpf, city, uf });
+      await saveMutation.mutateAsync({
+        token,
+        name,
+        email,
+        cpf,
+        zipCode,
+        addressLine,
+        neighborhood,
+        addressNumber,
+        addressComplement,
+        city,
+        uf,
+      });
+      localStorage.setItem(CP_TOKEN_KEY, token);
       localStorage.removeItem(TOKEN_KEY);
       setToken("");
       setStep("done");
       toast.success("Cadastro atualizado em todo o sistema.");
+      if (returnTo) window.location.assign(returnTo);
     } catch (error: any) {
-      if (String(error?.message || "").includes("já foi atualizado")) {
+      if (String(error?.message || "").includes("já está completo") || String(error?.message || "").includes("já foi atualizado")) {
         localStorage.removeItem(TOKEN_KEY);
         setToken("");
         return setStep("already_done");
@@ -182,7 +233,7 @@ export default function AtualizarCadastro() {
   function restart() {
     localStorage.removeItem(TOKEN_KEY);
     setToken("");
-    setPhone("");
+    setPhone(formatPhone(initialPhone));
     setPassword("");
     setStep("phone");
   }
@@ -198,7 +249,7 @@ export default function AtualizarCadastro() {
           </div>
           <p className="text-xs font-black tracking-[.2em] text-violet-300">WALK AJUDA</p>
           <h1 className="mt-2 text-3xl font-black">Atualizar cadastro</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-400">Seus dados serão corrigidos no cadastro, pedidos, empréstimos e gastos.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-400">Todos os dados obrigatórios são conferidos em um único fluxo.</p>
         </header>
 
         <section className="rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-2xl backdrop-blur sm:p-7">
@@ -237,7 +288,7 @@ export default function AtualizarCadastro() {
           {step === "profile" && profileQuery.data && (
             <form onSubmit={saveProfile} className="space-y-5">
               <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">Complete seus dados</h2><p className="text-xs text-slate-400">Telefone confirmado: {formatPhone(profileQuery.data.phone)}</p></div><button type="button" onClick={restart} className="text-xs font-bold text-violet-300">Trocar telefone</button></div>
-              {profileQuery.data.missing.length > 0 ? <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100">Encontramos {profileQuery.data.missing.length} dado(s) faltando. Confira todos os campos.</p> : <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs text-emerald-100">Seu cadastro está completo. Você ainda pode corrigir os dados abaixo.</p>}
+              {profileQuery.data.missing.length > 0 ? <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100">Encontramos {profileQuery.data.missing.length} dado(s) faltando. Preencha tudo abaixo para continuar.</p> : <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs text-emerald-100">Seu cadastro está completo.</p>}
               <label className="block cursor-pointer rounded-2xl border border-dashed border-violet-400/50 bg-violet-400/5 p-4 text-center hover:bg-violet-400/10">
                 {photoUrl ? <img src={photoUrl} alt="Foto de perfil" className="mx-auto h-24 w-24 rounded-full object-cover ring-2 ring-violet-400" /> : <Upload className="mx-auto h-9 w-9 text-violet-300" />}
                 <span className="mt-2 block text-sm font-bold">{uploadPhotoMutation.isPending ? "Enviando foto..." : photoUrl ? "Trocar foto de perfil" : "Enviar foto de perfil"}</span>
@@ -246,17 +297,26 @@ export default function AtualizarCadastro() {
               <Field label="Nome completo"><input value={name} onChange={(e) => setName(e.target.value)} className={INPUT_CLASS} required minLength={2} autoComplete="name" /></Field>
               <Field label="E-mail"><input value={email} onChange={(e) => setEmail(e.target.value)} className={INPUT_CLASS} required type="email" inputMode="email" autoComplete="email" /></Field>
               <Field label="CPF"><input value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))} className={INPUT_CLASS} required inputMode="numeric" placeholder="000.000.000-00" /></Field>
-              <div className="grid grid-cols-[1fr_92px] gap-3"><Field label="Cidade"><input value={city} onChange={(e) => setCity(e.target.value)} className={INPUT_CLASS} required /></Field><Field label="UF"><select value={uf} onChange={(e) => setUf(e.target.value)} className={INPUT_CLASS} required><option value="">UF</option>{UFS.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[.03] p-4">
+                <p className="mb-4 text-sm font-black text-violet-200">Endereço</p>
+                <div className="space-y-4">
+                  <Field label="CEP"><input value={zipCode} onChange={(e) => setZipCode(formatZipCode(e.target.value))} className={INPUT_CLASS} required inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" /></Field>
+                  <Field label="Rua"><input value={addressLine} onChange={(e) => setAddressLine(e.target.value)} className={INPUT_CLASS} required autoComplete="address-line1" /></Field>
+                  <div className="grid grid-cols-[1fr_110px] gap-3"><Field label="Bairro"><input value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} className={INPUT_CLASS} required /></Field><Field label="Número"><input value={addressNumber} onChange={(e) => setAddressNumber(e.target.value)} className={INPUT_CLASS} required /></Field></div>
+                  <Field label="Complemento (opcional)"><input value={addressComplement} onChange={(e) => setAddressComplement(e.target.value)} className={INPUT_CLASS} autoComplete="address-line2" placeholder="Apto, bloco, casa..." /></Field>
+                  <div className="grid grid-cols-[1fr_92px] gap-3"><Field label="Cidade"><input value={city} onChange={(e) => setCity(e.target.value)} className={INPUT_CLASS} required autoComplete="address-level2" /></Field><Field label="UF"><select value={uf} onChange={(e) => setUf(e.target.value)} className={INPUT_CLASS} required autoComplete="address-level1"><option value="">UF</option>{UFS.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field></div>
+                </div>
+              </div>
               <PrimaryButton busy={saveMutation.isPending || uploadPhotoMutation.isPending}>SALVAR EM TODO O SISTEMA</PrimaryButton>
             </form>
           )}
 
           {step === "done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro atualizado!</h2><p className="mt-2 text-sm leading-6 text-slate-400">Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos. Aguarde a liberação do site.</p></div></div>
+            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro atualizado!</h2><p className="mt-2 text-sm leading-6 text-slate-400">Todos os dados obrigatórios foram conferidos e sincronizados.</p></div>{returnTo && <button type="button" onClick={continueToOrigin} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-black">CONTINUAR</button>}</div>
           )}
 
           {step === "already_done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Seu cadastro já foi atualizado</h2><p className="mt-2 text-sm leading-6 text-slate-400">Aguarde a liberação do site.</p></div></div>
+            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro completo</h2><p className="mt-2 text-sm leading-6 text-slate-400">Não há dados obrigatórios pendentes.</p></div>{returnTo && <button type="button" onClick={continueToOrigin} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-black">CONTINUAR</button>}</div>
           )}
         </section>
         <p className="mt-5 text-center text-xs text-slate-600">Se não reconhecer o cadastro, não continue e fale com o atendimento.</p>

@@ -5,6 +5,7 @@ import { httpBatchLink, splitLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
+import { CustomerProfileRedirectGate } from "./components/CustomerProfileRedirectGate";
 import "./index.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
@@ -86,6 +87,7 @@ const trpcClient = trpc.createClient({
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
+      <CustomerProfileRedirectGate />
       <App />
     </QueryClientProvider>
   </trpc.Provider>

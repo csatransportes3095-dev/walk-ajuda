@@ -3,7 +3,7 @@ import { getDb } from "../db";
 import { findMainCustomerByIdentity, normalizeCustomerEmail, normalizeCustomerPhone, type CustomerRoute } from "../customerAccess";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
-export type OnlineRegistrationStep = 'route' | 'identity' | 'name' | 'phone' | 'cpf' | 'email' | 'cep' | 'uf' | 'city' | 'referrer' | 'photo' | 'confirm';
+export type OnlineRegistrationStep = 'route' | 'identity' | 'name' | 'phone' | 'cpf' | 'email' | 'cep' | 'addressLine' | 'addressNumber' | 'neighborhood' | 'addressComplement' | 'uf' | 'city' | 'referrer' | 'photo' | 'confirm';
 export type OnlineRegistrationDraftData = Record<string, string>;
 
 let infrastructurePromise: Promise<void> | null = null;
@@ -42,11 +42,12 @@ function parseData(value: unknown): OnlineRegistrationDraftData {
 
 function validateField(field: string, value: string) {
   const text = String(value || '').trim();
-  if (['name', 'uf', 'city', 'profilePhotoUrl'].includes(field) && !text) throw new Error('Campo obrigatório.');
+  if (['name', 'uf', 'city', 'profilePhotoUrl', 'addressNumber'].includes(field) && !text) throw new Error('Campo obrigatório.');
+  if (['addressLine', 'neighborhood'].includes(field) && text.length < 2) throw new Error('Campo obrigatório.');
   if (field === 'phone' && !normalizeCustomerPhone(text)) throw new Error('Telefone inválido. Informe DDD e número.');
   if (field === 'cpf' && !isValidCPF(normalizeCpf(text))) throw new Error('CPF inválido. Digite um CPF válido para continuar.');
   if (field === 'email' && !normalizeCustomerEmail(text)) throw new Error('E-mail inválido.');
-  if (field === 'cep' && text && !/^\d{8}$/.test(text.replace(/\D/g, ''))) throw new Error('CEP inválido.');
+  if ((field === 'cep' || field === 'zipCode') && !/^\d{8}$/.test(text.replace(/\D/g, ''))) throw new Error('CEP inválido.');
 }
 
 export async function getOnlineRegistrationDraft(conversationId: number, visitorId: string) {

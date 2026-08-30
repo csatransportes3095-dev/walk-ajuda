@@ -277,6 +277,7 @@ export default function OrderTracking() {
   const checkPinMutation = trpc.customerPin.check.useMutation();
   const setPinMutation = trpc.customerPin.setPin.useMutation();
   const updateCpfMutation = trpc.customers.updateCpfByPhone.useMutation();
+  const customerProfileStatusMutation = trpc.customerUpdate.status.useMutation();
 
   // Estado para tela de atualização de CPF
   const [needsCpfUpdate, setNeedsCpfUpdate] = useState(false);
@@ -300,11 +301,11 @@ export default function OrderTracking() {
       return;
     }
     if (result.success) {
-      // Verificar CPF antes de liberar acesso
-      const custCheck = await customerCheckQuery.refetch();
-      if (!(custCheck.data?.customer as any)?.cpf) {
-        setNeedsCpfUpdate(true);
-        setPinError(false);
+      // PIN legado não pode ignorar pendências do cadastro principal.
+      const profileStatus = await customerProfileStatusMutation.mutateAsync({ phone: searchPhone });
+      if (profileStatus.status !== 'completed') {
+        const params = new URLSearchParams({ phone: searchPhone, returnTo: '/acompanhar' });
+        window.location.assign(`/atualizarcadastro?${params.toString()}`);
         return;
       }
       if (result.firstAccess) {
@@ -329,12 +330,11 @@ export default function OrderTracking() {
     if (newPin.length !== 4) { setNewPinError("A senha deve ter exatamente 4 dígitos."); return; }
     if (newPin !== newPinConfirm) { setNewPinError("As senhas não coincidem. Tente novamente."); return; }
     await setPinMutation.mutateAsync({ phone: searchPhone, newPin });
-    // Verificar CPF antes de liberar acesso
-    const custCheck2 = await customerCheckQuery.refetch();
-    if (!(custCheck2.data?.customer as any)?.cpf) {
-      setNeedsCpfUpdate(true);
-      setShowCreatePin(false);
-      setNewPinError("");
+    // Após criar o PIN, perfil incompleto continua obrigado ao fluxo central.
+    const profileStatus = await customerProfileStatusMutation.mutateAsync({ phone: searchPhone });
+    if (profileStatus.status !== 'completed') {
+      const params = new URLSearchParams({ phone: searchPhone, returnTo: '/acompanhar' });
+      window.location.assign(`/atualizarcadastro?${params.toString()}`);
       return;
     }
     setShowCreatePin(false);

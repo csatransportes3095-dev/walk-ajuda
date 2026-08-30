@@ -15,6 +15,11 @@ type MainCustomer = {
   profilePhotoUrl?: string | null;
   city?: string | null;
   uf?: string | null;
+  zipCode?: string | null;
+  addressLine?: string | null;
+  neighborhood?: string | null;
+  addressNumber?: string | null;
+  addressComplement?: string | null;
   blocked?: number | boolean | null;
   deletedAt?: Date | string | null;
 };
@@ -62,13 +67,16 @@ async function rows(db: any, query: any): Promise<any[]> {
 export async function findMainCustomerByIdentity(identity: IdentityInput, dbArg?: any): Promise<MainCustomer | null> {
   const db = dbArg || await getDb() as any;
   if (!db) return null;
+  await ensureCustomerIdentityInfrastructure(db);
   const phone = normalizeCustomerPhone(identity.phone);
   const cpf = normalizeCustomerCpf(identity.cpf);
   const email = normalizeCustomerEmail(identity.email);
   if (!phone && !cpf && !email) return null;
 
   const candidates = await rows(db, sql`
-    SELECT id, customerNumber, name, phone, cpf, email, city, uf, profilePhotoUrl, blocked, deletedAt
+    SELECT id, customerNumber, name, phone, cpf, email, city, uf,
+           zipCode, addressLine, neighborhood, addressNumber, addressComplement,
+           profilePhotoUrl, blocked, deletedAt
     FROM customers
     WHERE deletedAt IS NULL
   `);
@@ -328,6 +336,21 @@ export async function ensureCustomerIdentityInfrastructure(dbArg?: any): Promise
       }
       if (!customerColumnNames.has("normalizedemail")) {
         await db.execute(sql.raw("ALTER TABLE customers ADD COLUMN normalizedEmail VARCHAR(320) NULL"));
+      }
+      if (!customerColumnNames.has("zipcode")) {
+        await db.execute(sql.raw("ALTER TABLE customers ADD COLUMN zipCode VARCHAR(10) NULL"));
+      }
+      if (!customerColumnNames.has("addressline")) {
+        await db.execute(sql.raw("ALTER TABLE customers ADD COLUMN addressLine VARCHAR(255) NULL"));
+      }
+      if (!customerColumnNames.has("neighborhood")) {
+        await db.execute(sql.raw("ALTER TABLE customers ADD COLUMN neighborhood VARCHAR(128) NULL"));
+      }
+      if (!customerColumnNames.has("addressnumber")) {
+        await db.execute(sql.raw("ALTER TABLE customers ADD COLUMN addressNumber VARCHAR(32) NULL"));
+      }
+      if (!customerColumnNames.has("addresscomplement")) {
+        await db.execute(sql.raw("ALTER TABLE customers ADD COLUMN addressComplement VARCHAR(128) NULL"));
       }
 
       await db.execute(sql.raw(`

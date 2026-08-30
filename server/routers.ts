@@ -2227,82 +2227,31 @@ export const appRouter = router({
 
     // Atualizar email do cliente pelo telefone (chamado quando cliente preenche email no formulário)
     updateEmailByPhone: publicProcedure
-      .input(z.object({ phone: z.string().min(1), email: z.string().email() }))
-      .mutation(async ({ input, ctx }) => {
-        const clientIp = (ctx.req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || ctx.req.socket?.remoteAddress || 'unknown';
-        const blockResult = await checkPhoneBlockedAndBlockIp(input.phone, clientIp, 'atualizar_email');
-        if (blockResult.blocked) return { success: false, message: 'Acesso bloqueado' };
-        const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
-        if (!customer) return { success: false, message: 'Cliente não encontrado' };
-        await updateCustomer(customer.id, { email: input.email });
-        return { success: true };
+      .input(z.any())
+      .mutation(async () => {
+        return { success: false as const, message: 'Cadastro incompleto. Use /atualizarcadastro para corrigir todos os dados obrigatórios juntos.' };
       }),
-
     updateCpfByPhone: publicProcedure
-      .input(z.object({ phone: z.string().min(1), cpf: z.string().min(11, 'CPF inválido') }))
-      .mutation(async ({ input }) => {
-        const cpf = normalizeCpf(input.cpf);
-        if (!isValidCPF(cpf)) return { success: false, message: 'CPF inválido' };
-        const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
-        if (!customer) return { success: false, message: 'Cliente não encontrado' };
-        // Verificar duplicidade somente após a aprovação matemática do CPF.
-        const existing = await getCustomerByCpf(cpf);
-        if (existing && existing.id !== customer.id) return { success: false, message: 'CPF já cadastrado' };
-        await updateCustomer(customer.id, { cpf });
-        return { success: true };
+      .input(z.any())
+      .mutation(async () => {
+        return { success: false as const, message: 'Cadastro incompleto. Use /atualizarcadastro para corrigir todos os dados obrigatórios juntos.' };
       }),
-
-    // Completar o perfil de um cliente existente. Nunca cria um segundo cadastro.
     completeProfile: publicProcedure
-      .input(z.object({
-        lookupIdentifier: z.string().min(10),
-        lookupIsCpf: z.boolean().optional(),
-        name: z.string().min(2, 'Nome obrigatório'),
-        phone: z.string().min(10),
-        email: z.string().email('E-mail obrigatório e inválido'),
-        cpf: z.string().min(11),
-        city: z.string().optional(),
-        uf: z.string().length(2).optional().or(z.literal('')),
-        profilePhotoUrl: z.string().url('Foto de perfil obrigatória').min(1),
-      }))
-      .mutation(async ({ input }) => {
-        await ensureCustomerIdentityInfrastructure();
-        const lookupPhone = input.lookupIsCpf ? '' : normalizeCustomerPhone(input.lookupIdentifier);
-        const lookupCpf = input.lookupIsCpf ? normalizeCustomerCpf(input.lookupIdentifier) : '';
-        if (input.lookupIsCpf && !isValidCPF(lookupCpf)) {
-          return { success: false, message: 'CPF inválido. Digite um CPF válido para continuar.' };
-        }
-        const profile = {
-          name: input.name.trim(),
-          phone: normalizeCustomerPhone(input.phone),
-          email: normalizeCustomerEmail(input.email),
-          cpf: normalizeCustomerCpf(input.cpf),
-          city: input.city?.trim() || undefined,
-          uf: input.uf?.trim().toUpperCase() || undefined,
-          profilePhotoUrl: input.profilePhotoUrl.trim(),
-        };
-        try {
-          validateMainCustomerProfile(profile);
-        } catch (error: any) {
-          return { success: false, message: error?.message || 'Complete todos os dados obrigatórios.' };
-        }
-        const current = await findMainCustomerByIdentity({ phone: lookupPhone, cpf: lookupCpf });
-        if (!current) return { success: false, message: 'Cadastro principal não encontrado. Entre em contato com o administrador.' };
-        const conflict = await findMainCustomerByIdentity(profile);
-        if (conflict && conflict.id !== current.id) {
-          return { success: false, message: 'Os dados informados já pertencem a outro cadastro. Entre em contato com o administrador.' };
-        }
-        const updated = await updateCustomer(current.id, profile);
-        if (!updated) return { success: false, message: 'Não foi possível atualizar o cadastro.' };
-        return { success: true, customer: updated };
+      .input(z.any())
+      .mutation(async () => {
+        return { success: false as const, message: 'Cadastro incompleto. Use /atualizarcadastro para corrigir todos os dados obrigatórios juntos.' };
       }),
-
     register: publicProcedure
       .input(z.object({
         name: z.string().min(1),
         phone: z.string().min(1),
         email: z.string().email("E-mail obrigatório e inválido").min(1, "E-mail obrigatório"),
         cpf: z.string().min(11, "CPF inválido").max(18),
+        zipCode: z.string().transform(value => value.replace(/\D/g, '')).refine(value => /^\d{8}$/.test(value), "CEP obrigatório e inválido"),
+        addressLine: z.string().trim().min(2, "Rua obrigatória").max(255),
+        neighborhood: z.string().trim().min(2, "Bairro obrigatório").max(128),
+        addressNumber: z.string().trim().min(1, "Número obrigatório").max(32),
+        addressComplement: z.string().trim().max(128).optional(),
         city: z.string().min(1, "Cidade é obrigatória"),
         uf: z.string().length(2, "UF deve ter 2 caracteres"),
         referredBy: z.string().optional(),
@@ -2547,6 +2496,9 @@ export const appRouter = router({
         const oldPhone = String(current.phone || '').replace(/\D/g, '');
         const newPhone = data.phone || oldPhone;
         const phoneChanged = !!data.phone && newPhone !== oldPhone;
+        if (phoneChanged) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Telefone é a identidade fixa do cliente e não pode ser alterado.' });
+        }
 
         // Verifica duplicidade antes de tocar em tabelas relacionadas. Assim não há
         // atualização parcial nem o erro genérico ao tentar trocar para telefone de outro cliente.
