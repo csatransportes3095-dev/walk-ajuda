@@ -99,23 +99,25 @@ export function StorefrontProductCard({
     const price = asNumber(effectivePrice);
     return original > price && price > 0 ? Math.round(((original - price) / original) * 100) : 0;
   }, [effectiveOriginalPrice, effectivePrice]);
+
   const productColor = item.product.cardColor || "#7c3aed";
   const borderColor = item.option.cardBorderColor || productColor;
   const accentColor = item.option.cardAccentColor || borderColor;
-  const cardBackground = item.option.cardBgColor || undefined;
-  const textColor = item.option.cardTextColor || undefined;
-  const cartButtonColor = item.option.cardButtonColor || productColor;
+  const cardBackground = item.option.cardBgColor || item.product.cardBgColor || productColor;
+  const textColor = item.option.cardTextColor || item.product.cardTextColor || undefined;
+  const cartButtonColor = item.option.cardButtonColor || item.product.cardBtnColor || productColor;
   const description = item.option.description || item.product.description;
   const warrantyLabel = selectedTier?.warrantyLabel || (selectedTier ? `${selectedTier.warrantyValue} ${selectedTier.warrantyType}` : item.option.warranty);
   const detailsId = `product-details-${item.product.id}-${item.option.id}`;
-  const glassBackground = cardBackground
-    ? `linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(15,23,42,0.60) 42%, rgba(2,6,23,0.90) 100%), ${cardBackground}`
-    : "linear-gradient(145deg, rgba(30,41,59,0.72) 0%, rgba(8,15,32,0.88) 48%, rgba(2,6,23,0.96) 100%)";
 
   return (
     <article
-      className="group relative flex h-full flex-col overflow-hidden rounded-3xl border shadow-[0_20px_58px_rgba(0,0,0,0.46),0_0_30px_rgba(59,130,246,0.08)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_72px_rgba(0,0,0,0.54),0_0_34px_rgba(34,211,238,0.16)] backdrop-blur-xl"
-      style={{ borderColor: `${borderColor}b8`, background: glassBackground, boxShadow: `0 20px 58px rgba(0,0,0,.46), 0 0 24px ${accentColor}2c, inset 0 1px 0 rgba(255,255,255,.16)` }}
+      className="group relative flex h-full flex-col overflow-hidden rounded-3xl border shadow-[0_20px_58px_rgba(0,0,0,0.46),0_0_30px_rgba(59,130,246,0.08)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_72px_rgba(0,0,0,0.54),0_0_34px_rgba(34,211,238,0.16)]"
+      style={{
+        borderColor,
+        background: cardBackground,
+        boxShadow: `0 20px 58px rgba(0,0,0,.46), 0 0 26px ${accentColor}, inset 0 1px 0 rgba(255,255,255,.20)`,
+      }}
     >
       <div className="pointer-events-none absolute inset-x-5 top-0 h-px opacity-95" style={{ background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`, boxShadow: `0 0 13px ${accentColor}` }} />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/[0.10] via-white/[0.025] to-transparent" />
@@ -135,28 +137,24 @@ export function StorefrontProductCard({
             )}
           </div>
           <div className="min-w-0">
-            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: accentColor }}>
-              {item.category}
-            </p>
+            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: accentColor }}>{item.category}</p>
             <h3 className="text-lg font-black leading-tight text-white" style={textColor ? { color: textColor } : undefined}>{item.option.label.trim()}</h3>
-            <p className="mt-1 text-xs font-semibold text-white/55" style={textColor ? { color: `${textColor}bb` } : undefined}>{item.product.name}</p>
+            <p className="mt-1 text-xs font-semibold text-white/70" style={textColor ? { color: textColor, opacity: 0.78 } : undefined}>{item.product.name}</p>
           </div>
         </div>
 
-        <p className="min-h-[43px] whitespace-pre-wrap text-sm leading-relaxed text-white/75" style={textColor ? { color: `${textColor}cc` } : undefined}>{shortText(description)}</p>
+        <p className="min-h-[43px] whitespace-pre-wrap text-sm leading-relaxed text-white/80" style={textColor ? { color: textColor, opacity: 0.88 } : undefined}>{shortText(description)}</p>
 
         {tiers.length > 0 && (
           <label className="mt-4 block">
-            <span className="mb-1.5 block text-xs font-bold text-white/70">Garantia</span>
+            <span className="mb-1.5 block text-xs font-bold text-white/80">Garantia</span>
             <select
               value={tierId ?? ""}
               onChange={(event) => setTierId(Number(event.target.value))}
-              className="w-full rounded-xl border border-white/20 bg-slate-950/45 px-3 py-2.5 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,.10)] outline-none backdrop-blur-xl focus:border-violet-300"
+              className="w-full rounded-xl border border-white/25 bg-slate-950/55 px-3 py-2.5 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,.10)] outline-none backdrop-blur-xl focus:border-violet-300"
             >
               {tiers.map((tier) => (
-                <option key={tier.id} value={tier.id}>
-                  {tier.warrantyLabel || `${tier.warrantyValue} ${tier.warrantyType}`} — {asMoney(tier.price)}
-                </option>
+                <option key={tier.id} value={tier.id}>{tier.warrantyLabel || `${tier.warrantyValue} ${tier.warrantyType}`} — {asMoney(tier.price)}</option>
               ))}
             </select>
           </label>
@@ -164,34 +162,28 @@ export function StorefrontProductCard({
 
         <div className="mt-5 flex items-end justify-between gap-3">
           <div>
-            {effectiveOriginalPrice && <p className="mb-0.5 text-xs font-semibold text-white/40 line-through">{asMoney(effectiveOriginalPrice)}</p>}
+            {effectiveOriginalPrice && <p className="mb-0.5 text-xs font-semibold text-white/50 line-through">{asMoney(effectiveOriginalPrice)}</p>}
             <p className="text-2xl font-black text-white" style={textColor ? { color: textColor } : undefined}>{asMoney(effectivePrice)}</p>
             {discount > 0 && <p className="mt-0.5 text-xs font-bold text-emerald-300">Economize {discount}%</p>}
           </div>
-          {item.product.deliveryDays && <span className="rounded-lg border border-white/20 bg-white/[0.08] px-2 py-1 text-right text-[11px] font-bold text-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,.12)] backdrop-blur-xl">Prazo: {item.product.deliveryDays}</span>}
+          {item.product.deliveryDays && <span className="rounded-lg border border-white/25 bg-black/20 px-2 py-1 text-right text-[11px] font-bold text-white/85">Prazo: {item.product.deliveryDays}</span>}
         </div>
 
         {warrantyLabel && (
           <div className="mt-4 flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-bold text-emerald-100"><ShieldCheck className="h-3.5 w-3.5" />Garantia</span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/35 bg-emerald-950/35 px-2.5 py-1 text-[11px] font-bold text-emerald-100"><ShieldCheck className="h-3.5 w-3.5" />Garantia</span>
           </div>
         )}
       </div>
 
-      <div className="relative z-[1] mt-auto border-t border-white/15 bg-slate-950/35 p-4 backdrop-blur-xl">
+      <div className="relative z-[1] mt-auto border-t border-white/20 bg-black/25 p-4 backdrop-blur-sm">
         <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => onBuy(selectedTier)}
-            className="min-h-12 rounded-xl border border-white/60 bg-white/95 px-3 py-3 text-sm font-black text-slate-950 shadow-[0_8px_24px_rgba(255,255,255,.14)] transition-all hover:bg-white hover:shadow-[0_8px_28px_rgba(255,255,255,.25)] active:scale-[0.98]"
-          >
-            Comprar agora
-          </button>
+          <button type="button" onClick={() => onBuy(selectedTier)} className="min-h-12 rounded-xl border border-white/70 bg-white px-3 py-3 text-sm font-black text-slate-950 shadow-lg transition-all hover:brightness-105 active:scale-[0.98]">Comprar agora</button>
           <button
             type="button"
             onClick={() => onAddToCart(selectedTier)}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-black text-white shadow-[0_8px_24px_rgba(0,0,0,.18)] backdrop-blur-xl transition-all hover:brightness-125 active:scale-[0.98]"
-            style={{ background: `linear-gradient(135deg, ${cartButtonColor}52, ${cartButtonColor}24)`, borderColor: `${cartButtonColor}cc`, boxShadow: `0 8px 24px ${cartButtonColor}24, inset 0 1px 0 rgba(255,255,255,.18)` }}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-black text-white shadow-lg transition-all hover:brightness-125 active:scale-[0.98]"
+            style={{ background: cartButtonColor, borderColor: cartButtonColor }}
           >
             <ShoppingCart className="h-4 w-4" /> Carrinho
           </button>
@@ -201,13 +193,13 @@ export function StorefrontProductCard({
           aria-expanded={detailsOpen}
           aria-controls={detailsId}
           onClick={() => setDetailsOpen((open) => !open)}
-          className="mt-3 inline-flex w-full items-center justify-center gap-1.5 py-1 text-xs font-bold text-white/70 transition-colors hover:text-white"
+          className="mt-3 inline-flex w-full items-center justify-center gap-1.5 py-1 text-xs font-bold text-white/80 transition-colors hover:text-white"
         >
           {detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}
           {detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
         {detailsOpen && (
-          <div id={detailsId} className="mt-2 rounded-xl border border-white/15 bg-slate-950/55 p-3 text-sm text-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,.10)] backdrop-blur-xl">
+          <div id={detailsId} className="mt-2 rounded-xl border border-white/20 bg-black/30 p-3 text-sm text-white/90 backdrop-blur-sm">
             {warrantyLabel && <p className="mb-2 flex items-center gap-2"><Check className="h-4 w-4 text-emerald-300" />{warrantyLabel}</p>}
             {item.option.documents.length > 0 && <p className="mb-2"><strong className="text-white">Documentos:</strong> {item.option.documents.map((document) => document.label).join(", ")}</p>}
             {item.option.questions.length > 0 && <p><strong className="text-white">Etapas:</strong> perguntas específicas desta opção serão apresentadas no fluxo de compra.</p>}
