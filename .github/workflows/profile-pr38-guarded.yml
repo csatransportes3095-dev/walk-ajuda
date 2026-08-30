@@ -1,0 +1,62 @@
+name: PR38 Profile Guarded Patch
+
+on:
+  push:
+    branches:
+      - fix/unificar-atualizacao-cadastro
+    paths:
+      - scripts/profile-pr38-patch.mjs
+      - .github/workflows/profile-pr38-guarded.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/unificar-atualizacao-cadastro
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Apply guarded profile patch
+        run: node scripts/profile-pr38-patch.mjs
+
+      - name: Validate patch whitespace
+        run: git diff --check
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript check
+        run: pnpm check
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Commit validated patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/components/PasswordGate.tsx client/src/pages/GastosLoginPage.tsx client/src/pages/OrderTracking.tsx client/src/pages/AtualizarCadastro.tsx drizzle/schema.ts
+          if git diff --cached --quiet; then
+            echo "No patch changes to commit."
+            exit 0
+          fi
+          git commit -m "fix(profile): centralize remaining required-profile flows [skip ci]"
+          git push origin HEAD:fix/unificar-atualizacao-cadastro
