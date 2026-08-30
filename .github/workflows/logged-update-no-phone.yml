@@ -1,0 +1,39 @@
+name: Validate Logged Update Flow
+
+on:
+  push:
+    branches:
+      - fix/logged-user-update-no-phone
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Apply guarded patch
+        run: node scripts/fix-logged-user-update-no-phone.mjs
+      - name: Validate whitespace
+        run: git diff --check
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Commit validated code
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/components/PasswordGate.tsx client/src/pages/AtualizarCadastro.tsx
+          if git diff --cached --quiet; then
+            echo "No validated changes to commit"
+          else
+            git commit -m "fix(cadastro): cliente logado atualiza sem repetir telefone [skip ci]"
+            git push
+          fi
