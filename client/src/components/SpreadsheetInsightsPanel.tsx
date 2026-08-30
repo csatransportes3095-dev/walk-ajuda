@@ -75,7 +75,7 @@ function downloadJson(data: unknown, filename: string) {
 }
 
 export function SpreadsheetInsightsPanel({ token, selectedMonth, onSelectedMonthChange, onNavigate, onDataChanged }: Props) {
-  const [period, setPeriod] = useState<Period>("month");
+  const [period, setPeriod] = useState<Period>("day");
   const [dataOpen, setDataOpen] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
   const [restoreBusy, setRestoreBusy] = useState(false);
