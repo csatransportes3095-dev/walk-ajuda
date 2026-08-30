@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { SpreadsheetPage } from './SpreadsheetPage';
 import { GastosLoginPage } from './GastosLoginPage';
 import { trpc } from '@/lib/trpc';
-import { PostLoginReferralManifest } from '@/components/PostLoginReferralManifest';
 import { useLocation } from 'wouter';
 
 const TOKEN_KEY = 'gastos_token';
@@ -51,7 +50,6 @@ export function GastosPage() {
   const [token, setToken] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string | null>(null);
   const [requiredProfilePhone, setRequiredProfilePhone] = useState<string>('');
-  const [manifestCompleted, setManifestCompleted] = useState(false);
   const [, navigate] = useLocation();
   const [savedToken] = useState<string>(() => localStorage.getItem(TOKEN_KEY) || '');
   const [isLoading, setIsLoading] = useState<boolean>(() => !!localStorage.getItem(TOKEN_KEY));
@@ -66,7 +64,7 @@ export function GastosPage() {
   // Verificar acesso à rota gastos
   const routeAccessQuery = trpc.spreadsheet.checkRouteAccess.useQuery(
     { token: token || '', route: 'gastos' },
-    { enabled: !!token && isLoggedIn, retry: false, refetchOnWindowFocus: true, refetchInterval: 1000 },
+    { enabled: !!token && isLoggedIn, retry: false, refetchOnWindowFocus: true, refetchInterval: 60000 },
   );
 
   useEffect(() => {
@@ -120,7 +118,6 @@ export function GastosPage() {
     setRequiredProfilePhone('');
     setToken(newToken);
     setClientName(newClientName);
-    setManifestCompleted(false);
     setIsLoggedIn(true);
   };
 
@@ -133,7 +130,6 @@ export function GastosPage() {
     setRequiredProfilePhone('');
     setToken(null);
     setClientName(null);
-    setManifestCompleted(false);
     setIsLoggedIn(false);
   };
 
@@ -155,10 +151,6 @@ export function GastosPage() {
   // Verificar permissão de rota (null = ainda carregando, não bloquear)
   if (routeAccessQuery.data && !routeAccessQuery.data.allowed) {
     return <AcessoNegado routeLabel="Gastos" onLogout={handleLogout} />;
-  }
-
-  if (!manifestCompleted) {
-    return <PostLoginReferralManifest token={token || ''} route="gastos" onComplete={() => setManifestCompleted(true)} />;
   }
 
   return (

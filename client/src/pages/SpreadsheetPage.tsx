@@ -14,9 +14,11 @@ import { ServicosExtras } from "@/components/ServicosExtras";
 import { H2ParticularModule } from "@/components/private-transport/H2ParticularModule";
 import { DashboardModuleCard, DashboardExternalModuleCard } from "@/components/DashboardModuleCard";
 import { H2AssistantPanel, type H2AssistantNavigationTarget } from "@/components/H2AssistantPanel";
+import { SpreadsheetInsightsPanel } from "@/components/SpreadsheetInsightsPanel";
 
 const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 const DATE_COLORS = ["#ff6b6b", "#4ecdc4", "#45b7d1", "#f9ca24", "#6c5ce7", "#a29bfe", "#fd79a8", "#fdcb6e", "#6c5ce7", "#00b894"];
+const EXPENSE_CATEGORY_LABELS: Record<string, string> = { fuel: "Combustível", carRental: "Aluguel", maintenance: "Manutenção", oilChange: "Troca de óleo", washing: "Lavagem", insurance: "Seguro", internetPhone: "Internet/Telefone", food: "Alimentação", parking: "Estacionamento", tolls: "Pedágios", financing: "Financiamento", fines: "Multas", accessories: "Acessórios", otherExpenses: "Outros" };
 
 // Mantém o chat e o WhatsApp preservados no código; altere para true caso precise reativá-los futuramente.
 const SHOW_SPREADSHEET_LIVE_CHAT = false;
@@ -839,7 +841,7 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
 
   // Dados para gráficos
   const chartData = useMemo(() => {
-    const dates = Array.from(new Set(earnings.map(e => e.date))).sort();
+    const dates = Array.from(new Set([...earnings.map(e => e.date), ...expenses.map(e => e.date)])).sort();
     return dates.map(date => {
       const earningsForDate = earnings.filter(e => e.date === date);
       const expensesForDate = expenses.filter(e => e.date === date);
@@ -1285,7 +1287,20 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
           </div>
         )}
 
-        {/* Resumo por periodo */}
+        <SpreadsheetInsightsPanel
+          token={token}
+          selectedMonth={selectedMonth}
+          onSelectedMonthChange={setSelectedMonth}
+          onNavigate={(target) => {
+            setActiveModule(target);
+            window.requestAnimationFrame(() => document.getElementById("planilha-modulos")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+          }}
+          onDataChanged={async () => {
+            await Promise.all([refetchEarnings(), refetchExpenses(), refetchYearlyEarnings(), refetchYearlyExpenses(), refetchOperational(), refetchGoals()]);
+          }}
+        />
+
+        {/* Resumo por periodo legado (ocultado pelo painel inteligente) */}
         <div className="premium-summary mb-8">
           {/* Cabecalho das colunas */}
           <div className="grid grid-cols-3 gap-2 mb-2 px-1">
@@ -1364,7 +1379,7 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
         {/* Abas */}
         <div id="planilha-modulos" className="scroll-mt-4">
         <Tabs value={activeModule} onValueChange={setActiveModule} className="w-full">
-          <TabsList aria-label="Módulos da Planilha de Gastos" className="!grid !w-full grid-cols-3 md:grid-cols-5 xl:grid-cols-9 !h-auto !items-stretch gap-2.5 sm:gap-3 bg-transparent p-0 mb-5">
+          <TabsList aria-label="Módulos da Planilha de Gastos" className="spreadsheet-module-strip !grid !w-full grid-cols-3 md:grid-cols-5 xl:grid-cols-9 !h-auto !items-stretch gap-2.5 sm:gap-3 bg-transparent p-0 mb-5">
             <DashboardModuleCard value="gastos" label="Gastos" selected={activeModule === 'gastos'} theme={MODULE_THEMES.gastos} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>} />
             <DashboardModuleCard value="ganhos" label="Ganhos" selected={activeModule === 'ganhos'} theme={MODULE_THEMES.ganhos} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>} />
             <DashboardModuleCard value="operacional" label="Operacional" selected={activeModule === 'operacional'} theme={MODULE_THEMES.operacional} icon={<svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>} />
@@ -2127,7 +2142,7 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
-                      data={Object.entries(expensesByCategory).filter(([, v]) => v > 0).map(([k, v]) => ({ name: k, value: v }))}
+                      data={Object.entries(expensesByCategory).filter(([, v]) => v > 0).map(([k, v]) => ({ name: EXPENSE_CATEGORY_LABELS[k] || k, value: v }))}
                       cx="50%" cy="50%" labelLine={false}
                       label={({ name, value }) => `${name}: R$ ${value.toFixed(2)}`}
                       outerRadius={80} fill="#8884d8" dataKey="value"
@@ -2246,12 +2261,13 @@ function RideAnalyzerTab({ token }: { token: string }) {
 
   // Buscar gastos do dia para combustível
   const { data: expensesMonth } = trpc.spreadsheet.getExpensesByMonth.useQuery({ token, month: todayMonth }, { enabled: !!token });
-  const todayExpense = expensesMonth?.find((e: any) => e.date === today);
-  const todayFuel = parseFloat(todayExpense?.fuel || '0');
+  const todayExpenses = (expensesMonth || []).filter((e: any) => String(e.date).slice(0, 10) === today);
+  const todayFuel = todayExpenses.reduce((sum: number, e: any) => sum + parseFloat(e.fuel || '0'), 0);
+  const { data: operationalMonth } = trpc.spreadsheet.getOperationalByMonth.useQuery({ token, month: todayMonth }, { enabled: !!token });
 
   // Buscar ganhos do dia para resumo
   const { data: earningsMonth, refetch: refetchEarnings } = trpc.spreadsheet.getEarningsByMonth.useQuery({ token, month: todayMonth }, { enabled: !!token });
-  const todayEarning = earningsMonth?.find((e: any) => e.date === today);
+  const todayEarnings = (earningsMonth || []).filter((e: any) => String(e.date).slice(0, 10) === today);
 
   // Estado do formulário de corrida
   const [platform, setPlatform] = useState<'uber' | 'ninetynine' | 'indrive' | 'particular' | 'deliveries'>('uber');
@@ -2259,7 +2275,7 @@ function RideAnalyzerTab({ token }: { token: string }) {
   const [pickupKm, setPickupKm] = useState('');
   const [tripKm, setTripKm] = useState('');
   const [analysis, setAnalysis] = useState<null | {
-    totalKm: number; fuelCost: number; netProfit: number; ratePerKm: number; score: number; label: string; color: string;
+    totalKm: number; fuelCost: number; operatingCost: number; realCostPerKm: number; netProfit: number; ratePerKm: number; score: number; label: string; color: string;
   }>(null);
   const [accepted, setAccepted] = useState(false);
 
@@ -2285,6 +2301,10 @@ function RideAnalyzerTab({ token }: { token: string }) {
   const fuelPrice = parseFloat(vehicleConfig?.fuelPricePerLiter || '6');
   const minRatePerKm = parseFloat(vehicleConfig?.minRatePerKm || '2');
   const costPerKm = fuelPrice / kmPerLiter;
+  const monthKm = (operationalMonth || []).reduce((sum: number, row: any) => sum + Math.max(0, parseFloat(row.kmFinal || '0') - parseFloat(row.kmInitial || '0')), 0);
+  const otherMonthlyCosts = (expensesMonth || []).reduce((sum: number, row: any) => sum + ['carRental','maintenance','oilChange','washing','insurance','internetPhone','food','parking','tolls','financing','fines','accessories','otherExpenses'].reduce((inner, key) => inner + parseFloat(row[key] || '0'), 0), 0);
+  const historicalOtherCostPerKm = monthKm > 0 ? otherMonthlyCosts / monthKm : 0;
+  const realCostPerKm = costPerKm + historicalOtherCostPerKm;
 
   function calcAnalysis() {
     const fare = parseFloat(fareValue.replace(',', '.')) || 0;
@@ -2293,7 +2313,8 @@ function RideAnalyzerTab({ token }: { token: string }) {
     const totalKm = pkm + tkm;
     if (fare <= 0 || totalKm <= 0) return;
     const fuelCost = totalKm * costPerKm;
-    const netProfit = fare - fuelCost;
+    const operatingCost = totalKm * realCostPerKm;
+    const netProfit = fare - operatingCost;
     const ratePerKm = fare / totalKm;
     // Nota: baseada na taxa por km vs meta mínima
     const ratio = ratePerKm / minRatePerKm;
@@ -2303,7 +2324,7 @@ function RideAnalyzerTab({ token }: { token: string }) {
     else if (score >= 70) { label = 'Boa'; color = '#22c55e'; }
     else if (score >= 55) { label = 'Aceitável'; color = '#f59e0b'; }
     else if (score >= 40) { label = 'Fraca'; color = '#f97316'; }
-    setAnalysis({ totalKm, fuelCost, netProfit, ratePerKm, score, label, color });
+    setAnalysis({ totalKm, fuelCost, operatingCost, realCostPerKm, netProfit, ratePerKm, score, label, color });
     setAccepted(false);
   }
 
@@ -2320,7 +2341,7 @@ function RideAnalyzerTab({ token }: { token: string }) {
   }
 
   const platformLabels: Record<string, string> = { uber: 'Uber', ninetynine: '99', indrive: 'InDrive', particular: 'Particular', deliveries: 'Entregas' };
-  const todayTotal = todayEarning ? ['uber','ninetynine','indrive','particular','deliveries','tips','otherEarnings'].reduce((s, k) => s + parseFloat((todayEarning as any)[k] || '0'), 0) : 0;
+  const todayTotal = todayEarnings.reduce((sum: number, row: any) => sum + ['uber','ninetynine','indrive','particular','deliveries','tips','otherEarnings'].reduce((s, k) => s + parseFloat(row[k] || '0'), 0), 0);
 
   return (
     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
@@ -2434,6 +2455,11 @@ function RideAnalyzerTab({ token }: { token: string }) {
             <div className="bg-background/50 rounded-lg p-2">
               <p className="text-xs text-muted-foreground">Combustível</p>
               <p className="font-bold text-orange-400">- R$ {analysis.fuelCost.toFixed(2)}</p>
+            </div>
+            <div className="bg-background/50 rounded-lg p-2">
+              <p className="text-xs text-muted-foreground">Custo real estimado</p>
+              <p className="font-bold text-amber-300">R$ {analysis.operatingCost.toFixed(2)}</p>
+              <p className="text-[10px] text-muted-foreground">R$ {analysis.realCostPerKm.toFixed(2)}/km</p>
             </div>
             <div className="bg-background/50 rounded-lg p-2">
               <p className="text-xs text-muted-foreground">Lucro líquido</p>

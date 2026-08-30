@@ -3558,16 +3558,18 @@ export async function getEarningsByUserAndYear(userId: number, year: string) {
   return await db.select().from(spreadsheetEarnings).where(and(eq(spreadsheetEarnings.userId, userId), sql`DATE_FORMAT(${spreadsheetEarnings.date}, '%Y') = ${year}`));
 }
 
-export async function updateEarning(id: number, data: Partial<InsertSpreadsheetEarning>) {
+export async function updateEarning(id: number, data: Partial<InsertSpreadsheetEarning>, userId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return await db.update(spreadsheetEarnings).set(data).where(eq(spreadsheetEarnings.id, id));
+  const where = userId === undefined ? eq(spreadsheetEarnings.id, id) : and(eq(spreadsheetEarnings.id, id), eq(spreadsheetEarnings.userId, userId));
+  return await db.update(spreadsheetEarnings).set(data).where(where);
 }
 
-export async function deleteEarning(id: number) {
+export async function deleteEarning(id: number, userId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return await db.delete(spreadsheetEarnings).where(eq(spreadsheetEarnings.id, id));
+  const where = userId === undefined ? eq(spreadsheetEarnings.id, id) : and(eq(spreadsheetEarnings.id, id), eq(spreadsheetEarnings.userId, userId));
+  return await db.delete(spreadsheetEarnings).where(where);
 }
 
 // ========== SPREADSHEET EXPENSES ==========
@@ -3609,16 +3611,18 @@ export async function getExpensesByUserAndYear(userId: number, year: string) {
   return await db.select().from(spreadsheetExpenses).where(and(eq(spreadsheetExpenses.userId, userId), sql`DATE_FORMAT(${spreadsheetExpenses.date}, '%Y') = ${year}`));
 }
 
-export async function updateExpense(id: number, data: Partial<InsertSpreadsheetExpense>) {
+export async function updateExpense(id: number, data: Partial<InsertSpreadsheetExpense>, userId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return await db.update(spreadsheetExpenses).set(data).where(eq(spreadsheetExpenses.id, id));
+  const where = userId === undefined ? eq(spreadsheetExpenses.id, id) : and(eq(spreadsheetExpenses.id, id), eq(spreadsheetExpenses.userId, userId));
+  return await db.update(spreadsheetExpenses).set(data).where(where);
 }
 
-export async function deleteExpense(id: number) {
+export async function deleteExpense(id: number, userId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return await db.delete(spreadsheetExpenses).where(eq(spreadsheetExpenses.id, id));
+  const where = userId === undefined ? eq(spreadsheetExpenses.id, id) : and(eq(spreadsheetExpenses.id, id), eq(spreadsheetExpenses.userId, userId));
+  return await db.delete(spreadsheetExpenses).where(where);
 }
 
 // ========== SPREADSHEET OPERATIONAL ==========
@@ -3650,16 +3654,18 @@ export async function getOperationalByUserAndMonth(userId: number, month: string
   return await db.select().from(spreadsheetOperational).where(and(eq(spreadsheetOperational.userId, userId), sql`DATE_FORMAT(${spreadsheetOperational.date}, '%Y-%m') = ${month}`));
 }
 
-export async function updateOperational(id: number, data: Partial<InsertSpreadsheetOperational>) {
+export async function updateOperational(id: number, data: Partial<InsertSpreadsheetOperational>, userId?: number) {
   const db = await getDb() as any;
   if (!db) throw new Error("Database connection failed");
-  return await db.update(spreadsheetOperational).set(data).where(eq(spreadsheetOperational.id, id));
+  const where = userId === undefined ? eq(spreadsheetOperational.id, id) : and(eq(spreadsheetOperational.id, id), eq(spreadsheetOperational.userId, userId));
+  return await db.update(spreadsheetOperational).set(data).where(where);
 }
 
-export async function deleteOperational(id: number) {
+export async function deleteOperational(id: number, userId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return await db.delete(spreadsheetOperational).where(eq(spreadsheetOperational.id, id));
+  const where = userId === undefined ? eq(spreadsheetOperational.id, id) : and(eq(spreadsheetOperational.id, id), eq(spreadsheetOperational.userId, userId));
+  return await db.delete(spreadsheetOperational).where(where);
 }
 
 // ========== SPREADSHEET GOALS ==========
@@ -3685,16 +3691,18 @@ export async function getGoalsByUserAndMonth(userId: number, month: string) {
   return rows[0] || null;
 }
 
-export async function updateGoal(id: number, data: Partial<InsertSpreadsheetGoal>) {
+export async function updateGoal(id: number, data: Partial<InsertSpreadsheetGoal>, userId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return await db.update(spreadsheetGoals).set(data).where(eq(spreadsheetGoals.id, id));
+  const where = userId === undefined ? eq(spreadsheetGoals.id, id) : and(eq(spreadsheetGoals.id, id), eq(spreadsheetGoals.userId, userId));
+  return await db.update(spreadsheetGoals).set(data).where(where);
 }
 
-export async function deleteGoal(id: number) {
+export async function deleteGoal(id: number, userId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  return await db.delete(spreadsheetGoals).where(eq(spreadsheetGoals.id, id));
+  const where = userId === undefined ? eq(spreadsheetGoals.id, id) : and(eq(spreadsheetGoals.id, id), eq(spreadsheetGoals.userId, userId));
+  return await db.delete(spreadsheetGoals).where(where);
 }
 
 // ========== SPREADSHEET AUTHENTICATION ==========
