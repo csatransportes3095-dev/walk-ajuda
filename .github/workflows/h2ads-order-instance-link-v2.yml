@@ -1,0 +1,384 @@
+name: H2 Ads order instance link v2
+
+on:
+  push:
+    branches:
+      - feat/h2ads-order-instance-link-v2-2026-08-30
+    paths:
+      - ".github/workflows/h2ads-order-instance-link-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/h2ads-order-instance-link-v2-2026-08-30
+          fetch-depth: 0
+
+      - name: Apply isolated order link implementation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          migration = r'''CREATE TABLE IF NOT EXISTS `h2ads_order_links` (
+            `id` int NOT NULL AUTO_INCREMENT,
+            `instanceId` int NOT NULL,
+            `registrationId` int NOT NULL,
+            `subOrderIndex` int NOT NULL DEFAULT 0,
+            `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `h2ads_order_links_instance_unique` (`instanceId`),
+            UNIQUE KEY `h2ads_order_links_order_unique` (`registrationId`,`subOrderIndex`),
+            KEY `h2ads_order_links_order_idx` (`registrationId`,`subOrderIndex`)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+          '''
+          Path('drizzle/0143_h2ads_order_links.sql').write_text(migration, encoding='utf-8')
+
+          migration_script = r'''import { readFile } from "node:fs/promises";
+          import path from "node:path";
+          import { createConnection } from "mysql2/promise";
+          import { assertH2AdsSchemaStatementSafe } from "../server/h2adsSchemaMigration";
+
+          const migrationPath = path.resolve(process.cwd(), "drizzle", "0143_h2ads_order_links.sql");
+
+          async function main() {
+            if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL não configurada para a migration de vínculo Pedido/Instância H2 Ads.");
+            const statements = (await readFile(migrationPath, "utf8")).split("--> statement-breakpoint").map(statement => statement.trim()).filter(Boolean);
+            if (statements.length !== 1) throw new Error("A migration de vínculo Pedido/Instância H2 Ads precisa conter exatamente uma tabela isolada.");
+            statements.forEach(assertH2AdsSchemaStatementSafe);
+            const connection = await createConnection(process.env.DATABASE_URL);
+            try {
+              for (const statement of statements) await connection.query(statement);
+            } finally {
+              await connection.end();
+            }
+          }
+
+          main().catch((error) => {
+            console.error("[H2ADS-MIGRATION] order links", error instanceof Error ? error.message : "falhou");
+            process.exit(1);
+          });
+          '''
+          Path('scripts/apply-h2ads-order-link-migration.ts').write_text(migration_script, encoding='utf-8')
+
+          service = r'''import { sql } from "drizzle-orm";
+          import { getDb, getOrderStatusHistory } from "./db";
+
+          export type H2AdsOrderLink = {
+            instanceId: number;
+            registrationId: number;
+            subOrderIndex: number;
+            createdAt: Date | null;
+            updatedAt: Date | null;
+          };
+
+          type HistoryEntry = { status: string };
+
+          function rowsFrom(result: unknown): Array<Record<string, unknown>> {
+            if (!Array.isArray(result)) return [];
+            if (Array.isArray(result[0])) return result[0] as Array<Record<string, unknown>>;
+            if (result[0] && typeof result[0] === "object") return result as Array<Record<string, unknown>>;
+            return [];
+          }
+
+          export function splitH2AdsOrderHistory(historyNewestFirst: HistoryEntry[], initialStatus: string): HistoryEntry[][] {
+            const chronological = [...historyNewestFirst].reverse();
+            const groups: HistoryEntry[][] = [];
+            let current: HistoryEntry[] = [];
+            for (const entry of chronological) {
+              if ((entry.status === initialStatus || entry.status === "recebido") && current.length > 0) {
+                groups.push(current);
+                current = [entry];
+              } else {
+                current.push(entry);
+              }
+            }
+            if (current.length > 0) groups.push(current);
+            return groups.reverse();
+          }
+
+          async function requireH2AdsDb() {
+            const db = await getDb();
+            if (!db) throw new Error("Banco indisponível para o H2 Ads.");
+            return db;
+          }
+
+          async function requireInstance(instanceId: number): Promise<void> {
+            const db = await requireH2AdsDb();
+            const rows = rowsFrom(await db.execute(sql`SELECT id FROM h2ads_instances WHERE id = ${instanceId} LIMIT 1`));
+            if (!rows[0]) throw new Error("Instância H2 Ads não encontrada.");
+          }
+
+          async function getInitialOrderStatus(): Promise<string> {
+            const db = await requireH2AdsDb();
+            const rows = rowsFrom(await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`));
+            return typeof rows[0]?.key === "string" && rows[0].key ? String(rows[0].key) : "recebido";
+          }
+
+          async function requireOrderSubOrder(registrationId: number, subOrderIndex: number): Promise<void> {
+            const history = await getOrderStatusHistory(registrationId);
+            if (history.length === 0) throw new Error("Pedido/subpedido não encontrado.");
+            const initialStatus = await getInitialOrderStatus();
+            const subOrders = splitH2AdsOrderHistory(history, initialStatus);
+            if (!subOrders[subOrderIndex]?.length) throw new Error("Pedido/subpedido não encontrado.");
+          }
+
+          export async function listH2AdsOrderLinks(): Promise<H2AdsOrderLink[]> {
+            const db = await requireH2AdsDb();
+            const rows = rowsFrom(await db.execute(sql`
+              SELECT instanceId, registrationId, subOrderIndex, createdAt, updatedAt
+              FROM h2ads_order_links
+              ORDER BY instanceId ASC
+            `));
+            return rows.map(row => ({
+              instanceId: Number(row.instanceId),
+              registrationId: Number(row.registrationId),
+              subOrderIndex: Number(row.subOrderIndex || 0),
+              createdAt: row.createdAt instanceof Date ? row.createdAt : row.createdAt ? new Date(String(row.createdAt)) : null,
+              updatedAt: row.updatedAt instanceof Date ? row.updatedAt : row.updatedAt ? new Date(String(row.updatedAt)) : null,
+            }));
+          }
+
+          export async function setH2AdsOrderLink(instanceId: number, registrationId: number | null, subOrderIndex = 0): Promise<void> {
+            const db = await requireH2AdsDb();
+            await requireInstance(instanceId);
+            if (registrationId === null) {
+              await db.execute(sql`DELETE FROM h2ads_order_links WHERE instanceId = ${instanceId}`);
+              return;
+            }
+            await requireOrderSubOrder(registrationId, subOrderIndex);
+            try {
+              await db.transaction(async tx => {
+                const owner = rowsFrom(await tx.execute(sql`
+                  SELECT instanceId FROM h2ads_order_links
+                  WHERE registrationId = ${registrationId} AND subOrderIndex = ${subOrderIndex}
+                  LIMIT 1
+                `))[0];
+                if (owner && Number(owner.instanceId) !== instanceId) {
+                  throw new Error("Este pedido/subpedido já está vinculado a outra instância.");
+                }
+                await tx.execute(sql`DELETE FROM h2ads_order_links WHERE instanceId = ${instanceId}`);
+                await tx.execute(sql`
+                  INSERT INTO h2ads_order_links (instanceId, registrationId, subOrderIndex)
+                  VALUES (${instanceId}, ${registrationId}, ${subOrderIndex})
+                `);
+              });
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Não foi possível vincular o pedido à instância.";
+              if (/duplicate|unique/i.test(message)) throw new Error("Este pedido/subpedido já está vinculado a outra instância.");
+              throw error;
+            }
+          }
+          '''
+          Path('server/h2adsOrderLink.ts').write_text(service, encoding='utf-8')
+
+          router_part = r'''import { TRPCError } from "@trpc/server";
+          import { z } from "zod";
+          import { adminProcedure } from "./_core/trpc";
+          import { listH2AdsOrderLinks, setH2AdsOrderLink } from "./h2adsOrderLink";
+
+          const setOrderLinkSchema = z.object({
+            instanceId: z.number().int().positive(),
+            registrationId: z.number().int().positive().nullable(),
+            subOrderIndex: z.number().int().min(0).default(0),
+          }).strict();
+
+          export const h2AdsOrderLinkRouterPart = {
+            listOrderLinks: adminProcedure.query(async () => listH2AdsOrderLinks()),
+            setOrderLink: adminProcedure.input(setOrderLinkSchema).mutation(async ({ input }) => {
+              try {
+                await setH2AdsOrderLink(input.instanceId, input.registrationId, input.subOrderIndex);
+                return { success: true };
+              } catch (error) {
+                const message = error instanceof Error ? error.message : "Não foi possível vincular o pedido à instância.";
+                const code = message.includes("outra instância") ? "CONFLICT" : message.includes("não encontrad") ? "NOT_FOUND" : "BAD_REQUEST";
+                throw new TRPCError({ code, message });
+              }
+            }),
+          };
+          '''
+          Path('server/h2adsOrderLinkRouter.ts').write_text(router_part, encoding='utf-8')
+
+          test = r'''import { describe, expect, it } from "vitest";
+          import { splitH2AdsOrderHistory } from "./h2adsOrderLink";
+
+          describe("H2 Ads order/suborder link", () => {
+            it("mantém subOrderIndex 0 como o subpedido mais recente", () => {
+              const result = splitH2AdsOrderHistory([
+                { status: "pedido_entregue" },
+                { status: "recebido" },
+                { status: "em_andamento" },
+                { status: "recebido" },
+              ], "recebido");
+              expect(result).toEqual([
+                [{ status: "recebido" }, { status: "pedido_entregue" }],
+                [{ status: "recebido" }, { status: "em_andamento" }],
+              ]);
+            });
+
+            it("respeita o status inicial dinâmico usado pelo módulo de pedidos", () => {
+              const result = splitH2AdsOrderHistory([
+                { status: "em_montagem" },
+                { status: "pedido_recebido" },
+                { status: "conta_ativa" },
+                { status: "pedido_recebido" },
+              ], "pedido_recebido");
+              expect(result).toHaveLength(2);
+              expect(result[0][0].status).toBe("pedido_recebido");
+              expect(result[1][0].status).toBe("pedido_recebido");
+            });
+          });
+          '''
+          Path('server/h2adsOrderLink.test.ts').write_text(test, encoding='utf-8')
+
+          component = r'''import { useMemo } from "react";
+          import { toast } from "sonner";
+          import { trpc } from "@/lib/trpc";
+
+          type AdminOrder = {
+            id: number;
+            subOrderIndex?: number;
+            orderNumber?: number | null;
+            customerName?: string | null;
+            serviceName?: string | null;
+            serviceOption?: string | null;
+            latestStatus?: string | null;
+          };
+
+          const keyFor = (registrationId: number, subOrderIndex: number) => `${registrationId}:${subOrderIndex}`;
+
+          export default function H2AdsOrderLinkControl({ instanceId }: { instanceId: number }) {
+            const utils = trpc.useUtils();
+            const linksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
+            const ordersQuery = trpc.orderStatus.listOrders.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
+            const setLink = trpc.h2Ads.setOrderLink.useMutation({
+              onSuccess: async (_, vars) => {
+                toast.success(vars.registrationId === null ? "Vínculo do pedido removido." : "Pedido vinculado à instância.");
+                await utils.h2Ads.listOrderLinks.invalidate();
+              },
+              onError: error => toast.error(error.message || "Não foi possível atualizar o vínculo do pedido."),
+            });
+
+            const links = linksQuery.data ?? [];
+            const orders = (ordersQuery.data ?? []) as unknown as AdminOrder[];
+            const current = links.find(link => link.instanceId === instanceId);
+            const currentKey = current ? keyFor(current.registrationId, current.subOrderIndex) : "";
+            const ownerByOrder = useMemo(() => new Map(links.map(link => [keyFor(link.registrationId, link.subOrderIndex), link.instanceId])), [links]);
+            const selectableOrders = useMemo(() => orders.filter(order => {
+              const sub = order.subOrderIndex ?? 0;
+              const key = keyFor(order.id, sub);
+              const active = order.latestStatus !== "pedido_entregue" && order.latestStatus !== "cancelado";
+              return active || key === currentKey;
+            }).sort((a, b) => (b.orderNumber ?? b.id) - (a.orderNumber ?? a.id)), [orders, currentKey]);
+
+            const update = async (value: string) => {
+              if (!value) {
+                await setLink.mutateAsync({ instanceId, registrationId: null, subOrderIndex: 0 });
+                return;
+              }
+              const [registrationRaw, subRaw] = value.split(":");
+              const registrationId = Number(registrationRaw);
+              const subOrderIndex = Number(subRaw);
+              if (!Number.isInteger(registrationId) || registrationId < 1 || !Number.isInteger(subOrderIndex) || subOrderIndex < 0) return;
+              await setLink.mutateAsync({ instanceId, registrationId, subOrderIndex });
+            };
+
+            const currentOrder = current ? orders.find(order => order.id === current.registrationId && (order.subOrderIndex ?? 0) === current.subOrderIndex) : undefined;
+            const currentLabel = current ? currentOrder ? `Pedido #${currentOrder.orderNumber ?? current.registrationId} · ${currentOrder.customerName || "Cliente"}` : `Pedido ${current.registrationId} · subpedido ${current.subOrderIndex + 1}` : "Nenhum pedido vinculado";
+
+            return <div className="mt-3 rounded-xl border border-violet-400/20 bg-violet-400/[0.04] p-3">
+              <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-violet-200">Pedido / subpedido</p><span className="text-[10px] font-bold text-slate-500">1 vínculo por instância</span></div>
+              <select value={currentKey} disabled={setLink.isPending || linksQuery.isLoading || ordersQuery.isLoading} onChange={event => { void update(event.target.value); }} className="mt-2 h-9 w-full rounded-lg border border-white/10 bg-black/20 px-2 text-xs font-bold text-slate-100 disabled:opacity-50">
+                <option value="">Sem pedido vinculado</option>
+                {selectableOrders.map(order => {
+                  const subOrderIndex = order.subOrderIndex ?? 0;
+                  const key = keyFor(order.id, subOrderIndex);
+                  const owner = ownerByOrder.get(key);
+                  const unavailable = owner !== undefined && owner !== instanceId;
+                  const detail = [order.serviceName, order.serviceOption].filter(Boolean).join(" · ");
+                  return <option key={key} value={key} disabled={unavailable}>#{order.orderNumber ?? order.id} · {order.customerName || "Cliente"}{subOrderIndex > 0 ? ` · item ${subOrderIndex + 1}` : ""}{detail ? ` · ${detail}` : ""}{unavailable ? " · já vinculado" : ""}</option>;
+                })}
+              </select>
+              <p className="mt-2 truncate text-[10px] font-medium text-slate-400" title={currentLabel}>{currentLabel}</p>
+            </div>;
+          }
+          '''
+          Path('client/src/components/H2AdsOrderLinkControl.tsx').write_text(component, encoding='utf-8')
+
+          router = Path('server/routers/h2ads.ts')
+          router_text = router.read_text(encoding='utf-8')
+          import_marker = 'import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "../h2adsProxyValidation";\n'
+          if 'h2AdsOrderLinkRouterPart' not in router_text:
+            if import_marker not in router_text:
+              raise SystemExit('router import marker not found')
+            router_text = router_text.replace(import_marker, import_marker + 'import { h2AdsOrderLinkRouterPart } from "../h2adsOrderLinkRouter";\n', 1)
+            router_text = router_text.replace('export const h2AdsRouter = {\n', 'export const h2AdsRouter = {\n  ...h2AdsOrderLinkRouterPart,\n', 1)
+          router.write_text(router_text, encoding='utf-8')
+
+          page = Path('client/src/pages/H2Ads.tsx')
+          page_text = page.read_text(encoding='utf-8')
+          trpc_import = 'import { trpc } from "@/lib/trpc";\n'
+          if 'H2AdsOrderLinkControl' not in page_text:
+            if trpc_import not in page_text:
+              raise SystemExit('H2Ads trpc import marker not found')
+            page_text = page_text.replace(trpc_import, trpc_import + 'import H2AdsOrderLinkControl from "@/components/H2AdsOrderLinkControl";\n', 1)
+            worker_marker = '    <div className="mt-3 rounded-xl border border-[#148CFF]/15 bg-[#148CFF]/[0.04] p-3"><div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8CC8FF]">Worker</p>'
+            if worker_marker not in page_text:
+              raise SystemExit('H2Ads instance Worker marker not found')
+            page_text = page_text.replace(worker_marker, '    <H2AdsOrderLinkControl instanceId={instance.id} />\n' + worker_marker, 1)
+          page.write_text(page_text, encoding='utf-8')
+
+          package_path = Path('package.json')
+          package = json.loads(package_path.read_text(encoding='utf-8'))
+          package.setdefault('scripts', {})['db:migrate:h2ads-order-links'] = 'tsx scripts/apply-h2ads-order-link-migration.ts'
+          package_path.write_text(json.dumps(package, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+
+          start = Path('scripts/render-start.sh')
+          start_text = start.read_text(encoding='utf-8')
+          start_marker = 'run_boot_step "db-migrate-h2ads-browser-manual-commands" pnpm run db:migrate:h2ads-browser-manual-commands\n'
+          new_step = 'run_boot_step "db-migrate-h2ads-order-links" pnpm run db:migrate:h2ads-order-links\n'
+          if new_step not in start_text:
+            if start_marker not in start_text:
+              raise SystemExit('render-start H2Ads marker not found')
+            start_text = start_text.replace(start_marker, start_marker + new_step, 1)
+          start.write_text(start_text, encoding='utf-8')
+          PY
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test H2 Ads order link
+        run: pnpm vitest run server/h2adsOrderLink.test.ts
+
+      - name: Typecheck
+        run: pnpm check
+
+      - name: Build
+        run: pnpm build
+
+      - name: Commit validated changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add drizzle/0143_h2ads_order_links.sql scripts/apply-h2ads-order-link-migration.ts server/h2adsOrderLink.ts server/h2adsOrderLinkRouter.ts server/h2adsOrderLink.test.ts server/routers/h2ads.ts client/src/components/H2AdsOrderLinkControl.tsx client/src/pages/H2Ads.tsx package.json scripts/render-start.sh
+          git commit -m "feat(h2ads): vincular pedido e subpedido a instancia"
+          git push origin HEAD:feat/h2ads-order-instance-link-v2-2026-08-30
