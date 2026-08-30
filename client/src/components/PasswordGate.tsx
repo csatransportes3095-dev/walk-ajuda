@@ -346,6 +346,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         }
         if (cpwdCheckSessionQuery.data.profileUpdateRequired) {
           setAccessGranted(false);
+          const authenticatedToken = cpToken || localStorage.getItem(CP_TOKEN_KEY) || '';
+          if (authenticatedToken) localStorage.setItem('customer_update_token', authenticatedToken);
           if (phone) localStorage.setItem('customer_update_phone_hint', phone);
           if (window.location.pathname !== '/atualizarcadastro') navigate('/atualizarcadastro');
           return;
