@@ -75,19 +75,76 @@ function TabsList({
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List>) {
   const isSpreadsheetModuleStrip = className?.includes("spreadsheet-module-strip");
+  const [modulesExpanded, setModulesExpanded] = React.useState(true);
+
+  React.useEffect(() => {
+    if (!isSpreadsheetModuleStrip || typeof window === "undefined") return;
+    setModulesExpanded(!window.matchMedia("(max-width: 767px)").matches);
+  }, [isSpreadsheetModuleStrip]);
+
+  if (isSpreadsheetModuleStrip) {
+    return (
+      <>
+        <style>{SPREADSHEET_MODULE_GRID_CSS}</style>
+        <div className="mb-5 w-full overflow-hidden rounded-2xl border border-white/10 bg-slate-950/35 shadow-[0_12px_34px_rgba(0,0,0,.22)] backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => setModulesExpanded((expanded) => !expanded)}
+            className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+            aria-expanded={modulesExpanded}
+            aria-controls="spreadsheet-module-list"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-black uppercase tracking-[0.10em] text-white">
+                Módulos da planilha
+              </p>
+              <p className="mt-0.5 text-xs font-medium text-white/55">
+                {modulesExpanded ? "Toque para recolher" : "Toque para ver os serviços"}
+              </p>
+            </div>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-white/80">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={cn("h-5 w-5 transition-transform duration-200", modulesExpanded && "rotate-180")}
+                aria-hidden="true"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </span>
+          </button>
+
+          {modulesExpanded && (
+            <div id="spreadsheet-module-list" className="px-3 pb-3 pt-1 sm:px-4 sm:pb-4">
+              <TabsPrimitive.List
+                data-slot="tabs-list"
+                className={cn(
+                  "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
+                  className,
+                  "!mb-0"
+                )}
+                {...props}
+              />
+            </div>
+          )}
+        </div>
+      </>
+    );
+  }
 
   return (
-    <>
-      {isSpreadsheetModuleStrip && <style>{SPREADSHEET_MODULE_GRID_CSS}</style>}
-      <TabsPrimitive.List
-        data-slot="tabs-list"
-        className={cn(
-          "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
-          className
-        )}
-        {...props}
-      />
-    </>
+    <TabsPrimitive.List
+      data-slot="tabs-list"
+      className={cn(
+        "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
+        className
+      )}
+      {...props}
+    />
   );
 }
 
