@@ -26,42 +26,23 @@ jobs:
           from pathlib import Path
           p = Path('client/src/pages/AtualizarCadastro.tsx')
           s = p.read_text(encoding='utf-8')
-          anchor = '''  useEffect(() => {
-            if (!profileQuery.error || !token) return;
-            localStorage.removeItem(TOKEN_KEY);
-            setToken("");
-            setStep("phone");
-          }, [profileQuery.error, token]);
-          '''
-          replacement = anchor + '''
-          useEffect(() => {
-            if (step !== "done" && step !== "already_done") return;
-            const timer = window.setTimeout(() => {
-              window.location.replace("/login");
-            }, 1800);
-            return () => window.clearTimeout(timer);
-          }, [step]);
-          '''
-          if s.count(anchor) != 1:
-              raise SystemExit(f'anchor count={s.count(anchor)}')
-          s = s.replace(anchor, replacement, 1)
-          old_done = '''          {step === "done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro atualizado!</h2><p className="mt-2 text-sm leading-6 text-slate-400">Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos. Aguarde a liberação do site.</p></div></div>
-          )}
+          marker = '\n  function acceptToken(nextToken: string) {'
+          effect = '''
 
-          {step === "already_done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Seu cadastro já foi atualizado</h2><p className="mt-2 text-sm leading-6 text-slate-400">Aguarde a liberação do site.</p></div></div>
-          )}'''
-          new_done = '''          {step === "done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro atualizado!</h2><p className="mt-2 text-sm leading-6 text-slate-400">Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos.</p><p className="mt-2 text-xs font-bold text-violet-300">Redirecionando para o site...</p></div><button type="button" onClick={() => window.location.replace("/login")} className="w-full rounded-xl bg-violet-600 px-4 py-3 font-black text-white">VOLTAR AO SITE AGORA</button></div>
-          )}
-
-          {step === "already_done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Seu cadastro já foi atualizado</h2><p className="mt-2 text-sm leading-6 text-slate-400">Seu cadastro está concluído.</p><p className="mt-2 text-xs font-bold text-violet-300">Redirecionando para o site...</p></div><button type="button" onClick={() => window.location.replace("/login")} className="w-full rounded-xl bg-violet-600 px-4 py-3 font-black text-white">VOLTAR AO SITE AGORA</button></div>
-          )}'''
-          if s.count(old_done) != 1:
-              raise SystemExit(f'done block count={s.count(old_done)}')
-          p.write_text(s.replace(old_done, new_done, 1), encoding='utf-8')
+  useEffect(() => {
+    if (step !== "done" && step !== "already_done") return;
+    const timer = window.setTimeout(() => {
+      window.location.replace("/login");
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [step]);
+'''
+          if s.count(marker) != 1:
+              raise SystemExit(f'marker count={s.count(marker)}')
+          s = s.replace(marker, effect + marker, 1)
+          s = s.replace('Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos. Aguarde a liberação do site.', 'Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos. Redirecionando para o site...', 1)
+          s = s.replace('Aguarde a liberação do site.', 'Redirecionando para o site...', 1)
+          p.write_text(s, encoding='utf-8')
           PY
       - name: Audit scope
         run: |
