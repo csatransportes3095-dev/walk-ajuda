@@ -12,6 +12,11 @@ type Customer = {
   name: string;
   phone: string;
   email: string | null;
+  cep?: string | null;
+  street?: string | null;
+  addressNumber?: string | null;
+  neighborhood?: string | null;
+  addressComplement?: string | null;
   city: string | null;
   uf: string | null;
   referredBy: string | null;
@@ -401,6 +406,12 @@ export default function AdminCustomers() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editCep, setEditCep] = useState("");
+  const [editStreet, setEditStreet] = useState("");
+  const [editAddressNumber, setEditAddressNumber] = useState("");
+  const [editNeighborhood, setEditNeighborhood] = useState("");
+  const [editAddressComplement, setEditAddressComplement] = useState("");
+  const [editProfilePhotoUrl, setEditProfilePhotoUrl] = useState("");
   const [editCity, setEditCity] = useState("");
   const [editUf, setEditUf] = useState("");
   const [editEmail, setEditEmail] = useState("");
@@ -764,6 +775,12 @@ export default function AdminCustomers() {
     setEditOriginal({
       name: String(c.name || '').trim(),
       phone: String(c.phone || '').replace(/\D/g, ''),
+      cep: String(c.cep || '').trim(),
+      street: String(c.street || '').trim(),
+      addressNumber: String(c.addressNumber || '').trim(),
+      neighborhood: String(c.neighborhood || '').trim(),
+      addressComplement: String(c.addressComplement || '').trim(),
+      profilePhotoUrl: String(c.profilePhotoUrl || '').trim(),
       city: String(c.city || '').trim(),
       uf: String(c.uf || '').trim().toUpperCase(),
       email: String(c.email || '').trim().toLowerCase(),
@@ -775,6 +792,12 @@ export default function AdminCustomers() {
     setEditingId(c.id);
     setEditName(c.name);
     setEditPhone(c.phone || "");
+    setEditCep(c.cep || "");
+    setEditStreet(c.street || "");
+    setEditAddressNumber(c.addressNumber || "");
+    setEditNeighborhood(c.neighborhood || "");
+    setEditAddressComplement(c.addressComplement || "");
+    setEditProfilePhotoUrl(c.profilePhotoUrl || "");
     setEditCity(c.city || "");
     setEditUf(c.uf || "");
     setEditEmail(c.email || "");
@@ -789,11 +812,6 @@ export default function AdminCustomers() {
 
   const saveEdit = () => {
     if (!editingId) return;
-    const phoneDigits = editPhone.replace(/\D/g, "");
-    if (phoneDigits && phoneDigits.length < 10) {
-      toast.error("Telefone inválido (mínimo 10 dígitos)");
-      return;
-    }
     const parsedCustomerNumber = editCustomerNumber ? parseInt(editCustomerNumber, 10) : null;
     if (editCustomerNumber && (isNaN(parsedCustomerNumber!) || parsedCustomerNumber! <= 0)) {
       toast.error("Número de cadastro inválido");
@@ -807,6 +825,12 @@ export default function AdminCustomers() {
     const payload: Record<string, any> = { id: editingId };
     const changed = (field: string, value: string) => value !== String(original[field] || '');
     const name = editName.trim();
+    const cep = editCep.trim();
+    const street = editStreet.trim();
+    const addressNumber = editAddressNumber.trim();
+    const neighborhood = editNeighborhood.trim();
+    const addressComplement = editAddressComplement.trim();
+    const profilePhotoUrl = editProfilePhotoUrl.trim();
     const city = editCity.trim();
     const uf = editUf.trim().toUpperCase();
     const email = editEmail.trim().toLowerCase();
@@ -815,15 +839,20 @@ export default function AdminCustomers() {
     const cpf = editCpf.replace(/\D/g, '');
     const customerNumber = parsedCustomerNumber ? String(parsedCustomerNumber) : '';
 
-    if (name && changed('name', name)) payload.name = name;
-    if (phoneDigits && changed('phone', phoneDigits)) payload.phone = phoneDigits;
-    if (email && changed('email', email)) payload.email = email;
-    if (city && changed('city', city)) payload.city = city;
-    if (uf && changed('uf', uf)) payload.uf = uf;
-    if (referredBy && changed('referredBy', referredBy)) payload.referredBy = referredBy;
-    if (referredByPhone && changed('referredByPhone', referredByPhone)) payload.referredByPhone = referredByPhone;
-    if (cpf && changed('cpf', cpf)) payload.cpf = cpf;
-    if (customerNumber && changed('customerNumber', customerNumber)) payload.customerNumber = parsedCustomerNumber;
+    if (changed('name', name)) payload.name = name;
+    if (changed('email', email)) payload.email = email;
+    if (changed('cep', cep)) payload.cep = cep;
+    if (changed('street', street)) payload.street = street;
+    if (changed('addressNumber', addressNumber)) payload.addressNumber = addressNumber;
+    if (changed('neighborhood', neighborhood)) payload.neighborhood = neighborhood;
+    if (changed('addressComplement', addressComplement)) payload.addressComplement = addressComplement;
+    if (changed('profilePhotoUrl', profilePhotoUrl)) payload.profilePhotoUrl = profilePhotoUrl;
+    if (changed('city', city)) payload.city = city;
+    if (changed('uf', uf)) payload.uf = uf;
+    if (changed('referredBy', referredBy)) payload.referredBy = referredBy;
+    if (changed('referredByPhone', referredByPhone)) payload.referredByPhone = referredByPhone;
+    if (changed('cpf', cpf)) payload.cpf = cpf;
+    if (changed('customerNumber', customerNumber)) payload.customerNumber = parsedCustomerNumber;
 
     if (Object.keys(payload).length === 1) {
       toast.info('Nenhuma alteração para salvar.');
@@ -1490,8 +1519,16 @@ export default function AdminCustomers() {
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">Telefone</label>
-                    <input type="tel" value={editPhone} onChange={(e) => setEditPhone(formatPhoneInput(e.target.value))} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground mt-0.5 focus:outline-none focus:ring-1 focus:ring-primary/50" placeholder="(11) 99999-9999" />
+                    <input type="tel" value={editPhone} readOnly disabled title="Telefone é a identidade fixa do cliente e não pode ser alterado" className="w-full px-2 py-1.5 bg-muted/50 border border-border rounded-lg text-sm text-muted-foreground mt-0.5 cursor-not-allowed" />
                   </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><label className="text-xs text-muted-foreground">CEP</label><input type="text" value={editCep} onChange={(e) => setEditCep(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" /></div>
+                    <div><label className="text-xs text-muted-foreground">Número</label><input type="text" value={editAddressNumber} onChange={(e) => setEditAddressNumber(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" /></div>
+                  </div>
+                  <div><label className="text-xs text-muted-foreground">Rua / Logradouro</label><input type="text" value={editStreet} onChange={(e) => setEditStreet(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" /></div>
+                  <div><label className="text-xs text-muted-foreground">Bairro</label><input type="text" value={editNeighborhood} onChange={(e) => setEditNeighborhood(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" /></div>
+                  <div><label className="text-xs text-muted-foreground">Complemento</label><input type="text" value={editAddressComplement} onChange={(e) => setEditAddressComplement(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" /></div>
+                  <div><label className="text-xs text-muted-foreground">URL da foto de perfil</label><input type="text" value={editProfilePhotoUrl} onChange={(e) => setEditProfilePhotoUrl(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" placeholder="Pode deixar vazio para exigir nova foto" /></div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs text-muted-foreground">Cidade</label>

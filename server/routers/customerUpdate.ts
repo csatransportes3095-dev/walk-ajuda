@@ -239,7 +239,6 @@ export const customerUpdateRouter = router({
   save: publicProcedure
     .input(z.object({
       token: z.string().min(32).max(255),
-      phone: z.string().min(10).max(32).optional(),
       name: z.string().trim().max(128).optional(),
       email: z.string().trim().max(320).optional(),
       cpf: z.string().max(18).optional(),
@@ -258,7 +257,7 @@ export const customerUpdateRouter = router({
       const selected = new Set([...missingFields(customer), ...policyState.effectiveFields, "cep", "street", "addressNumber", "neighborhood", "city", "uf"]);
       await ensureCustomerIdentityInfrastructure(db);
       const name = selected.has("name") ? String(input.name || "").trim().replace(/\s+/g, " ") : String(customer.name || "").trim();
-      const phone = selected.has("phone") ? normalizeCustomerPhone(input.phone || "") : normalizeCustomerPhone(customer.phone);
+      const phone = normalizeCustomerPhone(customer.phone);
       const email = selected.has("email") ? normalizeCustomerEmail(input.email || "") : normalizeCustomerEmail(customer.email);
       const cpf = selected.has("cpf") ? normalizeCustomerCpf(input.cpf || "") : normalizeCustomerCpf(customer.cpf);
       const cep = String(input.cep || customer.cep || "").replace(/\D/g, "").slice(0, 8);
@@ -269,7 +268,6 @@ export const customerUpdateRouter = router({
       const city = selected.has("city") ? String(input.city || "").trim().replace(/\s+/g, " ") : String(customer.city || "").trim();
       const uf = selected.has("uf") ? String(input.uf || "").trim().toUpperCase() : String(customer.uf || "").trim().toUpperCase();
       if (selected.has("name") && (name.length < 2 || isRecoveredCustomerName(name))) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo, sem a indicação de cadastro recuperado." });
-      if (selected.has("phone") && (!phone || phone.length < 10 || phone.length > 11)) throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone inválido." });
       if (selected.has("email") && !email) throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
       if (selected.has("cpf") && (!cpf || !isValidCPF(cpf))) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido." });
       if (cep.length !== 8) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um CEP válido." });
@@ -285,56 +283,12 @@ export const customerUpdateRouter = router({
       if (policyState.enabled && selected.has("profilePhotoUrl") && !(await hasCustomerProfilePhotoSubmission(Number(customer.id), policyState.revision))) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Envie uma nova foto de perfil para concluir esta atualização." });
       }
-      const phoneConflict = await findMainCustomerByIdentity({ phone }, db);
-      if (phoneConflict && Number(phoneConflict.id) !== Number(customer.id)) {
-        throw new TRPCError({ code: "CONFLICT", message: "Telefone já pertence a outro cadastro." });
-      }
       const cpfConflict = await findMainCustomerByIdentity({ cpf }, db);
       const emailConflict = await findMainCustomerByIdentity({ email }, db);
       if ((cpfConflict && Number(cpfConflict.id) !== Number(customer.id)) || (emailConflict && Number(emailConflict.id) !== Number(customer.id))) {
         throw new TRPCError({ code: "CONFLICT", message: "CPF ou e-mail já pertence a outro cadastro." });
       }
       const previousIdentity = { phone: customer.phone, cpf: customer.cpf };
-      const oldPhone = normalizeCustomerPhone(customer.phone);
-      await db.execute(sql`
-        UPDATE customers SET
-          name=${name}, phone=${phone}, email=${email}, cpf=${cpf}, cep=${cep}, street=${street}, addressNumber=${addressNumber}, neighborhood=${neighborhood}, addressComplement=${addressComplement || null}, city=${city}, uf=${uf},
-          normalizedPhone=${phone},
-          normalizedCpf=${cpf}, normalizedEmail=${email}, updatedAt=NOW()
-        WHERE id=${customer.id} AND deletedAt IS NULL
-      `);
-      if (phone !== oldPhone) {
-        const registrationRows = await rows(db, sql`SELECT id FROM accessCodePhones WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`);
-        const registrationIds = registrationRows.map((row: any) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0);
-        const propagationQueries = [
-          sql`UPDATE customerPasswordSessions SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-          sql`UPDATE customerPasswords SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-          sql`UPDATE customerLoginHistory SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-          sql`UPDATE customerPins SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-          sql`UPDATE spreadsheetClients SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-          sql`UPDATE loanClients SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-          sql`UPDATE accessCodes SET accessedByPhone=${phone} WHERE REGEXP_REPLACE(accessedByPhone, '[^0-9]', '')=${oldPhone}`,
-          sql`UPDATE accessCodePhones SET phone=${phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-        ];
-        for (const query of propagationQueries) {
-          try { await db.execute(query); } catch (error: any) { console.warn('[customerUpdate.save] sincronização de telefone não aplicada:', error?.message); }
-        }
-        if (registrationIds.length) {
-          const registrationList = sql.join(registrationIds.map((registrationId) => sql`${registrationId}`), sql`, `);
-          const orderQueries = [
-            sql`UPDATE orderStatusHistory SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
-            sql`UPDATE orderFiles SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
-            sql`UPDATE orderLoginData SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
-            sql`UPDATE scheduleAppointments SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
-            sql`UPDATE docRequests SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
-            sql`UPDATE uploadSessions SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
-            sql`UPDATE hiddenSubOrders SET customerPhone=${phone} WHERE registrationId IN (${registrationList})`,
-          ];
-          for (const query of orderQueries) {
-            try { await db.execute(query); } catch (error: any) { console.warn('[customerUpdate.save] sincronização do pedido não aplicada:', error?.message); }
-          }
-        }
-      }
       const synchronization = await syncUnifiedCustomerRegistry([previousIdentity]);
       await db.execute(sql`
         INSERT INTO customerProfileUpdateCompletions (customerId, phone, completedAt)
