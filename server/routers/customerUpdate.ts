@@ -275,6 +275,27 @@ export const customerUpdateRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "CPF ou e-mail já pertence a outro cadastro." });
       }
       const previousIdentity = { phone: customer.phone, cpf: customer.cpf };
+
+      // Grava os dados atuais do perfil antes de concluir a atualização.
+      // O telefone não participa do UPDATE: continua sendo a identidade fixa do cliente.
+      await db.execute(sql`
+        UPDATE customers SET
+          name=${name},
+          email=${email},
+          cpf=${cpf},
+          cep=${cep},
+          street=${street},
+          addressNumber=${addressNumber},
+          neighborhood=${neighborhood},
+          addressComplement=${addressComplement || null},
+          city=${city},
+          uf=${uf},
+          normalizedCpf=${cpf},
+          normalizedEmail=${email},
+          updatedAt=NOW()
+        WHERE id=${customer.id} AND deletedAt IS NULL
+      `);
+
       const synchronization = await syncUnifiedCustomerRegistry([previousIdentity]);
       await ensureCustomerUpdateCompletionInfrastructure(db);
       await db.execute(sql`
