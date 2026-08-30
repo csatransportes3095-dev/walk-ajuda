@@ -2194,115 +2194,17 @@ export const appRouter = router({
 
     // Atualizar email do cliente pelo telefone (chamado quando cliente preenche email no formulário)
     updateEmailByPhone: publicProcedure
-      .input(z.object({ phone: z.string().min(1), email: z.string().email() }))
-      .mutation(async ({ input, ctx }) => {
-        const clientIp = (ctx.req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || ctx.req.socket?.remoteAddress || 'unknown';
-        const blockResult = await checkPhoneBlockedAndBlockIp(input.phone, clientIp, 'atualizar_email');
-        if (blockResult.blocked) return { success: false, message: 'Acesso bloqueado' };
-        const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
-        if (!customer) return { success: false, message: 'Cliente não encontrado' };
-        await updateCustomer(customer.id, { email: input.email });
-        return { success: true };
-      }),
+      .input(z.object({ phone: z.string().min(1), email: z.string() }))
+      .mutation(async () => ({ success: false, message: 'Cadastro incompleto. Use /atualizarcadastro para corrigir todos os dados obrigatórios juntos.' })),
 
     updateCpfByPhone: publicProcedure
-      .input(z.object({ phone: z.string().min(1), cpf: z.string().min(11, 'CPF inválido') }))
-      .mutation(async ({ input }) => {
-        const cpf = normalizeCpf(input.cpf);
-        if (!isValidCPF(cpf)) return { success: false, message: 'CPF inválido' };
-        const customer = await getCustomerByPhone(input.phone.replace(/\D/g, ''));
-        if (!customer) return { success: false, message: 'Cliente não encontrado' };
-        // Verificar duplicidade somente após a aprovação matemática do CPF.
-        const existing = await getCustomerByCpf(cpf);
-        if (existing && existing.id !== customer.id) return { success: false, message: 'CPF já cadastrado' };
-        await updateCustomer(customer.id, { cpf });
-        return { success: true };
-      }),
+      .input(z.object({ phone: z.string().min(1), cpf: z.string().min(1) }))
+      .mutation(async () => ({ success: false, message: 'Cadastro incompleto. Use /atualizarcadastro para corrigir todos os dados obrigatórios juntos.' })),
 
     // Completar o perfil de um cliente existente. Nunca cria um segundo cadastro.
     completeProfile: publicProcedure
-      .input(z.object({
-        lookupIdentifier: z.string().min(10),
-        lookupIsCpf: z.boolean().optional(),
-        name: z.string().min(2, 'Nome obrigatório'),
-        phone: z.string().min(10),
-        email: z.string().email('E-mail obrigatório e inválido'),
-        cpf: z.string().min(11),
-        city: z.string().optional(),
-        uf: z.string().length(2).optional().or(z.literal('')),
-        profilePhotoUrl: z.string().url('Foto de perfil obrigatória').min(1),
-      }))
-      .mutation(async ({ input }) => {
-        await ensureCustomerIdentityInfrastructure();
-        const db = await (await import('./db')).getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
-        const lookupPhone = input.lookupIsCpf ? '' : normalizeCustomerPhone(input.lookupIdentifier);
-        const lookupCpf = input.lookupIsCpf ? normalizeCustomerCpf(input.lookupIdentifier) : '';
-        if (input.lookupIsCpf && !isValidCPF(lookupCpf)) {
-          return { success: false, message: 'CPF inválido. Digite um CPF válido para continuar.' };
-        }
-        const profile = {
-          name: input.name.trim(),
-          phone: normalizeCustomerPhone(input.phone),
-          email: normalizeCustomerEmail(input.email),
-          cpf: normalizeCustomerCpf(input.cpf),
-          city: input.city?.trim() || undefined,
-          uf: input.uf?.trim().toUpperCase() || undefined,
-          profilePhotoUrl: input.profilePhotoUrl.trim(),
-        };
-        try {
-          validateMainCustomerProfile(profile);
-        } catch (error: any) {
-          return { success: false, message: error?.message || 'Complete todos os dados obrigatórios.' };
-        }
-        const current = await findMainCustomerByIdentity({ phone: lookupPhone, cpf: lookupCpf });
-        if (!current) return { success: false, message: 'Cadastro principal não encontrado. Entre em contato com o administrador.' };
-        const conflict = await findMainCustomerByIdentity(profile);
-        if (conflict && conflict.id !== current.id) {
-          return { success: false, message: 'Os dados informados já pertencem a outro cadastro. Entre em contato com o administrador.' };
-        }
-        const profileUpdateState = await getCustomerProfileUpdateState(current);
-        if (profileUpdateState.enabled && profileUpdateState.effectiveFields.includes('profilePhotoUrl') && !(await hasCustomerProfilePhotoSubmission(Number(current.id), profileUpdateState.revision))) {
-          return { success: false, message: 'Envie uma nova foto de perfil para concluir esta atualização.' };
-        }
-        const oldPhone = normalizeCustomerPhone(current.phone);
-        const updated = await updateCustomer(current.id, profile);
-        if (profile.phone !== oldPhone) {
-          const registrationRows = await db.execute(sql`SELECT id FROM accessCodePhones WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`);
-          const registrationIds = ((registrationRows?.[0] || []) as Array<{ id: number }>).map((row) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0);
-          const propagationQueries = [
-            sql`UPDATE customerPasswordSessions SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-            sql`UPDATE customerPasswords SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-            sql`UPDATE customerLoginHistory SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-            sql`UPDATE customerPins SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-            sql`UPDATE spreadsheetClients SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-            sql`UPDATE loanClients SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-            sql`UPDATE accessCodes SET accessedByPhone=${profile.phone} WHERE REGEXP_REPLACE(accessedByPhone, '[^0-9]', '')=${oldPhone}`,
-            sql`UPDATE accessCodePhones SET phone=${profile.phone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
-          ];
-          for (const query of propagationQueries) { try { await db.execute(query); } catch (error: any) { console.warn('[customers.completeProfile] sincronização de telefone não aplicada:', error?.message); } }
-          if (registrationIds.length) {
-            const registrationList = sql.join(registrationIds.map((registrationId) => sql`${registrationId}`), sql`, `);
-            const orderQueries = [
-              sql`UPDATE orderStatusHistory SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE orderFiles SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE orderLoginData SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE scheduleAppointments SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE docRequests SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE uploadSessions SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE hiddenSubOrders SET customerPhone=${profile.phone} WHERE registrationId IN (${registrationList})`,
-            ];
-            for (const query of orderQueries) { try { await db.execute(query); } catch (error: any) { console.warn('[customers.completeProfile] sincronização do pedido não aplicada:', error?.message); } }
-          }
-        }
-        if (!updated) return { success: false, message: 'Não foi possível atualizar o cadastro.' };
-        if (profileUpdateState.enabled) {
-          const updatedState = await getCustomerProfileUpdateState(updated);
-          const photoSubmitted = !profileUpdateState.effectiveFields.includes('profilePhotoUrl') || await hasCustomerProfilePhotoSubmission(Number(current.id), profileUpdateState.revision);
-          if (updatedState.missingFields.length === 0 && photoSubmitted) await markCustomerProfileUpdateCompleted(Number(current.id), profileUpdateState.revision);
-        }
-        return { success: true, customer: updated };
-      }),
+      .input(z.object({ lookupIdentifier: z.string().min(1) }).passthrough())
+      .mutation(async () => ({ success: false, message: 'Cadastro incompleto. Use /atualizarcadastro para corrigir todos os dados obrigatórios juntos.' })),
 
     register: publicProcedure
       .input(z.object({
@@ -2534,23 +2436,26 @@ export const appRouter = router({
       .input(z.object({
         id: z.number(),
         name: z.string().optional(),
-        phone: z.string().regex(/^\d{10,11}$/).optional(),
-        email: z.string().email().optional(),
+        email: z.string().optional(),
+        cep: z.string().optional(),
+        street: z.string().optional(),
+        addressNumber: z.string().optional(),
+        neighborhood: z.string().optional(),
+        addressComplement: z.string().optional(),
         city: z.string().optional(),
-        uf: z.string().length(2).optional(),
+        uf: z.string().optional(),
         referredBy: z.string().optional(),
         referredByPhone: z.string().optional(),
         profilePhotoUrl: z.string().optional(),
         customerNumber: z.number().int().positive().nullable().optional(),
-        cpf: z.string().regex(/^\d{11}$/).optional(),
+        cpf: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...rawData } = input;
         const data = {
           ...rawData,
-          phone: rawData.phone?.replace(/\D/g, '') || undefined,
-          cpf: rawData.cpf?.replace(/\D/g, '') || undefined,
-          referredByPhone: rawData.referredByPhone?.replace(/\D/g, '') || undefined,
+          cpf: rawData.cpf !== undefined ? rawData.cpf.replace(/\D/g, '') : undefined,
+          referredByPhone: rawData.referredByPhone !== undefined ? rawData.referredByPhone.replace(/\D/g, '') : undefined,
         };
         const db = await (await import('./db')).getDb() as any;
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
@@ -2559,83 +2464,12 @@ export const appRouter = router({
         const current = (custRows[0] as unknown as Array<{ phone: string; cpf?: string | null }>)[0];
         if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
         const oldPhone = String(current.phone || '').replace(/\D/g, '');
-        const newPhone = data.phone || oldPhone;
-        const phoneChanged = !!data.phone && newPhone !== oldPhone;
-
-        // Verifica duplicidade antes de tocar em tabelas relacionadas. Assim não há
-        // atualização parcial nem o erro genérico ao tentar trocar para telefone de outro cliente.
-        if (phoneChanged) {
-          const duplicateRows = await db.execute(sql`
-            SELECT id, name FROM customers
-            WHERE id <> ${id} AND deletedAt IS NULL
-              AND REGEXP_REPLACE(phone, '[^0-9]', '') = ${newPhone}
-            LIMIT 1
-          `);
-          const duplicate = (duplicateRows[0] as unknown as Array<{ id: number; name: string }>)[0];
-          if (duplicate) {
-            throw new TRPCError({
-              code: 'CONFLICT',
-              message: `Este telefone já está cadastrado para ${duplicate.name || 'outro cliente'}.`,
-            });
-          }
-        }
 
         // Primeiro grava o cadastro principal. As sincronizações abaixo nunca podem
         // impedir o ADM de salvar nome/telefone/cidade no cliente principal.
         const updated = await updateCustomer(id, data);
         if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
 
-        if (phoneChanged) {
-          // O pedido é identificado permanentemente pelo registrationId, porém algumas
-          // telas ainda exibem/buscam pelo telefone. Portanto, quando o cadastro principal
-          // muda de número, todos os registros desse mesmo pedido acompanham a alteração.
-          // Isso não muda status, respostas, documentos nem o titular do pedido.
-          const registrationRows = await db.execute(sql`
-            SELECT id FROM accessCodePhones
-            WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}
-          `);
-          const registrationIds = (registrationRows[0] as unknown as Array<{ id: number }>)
-            .map(row => Number(row.id))
-            .filter(id => Number.isFinite(id) && id > 0);
-
-          const propagationQueries = [
-            sql`UPDATE customerPasswordSessions SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
-            sql`UPDATE customerPasswords SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
-            sql`UPDATE customerLoginHistory SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
-            sql`UPDATE customerPins SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
-            sql`UPDATE spreadsheetClients SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
-            sql`UPDATE loanClients SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
-            sql`UPDATE accessCodes SET accessedByPhone = ${newPhone} WHERE REGEXP_REPLACE(accessedByPhone, '[^0-9]', '') = ${oldPhone}`,
-            sql`UPDATE accessCodePhones SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
-          ];
-          for (const query of propagationQueries) {
-            try {
-              await db.execute(query);
-            } catch (error: any) {
-              console.warn('[customers.update] sincronização de telefone não aplicada:', error?.message);
-            }
-          }
-
-          if (registrationIds.length) {
-            const registrationList = sql.join(registrationIds.map(registrationId => sql`${registrationId}`), sql`, `);
-            const orderQueries = [
-              sql`UPDATE orderStatusHistory SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE orderFiles SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE orderLoginData SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE scheduleAppointments SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE docRequests SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE uploadSessions SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
-              sql`UPDATE hiddenSubOrders SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
-            ];
-            for (const query of orderQueries) {
-              try {
-                await db.execute(query);
-              } catch (error: any) {
-                console.warn('[customers.update] sincronização do pedido não aplicada:', error?.message);
-              }
-            }
-          }
-        }
         // Reúne novamente todos os cadastros com o mesmo CPF/telefone, para que
         // /gastos e /emprestimo recebam os dados atualizados do cadastro principal.
         try {
