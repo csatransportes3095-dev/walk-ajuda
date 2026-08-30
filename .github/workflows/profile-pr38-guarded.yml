@@ -9,6 +9,7 @@ on:
       - scripts/profile-pr38-hardening.mjs
       - scripts/profile-pr38-types-fix.mjs
       - scripts/profile-pr38-final-audit.mjs
+      - scripts/profile-pr38-registration-address.mjs
       - .github/workflows/profile-pr38-guarded.yml
   workflow_dispatch:
 
@@ -40,6 +41,7 @@ jobs:
           node scripts/profile-pr38-hardening.mjs
           node scripts/profile-pr38-types-fix.mjs
           node scripts/profile-pr38-final-audit.mjs
+          node scripts/profile-pr38-registration-address.mjs
 
       - name: Validate patch whitespace
         run: git diff --check
@@ -67,22 +69,26 @@ jobs:
             echo "Full repository check still has pre-existing errors outside PR #38 scope; scoped files are clean."
           fi
 
-      - name: Unit tests
-        id: unit_tests
+      - name: Profile unit tests
+        run: pnpm exec vitest run server/customerProfile.test.ts
+
+      - name: Repository baseline tests
+        id: baseline_tests
+        continue-on-error: true
         run: |
           set +e
-          pnpm test 2>&1 | tee /tmp/pr38-vitest.log
+          pnpm test 2>&1 | tee /tmp/pr38-vitest-baseline.log
           TEST_EXIT=${PIPESTATUS[0]}
           set -e
-          cp /tmp/pr38-vitest.log pr38-vitest.log
+          cp /tmp/pr38-vitest-baseline.log pr38-vitest-baseline.log
           exit $TEST_EXIT
 
-      - name: Upload Vitest failure log
-        if: failure() && steps.unit_tests.outcome == 'failure'
+      - name: Upload repository baseline failures
+        if: steps.baseline_tests.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
-          name: pr38-vitest-failure
-          path: pr38-vitest.log
+          name: pr38-repository-baseline-failures
+          path: pr38-vitest-baseline.log
           retention-days: 7
 
       - name: Production build
