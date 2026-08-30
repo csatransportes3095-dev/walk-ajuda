@@ -64,29 +64,44 @@ jobs:
           end = s.index('# 7) ADM clientes:', start)
           routers_block = '''# 6) Backend principal: cadastro + pedidos ADM
           p = 'server/routers.ts'
-          replace_once(p,
-              '        cpf: z.string().min(11, "CPF inválido").max(18),\\n        city: z.string().min(1, "Cidade é obrigatória"),\\n        uf: z.string().length(2, "UF deve ter 2 caracteres"),',
-              '        cpf: z.string().min(11, "CPF inválido").max(18),\\n        cep: z.string().trim().min(8, "CEP é obrigatório").max(9),\\n        street: z.string().trim().min(2, "Rua / logradouro é obrigatório").max(255),\\n        addressNumber: z.string().trim().min(1, "Número é obrigatório").max(30),\\n        neighborhood: z.string().trim().min(2, "Bairro é obrigatório").max(150),\\n        addressComplement: z.string().trim().max(255).optional(),\\n        city: z.string().trim().min(1, "Cidade é obrigatória"),\\n        uf: z.string().trim().length(2, "UF deve ter 2 caracteres"),'
-          )
-          replace_once(p,
-              '          cpf: normalizeCustomerCpf(input.cpf),\\n          profilePhotoUrl: input.profilePhotoUrl,\\n          city: input.city || undefined,\\n          uf: input.uf || undefined,',
-              '          cpf: normalizeCustomerCpf(input.cpf),\\n          cep: input.cep.replace(/\\\\D/g, "").replace(/^(\\\\d{5})(\\\\d{3})$/, "$1-$2"),\\n          street: input.street.trim(),\\n          addressNumber: input.addressNumber.trim(),\\n          neighborhood: input.neighborhood.trim(),\\n          addressComplement: input.addressComplement?.trim() || undefined,\\n          profilePhotoUrl: input.profilePhotoUrl,\\n          city: input.city.trim(),\\n          uf: input.uf.trim().toUpperCase(),'
-          )
+          text = read(p)
+          reg_start = text.index('    register: publicProcedure')
+          prefix, reg = text[:reg_start], text[reg_start:]
+          old_input = '        cpf: z.string().min(11, "CPF inválido").max(18),\\n        city: z.string().min(1, "Cidade é obrigatória"),\\n        uf: z.string().length(2, "UF deve ter 2 caracteres"),'
+          new_input = '        cpf: z.string().min(11, "CPF inválido").max(18),\\n        cep: z.string().trim().min(8).max(9).optional(),\\n        street: z.string().trim().min(2).max(255).optional(),\\n        addressNumber: z.string().trim().min(1).max(30).optional(),\\n        neighborhood: z.string().trim().min(2).max(150).optional(),\\n        addressComplement: z.string().trim().max(255).optional(),\\n        city: z.string().min(1, "Cidade é obrigatória"),\\n        uf: z.string().length(2, "UF deve ter 2 caracteres"),'
+          if reg.count(old_input) != 1: raise RuntimeError('register input exato não encontrado')
+          reg = reg.replace(old_input, new_input, 1)
+          old_profile = '          cpf: normalizeCustomerCpf(input.cpf),\\n          profilePhotoUrl: input.profilePhotoUrl,\\n          city: input.city || undefined,\\n          uf: input.uf || undefined,'
+          new_profile = '          cpf: normalizeCustomerCpf(input.cpf),\\n          cep: input.cep ? input.cep.replace(/\\\\D/g, "").replace(/^(\\\\d{5})(\\\\d{3})$/, "$1-$2") : undefined,\\n          street: input.street?.trim() || undefined,\\n          addressNumber: input.addressNumber?.trim() || undefined,\\n          neighborhood: input.neighborhood?.trim() || undefined,\\n          addressComplement: input.addressComplement?.trim() || undefined,\\n          profilePhotoUrl: input.profilePhotoUrl,\\n          city: input.city || undefined,\\n          uf: input.uf || undefined,'
+          if reg.count(old_profile) != 1: raise RuntimeError('register profile exato não encontrado')
+          reg = reg.replace(old_profile, new_profile, 1)
+          text = prefix + reg
+          old_policy = "        fields: z.array(z.enum(['name', 'phone', 'cpf', 'email', 'city', 'uf', 'profilePhotoUrl'])).max(7),"
+          new_policy = "        fields: z.array(z.enum(['name', 'phone', 'cpf', 'email', 'cep', 'street', 'addressNumber', 'neighborhood', 'city', 'uf', 'profilePhotoUrl'])).max(11),"
+          if text.count(old_policy) != 1: raise RuntimeError('enum da política ADM não encontrado')
+          text = text.replace(old_policy, new_policy, 1)
+          old_policy_select = 'SELECT id, name, phone, email, cpf, city, uf, profilePhotoUrl FROM customers'
+          new_policy_select = 'SELECT id, name, phone, email, cpf, cep, street, addressNumber, neighborhood, addressComplement, city, uf, profilePhotoUrl FROM customers'
+          if text.count(old_policy_select) != 1: raise RuntimeError('select da política ADM não encontrado')
+          text = text.replace(old_policy_select, new_policy_select, 1)
+          write(p, text)
           replace_all(p,
               '          c.city as customerCity,\\n          c.uf as customerUf,',
-              '          c.cep as customerCep,\\n          c.street as customerStreet,\\n          c.addressNumber as customerAddressNumber,\\n          c.neighborhood as customerNeighborhood,\\n          c.addressComplement as customerAddressComplement,\\n          c.city as customerCity,\\n          c.uf as customerUf,',
-              minimum=1
-          )
+              '          c.cep as customerCep,\\n          c.street as customerStreet,\\n          c.addressNumber as customerAddressNumber,\\n          c.neighborhood as customerNeighborhood,\\n          c.addressComplement as customerAddressComplement,\\n          c.city as customerCity,\\n          c.uf as customerUf,', minimum=1)
           replace_all(p,
               '            c.city AS customerCity,\\n            c.uf AS customerUf,',
-              '            c.cep AS customerCep,\\n            c.street AS customerStreet,\\n            c.addressNumber AS customerAddressNumber,\\n            c.neighborhood AS customerNeighborhood,\\n            c.addressComplement AS customerAddressComplement,\\n            c.city AS customerCity,\\n            c.uf AS customerUf,',
-              minimum=1
-          )
+              '            c.cep AS customerCep,\\n            c.street AS customerStreet,\\n            c.addressNumber AS customerAddressNumber,\\n            c.neighborhood AS customerNeighborhood,\\n            c.addressComplement AS customerAddressComplement,\\n            c.city AS customerCity,\\n            c.uf AS customerUf,', minimum=1)
           replace_all(p,
               '            customerCity: row.customerCity,\\n            customerUf: row.customerUf,',
-              '            customerCep: row.customerCep,\\n            customerStreet: row.customerStreet,\\n            customerAddressNumber: row.customerAddressNumber,\\n            customerNeighborhood: row.customerNeighborhood,\\n            customerAddressComplement: row.customerAddressComplement,\\n            customerCity: row.customerCity,\\n            customerUf: row.customerUf,',
-              minimum=1
-          )
+              '            customerCep: row.customerCep,\\n            customerStreet: row.customerStreet,\\n            customerAddressNumber: row.customerAddressNumber,\\n            customerNeighborhood: row.customerNeighborhood,\\n            customerAddressComplement: row.customerAddressComplement,\\n            customerCity: row.customerCity,\\n            customerUf: row.customerUf,', minimum=1)
+
+          # Tipo central usado pela atualização e demais rotas.
+          replace_once('server/customerAccess.ts',
+              '  email?: string | null;\\n  profilePhotoUrl?: string | null;\\n  city?: string | null;',
+              '  email?: string | null;\\n  profilePhotoUrl?: string | null;\\n  cep?: string | null;\\n  street?: string | null;\\n  addressNumber?: string | null;\\n  neighborhood?: string | null;\\n  addressComplement?: string | null;\\n  city?: string | null;')
+          replace_once('server/customerAccess.ts',
+              'SELECT id, customerNumber, name, phone, cpf, email, city, uf, referredBy, referredByPhone, profilePhotoUrl, blocked, deletedAt',
+              'SELECT id, customerNumber, name, phone, cpf, email, cep, street, addressNumber, neighborhood, addressComplement, city, uf, referredBy, referredByPhone, profilePhotoUrl, blocked, deletedAt')
 
           '''
           s = s[:start] + routers_block + s[end:]
@@ -98,7 +113,7 @@ jobs:
         run: |
           git diff --name-only > /tmp/working.txt
           cat /tmp/working.txt
-          if grep -Eq '^(client/src/components/StorefrontProductCard.tsx|client/src/components/ui/tabs.tsx|client/src/pages/Gastos.tsx)$' /tmp/working.txt; then
+          if grep -Eq '^(client/src/components/StorefrontProductCard.tsx|client/src/components/ui/tabs.tsx|client/src/pages/Gastos.tsx|client/src/pages/GastosLoginPage.tsx)$' /tmp/working.txt; then
             echo 'Forbidden file changed' >&2
             exit 1
           fi
@@ -114,6 +129,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git restore scripts/_apply_customer_address_patch.py .github/workflows/apply-customer-address-patch.yml
-          git add drizzle/schema.ts shared/customerProfileUpdate.ts server/routers/customerUpdate.ts client/src/pages/AtualizarCadastro.tsx client/src/components/PasswordGate.tsx server/routers.ts client/src/pages/AdminCustomers.tsx client/src/pages/AdminOrders.tsx scripts/apply-customer-address-migration.ts scripts/render-start.sh
+          git add drizzle/schema.ts shared/customerProfileUpdate.ts server/customerAccess.ts server/routers/customerUpdate.ts client/src/pages/AtualizarCadastro.tsx client/src/components/PasswordGate.tsx server/routers.ts client/src/pages/AdminCustomers.tsx client/src/pages/AdminOrders.tsx scripts/apply-customer-address-migration.ts scripts/render-start.sh
           git commit -m 'feat(cadastro): endereço completo obrigatório' || exit 0
           git push origin HEAD:feat/endereco-completo-cadastro-v2
