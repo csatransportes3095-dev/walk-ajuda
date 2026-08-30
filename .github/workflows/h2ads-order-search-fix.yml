@@ -7,7 +7,7 @@ on:
     paths:
       - "client/src/components/H2AdsOrderLinkControl.tsx"
       - "shared/h2adsOrderSearch.ts"
-      - "shared/h2adsOrderSearch.test.ts"
+      - "server/h2adsOrderSearch.test.ts"
       - ".github/workflows/h2ads-order-search-fix.yml"
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run focused tests
-        run: pnpm vitest run shared/h2adsOrderSearch.test.ts
+        run: pnpm vitest run server/h2adsOrderSearch.test.ts
 
       - name: Build production bundle
         run: pnpm build
