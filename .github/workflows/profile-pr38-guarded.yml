@@ -7,6 +7,7 @@ on:
     paths:
       - scripts/profile-pr38-patch.mjs
       - scripts/profile-pr38-hardening.mjs
+      - scripts/profile-pr38-types-fix.mjs
       - .github/workflows/profile-pr38-guarded.yml
   workflow_dispatch:
 
@@ -36,6 +37,7 @@ jobs:
         run: |
           node scripts/profile-pr38-patch.mjs
           node scripts/profile-pr38-hardening.mjs
+          node scripts/profile-pr38-types-fix.mjs
 
       - name: Validate patch whitespace
         run: git diff --check
@@ -53,7 +55,7 @@ jobs:
           set -e
           cat /tmp/pr38-tsc.log
           mv /tmp/tsconfig.pr38.json tsconfig.json
-          SCOPED='client/src/components/CustomerProfileRedirectGate.tsx|client/src/components/PasswordGate.tsx|client/src/main.tsx|client/src/pages/AtualizarCadastro.tsx|client/src/pages/GastosLoginPage.tsx|client/src/pages/GastosPage.tsx|client/src/pages/EmprestimoPage.tsx|client/src/pages/OrderTracking.tsx|client/src/pages/AdminCustomers.tsx|server/customerAccess.ts|server/customerIdentity.ts|server/customerProfile.ts|server/customerStableIdentity.ts|server/routers/customerUpdate.ts|server/routers.ts|drizzle/schema.ts'
+          SCOPED='client/src/components/CustomerProfileRedirectGate.tsx|client/src/components/PasswordGate.tsx|client/src/main.tsx|client/src/pages/AtualizarCadastro.tsx|client/src/pages/GastosLoginPage.tsx|client/src/pages/GastosPage.tsx|client/src/pages/EmprestimoPage.tsx|client/src/pages/OrderTracking.tsx|client/src/pages/AdminCustomers.tsx|server/customerAccess.ts|server/customerIdentity.ts|server/customerProfile.ts|server/customerStableIdentity.ts|server/routers/customerUpdate.ts|drizzle/schema.ts'
           if grep -E "^($SCOPED)\(" /tmp/pr38-tsc.log; then
             echo "PR #38 introduced or still contains scoped TypeScript errors."
             exit 1
