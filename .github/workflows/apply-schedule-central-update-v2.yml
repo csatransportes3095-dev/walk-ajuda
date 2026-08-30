@@ -5,9 +5,8 @@ on:
     branches:
       - fix/agendamento-atualizacao-central-20260830
     paths:
-      - scripts/fix-schedule-central-update-v2.mjs
+      - scripts/fix-render-production-cadastro.mjs
       - .github/workflows/apply-schedule-central-update-v2.yml
-      - .github/schedule-central-update-trigger.txt
   workflow_dispatch:
 
 permissions:
@@ -23,25 +22,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Preserve and repair patch script
-        run: |
-          cp scripts/fix-schedule-central-update-v2.mjs /tmp/fix-schedule-central-update-v2.mjs
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('/tmp/fix-schedule-central-update-v2.mjs')
-          s = p.read_text()
-          old = 'expect(page).toContain("const returnTo = `/agendar/${token}`");'
-          new = 'expect(page).toContain("const returnTo = \\`/agendar/\\${token}\\`");'
-          if old not in s:
-              raise SystemExit('embedded template assertion not found')
-          p.write_text(s.replace(old, new))
-          PY
+      - name: Preserve patch script
+        run: cp scripts/fix-render-production-cadastro.mjs /tmp/fix-render-production-cadastro.mjs
 
       - name: Start branch from actual Render production branch
         run: |
           git fetch origin recovery/organizar-salvos-2026-08-24
           git checkout -B fix/agendamento-render-production-20260830 origin/recovery/organizar-salvos-2026-08-24
-          node /tmp/fix-schedule-central-update-v2.mjs
+          node /tmp/fix-render-production-cadastro.mjs
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -58,8 +46,8 @@ jobs:
       - name: Restore repository lockfile
         run: git checkout -- pnpm-lock.yaml
 
-      - name: Run focused profile and schedule tests
-        run: pnpm exec vitest run server/customerProfile.test.ts server/scheduleProfileGuard.test.ts server/customerUpdateReturnPath.test.ts server/scheduleCentralUpdateWiring.test.ts
+      - name: Run focused cadastro and schedule tests
+        run: pnpm exec vitest run server/customerProfileRequirements.test.ts server/scheduleCentralProductionWiring.test.ts
 
       - name: TypeScript regression check for touched files
         run: |
@@ -77,8 +65,8 @@ jobs:
           set -e
           cp /tmp/tsconfig.json tsconfig.json
           cat /tmp/tsc.log
-          if grep -E '^(client/src/components/CustomerProfileRedirectGate\.tsx|client/src/pages/(AtualizarCadastro|SchedulePage)\.tsx|server/(scheduleProfileGuard|routers/schedule)\.ts|shared/customerUpdateReturnPath\.ts)\(' /tmp/tsc.log; then
-            echo "TypeScript regression found in a touched schedule/profile file."
+          if grep -E '^(client/src/pages/(AtualizarCadastro|SchedulePage)\.tsx|server/(customerProfileRequirements|routers/(customerUpdate|customerPassword|schedule))\.ts)\(' /tmp/tsc.log; then
+            echo "TypeScript regression found in a touched cadastro/schedule file."
             exit 1
           fi
           if [ "$TSC_EXIT" -ne 0 ]; then
@@ -97,6 +85,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add shared/customerUpdateReturnPath.ts client/src/components/CustomerProfileRedirectGate.tsx client/src/pages/AtualizarCadastro.tsx client/src/pages/SchedulePage.tsx server/scheduleProfileGuard.ts server/routers/schedule.ts server/scheduleProfileGuard.test.ts server/customerUpdateReturnPath.test.ts server/scheduleCentralUpdateWiring.test.ts
-          git commit -m "fix(schedule): exigir atualização central antes do agendamento"
+          git add client/src/pages/AtualizarCadastro.tsx client/src/pages/SchedulePage.tsx server/customerProfileRequirements.ts server/routers/customerUpdate.ts server/routers/customerPassword.ts server/routers/schedule.ts server/customerProfileRequirements.test.ts server/scheduleCentralProductionWiring.test.ts
+          git commit -m "fix(cadastro): unificar agendamento no atualizador central"
           git push origin HEAD:refs/heads/fix/agendamento-render-production-20260830
