@@ -1,0 +1,37 @@
+name: H2ADS linked customer photo
+
+on:
+  push:
+    branches:
+      - fix/h2ads-keep-photo-linked-customer-20260830
+    paths:
+      - "client/src/components/H2AdsOrderLinkControl.tsx"
+      - ".github/workflows/h2ads-linked-customer-photo.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify linked customer photo wiring
+        run: |
+          grep -F 'currentOrder?.customerProfilePhotoUrl' client/src/components/H2AdsOrderLinkControl.tsx
+          grep -F 'currentOrder?.customerNumber' client/src/components/H2AdsOrderLinkControl.tsx
+          grep -F 'currentOrder?.customerName' client/src/components/H2AdsOrderLinkControl.tsx
+          grep -F 'if (vars.registrationId !== null) setSearch("")' client/src/components/H2AdsOrderLinkControl.tsx
+      - name: Build production bundle
+        run: pnpm build
