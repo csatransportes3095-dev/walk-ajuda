@@ -4,12 +4,12 @@ import { CheckCircle2, Eye, EyeOff, LockKeyhole, Phone, ShieldCheck, Upload, Use
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
+import { sanitizeCustomerUpdateReturnPath } from "@shared/customerUpdateReturnPath";
 
 const TOKEN_KEY = "customer_update_token";
 const CP_TOKEN_KEY = "cp_token";
 const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
 const INPUT_CLASS = "w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/15";
-const ALLOWED_RETURN_PATHS = new Set(["/", "/login", "/acompanhar", "/gastos", "/emprestimo"]);
 
 function normalizePhone(value: string) {
   let digits = value.replace(/\D/g, "");
@@ -41,7 +41,7 @@ function formatZipCode(value: string) {
 function getSafeReturnPath() {
   if (typeof window === "undefined") return "";
   const raw = new URLSearchParams(window.location.search).get("returnTo") || "";
-  return ALLOWED_RETURN_PATHS.has(raw) ? raw : "";
+  return sanitizeCustomerUpdateReturnPath(raw);
 }
 
 function getInitialPhone() {
@@ -59,7 +59,7 @@ export default function AtualizarCadastro() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || localStorage.getItem(CP_TOKEN_KEY) || "");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
@@ -181,7 +181,7 @@ export default function AtualizarCadastro() {
   async function uploadPhoto(file?: File) {
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) return toast.error("A foto deve ter no máximo 5 MB.");
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return toast.error("Use uma foto JPG, PNG ou WEBP.");
+    if (file.type && !/^image\/(jpeg|png|webp)$/i.test(file.type)) return toast.error("Use uma foto JPG, PNG ou WEBP.");
     const reader = new FileReader();
     reader.onload = async () => {
       try {

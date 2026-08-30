@@ -5,6 +5,7 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
 import { publicSiteUrl } from "../../shared/publicLinks";
+import { resolveScheduleProfileRequirement } from "../scheduleProfileGuard";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -17,6 +18,18 @@ import {
 
 function makeToken(): string {
   return crypto.randomBytes(16).toString("hex");
+}
+
+async function assertScheduleProfileForAppointment(appointment: any) {
+  const profile = await resolveScheduleProfileRequirement(appointment?.customerPhone);
+  if (profile.status === "complete") return profile;
+  if (profile.status === "blocked") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Cadastro bloqueado. Fale com o atendimento." });
+  }
+  if (profile.status === "not_found") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Cadastro principal não encontrado. Fale com o atendimento antes de agendar." });
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Atualize seu cadastro antes de continuar o agendamento." });
 }
 
 async function sendScheduleEmail(to: string, subject: string, html: string): Promise<boolean> {
@@ -434,15 +447,21 @@ export const scheduleRouter = router({
       const appt = await getAppointmentByToken(input.token);
       if (!appt) return { found: false as const };
       const cfg = await getScheduleConfig();
-      // envia slots disponíveis sempre, para permitir reagendamento
-      const slots = await listAvailableScheduleSlots(appt.templateId ?? null);
-      return { found: true as const, appointment: appt, config: cfg, slots };
+      const profile = await resolveScheduleProfileRequirement(appt.customerPhone);
+      // O link público não libera horários enquanto o cadastro principal estiver pendente.
+      const slots = profile.status === "complete"
+        ? await listAvailableScheduleSlots(appt.templateId ?? null)
+        : [];
+      return { found: true as const, appointment: appt, config: cfg, slots, profile };
     }),
 
   // Cliente confirma o horário escolhido (reserva exclusiva)
   confirm: publicProcedure
     .input(z.object({ token: z.string(), slotId: z.number() }))
     .mutation(async ({ input }) => {
+      const currentAppointment = await getAppointmentByToken(input.token);
+      if (!currentAppointment) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento não encontrado" });
+      await assertScheduleProfileForAppointment(currentAppointment);
       const result = await confirmAppointment(input.token, input.slotId);
       if (!result.ok) throw new TRPCError({ code: "CONFLICT", message: result.reason || "Não foi possível agendar" });
       const appt = result.appointment!;
@@ -488,6 +507,7 @@ export const scheduleRouter = router({
     .mutation(async ({ input }) => {
       const appt = await getAppointmentByToken(input.token);
       if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Agendamento não encontrado" });
+      await assertScheduleProfileForAppointment(appt);
       if (appt.status !== "confirmed") {
         // já está pendente/sem horário — nada a fazer
         return { success: true };
