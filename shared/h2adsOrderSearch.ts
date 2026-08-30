@@ -21,6 +21,13 @@ export function getExactH2AdsCustomerNumberSearch(value: string): number | null 
   return Number.isInteger(customerNumber) && customerNumber > 0 ? customerNumber : null;
 }
 
+export function canShowH2AdsOrderForLink(status: string | null | undefined, isCurrent: boolean, hasSearch: boolean): boolean {
+  if (isCurrent) return true;
+  if (status === "cancelado") return false;
+  if (status === "pedido_entregue" || status === "entregue" || status === "login_de_acesso") return hasSearch;
+  return true;
+}
+
 export function matchesH2AdsOrderSearch(order: H2AdsOrderSearchable, search: string): boolean {
   const raw = search.trim().toLowerCase();
   if (!raw) return true;
