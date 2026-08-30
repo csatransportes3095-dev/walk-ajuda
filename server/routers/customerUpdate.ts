@@ -67,27 +67,13 @@ async function ensureCustomerUpdateCompletionInfrastructure(db: any) {
   `);
 }
 
-async function customerUpdateAlreadyCompleted(db: any, customer: any) {
+async function customerUpdateAlreadyCompleted(_db: any, customer: any) {
   const policyState = await getCustomerProfileUpdateState(customer);
   if (policyState.pending) return false;
-  if (policyState.enabled) return true;
 
-  // A foto ausente nunca pode ser ignorada por uma conclusão legada.
-  if (!String(customer?.profilePhotoUrl || "").trim()) return false;
-  // Cadastros completos também não precisam entrar novamente no formulário.
-  if (missingFields(customer).length === 0) return true;
-
-  // Compatibilidade com conclusões registradas antes da política individual.
-  await ensureCustomerUpdateCompletionInfrastructure(db);
-  const phone = normalizeCustomerPhone(customer?.phone);
-  const completed = await rows(db, sql`
-    SELECT customerId
-    FROM customerProfileUpdateCompletions
-    WHERE customerId=${Number(customer?.id) || 0}
-       OR phone=${phone}
-    LIMIT 1
-  `);
-  return completed.length > 0;
+  // A conclusão antiga nunca pode esconder campo obrigatório vazio hoje.
+  // Só consideramos "já atualizado" quando o perfil atual está realmente completo.
+  return missingFields(customer).length === 0;
 }
 
 function alreadyUpdatedError() {
@@ -289,7 +275,29 @@ export const customerUpdateRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "CPF ou e-mail já pertence a outro cadastro." });
       }
       const previousIdentity = { phone: customer.phone, cpf: customer.cpf };
+
+      // Grava os dados atuais do perfil antes de concluir a atualização.
+      // O telefone não participa do UPDATE: continua sendo a identidade fixa do cliente.
+      await db.execute(sql`
+        UPDATE customers SET
+          name=${name},
+          email=${email},
+          cpf=${cpf},
+          cep=${cep},
+          street=${street},
+          addressNumber=${addressNumber},
+          neighborhood=${neighborhood},
+          addressComplement=${addressComplement || null},
+          city=${city},
+          uf=${uf},
+          normalizedCpf=${cpf},
+          normalizedEmail=${email},
+          updatedAt=NOW()
+        WHERE id=${customer.id} AND deletedAt IS NULL
+      `);
+
       const synchronization = await syncUnifiedCustomerRegistry([previousIdentity]);
+      await ensureCustomerUpdateCompletionInfrastructure(db);
       await db.execute(sql`
         INSERT INTO customerProfileUpdateCompletions (customerId, phone, completedAt)
         VALUES (${customer.id}, ${phone}, NOW())
