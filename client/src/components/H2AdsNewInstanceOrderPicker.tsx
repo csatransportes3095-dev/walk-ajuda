@@ -20,7 +20,9 @@ const customerInitial = (name?: string | null) => (name || "C").trim().charAt(0)
 const statusLabel = (status?: string | null) => status ? status.replace(/_/g, " ") : "Sem status";
 
 export function suggestedH2AdsInstanceName(order: H2AdsPendingOrderLink): string {
-  return order.customerNumber ? `*${order.customerNumber}` : `#${order.orderNumber || order.registrationId}`;
+  const prefix = order.customerNumber ? `*${order.customerNumber}` : `#${order.orderNumber || order.registrationId}`;
+  const name = (order.customerName || "CLIENTE").trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
+  return `${prefix} ${name}`.slice(0, 128);
 }
 
 export default function H2AdsNewInstanceOrderPicker({ value, onChange }: { value: H2AdsPendingOrderLink | null; onChange: (value: H2AdsPendingOrderLink | null) => void }) {
