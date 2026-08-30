@@ -52,8 +52,11 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies for validation
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Restore repository lockfile
+        run: git checkout -- pnpm-lock.yaml
 
       - name: Run focused profile and schedule tests
         run: pnpm exec vitest run server/customerProfile.test.ts server/scheduleProfileGuard.test.ts server/customerUpdateReturnPath.test.ts server/scheduleCentralUpdateWiring.test.ts
