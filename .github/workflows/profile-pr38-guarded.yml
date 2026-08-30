@@ -62,7 +62,7 @@ jobs:
           cat /tmp/pr38-tsc.log
           mv /tmp/tsconfig.pr38.json tsconfig.json
           grep -vF "server/routers.ts(2016,17): error TS2304: Cannot find name 'transporter'." /tmp/pr38-tsc.log > /tmp/pr38-tsc-filtered.log || true
-          SCOPED='client/src/components/CustomerProfileRedirectGate.tsx|client/src/components/PasswordGate.tsx|client/src/components/OnlineRegistrationPanel.tsx|client/src/main.tsx|client/src/pages/AtualizarCadastro.tsx|client/src/pages/GastosLoginPage.tsx|client/src/pages/GastosPage.tsx|client/src/pages/EmprestimoPage.tsx|client/src/pages/OrderTracking.tsx|client/src/pages/AdminCustomers.tsx|server/customerAccess.ts|server/customerIdentity.ts|server/customerProfile.ts|server/customerStableIdentity.ts|server/routers/customerUpdate.ts|server/routers/customerPassword.ts|server/routers.ts|drizzle/schema.ts'
+          SCOPED='client/src/components/CustomerProfileRedirectGate.tsx|client/src/components/PasswordGate.tsx|client/src/components/OnlineRegistrationPanel.tsx|client/src/main.tsx|client/src/pages/AtualizarCadastro.tsx|client/src/pages/GastosLoginPage.tsx|client/src/pages/GastosPage.tsx|client/src/pages/EmprestimoPage.tsx|client/src/pages/OrderTracking.tsx|client/src/pages/AdminCustomers.tsx|server/customerAccess.ts|server/customerIdentity.ts|server/customerProfile.ts|server/customerStableIdentity.ts|server/online-support/registration.ts|server/routers/customerUpdate.ts|server/routers/customerPassword.ts|server/routers/online-support.ts|server/routers.ts|drizzle/schema.ts'
           if grep -E "^($SCOPED)\(" /tmp/pr38-tsc-filtered.log; then
             echo "PR #38 introduced or still contains scoped TypeScript errors."
             exit 1
@@ -100,7 +100,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/src/components/PasswordGate.tsx client/src/components/OnlineRegistrationPanel.tsx client/src/pages/GastosLoginPage.tsx client/src/pages/OrderTracking.tsx client/src/pages/AtualizarCadastro.tsx client/src/pages/AdminCustomers.tsx drizzle/schema.ts server/customerStableIdentity.ts server/routers.ts server/routers/customerPassword.ts
+          git add client/src/components/PasswordGate.tsx client/src/components/OnlineRegistrationPanel.tsx client/src/pages/GastosLoginPage.tsx client/src/pages/OrderTracking.tsx client/src/pages/AtualizarCadastro.tsx client/src/pages/AdminCustomers.tsx drizzle/schema.ts server/customerStableIdentity.ts server/online-support/registration.ts server/routers.ts server/routers/customerPassword.ts server/routers/online-support.ts
           if git diff --cached --quiet; then
             echo "No patch changes to commit."
             exit 0
