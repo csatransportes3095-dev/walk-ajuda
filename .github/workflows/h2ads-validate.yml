@@ -44,4 +44,4 @@ jobs:
         run: pnpm build
 
       - name: Verify production worker version
-        run: node -e "fetch('https://h2colombiano.com/api/h2ads/worker/windows-agent.ps1').then(async response => { if (!response.ok) throw new Error('HTTP ' + response.status); const text = await response.text(); if (!text.includes('AgentVersion = \\\"1.3.2\\\"')) throw new Error('Production worker is not 1.3.2'); console.log('Production worker 1.3.2 confirmed'); })"
+        run: node -e "fetch('https://h2colombiano.com/api/h2ads/worker/windows-agent.ps1').then(async response => { if (!response.ok) throw new Error('HTTP ' + response.status); const text = await response.text(); if (!text.includes('AgentVersion = \\\"1.3.4\\\"')) throw new Error('Production worker is not 1.3.4'); console.log('Production worker 1.3.4 confirmed'); })"
