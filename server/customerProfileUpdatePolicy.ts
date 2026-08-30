@@ -123,9 +123,6 @@ export async function markCustomerProfileUpdateCompleted(customerId: number, rev
   const payload = completionSchema.parse({ revision: completedRevision, completedAt: new Date().toISOString() });
   await upsertSetting(completionKey(normalizedCustomerId), JSON.stringify(payload));
 
-  // A exigência individual é de uso único: ao concluir a revisão atual ela deve
-  // ficar inativa. A revisão não é incrementada aqui, evitando criar outra
-  // pendência imediatamente após o cliente finalizar o cadastro.
   const current = await getCustomerProfileUpdatePolicy(normalizedCustomerId);
   await closeCompletedPolicy(normalizedCustomerId, current, completedRevision);
 }
@@ -164,7 +161,7 @@ export async function hasCustomerProfilePhotoSubmission(customerId: number, revi
 export function evaluateCustomerProfileUpdateState(
   customer: any,
   policy: Pick<CustomerProfileUpdatePolicy, "enabled" | "fields" | "revision" | "updatedAt" | "updatedBy">,
-  completedRevision = 0,
+  _completedRevision = 0,
 ): CustomerProfileUpdateState {
   const effectiveFields = getEffectiveCustomerProfileUpdateFields(customer, policy.fields, policy.enabled);
   const missingFields = effectiveFields.filter((field) => customerProfileFieldIsMissing(customer, field));
@@ -173,8 +170,9 @@ export function evaluateCustomerProfileUpdateState(
     configuredFields: normalizeCustomerProfileUpdateFields(policy.fields),
     effectiveFields,
     missingFields,
-    // Uma nova ativação/revisão exige uma confirmação nova, mesmo que o valor anterior ainda seja válido.
-    pending: missingFields.length > 0 || (policy.enabled && completedRevision < policy.revision),
+    // Regra central: a rota /atualizarcadastro só é obrigatória quando existe
+    // algum campo selecionado/obrigatório realmente vazio ou inválido hoje.
+    pending: missingFields.length > 0,
     revision: policy.revision,
     updatedAt: policy.updatedAt === new Date(0).toISOString() ? null : policy.updatedAt,
     updatedBy: policy.updatedBy,
@@ -186,9 +184,6 @@ export async function getCustomerProfileUpdateState(customer: any): Promise<Cust
   let policy = await getCustomerProfileUpdatePolicy(customerId);
   const completedRevision = await getCompletionRevision(customerId);
 
-  // Repara automaticamente registros antigos em que a revisão já foi concluída,
-  // mas a flag enabled permaneceu gravada como true. Isso elimina o estado
-  // "ATIVA + sem pendência" sem exigir correção manual cliente por cliente.
   policy = await closeCompletedPolicy(customerId, policy, completedRevision);
   return evaluateCustomerProfileUpdateState(customer, policy, completedRevision);
 }
