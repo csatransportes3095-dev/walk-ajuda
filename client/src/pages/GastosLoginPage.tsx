@@ -50,6 +50,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   const gastosSubtitle = settings?.gastos_subtitle || 'Controle seus ganhos e gastos';
   const gastosButtonText = settings?.gastos_button_text || 'Continuar';
   const gastosFooterText = settings?.gastos_footer_text || 'Problemas com acesso? Fale com o administrador';
+  const requestedRoute: 'gastos' | 'emprestimo' = sourceRoute === 'emprestimo' ? 'emprestimo' : 'gastos';
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -89,12 +90,10 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   useEffect(() => {
     const phoneToComplete = normalizePhone(requiredProfilePhone || '');
     if (!phoneToComplete) return;
-    setProfileUpdateLookup({ identifier: phoneToComplete, isCpf: false, missingFields: ['name', 'phone', 'cpf', 'email', 'photo'] });
-    setPhone(phoneToComplete);
-    setRegPhone(phoneToComplete);
-    setError('Atualize obrigatoriamente foto, e-mail, CPF e telefone para continuar.');
-    setStep('register');
-  }, [requiredProfilePhone]);
+    const returnTo = requestedRoute === 'emprestimo' ? '/emprestimo' : '/gastos';
+    const params = new URLSearchParams({ phone: phoneToComplete, returnTo });
+    window.location.assign(`/atualizarcadastro?${params.toString()}`);
+  }, [requiredProfilePhone, requestedRoute]);
 
   const checkPhoneMutation = trpc.spreadsheet.checkPhone.useMutation();
   const clientCreatePasswordMutation = trpc.spreadsheet.clientCreatePassword.useMutation();
@@ -149,15 +148,14 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
     }
     setIsLoading(true);
     try {
-      const result = await checkPhoneMutation.mutateAsync({ identifier: cleanId, isCpf: useCpf, requestedRoute: sourceRoute || 'gastos' });
+      const result = await checkPhoneMutation.mutateAsync({ identifier: cleanId, isCpf: useCpf, requestedRoute: requestedRoute });
       setClientName(result.clientName || '');
       switch (result.status) {
         case 'not_found':
-          setProfileUpdateLookup(null);
-          // Pré-preencher o telefone no formulário de cadastro novo.
-          setRegPhone(cleanPhone);
-          setStep('register');
-          break;
+          sessionStorage.setItem('reg_phone_temp', cleanPhone);
+          toast.info('Faça primeiro o cadastro completo no site principal.');
+          window.location.assign('/');
+          return;
         case 'blocked':
           setStep('blocked');
           break;
@@ -168,18 +166,15 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
           break;
         case 'profile_incomplete': {
           const existingProfile = (result as any).profile || {};
-          const missingFields = (result as any).missingFields || ['name', 'phone', 'cpf', 'email', 'photo'];
-          setProfileUpdateLookup({ identifier: cleanId, isCpf: useCpf, missingFields, profile: existingProfile });
-          setRegName(existingProfile.name || '');
-          setRegPhone(existingProfile.phone || cleanPhone);
-          setRegCpf(existingProfile.cpf || cleanCpf);
-          setRegEmail(existingProfile.email || '');
-          setRegCity(existingProfile.city || '');
-          setRegUf(existingProfile.uf || '');
-          setRegPhotoPreview(existingProfile.profilePhotoUrl || null);
-          setError(result.message || 'Atualize somente os dados pendentes para continuar.');
-          setStep('register');
-          break;
+          const fixedPhone = normalizePhone(existingProfile.phone || (result as any).clientPhone || cleanPhone);
+          if (!fixedPhone) {
+            setError('Cadastro encontrado, mas não foi possível confirmar o telefone da identidade.');
+            break;
+          }
+          const returnTo = requestedRoute === 'emprestimo' ? '/emprestimo' : '/gastos';
+          const params = new URLSearchParams({ phone: fixedPhone, returnTo });
+          window.location.assign(`/atualizarcadastro?${params.toString()}`);
+          return;
         }
         case 'no_password':
           setStep('create_password');
@@ -213,91 +208,28 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
     setRegPhotoPreview(url);
   };
 
-  // Cadastro completo
+  // Cadastro e reparo de perfil existem somente no fluxo principal/central.
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-
-    const cleanPhone = regPhone.replace(/\D/g, '');
-    const cleanCpf = regCpf.replace(/\D/g, '');
-
-    if (!regName.trim()) { setError('Informe seu nome completo'); return; }
-    if (cleanPhone.length < 10) { setError('Informe um telefone válido'); return; }
-    if (!isValidCPF(cleanCpf)) { setError('CPF inválido. Digite um CPF válido para continuar.'); return; }
-    if (!regEmail.trim() || !regEmail.includes('@')) { setError('Informe um e-mail válido'); return; }
-    if (!profileUpdateLookup && !regCity.trim()) { setError('Informe sua cidade'); return; }
-    if (!profileUpdateLookup && (!regUf.trim() || regUf.length !== 2)) { setError('Informe o estado (UF) com 2 letras'); return; }
-    if (isMissingProfileField('photo') && !regPhoto) { setError('Selecione uma foto de perfil'); return; }
-
-    setIsLoading(true);
-
-    try {
-      // Só envia foto quando ela está pendente ou foi trocada; uma atualização de CPF preserva a foto existente.
-      let profilePhotoUrl = regPhotoPreview || profileUpdateLookup?.profile?.profilePhotoUrl || '';
-      if (regPhoto) {
-        setIsUploadingPhoto(true);
-        const base64 = await fileToBase64(regPhoto);
-        const uploadResult = await uploadPhotoMutation.mutateAsync({ imageBase64: base64, phone: cleanPhone });
-        setIsUploadingPhoto(false);
-        if (!uploadResult?.url) { setError('Erro ao enviar foto. Tente novamente.'); setIsLoading(false); return; }
-        profilePhotoUrl = uploadResult.url;
-      }
-
-      // Perfil incompleto é atualizado no cadastro principal; cadastro novo cria uma identidade única.
-      const payload = {
-        name: regName.trim(),
-        phone: cleanPhone,
-        email: regEmail.trim(),
-        cpf: formatCpf(regCpf),
-        city: regCity.trim() || undefined,
-        uf: regUf.toUpperCase().slice(0, 2) || undefined,
-        profilePhotoUrl,
-      };
-      const result = profileUpdateLookup
-        ? await completeProfileMutation.mutateAsync({ ...payload, lookupIdentifier: profileUpdateLookup.identifier, lookupIsCpf: profileUpdateLookup.isCpf })
-        : await registerMutation.mutateAsync({ ...payload, city: regCity.trim(), uf: regUf.toUpperCase().slice(0, 2), sourceRoute: sourceRoute || 'gastos' });
-
-      if (result.blocked) {
-        setError(result.message || 'Cadastro não permitido.');
-        setIsLoading(false);
-        return;
-      }
-      if ((result as any).alreadyExists) {
-        setError('Você já possui cadastro no sistema. Volte e entre usando o telefone ou CPF do seu cadastro original.');
-        setIsLoading(false);
-        return;
-      }
-      if (!result.success) {
-        setError(result.message || 'Erro ao concluir cadastro. Verifique os dados.');
-        setIsLoading(false);
-        return;
-      }
-
-      // 3. Cadastro OK — chamar checkPhone para criar spreadsheetClient automaticamente
-      toast.success(profileUpdateLookup ? 'Cadastro atualizado! Agora crie sua senha de acesso.' : 'Cadastro realizado! Agora crie sua senha de acesso.');
-      setPhone(cleanPhone);
-      setClientName(regName.trim());
-      // Disparar checkPhone para garantir que spreadsheetClient seja criado
-      try {
-        await checkPhoneMutation.mutateAsync({ identifier: cleanPhone, isCpf: false, requestedRoute: sourceRoute || 'gastos' });
-      } catch (_) { /* ignora erro — spreadsheetClient pode já ter sido criado */ }
-      setProfileUpdateLookup(null);
-      setStep('create_password');
-    } catch (err: any) {
-      setError(err?.message || 'Erro ao realizar cadastro. Tente novamente.');
-    } finally {
-      setIsLoading(false);
-      setIsUploadingPhoto(false);
+    const cleanPhone = normalizePhone(regPhone || phone);
+    if (cleanPhone) sessionStorage.setItem('reg_phone_temp', cleanPhone);
+    toast.info(profileUpdateLookup ? 'Complete seu cadastro na tela central.' : 'Faça o cadastro completo no site principal.');
+    if (profileUpdateLookup && cleanPhone) {
+      const returnTo = requestedRoute === 'emprestimo' ? '/emprestimo' : '/gastos';
+      const params = new URLSearchParams({ phone: cleanPhone, returnTo });
+      window.location.assign(`/atualizarcadastro?${params.toString()}`);
+      return;
     }
+    window.location.assign('/');
   };
 
   const handleRequestRouteAccess = async () => {
     if (!restrictedPhone) return;
     try {
-      const result = await requestRouteAccessMutation.mutateAsync({ phone: restrictedPhone, route: sourceRoute || 'gastos' });
+      const result = await requestRouteAccessMutation.mutateAsync({ phone: restrictedPhone, route: requestedRoute });
       if (result.alreadyAllowed) {
         toast.success('Esta rota já está liberada para o seu cadastro.');
-      } else if (result.created) {
+      } else if ((result as any).created) {
         toast.success('Sua solicitação foi enviada ao administrador.');
       } else {
         toast.info('Sua solicitação de acesso já está em análise.');

@@ -94,6 +94,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const [enteredByCpf, setEnteredByCpf] = useState(false); // true quando o acesso foi feito via CPF
   const [cpfDuplicado, setCpfDuplicado] = useState(false);
   const [regCep, setRegCep] = useState("");
+  const [regStreet, setRegStreet] = useState("");
+  const [regAddressNumber, setRegAddressNumber] = useState("");
+  const [regNeighborhood, setRegNeighborhood] = useState("");
+  const [regAddressComplement, setRegAddressComplement] = useState("");
   const [cepLoading, setCepLoading] = useState(false);
   const [regCity, setRegCity] = useState("");
   const [regUf, setRegUf] = useState("");
@@ -151,6 +155,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const cpwdCreateAutoMutation = trpc.customerPassword.clientCreateAuto.useMutation();
   const cpwdCreateManualMutation = trpc.customerPassword.clientCreateManual.useMutation();
   const cpwdSaveCpfMutation = trpc.customerPassword.saveCpf.useMutation();
+  const customerUpdateStatusMutation = trpc.customerUpdate.status.useMutation();
   // Token estabilizado em state para evitar condições de corrida durante pedido
   const [cpToken, setCpToken] = useState(() => localStorage.getItem(CP_TOKEN_KEY) || '');
   const cpwdCheckSessionQuery = trpc.customerPassword.checkSession.useQuery(
@@ -467,6 +472,14 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
       setCustomerExists(true);
 
+      // Cadastro existente: qualquer pendência é resolvida exclusivamente no fluxo central.
+      const centralProfileStatus = await customerUpdateStatusMutation.mutateAsync({ phone: canonical });
+      if (centralProfileStatus.status !== 'completed' && centralProfileStatus.status !== 'blocked' && centralProfileStatus.status !== 'not_found') {
+        const params = new URLSearchParams({ phone: canonical, returnTo: '/' });
+        window.location.assign(`/atualizarcadastro?${params.toString()}`);
+        return;
+      }
+
       // Verificar link de indicação
       if (urlRefCode) {
         try {
@@ -568,6 +581,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       if (!data.erro) {
         const uf = data.uf?.toUpperCase() || '';
         const cidade = data.localidade || '';
+        if (data.logradouro) setRegStreet(String(data.logradouro));
+        if (data.bairro) setRegNeighborhood(String(data.bairro));
         const estadoObj = ESTADOS_BR.find(e => e.uf === uf);
         if (estadoObj) {
           setRegUf(uf);
@@ -618,6 +633,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     if (!enteredByCpf && cpfDuplicado) { toast.error("Este CPF já está cadastrado no sistema."); return; }
     // Quando entrou pelo CPF, telefone é obrigatório
     if (enteredByCpf && getPhoneDigits(regPhone).length !== 11) { toast.error("Preencha o telefone com DDD (11 dígitos)"); return; }
+    if (regCep.replace(/\D/g, '').length !== 8) { toast.error("Preencha um CEP válido com 8 dígitos"); return; }
+    if (regStreet.trim().length < 2) { toast.error("Preencha a rua / logradouro"); return; }
+    if (!regAddressNumber.trim()) { toast.error("Preencha o número do endereço"); return; }
+    if (regNeighborhood.trim().length < 2) { toast.error("Preencha o bairro"); return; }
     if (!regCity.trim()) { toast.error("Selecione a cidade"); return; }
     if (!regUf) { toast.error("Selecione o estado"); return; }
     const referredPhoneDigits = getPhoneDigits(regReferredByPhone);
@@ -680,6 +699,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         phone: clientPhoneDigits,
         email: regEmail.trim(),
         cpf: regCpf.trim(),
+        zipCode: regCep.replace(/\D/g, ''),
+        addressLine: regStreet.trim(),
+        neighborhood: regNeighborhood.trim(),
+        addressNumber: regAddressNumber.trim(),
+        addressComplement: regAddressComplement.trim() || undefined,
         city: regCity.trim(),
         uf: regUf,
         referredBy: regReferredBy.trim() || undefined,
@@ -691,7 +715,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         toast.error(result.message || 'Cadastro não permitido. Entre em contato pelo WhatsApp.');
         return;
       }
-      if (result.duplicateCpf) {
+      if ((result as any).duplicateCpf) {
         toast.error(result.message || 'CPF já registrado no sistema.');
         setCpfDuplicado(true);
         return;
@@ -702,39 +726,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         return;
       }
       if (result.success) {
-        toast.success("Cadastro realizado com sucesso!");
-        // Se veio por link de indicação, liberar acesso automático sem exigir senha
-        if (urlRefCode) {
-          try {
-            const refResult = await startRefSessionMutation.mutateAsync({
-              code: urlRefCode,
-              phone: clientPhoneDigits,
-            });
-            if (refResult.success && refResult.expiresAt) {
-              setRefSessionActive(true);
-              setRefSessionOwner(refResult.ownerName || '');
-              setRefSessionExpiresAt(refResult.expiresAt);
-              setAccessGranted(true);
-              setAccessType('ref_link');
-              localStorage.setItem(SESSION_KEY, 'true');
-              localStorage.setItem(SESSION_TYPE_KEY, 'ref_link');
-              localStorage.setItem(SESSION_PHONE_KEY, clientPhoneDigits);
-              const expiresDate = new Date(refResult.expiresAt);
-              localStorage.setItem(SESSION_EXPIRES_KEY, expiresDate.toISOString());
-              localStorage.setItem('ref_link_owner', refResult.ownerName || '');
-              setTimeRemaining(Math.max(0, Math.floor((refResult.expiresAt - Date.now()) / 1000)));
-              toast.success('Acesso liberado via link de indicação!');
-              return;
-            }
-          } catch { /* fallback para senha */ }
-        }
-        // Se entrou pelo CPF, atualizar clientPhone com o telefone digitado no formulário
-        if (enteredByCpf && getPhoneDigits(regPhone).length === 11) {
-          setClientPhone(regPhone);
-          setResolvedPhone(getPhoneDigits(regPhone));
-        }
-        // Ir para a tela de criar senha (novo sistema)
-        setGateStep("cpwd_create");
+        // O cadastro inicial apenas fixa a identidade pelo telefone. A conclusão
+        // obrigatória acontece no fluxo central antes de qualquer acesso ao site.
+        toast.success("Cadastro inicial salvo. Complete os dados obrigatórios para continuar.");
+        const params = new URLSearchParams({ phone: clientPhoneDigits, returnTo: '/' });
+        window.location.assign(`/atualizarcadastro?${params.toString()}`);
+        return;
       }
         } catch (err: any) {
       const msg = err?.message || err?.data?.message || (err?.shape?.message) || '';
@@ -1609,6 +1606,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     setRegName("");
                     setRegEmail("");
                     setRegCep("");
+                    setRegStreet("");
+                    setRegAddressNumber("");
+                    setRegNeighborhood("");
+                    setRegAddressComplement("");
                     setRegCity("");
                     setRegUf("");
                     setGateStep("registration");
@@ -1913,7 +1914,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
                 {/* CEP */}
                 <div>
-                  <label className="text-white mb-2 block text-sm font-medium">CEP <span className="text-gray-400 font-normal text-xs">(opcional — preenche Estado e Cidade)</span></label>
+                  <label className="text-white mb-2 block text-sm font-medium">CEP <span className="text-red-400">*</span></label>
                   <div className="relative">
                     <input type="text" inputMode="numeric" placeholder="00000-000" value={regCep}
                       onChange={(e) => {
@@ -1930,6 +1931,20 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </div>
                 </div>
 
+
+                {/* Endereço completo obrigatório */}
+                <div>
+                  <label className="text-white mb-2 block text-sm font-medium">Rua / Logradouro <span className="text-red-400">*</span></label>
+                  <input type="text" value={regStreet} onChange={(e) => setRegStreet(e.target.value)} required placeholder="Rua, Avenida..." className="w-full px-4 py-4 bg-white text-black text-lg font-medium rounded-xl border-2 border-black focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all" />
+                </div>
+                <div className="grid grid-cols-[120px_1fr] gap-3">
+                  <div><label className="text-white mb-2 block text-sm font-medium">Número <span className="text-red-400">*</span></label><input type="text" value={regAddressNumber} onChange={(e) => setRegAddressNumber(e.target.value)} required placeholder="123 ou S/N" className="w-full px-3 py-4 bg-white text-black text-lg font-medium rounded-xl border-2 border-black focus:border-primary outline-none" /></div>
+                  <div><label className="text-white mb-2 block text-sm font-medium">Bairro <span className="text-red-400">*</span></label><input type="text" value={regNeighborhood} onChange={(e) => setRegNeighborhood(e.target.value)} required placeholder="Bairro" className="w-full px-3 py-4 bg-white text-black text-lg font-medium rounded-xl border-2 border-black focus:border-primary outline-none" /></div>
+                </div>
+                <div>
+                  <label className="text-white mb-2 block text-sm font-medium">Complemento <span className="text-white/45">(opcional)</span></label>
+                  <input type="text" value={regAddressComplement} onChange={(e) => setRegAddressComplement(e.target.value)} placeholder="Apto, bloco, referência..." className="w-full px-4 py-4 bg-white text-black text-lg font-medium rounded-xl border-2 border-black focus:border-primary outline-none" />
+                </div>
                 {/* Estado com autocomplete */}
                 <div className="relative">
                   <label className="text-white mb-2 block text-sm font-medium">Estado <span className="text-red-400">*</span></label>

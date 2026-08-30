@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
 const TOKEN_KEY = "customer_update_token";
+const CP_TOKEN_KEY = "cp_token";
 const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
 const INPUT_CLASS = "w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/15";
 const ALLOWED_RETURN_PATHS = new Set(["/", "/login", "/acompanhar", "/gastos", "/emprestimo"]);
@@ -120,6 +121,7 @@ export default function AtualizarCadastro() {
 
   function acceptToken(nextToken: string) {
     localStorage.setItem(TOKEN_KEY, nextToken);
+    localStorage.setItem(CP_TOKEN_KEY, nextToken);
     loadedToken.current = "";
     setToken(nextToken);
     setPassword("");
@@ -212,6 +214,7 @@ export default function AtualizarCadastro() {
         city,
         uf,
       });
+      localStorage.setItem(CP_TOKEN_KEY, token);
       localStorage.removeItem(TOKEN_KEY);
       setToken("");
       setStep("done");

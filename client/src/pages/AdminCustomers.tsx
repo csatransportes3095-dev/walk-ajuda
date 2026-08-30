@@ -26,6 +26,11 @@ type Customer = {
   latestStatus?: string | null;
   isBlocked?: boolean;
   cpf?: string | null;
+  zipCode?: string | null;
+  addressLine?: string | null;
+  neighborhood?: string | null;
+  addressNumber?: string | null;
+  addressComplement?: string | null;
   blocked?: number;
   blockReason?: string | null;
   blockedAt?: number | Date | null;
@@ -332,6 +337,11 @@ export default function AdminCustomers() {
   const [editReferredBy, setEditReferredBy] = useState("");
   const [editReferredByPhone, setEditReferredByPhone] = useState("");
   const [editCpf, setEditCpf] = useState("");
+  const [editZipCode, setEditZipCode] = useState("");
+  const [editAddressLine, setEditAddressLine] = useState("");
+  const [editNeighborhood, setEditNeighborhood] = useState("");
+  const [editAddressNumber, setEditAddressNumber] = useState("");
+  const [editAddressComplement, setEditAddressComplement] = useState("");
   const [editCustomerNumber, setEditCustomerNumber] = useState<string>("");
   // Valores originais: o update envia somente o que o ADM realmente modificar.
   const [editOriginal, setEditOriginal] = useState<Record<string, string> | null>(null);
@@ -369,6 +379,11 @@ export default function AdminCustomers() {
   const [createPhone, setCreatePhone] = useState('');
   const [createEmail, setCreateEmail] = useState('');
   const [createCpf, setCreateCpf] = useState('');
+  const [createZipCode, setCreateZipCode] = useState('');
+  const [createAddressLine, setCreateAddressLine] = useState('');
+  const [createNeighborhood, setCreateNeighborhood] = useState('');
+  const [createAddressNumber, setCreateAddressNumber] = useState('');
+  const [createAddressComplement, setCreateAddressComplement] = useState('');
   const [createCity, setCreateCity] = useState('');
   const [createUf, setCreateUf] = useState('');
   const [createPhotoUrl, setCreatePhotoUrl] = useState('');
@@ -382,7 +397,7 @@ export default function AdminCustomers() {
   const [csvImportResult, setCsvImportResult] = useState<{ imported: number; duplicates: number; errors: number; details: string[] } | null>(null);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
 
-  const adminCreateMut = trpc.customers.adminCreate.useMutation({
+  const adminCreateMut = trpc.customerUpdate.adminCreatePartial.useMutation({
     onSuccess: (data) => {
       if (data.success) {
         toast.success('Cliente cadastrado com sucesso!');
@@ -392,7 +407,7 @@ export default function AdminCustomers() {
         setCreateError('');
         customersQuery.refetch();
       } else {
-        setCreateError(data.message || 'Erro ao cadastrar cliente');
+        setCreateError('Erro ao cadastrar cliente');
       }
     },
     onError: (e) => setCreateError(e.message || 'Erro ao cadastrar cliente'),
@@ -416,7 +431,7 @@ export default function AdminCustomers() {
     onSuccess: () => { routeReleaseModesQuery.refetch(); toast.success('Modo de liberação atualizado.'); },
     onError: (error) => toast.error(error.message || 'Não foi possível atualizar o modo de liberação.'),
   });
-  const updateMut = trpc.customers.update.useMutation({
+  const updateMut = trpc.customerUpdate.adminUpdate.useMutation({
     onSuccess: () => { customersQuery.refetch(); toast.success("Cliente atualizado!"); setEditingId(null); },
     onError: (error) => toast.error(error.message || "Erro ao atualizar cliente"),
   });
@@ -695,6 +710,11 @@ export default function AdminCustomers() {
       referredBy: String(c.referredBy || '').trim(),
       referredByPhone: String(c.referredByPhone || '').replace(/\D/g, ''),
       cpf: String((c as any).cpf || '').replace(/\D/g, ''),
+      zipCode: String((c as any).zipCode || '').replace(/\D/g, ''),
+      addressLine: String((c as any).addressLine || '').trim(),
+      neighborhood: String((c as any).neighborhood || '').trim(),
+      addressNumber: String((c as any).addressNumber || '').trim(),
+      addressComplement: String((c as any).addressComplement || '').trim(),
       customerNumber: (c as any).customerNumber ? String((c as any).customerNumber) : '',
     });
     setEditingId(c.id);
@@ -706,6 +726,11 @@ export default function AdminCustomers() {
     setEditReferredBy(c.referredBy || "");
     setEditReferredByPhone(c.referredByPhone || "");
     setEditCpf((c as any).cpf || "");
+    setEditZipCode((c as any).zipCode || "");
+    setEditAddressLine((c as any).addressLine || "");
+    setEditNeighborhood((c as any).neighborhood || "");
+    setEditAddressNumber((c as any).addressNumber || "");
+    setEditAddressComplement((c as any).addressComplement || "");
     setEditCustomerNumber((c as any).customerNumber ? String((c as any).customerNumber) : "");
     setEditIsReseller(!!(c as any).isReseller);
     setEditResellerDiscountType(((c as any).resellerDiscountType as 'percent' | 'fixed') || 'percent');
@@ -714,20 +739,14 @@ export default function AdminCustomers() {
 
   const saveEdit = () => {
     if (!editingId) return;
-    const phoneDigits = editPhone.replace(/\D/g, "");
-    if (phoneDigits && phoneDigits.length < 10) {
-      toast.error("Telefone inválido (mínimo 10 dígitos)");
-      return;
-    }
     const parsedCustomerNumber = editCustomerNumber ? parseInt(editCustomerNumber, 10) : null;
     if (editCustomerNumber && (isNaN(parsedCustomerNumber!) || parsedCustomerNumber! <= 0)) {
       toast.error("Número de cadastro inválido");
       return;
     }
 
-    // Não reenviar CPF, e-mail, número de cadastro ou outros campos se o ADM só
-    // alterou o telefone. Isso impede que uma regra antiga de outro campo bloqueie
-    // a atualização principal do telefone.
+    // Telefone é identidade fixa e nunca participa da edição. Campos tocados
+    // podem ser enviados vazios para tornar o cadastro pendente novamente.
     const original = editOriginal || {};
     const payload: Record<string, any> = { id: editingId };
     const changed = (field: string, value: string) => value !== String(original[field] || '');
@@ -738,23 +757,32 @@ export default function AdminCustomers() {
     const referredBy = editReferredBy.trim();
     const referredByPhone = editReferredByPhone.replace(/\D/g, '');
     const cpf = editCpf.replace(/\D/g, '');
+    const zipCode = editZipCode.replace(/\D/g, '');
+    const addressLine = editAddressLine.trim();
+    const neighborhood = editNeighborhood.trim();
+    const addressNumber = editAddressNumber.trim();
+    const addressComplement = editAddressComplement.trim();
     const customerNumber = parsedCustomerNumber ? String(parsedCustomerNumber) : '';
 
-    if (name && changed('name', name)) payload.name = name;
-    if (phoneDigits && changed('phone', phoneDigits)) payload.phone = phoneDigits;
-    if (email && changed('email', email)) payload.email = email;
-    if (city && changed('city', city)) payload.city = city;
-    if (uf && changed('uf', uf)) payload.uf = uf;
-    if (referredBy && changed('referredBy', referredBy)) payload.referredBy = referredBy;
-    if (referredByPhone && changed('referredByPhone', referredByPhone)) payload.referredByPhone = referredByPhone;
-    if (cpf && changed('cpf', cpf)) payload.cpf = cpf;
-    if (customerNumber && changed('customerNumber', customerNumber)) payload.customerNumber = parsedCustomerNumber;
+    if (changed('name', name)) payload.name = name;
+    if (changed('email', email)) payload.email = email;
+    if (changed('city', city)) payload.city = city;
+    if (changed('uf', uf)) payload.uf = uf;
+    if (changed('referredBy', referredBy)) payload.referredBy = referredBy;
+    if (changed('referredByPhone', referredByPhone)) payload.referredByPhone = referredByPhone;
+    if (changed('cpf', cpf)) payload.cpf = cpf;
+    if (changed('zipCode', zipCode)) payload.zipCode = zipCode;
+    if (changed('addressLine', addressLine)) payload.addressLine = addressLine;
+    if (changed('neighborhood', neighborhood)) payload.neighborhood = neighborhood;
+    if (changed('addressNumber', addressNumber)) payload.addressNumber = addressNumber;
+    if (changed('addressComplement', addressComplement)) payload.addressComplement = addressComplement;
+    if (changed('customerNumber', customerNumber)) payload.customerNumber = parsedCustomerNumber;
 
     if (Object.keys(payload).length === 1) {
       toast.info('Nenhuma alteração para salvar.');
       return;
     }
-    updateMut.mutate(payload);
+    updateMut.mutate(payload as any);
   };
 
   const handleDownloadPhoto = async (url: string, name: string) => {
@@ -1404,7 +1432,16 @@ export default function AdminCustomers() {
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">Telefone</label>
-                    <input type="tel" value={editPhone} onChange={(e) => setEditPhone(formatPhoneInput(e.target.value))} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground mt-0.5 focus:outline-none focus:ring-1 focus:ring-primary/50" placeholder="(11) 99999-9999" />
+                    <input type="tel" value={editPhone} readOnly disabled className="w-full px-2 py-1.5 bg-muted/50 border border-border rounded-lg text-sm text-muted-foreground mt-0.5 cursor-not-allowed" title="Telefone é a identidade fixa do cliente e não pode ser alterado" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><label className="text-xs text-muted-foreground">CEP</label><input type="text" value={editZipCode} onChange={(e) => setEditZipCode(e.target.value.replace(/\D/g, '').slice(0, 8))} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground mt-0.5" /></div>
+                    <div><label className="text-xs text-muted-foreground">Número</label><input type="text" value={editAddressNumber} onChange={(e) => setEditAddressNumber(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground mt-0.5" /></div>
+                  </div>
+                  <div><label className="text-xs text-muted-foreground">Rua</label><input type="text" value={editAddressLine} onChange={(e) => setEditAddressLine(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground mt-0.5" /></div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><label className="text-xs text-muted-foreground">Bairro</label><input type="text" value={editNeighborhood} onChange={(e) => setEditNeighborhood(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground mt-0.5" /></div>
+                    <div><label className="text-xs text-muted-foreground">Complemento</label><input type="text" value={editAddressComplement} onChange={(e) => setEditAddressComplement(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground mt-0.5" /></div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
@@ -1933,6 +1970,15 @@ export default function AdminCustomers() {
                 {uploadingPhotoFor === -1 && <p className="mt-1 text-xs text-primary">Enviando foto...</p>}
                 {createPhotoUrl && <p className="mt-1 text-xs text-green-500">✓ Foto obrigatória enviada</p>}
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className="block text-xs font-medium text-muted-foreground mb-1">CEP</label><input type="text" value={createZipCode} onChange={e => setCreateZipCode(e.target.value.replace(/\D/g, '').slice(0, 8))} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm" /></div>
+                <div><label className="block text-xs font-medium text-muted-foreground mb-1">Número</label><input type="text" value={createAddressNumber} onChange={e => setCreateAddressNumber(e.target.value)} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm" /></div>
+              </div>
+              <div><label className="block text-xs font-medium text-muted-foreground mb-1">Rua</label><input type="text" value={createAddressLine} onChange={e => setCreateAddressLine(e.target.value)} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm" /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className="block text-xs font-medium text-muted-foreground mb-1">Bairro</label><input type="text" value={createNeighborhood} onChange={e => setCreateNeighborhood(e.target.value)} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm" /></div>
+                <div><label className="block text-xs font-medium text-muted-foreground mb-1">Complemento</label><input type="text" value={createAddressComplement} onChange={e => setCreateAddressComplement(e.target.value)} className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm" /></div>
+              </div>
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-muted-foreground mb-1">Cidade</label>
@@ -1966,18 +2012,18 @@ export default function AdminCustomers() {
                 <button
                   onClick={() => {
                     setCreateError('');
-                    if (!createName.trim()) { setCreateError('Nome é obrigatório'); return; }
                     if (createPhone.length < 10) { setCreateError('Telefone inválido (mínimo 10 dígitos)'); return; }
-                    if (createReferrerPhone.length < 10) { setCreateError('Informe o telefone válido do indicador cadastrado'); return; }
-                    if (createCpf.length !== 11) { setCreateError('CPF obrigatório e inválido'); return; }
-                    if (!/^\S+@\S+\.\S+$/.test(createEmail.trim())) { setCreateError('E-mail obrigatório e inválido'); return; }
-                    if (!createPhotoUrl) { setCreateError('Foto de perfil obrigatória'); return; }
                     adminCreateMut.mutate({
                       name: createName.trim(),
                       phone: createPhone,
                       email: createEmail.trim(),
-                      cpf: createCpf,
-                      profilePhotoUrl: createPhotoUrl,
+                      cpf: createCpf || undefined,
+                      zipCode: createZipCode || undefined,
+                      addressLine: createAddressLine.trim() || undefined,
+                      neighborhood: createNeighborhood.trim() || undefined,
+                      addressNumber: createAddressNumber.trim() || undefined,
+                      addressComplement: createAddressComplement.trim() || undefined,
+                      profilePhotoUrl: createPhotoUrl || undefined,
                       referredByPhone: createReferrerPhone,
                       city: createCity.trim() || undefined,
                       uf: createUf || undefined,

@@ -1,4 +1,4 @@
-import { bigint, decimal, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { bigint, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -207,6 +207,14 @@ export const customers = mysqlTable("customers", {
   city: varchar("city", { length: 128 }),
   uf: varchar("uf", { length: 2 }),
   cpf: varchar("cpf", { length: 14 }),
+  zipCode: varchar("zipCode", { length: 10 }),
+  addressLine: varchar("addressLine", { length: 255 }),
+  neighborhood: varchar("neighborhood", { length: 128 }),
+  addressNumber: varchar("addressNumber", { length: 32 }),
+  addressComplement: varchar("addressComplement", { length: 128 }),
+  normalizedPhone: varchar("normalizedPhone", { length: 16 }),
+  normalizedCpf: varchar("normalizedCpf", { length: 11 }),
+  normalizedEmail: varchar("normalizedEmail", { length: 320 }),
   referredBy: varchar("referredBy", { length: 128 }),
   referredByPhone: varchar("referredByPhone", { length: 32 }),
   profilePhotoUrl: text("profilePhotoUrl"),

@@ -24,13 +24,7 @@ async function rows(db: any, query: any): Promise<any[]> {
 
 function normalizedIdentities(identity: CustomerIdentityInput) {
   const phone = normalizeCustomerPhone(identity.phone);
-  const cpf = normalizeCustomerCpf(identity.cpf);
-  const email = normalizeCustomerEmail(identity.email);
-  return [
-    phone ? { type: "phone", value: phone } : null,
-    cpf ? { type: "cpf", value: cpf } : null,
-    email ? { type: "email", value: email } : null,
-  ].filter(Boolean) as Array<{ type: "phone" | "cpf" | "email"; value: string }>;
+  return phone ? [{ type: "phone" as const, value: phone }] : [];
 }
 
 export async function ensureStableCustomerIdentityInfrastructure(dbArg?: any): Promise<void> {
