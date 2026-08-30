@@ -14,29 +14,21 @@ import {
   normalizeCustomerPhone,
 } from "../customerAccess";
 import { syncUnifiedCustomerRegistry } from "../customerIdentity";
+import {
+  getMissingCustomerProfileFields,
+  isCustomerProfileComplete,
+  isGenericRecoveredCustomerName,
+} from "../customerProfile";
 import { storagePut } from "../storage";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000;
 const PASSWORD_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const GENERIC_NAME = /^(?:CLIENTE|CADASTRO|PEDIDO)\s+RECUPERAD[OA]|^RECUPERAD[OA](?:\s|$)/i;
-const ALREADY_UPDATED_MESSAGE = "Seu cadastro já foi atualizado. Aguarde a liberação do site.";
+const ALREADY_UPDATED_MESSAGE = "Seu cadastro já está completo.";
 
 async function rows(db: any, query: any): Promise<any[]> {
   const result = await db.execute(query);
   return (result[0] || result || []) as any[];
-}
-
-function missingFields(customer: any) {
-  const missing: string[] = [];
-  const name = String(customer?.name || "").trim();
-  if (name.length < 2 || GENERIC_NAME.test(name)) missing.push("name");
-  if (!normalizeCustomerEmail(customer?.email)) missing.push("email");
-  if (!normalizeCustomerCpf(customer?.cpf) || !isValidCPF(normalizeCustomerCpf(customer?.cpf))) missing.push("cpf");
-  if (String(customer?.city || "").trim().length < 2) missing.push("city");
-  if (!/^[A-Z]{2}$/.test(String(customer?.uf || "").trim().toUpperCase())) missing.push("uf");
-  if (!String(customer?.profilePhotoUrl || "").trim()) missing.push("profilePhotoUrl");
-  return missing;
 }
 
 async function passwordRows(db: any, phone: string) {
@@ -50,32 +42,10 @@ async function passwordRows(db: any, phone: string) {
   `);
 }
 
-async function ensureCustomerUpdateCompletionInfrastructure(db: any) {
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS customerProfileUpdateCompletions (
-      customerId INT NOT NULL PRIMARY KEY,
-      phone VARCHAR(32) NOT NULL,
-      completedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY customerProfileUpdateCompletions_phone_unique (phone),
-      KEY customerProfileUpdateCompletions_completedAt_idx (completedAt)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-}
-
-async function customerUpdateAlreadyCompleted(db: any, customer: any) {
-  // Cadastros que já estão completos também não precisam entrar novamente no formulário.
-  // Isso cobre quem concluiu a atualização antes da criação do registro de conclusão.
-  if (missingFields(customer).length === 0) return true;
-  await ensureCustomerUpdateCompletionInfrastructure(db);
-  const phone = normalizeCustomerPhone(customer?.phone);
-  const completed = await rows(db, sql`
-    SELECT customerId
-    FROM customerProfileUpdateCompletions
-    WHERE customerId=${Number(customer?.id) || 0}
-       OR phone=${phone}
-    LIMIT 1
-  `);
-  return completed.length > 0;
+async function customerUpdateAlreadyCompleted(_db: any, customer: any) {
+  // A fonte de verdade são SEMPRE os dados atuais. Um cadastro atualizado no
+  // passado volta a ficar pendente se o ADM apagar/corrigir qualquer campo obrigatório.
+  return isCustomerProfileComplete(customer);
 }
 
 function alreadyUpdatedError() {
@@ -125,7 +95,10 @@ export const customerUpdateRouter = router({
       if (Number(customer.blocked) === 1) return { status: "blocked" as const };
       if (await customerUpdateAlreadyCompleted(db, customer)) return { status: "completed" as const };
       const passwords = await passwordRows(db, phone);
-      return { status: passwords.length ? "password" as const : "create_password" as const };
+      return {
+        status: passwords.length ? "password" as const : "create_password" as const,
+        missing: getMissingCustomerProfileFields(customer),
+      };
     }),
 
   login: publicProcedure
@@ -177,13 +150,13 @@ export const customerUpdateRouter = router({
         completed: await customerUpdateAlreadyCompleted(db, customer),
         customerNumber: customer.customerNumber || null,
         phone: normalizeCustomerPhone(customer.phone),
-        name: GENERIC_NAME.test(name) ? "" : name,
+        name: isGenericRecoveredCustomerName(name) ? "" : name,
         email: normalizeCustomerEmail(customer.email),
         cpf: normalizeCustomerCpf(customer.cpf),
         city: String(customer.city || "").trim(),
         uf: String(customer.uf || "").trim().toUpperCase(),
         profilePhotoUrl: String(customer.profilePhotoUrl || "").trim(),
-        missing: missingFields(customer),
+        missing: getMissingCustomerProfileFields(customer),
       };
     }),
 
@@ -229,7 +202,7 @@ export const customerUpdateRouter = router({
       const cpf = normalizeCustomerCpf(input.cpf);
       const city = input.city.trim().replace(/\s+/g, " ");
       const uf = input.uf.trim().toUpperCase();
-      if (GENERIC_NAME.test(name)) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo." });
+      if (isGenericRecoveredCustomerName(name)) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo." });
       if (!email) throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
       if (!cpf || !isValidCPF(cpf)) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido." });
       if (!/^[A-Z]{2}$/.test(uf)) throw new TRPCError({ code: "BAD_REQUEST", message: "UF inválida." });
@@ -251,11 +224,6 @@ export const customerUpdateRouter = router({
         WHERE id=${customer.id} AND deletedAt IS NULL
       `);
       const synchronization = await syncUnifiedCustomerRegistry([previousIdentity]);
-      await db.execute(sql`
-        INSERT INTO customerProfileUpdateCompletions (customerId, phone, completedAt)
-        VALUES (${customer.id}, ${normalizeCustomerPhone(customer.phone)}, NOW())
-        ON DUPLICATE KEY UPDATE completedAt=completedAt
-      `);
       return { success: true, synchronization };
     }),
 });
