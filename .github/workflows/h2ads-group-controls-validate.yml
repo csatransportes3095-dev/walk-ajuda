@@ -1,0 +1,209 @@
+name: H2ADS group controls validate
+
+on:
+  push:
+    branches:
+      - feat/h2ads-group-order-collapse-delete-20260830
+    paths:
+      - ".github/workflows/h2ads-group-controls-validate.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/h2ads-group-order-collapse-delete-20260830
+          fetch-depth: 0
+
+      - name: Apply isolated group controls
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Backend data layer: safe group deletion only when empty.
+          p = Path('server/h2ads.ts')
+          s = p.read_text(encoding='utf-8')
+          marker = '''export async function createH2AdsInstance(input: Pick<H2AdsInstance, "groupId" | "name"> & Partial<Pick<H2AdsInstance, "status" | "notes" | "sortOrder">>): Promise<number> {'''
+          helper = '''export async function deleteH2AdsGroup(id: number): Promise<boolean> {
+  const db = await requireH2AdsDb();
+  const existing = await db.select({ id: h2AdsGroups.id }).from(h2AdsGroups).where(eq(h2AdsGroups.id, id)).limit(1);
+  if (!existing[0]) return false;
+  const child = await db.select({ id: h2AdsInstances.id }).from(h2AdsInstances).where(eq(h2AdsInstances.groupId, id)).limit(1);
+  if (child[0]) throw new Error("Este grupo possui instâncias. Mova ou exclua as instâncias antes de apagar o grupo.");
+  const deleted = await db.delete(h2AdsGroups).where(eq(h2AdsGroups.id, id));
+  return Number(deleted[0].affectedRows) === 1;
+}
+
+'''
+          if 'export async function deleteH2AdsGroup' not in s:
+            if marker not in s: raise SystemExit('h2ads group delete marker missing')
+            s = s.replace(marker, helper + marker, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Router: expose safe deleteGroup.
+          p = Path('server/routers/h2ads.ts')
+          s = p.read_text(encoding='utf-8')
+          if 'deleteH2AdsGroup,' not in s:
+            s = s.replace('  deleteH2AdsInstance,\n', '  deleteH2AdsInstance,\n  deleteH2AdsGroup,\n', 1)
+          schema_marker = '''export const h2AdsDeleteInstanceSchema = z.object({
+  id: z.number().int().positive(),
+}).strict();'''
+          group_schema = '''export const h2AdsDeleteGroupSchema = z.object({
+  id: z.number().int().positive(),
+}).strict();
+
+'''
+          if 'h2AdsDeleteGroupSchema' not in s:
+            if schema_marker not in s: raise SystemExit('router schema marker missing')
+            s = s.replace(schema_marker, group_schema + schema_marker, 1)
+          mutation_marker = '''  createInstance: adminProcedure.input(h2AdsCreateInstanceSchema).mutation(async ({ input }) => {'''
+          mutation = '''  deleteGroup: adminProcedure.input(h2AdsDeleteGroupSchema).mutation(async ({ input }) => {
+    try {
+      const deleted = await deleteH2AdsGroup(input.id);
+      if (!deleted) throw new TRPCError({ code: "NOT_FOUND", message: "Grupo H2 Ads não encontrado." });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof TRPCError) throw error;
+      const message = error instanceof Error ? error.message : "Não foi possível excluir o grupo.";
+      throw new TRPCError({ code: "CONFLICT", message });
+    }
+  }),
+
+'''
+          if 'deleteGroup: adminProcedure' not in s:
+            if mutation_marker not in s: raise SystemExit('router mutation marker missing')
+            s = s.replace(mutation_marker, mutation + mutation_marker, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # UI controls.
+          p = Path('client/src/pages/H2Ads.tsx')
+          s = p.read_text(encoding='utf-8')
+          old_icons = 'Activity, ArrowLeft, CheckCircle2, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, ShieldCheck, Square, Trash2, Wifi, WifiOff, X'
+          new_icons = 'Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, ShieldCheck, Square, Trash2, Wifi, WifiOff, X'
+          s = s.replace(old_icons, new_icons, 1)
+          s = s.replace('  const updateGroup = trpc.h2Ads.updateGroup.useMutation();\n', '  const updateGroup = trpc.h2Ads.updateGroup.useMutation();\n  const deleteGroup = trpc.h2Ads.deleteGroup.useMutation();\n', 1)
+          state_marker = '  const [visualColors, setVisualColors] = useState<VisualColors>(() => readVisualColors());\n'
+          state_insert = state_marker + '  const [expandedGroups, setExpandedGroups] = useState<Set<number>>(() => new Set());\n  const [orderingGroups, setOrderingGroups] = useState(false);\n'
+          if 'expandedGroups' not in s:
+            if state_marker not in s: raise SystemExit('ui state marker missing')
+            s = s.replace(state_marker, state_insert, 1)
+          s = s.replace('createGroup.isPending || updateGroup.isPending || createInstance.isPending', 'createGroup.isPending || updateGroup.isPending || deleteGroup.isPending || createInstance.isPending', 1)
+
+          fn_marker = '''  const newInstance = (groupId?: number) => {'''
+          funcs = '''  const toggleGroup = (groupId: number) => setExpandedGroups(current => {
+    const next = new Set(current);
+    if (next.has(groupId)) next.delete(groupId); else next.add(groupId);
+    return next;
+  });
+
+  const moveGroup = async (groupId: number, direction: -1 | 1) => {
+    const index = groups.findIndex(group => group.id === groupId);
+    const targetIndex = index + direction;
+    if (index < 0 || targetIndex < 0 || targetIndex >= groups.length) return;
+    const current = groups[index];
+    const target = groups[targetIndex];
+    try {
+      await Promise.all([
+        updateGroup.mutateAsync({ id: current.id, sortOrder: targetIndex + 1 }),
+        updateGroup.mutateAsync({ id: target.id, sortOrder: index + 1 }),
+      ]);
+      await refresh();
+    } catch (error) { toast.error(errorText(error, "Não foi possível ordenar os grupos.")); }
+  };
+
+  const removeGroup = async (groupId: number, groupName: string) => {
+    const count = (instancesByGroup.get(groupId) ?? []).length;
+    if (count > 0) { toast.error(`O grupo ${groupName} possui ${count} instância(s). Mova ou exclua antes de apagar o grupo.`); return; }
+    if (!window.confirm(`Excluir definitivamente o grupo ${groupName}?`)) return;
+    try {
+      await deleteGroup.mutateAsync({ id: groupId });
+      setExpandedGroups(current => { const next = new Set(current); next.delete(groupId); return next; });
+      toast.success("Grupo excluído.");
+      await refresh();
+    } catch (error) { toast.error(errorText(error, "Não foi possível excluir o grupo.")); }
+  };
+
+'''
+          if 'const toggleGroup =' not in s:
+            if fn_marker not in s: raise SystemExit('ui function marker missing')
+            s = s.replace(fn_marker, funcs + fn_marker, 1)
+
+          old_header = '''<div className="flex gap-2"><button type="button" onClick={() => setGroupForm({ ...emptyGroup })} className="inline-flex items-center gap-2 rounded-xl border border-[#F5B800]/30 bg-[#F5B800]/10 px-4 py-2.5 text-sm font-black text-[#FFE37A]"><FolderPlus className="h-4 w-4" />Novo grupo</button><button type="button" onClick={() => newInstance()} className="inline-flex items-center gap-2 rounded-xl bg-[#F5B800] px-4 py-2.5 text-sm font-black text-[#171003]"><Plus className="h-4 w-4" />Nova instância</button></div>'''
+          new_header = '''<div className="flex flex-wrap gap-2"><button type="button" onClick={() => setOrderingGroups(value => !value)} className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black ${orderingGroups ? "border-[#148CFF]/40 bg-[#148CFF]/15 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-300"}`}><ArrowUpDown className="h-4 w-4" />{orderingGroups ? "Concluir ordem" : "Ordenar grupos"}</button><button type="button" onClick={() => setGroupForm({ ...emptyGroup })} className="inline-flex items-center gap-2 rounded-xl border border-[#F5B800]/30 bg-[#F5B800]/10 px-4 py-2.5 text-sm font-black text-[#FFE37A]"><FolderPlus className="h-4 w-4" />Novo grupo</button><button type="button" onClick={() => newInstance()} className="inline-flex items-center gap-2 rounded-xl bg-[#F5B800] px-4 py-2.5 text-sm font-black text-[#171003]"><Plus className="h-4 w-4" />Nova instância</button></div>'''
+          if old_header not in s: raise SystemExit('ui top header marker missing')
+          s = s.replace(old_header, new_header, 1)
+
+          old_map_start = '{groups.map(group => <GroupSection key={group.id} group={group}'
+          new_map_start = '{groups.map((group, groupIndex) => <GroupSection key={group.id} group={group}'
+          if old_map_start not in s: raise SystemExit('group map marker missing')
+          s = s.replace(old_map_start, new_map_start, 1)
+          old_tail = ' onDeleteInstance={removeInstance} instanceAction={instanceAction} />)}'
+          new_tail = ' onDeleteInstance={removeInstance} instanceAction={instanceAction} expanded={expandedGroups.has(group.id)} onToggle={() => toggleGroup(group.id)} ordering={orderingGroups} canMoveUp={groupIndex > 0} canMoveDown={groupIndex < groups.length - 1} onMoveUp={() => void moveGroup(group.id, -1)} onMoveDown={() => void moveGroup(group.id, 1)} onDeleteGroup={() => void removeGroup(group.id, group.name)} />)}'
+          if old_tail not in s: raise SystemExit('group map tail missing')
+          s = s.replace(old_tail, new_tail, 1)
+
+          # Replace GroupSection signature/body with controls while preserving InstanceCard.
+          start = s.index('function GroupSection(')
+          end = s.index('\nfunction InstanceCard(', start)
+          new_group = '''function GroupSection({ group, instances, profileByInstance, credentialByInstance, workerById, assignmentByInstance, browserRunByInstance, workers, busy, visualColors, onVisualColor, onEditGroup, onNewInstance, onEditInstance, onEditRoute, onAssignWorker, onPrepareBrowser, onLaunchBrowser, onCloseBrowser, onDeleteInstance, instanceAction, expanded, onToggle, ordering, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onDeleteGroup }: { group: { id: number; name: string; description: string | null; status: "active" | "archived"; sortOrder: number }; instances: { id: number; groupId: number; name: string; notes: string | null; status: "draft" | "paused" | "archived" }[]; profileByInstance: Map<number, NetworkProfile>; credentialByInstance: Map<number, unknown>; workerById: Map<number, BrowserWorker>; assignmentByInstance: Map<number, WorkerAssignment>; browserRunByInstance: Map<number, BrowserRun>; workers: BrowserWorker[]; busy: boolean; visualColors: VisualColors; onVisualColor: (kind: "group" | "instance", id: number, color: string) => void; onEditGroup: () => void; onNewInstance: () => void; onEditInstance: (instance: { id: number; groupId: number; name: string; notes: string | null; status: "draft" | "paused" | "archived" }) => void; onEditRoute: (id: number) => void; onAssignWorker: (instanceId: number, workerId: string) => void; onPrepareBrowser: (instanceId: number) => void; onLaunchBrowser: (instanceId: number) => void; onCloseBrowser: (instanceId: number) => void; onDeleteInstance: (instanceId: number, instanceName: string) => void; instanceAction: Record<number, string>; expanded: boolean; onToggle: () => void; ordering: boolean; canMoveUp: boolean; canMoveDown: boolean; onMoveUp: () => void; onMoveDown: () => void; onDeleteGroup: () => void }) {
+  const groupColor = visualColors[visualColorKey("group", group.id)] ?? GROUP_DEFAULT_COLOR;
+  return <section className="mb-4 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+    <header className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between ${expanded ? "border-b border-white/8" : ""}`}>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={onToggle} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-slate-300" title={expanded ? "Recolher grupo" : "Abrir grupo"}>{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>
+          <h4 className="rounded-lg border px-2.5 py-1 text-lg font-black text-white xl:text-xl" style={{ borderColor: groupColor, backgroundColor: colorBackground(groupColor) }}>{group.name}</h4>
+          <label className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-white/10 bg-black/30" title="Escolher cor do grupo"><input type="color" value={groupColor} onChange={event => onVisualColor("group", group.id, event.target.value)} className="h-5 w-5 cursor-pointer border-0 bg-transparent p-0" aria-label={`Cor do grupo ${group.name}`} /></label>
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${group.status === "active" ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200" : "border-white/10 bg-white/[0.04] text-slate-400"}`}>{statusName(group.status)}</span>
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-black text-slate-400">{instances.length} instância{instances.length === 1 ? "" : "s"}</span>
+        </div>
+        <p className="mt-1.5 text-sm text-slate-400">{group.description || "Sem descrição administrativa."}</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {ordering && <><button type="button" disabled={!canMoveUp || busy} onClick={onMoveUp} className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-slate-300 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" />Subir</button><button type="button" disabled={!canMoveDown || busy} onClick={onMoveDown} className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-slate-300 disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" />Descer</button></>}
+        <button type="button" onClick={onToggle} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300">{expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}{expanded ? "Recolher" : "Abrir"}</button>
+        <button type="button" onClick={onEditGroup} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300"><Pencil className="h-3.5 w-3.5" />Editar</button>
+        <button type="button" disabled={group.status !== "active"} onClick={onNewInstance} className="inline-flex items-center gap-1.5 rounded-lg border border-[#148CFF]/25 bg-[#148CFF]/10 px-3 py-2 text-xs font-bold text-[#8CC8FF] disabled:opacity-40"><Plus className="h-3.5 w-3.5" />Instância</button>
+        <button type="button" disabled={busy || instances.length > 0} onClick={onDeleteGroup} title={instances.length > 0 ? "Mova ou exclua as instâncias antes de apagar o grupo" : "Excluir grupo"} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-400/20 bg-rose-400/[0.06] px-3 py-2 text-xs font-bold text-rose-300 disabled:cursor-not-allowed disabled:opacity-35"><Trash2 className="h-3.5 w-3.5" />Excluir</button>
+      </div>
+    </header>
+    {expanded && <div className="grid grid-cols-1 gap-4 p-3 md:grid-cols-2 xl:grid-cols-4">{instances.length === 0 ? <p className="px-1 py-2 text-xs text-slate-500">Nenhuma instância cadastrada neste grupo.</p> : instances.map(instance => <InstanceCard key={instance.id} instance={instance} profile={profileByInstance.get(instance.id)} hasCredential={credentialByInstance.has(instance.id)} assignment={assignmentByInstance.get(instance.id)} browserRun={browserRunByInstance.get(instance.id)} worker={assignmentByInstance.get(instance.id) ? workerById.get(assignmentByInstance.get(instance.id)!.workerId) : undefined} workers={workers} busy={busy} visualColor={visualColors[visualColorKey("instance", instance.id)] ?? INSTANCE_DEFAULT_COLOR} actionState={instanceAction[instance.id]} onVisualColor={color => onVisualColor("instance", instance.id, color)} onAssignWorker={onAssignWorker} onPrepareBrowser={onPrepareBrowser} onLaunchBrowser={onLaunchBrowser} onCloseBrowser={onCloseBrowser} onDelete={() => onDeleteInstance(instance.id, instance.name)} onEditInstance={() => onEditInstance(instance)} onEditRoute={() => onEditRoute(instance.id)} />)}</div>}
+  </section>;
+}
+'''
+          s = s[:start] + new_group + s[end:]
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify isolated files
+        run: |
+          git diff --name-only | tee /tmp/files
+          grep -qx 'client/src/pages/H2Ads.tsx' /tmp/files
+          grep -qx 'server/h2ads.ts' /tmp/files
+          grep -qx 'server/routers/h2ads.ts' /tmp/files
+          test "$(wc -l < /tmp/files)" -eq 3
+          grep -q 'deleteH2AdsGroup' server/h2ads.ts
+          grep -q 'deleteGroup: adminProcedure' server/routers/h2ads.ts
+          grep -q 'Ordenar grupos' client/src/pages/H2Ads.tsx
+          grep -q 'expandedGroups' client/src/pages/H2Ads.tsx
+      - name: Build
+        run: pnpm build
+      - name: Commit validated implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/H2Ads.tsx server/h2ads.ts server/routers/h2ads.ts
+          git commit -m "feat(h2ads): ordenar recolher e excluir grupos"
+          git push origin HEAD:feat/h2ads-group-order-collapse-delete-20260830
