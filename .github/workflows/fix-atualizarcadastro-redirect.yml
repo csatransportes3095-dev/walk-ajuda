@@ -27,16 +27,7 @@ jobs:
           p = Path('client/src/pages/AtualizarCadastro.tsx')
           s = p.read_text(encoding='utf-8')
           marker = '\n  function acceptToken(nextToken: string) {'
-          effect = '''
-
-  useEffect(() => {
-    if (step !== "done" && step !== "already_done") return;
-    const timer = window.setTimeout(() => {
-      window.location.replace("/login");
-    }, 1800);
-    return () => window.clearTimeout(timer);
-  }, [step]);
-'''
+          effect = '\n\n  useEffect(() => {\n    if (step !== "done" && step !== "already_done") return;\n    const timer = window.setTimeout(() => {\n      window.location.replace("/login");\n    }, 1800);\n    return () => window.clearTimeout(timer);\n  }, [step]);\n'
           if s.count(marker) != 1:
               raise SystemExit(f'marker count={s.count(marker)}')
           s = s.replace(marker, effect + marker, 1)
