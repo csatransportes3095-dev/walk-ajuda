@@ -1,0 +1,64 @@
+name: Apply Schedule Central Update V2
+
+on:
+  push:
+    branches:
+      - fix/agendamento-atualizacao-central-20260830
+    paths:
+      - scripts/fix-schedule-central-update-v2.mjs
+      - .github/workflows/apply-schedule-central-update-v2.yml
+      - .github/schedule-central-update-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout patch source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Preserve patch script
+        run: cp scripts/fix-schedule-central-update-v2.mjs /tmp/fix-schedule-central-update-v2.mjs
+
+      - name: Start clean branch from current production
+        run: |
+          git fetch origin main
+          git checkout -B fix/agendamento-cadastro-central-final-20260830 origin/main
+          node /tmp/fix-schedule-central-update-v2.mjs
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run focused profile and schedule tests
+        run: pnpm exec vitest run server/customerProfile.test.ts server/scheduleProfileGuard.test.ts server/customerUpdateReturnPath.test.ts server/scheduleCentralUpdateWiring.test.ts
+
+      - name: TypeScript check
+        run: pnpm check
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Commit validated correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shared/customerUpdateReturnPath.ts client/src/components/CustomerProfileRedirectGate.tsx client/src/pages/AtualizarCadastro.tsx client/src/pages/SchedulePage.tsx server/scheduleProfileGuard.ts server/routers/schedule.ts server/scheduleProfileGuard.test.ts server/customerUpdateReturnPath.test.ts server/scheduleCentralUpdateWiring.test.ts
+          git commit -m "fix(schedule): exigir atualização central antes do agendamento"
+          git push origin HEAD:refs/heads/fix/agendamento-cadastro-central-final-20260830
