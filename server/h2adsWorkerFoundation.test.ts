@@ -57,7 +57,9 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(runner).toContain('host: "127.0.0.1"');
     expect(runner).toContain("https://api.ipify.org?format=json");
     expect(runner).not.toContain("console.log");
-    expect(session).toContain('"about:blank"');
+    expect(session).toContain("createInstanceLabelPage");
+    expect(session).toContain("labelPageUrl");
+    expect(session).toContain("privacyGuardPreflight");
     expect(session).toContain("--proxy-server=http://127.0.0.1:");
     expect(session).toContain("--user-data-dir=");
     expect(session).toContain("/api/h2ads/worker/runs/");
