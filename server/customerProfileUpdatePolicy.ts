@@ -173,8 +173,8 @@ export function evaluateCustomerProfileUpdateState(
     configuredFields: normalizeCustomerProfileUpdateFields(policy.fields),
     effectiveFields,
     missingFields,
-    // Uma nova ativação/revisão exige uma confirmação nova, mesmo que o valor anterior ainda seja válido.
-    pending: missingFields.length > 0 || (policy.enabled && completedRevision < policy.revision),
+    // Regra única: só existe atualização quando há campo obrigatório realmente ausente ou inválido.
+    pending: missingFields.length > 0,
     revision: policy.revision,
     updatedAt: policy.updatedAt === new Date(0).toISOString() ? null : policy.updatedAt,
     updatedBy: policy.updatedBy,
