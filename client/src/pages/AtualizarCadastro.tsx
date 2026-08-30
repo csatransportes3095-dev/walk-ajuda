@@ -32,6 +32,11 @@ function formatCpf(value: string) {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+function formatZipCode(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  return digits.length <= 5 ? digits : `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
 function getSafeReturnPath() {
   if (typeof window === "undefined") return "";
   const raw = new URLSearchParams(window.location.search).get("returnTo") || "";
@@ -57,6 +62,11 @@ export default function AtualizarCadastro() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
+  const [zipCode, setZipCode] = useState("");
+  const [addressLine, setAddressLine] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [addressNumber, setAddressNumber] = useState("");
+  const [addressComplement, setAddressComplement] = useState("");
   const [city, setCity] = useState("");
   const [uf, setUf] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
@@ -90,6 +100,11 @@ export default function AtualizarCadastro() {
     setName(profile.name || "");
     setEmail(profile.email || "");
     setCpf(formatCpf(profile.cpf || ""));
+    setZipCode(formatZipCode(profile.zipCode || ""));
+    setAddressLine(profile.addressLine || "");
+    setNeighborhood(profile.neighborhood || "");
+    setAddressNumber(profile.addressNumber || "");
+    setAddressComplement(profile.addressComplement || "");
     setCity(profile.city || "");
     setUf(profile.uf || "");
     setPhotoUrl(profile.profilePhotoUrl || "");
@@ -181,9 +196,22 @@ export default function AtualizarCadastro() {
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
     if (!isValidCPF(normalizeCpf(cpf))) return toast.error("Digite um CPF válido.");
+    if (zipCode.replace(/\D/g, "").length !== 8) return toast.error("Digite um CEP válido.");
     if (!photoUrl) return toast.error("Envie sua foto de perfil.");
     try {
-      await saveMutation.mutateAsync({ token, name, email, cpf, city, uf });
+      await saveMutation.mutateAsync({
+        token,
+        name,
+        email,
+        cpf,
+        zipCode,
+        addressLine,
+        neighborhood,
+        addressNumber,
+        addressComplement,
+        city,
+        uf,
+      });
       localStorage.removeItem(TOKEN_KEY);
       setToken("");
       setStep("done");
@@ -266,7 +294,16 @@ export default function AtualizarCadastro() {
               <Field label="Nome completo"><input value={name} onChange={(e) => setName(e.target.value)} className={INPUT_CLASS} required minLength={2} autoComplete="name" /></Field>
               <Field label="E-mail"><input value={email} onChange={(e) => setEmail(e.target.value)} className={INPUT_CLASS} required type="email" inputMode="email" autoComplete="email" /></Field>
               <Field label="CPF"><input value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))} className={INPUT_CLASS} required inputMode="numeric" placeholder="000.000.000-00" /></Field>
-              <div className="grid grid-cols-[1fr_92px] gap-3"><Field label="Cidade"><input value={city} onChange={(e) => setCity(e.target.value)} className={INPUT_CLASS} required /></Field><Field label="UF"><select value={uf} onChange={(e) => setUf(e.target.value)} className={INPUT_CLASS} required><option value="">UF</option>{UFS.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[.03] p-4">
+                <p className="mb-4 text-sm font-black text-violet-200">Endereço</p>
+                <div className="space-y-4">
+                  <Field label="CEP"><input value={zipCode} onChange={(e) => setZipCode(formatZipCode(e.target.value))} className={INPUT_CLASS} required inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" /></Field>
+                  <Field label="Rua"><input value={addressLine} onChange={(e) => setAddressLine(e.target.value)} className={INPUT_CLASS} required autoComplete="address-line1" /></Field>
+                  <div className="grid grid-cols-[1fr_110px] gap-3"><Field label="Bairro"><input value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} className={INPUT_CLASS} required /></Field><Field label="Número"><input value={addressNumber} onChange={(e) => setAddressNumber(e.target.value)} className={INPUT_CLASS} required /></Field></div>
+                  <Field label="Complemento (opcional)"><input value={addressComplement} onChange={(e) => setAddressComplement(e.target.value)} className={INPUT_CLASS} autoComplete="address-line2" placeholder="Apto, bloco, casa..." /></Field>
+                  <div className="grid grid-cols-[1fr_92px] gap-3"><Field label="Cidade"><input value={city} onChange={(e) => setCity(e.target.value)} className={INPUT_CLASS} required autoComplete="address-level2" /></Field><Field label="UF"><select value={uf} onChange={(e) => setUf(e.target.value)} className={INPUT_CLASS} required autoComplete="address-level1"><option value="">UF</option>{UFS.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field></div>
+                </div>
+              </div>
               <PrimaryButton busy={saveMutation.isPending || uploadPhotoMutation.isPending}>SALVAR EM TODO O SISTEMA</PrimaryButton>
             </form>
           )}
