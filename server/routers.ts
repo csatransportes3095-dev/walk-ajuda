@@ -2051,22 +2051,13 @@ export const appRouter = router({
       .input(z.object({
         customerId: z.number().int().positive(),
         enabled: z.boolean(),
-        fields: z.array(z.enum(['name', 'phone', 'cpf', 'email', 'cep', 'street', 'addressNumber', 'neighborhood', 'city', 'uf', 'profilePhotoUrl'])).max(11),
+        fields: z.array(z.string()),
       }))
-      .mutation(async ({ input, ctx }) => {
-        const db = await (await import('./db')).getDb() as any;
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
-        const customerRows = await db.execute(sql`SELECT id, name, phone, email, cpf, cep, street, addressNumber, neighborhood, addressComplement, city, uf, profilePhotoUrl FROM customers WHERE id=${input.customerId} AND deletedAt IS NULL LIMIT 1`);
-        const customer = (customerRows[0] as any[])?.[0];
-        if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado.' });
-        const updatedBy = (ctx as any)?.user?.name || (ctx as any)?.user?.username || 'Administrador';
-        let policy;
-        try {
-          policy = await saveCustomerProfileUpdatePolicy({ ...input, updatedBy });
-        } catch (error: any) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: error?.message || 'Não foi possível salvar a exigência.' });
-        }
-        return { success: true, policy, state: await getCustomerProfileUpdateState(customer) };
+      .mutation(async () => {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'A atualização cadastral é automática e só ocorre quando faltam dados obrigatórios.',
+        });
       }),
 
     // O H2 Score pertence ao customerId do cadastro principal. Nenhum cadastro paralelo é criado aqui.
