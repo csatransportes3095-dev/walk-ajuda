@@ -17,6 +17,7 @@ import { eq, and } from "drizzle-orm";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { resolveReferralDeclaration } from "../referral";
 import { getCustomerProfileUpdateState } from "../customerProfileUpdatePolicy";
+import { buildSpreadsheetClientBackup, restoreSpreadsheetClientBackup } from "../spreadsheetClientBackup";
 
 // Resolve o clientId a partir do token de sessão da planilha.
 // Lança UNAUTHORIZED se o token for inválido ou expirado.
@@ -167,16 +168,16 @@ export const spreadsheetRouter = router({
       otherEarnings: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      await resolveClientId(input.token);
+      const clientId = await resolveClientId(input.token);
       const { token, ...rest } = input;
-      return await updateEarning(rest.id, rest);
+      return await updateEarning(rest.id, rest, clientId);
     }),
 
   deleteEarning: publicProcedure
     .input(z.object({ token: z.string(), id: z.number() }))
     .mutation(async ({ input }) => {
-      await resolveClientId(input.token);
-      return await deleteEarning(input.id);
+      const clientId = await resolveClientId(input.token);
+      return await deleteEarning(input.id, clientId);
     }),
 
   // EXPENSES
@@ -255,16 +256,16 @@ export const spreadsheetRouter = router({
       otherExpenses: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      await resolveClientId(input.token);
+      const clientId = await resolveClientId(input.token);
       const { token, ...rest } = input;
-      return await updateExpense(rest.id, rest);
+      return await updateExpense(rest.id, rest, clientId);
     }),
 
   deleteExpense: publicProcedure
     .input(z.object({ token: z.string(), id: z.number() }))
     .mutation(async ({ input }) => {
-      await resolveClientId(input.token);
-      return await deleteExpense(input.id);
+      const clientId = await resolveClientId(input.token);
+      return await deleteExpense(input.id, clientId);
     }),
 
   // OPERATIONAL
@@ -325,7 +326,7 @@ export const spreadsheetRouter = router({
       ridesDeliveries: z.number().optional(),
     }))
     .mutation(async ({ input }) => {
-      await resolveClientId(input.token);
+      const clientId = await resolveClientId(input.token);
       const { token, ...rest } = input;
       const data: any = { ...rest };
       if (
@@ -334,14 +335,14 @@ export const spreadsheetRouter = router({
       ) {
         data.rideCount = (rest.ridesUber || 0) + (rest.rides99 || 0) + (rest.ridesIndrive || 0) + (rest.ridesParticular || 0) + (rest.ridesDeliveries || 0);
       }
-      return await updateOperational(rest.id, data);
+      return await updateOperational(rest.id, data, clientId);
     }),
 
   deleteOperational: publicProcedure
     .input(z.object({ token: z.string(), id: z.number() }))
     .mutation(async ({ input }) => {
-      await resolveClientId(input.token);
-      return await deleteOperational(input.id);
+      const clientId = await resolveClientId(input.token);
+      return await deleteOperational(input.id, clientId);
     }),
 
   // GOALS
@@ -380,16 +381,16 @@ export const spreadsheetRouter = router({
       monthlyGoal: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      await resolveClientId(input.token);
+      const clientId = await resolveClientId(input.token);
       const { token, ...rest } = input;
-      return await updateGoal(rest.id, rest);
+      return await updateGoal(rest.id, rest, clientId);
     }),
 
   deleteGoal: publicProcedure
     .input(z.object({ token: z.string(), id: z.number() }))
     .mutation(async ({ input }) => {
-      await resolveClientId(input.token);
-      return await deleteGoal(input.id);
+      const clientId = await resolveClientId(input.token);
+      return await deleteGoal(input.id, clientId);
     }),
 
   // === AUTENTICAÃ‡ÃƒO SPREADSHEET ===
@@ -2048,6 +2049,30 @@ export const spreadsheetRouter = router({
       await db.delete(spreadsheetOperational).where(eq(spreadsheetOperational.userId, clientId));
       await db.delete(spreadsheetGoals).where(eq(spreadsheetGoals.userId, clientId));
       return { success: true };
+    }),
+
+  // Backup local do cliente: exporta apenas dados da própria planilha autenticada.
+  exportBackup: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ input }) => {
+      const clientId = await resolveClientId(input.token);
+      try {
+        return await buildSpreadsheetClientBackup(clientId);
+      } catch (error: any) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: error?.message || 'Não foi possível gerar o backup.' });
+      }
+    }),
+
+  // Restauração substitui somente os dados da conta autenticada; IDs/userIds do arquivo são ignorados.
+  restoreBackup: publicProcedure
+    .input(z.object({ token: z.string(), payload: z.string().max(15_000_000) }))
+    .mutation(async ({ input }) => {
+      const clientId = await resolveClientId(input.token);
+      try {
+        return await restoreSpreadsheetClientBackup(clientId, input.payload);
+      } catch (error: any) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: error?.message || 'Não foi possível restaurar o backup.' });
+      }
     }),
 
   // === ANALISADOR DE CORRIDAS ===
