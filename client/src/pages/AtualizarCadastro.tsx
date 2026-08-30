@@ -44,7 +44,7 @@ export default function AtualizarCadastro() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || localStorage.getItem("cp_token") || "");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
@@ -291,6 +291,7 @@ export default function AtualizarCadastro() {
                 <div className="relative"><Phone className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" /><input autoFocus inputMode="tel" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(11) 99999-9999" className={`${INPUT_CLASS} pl-12`} /></div>
               </Field>
               <PrimaryButton busy={busy}>CONTINUAR</PrimaryButton>
+              <button type="button" onClick={exitUpdate} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-400 transition hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200">SAIR / VOLTAR AO INÍCIO</button>
             </form>
           )}
 
@@ -316,7 +317,7 @@ export default function AtualizarCadastro() {
           {step === "profile" && profileQuery.data && (
             <form onSubmit={saveProfile} className="space-y-5">
               <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">Complete seus dados</h2><p className="text-xs text-slate-400">Telefone confirmado: {formatPhone(profileQuery.data.phone)}</p></div><button type="button" onClick={exitUpdate} className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-black text-red-200 hover:bg-red-500/20">SAIR</button></div>
-              {requiredFields.length > 0 ? <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100"><p className="font-black">Atualização cadastral obrigatória pelo administrador.</p><p className="mt-1">Revise: {requiredLabels.join(", ")}.</p></div> : <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs text-emerald-100">Confira os dados abaixo para concluir sua atualização.</p>}
+              {requiredFields.length > 0 ? <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100"><p className="font-black">Complete os dados obrigatórios que estão faltando.</p><p className="mt-1">Revise: {requiredLabels.join(", ")}.</p></div> : <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs text-emerald-100">Confira os dados abaixo para concluir sua atualização.</p>}
               <label className="block cursor-pointer rounded-2xl border border-dashed border-violet-400/50 bg-violet-400/5 p-4 text-center hover:bg-violet-400/10">
                 {photoUrl ? <img src={photoUrl} alt="Foto de perfil" className="mx-auto h-24 w-24 rounded-full object-cover ring-2 ring-violet-400" /> : <Upload className="mx-auto h-9 w-9 text-violet-300" />}
                 <span className="mt-2 block text-sm font-bold">{uploadPhotoMutation.isPending ? "Enviando foto..." : photoUrl ? "Trocar foto de perfil" : "Enviar foto de perfil"}</span>
