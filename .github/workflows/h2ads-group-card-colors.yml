@@ -17,7 +17,7 @@ jobs:
           ref: feat/h2ads-group-card-colors-20260830
           fetch-depth: 0
       - name: Apply patch
-        run: python3 scripts/patch-h2ads-group-card-colors.py
+        run: python3 scripts/patch-h2ads-group-card-colors-v2.py
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -38,7 +38,7 @@ jobs:
           grep -qx 'server/h2ads.ts' /tmp/files
           grep -qx 'server/routers/h2ads.ts' /tmp/files
           test "$(wc -l < /tmp/files)" -eq 8
-          grep -q 'cardColor' drizzle/schema.ts
+          grep -q 'cardColor: varchar("cardColor", { length: 32 }).notNull().default("#148CFF")' drizzle/schema.ts
           grep -q 'Cor dos cards das instâncias' client/src/pages/H2Ads.tsx
           grep -q 'visualColor={groupColor}' client/src/pages/H2Ads.tsx
           ! grep -q 'Escolher cor da instância' client/src/pages/H2Ads.tsx
