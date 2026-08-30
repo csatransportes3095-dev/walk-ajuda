@@ -18,6 +18,7 @@ import {
   getMissingCustomerProfileFields,
   isCustomerProfileComplete,
   isGenericRecoveredCustomerName,
+  normalizeCustomerZipCode,
 } from "../customerProfile";
 import { storagePut } from "../storage";
 
@@ -153,6 +154,11 @@ export const customerUpdateRouter = router({
         name: isGenericRecoveredCustomerName(name) ? "" : name,
         email: normalizeCustomerEmail(customer.email),
         cpf: normalizeCustomerCpf(customer.cpf),
+        zipCode: normalizeCustomerZipCode(customer.zipCode),
+        addressLine: String(customer.addressLine || "").trim(),
+        neighborhood: String(customer.neighborhood || "").trim(),
+        addressNumber: String(customer.addressNumber || "").trim(),
+        addressComplement: String(customer.addressComplement || "").trim(),
         city: String(customer.city || "").trim(),
         uf: String(customer.uf || "").trim().toUpperCase(),
         profilePhotoUrl: String(customer.profilePhotoUrl || "").trim(),
@@ -190,6 +196,11 @@ export const customerUpdateRouter = router({
       name: z.string().trim().min(2).max(128),
       email: z.string().trim().email().max(320),
       cpf: z.string().min(11).max(18),
+      zipCode: z.string().min(8).max(10),
+      addressLine: z.string().trim().min(2).max(255),
+      neighborhood: z.string().trim().min(2).max(128),
+      addressNumber: z.string().trim().min(1).max(32),
+      addressComplement: z.string().trim().max(128).optional().default(""),
       city: z.string().trim().min(2).max(128),
       uf: z.string().trim().length(2),
     }))
@@ -200,11 +211,17 @@ export const customerUpdateRouter = router({
       const name = input.name.trim().replace(/\s+/g, " ");
       const email = normalizeCustomerEmail(input.email);
       const cpf = normalizeCustomerCpf(input.cpf);
+      const zipCode = normalizeCustomerZipCode(input.zipCode);
+      const addressLine = input.addressLine.trim().replace(/\s+/g, " ");
+      const neighborhood = input.neighborhood.trim().replace(/\s+/g, " ");
+      const addressNumber = input.addressNumber.trim();
+      const addressComplement = input.addressComplement.trim().replace(/\s+/g, " ");
       const city = input.city.trim().replace(/\s+/g, " ");
       const uf = input.uf.trim().toUpperCase();
       if (isGenericRecoveredCustomerName(name)) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo." });
       if (!email) throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
       if (!cpf || !isValidCPF(cpf)) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido." });
+      if (!zipCode) throw new TRPCError({ code: "BAD_REQUEST", message: "CEP inválido." });
       if (!/^[A-Z]{2}$/.test(uf)) throw new TRPCError({ code: "BAD_REQUEST", message: "UF inválida." });
       const photoRows = await rows(db, sql`SELECT profilePhotoUrl FROM customers WHERE id=${customer.id} LIMIT 1`);
       if (!String(photoRows[0]?.profilePhotoUrl || "").trim()) {
@@ -218,7 +235,10 @@ export const customerUpdateRouter = router({
       const previousIdentity = { phone: customer.phone, cpf: customer.cpf };
       await db.execute(sql`
         UPDATE customers SET
-          name=${name}, email=${email}, cpf=${cpf}, city=${city}, uf=${uf},
+          name=${name}, email=${email}, cpf=${cpf},
+          zipCode=${zipCode}, addressLine=${addressLine}, neighborhood=${neighborhood},
+          addressNumber=${addressNumber}, addressComplement=${addressComplement || null},
+          city=${city}, uf=${uf},
           normalizedPhone=${normalizeCustomerPhone(customer.phone)},
           normalizedCpf=${cpf}, normalizedEmail=${email}, updatedAt=NOW()
         WHERE id=${customer.id} AND deletedAt IS NULL
