@@ -5,7 +5,6 @@ import { Pencil, Trash2, Download, Search, X, Users, Gift, Camera, KeyRound, Ref
 import AdminHeader from "@/components/AdminHeader";
 import { useTimezone } from "@/hooks/useTimezone";
 import { useLocation } from "wouter";
-import { CUSTOMER_PROFILE_UPDATE_FIELD_OPTIONS, type CustomerProfileUpdateField } from "@shared/customerProfileUpdate";
 
 type Customer = {
   id: number;
@@ -35,16 +34,6 @@ type Customer = {
   blocked?: number;
   blockReason?: string | null;
   blockedAt?: number | Date | null;
-  profileUpdatePolicy?: {
-    enabled: boolean;
-    configuredFields: CustomerProfileUpdateField[];
-    effectiveFields: CustomerProfileUpdateField[];
-    missingFields: CustomerProfileUpdateField[];
-    pending: boolean;
-    revision: number;
-    updatedAt: string | null;
-    updatedBy?: string;
-  };
 };
 
 // Apenas os objetos R2 recuperados precisam ignorar a cópia antiga marcada como imutável no navegador.
@@ -337,69 +326,6 @@ function LoginHistoryColumn({ phone, formatDate }: { phone: string; formatDate: 
   );
 }
 
-function CustomerProfileUpdatePolicyCard({ customer, onSaved }: { customer: Customer; onSaved: () => void }) {
-  const policy = customer.profileUpdatePolicy;
-  const [open, setOpen] = useState(false);
-  const [enabled, setEnabled] = useState(policy?.enabled ?? false);
-  const [fields, setFields] = useState<CustomerProfileUpdateField[]>(policy?.configuredFields ?? []);
-  const saveMutation = trpc.customers.setProfileUpdatePolicy.useMutation({
-    onSuccess: (result) => {
-      setEnabled(result.policy.enabled);
-      setFields(result.policy.fields);
-      setOpen(false);
-      onSaved();
-      toast.success(result.policy.enabled ? "Atualização obrigatória ativada para este cliente." : "Atualização obrigatória desativada.");
-    },
-    onError: (error) => toast.error(error.message || "Não foi possível salvar a exigência."),
-  });
-
-  useEffect(() => {
-    setEnabled(policy?.enabled ?? false);
-    setFields(policy?.configuredFields ?? []);
-  }, [policy?.enabled, policy?.revision, JSON.stringify(policy?.configuredFields || [])]);
-
-  const toggleField = (field: CustomerProfileUpdateField) => {
-    setFields((current) => current.includes(field) ? current.filter((item) => item !== field) : [...current, field]);
-  };
-
-  return (
-    <div className="mt-3 rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 p-3" onClick={(event) => event.stopPropagation()}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-black text-fuchsia-100">Atualização obrigatória do cadastro</p>
-          <p className="text-xs text-fuchsia-100/70">
-            {policy?.pending ? "Pendente para este cliente." : "Sem pendência individual ativa."}
-            {!String(customer.profilePhotoUrl || '').trim() ? " Foto ausente: obrigatória automaticamente." : ""}
-          </p>
-        </div>
-        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={`rounded-xl border px-3 py-2 text-xs font-black transition ${enabled ? 'border-fuchsia-300 bg-fuchsia-400 text-slate-950' : 'border-white/20 bg-white/10 text-white hover:bg-white/20'}`}>
-          {enabled ? "ATIVA" : "INATIVA"} · {open ? "Fechar" : "Configurar"}
-        </button>
-      </div>
-      {open && (
-        <div className="mt-3 space-y-3 border-t border-white/10 pt-3">
-          <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-slate-950/30 p-3 text-sm font-bold">
-            <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="h-4 w-4 accent-fuchsia-500" />
-            Obrigar este cliente a confirmar uma nova atualização
-          </label>
-          <p className="text-xs leading-5 text-slate-300">Selecione os campos que deverão ser revisados. A foto sem URL continua obrigatória mesmo com esta ativação desligada. Ativar ou desativar não altera nenhum dado do cliente.</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {CUSTOMER_PROFILE_UPDATE_FIELD_OPTIONS.map((option) => (
-              <label key={option.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-2 text-xs font-bold text-slate-100">
-                <input type="checkbox" checked={fields.includes(option.id)} onChange={() => toggleField(option.id)} className="h-4 w-4 accent-fuchsia-500" />
-                {option.label}
-              </label>
-            ))}
-          </div>
-          <p className="text-[11px] text-slate-400">Campos selecionados: {fields.length ? fields.map((field) => CUSTOMER_PROFILE_UPDATE_FIELD_OPTIONS.find((option) => option.id === field)?.label).join(', ') : 'nenhum'}</p>
-          <button type="button" disabled={saveMutation.isPending || (enabled && fields.length === 0)} onClick={() => saveMutation.mutate({ customerId: customer.id, enabled, fields })} className="w-full rounded-xl bg-fuchsia-500 px-4 py-2.5 text-xs font-black text-white transition hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50">
-            {saveMutation.isPending ? "SALVANDO..." : "SALVAR EXIGÊNCIA"}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function AdminCustomers() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -1320,7 +1246,6 @@ export default function AdminCustomers() {
                         )}
                       </div>
                     ) : null}
-                    <CustomerProfileUpdatePolicyCard customer={c} onSaved={() => customersQuery.refetch()} />
                     {/* Ações */}
                     <div className="flex gap-1 mt-2 flex-wrap">
                       <button onClick={() => setReferralModal(c)} className="p-1.5 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors" title="Links de Indicação">
