@@ -227,15 +227,27 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null 
     void requestRoute(intendedRoute);
   }, [intendedRoute, autoRouteHandled, sessionQ.data?.authenticated, sessionQ.data?.customer?.profileUpdateRequired, sessionQ.data?.access, sessionQ.data?.routeStates]);
 
+  const openCentralProfileUpdate = () => {
+    if (token) {
+      localStorage.setItem('cp_token', token);
+      localStorage.setItem('customer_update_token', token);
+    }
+    const phoneHint = sessionQ.data?.customer?.phone || '';
+    if (phoneHint) localStorage.setItem('customer_update_phone_hint', phoneHint);
+    const returnTo = intendedRoute === 'gastos' ? '/gastos' : intendedRoute === 'emprestimo' ? '/emprestimo' : '/';
+    sessionStorage.setItem('h2_customer_return_to', returnTo);
+    window.location.assign('/atualizarcadastro');
+  };
+
   const customer = sessionQ.data?.authenticated ? sessionQ.data.customer : null;
   if (customer?.profileUpdateRequired) return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <div style={{ ...cardStyle, border: '1px solid rgba(245,158,11,.35)' }}>
       <AlertTriangle size={21} color="#fbbf24" />
       <h3 style={{ margin: '8px 0 4px', color: '#fff', fontSize: 16 }}>Atualização cadastral obrigatória</h3>
       <p style={{ margin: '0 0 10px', color: 'rgba(255,255,255,.68)', fontSize: 12, lineHeight: 1.45 }}>O administrador solicitou a revisão de alguns dados. Conclua a atualização para voltar a consultar pedidos e empréstimos.</p>
-      <p style={{ margin: 0, color: '#fcd34d', fontSize: 12 }}>Campos: {(customer.profileUpdateFields || []).map((field: string) => ({ name: 'nome', phone: 'telefone', email: 'e-mail', cpf: 'CPF', city: 'cidade', uf: 'UF', profilePhotoUrl: 'foto' } as Record<string, string>)[field] || field).join(', ')}</p>
+      <p style={{ margin: 0, color: '#fcd34d', fontSize: 12 }}>Campos: {(customer.profileUpdateFields || []).map((field: string) => ({ name: 'nome', email: 'e-mail', cpf: 'CPF', cep: 'CEP', street: 'rua', addressNumber: 'número', neighborhood: 'bairro', city: 'cidade', uf: 'UF', profilePhotoUrl: 'foto' } as Record<string, string>)[field] || field).join(', ')}</p>
     </div>
-    <button type="button" onClick={() => window.location.assign('/atualizarcadastro')} style={primaryStyle}>Atualizar cadastro</button>
+    <button type="button" onClick={openCentralProfileUpdate} style={primaryStyle}>Atualizar cadastro</button>
     <button type="button" onClick={logout} style={backStyle}>Sair</button>
   </div>;
   if (!customer && passwordSetupPhone) return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

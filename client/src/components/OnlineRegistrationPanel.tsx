@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, Camera, Eye, EyeOff, KeyRound } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
-const steps = ['route', 'name', 'phone', 'cpf', 'email', 'cep', 'city', 'uf', 'referrer', 'photo', 'confirm', 'password'] as const;
+const steps = ['route', 'name', 'phone', 'cpf', 'email', 'cep', 'street', 'addressNumber', 'neighborhood', 'city', 'uf', 'referrer', 'photo', 'confirm', 'password'] as const;
 type Step = typeof steps[number];
 type Route = 'site' | 'acompanhar' | 'gastos' | 'emprestimo';
 type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void; initialRoute?: 'gastos' | 'emprestimo' | null };
@@ -19,7 +19,7 @@ function toBase64(file: File) {
 export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone, initialRoute = null }: Props) {
   const [index, setIndex] = useState(initialRoute ? 1 : 0);
   const [route, setRoute] = useState<Route>(initialRoute || 'site');
-  const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', city: '', uf: '', referrerPhone: '', profilePhotoUrl: '' });
+  const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', street: '', addressNumber: '', neighborhood: '', city: '', uf: '', referrerPhone: '', profilePhotoUrl: '' });
   const [value, setValue] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState('');
@@ -46,6 +46,9 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
     cpf: 'Informe seu CPF',
     email: 'Informe seu e-mail',
     cep: 'Informe seu CEP',
+    street: 'Informe sua rua / logradouro',
+    addressNumber: 'Informe o número do endereço',
+    neighborhood: 'Informe seu bairro',
     city: 'Qual é sua cidade?',
     uf: 'Selecione seu estado',
     referrer: 'Telefone de quem indicou você',
@@ -140,7 +143,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
         const response = await fetch(`https://viacep.com.br/ws/${cleaned}/json/`);
         const address = await response.json();
         if (!address.erro) {
-          next = { ...next, city: address.localidade || next.city, uf: address.uf || next.uf };
+          next = { ...next, street: address.logradouro || next.street, neighborhood: address.bairro || next.neighborhood, city: address.localidade || next.city, uf: address.uf || next.uf };
           setData(next);
         }
       }
@@ -171,7 +174,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
       ) : step === 'photo' ? (
         <label style={{ ...choice, display: 'block', textAlign: 'center' }}><Camera size={22} style={{ marginBottom: 6 }} /><div>{file ? file.name : 'Escolher foto'}</div><input type="file" accept="image/*" capture="user" onChange={e => setFile(e.target.files?.[0] || null)} style={{ display: 'none' }} /></label>
       ) : step === 'confirm' ? (
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>CPF:</b> {data.cpf}</div><div><b>E-mail:</b> {data.email}</div><div><b>CEP:</b> {data.cep}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div><div><b>Indicador:</b> {data.referrerPhone}</div></div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>CPF:</b> {data.cpf}</div><div><b>E-mail:</b> {data.email}</div><div><b>CEP:</b> {data.cep}</div><div><b>Rua:</b> {data.street}</div><div><b>Número:</b> {data.addressNumber}</div><div><b>Bairro:</b> {data.neighborhood}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div><div><b>Indicador:</b> {data.referrerPhone}</div></div>
       ) : step === 'password' ? (
         passwordCompleted ? (
           <div style={{ marginTop: 8, padding: 12, borderRadius: 10, background: 'rgba(34,197,94,.12)', border: '1px solid rgba(74,222,128,.45)', color: '#dcfce7', fontSize: 13, lineHeight: 1.5 }}>
