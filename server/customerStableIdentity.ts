@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import {
+  ensureCustomerIdentityInfrastructure,
   findMainCustomerByIdentity,
   normalizeCustomerCpf,
   normalizeCustomerEmail,
@@ -40,6 +41,10 @@ export async function ensureStableCustomerIdentityInfrastructure(dbArg?: any): P
     const db = dbArg || await getDb() as any;
     if (!db) return;
     try {
+      // Garante primeiro as colunas canônicas do perfil/endereço. Isso evita que
+      // uma sessão resolvida diretamente por customerId consulte colunas ainda não provisionadas.
+      await ensureCustomerIdentityInfrastructure(db);
+
       // Regra de negócio: telefone é a identidade fixa do cliente.
       // NÃO alterar a coluna para aceitar NULL e NÃO permitir troca/apagamento depois do cadastro.
       await db.execute(sql.raw(`
