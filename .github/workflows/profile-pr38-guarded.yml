@@ -8,6 +8,7 @@ on:
       - scripts/profile-pr38-patch.mjs
       - scripts/profile-pr38-hardening.mjs
       - scripts/profile-pr38-types-fix.mjs
+      - scripts/profile-pr38-final-audit.mjs
       - .github/workflows/profile-pr38-guarded.yml
   workflow_dispatch:
 
@@ -38,6 +39,7 @@ jobs:
           node scripts/profile-pr38-patch.mjs
           node scripts/profile-pr38-hardening.mjs
           node scripts/profile-pr38-types-fix.mjs
+          node scripts/profile-pr38-final-audit.mjs
 
       - name: Validate patch whitespace
         run: git diff --check
@@ -55,7 +57,7 @@ jobs:
           set -e
           cat /tmp/pr38-tsc.log
           mv /tmp/tsconfig.pr38.json tsconfig.json
-          SCOPED='client/src/components/CustomerProfileRedirectGate.tsx|client/src/components/PasswordGate.tsx|client/src/main.tsx|client/src/pages/AtualizarCadastro.tsx|client/src/pages/GastosLoginPage.tsx|client/src/pages/GastosPage.tsx|client/src/pages/EmprestimoPage.tsx|client/src/pages/OrderTracking.tsx|client/src/pages/AdminCustomers.tsx|server/customerAccess.ts|server/customerIdentity.ts|server/customerProfile.ts|server/customerStableIdentity.ts|server/routers/customerUpdate.ts|drizzle/schema.ts'
+          SCOPED='client/src/components/CustomerProfileRedirectGate.tsx|client/src/components/PasswordGate.tsx|client/src/main.tsx|client/src/pages/AtualizarCadastro.tsx|client/src/pages/GastosLoginPage.tsx|client/src/pages/GastosPage.tsx|client/src/pages/EmprestimoPage.tsx|client/src/pages/OrderTracking.tsx|client/src/pages/AdminCustomers.tsx|server/customerAccess.ts|server/customerIdentity.ts|server/customerProfile.ts|server/customerStableIdentity.ts|server/routers/customerUpdate.ts|server/routers/customerPassword.ts|server/routers.ts|drizzle/schema.ts'
           if grep -E "^($SCOPED)\(" /tmp/pr38-tsc.log; then
             echo "PR #38 introduced or still contains scoped TypeScript errors."
             exit 1
@@ -65,7 +67,22 @@ jobs:
           fi
 
       - name: Unit tests
-        run: pnpm test
+        id: unit_tests
+        run: |
+          set +e
+          pnpm test 2>&1 | tee /tmp/pr38-vitest.log
+          TEST_EXIT=${PIPESTATUS[0]}
+          set -e
+          cp /tmp/pr38-vitest.log pr38-vitest.log
+          exit $TEST_EXIT
+
+      - name: Upload Vitest failure log
+        if: failure() && steps.unit_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr38-vitest-failure
+          path: pr38-vitest.log
+          retention-days: 7
 
       - name: Production build
         run: pnpm build
@@ -74,7 +91,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/src/components/PasswordGate.tsx client/src/pages/GastosLoginPage.tsx client/src/pages/OrderTracking.tsx client/src/pages/AtualizarCadastro.tsx client/src/pages/AdminCustomers.tsx drizzle/schema.ts server/customerStableIdentity.ts server/routers.ts
+          git add client/src/components/PasswordGate.tsx client/src/pages/GastosLoginPage.tsx client/src/pages/OrderTracking.tsx client/src/pages/AtualizarCadastro.tsx client/src/pages/AdminCustomers.tsx drizzle/schema.ts server/customerStableIdentity.ts server/routers.ts server/routers/customerPassword.ts
           if git diff --cached --quiet; then
             echo "No patch changes to commit."
             exit 0
