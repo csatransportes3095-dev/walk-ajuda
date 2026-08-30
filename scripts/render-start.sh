@@ -38,6 +38,7 @@ run_boot_step "db-migrate-h2ads-proxy-credentials" pnpm run db:migrate:h2ads-pro
 run_boot_step "db-migrate-h2ads-browser-workers" pnpm run db:migrate:h2ads-browser-workers
 run_boot_step "db-migrate-h2ads-browser-preparation" pnpm run db:migrate:h2ads-browser-preparation
 run_boot_step "db-migrate-h2ads-browser-manual-commands" pnpm run db:migrate:h2ads-browser-manual-commands
+run_boot_step "db-migrate-h2ads-order-links" pnpm run db:migrate:h2ads-order-links
 run_boot_step "loans-recovery-preflight" pnpm exec tsx scripts/apply-loans-recovery-preflight.ts
 run_boot_step "loans-recovery-wrapper" pnpm exec tsx scripts/apply-loans-recovery-wrapper.ts
 run_boot_step "loans-recovery-20260822-fix" pnpm exec tsx scripts/apply-loans-recovery-20260822-fix.ts
