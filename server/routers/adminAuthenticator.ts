@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { adminAuthenticatorAudit, adminAuthenticatorEntries, adminAuthenticatorOrderLinks } from "../../drizzle/schema";
 import { decryptTotpSecret, encryptTotpSecret, generateTotp, normalizeTotpSecret } from "../adminAuthenticatorVault";
+import { buildAuthenticatorOrderLabel } from "../adminAuthenticatorOrder";
 import { getDb } from "../db";
 import { adminProcedure, router } from "../_core/trpc";
 
@@ -102,13 +103,18 @@ async function searchOpenOrders(query: string) {
   }));
 }
 
-async function ensureOpenOrder(registrationId: number) {
+async function getOpenOrderIdentity(registrationId: number) {
   const db = await requireDb();
   const result = await db.execute(sql`
-    SELECT latest.status
+    SELECT
+      acp.id AS registrationId,
+      latest.orderNumber,
+      latest.status,
+      c.customerNumber,
+      c.name AS customerName
     FROM accessCodePhones acp
     INNER JOIN (
-      SELECT h.registrationId, h.status
+      SELECT h.registrationId, h.orderNumber, h.status
       FROM orderStatusHistory h
       INNER JOIN (
         SELECT registrationId, MAX(id) AS latestId
@@ -116,6 +122,8 @@ async function ensureOpenOrder(registrationId: number) {
         GROUP BY registrationId
       ) newest ON newest.latestId = h.id
     ) latest ON latest.registrationId = acp.id
+    LEFT JOIN customers c ON REGEXP_REPLACE(COALESCE(c.phone, ''), '[^0-9]', '') = REGEXP_REPLACE(acp.phone, '[^0-9]', '')
+      AND c.deletedAt IS NULL
     WHERE acp.id = ${registrationId}
       AND acp.archived = 0
       AND acp.rgCnhApproved = 0
@@ -123,7 +131,17 @@ async function ensureOpenOrder(registrationId: number) {
     LIMIT 1
   `);
   const row = ((result as any)[0] || [])[0];
-  if (!row) throw new TRPCError({ code: "BAD_REQUEST", message: "Escolha um pedido em aberto. Pedido entregue, cancelado, arquivado ou oculto não aceita autenticador." });
+  if (!row) throw new TRPCError({ code: "BAD_REQUEST", message: "Este pedido não aceita novo autenticador. Pedido entregue, cancelado, arquivado ou oculto permanece protegido pela regra atual." });
+  return {
+    registrationId: Number(row.registrationId),
+    orderNumber: row.orderNumber == null ? null : Number(row.orderNumber),
+    customerNumber: row.customerNumber == null ? null : Number(row.customerNumber),
+    customerName: row.customerName ? String(row.customerName) : null,
+  };
+}
+
+async function ensureOpenOrder(registrationId: number) {
+  await getOpenOrderIdentity(registrationId);
 }
 
 export const adminAuthenticatorRouter = router({
@@ -165,6 +183,45 @@ export const adminAuthenticatorRouter = router({
       }).$returningId();
       await recordAudit(created.id, "created");
       return { id: created.id };
+    }),
+
+  createForOrder: adminProcedure
+    .input(z.object({
+      registrationId: z.number().int().positive(),
+      issuer: z.string().trim().max(128).optional(),
+      secret: z.string().min(16).max(256),
+    }).strict())
+    .mutation(async ({ input }) => {
+      const identity = await getOpenOrderIdentity(input.registrationId);
+      let encrypted;
+      try {
+        encrypted = encryptTotpSecret(input.secret);
+      } catch (error) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: error instanceof Error ? error.message : "Chave do autenticador inválida." });
+      }
+      const label = buildAuthenticatorOrderLabel(identity);
+      const db = await requireDb();
+      const createdId = await db.transaction(async (tx) => {
+        const [created] = await tx.insert(adminAuthenticatorEntries).values({
+          label,
+          issuer: input.issuer || null,
+          secretCiphertext: encrypted.ciphertext,
+          secretIv: encrypted.iv,
+          secretTag: encrypted.tag,
+          keyVersion: encrypted.keyVersion,
+        }).$returningId();
+        await tx.insert(adminAuthenticatorOrderLinks).values({
+          authenticatorEntryId: created.id,
+          registrationId: input.registrationId,
+        });
+        await tx.insert(adminAuthenticatorAudit).values({
+          entryId: created.id,
+          action: "created_and_linked_from_order",
+          adminUsername: "admin",
+        });
+        return created.id;
+      });
+      return { success: true, id: createdId, label };
     }),
 
   linkToOrder: adminProcedure
