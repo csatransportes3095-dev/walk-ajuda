@@ -1,0 +1,110 @@
+name: Validate DevTools global public protection
+on:
+  push:
+    branches: [fix/devtools-global-public-20260830]
+    paths: [.github/workflows/validate-devtools-global-public.yml]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/devtools-global-public-20260830
+      - name: Apply global public guard
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('client/src/App.tsx')
+          s=p.read_text()
+          s=s.replace('import { useEffect } from "react";', 'import { useEffect, useState } from "react";', 1)
+          marker='import { useAntiPrint } from "./hooks/useAntiPrint";'
+          if marker not in s:
+              raise SystemExit('anti-print import marker not found')
+          if 'useDevToolsDetection' not in s:
+              s=s.replace(marker, marker+'\nimport { useDevToolsDetection } from "./hooks/useDevToolsDetection";', 1)
+
+          component=r'''
+function PublicDevToolsGuard({ children }: { children: React.ReactNode }) {
+  const [location] = useLocation();
+  const excluded = location.startsWith("/admin") || isH2AdsPath(location) || location === "/acompanhar";
+  const settingsQuery = trpc.settings.getAll.useQuery(undefined, {
+    enabled: !excluded,
+    staleTime: 0,
+    refetchInterval: !excluded ? 2_000 : false,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
+  const enabled = !excluded && settingsQuery.data?.['devtools_protection'] === '1';
+  const [blocked, setBlocked] = useState(false);
+  const securityAlertMut = trpc.system.securityAlert.useMutation();
+
+  useEffect(() => {
+    if (!enabled) setBlocked(false);
+  }, [enabled]);
+
+  useDevToolsDetection(() => {
+    if (!enabled) return;
+    setBlocked(true);
+    let phone: string | undefined;
+    try { phone = localStorage.getItem('walk_client_phone') || undefined; } catch { phone = undefined; }
+    securityAlertMut.mutate({
+      type: 'DevTools / Inspetor aberto',
+      phone,
+      page: window.location.pathname,
+      userAgent: navigator.userAgent.slice(0, 200),
+    });
+  }, enabled);
+
+  return <>
+    {children}
+    {enabled && blocked && <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-black p-6 text-white">
+      <div className="mb-4 text-6xl">🔒</div>
+      <h2 className="mb-2 text-center text-xl font-bold text-red-400">Acesso Bloqueado</h2>
+      <p className="max-w-xs text-center text-sm text-white/60">Ferramentas de desenvolvedor foram detectadas. Por segurança, o acesso foi bloqueado e o administrador foi notificado.</p>
+    </div>}
+  </>;
+}
+
+'''
+          appcontent='function AppContent() {'
+          if appcontent not in s:
+              raise SystemExit('AppContent marker not found')
+          if 'function PublicDevToolsGuard' not in s:
+              s=s.replace(appcontent, component+appcontent, 1)
+
+          old='<AppContent />'
+          new='<PublicDevToolsGuard><AppContent /></PublicDevToolsGuard>'
+          if old not in s:
+              raise SystemExit('AppContent render marker not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Verify architecture
+        shell: bash
+        run: |
+          grep -q 'function PublicDevToolsGuard' client/src/App.tsx
+          grep -q 'location === "/acompanhar"' client/src/App.tsx
+          grep -q 'refetchInterval: !excluded ? 2_000 : false' client/src/App.tsx
+          grep -q 'PublicDevToolsGuard><AppContent' client/src/App.tsx
+          grep -q 'desktopWithMobileEmulation' client/src/hooks/useDevToolsDetection.ts
+          ! grep -q 'debugger;' client/src/hooks/useDevToolsDetection.ts
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Production build
+        run: pnpm build
+      - name: Commit validated changes
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add client/src/App.tsx client/src/hooks/useDevToolsDetection.ts
+          git commit -m 'fix(security): aplicar protecao DevTools global nas paginas publicas'
+          git push origin HEAD:fix/devtools-global-public-20260830
