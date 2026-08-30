@@ -70,7 +70,11 @@ export default function SchedulePage() {
         setNeedsPasswordCreation(result.error === "no_password" || result.error === "expired");
         return toast.error(messages[result.error] || "Não foi possível confirmar os dados para este agendamento.");
       }
-      try { sessionStorage.setItem(accessStorageKey, result.accessToken); } catch { /* sessão continua em memória */ }
+      try {
+        sessionStorage.setItem(accessStorageKey, result.accessToken);
+        localStorage.setItem("cp_token", result.customerSessionToken);
+        localStorage.setItem("customer_update_token", result.customerSessionToken);
+      } catch { /* sessão continua em memória */ }
       setAccessToken(result.accessToken);
       setIdentity("");
       setPassword("");
@@ -121,6 +125,14 @@ export default function SchedulePage() {
   });
 
   const loadedProfile = data && "profile" in data ? data.profile : null;
+
+  useEffect(() => {
+    if (!loadedProfile?.updateRequired) return;
+    const returnTo = `/agendar/${token}`;
+    sessionStorage.setItem("h2_customer_return_to", returnTo);
+    if (loadedProfile.phone) localStorage.setItem("customer_update_phone_hint", loadedProfile.phone);
+    window.location.replace("/atualizarcadastro");
+  }, [loadedProfile?.updateRequired, loadedProfile?.phone, token]);
 
   useEffect(() => {
     const profile = loadedProfile;
@@ -306,7 +318,19 @@ export default function SchedulePage() {
   const missingFields = data.profile?.missing || [];
   const profileUpdateRequired = data.profile?.updateRequired === true;
 
-  if (missingFields.length > 0) {
+  if (profileUpdateRequired || missingFields.length > 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
+        <div className="bg-black/40 border border-white/10 rounded-2xl p-8 max-w-md">
+          <Loader2 className="w-8 h-8 animate-spin text-fuchsia-400 mx-auto mb-3" />
+          <h1 className="text-xl font-bold text-white mb-2">Atualização necessária</h1>
+          <p className="text-white/60 text-sm">Abrindo a atualização central do cadastro antes do agendamento.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (false && missingFields.length > 0) {
     return (
       <ScheduleMissingProfileGate
         missingFields={missingFields}
@@ -343,7 +367,6 @@ export default function SchedulePage() {
             token,
             accessToken,
             ...(missingFields.includes("name") ? { name: profileName } : {}),
-            ...(missingFields.includes("phone") ? { phone: profilePhone } : {}),
             ...(missingFields.includes("email") ? { email: profileEmail } : {}),
             ...(missingFields.includes("cpf") ? { cpf: profileCpf } : {}),
             ...(missingFields.includes("city") ? { city: profileCity } : {}),

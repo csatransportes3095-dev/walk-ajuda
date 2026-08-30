@@ -6,6 +6,15 @@ import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
 const TOKEN_KEY = "customer_update_token";
+const RETURN_TO_KEY = "h2_customer_return_to";
+
+function getSafeReturnTo(): string {
+  if (typeof window === "undefined") return "/";
+  const raw = sessionStorage.getItem(RETURN_TO_KEY) || "";
+  if (["/", "/login", "/acompanhar", "/gastos", "/emprestimo"].includes(raw)) return raw;
+  if (/^\/agendar\/[a-f0-9]{32}$/i.test(raw)) return raw;
+  return "/";
+}
 const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
 const INPUT_CLASS = "w-full rounded-xl border-2 border-white/10 bg-white px-4 py-3 text-base font-semibold text-slate-950 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/15";
 
@@ -106,8 +115,10 @@ export default function AtualizarCadastro() {
     if (step !== "done" && step !== "already_done") return;
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem("customer_update_phone_hint");
+    const returnTo = getSafeReturnTo();
+    sessionStorage.removeItem(RETURN_TO_KEY);
     const timer = window.setTimeout(() => {
-      window.location.replace("/");
+      window.location.replace(returnTo);
     }, 1200);
     return () => window.clearTimeout(timer);
   }, [step]);
@@ -172,7 +183,7 @@ export default function AtualizarCadastro() {
   async function uploadPhoto(file?: File) {
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) return toast.error("A foto deve ter no máximo 5 MB.");
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return toast.error("Use uma foto JPG, PNG ou WEBP.");
+    if (file.type && !/^image\/(jpeg|png|webp)$/i.test(file.type)) return toast.error("Use uma foto JPG, PNG ou WEBP.");
     const reader = new FileReader();
     reader.onload = async () => {
       try {
@@ -207,7 +218,6 @@ export default function AtualizarCadastro() {
 
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
-    if (isRequired("phone") && normalizePhone(phone).length < 10) return toast.error("Digite um telefone válido.");
     if (isRequired("cpf") && !isValidCPF(normalizeCpf(cpf))) return toast.error("Digite um CPF válido.");
     if (cep.replace(/\D/g, "").length !== 8) return toast.error("Digite um CEP válido.");
     if (street.trim().length < 2) return toast.error("Informe a rua / logradouro.");
@@ -216,7 +226,7 @@ export default function AtualizarCadastro() {
     if (city.trim().length < 2 || uf.trim().length !== 2) return toast.error("Informe cidade e estado.");
     if (!photoUrl) return toast.error("Envie sua foto de perfil.");
     try {
-      await saveMutation.mutateAsync({ token, phone: normalizePhone(phone), name, email, cpf, cep: formatCep(cep), street, addressNumber, neighborhood, addressComplement, city, uf });
+      await saveMutation.mutateAsync({ token, name, email, cpf, cep: formatCep(cep), street, addressNumber, neighborhood, addressComplement, city, uf });
       localStorage.removeItem(TOKEN_KEY);
       setToken("");
       setStep("done");
@@ -323,7 +333,7 @@ export default function AtualizarCadastro() {
                 <span className="mt-2 block text-sm font-bold">{uploadPhotoMutation.isPending ? "Enviando foto..." : photoUrl ? "Trocar foto de perfil" : "Enviar foto de perfil"}</span>
                 <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" className="hidden" disabled={uploadPhotoMutation.isPending || !isRequired("profilePhotoUrl")} onChange={(e) => uploadPhoto(e.target.files?.[0])} />
               </label>
-              <Field label={`Telefone${isRequired("phone") ? " · obrigatório nesta revisão" : ""}`}><input value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} className={INPUT_CLASS} required={isRequired("phone")} readOnly={!isRequired("phone")} inputMode="tel" autoComplete="tel" /></Field>
+              <Field label="Telefone confirmado · não editável"><input value={phone} className={`${INPUT_CLASS} bg-slate-200/80`} readOnly inputMode="tel" autoComplete="tel" /></Field>
               <Field label={`Nome completo${isRequired("name") ? " · obrigatório nesta revisão" : ""}`}><input value={name} onChange={(e) => setName(e.target.value)} className={`${INPUT_CLASS} ${!isRequired("name") ? "bg-slate-200/80" : ""}`} required={isRequired("name")} readOnly={!isRequired("name")} minLength={2} autoComplete="name" /></Field>
               <Field label={`E-mail${isRequired("email") ? " · obrigatório nesta revisão" : ""}`}><input value={email} onChange={(e) => setEmail(e.target.value)} className={`${INPUT_CLASS} ${!isRequired("email") ? "bg-slate-200/80" : ""}`} required={isRequired("email")} readOnly={!isRequired("email")} type="email" inputMode="email" autoComplete="email" /></Field>
               <Field label={`CPF${isRequired("cpf") ? " · obrigatório nesta revisão" : ""}`}><input value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))} className={`${INPUT_CLASS} ${!isRequired("cpf") ? "bg-slate-200/80" : ""}`} required={isRequired("cpf")} readOnly={!isRequired("cpf")} inputMode="numeric" placeholder="000.000.000-00" /></Field>

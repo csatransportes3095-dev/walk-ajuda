@@ -16,7 +16,7 @@ import {
 } from "../customerAccess";
 import { syncUnifiedCustomerRegistry } from "../customerIdentity";
 import { storagePut } from "../storage";
-import { getCustomerProfileUpdateState, hasCustomerProfilePhotoSubmission, markCustomerProfilePhotoSubmitted, markCustomerProfileUpdateCompleted } from "../customerProfileUpdatePolicy";
+import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000;
 const PASSWORD_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -29,19 +29,7 @@ async function rows(db: any, query: any): Promise<any[]> {
 }
 
 function missingFields(customer: any) {
-  const missing: string[] = [];
-  const name = String(customer?.name || "").trim();
-  if (name.length < 2 || isRecoveredCustomerName(name)) missing.push("name");
-  if (!normalizeCustomerEmail(customer?.email)) missing.push("email");
-  if (!normalizeCustomerCpf(customer?.cpf) || !isValidCPF(normalizeCustomerCpf(customer?.cpf))) missing.push("cpf");
-  if (String(customer?.cep || "").replace(/\D/g, "").length !== 8) missing.push("cep");
-  if (String(customer?.street || "").trim().length < 2) missing.push("street");
-  if (String(customer?.addressNumber || "").trim().length < 1) missing.push("addressNumber");
-  if (String(customer?.neighborhood || "").trim().length < 2) missing.push("neighborhood");
-  if (String(customer?.city || "").trim().length < 2) missing.push("city");
-  if (!/^[A-Z]{2}$/.test(String(customer?.uf || "").trim().toUpperCase())) missing.push("uf");
-  if (!String(customer?.profilePhotoUrl || "").trim()) missing.push("profilePhotoUrl");
-  return missing;
+  return getMissingCustomerProfileFields(customer);
 }
 
 async function passwordRows(db: any, phone: string) {
@@ -68,11 +56,6 @@ async function ensureCustomerUpdateCompletionInfrastructure(db: any) {
 }
 
 async function customerUpdateAlreadyCompleted(_db: any, customer: any) {
-  const policyState = await getCustomerProfileUpdateState(customer);
-  if (policyState.pending) return false;
-
-  // A conclusão antiga nunca pode esconder campo obrigatório vazio hoje.
-  // Só consideramos "já atualizado" quando o perfil atual está realmente completo.
   return missingFields(customer).length === 0;
 }
 
@@ -171,14 +154,13 @@ export const customerUpdateRouter = router({
     .query(async ({ input }) => {
       const { db, customer } = await requireCustomerSession(input.token);
       const name = String(customer.name || "").trim();
-      const policyState = await getCustomerProfileUpdateState(customer);
-      const requiredFields = Array.from(new Set([...missingFields(customer), ...policyState.effectiveFields]));
+      const requiredFields = missingFields(customer);
       return {
         completed: await customerUpdateAlreadyCompleted(db, customer),
-        policyEnabled: policyState.enabled,
+        policyEnabled: false,
         requiredFields,
         pendingFields: requiredFields,
-        policyRevision: policyState.revision,
+        policyRevision: 0,
         customerNumber: customer.customerNumber || null,
         phone: normalizeCustomerPhone(customer.phone),
         name: isRecoveredCustomerName(name) ? "" : name,
@@ -201,7 +183,6 @@ export const customerUpdateRouter = router({
     .mutation(async ({ input }) => {
       const { db, customer } = await requireCustomerSession(input.token);
       if (await customerUpdateAlreadyCompleted(db, customer)) throw alreadyUpdatedError();
-      const policyState = await getCustomerProfileUpdateState(customer);
       const comma = input.imageBase64.indexOf(",");
       const pureBase64 = (comma >= 0 ? input.imageBase64.slice(comma + 1) : input.imageBase64).trim();
       const buffer = Buffer.from(pureBase64, "base64");
@@ -218,7 +199,6 @@ export const customerUpdateRouter = router({
       const fileKey = `profile-photos/${phone}-${Date.now()}.${ext}`;
       const { url } = await storagePut(fileKey, buffer, mime);
       await db.execute(sql`UPDATE customers SET profilePhotoUrl=${url}, updatedAt=NOW() WHERE id=${customer.id}`);
-      await markCustomerProfilePhotoSubmitted(Number(customer.id), policyState.revision);
       return { success: true, url };
     }),
 
@@ -239,8 +219,7 @@ export const customerUpdateRouter = router({
     .mutation(async ({ input }) => {
       const { db, customer } = await requireCustomerSession(input.token);
       if (await customerUpdateAlreadyCompleted(db, customer)) throw alreadyUpdatedError();
-      const policyState = await getCustomerProfileUpdateState(customer);
-      const selected = new Set([...missingFields(customer), ...policyState.effectiveFields, "cep", "street", "addressNumber", "neighborhood", "city", "uf"]);
+      const selected = new Set([...missingFields(customer), "cep", "street", "addressNumber", "neighborhood", "city", "uf"]);
       await ensureCustomerIdentityInfrastructure(db);
       const name = selected.has("name") ? String(input.name || "").trim().replace(/\s+/g, " ") : String(customer.name || "").trim();
       const phone = normalizeCustomerPhone(customer.phone);
@@ -265,9 +244,6 @@ export const customerUpdateRouter = router({
       const photoRows = await rows(db, sql`SELECT profilePhotoUrl FROM customers WHERE id=${customer.id} LIMIT 1`);
       if (!String(photoRows[0]?.profilePhotoUrl || "").trim()) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Envie sua foto de perfil." });
-      }
-      if (policyState.enabled && selected.has("profilePhotoUrl") && !(await hasCustomerProfilePhotoSubmission(Number(customer.id), policyState.revision))) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Envie uma nova foto de perfil para concluir esta atualização." });
       }
       const cpfConflict = await findMainCustomerByIdentity({ cpf }, db);
       const emailConflict = await findMainCustomerByIdentity({ email }, db);
@@ -303,7 +279,6 @@ export const customerUpdateRouter = router({
         VALUES (${customer.id}, ${phone}, NOW())
         ON DUPLICATE KEY UPDATE phone=${phone}, completedAt=completedAt
       `);
-      if (policyState.enabled) await markCustomerProfileUpdateCompleted(Number(customer.id), policyState.revision);
       return { success: true, synchronization };
     }),
 });

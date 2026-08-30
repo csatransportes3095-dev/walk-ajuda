@@ -8,12 +8,9 @@ import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
 import { publicSiteUrl } from "../../shared/publicLinks";
 import { isValidCPF } from "@shared/cpf";
-import { parseMaintenanceManifest } from "../../shared/maintenanceManifest";
 import { isRecoveredCustomerName } from "../../shared/customerProfile";
 import { findMainCustomerByIdentity, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone } from "../customerAccess";
-import { syncUnifiedCustomerRegistry } from "../customerIdentity";
-import { storagePut } from "../storage";
-import { getCustomerProfileUpdateState, hasCustomerProfilePhotoSubmission, markCustomerProfilePhotoSubmitted, markCustomerProfileUpdateCompleted } from "../customerProfileUpdatePolicy";
+import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -45,16 +42,7 @@ export function phonesMatch(leftValue: unknown, rightValue: unknown): boolean {
 }
 
 export function missingCustomerFields(customer: any): string[] {
-  const missing: string[] = [];
-  const name = String(customer?.name || "").trim();
-  if (name.length < 2 || isRecoveredCustomerName(name)) missing.push("name");
-  if (!normalizeCustomerEmail(customer?.email)) missing.push("email");
-  const cpf = normalizeCustomerCpf(customer?.cpf);
-  if (!cpf || !isValidCPF(cpf)) missing.push("cpf");
-  if (String(customer?.city || "").trim().length < 2) missing.push("city");
-  if (!/^[A-Z]{2}$/.test(String(customer?.uf || "").trim().toUpperCase())) missing.push("uf");
-  if (!String(customer?.profilePhotoUrl || "").trim()) missing.push("profilePhotoUrl");
-  return missing;
+  return getMissingCustomerProfileFields(customer);
 }
 
 export function shouldBlockScheduleCompletion(requireCompleteProfile: boolean, customer: any): boolean {
@@ -111,7 +99,7 @@ async function rows(db: any, query: any): Promise<any[]> {
 
 async function loadMainCustomerById(db: any, customerId: number): Promise<any | null> {
   const found = await rows(db, sql`
-    SELECT id, customerNumber, name, phone, cpf, email, city, uf, profilePhotoUrl, blocked, deletedAt
+    SELECT id, customerNumber, name, phone, cpf, email, cep, street, addressNumber, neighborhood, addressComplement, city, uf, profilePhotoUrl, blocked, deletedAt
     FROM customers
     WHERE id=${customerId} AND deletedAt IS NULL
     LIMIT 1
@@ -154,6 +142,18 @@ async function verifyCustomerPassword(db: any, phone: unknown, password: string)
   return await bcrypt.compare(password, String(current?.password || "")) ? "ok" : "wrong_password";
 }
 
+async function createCentralCustomerSession(db: any, phoneValue: unknown): Promise<string> {
+  const phone = normalizeCustomerPhone(phoneValue);
+  if (!phone) throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone do cadastro inválido." });
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+  await db.execute(sql`
+    INSERT INTO customerPasswordSessions (phone, token, expiresAt, createdAt, lastAccessAt)
+    VALUES (${phone}, ${token}, ${expiresAt}, NOW(), NOW())
+  `);
+  return token;
+}
+
 async function requireScheduleAccess(appointmentToken: string, accessToken: string) {
   const payload = verifyScheduleAccessToken(accessToken, appointmentToken);
   if (!payload) throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão do agendamento inválida ou vencida." });
@@ -176,33 +176,22 @@ async function getPublicOrderContext(registrationId: number) {
   };
 }
 
-async function isCompleteProfileRequiredForSchedule(): Promise<boolean> {
-  const stored = await getSetting("maintenance_manifest");
-  return parseMaintenanceManifest(stored).requireCompleteProfileForSchedule;
-}
-
 function rejectIncompleteScheduleProfile() {
   throw new TRPCError({
     code: "FORBIDDEN",
-    message: "Atualização cadastral obrigatória pelo administrador. Conclua os campos solicitados e a foto de perfil antes de continuar.",
+    message: "Atualize seu cadastro em /atualizarcadastro antes de continuar o agendamento.",
   });
 }
 
 async function shouldBlockScheduleForCustomer(customer: any): Promise<boolean> {
-  const profileUpdateState = await getCustomerProfileUpdateState(customer);
-  return profileUpdateState.pending || (await isCompleteProfileRequiredForSchedule() && missingCustomerFields(customer).length > 0);
+  return getMissingCustomerProfileFields(customer).length > 0;
 }
 
 async function buildAuthenticatedScheduleData(appt: any, customer: any) {
   const cfg = await getScheduleConfig();
-  const requireCompleteProfile = await isCompleteProfileRequiredForSchedule();
-  const profileUpdateState = await getCustomerProfileUpdateState(customer);
-  const missing = Array.from(new Set([
-    ...profileUpdateState.missingFields,
-    ...(profileUpdateState.enabled ? profileUpdateState.effectiveFields : []),
-  ]));
-  const updateRequired = profileUpdateState.pending || (requireCompleteProfile && missingCustomerFields(customer).length > 0);
-  const slots = await listAvailableScheduleSlots(appt.templateId ?? null);
+  const missing = getMissingCustomerProfileFields(customer);
+  const updateRequired = missing.length > 0;
+  const slots = updateRequired ? [] : await listAvailableScheduleSlots(appt.templateId ?? null);
   const orderStatus = await getPublicOrderContext(Number(appt.registrationId));
   return {
     found: true as const,
@@ -212,7 +201,7 @@ async function buildAuthenticatedScheduleData(appt: any, customer: any) {
     slots,
     profile: {
       missing,
-      requiredFields: profileUpdateState.effectiveFields,
+      requiredFields: missing,
       name: isRecoveredCustomerName(String(customer.name || '').trim()) ? '' : String(customer.name || '').trim(),
       phone: normalizeCustomerPhone(customer.phone),
       email: normalizeCustomerEmail(customer.email),
@@ -696,10 +685,12 @@ export const scheduleRouter = router({
       const passwordState = await verifyCustomerPassword(db, customer.phone, input.password);
       if (passwordState !== "ok") return { success: false as const, error: passwordState };
       const accessToken = createScheduleAccessToken(input.token, Number(customer.id));
-      return { success: true as const, accessToken, data: await buildAuthenticatedScheduleData(appt, customer) };
+      const customerSessionToken = await createCentralCustomerSession(db, customer.phone);
+      return { success: true as const, accessToken, customerSessionToken, data: await buildAuthenticatedScheduleData(appt, customer) };
     }),
 
-  // Atualiza somente os campos que estavam faltantes no cadastro principal.
+  // Compatibilidade: os endpoints antigos continuam existindo, mas não podem mais alterar cadastro.
+  // Toda atualização é feita exclusivamente em /atualizarcadastro.
   saveMissingProfile: publicProcedure
     .input(z.object({
       token: z.string().min(32).max(64),
@@ -711,87 +702,14 @@ export const scheduleRouter = router({
       city: z.string().trim().min(2).max(128).optional(),
       uf: z.string().trim().length(2).optional(),
     }))
-    .mutation(async ({ input }) => {
-      const { db, appt, customer } = await requireScheduleAccess(input.token, input.accessToken);
-      const policyState = await getCustomerProfileUpdateState(customer);
-      const missing = Array.from(new Set([
-        ...policyState.missingFields,
-        ...(policyState.enabled ? policyState.effectiveFields : []),
-      ]));
-      const name = input.name?.trim().replace(/\s+/g, " ");
-      const phone = input.phone ? normalizeCustomerPhone(input.phone) : "";
-      const email = input.email ? normalizeCustomerEmail(input.email) : "";
-      const cpf = input.cpf ? normalizeCustomerCpf(input.cpf) : "";
-      const city = input.city?.trim().replace(/\s+/g, " ");
-      const uf = input.uf?.trim().toUpperCase();
-      if (missing.includes("name") && input.name !== undefined && (!name || name.length < 2 || isRecoveredCustomerName(name))) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo." });
-      }
-      if (missing.includes("email") && input.email !== undefined && !email) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um e-mail válido." });
-      }
-      if (missing.includes("cpf") && input.cpf !== undefined && (!cpf || !isValidCPF(cpf))) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um CPF válido." });
-      }
-      if (missing.includes("uf") && input.uf !== undefined && !uf?.match(/^[A-Z]{2}$/)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe uma UF válida." });
-      }
-      if (missing.includes("phone") && (!phone || phone.length < 10 || phone.length > 11)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um telefone válido." });
-      }
-      const phoneConflict = phone && missing.includes("phone") ? await findMainCustomerByIdentity({ phone }, db) : null;
-      const cpfConflict = cpf && missing.includes("cpf") ? await findMainCustomerByIdentity({ cpf }, db) : null;
-      const emailConflict = email && missing.includes("email") ? await findMainCustomerByIdentity({ email }, db) : null;
-      if ((phoneConflict && Number(phoneConflict.id) !== Number(customer.id)) || (cpfConflict && Number(cpfConflict.id) !== Number(customer.id)) || (emailConflict && Number(emailConflict.id) !== Number(customer.id))) {
-        throw new TRPCError({ code: "CONFLICT", message: "CPF ou e-mail já pertence a outro cadastro." });
-      }
-      const previousIdentity = { phone: customer.phone, cpf: customer.cpf };
-      const updates: any[] = [];
-      if (missing.includes("name") && name) updates.push(sql`name=${name}`);
-      if (missing.includes("phone") && phone) updates.push(sql`phone=${phone}, normalizedPhone=${phone}`);
-      if (missing.includes("email") && email) updates.push(sql`email=${email}, normalizedEmail=${email}`);
-      if (missing.includes("cpf") && cpf) updates.push(sql`cpf=${cpf}, normalizedCpf=${cpf}`);
-      if (missing.includes("city") && city) updates.push(sql`city=${city}`);
-      if (missing.includes("uf") && uf) updates.push(sql`uf=${uf}`);
-      if (updates.length > 0) {
-        updates.push(sql`updatedAt=NOW()`);
-        await db.execute(sql`UPDATE customers SET ${sql.join(updates, sql`, `)} WHERE id=${customer.id} AND deletedAt IS NULL`);
-        await syncUnifiedCustomerRegistry([previousIdentity]);
-      }
-      const refreshed = await loadMainCustomerById(db, Number(customer.id));
-      if (!refreshed) throw new TRPCError({ code: "NOT_FOUND", message: "Cadastro não encontrado." });
-      const refreshedState = await getCustomerProfileUpdateState(refreshed);
-      const photoSubmitted = !policyState.effectiveFields.includes('profilePhotoUrl') || await hasCustomerProfilePhotoSubmission(Number(customer.id), policyState.revision);
-      if (policyState.enabled && refreshedState.missingFields.length === 0 && photoSubmitted) await markCustomerProfileUpdateCompleted(Number(customer.id), policyState.revision);
-      return { success: true as const, remaining: refreshedState.missingFields, data: await buildAuthenticatedScheduleData(appt, refreshed) };
+    .mutation(async () => {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Use /atualizarcadastro para atualizar seus dados." });
     }),
 
-  // Atualiza a foto somente quando ela estiver faltante no cadastro principal.
   uploadMissingProfilePhoto: publicProcedure
     .input(z.object({ token: z.string().min(32).max(64), accessToken: z.string().min(32).max(512), imageBase64: z.string().min(100).max(8_000_000) }))
-    .mutation(async ({ input }) => {
-      const { db, appt, customer } = await requireScheduleAccess(input.token, input.accessToken);
-      const policyState = await getCustomerProfileUpdateState(customer);
-      if (!policyState.pending || !policyState.effectiveFields.includes("profilePhotoUrl")) return { success: true as const, remaining: policyState.missingFields, data: await buildAuthenticatedScheduleData(appt, customer) };
-      const comma = input.imageBase64.indexOf(",");
-      const pureBase64 = (comma >= 0 ? input.imageBase64.slice(comma + 1) : input.imageBase64).trim();
-      const buffer = Buffer.from(pureBase64, "base64");
-      const isJpeg = buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
-      const isPng = buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
-      const isWebp = buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
-      if (!buffer.length || buffer.length > 5 * 1024 * 1024 || (!isJpeg && !isPng && !isWebp)) throw new TRPCError({ code: "BAD_REQUEST", message: "Envie uma foto JPG, PNG ou WEBP de até 5 MB." });
-      const ext = isJpeg ? "jpg" : isPng ? "png" : "webp";
-      const mime = isJpeg ? "image/jpeg" : isPng ? "image/png" : "image/webp";
-      const phone = normalizeCustomerPhone(customer.phone);
-      const { url } = await storagePut(`profile-photos/${phone}-${Date.now()}.${ext}`, buffer, mime);
-      await db.execute(sql`UPDATE customers SET profilePhotoUrl=${url}, updatedAt=NOW() WHERE id=${customer.id} AND deletedAt IS NULL`);
-      await markCustomerProfilePhotoSubmitted(Number(customer.id), policyState.revision);
-      const refreshed = await loadMainCustomerById(db, Number(customer.id));
-      if (refreshed && policyState.enabled) {
-        const refreshedState = await getCustomerProfileUpdateState(refreshed);
-        if (refreshedState.missingFields.length === 0) await markCustomerProfileUpdateCompleted(Number(customer.id), policyState.revision);
-      }
-      return { success: true as const, remaining: refreshed ? (await getCustomerProfileUpdateState(refreshed)).missingFields : [], data: refreshed ? await buildAuthenticatedScheduleData(appt, refreshed) : null };
+    .mutation(async () => {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Use /atualizarcadastro para atualizar sua foto." });
     }),
 
   // Cliente confirma o horário escolhido (reserva exclusiva)
