@@ -24,15 +24,32 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Align patch with safe baseline schema
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/_apply_customer_address_patch.py')
+          s = p.read_text(encoding='utf-8')
+          start = s.index('# 1) Banco / schema')
+          end = s.index("migration = '''", start)
+          block = '''# 1) Banco / schema
+          replace_once(
+              'drizzle/schema.ts',
+              '  email: varchar("email", { length: 320 }),\\n  city: varchar("city", { length: 128 }),\\n  uf: varchar("uf", { length: 2 }),\\n  cpf: varchar("cpf", { length: 14 }),',
+              '  email: varchar("email", { length: 320 }),\\n  cep: varchar("cep", { length: 9 }),\\n  street: varchar("street", { length: 255 }),\\n  addressNumber: varchar("addressNumber", { length: 30 }),\\n  neighborhood: varchar("neighborhood", { length: 150 }),\\n  addressComplement: varchar("addressComplement", { length: 255 }),\\n  city: varchar("city", { length: 128 }),\\n  uf: varchar("uf", { length: 2 }),\\n  cpf: varchar("cpf", { length: 14 }),'
+          )
+
+          '''
+          p.write_text(s[:start] + block + s[end:], encoding='utf-8')
+          PY
       - name: Apply isolated address patch
         run: python scripts/_apply_customer_address_patch.py
       - name: Audit forbidden files
         run: |
-          git diff --name-only 015f969fbc515836261d9585511276d994534e33...HEAD > /tmp/before.txt || true
           git diff --name-only > /tmp/working.txt
+          cat /tmp/working.txt
           if grep -Eq '^(client/src/components/StorefrontProductCard.tsx|client/src/components/ui/tabs.tsx|client/src/pages/Gastos.tsx)$' /tmp/working.txt; then
             echo 'Forbidden file changed' >&2
-            cat /tmp/working.txt
             exit 1
           fi
       - name: Install and validate
@@ -46,6 +63,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git restore scripts/_apply_customer_address_patch.py .github/workflows/apply-customer-address-patch.yml
           git add drizzle/schema.ts shared/customerProfileUpdate.ts server/customerProfileUpdatePolicy.ts server/routers/customerUpdate.ts client/src/pages/AtualizarCadastro.tsx client/src/components/PasswordGate.tsx server/routers.ts client/src/pages/AdminCustomers.tsx client/src/pages/AdminOrders.tsx scripts/apply-customer-address-migration.ts scripts/render-start.sh
           git commit -m 'feat(cadastro): endereço completo obrigatório' || exit 0
           git push origin HEAD:feat/endereco-completo-cadastro-v2
