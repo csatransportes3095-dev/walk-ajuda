@@ -26,6 +26,7 @@ import { adminProcedure } from "../_core/trpc";
 import { decryptH2AdsProxy, encryptH2AdsProxy, H2ADS_PROXY_ROTATION_MINUTES_MAX, H2ADS_PROXY_ROTATION_MINUTES_MIN, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "../h2adsProxySecurity";
 import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "../h2adsProxyValidation";
 import { h2AdsOrderLinkRouterPart } from "../h2adsOrderLinkRouter";
+import { setH2AdsOrderLink } from "../h2adsOrderLink";
 
 export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
 export const h2AdsInstanceStatusSchema = z.enum(["draft", "paused", "archived"]);
@@ -61,6 +62,11 @@ export const h2AdsCreateInstanceSchema = z.object({
   status: h2AdsInstanceStatusSchema.optional().default("draft"),
   notes: z.string().trim().max(4_000).nullable().optional(),
   sortOrder: z.number().int().min(0).max(100_000).optional().default(0),
+}).strict();
+
+export const h2AdsCreateLinkedInstanceSchema = h2AdsCreateInstanceSchema.extend({
+  registrationId: z.number().int().positive(),
+  subOrderIndex: z.number().int().min(0).default(0),
 }).strict();
 
 export const h2AdsUpdateInstanceSchema = z.object({
@@ -243,6 +249,20 @@ export const h2AdsRouter = {
     await requireWritableGroup(input.groupId);
     const id = await createH2AdsInstance(input);
     return { success: true, id };
+  }),
+
+  createInstanceLinkedOrder: adminProcedure.input(h2AdsCreateLinkedInstanceSchema).mutation(async ({ input }) => {
+    const { registrationId, subOrderIndex, ...instanceInput } = input;
+    await requireWritableGroup(instanceInput.groupId);
+    const id = await createH2AdsInstance(instanceInput);
+    try {
+      await setH2AdsOrderLink(id, registrationId, subOrderIndex);
+      return { success: true, id };
+    } catch (error) {
+      try { await deleteH2AdsInstance(id); } catch { }
+      const message = error instanceof Error ? error.message : "Não foi possível criar a instância já vinculada ao pedido.";
+      throw new TRPCError({ code: message.includes("outra instância") ? "CONFLICT" : "BAD_REQUEST", message });
+    }
   }),
 
   updateInstance: adminProcedure.input(h2AdsUpdateInstanceSchema).mutation(async ({ input }) => {

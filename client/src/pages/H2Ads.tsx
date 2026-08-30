@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import H2AdsOrderLinkControl from "@/components/H2AdsOrderLinkControl";
+import H2AdsNewInstanceOrderPicker, { suggestedH2AdsInstanceName, type H2AdsPendingOrderLink } from "@/components/H2AdsNewInstanceOrderPicker";
 import { H2ADS_NAME_MIN_LENGTH, validateH2AdsName } from "@shared/h2adsValidation";
 import { parseH2AdsProxyInput, type H2AdsProxyProtocol } from "@shared/h2adsProxyInput";
 
@@ -69,6 +70,7 @@ export default function H2Ads() {
   const updateGroup = trpc.h2Ads.updateGroup.useMutation();
   const deleteGroup = trpc.h2Ads.deleteGroup.useMutation();
   const createInstance = trpc.h2Ads.createInstance.useMutation();
+  const createInstanceLinkedOrder = trpc.h2Ads.createInstanceLinkedOrder.useMutation();
   const updateInstance = trpc.h2Ads.updateInstance.useMutation();
   const deleteInstance = trpc.h2Ads.deleteInstance.useMutation();
   const saveNetworkProfile = trpc.h2Ads.saveNetworkProfile.useMutation();
@@ -83,6 +85,7 @@ export default function H2Ads() {
   const updateProxyRotation = trpc.h2Ads.updateProxyRotation.useMutation();
   const [groupForm, setGroupForm] = useState<GroupForm | null>(null);
   const [instanceForm, setInstanceForm] = useState<InstanceForm | null>(null);
+  const [newInstanceOrderLink, setNewInstanceOrderLink] = useState<H2AdsPendingOrderLink | null>(null);
   const [networkForm, setNetworkForm] = useState<NetworkProfileForm | null>(null);
   const [proxyConfig, setProxyConfig] = useState("");
   const [proxyProtocol, setProxyProtocol] = useState<H2AdsProxyProtocol>("http");
@@ -116,7 +119,7 @@ export default function H2Ads() {
   const browserRunByInstance = useMemo(() => new Map(browserRuns.map(run => [run.instanceId, run])), [browserRuns]);
   const selectedInstance = networkForm ? instances.find(instance => instance.id === networkForm.instanceId) : undefined;
   const encryptionReady = proxySecurityStatus.data?.encryptionReady === true;
-  const saving = createGroup.isPending || updateGroup.isPending || deleteGroup.isPending || createInstance.isPending || updateInstance.isPending || deleteInstance.isPending || saveNetworkProfile.isPending || saveProxyCredential.isPending || updateProxyRotation.isPending || validateProxy.isPending || createWorkerPairing.isPending || assignWorker.isPending || revokeWorker.isPending;
+  const saving = createGroup.isPending || updateGroup.isPending || deleteGroup.isPending || createInstance.isPending || createInstanceLinkedOrder.isPending || updateInstance.isPending || deleteInstance.isPending || saveNetworkProfile.isPending || saveProxyCredential.isPending || updateProxyRotation.isPending || validateProxy.isPending || createWorkerPairing.isPending || assignWorker.isPending || revokeWorker.isPending;
   const refresh = () => dashboard.refetch();
   const setVisualColor = (kind: "group" | "instance", id: number, color: string) => {
     if (!/^#[0-9a-fA-F]{6}$/.test(color)) return;
@@ -172,6 +175,7 @@ export default function H2Ads() {
 
   const newInstance = (groupId?: number) => {
     if (!activeGroups.length) { toast.info("Crie primeiro um grupo H2 Ads ativo."); setGroupForm({ ...emptyGroup }); return; }
+    setNewInstanceOrderLink(null);
     setInstanceForm({ ...emptyInstance, groupId: String(groupId ?? activeGroups[0].id) });
   };
 
@@ -212,8 +216,14 @@ export default function H2Ads() {
     if (validation) { toast.error(validation); return; }
     try {
       const payload = { groupId, name, notes: instanceForm.notes.trim() || null, status: instanceForm.status };
-      if (instanceForm.id) await updateInstance.mutateAsync({ id: instanceForm.id, ...payload }); else await createInstance.mutateAsync(payload);
-      setInstanceForm(null); toast.success("Instância salva."); await refresh();
+      if (instanceForm.id) {
+        await updateInstance.mutateAsync({ id: instanceForm.id, ...payload });
+      } else if (newInstanceOrderLink) {
+        await createInstanceLinkedOrder.mutateAsync({ ...payload, registrationId: newInstanceOrderLink.registrationId, subOrderIndex: newInstanceOrderLink.subOrderIndex });
+      } else {
+        await createInstance.mutateAsync(payload);
+      }
+      setInstanceForm(null); setNewInstanceOrderLink(null); toast.success(newInstanceOrderLink ? "Instância criada e cliente vinculado." : "Instância salva."); await refresh();
     } catch (error) { toast.error(errorText(error, "Não foi possível salvar a instância.")); }
   };
 
@@ -349,7 +359,7 @@ export default function H2Ads() {
     {groupForm && <Modal title={groupForm.id ? "Editar grupo" : "Novo grupo"} subtitle="Organização interna do H2 Ads." onClose={() => setGroupForm(null)}><form onSubmit={saveGroup} className="grid gap-4"><Field label="Nome do grupo"><input required minLength={H2ADS_NAME_MIN_LENGTH} value={groupForm.name} onChange={event => setGroupForm({ ...groupForm, name: event.target.value })} placeholder="Ex.: Operação São Paulo" /></Field><Field label="Descrição"><textarea value={groupForm.description} onChange={event => setGroupForm({ ...groupForm, description: event.target.value })} placeholder="Opcional" /></Field><Field label="Cor dos cards das instâncias"><div className="flex items-center gap-3"><input type="color" value={groupForm.cardColor} onChange={event => setGroupForm({ ...groupForm, cardColor: event.target.value.toUpperCase() })} className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-black/20 p-1" /><div className="flex-1 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300" style={{ backgroundColor: colorBackground(groupForm.cardColor), borderColor: groupForm.cardColor }}>{groupForm.cardColor} · todas as instâncias deste grupo</div></div></Field><Field label="Estado"><select value={groupForm.status} onChange={event => setGroupForm({ ...groupForm, status: event.target.value as GroupForm["status"] })}><option value="active">Ativo</option><option value="archived">Arquivado</option></select></Field><ActionBar saving={saving} label="Salvar grupo" onCancel={() => setGroupForm(null)} /></form></Modal>}
     {workerForm && !pairingCode && <Modal title="Adicionar Browser Worker" subtitle="Crie um código temporário para parear um computador Windows autorizado." onClose={() => setWorkerForm(null)}><form onSubmit={createPairing} className="grid gap-4"><Field label="Nome do computador"><input required value={workerForm.name} onChange={event => setWorkerForm({ ...workerForm, name: event.target.value })} placeholder="Ex.: Computador principal" /></Field><Field label="Capacidade de instâncias"><input required type="number" min="1" max="20" value={workerForm.capacity} onChange={event => setWorkerForm({ ...workerForm, capacity: event.target.value })} /></Field><p className="-mt-2 text-xs leading-5 text-slate-500">Defina quantas instâncias este computador poderá manter abertas no futuro. Nesta entrega, nenhum browser será iniciado.</p><ActionBar saving={saving} label="Criar código de pareamento" onCancel={() => setWorkerForm(null)} /></form></Modal>}
     {pairingCode && <Modal title="Código temporário do Worker" subtitle="Use este código apenas no seu computador Windows. Ele expira em 15 minutos e não será mostrado novamente depois de fechar." onClose={() => { setPairingCode(null); setWorkerForm(null); }}><div className="space-y-4"><div className="rounded-2xl border border-[#F5B800]/30 bg-[#F5B800]/[0.08] p-4"><p className="text-xs font-black uppercase tracking-[0.14em] text-[#FFE37A]">Código de pareamento</p><code className="mt-3 block break-all rounded-xl bg-black/40 p-3 text-sm font-bold text-white">{pairingCode.code}</code><p className="mt-3 text-xs text-slate-400">Expira às {new Date(pairingCode.expiresAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={copyPairingCode} className="inline-flex items-center gap-2 rounded-xl border border-[#148CFF]/35 bg-[#148CFF]/10 px-4 py-2.5 text-sm font-black text-[#8CC8FF]"><Copy className="h-4 w-4" />Copiar código</button><a href="/api/h2ads/worker/windows-agent.ps1" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2.5 text-sm font-black text-slate-200"><Monitor className="h-4 w-4" />Baixar agente Windows</a></div><div className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-xs font-bold text-slate-200">No PowerShell, execute apenas:</p><code className="mt-2 block break-all text-xs text-[#8CC8FF]">powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\H2AdsWorker.ps1" -Install</code><p className="mt-2 text-[11px] leading-4 text-slate-500">O próprio agente solicitará o código uma única vez; cole somente o código copiado acima. Ele não aparecerá no terminal.</p></div></div></Modal>}
-    {instanceForm && <Modal title={instanceForm.id ? "Editar instância" : "Nova instância"} subtitle="A rota será configurada no cartão da instância depois de salvar." onClose={() => setInstanceForm(null)}><form onSubmit={saveInstance} className="grid gap-4"><div className="grid gap-4 sm:grid-cols-3"><Field label="Grupo"><select required value={instanceForm.groupId} onChange={event => setInstanceForm({ ...instanceForm, groupId: event.target.value })}><option value="">Selecione</option>{activeGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></Field><Field label="Nome da instância" className="sm:col-span-2"><input required minLength={H2ADS_NAME_MIN_LENGTH} value={instanceForm.name} onChange={event => setInstanceForm({ ...instanceForm, name: event.target.value })} placeholder="Ex.: Instância 01" /></Field></div><Field label="Notas"><textarea value={instanceForm.notes} onChange={event => setInstanceForm({ ...instanceForm, notes: event.target.value })} placeholder="Opcional" /></Field><Field label="Estado"><select value={instanceForm.status} onChange={event => setInstanceForm({ ...instanceForm, status: event.target.value as InstanceForm["status"] })}><option value="draft">Rascunho</option><option value="paused">Pausado</option><option value="archived">Arquivado</option></select></Field><ActionBar saving={saving} label="Salvar instância" onCancel={() => setInstanceForm(null)} /></form></Modal>}
+    {instanceForm && <Modal title={instanceForm.id ? "Editar instância" : "Nova instância"} subtitle="A rota será configurada no cartão da instância depois de salvar." onClose={() => setInstanceForm(null)}><form onSubmit={saveInstance} className="grid gap-4"><div className="grid gap-4 sm:grid-cols-3"><Field label="Grupo"><select required value={instanceForm.groupId} onChange={event => setInstanceForm({ ...instanceForm, groupId: event.target.value })}><option value="">Selecione</option>{activeGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></Field><Field label="Nome da instância" className="sm:col-span-2"><input required minLength={H2ADS_NAME_MIN_LENGTH} value={instanceForm.name} onChange={event => setInstanceForm({ ...instanceForm, name: event.target.value })} placeholder="Ex.: Instância 01" /></Field></div><Field label="Notas"><textarea value={instanceForm.notes} onChange={event => setInstanceForm({ ...instanceForm, notes: event.target.value })} placeholder="Opcional" /></Field>{!instanceForm.id && <H2AdsNewInstanceOrderPicker value={newInstanceOrderLink} onChange={order => { setNewInstanceOrderLink(order); if (order && (!instanceForm.name.trim() || /^instância\s*\d*$/i.test(instanceForm.name.trim()))) setInstanceForm({ ...instanceForm, name: suggestedH2AdsInstanceName(order) }); }} />}<Field label="Estado"><select value={instanceForm.status} onChange={event => setInstanceForm({ ...instanceForm, status: event.target.value as InstanceForm["status"] })}><option value="draft">Rascunho</option><option value="paused">Pausado</option><option value="archived">Arquivado</option></select></Field><ActionBar saving={saving} label="Salvar instância" onCancel={() => setInstanceForm(null)} /></form></Modal>}
     {networkForm && selectedInstance && <RouteEditor instance={selectedInstance} profile={profileByInstance.get(selectedInstance.id)} hasCredential={credentialByInstance.has(selectedInstance.id)} form={networkForm} setForm={setNetworkForm} proxyConfig={proxyConfig} setProxyConfig={setProxyConfig} proxyProtocol={proxyProtocol} setProxyProtocol={setProxyProtocol} rotationMinutes={proxyRotationMinutes} setRotationMinutes={setProxyRotationMinutes} showNewRoute={showNewRoute} setShowNewRoute={setShowNewRoute} encryptionReady={encryptionReady} saving={saving} onSaveRoute={replaceRoute} onSaveRotation={saveRotation} onValidate={validateRoute} onSaveMetadata={saveMetadata} onClose={closeRouteEditor} />}
   </div>;
 }
