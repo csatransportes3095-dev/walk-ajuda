@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { isValidCPF } from "@shared/cpf";
-import { publicProcedure, router } from "../_core/trpc";
+import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import {
   ensureCustomerIdentityInfrastructure,
@@ -124,6 +124,10 @@ async function createSession(db: any, customer: any, authPhone: string) {
   return token;
 }
 
+function hasOwn(value: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
 export const customerUpdateRouter = router({
   status: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32) }))
@@ -236,6 +240,178 @@ export const customerUpdateRouter = router({
       const { url } = await storagePut(fileKey, buffer, mime);
       await db.execute(sql`UPDATE customers SET profilePhotoUrl=${url}, updatedAt=NOW() WHERE id=${customer.id}`);
       return { success: true, url };
+    }),
+
+  adminUpdate: adminProcedure
+    .input(z.object({
+      id: z.number().int().positive(),
+      name: z.string().max(128).optional(),
+      email: z.string().max(320).nullable().optional(),
+      cpf: z.string().max(18).nullable().optional(),
+      zipCode: z.string().max(10).nullable().optional(),
+      addressLine: z.string().max(255).nullable().optional(),
+      neighborhood: z.string().max(128).nullable().optional(),
+      addressNumber: z.string().max(32).nullable().optional(),
+      addressComplement: z.string().max(128).nullable().optional(),
+      city: z.string().max(128).nullable().optional(),
+      uf: z.string().max(2).nullable().optional(),
+      profilePhotoUrl: z.string().max(2048).nullable().optional(),
+      referredBy: z.string().max(128).nullable().optional(),
+      referredByPhone: z.string().max(32).nullable().optional(),
+      customerNumber: z.number().int().positive().nullable().optional(),
+      isReseller: z.number().int().min(0).max(1).optional(),
+      resellerDiscountType: z.enum(["percent", "fixed"]).nullable().optional(),
+      resellerDiscountValue: z.union([z.string(), z.number()]).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      await ensureCustomerIdentityInfrastructure(db);
+      await ensureStableCustomerIdentityInfrastructure(db);
+
+      const current = (await rows(db, sql`
+        SELECT id, customerNumber, name, phone, email, cpf, zipCode, addressLine,
+               neighborhood, addressNumber, addressComplement, city, uf, profilePhotoUrl,
+               referredBy, referredByPhone, isReseller, resellerDiscountType, resellerDiscountValue
+        FROM customers
+        WHERE id=${input.id} AND deletedAt IS NULL
+        LIMIT 1
+      `))[0];
+      if (!current) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+
+      // Telefone propositalmente não existe no input: é a identidade fixa do cliente.
+      const nextName = hasOwn(input, "name") ? String(input.name ?? "").trim().replace(/\s+/g, " ") : String(current.name || "");
+      const rawEmail = hasOwn(input, "email") ? String(input.email ?? "").trim() : String(current.email || "");
+      const nextEmail = rawEmail ? normalizeCustomerEmail(rawEmail) : "";
+      if (rawEmail && !nextEmail) throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
+
+      const rawCpf = hasOwn(input, "cpf") ? String(input.cpf ?? "") : String(current.cpf || "");
+      const nextCpf = rawCpf ? normalizeCustomerCpf(rawCpf) : "";
+      if (rawCpf && (!nextCpf || !isValidCPF(nextCpf))) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido." });
+
+      const rawZipCode = hasOwn(input, "zipCode") ? String(input.zipCode ?? "") : String(current.zipCode || "");
+      const nextZipCode = rawZipCode ? normalizeCustomerZipCode(rawZipCode) : "";
+      if (rawZipCode && !nextZipCode) throw new TRPCError({ code: "BAD_REQUEST", message: "CEP inválido." });
+
+      const nextAddressLine = hasOwn(input, "addressLine") ? String(input.addressLine ?? "").trim().replace(/\s+/g, " ") : String(current.addressLine || "");
+      const nextNeighborhood = hasOwn(input, "neighborhood") ? String(input.neighborhood ?? "").trim().replace(/\s+/g, " ") : String(current.neighborhood || "");
+      const nextAddressNumber = hasOwn(input, "addressNumber") ? String(input.addressNumber ?? "").trim() : String(current.addressNumber || "");
+      const nextAddressComplement = hasOwn(input, "addressComplement") ? String(input.addressComplement ?? "").trim().replace(/\s+/g, " ") : String(current.addressComplement || "");
+      const nextCity = hasOwn(input, "city") ? String(input.city ?? "").trim().replace(/\s+/g, " ") : String(current.city || "");
+      const rawUf = hasOwn(input, "uf") ? String(input.uf ?? "").trim().toUpperCase() : String(current.uf || "").trim().toUpperCase();
+      if (rawUf && !/^[A-Z]{2}$/.test(rawUf)) throw new TRPCError({ code: "BAD_REQUEST", message: "UF inválida." });
+      const nextPhoto = hasOwn(input, "profilePhotoUrl") ? String(input.profilePhotoUrl ?? "").trim() : String(current.profilePhotoUrl || "");
+      const nextReferredBy = hasOwn(input, "referredBy") ? String(input.referredBy ?? "").trim() : String(current.referredBy || "");
+      const rawReferredByPhone = hasOwn(input, "referredByPhone") ? String(input.referredByPhone ?? "") : String(current.referredByPhone || "");
+      const nextReferredByPhone = rawReferredByPhone ? normalizeCustomerPhone(rawReferredByPhone) : "";
+      if (rawReferredByPhone && !nextReferredByPhone) throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone do indicador inválido." });
+      const nextCustomerNumber = hasOwn(input, "customerNumber") ? input.customerNumber ?? null : current.customerNumber ?? null;
+      const nextIsReseller = hasOwn(input, "isReseller") ? Number(input.isReseller || 0) : Number(current.isReseller || 0);
+      const nextDiscountType = hasOwn(input, "resellerDiscountType") ? input.resellerDiscountType || "percent" : String(current.resellerDiscountType || "percent");
+      const nextDiscountValue = hasOwn(input, "resellerDiscountValue") ? String(input.resellerDiscountValue ?? "0") : String(current.resellerDiscountValue ?? "0");
+
+      if (nextCpf) {
+        const conflict = await findCustomerByStableIdentity({ cpf: nextCpf }, db);
+        if (conflict && Number(conflict.id) !== Number(input.id)) throw new TRPCError({ code: "CONFLICT", message: "CPF já pertence a outro cadastro." });
+      }
+      if (nextEmail) {
+        const conflict = await findCustomerByStableIdentity({ email: nextEmail }, db);
+        if (conflict && Number(conflict.id) !== Number(input.id)) throw new TRPCError({ code: "CONFLICT", message: "E-mail já pertence a outro cadastro." });
+      }
+
+      const previousIdentity = { phone: current.phone, cpf: current.cpf, email: current.email };
+      await recordCustomerIdentityAliases(Number(input.id), previousIdentity, db);
+      await db.execute(sql`
+        UPDATE customers SET
+          customerNumber=${nextCustomerNumber}, name=${nextName},
+          email=${nextEmail || null}, cpf=${nextCpf || null},
+          zipCode=${nextZipCode || null}, addressLine=${nextAddressLine || null},
+          neighborhood=${nextNeighborhood || null}, addressNumber=${nextAddressNumber || null},
+          addressComplement=${nextAddressComplement || null}, city=${nextCity || null}, uf=${rawUf || null},
+          profilePhotoUrl=${nextPhoto || null}, referredBy=${nextReferredBy || null},
+          referredByPhone=${nextReferredByPhone || null}, isReseller=${nextIsReseller},
+          resellerDiscountType=${nextDiscountType}, resellerDiscountValue=${nextDiscountValue},
+          normalizedPhone=${normalizeCustomerPhone(current.phone)},
+          normalizedCpf=${nextCpf || null}, normalizedEmail=${nextEmail || null}, updatedAt=NOW()
+        WHERE id=${input.id} AND deletedAt IS NULL
+      `);
+      await recordCustomerIdentityAliases(Number(input.id), { phone: current.phone, cpf: nextCpf, email: nextEmail }, db);
+      const synchronization = await syncUnifiedCustomerRegistry([previousIdentity]);
+      const customer = await findCustomerByStableId(Number(input.id), db);
+      return { success: true, customer, incomplete: customer ? !isCustomerProfileComplete(customer) : true, synchronization };
+    }),
+
+  adminCreatePartial: adminProcedure
+    .input(z.object({
+      phone: z.string().min(10).max(32),
+      name: z.string().max(128).optional(),
+      email: z.string().max(320).optional(),
+      cpf: z.string().max(18).optional(),
+      zipCode: z.string().max(10).optional(),
+      addressLine: z.string().max(255).optional(),
+      neighborhood: z.string().max(128).optional(),
+      addressNumber: z.string().max(32).optional(),
+      addressComplement: z.string().max(128).optional(),
+      city: z.string().max(128).optional(),
+      uf: z.string().max(2).optional(),
+      profilePhotoUrl: z.string().max(2048).optional(),
+      referredBy: z.string().max(128).optional(),
+      referredByPhone: z.string().max(32).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      await ensureCustomerIdentityInfrastructure(db);
+      await ensureStableCustomerIdentityInfrastructure(db);
+
+      const phone = normalizeCustomerPhone(input.phone);
+      if (!phone) throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone inválido." });
+      const duplicate = (await rows(db, sql`SELECT id FROM customers WHERE phone=${phone} LIMIT 1`))[0];
+      if (duplicate) throw new TRPCError({ code: "CONFLICT", message: "Este telefone já identifica outro cadastro." });
+
+      const email = input.email?.trim() ? normalizeCustomerEmail(input.email) : "";
+      if (input.email?.trim() && !email) throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
+      const cpf = input.cpf?.trim() ? normalizeCustomerCpf(input.cpf) : "";
+      if (input.cpf?.trim() && (!cpf || !isValidCPF(cpf))) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido." });
+      const zipCode = input.zipCode?.trim() ? normalizeCustomerZipCode(input.zipCode) : "";
+      if (input.zipCode?.trim() && !zipCode) throw new TRPCError({ code: "BAD_REQUEST", message: "CEP inválido." });
+      const uf = String(input.uf || "").trim().toUpperCase();
+      if (uf && !/^[A-Z]{2}$/.test(uf)) throw new TRPCError({ code: "BAD_REQUEST", message: "UF inválida." });
+      const referredByPhone = input.referredByPhone?.trim() ? normalizeCustomerPhone(input.referredByPhone) : "";
+      if (input.referredByPhone?.trim() && !referredByPhone) throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone do indicador inválido." });
+
+      if (cpf) {
+        const conflict = await findCustomerByStableIdentity({ cpf }, db);
+        if (conflict) throw new TRPCError({ code: "CONFLICT", message: "CPF já pertence a outro cadastro." });
+      }
+      if (email) {
+        const conflict = await findCustomerByStableIdentity({ email }, db);
+        if (conflict) throw new TRPCError({ code: "CONFLICT", message: "E-mail já pertence a outro cadastro." });
+      }
+
+      const nextRows = await rows(db, sql`SELECT COALESCE(MAX(customerNumber), 0) + 1 AS nextNum FROM customers`);
+      const customerNumber = Number(nextRows[0]?.nextNum || 1);
+      const name = String(input.name || "").trim().replace(/\s+/g, " ") || "CADASTRO RECUPERADO";
+      await db.execute(sql`
+        INSERT INTO customers (
+          customerNumber, name, phone, email, cpf,
+          zipCode, addressLine, neighborhood, addressNumber, addressComplement,
+          city, uf, profilePhotoUrl, referredBy, referredByPhone,
+          normalizedPhone, normalizedCpf, normalizedEmail, createdAt, updatedAt
+        ) VALUES (
+          ${customerNumber}, ${name}, ${phone}, ${email || null}, ${cpf || null},
+          ${zipCode || null}, ${String(input.addressLine || "").trim() || null},
+          ${String(input.neighborhood || "").trim() || null}, ${String(input.addressNumber || "").trim() || null},
+          ${String(input.addressComplement || "").trim() || null}, ${String(input.city || "").trim() || null},
+          ${uf || null}, ${String(input.profilePhotoUrl || "").trim() || null},
+          ${String(input.referredBy || "").trim() || null}, ${referredByPhone || null},
+          ${phone}, ${cpf || null}, ${email || null}, NOW(), NOW()
+        )
+      `);
+      const customer = await findCustomerByStableIdentity({ phone }, db);
+      if (!customer) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível recuperar o cadastro criado." });
+      await recordCustomerIdentityAliases(Number(customer.id), customer, db);
+      return { success: true, customer, incomplete: !isCustomerProfileComplete(customer) };
     }),
 
   save: publicProcedure
