@@ -110,6 +110,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const [enteredByCpf, setEnteredByCpf] = useState(false); // true quando o acesso foi feito via CPF
   const [cpfDuplicado, setCpfDuplicado] = useState(false);
   const [regCep, setRegCep] = useState("");
+  const [regStreet, setRegStreet] = useState("");
+  const [regAddressNumber, setRegAddressNumber] = useState("");
+  const [regNeighborhood, setRegNeighborhood] = useState("");
+  const [regAddressComplement, setRegAddressComplement] = useState("");
   const [cepLoading, setCepLoading] = useState(false);
   const [regCity, setRegCity] = useState("");
   const [regUf, setRegUf] = useState("");
@@ -593,6 +597,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       if (!data.erro) {
         const uf = data.uf?.toUpperCase() || '';
         const cidade = data.localidade || '';
+        if (data.logradouro) setRegStreet(String(data.logradouro));
+        if (data.bairro) setRegNeighborhood(String(data.bairro));
         const estadoObj = ESTADOS_BR.find(e => e.uf === uf);
         if (estadoObj) {
           setRegUf(uf);
@@ -700,11 +706,20 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         toast.error("Erro ao enviar foto. Tente novamente.");
         return;
       }
+      if (regCep.replace(/\D/g, "").length !== 8 || regStreet.trim().length < 2 || !regAddressNumber.trim() || regNeighborhood.trim().length < 2 || regCity.trim().length < 2 || regUf.trim().length !== 2) {
+        toast.error("Preencha o endereço completo: CEP, rua, número, bairro, cidade e estado.");
+        return;
+      }
       const result = await registerMutation.mutateAsync({
         name: regName.trim(),
         phone: clientPhoneDigits,
         email: regEmail.trim(),
         cpf: regCpf.trim(),
+        cep: regCep.trim(),
+        street: regStreet.trim(),
+        addressNumber: regAddressNumber.trim(),
+        neighborhood: regNeighborhood.trim(),
+        addressComplement: regAddressComplement.trim() || undefined,
         city: regCity.trim(),
         uf: regUf,
         referredBy: regReferredBy.trim() || undefined,
@@ -1982,9 +1997,9 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
                 {/* CEP */}
                 <div>
-                  <label className="text-white mb-2 block text-sm font-medium">CEP <span className="text-gray-400 font-normal text-xs">(opcional — preenche Estado e Cidade)</span></label>
+                  <label className="text-white mb-2 block text-sm font-medium">CEP <span className="text-red-400">*</span> <span className="text-gray-400 font-normal text-xs">(preenche endereço automaticamente)</span></label>
                   <div className="relative">
-                    <input type="text" inputMode="numeric" placeholder="00000-000" value={regCep}
+                    <input type="text" inputMode="numeric" placeholder="00000-000" value={regCep} required
                       onChange={(e) => {
                         const formatted = formatCep(e.target.value);
                         setRegCep(formatted);
@@ -1998,6 +2013,18 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     )}
                   </div>
                 </div>
+
+
+                {/* Endereço completo */}
+                <div>
+                  <label className="text-white mb-2 block text-sm font-medium">Rua / Logradouro <span className="text-red-400">*</span></label>
+                  <input type="text" value={regStreet} onChange={(e) => setRegStreet(e.target.value)} required placeholder="Rua, Avenida..." className="w-full px-4 py-4 bg-white text-black text-lg font-medium rounded-xl border-2 border-black focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all" />
+                </div>
+                <div className="grid grid-cols-[120px_1fr] gap-3">
+                  <div><label className="text-white mb-2 block text-sm font-medium">Número <span className="text-red-400">*</span></label><input type="text" value={regAddressNumber} onChange={(e) => setRegAddressNumber(e.target.value)} required placeholder="123 ou S/N" className="w-full px-3 py-4 bg-white text-black text-lg font-medium rounded-xl border-2 border-black focus:border-primary outline-none" /></div>
+                  <div><label className="text-white mb-2 block text-sm font-medium">Bairro <span className="text-red-400">*</span></label><input type="text" value={regNeighborhood} onChange={(e) => setRegNeighborhood(e.target.value)} required className="w-full px-3 py-4 bg-white text-black text-lg font-medium rounded-xl border-2 border-black focus:border-primary outline-none" /></div>
+                </div>
+                <div><label className="text-white mb-2 block text-sm font-medium">Complemento <span className="text-gray-400 font-normal text-xs">(opcional)</span></label><input type="text" value={regAddressComplement} onChange={(e) => setRegAddressComplement(e.target.value)} placeholder="Apto, bloco, fundos..." className="w-full px-4 py-4 bg-white text-black text-lg font-medium rounded-xl border-2 border-black focus:border-primary outline-none" /></div>
 
                 {/* Estado com autocomplete */}
                 <div className="relative">

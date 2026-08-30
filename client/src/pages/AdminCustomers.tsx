@@ -1395,6 +1395,16 @@ export default function AdminCustomers() {
                       <span>📍</span> {c.city}{c.uf ? `/${c.uf}` : ""}
                     </p>
                   )}
+
+                  {((c as any).street || (c as any).addressNumber || (c as any).neighborhood || (c as any).cep) && (
+                    <div className="mt-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-2 text-[11px] leading-5 text-slate-300">
+                      <p className="font-bold text-cyan-200">📍 Endereço</p>
+                      <p>{[(c as any).street, (c as any).addressNumber].filter(Boolean).join(", ")}</p>
+                      <p>{[(c as any).neighborhood, c.city, c.uf].filter(Boolean).join(" · ")}</p>
+                      {(c as any).addressComplement && <p>Complemento: {(c as any).addressComplement}</p>}
+                      {(c as any).cep && <p>CEP: {(c as any).cep}</p>}
+                    </div>
+                  )}
                   <p className="text-xs flex items-center gap-1.5" style={{ color: c.referredBy === 'Não informou' ? '#f87171' : (c.referredBy || (c as any).resolvedReferrerName || c.referredByPhone) ? '#4ade80' : '#6b7280' }}>
                     <span>👤</span>
                     {c.referredBy === 'Não informou'

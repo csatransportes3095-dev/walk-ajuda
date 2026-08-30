@@ -34,6 +34,10 @@ function missingFields(customer: any) {
   if (name.length < 2 || isRecoveredCustomerName(name)) missing.push("name");
   if (!normalizeCustomerEmail(customer?.email)) missing.push("email");
   if (!normalizeCustomerCpf(customer?.cpf) || !isValidCPF(normalizeCustomerCpf(customer?.cpf))) missing.push("cpf");
+  if (String(customer?.cep || "").replace(/\D/g, "").length !== 8) missing.push("cep");
+  if (String(customer?.street || "").trim().length < 2) missing.push("street");
+  if (String(customer?.addressNumber || "").trim().length < 1) missing.push("addressNumber");
+  if (String(customer?.neighborhood || "").trim().length < 2) missing.push("neighborhood");
   if (String(customer?.city || "").trim().length < 2) missing.push("city");
   if (!/^[A-Z]{2}$/.test(String(customer?.uf || "").trim().toUpperCase())) missing.push("uf");
   if (!String(customer?.profilePhotoUrl || "").trim()) missing.push("profilePhotoUrl");
@@ -194,6 +198,11 @@ export const customerUpdateRouter = router({
         name: isRecoveredCustomerName(name) ? "" : name,
         email: normalizeCustomerEmail(customer.email),
         cpf: normalizeCustomerCpf(customer.cpf),
+        cep: String(customer.cep || "").trim(),
+        street: String(customer.street || "").trim(),
+        addressNumber: String(customer.addressNumber || "").trim(),
+        neighborhood: String(customer.neighborhood || "").trim(),
+        addressComplement: String(customer.addressComplement || "").trim(),
         city: String(customer.city || "").trim(),
         uf: String(customer.uf || "").trim().toUpperCase(),
         profilePhotoUrl: String(customer.profilePhotoUrl || "").trim(),
@@ -234,6 +243,11 @@ export const customerUpdateRouter = router({
       name: z.string().trim().max(128).optional(),
       email: z.string().trim().max(320).optional(),
       cpf: z.string().max(18).optional(),
+      cep: z.string().trim().max(9).optional(),
+      street: z.string().trim().max(255).optional(),
+      addressNumber: z.string().trim().max(30).optional(),
+      neighborhood: z.string().trim().max(150).optional(),
+      addressComplement: z.string().trim().max(255).optional(),
       city: z.string().trim().max(128).optional(),
       uf: z.string().trim().max(2).optional(),
     }))
@@ -241,18 +255,27 @@ export const customerUpdateRouter = router({
       const { db, customer } = await requireCustomerSession(input.token);
       if (await customerUpdateAlreadyCompleted(db, customer)) throw alreadyUpdatedError();
       const policyState = await getCustomerProfileUpdateState(customer);
-      const selected = new Set([...missingFields(customer), ...policyState.effectiveFields]);
+      const selected = new Set([...missingFields(customer), ...policyState.effectiveFields, "cep", "street", "addressNumber", "neighborhood", "city", "uf"]);
       await ensureCustomerIdentityInfrastructure(db);
       const name = selected.has("name") ? String(input.name || "").trim().replace(/\s+/g, " ") : String(customer.name || "").trim();
       const phone = selected.has("phone") ? normalizeCustomerPhone(input.phone || "") : normalizeCustomerPhone(customer.phone);
       const email = selected.has("email") ? normalizeCustomerEmail(input.email || "") : normalizeCustomerEmail(customer.email);
       const cpf = selected.has("cpf") ? normalizeCustomerCpf(input.cpf || "") : normalizeCustomerCpf(customer.cpf);
+      const cep = String(input.cep || customer.cep || "").replace(/\D/g, "").slice(0, 8);
+      const street = String(input.street || customer.street || "").trim().replace(/\s+/g, " ");
+      const addressNumber = String(input.addressNumber || customer.addressNumber || "").trim().replace(/\s+/g, " ");
+      const neighborhood = String(input.neighborhood || customer.neighborhood || "").trim().replace(/\s+/g, " ");
+      const addressComplement = String(input.addressComplement ?? customer.addressComplement ?? "").trim().replace(/\s+/g, " ");
       const city = selected.has("city") ? String(input.city || "").trim().replace(/\s+/g, " ") : String(customer.city || "").trim();
       const uf = selected.has("uf") ? String(input.uf || "").trim().toUpperCase() : String(customer.uf || "").trim().toUpperCase();
       if (selected.has("name") && (name.length < 2 || isRecoveredCustomerName(name))) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo, sem a indicação de cadastro recuperado." });
       if (selected.has("phone") && (!phone || phone.length < 10 || phone.length > 11)) throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone inválido." });
       if (selected.has("email") && !email) throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
       if (selected.has("cpf") && (!cpf || !isValidCPF(cpf))) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido." });
+      if (cep.length !== 8) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um CEP válido." });
+      if (street.length < 2) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe a rua / logradouro." });
+      if (!addressNumber) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o número do endereço." });
+      if (neighborhood.length < 2) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o bairro." });
       if (selected.has("city") && city.length < 2) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe sua cidade." });
       if (selected.has("uf") && !/^[A-Z]{2}$/.test(uf)) throw new TRPCError({ code: "BAD_REQUEST", message: "UF inválida." });
       const photoRows = await rows(db, sql`SELECT profilePhotoUrl FROM customers WHERE id=${customer.id} LIMIT 1`);
@@ -275,7 +298,7 @@ export const customerUpdateRouter = router({
       const oldPhone = normalizeCustomerPhone(customer.phone);
       await db.execute(sql`
         UPDATE customers SET
-          name=${name}, phone=${phone}, email=${email}, cpf=${cpf}, city=${city}, uf=${uf},
+          name=${name}, phone=${phone}, email=${email}, cpf=${cpf}, cep=${cep}, street=${street}, addressNumber=${addressNumber}, neighborhood=${neighborhood}, addressComplement=${addressComplement || null}, city=${city}, uf=${uf},
           normalizedPhone=${phone},
           normalizedCpf=${cpf}, normalizedEmail=${email}, updatedAt=NOW()
         WHERE id=${customer.id} AND deletedAt IS NULL

@@ -2038,7 +2038,7 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const db = await (await import('./db')).getDb() as any;
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
-        const customerRows = await db.execute(sql`SELECT id, name, phone, email, cpf, city, uf, profilePhotoUrl FROM customers WHERE id=${input.customerId} AND deletedAt IS NULL LIMIT 1`);
+        const customerRows = await db.execute(sql`SELECT id, name, phone, email, cpf, cep, street, addressNumber, neighborhood, addressComplement, city, uf, profilePhotoUrl FROM customers WHERE id=${input.customerId} AND deletedAt IS NULL LIMIT 1`);
         const customer = (customerRows[0] as any[])?.[0];
         if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado.' });
         return {
@@ -2051,12 +2051,12 @@ export const appRouter = router({
       .input(z.object({
         customerId: z.number().int().positive(),
         enabled: z.boolean(),
-        fields: z.array(z.enum(['name', 'phone', 'cpf', 'email', 'city', 'uf', 'profilePhotoUrl'])).max(7),
+        fields: z.array(z.enum(['name', 'phone', 'cpf', 'email', 'cep', 'street', 'addressNumber', 'neighborhood', 'city', 'uf', 'profilePhotoUrl'])).max(11),
       }))
       .mutation(async ({ input, ctx }) => {
         const db = await (await import('./db')).getDb() as any;
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
-        const customerRows = await db.execute(sql`SELECT id, name, phone, email, cpf, city, uf, profilePhotoUrl FROM customers WHERE id=${input.customerId} AND deletedAt IS NULL LIMIT 1`);
+        const customerRows = await db.execute(sql`SELECT id, name, phone, email, cpf, cep, street, addressNumber, neighborhood, addressComplement, city, uf, profilePhotoUrl FROM customers WHERE id=${input.customerId} AND deletedAt IS NULL LIMIT 1`);
         const customer = (customerRows[0] as any[])?.[0];
         if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado.' });
         const updatedBy = (ctx as any)?.user?.name || (ctx as any)?.user?.username || 'Administrador';
@@ -2310,6 +2310,11 @@ export const appRouter = router({
         phone: z.string().min(1),
         email: z.string().email("E-mail obrigatório e inválido").min(1, "E-mail obrigatório"),
         cpf: z.string().min(11, "CPF inválido").max(18),
+        cep: z.string().trim().min(8).max(9).optional(),
+        street: z.string().trim().min(2).max(255).optional(),
+        addressNumber: z.string().trim().min(1).max(30).optional(),
+        neighborhood: z.string().trim().min(2).max(150).optional(),
+        addressComplement: z.string().trim().max(255).optional(),
         city: z.string().min(1, "Cidade é obrigatória"),
         uf: z.string().length(2, "UF deve ter 2 caracteres"),
         referredBy: z.string().optional(),
@@ -3085,6 +3090,11 @@ export const appRouter = router({
         profilePhotoUrl: z.string().url('Foto de perfil obrigatória').min(1, 'Foto de perfil obrigatória'),
         referredBy: z.string().trim().min(1).optional(),
         referredByPhone: z.string().regex(/^\d{10,11}$/, 'Informe o telefone válido do indicador cadastrado'),
+        cep: z.string().trim().min(8).max(9).optional(),
+        street: z.string().trim().min(2).max(255).optional(),
+        addressNumber: z.string().trim().min(1).max(30).optional(),
+        neighborhood: z.string().trim().min(2).max(150).optional(),
+        addressComplement: z.string().trim().max(255).optional(),
         city: z.string().optional(),
         uf: z.string().length(2).optional().or(z.literal('')),
       }))
@@ -3095,6 +3105,11 @@ export const appRouter = router({
           phone: normalizeCustomerPhone(input.phone),
           email: normalizeCustomerEmail(input.email),
           cpf: normalizeCustomerCpf(input.cpf),
+          cep: input.cep ? input.cep.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2") : undefined,
+          street: input.street?.trim() || undefined,
+          addressNumber: input.addressNumber?.trim() || undefined,
+          neighborhood: input.neighborhood?.trim() || undefined,
+          addressComplement: input.addressComplement?.trim() || undefined,
           profilePhotoUrl: input.profilePhotoUrl,
           city: input.city || undefined,
           uf: input.uf || undefined,
@@ -3520,6 +3535,11 @@ export const appRouter = router({
           c.id as customerId,
           c.email as customerEmail,
           c.name as customerName,
+          c.cep as customerCep,
+          c.street as customerStreet,
+          c.addressNumber as customerAddressNumber,
+          c.neighborhood as customerNeighborhood,
+          c.addressComplement as customerAddressComplement,
           c.city as customerCity,
           c.uf as customerUf,
           c.referredBy as customerReferredBy,
@@ -3567,6 +3587,11 @@ export const appRouter = router({
             c.id AS customerId,
             c.email AS customerEmail,
             c.name AS customerName,
+            c.cep AS customerCep,
+            c.street AS customerStreet,
+            c.addressNumber AS customerAddressNumber,
+            c.neighborhood AS customerNeighborhood,
+            c.addressComplement AS customerAddressComplement,
             c.city AS customerCity,
             c.uf AS customerUf,
             c.referredBy AS customerReferredBy,
@@ -3680,6 +3705,11 @@ export const appRouter = router({
             customerId: row.customerId,
             customerEmail: row.customerEmail,
             customerName: row.customerName,
+            customerCep: row.customerCep,
+            customerStreet: row.customerStreet,
+            customerAddressNumber: row.customerAddressNumber,
+            customerNeighborhood: row.customerNeighborhood,
+            customerAddressComplement: row.customerAddressComplement,
             customerCity: row.customerCity,
             customerUf: row.customerUf,
             customerReferredBy: row.customerReferredBy,
@@ -3753,6 +3783,11 @@ export const appRouter = router({
             customerId: row.customerId,
             customerEmail: row.customerEmail,
             customerName: row.customerName,
+            customerCep: row.customerCep,
+            customerStreet: row.customerStreet,
+            customerAddressNumber: row.customerAddressNumber,
+            customerNeighborhood: row.customerNeighborhood,
+            customerAddressComplement: row.customerAddressComplement,
             customerCity: row.customerCity,
             customerUf: row.customerUf,
             customerReferredBy: row.customerReferredBy,
