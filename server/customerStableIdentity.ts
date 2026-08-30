@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import {
+  findMainCustomerByIdentity,
   normalizeCustomerCpf,
   normalizeCustomerEmail,
   normalizeCustomerPhone,
@@ -152,6 +153,39 @@ export async function findCustomerIdByIdentityAlias(
     if (customerId) return customerId;
   }
   return null;
+}
+
+export async function findCustomerByStableId(customerId: number, dbArg?: any): Promise<any | null> {
+  const db = dbArg || await getDb() as any;
+  if (!db || !customerId) return null;
+  await ensureStableCustomerIdentityInfrastructure(db);
+  const found = await rows(db, sql`
+    SELECT id, customerNumber, name, phone, cpf, email, city, uf,
+           zipCode, addressLine, neighborhood, addressNumber, addressComplement,
+           profilePhotoUrl, blocked, deletedAt
+    FROM customers
+    WHERE id=${customerId} AND deletedAt IS NULL
+    LIMIT 1
+  `);
+  return found[0] || null;
+}
+
+export async function findCustomerByStableIdentity(
+  identity: CustomerIdentityInput,
+  dbArg?: any,
+): Promise<any | null> {
+  const db = dbArg || await getDb() as any;
+  if (!db) return null;
+  await ensureStableCustomerIdentityInfrastructure(db);
+
+  const current = await findMainCustomerByIdentity(identity, db);
+  if (current) {
+    await recordCustomerIdentityAliases(Number(current.id), current, db);
+    return current;
+  }
+
+  const customerId = await findCustomerIdByIdentityAlias(identity, db);
+  return customerId ? findCustomerByStableId(customerId, db) : null;
 }
 
 export async function linkCustomerAuthRows(
