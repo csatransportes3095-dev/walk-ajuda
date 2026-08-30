@@ -6,6 +6,7 @@ on:
       - feat/endereco-completo-cadastro-v2
     paths:
       - scripts/_prepare_customer_address_patch_final.py
+      - scripts/_fix_admin_create_address_input.py
       - .github/workflows/apply-customer-address-final.yml
   workflow_dispatch:
 
@@ -28,6 +29,8 @@ jobs:
         run: python scripts/_prepare_customer_address_patch_final.py
       - name: Apply isolated address patch
         run: python scripts/_apply_customer_address_patch.py
+      - name: Align adminCreate input
+        run: python scripts/_fix_admin_create_address_input.py
       - name: Audit forbidden files
         run: |
           git status --short
@@ -46,7 +49,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git restore scripts/_apply_customer_address_patch.py scripts/_prepare_customer_address_patch_final.py .github/workflows/apply-customer-address-patch.yml .github/workflows/apply-customer-address-final.yml
+          git restore scripts/_apply_customer_address_patch.py scripts/_prepare_customer_address_patch_final.py scripts/_fix_admin_create_address_input.py .github/workflows/apply-customer-address-patch.yml .github/workflows/apply-customer-address-final.yml
           git add drizzle/schema.ts shared/customerProfileUpdate.ts server/customerAccess.ts server/routers/customerUpdate.ts client/src/pages/AtualizarCadastro.tsx client/src/components/PasswordGate.tsx server/routers.ts client/src/pages/AdminCustomers.tsx client/src/pages/AdminOrders.tsx scripts/apply-customer-address-migration.ts scripts/render-start.sh
           git commit -m 'feat(cadastro): endereço completo obrigatório'
           git push origin HEAD:feat/endereco-completo-cadastro-v2
