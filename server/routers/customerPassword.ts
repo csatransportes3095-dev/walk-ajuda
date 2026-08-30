@@ -167,25 +167,10 @@ export const customerPasswordRouter = router({
   // â”€â”€ Salvar CPF do cliente (obrigatório antes de criar senha) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   saveCpf: publicProcedure
-    .input(z.object({ phone: z.string(), cpf: z.string().min(11) }))
-    .mutation(async ({ input }) => {
-      const db = (await getDb()) as any;
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
-      const cleanPhone = input.phone.replace(/\D/g, "");
-      const cleanCpf = normalizeCpf(input.cpf);
-      if (!isValidCPF(cleanCpf)) throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido" });
-      const formattedCpf = formatCPF(cleanCpf);
-      // Verificar se CPF já pertence a outro cliente
-      const existing = await db.select().from(customers)
-        .where(eq(customers.cpf, formattedCpf)).limit(1);
-      if (existing?.[0] && existing[0].phone !== cleanPhone) {
-        throw new TRPCError({ code: "CONFLICT", message: "CPF já cadastrado por outro cliente." });
-      }
-      await db.update(customers).set({ cpf: formattedCpf }).where(eq(customers.phone, cleanPhone));
-      return { success: true };
-    }),
+    .input(z.object({ phone: z.string(), cpf: z.string().min(1) }))
+    .mutation(async () => ({ success: false, message: 'Cadastro incompleto. Use /atualizarcadastro para corrigir todos os dados obrigatórios juntos.' })),
 
-  // â”€â”€ Cliente cria senha (modo auto) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Cliente cria senha pelo fluxo normal; reparo de CPF fica centralizado.
 
   clientCreateAuto: publicProcedure
     .input(z.object({ phone: z.string(), password: z.string().min(4) }))
