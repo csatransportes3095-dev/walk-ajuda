@@ -33,7 +33,7 @@ jobs:
 
           start = s.index('# 1) Banco / schema')
           end = s.index("migration = '''", start)
-          schema_block = '''# 1) Banco / schema
+          schema_block = r'''# 1) Banco / schema
           replace_once(
               'drizzle/schema.ts',
               '  email: varchar("email", { length: 320 }),\n  city: varchar("city", { length: 128 }),\n  uf: varchar("uf", { length: 2 }),\n  cpf: varchar("cpf", { length: 14 }),',
@@ -45,7 +45,7 @@ jobs:
 
           start = s.index('# 2) Política central de atualização obrigatória')
           end = s.index('# 3) Backend de atualização cadastral', start)
-          policy_block = '''# 2) Política central de atualização obrigatória
+          policy_block = r'''# 2) Política central de atualização obrigatória
           replace_once(
               'shared/customerProfileUpdate.ts',
               '  { id: "email", label: "E-mail" },\n  { id: "city", label: "Cidade" },',
@@ -62,7 +62,7 @@ jobs:
 
           start = s.index('# 6) Backend principal: cadastro + pedidos ADM')
           end = s.index('# 7) ADM clientes:', start)
-          routers_block = '''# 6) Backend principal: cadastro + pedidos ADM
+          routers_block = r'''# 6) Backend principal: cadastro + pedidos ADM
           p = 'server/routers.ts'
           text = read(p)
           reg_start = text.index('    register: publicProcedure')
