@@ -59,6 +59,37 @@ jobs:
 
           '''
           s = s[:start] + policy_block + s[end:]
+
+          start = s.index('# 6) Backend principal: cadastro + pedidos ADM')
+          end = s.index('# 7) ADM clientes:', start)
+          routers_block = '''# 6) Backend principal: cadastro + pedidos ADM
+          p = 'server/routers.ts'
+          replace_once(p,
+              '        cpf: z.string().min(11, "CPF inválido").max(18),\\n        city: z.string().min(1, "Cidade é obrigatória"),\\n        uf: z.string().length(2, "UF deve ter 2 caracteres"),',
+              '        cpf: z.string().min(11, "CPF inválido").max(18),\\n        cep: z.string().trim().min(8, "CEP é obrigatório").max(9),\\n        street: z.string().trim().min(2, "Rua / logradouro é obrigatório").max(255),\\n        addressNumber: z.string().trim().min(1, "Número é obrigatório").max(30),\\n        neighborhood: z.string().trim().min(2, "Bairro é obrigatório").max(150),\\n        addressComplement: z.string().trim().max(255).optional(),\\n        city: z.string().trim().min(1, "Cidade é obrigatória"),\\n        uf: z.string().trim().length(2, "UF deve ter 2 caracteres"),'
+          )
+          replace_once(p,
+              '          cpf: normalizeCustomerCpf(input.cpf),\\n          profilePhotoUrl: input.profilePhotoUrl,\\n          city: input.city || undefined,\\n          uf: input.uf || undefined,',
+              '          cpf: normalizeCustomerCpf(input.cpf),\\n          cep: input.cep.replace(/\\\\D/g, "").replace(/^(\\\\d{5})(\\\\d{3})$/, "$1-$2"),\\n          street: input.street.trim(),\\n          addressNumber: input.addressNumber.trim(),\\n          neighborhood: input.neighborhood.trim(),\\n          addressComplement: input.addressComplement?.trim() || undefined,\\n          profilePhotoUrl: input.profilePhotoUrl,\\n          city: input.city.trim(),\\n          uf: input.uf.trim().toUpperCase(),'
+          )
+          replace_all(p,
+              '          c.city as customerCity,\\n          c.uf as customerUf,',
+              '          c.cep as customerCep,\\n          c.street as customerStreet,\\n          c.addressNumber as customerAddressNumber,\\n          c.neighborhood as customerNeighborhood,\\n          c.addressComplement as customerAddressComplement,\\n          c.city as customerCity,\\n          c.uf as customerUf,',
+              minimum=1
+          )
+          replace_all(p,
+              '            c.city AS customerCity,\\n            c.uf AS customerUf,',
+              '            c.cep AS customerCep,\\n            c.street AS customerStreet,\\n            c.addressNumber AS customerAddressNumber,\\n            c.neighborhood AS customerNeighborhood,\\n            c.addressComplement AS customerAddressComplement,\\n            c.city AS customerCity,\\n            c.uf AS customerUf,',
+              minimum=1
+          )
+          replace_all(p,
+              '            customerCity: row.customerCity,\\n            customerUf: row.customerUf,',
+              '            customerCep: row.customerCep,\\n            customerStreet: row.customerStreet,\\n            customerAddressNumber: row.customerAddressNumber,\\n            customerNeighborhood: row.customerNeighborhood,\\n            customerAddressComplement: row.customerAddressComplement,\\n            customerCity: row.customerCity,\\n            customerUf: row.customerUf,',
+              minimum=1
+          )
+
+          '''
+          s = s[:start] + routers_block + s[end:]
           p.write_text(s, encoding='utf-8')
           PY
       - name: Apply isolated address patch
