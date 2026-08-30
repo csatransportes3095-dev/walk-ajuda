@@ -43,6 +43,15 @@ jobs:
           git fetch origin recovery/organizar-salvos-2026-08-24
           git checkout -B fix/agendamento-render-production-20260830 origin/recovery/organizar-salvos-2026-08-24
           node /tmp/fix-render-production-cadastro.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('client/src/pages/SchedulePage.tsx')
+          s = p.read_text()
+          dead = '            ...(missingFields.includes("phone") ? { phone: profilePhone } : {}),\n'
+          if dead not in s:
+              raise SystemExit('dead phone update reference not found')
+          p.write_text(s.replace(dead, '', 1))
+          PY
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -72,6 +81,7 @@ jobs:
           grep -F 'window.location.replace(returnTo)' client/src/pages/AtualizarCadastro.tsx
           grep -F 'Telefone confirmado · não editável' client/src/pages/AtualizarCadastro.tsx
           grep -F 'if (file.type && !/^image\/(jpeg|png|webp)$/i.test(file.type))' client/src/pages/AtualizarCadastro.tsx
+          ! grep -F 'missingFields.includes("phone")' client/src/pages/SchedulePage.tsx
           ! grep -F 'mutateAsync({ token, phone:' client/src/pages/AtualizarCadastro.tsx
           ! grep -F 'customerProfileUpdatePolicy' server/routers/customerUpdate.ts
           ! grep -F 'customerProfileUpdatePolicy' server/routers/customerPassword.ts
