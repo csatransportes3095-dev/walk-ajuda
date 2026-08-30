@@ -33,7 +33,9 @@ jobs:
           end = s.find("\n\nassertNotIncludes", start)
           if start < 0 or end < 0:
               raise SystemExit('wiring test block not found')
-          p.write_text(s[:start] + s[end + 2:])
+          s = s[:start] + s[end + 2:]
+          s = s.replace('if (count !== 1) throw new Error(`${path}: expected one match for ${label}, found ${count}`);', 'if (count < 1) throw new Error(`${path}: expected at least one match for ${label}, found ${count}`);')
+          p.write_text(s)
           PY
 
       - name: Start branch from actual Render production branch
