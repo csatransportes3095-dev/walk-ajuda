@@ -1,0 +1,214 @@
+name: Apply H2ADS linked instance
+
+on:
+  push:
+    branches:
+      - automation/apply-h2ads-linked-instance-20260830
+    paths:
+      - ".github/workflows/apply-h2ads-linked-instance.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/h2ads-create-instance-linked-order-20260830
+          fetch-depth: 0
+
+      - name: Apply implementation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          picker = r'''import { useMemo, useState } from "react";
+          import { trpc } from "@/lib/trpc";
+          import { canShowH2AdsOrderForLink, getExactH2AdsCustomerNumberSearch, matchesH2AdsOrderSearch, normalizeH2AdsOrderSearch } from "@shared/h2adsOrderSearch";
+
+          export type H2AdsPendingOrderLink = {
+            registrationId: number;
+            subOrderIndex: number;
+            customerNumber: number | null;
+            customerName: string | null;
+            orderNumber: number | null;
+            serviceName: string | null;
+            serviceOption: string | null;
+            latestStatus: string | null;
+            customerProfilePhotoUrl: string | null;
+          };
+
+          type AdminOrder = H2AdsPendingOrderLink & {
+            id: number;
+            phone?: string | null;
+          };
+
+          const keyFor = (registrationId: number, subOrderIndex: number) => `${registrationId}:${subOrderIndex}`;
+          const customerInitial = (name?: string | null) => (name || "C").trim().charAt(0).toUpperCase() || "C";
+          const statusLabel = (status?: string | null) => status ? status.replace(/_/g, " ") : "Sem status";
+
+          export function suggestedH2AdsInstanceName(order: H2AdsPendingOrderLink): string {
+            const prefix = order.customerNumber ? String(order.customerNumber) : String(order.orderNumber || order.registrationId);
+            const name = (order.customerName || "CLIENTE").trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
+            return `${prefix} ${name}`.slice(0, 128);
+          }
+
+          export default function H2AdsNewInstanceOrderPicker({ value, onChange }: { value: H2AdsPendingOrderLink | null; onChange: (value: H2AdsPendingOrderLink | null) => void }) {
+            const [search, setSearch] = useState("");
+            const linksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
+            const ordersQuery = trpc.orderStatus.listOrders.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
+            const orders = (ordersQuery.data ?? []) as unknown as AdminOrder[];
+            const links = linksQuery.data ?? [];
+            const normalizedSearch = normalizeH2AdsOrderSearch(search);
+            const exactCustomerNumber = getExactH2AdsCustomerNumberSearch(search);
+            const linkedKeys = useMemo(() => new Set(links.map(link => keyFor(link.registrationId, link.subOrderIndex))), [links]);
+
+            const results = useMemo(() => {
+              if (!normalizedSearch) return [] as AdminOrder[];
+              const filtered = orders.filter(order => {
+                const subOrderIndex = order.subOrderIndex ?? 0;
+                if (linkedKeys.has(keyFor(order.id, subOrderIndex))) return false;
+                if (!canShowH2AdsOrderForLink(order.latestStatus, false, true)) return false;
+                return matchesH2AdsOrderSearch(order, search);
+              });
+              if (exactCustomerNumber !== null) {
+                const exact = filtered.find(order => Number(order.customerNumber) === exactCustomerNumber);
+                return exact ? [exact] : [];
+              }
+              return filtered.slice(0, 8);
+            }, [orders, linkedKeys, normalizedSearch, exactCustomerNumber, search]);
+
+            const select = (order: AdminOrder) => {
+              onChange({
+                registrationId: order.id,
+                subOrderIndex: order.subOrderIndex ?? 0,
+                customerNumber: order.customerNumber ?? null,
+                customerName: order.customerName ?? null,
+                orderNumber: order.orderNumber ?? null,
+                serviceName: order.serviceName ?? null,
+                serviceOption: order.serviceOption ?? null,
+                latestStatus: order.latestStatus ?? null,
+                customerProfilePhotoUrl: order.customerProfilePhotoUrl ?? null,
+              });
+              setSearch("");
+            };
+
+            return <div className="rounded-2xl border border-violet-400/25 bg-violet-400/[0.05] p-3">
+              <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.12em] text-violet-200">Vincular cliente ao criar</p><p className="mt-1 text-[11px] leading-4 text-slate-500">Opcional. A instância já nasce sincronizada ao pedido escolhido.</p></div>{value && <button type="button" onClick={() => onChange(null)} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-black text-slate-300 hover:bg-white/5">Trocar</button>}</div>
+              {value ? <div className="mt-3 flex items-center gap-3 rounded-xl border border-violet-300/20 bg-black/20 p-3">
+                <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full border border-violet-300/25 bg-violet-400/10">{value.customerProfilePhotoUrl ? <img src={value.customerProfilePhotoUrl} alt={value.customerName || "Foto do cliente"} className="h-full w-full object-cover" /> : <div className="grid h-full w-full place-items-center text-sm font-black text-violet-100">{customerInitial(value.customerName)}</div>}</div>
+                <div className="min-w-0 flex-1"><p className="text-[11px] font-black text-violet-200">{value.customerNumber ? `*${value.customerNumber}` : `#${value.orderNumber || value.registrationId}`}</p><p className="truncate text-sm font-black text-white">{value.customerName || "Cliente"}</p><p className="mt-1 truncate text-[10px] font-semibold text-slate-400">Pedido #{value.orderNumber || value.registrationId} · {[value.serviceName, value.serviceOption].filter(Boolean).join(" · ") || "Pedido"}</p></div>
+                <span className="shrink-0 rounded-lg bg-emerald-400/10 px-2 py-1 text-[9px] font-black uppercase text-emerald-300">{statusLabel(value.latestStatus)}</span>
+              </div> : <>
+                <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar *cadastro, nome, telefone ou #pedido" className="mt-3 h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-xs font-bold text-white outline-none placeholder:text-slate-600 focus:border-violet-300/50" />
+                {normalizedSearch && <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-black/25">{results.length === 0 ? <p className="px-3 py-3 text-[11px] font-semibold text-slate-500">Nenhum cliente disponível para “{search}”.</p> : results.map(order => <button key={keyFor(order.id, order.subOrderIndex ?? 0)} type="button" onClick={() => select(order)} className="flex w-full items-center gap-3 border-b border-white/8 px-3 py-2.5 text-left last:border-b-0 hover:bg-violet-400/10"><div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-violet-300/20 bg-violet-400/10">{order.customerProfilePhotoUrl ? <img src={order.customerProfilePhotoUrl} alt={order.customerName || "Foto do cliente"} className="h-full w-full object-cover" /> : <div className="grid h-full w-full place-items-center text-xs font-black text-violet-100">{customerInitial(order.customerName)}</div>}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-black text-white">{order.customerNumber ? `*${order.customerNumber}` : `#${order.orderNumber || order.id}`} · {order.customerName || "Cliente"}</p><p className="mt-0.5 truncate text-[10px] text-slate-400">#{order.orderNumber || order.id} · {[order.serviceName, order.serviceOption].filter(Boolean).join(" · ") || "Pedido"}</p></div><span className="shrink-0 text-[9px] font-black uppercase text-emerald-300">{statusLabel(order.latestStatus)}</span></button>)}</div>}
+              </>}
+            </div>;
+          }
+          '''
+          Path('client/src/components/H2AdsNewInstanceOrderPicker.tsx').write_text(picker, encoding='utf-8')
+
+          page = Path('client/src/pages/H2Ads.tsx')
+          text = page.read_text(encoding='utf-8')
+          old_import = 'import H2AdsOrderLinkControl from "@/components/H2AdsOrderLinkControl";\n'
+          new_import = old_import + 'import H2AdsNewInstanceOrderPicker, { suggestedH2AdsInstanceName, type H2AdsPendingOrderLink } from "@/components/H2AdsNewInstanceOrderPicker";\n'
+          if 'H2AdsNewInstanceOrderPicker' not in text:
+            if old_import not in text: raise SystemExit('H2Ads import marker missing')
+            text = text.replace(old_import, new_import, 1)
+
+          old_mutation = '  const createInstance = trpc.h2Ads.createInstance.useMutation();\n'
+          new_mutation = old_mutation + '  const createInstanceLinkedOrder = trpc.h2Ads.createInstanceLinkedOrder.useMutation();\n'
+          if 'createInstanceLinkedOrder = ' not in text:
+            if old_mutation not in text: raise SystemExit('create mutation marker missing')
+            text = text.replace(old_mutation, new_mutation, 1)
+
+          old_state = '  const [instanceForm, setInstanceForm] = useState<InstanceForm | null>(null);\n'
+          new_state = old_state + '  const [newInstanceOrderLink, setNewInstanceOrderLink] = useState<H2AdsPendingOrderLink | null>(null);\n'
+          if 'newInstanceOrderLink' not in text:
+            if old_state not in text: raise SystemExit('instance state marker missing')
+            text = text.replace(old_state, new_state, 1)
+
+          old_saving = '  const saving = createGroup.isPending || updateGroup.isPending || deleteGroup.isPending || createInstance.isPending || updateInstance.isPending || deleteInstance.isPending || saveNetworkProfile.isPending || saveProxyCredential.isPending || updateProxyRotation.isPending || validateProxy.isPending || createWorkerPairing.isPending || assignWorker.isPending || revokeWorker.isPending;'
+          new_saving = '  const saving = createGroup.isPending || updateGroup.isPending || deleteGroup.isPending || createInstance.isPending || createInstanceLinkedOrder.isPending || updateInstance.isPending || deleteInstance.isPending || saveNetworkProfile.isPending || saveProxyCredential.isPending || updateProxyRotation.isPending || validateProxy.isPending || createWorkerPairing.isPending || assignWorker.isPending || revokeWorker.isPending;'
+          if old_saving in text: text = text.replace(old_saving, new_saving, 1)
+
+          old_new = '    setInstanceForm({ ...emptyInstance, groupId: String(groupId ?? activeGroups[0].id) });\n'
+          new_new = '    setNewInstanceOrderLink(null);\n    setInstanceForm({ ...emptyInstance, groupId: String(groupId ?? activeGroups[0].id) });\n'
+          if 'setNewInstanceOrderLink(null);\n    setInstanceForm' not in text:
+            if old_new not in text: raise SystemExit('newInstance marker missing')
+            text = text.replace(old_new, new_new, 1)
+
+          old_save = '      const payload = { groupId, name, notes: instanceForm.notes.trim() || null, status: instanceForm.status };\n      if (instanceForm.id) await updateInstance.mutateAsync({ id: instanceForm.id, ...payload }); else await createInstance.mutateAsync(payload);\n      setInstanceForm(null); toast.success("Instância salva."); await refresh();'
+          new_save = '      const payload = { groupId, name, notes: instanceForm.notes.trim() || null, status: instanceForm.status };\n      if (instanceForm.id) {\n        await updateInstance.mutateAsync({ id: instanceForm.id, ...payload });\n      } else if (newInstanceOrderLink) {\n        await createInstanceLinkedOrder.mutateAsync({ ...payload, registrationId: newInstanceOrderLink.registrationId, subOrderIndex: newInstanceOrderLink.subOrderIndex });\n      } else {\n        await createInstance.mutateAsync(payload);\n      }\n      setInstanceForm(null); setNewInstanceOrderLink(null); toast.success(newInstanceOrderLink ? "Instância criada e cliente vinculado." : "Instância salva."); await refresh();'
+          if 'createInstanceLinkedOrder.mutateAsync' not in text:
+            if old_save not in text: raise SystemExit('saveInstance marker missing')
+            text = text.replace(old_save, new_save, 1)
+
+          old_modal = '<Field label="Notas"><textarea value={instanceForm.notes} onChange={event => setInstanceForm({ ...instanceForm, notes: event.target.value })} placeholder="Opcional" /></Field><Field label="Estado">'
+          new_modal = '<Field label="Notas"><textarea value={instanceForm.notes} onChange={event => setInstanceForm({ ...instanceForm, notes: event.target.value })} placeholder="Opcional" /></Field>{!instanceForm.id && <H2AdsNewInstanceOrderPicker value={newInstanceOrderLink} onChange={order => { setNewInstanceOrderLink(order); if (order && (!instanceForm.name.trim() || /^instância\\s*\\d*$/i.test(instanceForm.name.trim()))) setInstanceForm({ ...instanceForm, name: suggestedH2AdsInstanceName(order) }); }} />}<Field label="Estado">'
+          if 'H2AdsNewInstanceOrderPicker value=' not in text:
+            if old_modal not in text: raise SystemExit('instance modal marker missing')
+            text = text.replace(old_modal, new_modal, 1)
+          page.write_text(text, encoding='utf-8')
+
+          router = Path('server/routers/h2ads.ts')
+          text = router.read_text(encoding='utf-8')
+          import_marker = 'import { h2AdsOrderLinkRouterPart } from "../h2adsOrderLinkRouter";\n'
+          if 'setH2AdsOrderLink' not in text:
+            if import_marker not in text: raise SystemExit('router import marker missing')
+            text = text.replace(import_marker, import_marker + 'import { setH2AdsOrderLink } from "../h2adsOrderLink";\n', 1)
+
+          schema_marker = 'export const h2AdsUpdateInstanceSchema = z.object({\n'
+          linked_schema = 'export const h2AdsCreateLinkedInstanceSchema = h2AdsCreateInstanceSchema.extend({\n  registrationId: z.number().int().positive(),\n  subOrderIndex: z.number().int().min(0).default(0),\n}).strict();\n\n'
+          if 'h2AdsCreateLinkedInstanceSchema' not in text:
+            if schema_marker not in text: raise SystemExit('schema marker missing')
+            text = text.replace(schema_marker, linked_schema + schema_marker, 1)
+
+          route_marker = '  updateInstance: adminProcedure.input(h2AdsUpdateInstanceSchema).mutation(async ({ input }) => {\n'
+          linked_route = '''  createInstanceLinkedOrder: adminProcedure.input(h2AdsCreateLinkedInstanceSchema).mutation(async ({ input }) => {\n    const { registrationId, subOrderIndex, ...instanceInput } = input;\n    await requireWritableGroup(instanceInput.groupId);\n    const id = await createH2AdsInstance(instanceInput);\n    try {\n      await setH2AdsOrderLink(id, registrationId, subOrderIndex);\n      return { success: true, id };\n    } catch (error) {\n      try { await deleteH2AdsInstance(id); } catch { }\n      const message = error instanceof Error ? error.message : "Não foi possível criar a instância já vinculada ao pedido.";\n      throw new TRPCError({ code: message.includes("outra instância") ? "CONFLICT" : "BAD_REQUEST", message });\n    }\n  }),\n\n'''
+          if 'createInstanceLinkedOrder:' not in text:
+            if route_marker not in text: raise SystemExit('route marker missing')
+            text = text.replace(route_marker, linked_route + route_marker, 1)
+          router.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Focused H2ADS tests
+        run: pnpm vitest run server/h2adsOrderSearch.test.ts server/h2adsOrderLink.test.ts
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Verify isolated diff
+        shell: bash
+        run: |
+          git diff --check
+          git status --short
+          test -f client/src/components/H2AdsNewInstanceOrderPicker.tsx
+          grep -q "createInstanceLinkedOrder" server/routers/h2ads.ts
+          grep -q "H2AdsNewInstanceOrderPicker" client/src/pages/H2Ads.tsx
+
+      - name: Commit validated implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/components/H2AdsNewInstanceOrderPicker.tsx client/src/pages/H2Ads.tsx server/routers/h2ads.ts
+          git commit -m "feat(h2ads): criar instancia ja vinculada ao cliente"
+          git push origin HEAD:feat/h2ads-create-instance-linked-order-20260830
