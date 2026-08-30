@@ -1,0 +1,162 @@
+name: Apply BOT central profile fix
+
+on:
+  push:
+    branches:
+      - automation/bot-cadastro-central-loop-20260830
+    paths:
+      - ".github/workflows/apply-bot-central-profile-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout target fix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/bot-cadastro-central-loop-20260830
+          fetch-depth: 0
+
+      - name: Apply audited BOT profile flow fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_str, old, new):
+              path = Path(path_str)
+              text = path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path_str}: expected 1 match, found {count} for {old[:80]!r}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # 1) BOT session must use the same central profile requirements as login/schedule/update.
+          replace_once(
+              'server/online-support/entry.ts',
+              'import { getCustomerProfileUpdateState } from "../customerProfileUpdatePolicy";',
+              'import { getMissingCustomerProfileFields } from "../customerProfileRequirements";'
+          )
+          replace_once(
+              'server/online-support/entry.ts',
+              'SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.city, c.uf, c.profilePhotoUrl, c.blocked,',
+              'SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.cep, c.street, c.addressNumber, c.neighborhood, c.city, c.uf, c.profilePhotoUrl, c.blocked,'
+          )
+          replace_once(
+              'server/online-support/entry.ts',
+              '''  const profileUpdateState = await getCustomerProfileUpdateState(session);\n  if (profileUpdateState.pending && !options?.allowProfileUpdate) {\n    throw new Error("Atualização cadastral obrigatória pelo administrador. Conclua os campos solicitados para continuar.");\n  }''',
+              '''  const profileUpdateFields = getMissingCustomerProfileFields(session);\n  const profileUpdateRequired = profileUpdateFields.length > 0;\n  if (profileUpdateRequired && !options?.allowProfileUpdate) {\n    throw new Error("Atualização cadastral obrigatória. Conclua os campos obrigatórios em /atualizarcadastro para continuar.");\n  }'''
+          )
+          replace_once(
+              'server/online-support/entry.ts',
+              '''    profileUpdateRequired: profileUpdateState.pending,\n    profileUpdateFields: profileUpdateState.effectiveFields,''',
+              '''    profileUpdateRequired,\n    profileUpdateFields,'''
+          )
+
+          # 2) BOT update button must preserve official session and intended route.
+          entry_panel = Path('client/src/components/OnlineEntryPanel.tsx')
+          text = entry_panel.read_text(encoding='utf-8')
+          marker = '  const customer = sessionQ.data?.authenticated ? sessionQ.data.customer : null;\n'
+          if text.count(marker) != 1:
+              raise SystemExit('OnlineEntryPanel customer marker not found exactly once')
+          helper = '''  const openCentralProfileUpdate = () => {\n    if (token) {\n      localStorage.setItem('cp_token', token);\n      localStorage.setItem('customer_update_token', token);\n    }\n    const phoneHint = sessionQ.data?.customer?.phone || '';\n    if (phoneHint) localStorage.setItem('customer_update_phone_hint', phoneHint);\n    const returnTo = intendedRoute === 'gastos' ? '/gastos' : intendedRoute === 'emprestimo' ? '/emprestimo' : '/';\n    sessionStorage.setItem('h2_customer_return_to', returnTo);\n    window.location.assign('/atualizarcadastro');\n  };\n\n'''
+          text = text.replace(marker, helper + marker, 1)
+          old_map = "({ name: 'nome', phone: 'telefone', email: 'e-mail', cpf: 'CPF', city: 'cidade', uf: 'UF', profilePhotoUrl: 'foto' } as Record<string, string>)"
+          new_map = "({ name: 'nome', email: 'e-mail', cpf: 'CPF', cep: 'CEP', street: 'rua', addressNumber: 'número', neighborhood: 'bairro', city: 'cidade', uf: 'UF', profilePhotoUrl: 'foto' } as Record<string, string>)"
+          if text.count(old_map) != 1:
+              raise SystemExit('OnlineEntryPanel profile field label map not found exactly once')
+          text = text.replace(old_map, new_map, 1)
+          old_button = "<button type=\"button\" onClick={() => window.location.assign('/atualizarcadastro')} style={primaryStyle}>Atualizar cadastro</button>"
+          new_button = "<button type=\"button\" onClick={openCentralProfileUpdate} style={primaryStyle}>Atualizar cadastro</button>"
+          if text.count(old_button) != 1:
+              raise SystemExit('OnlineEntryPanel central update button not found exactly once')
+          text = text.replace(old_button, new_button, 1)
+          entry_panel.write_text(text, encoding='utf-8')
+
+          # 3) New BOT registrations must collect every current central required address field.
+          replace_once(
+              'client/src/components/OnlineRegistrationPanel.tsx',
+              "const steps = ['route', 'name', 'phone', 'cpf', 'email', 'cep', 'city', 'uf', 'referrer', 'photo', 'confirm', 'password'] as const;",
+              "const steps = ['route', 'name', 'phone', 'cpf', 'email', 'cep', 'street', 'addressNumber', 'neighborhood', 'city', 'uf', 'referrer', 'photo', 'confirm', 'password'] as const;"
+          )
+          replace_once(
+              'client/src/components/OnlineRegistrationPanel.tsx',
+              "const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', city: '', uf: '', referrerPhone: '', profilePhotoUrl: '' });",
+              "const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', street: '', addressNumber: '', neighborhood: '', city: '', uf: '', referrerPhone: '', profilePhotoUrl: '' });"
+          )
+          replace_once(
+              'client/src/components/OnlineRegistrationPanel.tsx',
+              "    cep: 'Informe seu CEP',\n    city: 'Qual é sua cidade?',",
+              "    cep: 'Informe seu CEP',\n    street: 'Informe sua rua / logradouro',\n    addressNumber: 'Informe o número do endereço',\n    neighborhood: 'Informe seu bairro',\n    city: 'Qual é sua cidade?',"
+          )
+          replace_once(
+              'client/src/components/OnlineRegistrationPanel.tsx',
+              "next = { ...next, city: address.localidade || next.city, uf: address.uf || next.uf };",
+              "next = { ...next, street: address.logradouro || next.street, neighborhood: address.bairro || next.neighborhood, city: address.localidade || next.city, uf: address.uf || next.uf };"
+          )
+          replace_once(
+              'client/src/components/OnlineRegistrationPanel.tsx',
+              "<div><b>CEP:</b> {data.cep}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div>",
+              "<div><b>CEP:</b> {data.cep}</div><div><b>Rua:</b> {data.street}</div><div><b>Número:</b> {data.addressNumber}</div><div><b>Bairro:</b> {data.neighborhood}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div>"
+          )
+
+          # 4) Registration draft schema/validation must accept and enforce the same address fields.
+          replace_once(
+              'server/online-support/registration.ts',
+              "export type OnlineRegistrationStep = 'route' | 'identity' | 'name' | 'phone' | 'cpf' | 'email' | 'cep' | 'uf' | 'city' | 'referrer' | 'photo' | 'confirm';",
+              "export type OnlineRegistrationStep = 'route' | 'identity' | 'name' | 'phone' | 'cpf' | 'email' | 'cep' | 'street' | 'addressNumber' | 'neighborhood' | 'uf' | 'city' | 'referrer' | 'photo' | 'confirm';"
+          )
+          replace_once(
+              'server/online-support/registration.ts',
+              "  if (['name', 'uf', 'city', 'profilePhotoUrl'].includes(field) && !text) throw new Error('Campo obrigatório.');",
+              "  if (['name', 'street', 'addressNumber', 'neighborhood', 'uf', 'city', 'profilePhotoUrl'].includes(field) && !text) throw new Error('Campo obrigatório.');\n  if (field === 'street' && text.length < 2) throw new Error('Informe uma rua / logradouro válido.');\n  if (field === 'neighborhood' && text.length < 2) throw new Error('Informe um bairro válido.');"
+          )
+          replace_once(
+              'server/routers/online-support.ts',
+              "step: z.enum(['route', 'identity', 'name', 'phone', 'cpf', 'email', 'cep', 'uf', 'city', 'referrer', 'photo', 'confirm']),",
+              "step: z.enum(['route', 'identity', 'name', 'phone', 'cpf', 'email', 'cep', 'street', 'addressNumber', 'neighborhood', 'uf', 'city', 'referrer', 'photo', 'confirm']),"
+          )
+          PY
+
+      - name: Verify central BOT wiring
+        run: |
+          set -eu
+          ! grep -q "customerProfileUpdatePolicy" server/online-support/entry.ts
+          grep -q "getMissingCustomerProfileFields" server/online-support/entry.ts
+          grep -q "c.cep, c.street, c.addressNumber, c.neighborhood" server/online-support/entry.ts
+          grep -q "customer_update_token" client/src/components/OnlineEntryPanel.tsx
+          grep -q "h2_customer_return_to" client/src/components/OnlineEntryPanel.tsx
+          grep -q "addressNumber" client/src/components/OnlineRegistrationPanel.tsx
+          grep -q "neighborhood" client/src/components/OnlineRegistrationPanel.tsx
+          grep -q "'street', 'addressNumber', 'neighborhood'" server/routers/online-support.ts
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Central profile requirement tests
+        run: pnpm vitest run server/customerProfileRequirements.test.ts
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Commit validated BOT correction
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/components/OnlineEntryPanel.tsx client/src/components/OnlineRegistrationPanel.tsx server/online-support/entry.ts server/online-support/registration.ts server/routers/online-support.ts
+          git diff --cached --check
+          git commit -m "fix(bot): unify cadastro with central profile rules"
+          git push origin HEAD:fix/bot-cadastro-central-loop-20260830
