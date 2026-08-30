@@ -1,0 +1,47 @@
+name: H2ADS group controls v2
+on:
+  push:
+    branches:
+      - feat/h2ads-group-order-collapse-delete-20260830
+    paths:
+      - ".github/workflows/h2ads-group-controls-v2.yml"
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/h2ads-group-order-collapse-delete-20260830
+          fetch-depth: 0
+      - name: Apply patch
+        run: python3 scripts/patch-h2ads-group-controls.py
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Verify
+        run: |
+          git diff --name-only | tee /tmp/files
+          grep -qx 'client/src/pages/H2Ads.tsx' /tmp/files
+          grep -qx 'server/h2ads.ts' /tmp/files
+          grep -qx 'server/routers/h2ads.ts' /tmp/files
+          test "$(wc -l < /tmp/files)" -eq 3
+          grep -q 'deleteH2AdsGroup' server/h2ads.ts
+          grep -q 'deleteGroup: adminProcedure' server/routers/h2ads.ts
+          grep -q 'Ordenar grupos' client/src/pages/H2Ads.tsx
+          grep -q 'expandedGroups' client/src/pages/H2Ads.tsx
+      - name: Build
+        run: pnpm build
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/H2Ads.tsx server/h2ads.ts server/routers/h2ads.ts
+          git commit -m "feat(h2ads): ordenar recolher e excluir grupos"
+          git push origin HEAD:feat/h2ads-group-order-collapse-delete-20260830
