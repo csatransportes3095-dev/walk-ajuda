@@ -34,8 +34,7 @@ function assertNotIncludes(path, needle, label) {
 
 const centralMessage = 'Cadastro incompleto. Use /atualizarcadastro para corrigir todos os dados obrigatórios juntos.';
 
-// 1) Gastos/Empréstimos não podem manter um segundo formulário de reparo de perfil.
-// requiredProfilePhone agora apenas encaminha a identidade fixa para a tela central.
+// 1) Gastos/Empréstimos não podem manter um segundo formulário de reparo/cadastro.
 const gastosLogin = 'client/src/pages/GastosLoginPage.tsx';
 regexReplace(
   gastosLogin,
@@ -43,16 +42,21 @@ regexReplace(
   `  useEffect(() => {\n    const phoneToComplete = normalizePhone(requiredProfilePhone || '');\n    if (!phoneToComplete) return;\n    const returnTo = requestedRoute === 'emprestimo' ? '/emprestimo' : '/gastos';\n    const params = new URLSearchParams({ phone: phoneToComplete, returnTo });\n    window.location.assign(\`/atualizarcadastro?\${params.toString()}\`);\n  }, [requiredProfilePhone, requestedRoute]);`,
 );
 
-// Cadastro inexistente em Gastos/Empréstimos volta ao cadastro principal. Não existe
-// mais um segundo cadastro parcial nesta tela.
 regexReplace(
   gastosLogin,
   /        case 'not_found':\n          setProfileUpdateLookup\(null\);\n          \/\/ Pré-preencher o telefone no formulário de cadastro novo\.\n          setRegPhone\(cleanPhone\);\n          setStep\('register'\);\n          break;/,
   `        case 'not_found':\n          sessionStorage.setItem('reg_phone_temp', cleanPhone);\n          toast.info('Faça primeiro o cadastro completo no site principal.');\n          window.location.assign('/');\n          return;`,
 );
 
-// 2) Endpoints antigos continuam tipados para não quebrar telas legadas, mas nunca
-// alteram o banco. O retorno orienta qualquer UI antiga para o fluxo central.
+// Mesmo que a tela legada ainda tenha JSX do formulário, o handler não cadastra
+// nem repara perfil. Ele apenas delega ao cadastro principal/central.
+regexReplace(
+  gastosLogin,
+  /  \/\/ Cadastro completo\n  const handleRegister = async \(e: React\.FormEvent\) => \{[\s\S]*?\n  \};\n\n  const handleRequestRouteAccess/,
+  `  // Cadastro e reparo de perfil existem somente no fluxo principal/central.\n  const handleRegister = async (e: React.FormEvent) => {\n    e.preventDefault();\n    const cleanPhone = normalizePhone(regPhone || phone);\n    if (cleanPhone) sessionStorage.setItem('reg_phone_temp', cleanPhone);\n    toast.info(profileUpdateLookup ? 'Complete seu cadastro na tela central.' : 'Faça o cadastro completo no site principal.');\n    if (profileUpdateLookup && cleanPhone) {\n      const returnTo = requestedRoute === 'emprestimo' ? '/emprestimo' : '/gastos';\n      const params = new URLSearchParams({ phone: cleanPhone, returnTo });\n      window.location.assign(\`/atualizarcadastro?\${params.toString()}\`);\n      return;\n    }\n    window.location.assign('/');\n  };\n\n  const handleRequestRouteAccess`,
+);
+
+// 2) Endpoints antigos continuam tipados para telas legadas, mas nunca alteram o banco.
 const customerPassword = 'server/routers/customerPassword.ts';
 regexReplace(
   customerPassword,
@@ -70,8 +74,7 @@ for (const endpoint of ['updateEmailByPhone', 'updateCpfByPhone', 'completeProfi
   );
 }
 
-// 3) Asserções da auditoria estrutural. Se algum patch futuro reabrir esses caminhos,
-// o workflow falha antes de commitá-los.
+// 3) Asserções estruturais: qualquer regressão reabre o workflow antes do commit.
 assertIncludes('client/src/components/PasswordGate.tsx', 'customerUpdateStatusMutation', 'PasswordGate must consult central profile status');
 assertIncludes('client/src/pages/OrderTracking.tsx', "returnTo: '/acompanhar'", 'Order tracking must redirect incomplete customers centrally');
 assertIncludes('client/src/pages/AdminCustomers.tsx', 'trpc.customerUpdate.adminUpdate.useMutation', 'ADM must use guarded customerUpdate.adminUpdate');
@@ -80,5 +83,7 @@ assertIncludes('server/routers.ts', "Telefone é a identidade fixa do cliente e 
 assertIncludes('server/customerProfile.ts', 'addressNumber', 'global completeness must include address number');
 assertIncludes('server/customerProfile.ts', 'profilePhotoUrl', 'global completeness must include profile photo');
 assertNotIncludes(customerPassword, 'await db.update(customers).set({ cpf: formattedCpf })', 'legacy saveCpf must not update CPF');
+assertNotIncludes(gastosLogin, 'registerMutation.mutateAsync', 'Gastos must not create customers through a duplicate registration flow');
+assertNotIncludes(gastosLogin, 'completeProfileMutation.mutateAsync', 'Gastos must not repair profiles locally');
 
 console.log('PR #38 final audit hardening applied: legacy bypasses closed and central flow asserted.');
