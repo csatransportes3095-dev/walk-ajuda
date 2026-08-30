@@ -37,10 +37,10 @@ jobs:
           p.write_text(s.replace(old, new))
           PY
 
-      - name: Start clean branch from current production
+      - name: Start branch from actual Render production branch
         run: |
-          git fetch origin main
-          git checkout -B fix/agendamento-cadastro-central-final-20260830 origin/main
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git checkout -B fix/agendamento-render-production-20260830 origin/recovery/organizar-salvos-2026-08-24
           node /tmp/fix-schedule-central-update-v2.mjs
 
       - name: Setup pnpm
@@ -99,4 +99,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add shared/customerUpdateReturnPath.ts client/src/components/CustomerProfileRedirectGate.tsx client/src/pages/AtualizarCadastro.tsx client/src/pages/SchedulePage.tsx server/scheduleProfileGuard.ts server/routers/schedule.ts server/scheduleProfileGuard.test.ts server/customerUpdateReturnPath.test.ts server/scheduleCentralUpdateWiring.test.ts
           git commit -m "fix(schedule): exigir atualização central antes do agendamento"
-          git push origin HEAD:refs/heads/fix/agendamento-cadastro-central-final-20260830
+          git push origin HEAD:refs/heads/fix/agendamento-render-production-20260830
