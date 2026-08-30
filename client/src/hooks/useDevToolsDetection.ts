@@ -1,133 +1,99 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
- * Detecta quando o cliente abre o DevTools (F12, botão direito > Inspecionar, etc.)
- * Usa múltiplas técnicas para maior cobertura:
- * 1. Diferença de tamanho da janela (outerWidth/Height vs innerWidth/Height)
- * 2. Tempo de execução do debugger (técnica de performance)
- * 3. Evento de resize com diferença de dimensões
+ * Proteção conservadora contra abertura de DevTools.
+ *
+ * Regras de segurança:
+ * - Só executa quando a configuração do ADM estiver ativada.
+ * - Atalhos explícitos de DevTools continuam bloqueados.
+ * - Detecção por diferença de viewport é usada somente em desktop real.
+ * - Não usa debugger timing nem serialização de console, pois essas técnicas
+ *   geram falsos positivos em Safari/iPhone, WebViews e aparelhos mais lentos.
  */
 export function useDevToolsDetection(onDetected: () => void, enabled = true) {
   const detectedRef = useRef(false);
   const alertSentRef = useRef(false);
+  const callbackRef = useRef(onDetected);
+  const enabledRef = useRef(enabled);
 
-  const trigger = useCallback(() => {
-    if (detectedRef.current) return;
-    detectedRef.current = true;
-    onDetected();
-  }, [onDetected]);
+  callbackRef.current = onDetected;
+  enabledRef.current = enabled;
 
   useEffect(() => {
-    if (!enabled) return;
-    // Técnica 1: Diferença de tamanho (funciona bem em desktop)
-    const THRESHOLD = 160;
+    if (!enabled) {
+      // A configuração do ADM sempre prevalece. Ao desativar, limpa qualquer
+      // detecção anterior para permitir uma futura ativação sem estado preso.
+      detectedRef.current = false;
+      alertSentRef.current = false;
+      return;
+    }
 
-    const checkSize = () => {
-      const widthDiff = window.outerWidth - window.innerWidth;
-      const heightDiff = window.outerHeight - window.innerHeight;
-      if (widthDiff > THRESHOLD || heightDiff > THRESHOLD) {
+    const trigger = () => {
+      if (!enabledRef.current || detectedRef.current) return;
+      detectedRef.current = true;
+      alertSentRef.current = true;
+      callbackRef.current();
+    };
+
+    const mobileUa = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const finePointer = typeof window.matchMedia === 'function'
+      ? window.matchMedia('(hover: hover) and (pointer: fine)').matches
+      : true;
+    const desktopViewportDetection = !mobileUa && finePointer;
+
+    // Em desktop, DevTools acoplado normalmente reduz uma dimensão em centenas
+    // de pixels. O limite alto evita confundir barras do navegador, zoom ou SO.
+    const VIEWPORT_THRESHOLD = 240;
+    const checkDesktopViewport = () => {
+      if (!desktopViewportDetection || !enabledRef.current) return;
+      const widthDiff = Math.max(0, window.outerWidth - window.innerWidth);
+      const heightDiff = Math.max(0, window.outerHeight - window.innerHeight);
+      if (widthDiff >= VIEWPORT_THRESHOLD || heightDiff >= VIEWPORT_THRESHOLD) {
         trigger();
       }
     };
 
-    // Técnica 2: debugger statement timing
-    const checkDebugger = () => {
-      const start = performance.now();
-      // eslint-disable-next-line no-debugger
-      debugger; // Quando DevTools está aberto, isso pausa e leva muito tempo
-      const elapsed = performance.now() - start;
-      if (elapsed > 100) {
+    const blockKeys = (event: KeyboardEvent) => {
+      if (!enabledRef.current) return;
+      const key = event.key.toLowerCase();
+      const devtoolsShortcut =
+        event.key === 'F12' ||
+        ((event.ctrlKey || event.metaKey) && event.shiftKey && (key === 'i' || key === 'j' || key === 'c'));
+
+      if (devtoolsShortcut) {
+        event.preventDefault();
+        event.stopPropagation();
         trigger();
+        return;
+      }
+
+      // Visualizar código-fonte continua bloqueado quando a proteção está ativa,
+      // mas não é tratado como prova de que o inspetor foi aberto.
+      if ((event.ctrlKey || event.metaKey) && key === 'u') {
+        event.preventDefault();
+        event.stopPropagation();
       }
     };
 
-    // Técnica 3: console.log com getter (detecta quando console é inspecionado)
-    let devtoolsOpen = false;
-    const element = new Image();
-    Object.defineProperty(element, 'id', {
-      get() {
-        devtoolsOpen = true;
-        trigger();
-        return '';
-      },
-    });
-
-    // Técnica 4 (mobile/remote): getter em toString de um objeto regex.
-    // Inspetores remotos (Chrome Remote Debugging / WebView debug) acessam toString
-    // ao serializar objetos no console, mesmo sem janela visível de DevTools.
-    const remoteProbe: any = /./;
-    remoteProbe.toString = function () {
-      trigger();
-      return '';
+    const blockRightClick = (event: MouseEvent) => {
+      if (!enabledRef.current) return;
+      event.preventDefault();
     };
 
-    // Verificar periodicamente
-    const interval = setInterval(() => {
-      checkSize();
-      // Só usa debugger check se não detectou ainda (evita spam)
-      if (!detectedRef.current) {
-        checkDebugger();
-      }
-      // Console check (desktop + mobile/remote)
-      if (!devtoolsOpen) {
-        console.log('%c', element); // eslint-disable-line no-console
-        // dir() costuma disparar a serialização (toString) em inspetores remotos
-        console.dir(remoteProbe); // eslint-disable-line no-console
-      }
-    }, 1000);
-
-    // Verificar no resize
-    window.addEventListener('resize', checkSize);
-
-    // Bloquear F12 e atalhos de DevTools
-    const blockKeys = (e: KeyboardEvent) => {
-      // F12
-      if (e.key === 'F12') {
-        e.preventDefault();
-        trigger();
-        return false;
-      }
-      // Ctrl+Shift+I / Cmd+Option+I
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i')) {
-        e.preventDefault();
-        trigger();
-        return false;
-      }
-      // Ctrl+Shift+J / Cmd+Option+J (console)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'J' || e.key === 'j')) {
-        e.preventDefault();
-        trigger();
-        return false;
-      }
-      // Ctrl+Shift+C (inspect element)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
-        e.preventDefault();
-        trigger();
-        return false;
-      }
-      // Ctrl+U (view source)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'U' || e.key === 'u')) {
-        e.preventDefault();
-        return false;
-      }
-    };
-
-    document.addEventListener('keydown', blockKeys);
-
-    // Bloquear botão direito
-    const blockRightClick = (e: MouseEvent) => {
-      e.preventDefault();
-      return false;
-    };
-    document.addEventListener('contextmenu', blockRightClick);
+    const initialTimer = window.setTimeout(checkDesktopViewport, 700);
+    const interval = window.setInterval(checkDesktopViewport, 1500);
+    window.addEventListener('resize', checkDesktopViewport, { passive: true });
+    document.addEventListener('keydown', blockKeys, true);
+    document.addEventListener('contextmenu', blockRightClick, true);
 
     return () => {
-      clearInterval(interval);
-      window.removeEventListener('resize', checkSize);
-      document.removeEventListener('keydown', blockKeys);
-      document.removeEventListener('contextmenu', blockRightClick);
+      window.clearTimeout(initialTimer);
+      window.clearInterval(interval);
+      window.removeEventListener('resize', checkDesktopViewport);
+      document.removeEventListener('keydown', blockKeys, true);
+      document.removeEventListener('contextmenu', blockRightClick, true);
     };
-  }, [trigger, enabled]);
+  }, [enabled]);
 
   return { detected: detectedRef.current, alertSent: alertSentRef.current };
 }
