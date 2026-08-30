@@ -23,6 +23,11 @@ function formatPhone(value: string) {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
+function formatCep(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+}
+
 function formatCpf(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);
   if (digits.length <= 3) return digits;
@@ -43,6 +48,12 @@ export default function AtualizarCadastro() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
+  const [cep, setCep] = useState("");
+  const [street, setStreet] = useState("");
+  const [addressNumber, setAddressNumber] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [addressComplement, setAddressComplement] = useState("");
+  const [cepLoading, setCepLoading] = useState(false);
   const [city, setCity] = useState("");
   const [uf, setUf] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
@@ -72,6 +83,11 @@ export default function AtualizarCadastro() {
     setName(profile.name || "");
     setEmail(profile.email || "");
     setCpf(formatCpf(profile.cpf || ""));
+    setCep(formatCep(profile.cep || ""));
+    setStreet(profile.street || "");
+    setAddressNumber(profile.addressNumber || "");
+    setNeighborhood(profile.neighborhood || "");
+    setAddressComplement(profile.addressComplement || "");
     setCity(profile.city || "");
     setUf(profile.uf || "");
     setPhotoUrl(profile.profilePhotoUrl || "");
@@ -159,13 +175,37 @@ export default function AtualizarCadastro() {
     reader.readAsDataURL(file);
   }
 
+  async function lookupCep(value: string) {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const data = await response.json();
+      if (data.erro) return toast.error("CEP não encontrado. Preencha o endereço manualmente.");
+      if (data.logradouro) setStreet(data.logradouro);
+      if (data.bairro) setNeighborhood(data.bairro);
+      if (data.localidade) setCity(data.localidade);
+      if (data.uf) setUf(String(data.uf).toUpperCase());
+    } catch {
+      toast.error("Não foi possível consultar o CEP. Preencha manualmente.");
+    } finally {
+      setCepLoading(false);
+    }
+  }
+
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
     if (isRequired("phone") && normalizePhone(phone).length < 10) return toast.error("Digite um telefone válido.");
     if (isRequired("cpf") && !isValidCPF(normalizeCpf(cpf))) return toast.error("Digite um CPF válido.");
+    if (cep.replace(/\D/g, "").length !== 8) return toast.error("Digite um CEP válido.");
+    if (street.trim().length < 2) return toast.error("Informe a rua / logradouro.");
+    if (!addressNumber.trim()) return toast.error("Informe o número do endereço.");
+    if (neighborhood.trim().length < 2) return toast.error("Informe o bairro.");
+    if (city.trim().length < 2 || uf.trim().length !== 2) return toast.error("Informe cidade e estado.");
     if (!photoUrl) return toast.error("Envie sua foto de perfil.");
     try {
-      await saveMutation.mutateAsync({ token, phone: normalizePhone(phone), name, email, cpf, city, uf });
+      await saveMutation.mutateAsync({ token, phone: normalizePhone(phone), name, email, cpf, cep: formatCep(cep), street, addressNumber, neighborhood, addressComplement, city, uf });
       localStorage.removeItem(TOKEN_KEY);
       setToken("");
       setStep("done");
@@ -195,6 +235,10 @@ export default function AtualizarCadastro() {
     phone: "Telefone",
     email: "E-mail",
     cpf: "CPF",
+    cep: "CEP",
+    street: "Rua / Logradouro",
+    addressNumber: "Número",
+    neighborhood: "Bairro",
     city: "Cidade",
     uf: "Estado (UF)",
     profilePhotoUrl: "Foto de perfil",
@@ -259,6 +303,10 @@ export default function AtualizarCadastro() {
               <Field label={`Nome completo${isRequired("name") ? " · obrigatório nesta revisão" : ""}`}><input value={name} onChange={(e) => setName(e.target.value)} className={`${INPUT_CLASS} ${!isRequired("name") ? "bg-slate-200/80" : ""}`} required={isRequired("name")} readOnly={!isRequired("name")} minLength={2} autoComplete="name" /></Field>
               <Field label={`E-mail${isRequired("email") ? " · obrigatório nesta revisão" : ""}`}><input value={email} onChange={(e) => setEmail(e.target.value)} className={`${INPUT_CLASS} ${!isRequired("email") ? "bg-slate-200/80" : ""}`} required={isRequired("email")} readOnly={!isRequired("email")} type="email" inputMode="email" autoComplete="email" /></Field>
               <Field label={`CPF${isRequired("cpf") ? " · obrigatório nesta revisão" : ""}`}><input value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))} className={`${INPUT_CLASS} ${!isRequired("cpf") ? "bg-slate-200/80" : ""}`} required={isRequired("cpf")} readOnly={!isRequired("cpf")} inputMode="numeric" placeholder="000.000.000-00" /></Field>
+              <Field label="CEP · obrigatório"><input value={cep} onChange={(e) => { const next = formatCep(e.target.value); setCep(next); if (next.replace(/\D/g, "").length === 8) void lookupCep(next); }} onBlur={(e) => void lookupCep(e.target.value)} className={INPUT_CLASS} required inputMode="numeric" placeholder="00000-000" />{cepLoading && <span className="mt-1 block text-xs text-violet-300">Buscando CEP...</span>}</Field>
+              <Field label="Rua / Logradouro · obrigatório"><input value={street} onChange={(e) => setStreet(e.target.value)} className={INPUT_CLASS} required placeholder="Rua, Avenida..." /></Field>
+              <div className="grid grid-cols-[120px_1fr] gap-3"><Field label="Número · obrigatório"><input value={addressNumber} onChange={(e) => setAddressNumber(e.target.value)} className={INPUT_CLASS} required placeholder="123 ou S/N" /></Field><Field label="Bairro · obrigatório"><input value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} className={INPUT_CLASS} required /></Field></div>
+              <Field label="Complemento · opcional"><input value={addressComplement} onChange={(e) => setAddressComplement(e.target.value)} className={INPUT_CLASS} placeholder="Apto, bloco, fundos..." /></Field>
               <div className="grid grid-cols-[1fr_92px] gap-3"><Field label={`Cidade${isRequired("city") ? " · obrigatório nesta revisão" : ""}`}><input value={city} onChange={(e) => setCity(e.target.value)} className={`${INPUT_CLASS} ${!isRequired("city") ? "bg-slate-200/80" : ""}`} required={isRequired("city")} readOnly={!isRequired("city")} /></Field><Field label={`UF${isRequired("uf") ? " · obrigatório nesta revisão" : ""}`}><select value={uf} onChange={(e) => setUf(e.target.value)} className={INPUT_CLASS} required={isRequired("uf")} disabled={!isRequired("uf")}><option value="">UF</option>{UFS.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field></div>
               <PrimaryButton busy={saveMutation.isPending || uploadPhotoMutation.isPending}>SALVAR EM TODO O SISTEMA</PrimaryButton>
             </form>

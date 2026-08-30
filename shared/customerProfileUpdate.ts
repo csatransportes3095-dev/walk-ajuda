@@ -5,6 +5,10 @@ export const CUSTOMER_PROFILE_UPDATE_FIELD_OPTIONS = [
   { id: "phone", label: "Telefone" },
   { id: "cpf", label: "CPF" },
   { id: "email", label: "E-mail" },
+  { id: "cep", label: "CEP" },
+  { id: "street", label: "Rua / Logradouro" },
+  { id: "addressNumber", label: "Número" },
+  { id: "neighborhood", label: "Bairro" },
   { id: "city", label: "Cidade" },
   { id: "uf", label: "Estado (UF)" },
   { id: "profilePhotoUrl", label: "Foto de perfil" },
@@ -43,6 +47,14 @@ export function customerProfileFieldIsMissing(customer: any, field: CustomerProf
     }
     case "email":
       return !/^\S+@\S+\.\S+$/.test(String(customer?.email || "").trim());
+    case "cep":
+      return String(customer?.cep || "").replace(/\D/g, "").length !== 8;
+    case "street":
+      return String(customer?.street || "").trim().length < 2;
+    case "addressNumber":
+      return String(customer?.addressNumber || "").trim().length < 1;
+    case "neighborhood":
+      return String(customer?.neighborhood || "").trim().length < 2;
     case "city":
       return String(customer?.city || "").trim().length < 2;
     case "uf":

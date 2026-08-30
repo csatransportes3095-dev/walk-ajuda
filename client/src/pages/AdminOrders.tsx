@@ -53,6 +53,11 @@ type Order = {
   customerId: number | null;
   customerEmail: string | null;
   customerName: string | null;
+  customerCep: string | null;
+  customerStreet: string | null;
+  customerAddressNumber: string | null;
+  customerNeighborhood: string | null;
+  customerAddressComplement: string | null;
   customerCity: string | null;
   customerUf: string | null;
   customerReferredBy: string | null;
@@ -5354,10 +5359,13 @@ export default function AdminOrders() {
                         {order.customerEmail && (
                           <p className="text-xs text-muted-foreground truncate">{order.customerEmail}</p>
                         )}
-                        {(order.customerCity || order.customerUf) && (
-                          <p className="text-xs text-muted-foreground">
-                            {[order.customerCity, order.customerUf].filter(Boolean).join(" - ")}
-                          </p>
+                        {(order.customerStreet || order.customerAddressNumber || order.customerNeighborhood || order.customerCep || order.customerCity || order.customerUf) && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {(order.customerStreet || order.customerAddressNumber) && <p>{[order.customerStreet, order.customerAddressNumber].filter(Boolean).join(", ")}</p>}
+                            {(order.customerNeighborhood || order.customerCity || order.customerUf) && <p>{[order.customerNeighborhood, order.customerCity, order.customerUf].filter(Boolean).join(" · ")}</p>}
+                            {order.customerAddressComplement && <p>Complemento: {order.customerAddressComplement}</p>}
+                            {order.customerCep && <p>CEP: {order.customerCep}</p>}
+                          </div>
                         )}
                         <div className="mt-1">
                           {editingPrice[String(order.id)] !== undefined ? (
