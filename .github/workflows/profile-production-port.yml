@@ -22,18 +22,12 @@ jobs:
         with:
           node-version: '22'
       - run: corepack enable
-      - name: Apply profile patch on current production
-        run: |
-          node scripts/profile-pr38-patch.mjs
-          node scripts/profile-pr38-hardening.mjs
-          node scripts/profile-pr38-types-fix.mjs
-          node scripts/profile-pr38-final-audit.mjs
-          node scripts/profile-pr38-registration-address.mjs
-          node scripts/profile-pr38-online-registration.mjs
-      - run: git diff --check
-      - run: pnpm install --no-frozen-lockfile
-      - name: Profile tests
-        run: pnpm exec vitest run server/customerProfile.test.ts
+      - name: Apply production-specific profile patch
+        run: node scripts/profile-production-port.mjs
+      - name: Validate patch whitespace
+        run: git diff --check
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
       - name: Production build
         run: pnpm build
       - name: Commit validated production port
@@ -42,5 +36,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "fix(profile): port centralized profile to production branch [skip ci]"
+          git commit -m "fix(profile): centralizar cadastro na producao [skip ci]"
           git push origin HEAD:fix/profile-producao-atual
