@@ -46,6 +46,7 @@ export default function H2AdsOrderLinkControl({ instanceId }: { instanceId: numb
   const setLink = trpc.h2Ads.setOrderLink.useMutation({
     onSuccess: async (_, vars) => {
       toast.success(vars.registrationId === null ? "Vínculo do pedido removido." : "Cliente vinculado à instância.");
+      if (vars.registrationId !== null) setSearch("");
       await utils.h2Ads.listOrderLinks.invalidate();
     },
     onError: error => toast.error(error.message || "Não foi possível atualizar o vínculo do pedido."),
@@ -93,11 +94,22 @@ export default function H2AdsOrderLinkControl({ instanceId }: { instanceId: numb
 
   return <div className="mt-3 rounded-xl border border-violet-400/20 bg-violet-400/[0.04] p-3">
     <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-violet-200">Pedido vinculado</p><span className="text-[10px] font-bold text-slate-500">Sincronização automática</span></div>
-    {current && <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-white/8 bg-black/20 p-2 text-[10px]">
-      <div><p className="font-semibold text-slate-500">Pedido</p><p className="mt-0.5 font-black text-white">#{currentOrder?.orderNumber ?? current.registrationId}{current.subOrderIndex > 0 ? ` · item ${current.subOrderIndex + 1}` : ""}</p></div>
-      <div><p className="font-semibold text-slate-500">Status do pedido</p><p className="mt-0.5 font-black text-emerald-200">{statusLabel(currentOrder?.latestStatus)}</p></div>
-      <div><p className="font-semibold text-slate-500">Produto</p><p className="mt-0.5 truncate font-bold text-slate-200" title={currentOrder?.serviceName || ""}>{currentOrder?.serviceName || "Não informado"}</p></div>
-      <div><p className="font-semibold text-slate-500">Opção</p><p className="mt-0.5 truncate font-bold text-slate-200" title={currentOrder?.serviceOption || ""}>{currentOrder?.serviceOption || "Não informada"}</p></div>
+    {current && <div className="mt-2 rounded-lg border border-white/8 bg-black/20 p-2 text-[10px]">
+      <div className="flex items-center gap-3 border-b border-white/8 pb-2">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full border border-violet-300/25 bg-violet-400/10">
+          {currentOrder?.customerProfilePhotoUrl ? <img src={currentOrder.customerProfilePhotoUrl} alt={currentOrder.customerName || "Foto do cliente vinculado"} className="h-full w-full object-cover" /> : <div className="grid h-full w-full place-items-center text-sm font-black text-violet-100">{customerInitial(currentOrder?.customerName)}</div>}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-black text-violet-200">{currentOrder?.customerNumber ? `*${currentOrder.customerNumber}` : "Cliente vinculado"}</p>
+          <p className="mt-0.5 break-words text-xs font-black leading-4 text-white">{currentOrder?.customerName || "Cliente sem nome"}</p>
+        </div>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <div><p className="font-semibold text-slate-500">Pedido</p><p className="mt-0.5 font-black text-white">#{currentOrder?.orderNumber ?? current.registrationId}{current.subOrderIndex > 0 ? ` · item ${current.subOrderIndex + 1}` : ""}</p></div>
+        <div><p className="font-semibold text-slate-500">Status do pedido</p><p className="mt-0.5 font-black text-emerald-200">{statusLabel(currentOrder?.latestStatus)}</p></div>
+        <div><p className="font-semibold text-slate-500">Produto</p><p className="mt-0.5 truncate font-bold text-slate-200" title={currentOrder?.serviceName || ""}>{currentOrder?.serviceName || "Não informado"}</p></div>
+        <div><p className="font-semibold text-slate-500">Opção</p><p className="mt-0.5 truncate font-bold text-slate-200" title={currentOrder?.serviceOption || ""}>{currentOrder?.serviceOption || "Não informada"}</p></div>
+      </div>
     </div>}
 
     <input
