@@ -35,6 +35,7 @@ function TabsList({
           ? {
               ...style,
               display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
               width: "100%",
               height: "auto",
               alignItems: "stretch",
