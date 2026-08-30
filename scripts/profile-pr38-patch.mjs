@@ -49,15 +49,15 @@ exactReplace(
   '  const updateCpfMutation = trpc.customers.updateCpfByPhone.useMutation();\n',
   '  const updateCpfMutation = trpc.customers.updateCpfByPhone.useMutation();\n  const customerProfileStatusMutation = trpc.customerUpdate.status.useMutation();\n'
 );
-regexReplace(
+exactReplace(
   tracking,
-  /      \/\/ Verificar CPF antes de liberar acesso\n      const custCheck = await customerCheckQuery\.refetch\(\);\n      if \(!\(custCheck\.data\?\.customer as any\)\?\.cpf\) \{\n        setNeedsCpfUpdate\(true\);\n        setPinError\(false\);\n        return;\n      \}/,
-  `      // PIN legado não pode ignorar pendências do cadastro principal.\n      const profileStatus = await customerProfileStatusMutation.mutateAsync({ phone: searchPhone });\n      if (profileStatus.status !== 'completed') {\n        const params = new URLSearchParams({ phone: searchPhone, returnTo: '/acompanhar' });\n        window.location.assign(\`/atualizarcadastro?\${params.toString()}\`);\n        return;\n      }`
+  `      // Verificar CPF antes de liberar acesso\n      const custCheck = await customerCheckQuery.refetch();\n      if (!(custCheck.data?.customer as any)?.cpf) {\n        setNeedsCpfUpdate(true);\n        setPinError(false);\n        return;\n      }\n`,
+  `      // PIN legado não pode ignorar pendências do cadastro principal.\n      const profileStatus = await customerProfileStatusMutation.mutateAsync({ phone: searchPhone });\n      if (profileStatus.status !== 'completed') {\n        const params = new URLSearchParams({ phone: searchPhone, returnTo: '/acompanhar' });\n        window.location.assign(\`/atualizarcadastro?\${params.toString()}\`);\n        return;\n      }\n`
 );
-regexReplace(
+exactReplace(
   tracking,
-  /    \/\/ Verificar CPF antes de liberar acesso\n    const custCheck2 = await customerCheckQuery\.refetch\(\);\n    if \(!\(custCheck2\.data\?\.customer as any\)\?\.cpf\) \{\n      setNeedsCpfUpdate\(true\);\n      setShowCreatePin\(false\);\n      return;\n    \}/,
-  `    // Após criar o PIN, perfil incompleto continua obrigado ao fluxo central.\n    const profileStatus = await customerProfileStatusMutation.mutateAsync({ phone: searchPhone });\n    if (profileStatus.status !== 'completed') {\n      const params = new URLSearchParams({ phone: searchPhone, returnTo: '/acompanhar' });\n      window.location.assign(\`/atualizarcadastro?\${params.toString()}\`);\n      return;\n    }`
+  `    // Verificar CPF antes de liberar acesso\n    const custCheck2 = await customerCheckQuery.refetch();\n    if (!(custCheck2.data?.customer as any)?.cpf) {\n      setNeedsCpfUpdate(true);\n      setShowCreatePin(false);\n      setNewPinError("");\n      return;\n    }\n`,
+  `    // Após criar o PIN, perfil incompleto continua obrigado ao fluxo central.\n    const profileStatus = await customerProfileStatusMutation.mutateAsync({ phone: searchPhone });\n    if (profileStatus.status !== 'completed') {\n      const params = new URLSearchParams({ phone: searchPhone, returnTo: '/acompanhar' });\n      window.location.assign(\`/atualizarcadastro?\${params.toString()}\`);\n      return;\n    }\n`
 );
 
 // 4) A sessão de /atualizarcadastro é uma customerPasswordSession válida: ao concluir,
