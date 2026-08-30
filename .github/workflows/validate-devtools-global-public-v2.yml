@@ -1,0 +1,36 @@
+name: Validate DevTools global public v2
+
+on:
+  push:
+    branches:
+      - "fix/devtools-global-public-20260830"
+    paths:
+      - ".github/workflows/validate-devtools-global-public-v2.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: "fix/devtools-global-public-20260830"
+      - name: Verify global protection wiring
+        run: |
+          grep -q "GlobalDevToolsProtection" client/src/main.tsx
+          grep -q "location === \"/acompanhar\"" client/src/components/GlobalDevToolsProtection.tsx
+          grep -q "refetchInterval: !excluded ? 2_000 : false" client/src/components/GlobalDevToolsProtection.tsx
+          grep -q "desktopWithMobileEmulation" client/src/hooks/useDevToolsDetection.ts
+          ! grep -q "debugger;" client/src/hooks/useDevToolsDetection.ts
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Production build
+        run: pnpm build
