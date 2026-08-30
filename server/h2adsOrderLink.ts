@@ -9,6 +9,19 @@ export type H2AdsOrderLink = {
   updatedAt: Date | null;
 };
 
+export type H2AdsCustomerOrderSearchResult = {
+  registrationId: number;
+  subOrderIndex: number;
+  customerNumber: number | null;
+  customerName: string | null;
+  phone: string | null;
+  orderNumber: number | null;
+  serviceName: string | null;
+  serviceOption: string | null;
+  latestStatus: string | null;
+  customerProfilePhotoUrl: string | null;
+};
+
 type HistoryEntry = { status: string };
 
 function rowsFrom(result: unknown): Array<Record<string, unknown>> {
@@ -58,6 +71,91 @@ async function requireOrderSubOrder(registrationId: number, subOrderIndex: numbe
   const initialStatus = await getInitialOrderStatus();
   const subOrders = splitH2AdsOrderHistory(history, initialStatus);
   if (!subOrders[subOrderIndex]?.length) throw new Error("Pedido/subpedido não encontrado.");
+}
+
+function normalizePhoneSql(column: string): string {
+  return `REGEXP_REPLACE(${column}, '[^0-9]', '')`;
+}
+
+export async function searchH2AdsCustomersForNewInstance(search: string): Promise<H2AdsCustomerOrderSearchResult[]> {
+  const db = await requireH2AdsDb();
+  const raw = search.trim();
+  if (!raw) return [];
+  const exactMatch = raw.match(/^\*(\d+)$/);
+  const digits = raw.replace(/\D/g, "");
+  const text = raw.replace(/^[#*]+/, "").trim();
+
+  let customerRows: Array<Record<string, unknown>> = [];
+  if (exactMatch) {
+    const customerNumber = Number(exactMatch[1]);
+    customerRows = rowsFrom(await db.execute(sql`
+      SELECT id, customerNumber, name, phone, profilePhotoUrl
+      FROM customers
+      WHERE customerNumber = ${customerNumber} AND deletedAt IS NULL
+      LIMIT 1
+    `));
+  } else {
+    const like = `%${text}%`;
+    const phoneLike = `%${digits}%`;
+    customerRows = rowsFrom(await db.execute(sql`
+      SELECT id, customerNumber, name, phone, profilePhotoUrl
+      FROM customers
+      WHERE deletedAt IS NULL AND (
+        name LIKE ${like}
+        OR CAST(customerNumber AS CHAR) LIKE ${like}
+        OR (${digits ? sql.raw(normalizePhoneSql("phone")) : sql`''`}) LIKE ${phoneLike}
+      )
+      ORDER BY customerNumber DESC, id DESC
+      LIMIT 20
+    `));
+  }
+
+  const results: H2AdsCustomerOrderSearchResult[] = [];
+  for (const customer of customerRows) {
+    const phone = String(customer.phone || "").replace(/\D/g, "");
+    if (!phone) continue;
+    const orderRows = rowsFrom(await db.execute(sql.raw(`
+      SELECT registrationId, orderNumber, status, serviceName, serviceOption, createdAt, id
+      FROM orderStatusHistory
+      WHERE ${normalizePhoneSql("customerPhone")} = '${phone.replace(/'/g, "''")}'
+      ORDER BY createdAt DESC, id DESC
+      LIMIT 250
+    `)));
+
+    const latestByRegistration = new Map<number, Record<string, unknown>>();
+    for (const row of orderRows) {
+      const registrationId = Number(row.registrationId);
+      if (!Number.isInteger(registrationId) || registrationId < 1 || latestByRegistration.has(registrationId)) continue;
+      latestByRegistration.set(registrationId, row);
+    }
+
+    const latestOrder = [...latestByRegistration.values()].find(row => String(row.status || "") !== "cancelado");
+    if (!latestOrder) continue;
+    const registrationId = Number(latestOrder.registrationId);
+    const linked = rowsFrom(await db.execute(sql`
+      SELECT instanceId FROM h2ads_order_links
+      WHERE registrationId = ${registrationId} AND subOrderIndex = 0
+      LIMIT 1
+    `))[0];
+    if (linked) continue;
+
+    results.push({
+      registrationId,
+      subOrderIndex: 0,
+      customerNumber: customer.customerNumber === null || customer.customerNumber === undefined ? null : Number(customer.customerNumber),
+      customerName: customer.name ? String(customer.name) : null,
+      phone: customer.phone ? String(customer.phone) : null,
+      orderNumber: latestOrder.orderNumber === null || latestOrder.orderNumber === undefined ? null : Number(latestOrder.orderNumber),
+      serviceName: latestOrder.serviceName ? String(latestOrder.serviceName) : null,
+      serviceOption: latestOrder.serviceOption ? String(latestOrder.serviceOption) : null,
+      latestStatus: latestOrder.status ? String(latestOrder.status) : null,
+      customerProfilePhotoUrl: customer.profilePhotoUrl ? String(customer.profilePhotoUrl) : null,
+    });
+    if (exactMatch) break;
+    if (results.length >= 8) break;
+  }
+
+  return results;
 }
 
 export async function listH2AdsOrderLinks(): Promise<H2AdsOrderLink[]> {
