@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { adminProcedure } from "./_core/trpc";
-import { listH2AdsOrderLinks, setH2AdsOrderLink } from "./h2adsOrderLink";
+import { listH2AdsOrderLinks, searchH2AdsCustomersForNewInstance, setH2AdsOrderLink } from "./h2adsOrderLink";
 
 const setOrderLinkSchema = z.object({
   instanceId: z.number().int().positive(),
@@ -9,8 +9,15 @@ const setOrderLinkSchema = z.object({
   subOrderIndex: z.number().int().min(0).default(0),
 }).strict();
 
+const searchNewInstanceCustomerSchema = z.object({
+  search: z.string().trim().min(1).max(128),
+}).strict();
+
 export const h2AdsOrderLinkRouterPart = {
   listOrderLinks: adminProcedure.query(async () => listH2AdsOrderLinks()),
+  searchCustomersForNewInstance: adminProcedure.input(searchNewInstanceCustomerSchema).query(async ({ input }) => {
+    return searchH2AdsCustomersForNewInstance(input.search);
+  }),
   setOrderLink: adminProcedure.input(setOrderLinkSchema).mutation(async ({ input }) => {
     try {
       await setH2AdsOrderLink(input.instanceId, input.registrationId, input.subOrderIndex);
