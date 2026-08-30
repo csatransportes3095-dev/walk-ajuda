@@ -27,6 +27,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify
         run: |
+          git add -N drizzle/0144_h2ads_group_card_color.sql scripts/apply-h2ads-group-card-color-migration.ts
           git diff --name-only | tee /tmp/files
           grep -qx 'client/src/pages/H2Ads.tsx' /tmp/files
           grep -qx 'drizzle/0144_h2ads_group_card_color.sql' /tmp/files
