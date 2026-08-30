@@ -24,15 +24,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Align patch with safe baseline schema
+      - name: Align patch with safe baseline
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('scripts/_apply_customer_address_patch.py')
           s = p.read_text(encoding='utf-8')
+
           start = s.index('# 1) Banco / schema')
           end = s.index("migration = '''", start)
-          block = '''# 1) Banco / schema
+          schema_block = '''# 1) Banco / schema
           replace_once(
               'drizzle/schema.ts',
               '  email: varchar("email", { length: 320 }),\\n  city: varchar("city", { length: 128 }),\\n  uf: varchar("uf", { length: 2 }),\\n  cpf: varchar("cpf", { length: 14 }),',
@@ -40,7 +41,25 @@ jobs:
           )
 
           '''
-          p.write_text(s[:start] + block + s[end:], encoding='utf-8')
+          s = s[:start] + schema_block + s[end:]
+
+          start = s.index('# 2) Política central de atualização obrigatória')
+          end = s.index('# 3) Backend de atualização cadastral', start)
+          policy_block = '''# 2) Política central de atualização obrigatória
+          replace_once(
+              'shared/customerProfileUpdate.ts',
+              '  { id: "email", label: "E-mail" },\\n  { id: "city", label: "Cidade" },',
+              '  { id: "email", label: "E-mail" },\\n  { id: "cep", label: "CEP" },\\n  { id: "street", label: "Rua / Logradouro" },\\n  { id: "addressNumber", label: "Número" },\\n  { id: "neighborhood", label: "Bairro" },\\n  { id: "city", label: "Cidade" },'
+          )
+          replace_once(
+              'shared/customerProfileUpdate.ts',
+              '    case "email":\\n      return !/^\\\\S+@\\\\S+\\\\.\\\\S+$/.test(String(customer?.email || "").trim());\\n    case "city":',
+              '    case "email":\\n      return !/^\\\\S+@\\\\S+\\\\.\\\\S+$/.test(String(customer?.email || "").trim());\\n    case "cep":\\n      return String(customer?.cep || "").replace(/\\\\D/g, "").length !== 8;\\n    case "street":\\n      return String(customer?.street || "").trim().length < 2;\\n    case "addressNumber":\\n      return String(customer?.addressNumber || "").trim().length < 1;\\n    case "neighborhood":\\n      return String(customer?.neighborhood || "").trim().length < 2;\\n    case "city":'
+          )
+
+          '''
+          s = s[:start] + policy_block + s[end:]
+          p.write_text(s, encoding='utf-8')
           PY
       - name: Apply isolated address patch
         run: python scripts/_apply_customer_address_patch.py
@@ -64,6 +83,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git restore scripts/_apply_customer_address_patch.py .github/workflows/apply-customer-address-patch.yml
-          git add drizzle/schema.ts shared/customerProfileUpdate.ts server/customerProfileUpdatePolicy.ts server/routers/customerUpdate.ts client/src/pages/AtualizarCadastro.tsx client/src/components/PasswordGate.tsx server/routers.ts client/src/pages/AdminCustomers.tsx client/src/pages/AdminOrders.tsx scripts/apply-customer-address-migration.ts scripts/render-start.sh
+          git add drizzle/schema.ts shared/customerProfileUpdate.ts server/routers/customerUpdate.ts client/src/pages/AtualizarCadastro.tsx client/src/components/PasswordGate.tsx server/routers.ts client/src/pages/AdminCustomers.tsx client/src/pages/AdminOrders.tsx scripts/apply-customer-address-migration.ts scripts/render-start.sh
           git commit -m 'feat(cadastro): endereço completo obrigatório' || exit 0
           git push origin HEAD:feat/endereco-completo-cadastro-v2
