@@ -20,12 +20,16 @@ function TabsList({
   className,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List>) {
+  const isSpreadsheetModuleStrip = className?.includes("spreadsheet-module-strip");
+
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
         "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
-        className
+        className,
+        isSpreadsheetModuleStrip &&
+          "grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 h-auto"
       )}
       {...props}
     />
