@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { matchesH2AdsOrderSearch, normalizeH2AdsOrderSearch } from "@shared/h2adsOrderSearch";
+import { getExactH2AdsCustomerNumberSearch, matchesH2AdsOrderSearch, normalizeH2AdsOrderSearch } from "@shared/h2adsOrderSearch";
 
 type AdminOrder = {
   id: number;
@@ -10,6 +10,7 @@ type AdminOrder = {
   orderNumber?: number | null;
   customerNumber?: number | null;
   customerName?: string | null;
+  customerProfilePhotoUrl?: string | null;
   serviceName?: string | null;
   serviceOption?: string | null;
   latestStatus?: string | null;
@@ -30,6 +31,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const keyFor = (registrationId: number, subOrderIndex: number) => `${registrationId}:${subOrderIndex}`;
 const statusLabel = (status?: string | null) => status ? (STATUS_LABELS[status] || status.replace(/_/g, " ")) : "Sem status";
+const customerInitial = (name?: string | null) => (name || "C").trim().charAt(0).toUpperCase() || "C";
 
 export default function H2AdsOrderLinkControl({ instanceId }: { instanceId: number }) {
   const utils = trpc.useUtils();
@@ -43,7 +45,7 @@ export default function H2AdsOrderLinkControl({ instanceId }: { instanceId: numb
   });
   const setLink = trpc.h2Ads.setOrderLink.useMutation({
     onSuccess: async (_, vars) => {
-      toast.success(vars.registrationId === null ? "Vínculo do pedido removido." : "Pedido vinculado à instância.");
+      toast.success(vars.registrationId === null ? "Vínculo do pedido removido." : "Cliente vinculado à instância.");
       await utils.h2Ads.listOrderLinks.invalidate();
     },
     onError: error => toast.error(error.message || "Não foi possível atualizar o vínculo do pedido."),
@@ -54,6 +56,7 @@ export default function H2AdsOrderLinkControl({ instanceId }: { instanceId: numb
   const current = links.find(link => link.instanceId === instanceId);
   const currentKey = current ? keyFor(current.registrationId, current.subOrderIndex) : "";
   const normalizedSearch = normalizeH2AdsOrderSearch(search);
+  const exactCustomerNumber = getExactH2AdsCustomerNumberSearch(search);
   const ownerByOrder = useMemo(() => new Map(links.map(link => [keyFor(link.registrationId, link.subOrderIndex), link.instanceId])), [links]);
   const selectableOrders = useMemo(() => orders.filter(order => {
     const sub = order.subOrderIndex ?? 0;
@@ -62,11 +65,17 @@ export default function H2AdsOrderLinkControl({ instanceId }: { instanceId: numb
     if (!active && key !== currentKey) return false;
     if (!normalizedSearch || key === currentKey) return true;
     return matchesH2AdsOrderSearch(order, search);
-  }).sort((a, b) => (b.orderNumber ?? b.customerNumber ?? b.id) - (a.orderNumber ?? a.customerNumber ?? a.id)).slice(0, 80), [orders, currentKey, normalizedSearch, search]);
+  }).sort((a, b) => (b.orderNumber ?? b.customerNumber ?? b.id) - (a.orderNumber ?? a.customerNumber ?? a.id)), [orders, currentKey, normalizedSearch, search]);
 
-  const searchResults = normalizedSearch
-    ? selectableOrders.filter(order => keyFor(order.id, order.subOrderIndex ?? 0) !== currentKey).slice(0, 8)
-    : [];
+  const searchResults = useMemo(() => {
+    if (!normalizedSearch) return [] as AdminOrder[];
+    const available = selectableOrders.filter(order => keyFor(order.id, order.subOrderIndex ?? 0) !== currentKey);
+    if (exactCustomerNumber !== null) {
+      const exact = available.find(order => Number(order.customerNumber) === exactCustomerNumber);
+      return exact ? [exact] : [];
+    }
+    return available.slice(0, 8);
+  }, [selectableOrders, currentKey, exactCustomerNumber, normalizedSearch]);
 
   const update = async (value: string) => {
     if (!value) {
@@ -99,11 +108,30 @@ export default function H2AdsOrderLinkControl({ instanceId }: { instanceId: numb
     />
 
     {normalizedSearch && <div className="mt-2 overflow-hidden rounded-lg border border-white/10 bg-black/25">
-      {searchResults.length === 0 ? <p className="px-3 py-3 text-[11px] font-semibold text-slate-500">Nenhum pedido encontrado para “{search}”.</p> : searchResults.map(order => {
+      {searchResults.length === 0 ? <p className="px-3 py-3 text-[11px] font-semibold text-slate-500">Nenhum cliente encontrado para “{search}”.</p> : searchResults.map(order => {
         const subOrderIndex = order.subOrderIndex ?? 0;
         const key = keyFor(order.id, subOrderIndex);
         const owner = ownerByOrder.get(key);
         const unavailable = owner !== undefined && owner !== instanceId;
+        const isExactCustomerSearch = exactCustomerNumber !== null;
+        if (isExactCustomerSearch) {
+          return <button
+            key={key}
+            type="button"
+            disabled={setLink.isPending || unavailable}
+            onClick={() => { void update(key); }}
+            className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-violet-400/10 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border border-violet-300/25 bg-violet-400/10">
+              {order.customerProfilePhotoUrl ? <img src={order.customerProfilePhotoUrl} alt={order.customerName || "Foto do cliente"} className="h-full w-full object-cover" /> : <div className="grid h-full w-full place-items-center text-sm font-black text-violet-100">{customerInitial(order.customerName)}</div>}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-black text-violet-200">*{order.customerNumber}</p>
+              <p className="mt-0.5 break-words text-xs font-black leading-4 text-white">{order.customerName || "Cliente sem nome"}</p>
+            </div>
+            {unavailable && <span className="shrink-0 text-[9px] font-black uppercase text-amber-300">já vinculado</span>}
+          </button>;
+        }
         const displayNumber = order.orderNumber ?? order.customerNumber ?? order.id;
         return <button
           key={key}
@@ -135,6 +163,6 @@ export default function H2AdsOrderLinkControl({ instanceId }: { instanceId: numb
         return <option key={key} value={key} disabled={unavailable}>#{displayNumber} · {order.customerName || "Cliente"}{subOrderIndex > 0 ? ` · item ${subOrderIndex + 1}` : ""}{detail ? ` · ${detail}` : ""}{unavailable ? " · já vinculado" : ""}</option>;
       })}
     </select>
-    <p className="mt-2 text-[10px] leading-4 text-slate-500">Aceita busca por nome, telefone, número do pedido, cadastro e também formatos como *451 ou #451. O H2ADS apenas lê os dados do pedido.</p>
+    <p className="mt-2 text-[10px] leading-4 text-slate-500">Código com * é exclusivo: *451 busca somente o cadastro 451. Nas outras buscas, aceita nome, telefone, número do pedido e cadastro. O H2ADS apenas lê os dados do pedido.</p>
   </div>;
 }
