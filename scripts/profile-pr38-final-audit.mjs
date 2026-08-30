@@ -51,12 +51,13 @@ regexReplace(
   `        case 'not_found':\n          sessionStorage.setItem('reg_phone_temp', cleanPhone);\n          toast.info('Faça primeiro o cadastro completo no site principal.');\n          window.location.assign('/');\n          return;`,
 );
 
-// 2) Endpoints antigos não podem mais corrigir um campo isolado e furar a regra global.
+// 2) Endpoints antigos continuam tipados para não quebrar telas legadas, mas nunca
+// alteram o banco. O retorno orienta qualquer UI antiga para o fluxo central.
 const customerPassword = 'server/routers/customerPassword.ts';
 regexReplace(
   customerPassword,
   /  saveCpf: publicProcedure[\s\S]*?(?=  clientCreateAuto: publicProcedure)/,
-  `  saveCpf: publicProcedure\n    .input(z.object({ phone: z.string(), cpf: z.string().min(11) }))\n    .mutation(async () => {\n      throw new TRPCError({ code: 'BAD_REQUEST', message: '${centralMessage}' });\n    }),\n\n  // Cliente cria senha (modo auto)\n`,
+  `  saveCpf: publicProcedure\n    .input(z.object({ phone: z.string(), cpf: z.string().min(11) }))\n    .mutation(async () => {\n      return { success: false as const, message: '${centralMessage}' };\n    }),\n\n  // Cliente cria senha (modo auto)\n`,
 );
 
 const routers = 'server/routers.ts';
@@ -65,7 +66,7 @@ for (const endpoint of ['updateEmailByPhone', 'updateCpfByPhone', 'completeProfi
   regexReplace(
     routers,
     pattern,
-    `    ${endpoint}: publicProcedure\n      .input(z.any())\n      .mutation(async () => {\n        throw new TRPCError({ code: 'BAD_REQUEST', message: '${centralMessage}' });\n      }),`,
+    `    ${endpoint}: publicProcedure\n      .input(z.any())\n      .mutation(async () => {\n        return { success: false as const, message: '${centralMessage}' };\n      }),`,
   );
 }
 
