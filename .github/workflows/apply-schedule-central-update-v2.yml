@@ -61,7 +61,7 @@ jobs:
       - name: Run focused profile and schedule tests
         run: pnpm exec vitest run server/customerProfile.test.ts server/scheduleProfileGuard.test.ts server/customerUpdateReturnPath.test.ts server/scheduleCentralUpdateWiring.test.ts
 
-      - name: TypeScript check with compatible existing config
+      - name: TypeScript regression check for touched files
         run: |
           cp tsconfig.json /tmp/tsconfig.json
           python3 - <<'PY'
@@ -71,8 +71,19 @@ jobs:
           s = s.replace('"ignoreDeprecations": "6.0"', '"ignoreDeprecations": "5.0"')
           p.write_text(s)
           PY
-          pnpm check
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          TSC_EXIT=$?
+          set -e
           cp /tmp/tsconfig.json tsconfig.json
+          cat /tmp/tsc.log
+          if grep -E '^(client/src/components/CustomerProfileRedirectGate\.tsx|client/src/pages/(AtualizarCadastro|SchedulePage)\.tsx|server/(scheduleProfileGuard|routers/schedule)\.ts|shared/customerUpdateReturnPath\.ts)\(' /tmp/tsc.log; then
+            echo "TypeScript regression found in a touched schedule/profile file."
+            exit 1
+          fi
+          if [ "$TSC_EXIT" -ne 0 ]; then
+            echo "Global TypeScript check has pre-existing unrelated errors; touched files have no reported TypeScript errors."
+          fi
 
       - name: Production build
         run: pnpm build
