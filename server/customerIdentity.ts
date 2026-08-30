@@ -11,6 +11,11 @@ type IdentityRow = {
   email?: string | null;
   city?: string | null;
   uf?: string | null;
+  zipCode?: string | null;
+  addressLine?: string | null;
+  neighborhood?: string | null;
+  addressNumber?: string | null;
+  addressComplement?: string | null;
   profilePhotoUrl?: string | null;
   allowedRoutes?: string | null;
 };
@@ -105,7 +110,13 @@ export async function syncUnifiedCustomerRegistry(previousIdentities: Array<Pick
   await allowPhoneReuseFromDeletedCustomers(db);
   await hideAutomaticIncompleteCustomers(db);
 
-  const customerRows = await rows(db, sql`SELECT id, name, phone, cpf, email, city, uf, profilePhotoUrl FROM customers WHERE deletedAt IS NULL`);
+  const customerRows = await rows(db, sql`
+    SELECT id, name, phone, cpf, email, city, uf,
+           zipCode, addressLine, neighborhood, addressNumber, addressComplement,
+           profilePhotoUrl
+    FROM customers
+    WHERE deletedAt IS NULL
+  `);
   const spreadsheetRows = await rows(db, sql`SELECT id, name, phone, cpf, allowedRoutes FROM spreadsheetClients`);
   const loanRows = await rows(db, sql`SELECT id, name, phone, cpf FROM loanClients`);
 
