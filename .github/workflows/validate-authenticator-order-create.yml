@@ -1,0 +1,37 @@
+name: Validate authenticator direct order create
+
+on:
+  push:
+    branches:
+      - automation/validate-authenticator-order-create-20260830
+    paths:
+      - ".github/workflows/validate-authenticator-order-create.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/authenticator-create-inside-order-20260830
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Focused tests
+        run: pnpm vitest run server/adminAuthenticatorOrder.test.ts
+
+      - name: Production build
+        run: pnpm build
