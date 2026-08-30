@@ -33,7 +33,9 @@ export function CustomerProfileRedirectGate() {
     ? normalizePhone(localStorage.getItem(LEGACY_PHONE_KEY))
     : "";
   const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-  const guardEnabled = pathname !== CENTRAL_PATH && !pathname.startsWith("/admin");
+  // O gate de cadastro existe apenas nas rotas privadas do cliente.
+  // Links públicos tokenizados (/agendar, /orcamento, /recibo etc.) nunca podem ser sequestrados por este redirecionamento.
+  const guardEnabled = CUSTOMER_ROUTES.has(pathname);
 
   const sessionQuery = trpc.customerPassword.checkSession.useQuery(
     { token },
