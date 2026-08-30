@@ -29,11 +29,6 @@ replaceOnce(
 );
 
 replaceOnce(
-  `      const result = await register.mutateAsync({ ...data, phone: data.phone.replace(/\\D/g, ''), referredByPhone: data.referrerPhone, sourceRoute: route });`,
-  `      const result = await register.mutateAsync({ ...data, phone: data.phone.replace(/\\D/g, ''), referredByPhone: data.referrerPhone, sourceRoute: route });`,
-);
-
-replaceOnce(
   `    const field = step as keyof typeof data;\n    let cleaned = (value.trim() || ((step === 'city' || step === 'uf') ? data[field] : '')).trim();\n    if (step === 'phone' || step === 'cpf' || step === 'cep') cleaned = cleaned.replace(/\\D/g, '');`,
   `    const field = (step === 'cep' ? 'zipCode' : step) as keyof typeof data;\n    let cleaned = (value.trim() || ((step === 'city' || step === 'uf') ? data[field] : '')).trim();\n    if (step === 'phone' || step === 'cpf' || step === 'cep') cleaned = cleaned.replace(/\\D/g, '');`,
 );
@@ -50,7 +45,7 @@ replaceOnce(
 
 replaceOnce(
   `<div><b>CEP:</b> {data.cep}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div>`,
-  `<div><b>CEP:</b> {data.zipCode}</div><div><b>Endereço:</b> {data.addressLine}, {data.addressNumber} - {data.neighborhood}{data.addressComplement ? \\` - ${data.addressComplement}\\` : ''}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div>`,
+  `<div><b>CEP:</b> {data.zipCode}</div><div><b>Endereço:</b> {data.addressLine}, {data.addressNumber} - {data.neighborhood}</div><div><b>Complemento:</b> {data.addressComplement || '-'}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div>`,
 );
 
 replaceOnce(
