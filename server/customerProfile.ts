@@ -10,6 +10,10 @@ export type RequiredCustomerProfileField =
   | "phone"
   | "email"
   | "cpf"
+  | "zipCode"
+  | "addressLine"
+  | "neighborhood"
+  | "addressNumber"
   | "city"
   | "uf"
   | "profilePhotoUrl";
@@ -19,6 +23,10 @@ export const REQUIRED_CUSTOMER_PROFILE_FIELDS: RequiredCustomerProfileField[] = 
   "phone",
   "email",
   "cpf",
+  "zipCode",
+  "addressLine",
+  "neighborhood",
+  "addressNumber",
   "city",
   "uf",
   "profilePhotoUrl",
@@ -29,6 +37,10 @@ export const REQUIRED_CUSTOMER_PROFILE_LABELS: Record<RequiredCustomerProfileFie
   phone: "telefone",
   email: "e-mail",
   cpf: "CPF válido",
+  zipCode: "CEP",
+  addressLine: "rua",
+  neighborhood: "bairro",
+  addressNumber: "número",
   city: "cidade",
   uf: "UF",
   profilePhotoUrl: "foto de perfil",
@@ -36,12 +48,21 @@ export const REQUIRED_CUSTOMER_PROFILE_LABELS: Record<RequiredCustomerProfileFie
 
 const GENERIC_NAME = /^(?:CLIENTE|CADASTRO|PEDIDO)\s+RECUPERAD[OA]|^RECUPERAD[OA](?:\s|$)/i;
 
+export function normalizeCustomerZipCode(value: unknown): string {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return /^\d{8}$/.test(digits) ? digits : "";
+}
+
 export function getMissingCustomerProfileFields(customer: any): RequiredCustomerProfileField[] {
   const missing: RequiredCustomerProfileField[] = [];
   const name = String(customer?.name || "").trim();
   const phone = normalizeCustomerPhone(customer?.phone);
   const email = normalizeCustomerEmail(customer?.email);
   const cpf = normalizeCustomerCpf(customer?.cpf);
+  const zipCode = normalizeCustomerZipCode(customer?.zipCode);
+  const addressLine = String(customer?.addressLine || "").trim();
+  const neighborhood = String(customer?.neighborhood || "").trim();
+  const addressNumber = String(customer?.addressNumber || "").trim();
   const city = String(customer?.city || "").trim();
   const uf = String(customer?.uf || "").trim().toUpperCase();
   const photo = String(customer?.profilePhotoUrl || "").trim();
@@ -50,6 +71,10 @@ export function getMissingCustomerProfileFields(customer: any): RequiredCustomer
   if (!phone) missing.push("phone");
   if (!email) missing.push("email");
   if (!cpf || !isValidCPF(cpf)) missing.push("cpf");
+  if (!zipCode) missing.push("zipCode");
+  if (addressLine.length < 2) missing.push("addressLine");
+  if (neighborhood.length < 2) missing.push("neighborhood");
+  if (!addressNumber) missing.push("addressNumber");
   if (city.length < 2) missing.push("city");
   if (!/^[A-Z]{2}$/.test(uf)) missing.push("uf");
   if (!photo) missing.push("profilePhotoUrl");
