@@ -3,7 +3,7 @@ import { getDb } from "../db";
 import { storagePut } from "../storage";
 import { registerH2ScoreSubmission } from "../loans/h2Score";
 import { hasRouteAccess, type CustomerRoute } from "../customerAccess";
-import { getCustomerProfileUpdateState } from "../customerProfileUpdatePolicy";
+import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
 
 export type OnlineEntrySession = {
   customerId: number;
@@ -32,7 +32,7 @@ export async function requireOnlineEntrySession(token: string, options?: { allow
   if (!safeToken) throw new Error("Sessão inválida");
 
   const rows = resultRows(await db.execute(sql`
-    SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.city, c.uf, c.profilePhotoUrl, c.blocked,
+    SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.cep, c.street, c.addressNumber, c.neighborhood, c.city, c.uf, c.profilePhotoUrl, c.blocked,
            s.expiresAt
     FROM customerPasswordSessions s
     INNER JOIN customers c ON c.phone = s.phone
@@ -44,9 +44,10 @@ export async function requireOnlineEntrySession(token: string, options?: { allow
     throw new Error("Sessão expirada. Informe telefone e senha novamente.");
   }
   if (Number(session.blocked) === 1) throw new Error("Acesso bloqueado. Entre em contato com o administrador.");
-  const profileUpdateState = await getCustomerProfileUpdateState(session);
-  if (profileUpdateState.pending && !options?.allowProfileUpdate) {
-    throw new Error("Atualização cadastral obrigatória pelo administrador. Conclua os campos solicitados para continuar.");
+  const profileUpdateFields = getMissingCustomerProfileFields(session);
+  const profileUpdateRequired = profileUpdateFields.length > 0;
+  if (profileUpdateRequired && !options?.allowProfileUpdate) {
+    throw new Error("Atualização cadastral obrigatória. Conclua os campos obrigatórios em /atualizarcadastro para continuar.");
   }
 
   return {
@@ -57,8 +58,8 @@ export async function requireOnlineEntrySession(token: string, options?: { allow
     cpf: session.cpf ? String(session.cpf).replace(/\D/g, '') : null,
     email: session.email ? String(session.email) : null,
     profilePhotoUrl: session.profilePhotoUrl ? String(session.profilePhotoUrl) : null,
-    profileUpdateRequired: profileUpdateState.pending,
-    profileUpdateFields: profileUpdateState.effectiveFields,
+    profileUpdateRequired,
+    profileUpdateFields,
   };
 }
 

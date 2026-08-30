@@ -160,7 +160,7 @@ export const onlineSupportRouter = router({
       conversationId: z.number().int().positive(),
       visitorId: z.string().min(8),
       requestedRoute: z.enum(CUSTOMER_ROUTES),
-      step: z.enum(['route', 'identity', 'name', 'phone', 'cpf', 'email', 'cep', 'uf', 'city', 'referrer', 'photo', 'confirm']),
+      step: z.enum(['route', 'identity', 'name', 'phone', 'cpf', 'email', 'cep', 'street', 'addressNumber', 'neighborhood', 'uf', 'city', 'referrer', 'photo', 'confirm']),
       field: z.string().optional(),
       value: z.string().optional(),
       data: z.record(z.string(), z.string()).optional(),
