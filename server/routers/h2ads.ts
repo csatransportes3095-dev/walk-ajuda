@@ -4,6 +4,7 @@ import {
   createH2AdsGroup,
   createH2AdsInstance,
   deleteH2AdsInstance,
+  deleteH2AdsGroup,
   createH2AdsWorkerPairingCode,
   getH2AdsGroup,
   getH2AdsInstance,
@@ -70,6 +71,10 @@ export const h2AdsUpdateInstanceSchema = z.object({
 }).strict().refine(({ id: _id, ...changes }) => Object.values(changes).some(value => value !== undefined), {
   message: "Informe ao menos um campo para atualizar a instância.",
 });
+
+export const h2AdsDeleteGroupSchema = z.object({
+  id: z.number().int().positive(),
+}).strict();
 
 export const h2AdsDeleteInstanceSchema = z.object({
   id: z.number().int().positive(),
@@ -218,6 +223,18 @@ export const h2AdsRouter = {
     const updated = await updateH2AdsGroup(id, changes);
     if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Grupo H2 Ads não encontrado." });
     return { success: true };
+  }),
+
+  deleteGroup: adminProcedure.input(h2AdsDeleteGroupSchema).mutation(async ({ input }) => {
+    try {
+      const deleted = await deleteH2AdsGroup(input.id);
+      if (!deleted) throw new TRPCError({ code: "NOT_FOUND", message: "Grupo H2 Ads não encontrado." });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof TRPCError) throw error;
+      const message = error instanceof Error ? error.message : "Não foi possível excluir o grupo.";
+      throw new TRPCError({ code: "CONFLICT", message });
+    }
   }),
 
   createInstance: adminProcedure.input(h2AdsCreateInstanceSchema).mutation(async ({ input }) => {
