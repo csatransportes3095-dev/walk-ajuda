@@ -36,7 +36,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
     const session = read("workers/windows/browser-session.mjs");
-    expect(script).toContain('$AgentVersion = "1.3.3"');
+    expect(script).toContain('$AgentVersion = "1.3.4"');
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
@@ -57,7 +57,9 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(runner).toContain('host: "127.0.0.1"');
     expect(runner).toContain("https://api.ipify.org?format=json");
     expect(runner).not.toContain("console.log");
-    expect(session).toContain('"about:blank"');
+    expect(session).toContain("createInstanceLabelPage");
+    expect(session).toContain("labelPageUrl");
+    expect(session).toContain("privacyGuardPreflight");
     expect(session).toContain("--proxy-server=http://127.0.0.1:");
     expect(session).toContain("--user-data-dir=");
     expect(session).toContain("/api/h2ads/worker/runs/");
