@@ -40,14 +40,8 @@ export async function ensureStableCustomerIdentityInfrastructure(dbArg?: any): P
     const db = dbArg || await getDb() as any;
     if (!db) return;
     try {
-      const customerColumns = await rows(db, sql`SHOW COLUMNS FROM customers`);
-      const phoneColumn = customerColumns.find((column: any) => String(column.Field || "").toLowerCase() === "phone");
-      // Telefone continua obrigatório para o cliente, mas precisa aceitar NULL no banco
-      // para o ADM poder limpar um dado incorreto sem colidir com UNIQUE em vários cadastros.
-      if (phoneColumn && String(phoneColumn.Null || "").toUpperCase() !== "YES") {
-        await db.execute(sql.raw("ALTER TABLE customers MODIFY COLUMN phone VARCHAR(32) NULL"));
-      }
-
+      // Regra de negócio: telefone é a identidade fixa do cliente.
+      // NÃO alterar a coluna para aceitar NULL e NÃO permitir troca/apagamento depois do cadastro.
       await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS customerIdentityAliases (
           id INT AUTO_INCREMENT PRIMARY KEY,
