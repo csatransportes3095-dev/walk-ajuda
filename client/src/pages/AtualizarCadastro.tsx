@@ -101,6 +101,15 @@ export default function AtualizarCadastro() {
     setStep("phone");
   }, [profileQuery.error, token]);
 
+
+  useEffect(() => {
+    if (step !== "done" && step !== "already_done") return;
+    const timer = window.setTimeout(() => {
+      window.location.replace("/login");
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [step]);
+
   function acceptToken(nextToken: string) {
     localStorage.setItem(TOKEN_KEY, nextToken);
     loadedToken.current = "";
@@ -313,11 +322,11 @@ export default function AtualizarCadastro() {
           )}
 
           {step === "done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro atualizado!</h2><p className="mt-2 text-sm leading-6 text-slate-400">Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos. Aguarde a liberação do site.</p></div></div>
+            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Cadastro atualizado!</h2><p className="mt-2 text-sm leading-6 text-slate-400">Os dados foram sincronizados com pedidos, cadastro, empréstimos e gastos. Redirecionando para o site...</p></div></div>
           )}
 
           {step === "already_done" && (
-            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Seu cadastro já foi atualizado</h2><p className="mt-2 text-sm leading-6 text-slate-400">Aguarde a liberação do site.</p></div></div>
+            <div className="space-y-5 text-center"><CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" /><div><h2 className="text-2xl font-black">Seu cadastro já foi atualizado</h2><p className="mt-2 text-sm leading-6 text-slate-400">Redirecionando para o site...</p></div></div>
           )}
         </section>
         <p className="mt-5 text-center text-xs text-slate-600">Se não reconhecer o cadastro, não continue e fale com o atendimento.</p>
