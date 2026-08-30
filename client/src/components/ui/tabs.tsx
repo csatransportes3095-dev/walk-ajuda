@@ -18,6 +18,7 @@ function Tabs({
 
 function TabsList({
   className,
+  style,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List>) {
   const isSpreadsheetModuleStrip = className?.includes("spreadsheet-module-strip");
@@ -27,10 +28,20 @@ function TabsList({
       data-slot="tabs-list"
       className={cn(
         "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
-        className,
-        isSpreadsheetModuleStrip &&
-          "grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 h-auto"
+        className
       )}
+      style={
+        isSpreadsheetModuleStrip
+          ? {
+              ...style,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+              width: "100%",
+              height: "auto",
+              alignItems: "stretch",
+            }
+          : style
+      }
       {...props}
     />
   );
