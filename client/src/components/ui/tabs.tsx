@@ -3,6 +3,60 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 
 import { cn } from "@/lib/utils";
 
+const SPREADSHEET_MODULE_GRID_CSS = `
+#planilha-modulos {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+#planilha-modulos > [data-slot="tabs"] {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+#planilha-modulos .spreadsheet-module-strip {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: auto !important;
+  align-items: stretch !important;
+  justify-items: stretch !important;
+  justify-content: stretch !important;
+  gap: 10px !important;
+}
+
+#planilha-modulos .spreadsheet-module-strip > * {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  flex: none !important;
+}
+
+@media (min-width: 640px) {
+  #planilha-modulos .spreadsheet-module-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+}
+
+@media (min-width: 768px) {
+  #planilha-modulos .spreadsheet-module-strip {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  #planilha-modulos .spreadsheet-module-strip {
+    grid-template-columns: repeat(9, minmax(0, 1fr)) !important;
+  }
+}
+`;
+
 function Tabs({
   className,
   ...props
@@ -23,16 +77,17 @@ function TabsList({
   const isSpreadsheetModuleStrip = className?.includes("spreadsheet-module-strip");
 
   return (
-    <TabsPrimitive.List
-      data-slot="tabs-list"
-      className={cn(
-        "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
-        className,
-        isSpreadsheetModuleStrip &&
-          "grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 h-auto"
-      )}
-      {...props}
-    />
+    <>
+      {isSpreadsheetModuleStrip && <style>{SPREADSHEET_MODULE_GRID_CSS}</style>}
+      <TabsPrimitive.List
+        data-slot="tabs-list"
+        className={cn(
+          "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
+          className
+        )}
+        {...props}
+      />
+    </>
   );
 }
 
