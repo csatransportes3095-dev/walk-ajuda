@@ -231,12 +231,24 @@ export default function AtualizarCadastro() {
     }
   }
 
-  function restart() {
-    localStorage.removeItem(TOKEN_KEY);
+  function exitUpdate() {
+    // Cliente optou por nao atualizar agora: encerra a identificacao atual
+    // e volta para a tela inicial sem manter uma sessao de cliente ativa.
+    const keys = [
+      TOKEN_KEY,
+      "cp_token",
+      "walk_access_granted",
+      "walk_access_code",
+      "walk_access_type",
+      "walk_access_expires",
+      "walk_client_phone",
+      "customer_update_phone_hint",
+    ];
+    for (const key of keys) localStorage.removeItem(key);
+    sessionStorage.removeItem("walk_welcome_choice");
+    sessionStorage.removeItem("walk_home_existing_phone");
     setToken("");
-    setPhone("");
-    setPassword("");
-    setStep("phone");
+    window.location.replace("/");
   }
 
   const requiredFields = profileQuery.data?.requiredFields || [];
@@ -303,7 +315,7 @@ export default function AtualizarCadastro() {
 
           {step === "profile" && profileQuery.data && (
             <form onSubmit={saveProfile} className="space-y-5">
-              <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">Complete seus dados</h2><p className="text-xs text-slate-400">Telefone confirmado: {formatPhone(profileQuery.data.phone)}</p></div><button type="button" onClick={restart} className="text-xs font-bold text-violet-300">Trocar telefone</button></div>
+              <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">Complete seus dados</h2><p className="text-xs text-slate-400">Telefone confirmado: {formatPhone(profileQuery.data.phone)}</p></div><button type="button" onClick={exitUpdate} className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-black text-red-200 hover:bg-red-500/20">SAIR</button></div>
               {requiredFields.length > 0 ? <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100"><p className="font-black">Atualização cadastral obrigatória pelo administrador.</p><p className="mt-1">Revise: {requiredLabels.join(", ")}.</p></div> : <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs text-emerald-100">Confira os dados abaixo para concluir sua atualização.</p>}
               <label className="block cursor-pointer rounded-2xl border border-dashed border-violet-400/50 bg-violet-400/5 p-4 text-center hover:bg-violet-400/10">
                 {photoUrl ? <img src={photoUrl} alt="Foto de perfil" className="mx-auto h-24 w-24 rounded-full object-cover ring-2 ring-violet-400" /> : <Upload className="mx-auto h-9 w-9 text-violet-300" />}
@@ -320,6 +332,7 @@ export default function AtualizarCadastro() {
               <Field label="Complemento · opcional"><input value={addressComplement} onChange={(e) => setAddressComplement(e.target.value)} className={INPUT_CLASS} placeholder="Apto, bloco, fundos..." /></Field>
               <div className="grid grid-cols-[1fr_92px] gap-3"><Field label={`Cidade${isRequired("city") ? " · obrigatório nesta revisão" : ""}`}><input value={city} onChange={(e) => setCity(e.target.value)} className={`${INPUT_CLASS} ${!isRequired("city") ? "bg-slate-200/80" : ""}`} required={isRequired("city")} readOnly={!isRequired("city")} /></Field><Field label={`UF${isRequired("uf") ? " · obrigatório nesta revisão" : ""}`}><select value={uf} onChange={(e) => setUf(e.target.value)} className={INPUT_CLASS} required={isRequired("uf")} disabled={!isRequired("uf")}><option value="">UF</option>{UFS.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field></div>
               <PrimaryButton busy={saveMutation.isPending || uploadPhotoMutation.isPending}>SALVAR EM TODO O SISTEMA</PrimaryButton>
+              <button type="button" onClick={exitUpdate} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-400 transition hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200">NÃO QUERO ATUALIZAR AGORA · SAIR</button>
             </form>
           )}
 

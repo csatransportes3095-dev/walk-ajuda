@@ -1063,9 +1063,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         localStorage.setItem(SESSION_PHONE_KEY, getCanonicalPhone());
         setCpToken(result.token); // estabilizar token em state
         if (result.profileUpdateRequired) {
+          // O login principal ja autenticou o cliente. Reaproveita a mesma sessao
+          // na tela de atualizacao para nao pedir telefone/senha novamente.
+          localStorage.setItem('customer_update_token', result.token);
           localStorage.setItem('customer_update_phone_hint', getCanonicalPhone());
           setAccessGranted(false);
-          toast.info("Atualização cadastral obrigatória pelo administrador.");
+          toast.info("Complete os dados pendentes para continuar.");
           navigate('/atualizarcadastro');
           return;
         }
@@ -1121,8 +1124,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           localStorage.setItem(SESSION_PHONE_KEY, getCanonicalPhone());
           setCpToken(result.token); // estabilizar token em state
           if (profileUpdateRequiredAfterPasswordSetup) {
+            // A senha acabou de ser criada/autenticada; a atualizacao recebe
+            // diretamente essa sessao e abre o formulario sem nova identificacao.
+            localStorage.setItem('customer_update_token', result.token);
+            localStorage.setItem('customer_update_phone_hint', getCanonicalPhone());
             setAccessGranted(false);
-            toast.info("Atualização cadastral obrigatória pelo administrador.");
+            toast.info("Complete os dados pendentes para continuar.");
             navigate('/atualizarcadastro');
             return;
           }
