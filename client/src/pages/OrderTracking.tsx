@@ -142,7 +142,7 @@ export default function OrderTracking() {
   };
 
   // Ler configuração global de proteção DevTools
-  const siteSettingsQuery = trpc.settings.getAll.useQuery();
+  const siteSettingsQuery = trpc.settings.getAll.useQuery(undefined, { staleTime: 0, refetchInterval: 2_000, refetchIntervalInBackground: true, refetchOnWindowFocus: true });
   const devtoolsProtectionEnabled = siteSettingsQuery.data ? siteSettingsQuery.data['devtools_protection'] === '1' : false;
 
   const statusQuery = trpc.orderStatus.getMyStatus.useQuery(
@@ -372,12 +372,19 @@ export default function OrderTracking() {
   const [devToolsBlocked, setDevToolsBlocked] = useState(false);
   const securityAlertMut = trpc.system.securityAlert.useMutation();
 
+  // A configuração do ADM sempre prevalece. Se a proteção for desligada em
+  // outro aparelho/aba, o bloqueio atual é removido assim que a configuração
+  // sincronizar, sem exigir refresh do cliente.
+  useEffect(() => {
+    if (!devtoolsProtectionEnabled || admMode) setDevToolsBlocked(false);
+  }, [devtoolsProtectionEnabled, admMode]);
+
   // Status que dispensam o alerta de DevTools (cliente já tem acesso liberado)
   const EXEMPT_STATUSES = ['login_liberado', 'entregue', 'pedido_entregue'];
 
   useDevToolsDetection(() => {
-    // Não bloquear em modo ADM ou clientes com status de acesso liberado
-    if (admMode) return;
+    // Regra do ADM é soberana; evita qualquer bloqueio por callback atrasado.
+    if (!devtoolsProtectionEnabled || admMode) return;
     const currentStatus = orders.length > 0 ? (orders[selectedOrderIdx] || orders[0])?.[0]?.status : null;
     if (currentStatus && EXEMPT_STATUSES.includes(currentStatus)) return;
     setDevToolsBlocked(true);
@@ -697,7 +704,7 @@ export default function OrderTracking() {
       )}
 
       {/* Bloqueio de segurança - DevTools detectado (não aplica para login_liberado/entregue) */}
-      {devToolsBlocked && !EXEMPT_STATUSES.includes(latestStatus || '') && (
+      {devtoolsProtectionEnabled && devToolsBlocked && !EXEMPT_STATUSES.includes(latestStatus || '') && (
         <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center p-6">
           <div className="text-6xl mb-4">🔒</div>
           <h2 className="text-xl font-bold text-red-400 mb-2 text-center">Acesso Bloqueado</h2>
