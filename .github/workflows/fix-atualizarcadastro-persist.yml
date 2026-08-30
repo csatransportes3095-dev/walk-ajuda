@@ -1,0 +1,41 @@
+name: Fix AtualizarCadastro Persist
+
+on:
+  push:
+    branches:
+      - fix/atualizarcadastro-loop-home
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/atualizarcadastro-loop-home
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - name: Apply profile persistence fix
+        run: node scripts/fix-atualizarcadastro-save.mjs
+      - name: Validate whitespace
+        run: git diff --check
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Production build
+        run: pnpm build
+      - name: Commit validated persistence fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/customerUpdate.ts
+          if git diff --cached --quiet; then
+            echo "No source changes"
+            exit 0
+          fi
+          git commit -m "fix(cadastro): persistir dados antes de concluir [skip ci]"
+          git push origin HEAD:fix/atualizarcadastro-loop-home
