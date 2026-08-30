@@ -2642,6 +2642,7 @@ export const h2AdsGroups = mysqlTable("h2ads_groups", {
   name: varchar("name", { length: 128 }).notNull(),
   description: text("description"),
   status: mysqlEnum("status", ["active", "archived"]).notNull().default("active"),
+  cardColor: varchar("cardColor", { length: 32 }).notNull().default("#148CFF"),
   sortOrder: int("sortOrder").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

@@ -40,6 +40,7 @@ export const h2AdsCreateGroupSchema = z.object({
   name: z.string().trim().min(2).max(128),
   description: z.string().trim().max(2_000).nullable().optional(),
   status: h2AdsGroupStatusSchema.optional().default("active"),
+  cardColor: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/).optional().default("#148CFF"),
   sortOrder: z.number().int().min(0).max(100_000).optional().default(0),
 }).strict();
 
@@ -48,6 +49,7 @@ export const h2AdsUpdateGroupSchema = z.object({
   name: z.string().trim().min(2).max(128).optional(),
   description: z.string().trim().max(2_000).nullable().optional(),
   status: h2AdsGroupStatusSchema.optional(),
+  cardColor: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   sortOrder: z.number().int().min(0).max(100_000).optional(),
 }).strict().refine(({ id: _id, ...changes }) => Object.values(changes).some(value => value !== undefined), {
   message: "Informe ao menos um campo para atualizar o grupo.",
