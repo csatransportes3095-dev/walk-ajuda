@@ -25,9 +25,8 @@ mustReplace(
   const fnRe = /\nfunction CustomerProfileUpdatePolicyCard\([\s\S]*?\nfunction /;
   if (!fnRe.test(s)) throw new Error('card CustomerProfileUpdatePolicyCard nao encontrado');
   s = s.replace(fnRe, '\nfunction ');
-  const before = s;
-  s = s.replace(/\s*<CustomerProfileUpdatePolicyCard[\s\S]*?\/>/g, '');
-  if (s === before) throw new Error('uso do CustomerProfileUpdatePolicyCard nao encontrado');
+  s = s.replace(/\s*<CustomerProfileUpdatePolicyCard[^>]*\/>/g, '');
+  s = s.replace(/\s*<CustomerProfileUpdatePolicyCard[\s\S]*?<\/CustomerProfileUpdatePolicyCard>/g, '');
   fs.writeFileSync(path, s);
 }
 
