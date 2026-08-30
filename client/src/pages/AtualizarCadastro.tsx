@@ -104,9 +104,11 @@ export default function AtualizarCadastro() {
 
   useEffect(() => {
     if (step !== "done" && step !== "already_done") return;
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("customer_update_phone_hint");
     const timer = window.setTimeout(() => {
-      window.location.replace("/login");
-    }, 1800);
+      window.location.replace("/");
+    }, 1200);
     return () => window.clearTimeout(timer);
   }, [step]);
 
