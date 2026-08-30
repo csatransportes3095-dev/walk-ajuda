@@ -1,0 +1,71 @@
+name: Validate DevTools protection stability
+on:
+  push:
+    branches: [fix/devtools-protection-stability-20260830]
+    paths: [.github/workflows/validate-devtools-protection-stability.yml]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/devtools-protection-stability-20260830
+      - name: Apply live setting synchronization
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('client/src/pages/OrderTracking.tsx')
+          s=p.read_text()
+          old="const siteSettingsQuery = trpc.settings.getAll.useQuery();"
+          new="const siteSettingsQuery = trpc.settings.getAll.useQuery(undefined, { staleTime: 0, refetchInterval: 2_000, refetchIntervalInBackground: true, refetchOnWindowFocus: true });"
+          if old not in s:
+              raise SystemExit('settings query marker not found')
+          s=s.replace(old,new,1)
+
+          old2="  const securityAlertMut = trpc.system.securityAlert.useMutation();\n\n  // Status que dispensam o alerta de DevTools"
+          new2="  const securityAlertMut = trpc.system.securityAlert.useMutation();\n\n  // A configuração do ADM sempre prevalece. Se a proteção for desligada em\n  // outro aparelho/aba, o bloqueio atual é removido assim que a configuração\n  // sincronizar, sem exigir refresh do cliente.\n  useEffect(() => {\n    if (!devtoolsProtectionEnabled || admMode) setDevToolsBlocked(false);\n  }, [devtoolsProtectionEnabled, admMode]);\n\n  // Status que dispensam o alerta de DevTools"
+          if old2 not in s:
+              raise SystemExit('reset marker not found')
+          s=s.replace(old2,new2,1)
+
+          old3="  useDevToolsDetection(() => {\n    // Não bloquear em modo ADM ou clientes com status de acesso liberado\n    if (admMode) return;"
+          new3="  useDevToolsDetection(() => {\n    // Regra do ADM é soberana; evita qualquer bloqueio por callback atrasado.\n    if (!devtoolsProtectionEnabled || admMode) return;"
+          if old3 not in s:
+              raise SystemExit('callback guard marker not found')
+          s=s.replace(old3,new3,1)
+
+          old4="{devToolsBlocked && !EXEMPT_STATUSES.includes(latestStatus || '') && ("
+          new4="{devtoolsProtectionEnabled && devToolsBlocked && !EXEMPT_STATUSES.includes(latestStatus || '') && ("
+          if old4 not in s:
+              raise SystemExit('render guard marker not found')
+          s=s.replace(old4,new4,1)
+          p.write_text(s)
+          PY
+      - name: Verify unstable probes are gone
+        shell: bash
+        run: |
+          ! grep -q "debugger;" client/src/hooks/useDevToolsDetection.ts
+          ! grep -q "console.dir(remoteProbe)" client/src/hooks/useDevToolsDetection.ts
+          grep -q "refetchInterval: 2_000" client/src/pages/OrderTracking.tsx
+          grep -q "devtoolsProtectionEnabled && devToolsBlocked" client/src/pages/OrderTracking.tsx
+          grep -q "if (!devtoolsProtectionEnabled || admMode) setDevToolsBlocked(false)" client/src/pages/OrderTracking.tsx
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Production build
+        run: pnpm build
+      - name: Commit validated page fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add client/src/pages/OrderTracking.tsx
+          git commit -m 'fix(security): sincronizar regra DevTools do ADM em tempo real'
+          git push origin HEAD:fix/devtools-protection-stability-20260830
