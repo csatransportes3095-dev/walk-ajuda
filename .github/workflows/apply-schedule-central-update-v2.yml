@@ -23,7 +23,19 @@ jobs:
           fetch-depth: 0
 
       - name: Preserve patch script
-        run: cp scripts/fix-render-production-cadastro.mjs /tmp/fix-render-production-cadastro.mjs
+        run: |
+          cp scripts/fix-render-production-cadastro.mjs /tmp/fix-render-production-cadastro.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/fix-render-production-cadastro.mjs')
+          lines = p.read_text().splitlines()
+          fixed = []
+          for line in lines:
+              if 'updates.push(sql' in line:
+                  line = '    expect(router).not.toContain("normalizedPhone");\\n  });\\n\\n  it("redireciona para o atualizador e volta ao mesmo token", () => {'
+              fixed.append(line)
+          p.write_text('\n'.join(fixed) + '\n')
+          PY
 
       - name: Start branch from actual Render production branch
         run: |
