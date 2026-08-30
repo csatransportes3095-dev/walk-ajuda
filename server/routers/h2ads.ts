@@ -24,6 +24,7 @@ import {
 import { adminProcedure } from "../_core/trpc";
 import { decryptH2AdsProxy, encryptH2AdsProxy, H2ADS_PROXY_ROTATION_MINUTES_MAX, H2ADS_PROXY_ROTATION_MINUTES_MIN, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "../h2adsProxySecurity";
 import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "../h2adsProxyValidation";
+import { h2AdsOrderLinkRouterPart } from "../h2adsOrderLinkRouter";
 
 export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
 export const h2AdsInstanceStatusSchema = z.enum(["draft", "paused", "archived"]);
@@ -151,6 +152,7 @@ async function requireConfigurableInstance(instanceId: number) {
 }
 
 export const h2AdsRouter = {
+  ...h2AdsOrderLinkRouterPart,
   listDashboard: adminProcedure.query(async () => listH2AdsDashboard()),
   proxySecurityStatus: adminProcedure.query(() => ({ encryptionReady: isH2AdsProxyEncryptionReady() })),
 
