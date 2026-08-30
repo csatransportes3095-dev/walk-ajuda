@@ -15,6 +15,14 @@ export default function SchedulePage() {
   const [showChangeDate, setShowChangeDate] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<'all' | 'morning' | 'afternoon' | 'night' | 'midnight'>('all');
   const [showMidnightWarning, setShowMidnightWarning] = useState(false);
+  const scheduleProfile = data?.found ? data.profile : null;
+
+  useEffect(() => {
+    if (!data?.found || scheduleProfile?.status !== "required") return;
+    const returnTo = `/agendar/${token}`;
+    const query = new URLSearchParams({ phone: scheduleProfile.phone, returnTo });
+    window.location.replace(`/atualizarcadastro?${query.toString()}`);
+  }, [data?.found, scheduleProfile?.phone, scheduleProfile?.status, token]);
 
   const confirmMut = trpc.schedule.confirm.useMutation({
     onSuccess: () => { toast.success("Horário agendado com sucesso!"); utils.schedule.getByToken.invalidate({ token }); },
@@ -116,6 +124,42 @@ export default function SchedulePage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-fuchsia-400" />
+      </div>
+    );
+  }
+
+  if (data?.found && data.profile.status === "required") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
+        <div className="bg-black/40 border border-white/10 rounded-2xl p-8 max-w-md">
+          <Loader2 className="w-8 h-8 animate-spin text-fuchsia-400 mx-auto mb-3" />
+          <h1 className="text-xl font-bold text-white mb-2">Atualização necessária</h1>
+          <p className="text-white/60 text-sm">Abrindo a atualização central do seu cadastro antes do agendamento.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (data?.found && data.profile.status === "blocked") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
+        <div className="bg-black/40 border border-red-500/20 rounded-2xl p-8 max-w-md">
+          <ShieldAlert className="w-10 h-10 text-red-400 mx-auto mb-3" />
+          <h1 className="text-xl font-bold text-white mb-2">Cadastro bloqueado</h1>
+          <p className="text-white/60 text-sm">Fale com o atendimento antes de continuar o agendamento.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (data?.found && data.profile.status === "not_found") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
+        <div className="bg-black/40 border border-yellow-500/20 rounded-2xl p-8 max-w-md">
+          <AlertTriangle className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
+          <h1 className="text-xl font-bold text-white mb-2">Cadastro não localizado</h1>
+          <p className="text-white/60 text-sm">Fale com o atendimento para vincular este agendamento ao seu cadastro principal.</p>
+        </div>
       </div>
     );
   }

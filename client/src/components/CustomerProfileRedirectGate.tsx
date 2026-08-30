@@ -1,21 +1,16 @@
 import { useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
+import { sanitizeCustomerUpdateReturnPath } from "@shared/customerUpdateReturnPath";
 
 const CP_TOKEN_KEY = "cp_token";
 const LEGACY_PHONE_KEY = "walk_client_phone";
 const LEGACY_ACCESS_KEY = "walk_access_granted";
 const CENTRAL_PATH = "/atualizarcadastro";
-const CUSTOMER_ROUTES = new Set(["/", "/login", "/acompanhar", "/gastos", "/emprestimo"]);
 
 function normalizePhone(value: unknown) {
   let digits = String(value ?? "").replace(/\D/g, "");
   if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) digits = digits.slice(2);
   return /^\d{10,11}$/.test(digits) ? digits : "";
-}
-
-function normalizeReturnPath(pathname: string) {
-  if (CUSTOMER_ROUTES.has(pathname)) return pathname;
-  return "/";
 }
 
 /**
@@ -66,7 +61,7 @@ export function CustomerProfileRedirectGate() {
           if (result.status === "completed" || result.status === "blocked" || result.status === "not_found") return;
           const params = new URLSearchParams({
             phone,
-            returnTo: normalizeReturnPath(window.location.pathname),
+            returnTo: sanitizeCustomerUpdateReturnPath(window.location.pathname) || "/",
           });
           window.location.assign(`${CENTRAL_PATH}?${params.toString()}`);
         },
