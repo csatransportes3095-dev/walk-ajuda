@@ -72,12 +72,13 @@ export async function getH2AdsNetworkProfile(instanceId: number): Promise<H2AdsI
   return rows[0];
 }
 
-export async function createH2AdsGroup(input: Pick<H2AdsGroup, "name"> & Partial<Pick<H2AdsGroup, "description" | "status" | "sortOrder">>): Promise<number> {
+export async function createH2AdsGroup(input: Pick<H2AdsGroup, "name"> & Partial<Pick<H2AdsGroup, "description" | "status" | "cardColor" | "sortOrder">>): Promise<number> {
   const db = await requireH2AdsDb();
   const result = await db.insert(h2AdsGroups).values({
     name: input.name,
     description: input.description ?? null,
     status: input.status ?? "active",
+    cardColor: input.cardColor ?? "#148CFF",
     sortOrder: input.sortOrder ?? 0,
   });
   return Number(result[0].insertId);
