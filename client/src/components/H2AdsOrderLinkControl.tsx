@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { getExactH2AdsCustomerNumberSearch, matchesH2AdsOrderSearch, normalizeH2AdsOrderSearch } from "@shared/h2adsOrderSearch";
+import { canShowH2AdsOrderForLink, getExactH2AdsCustomerNumberSearch, matchesH2AdsOrderSearch, normalizeH2AdsOrderSearch } from "@shared/h2adsOrderSearch";
 
 type AdminOrder = {
   id: number;
@@ -62,9 +62,9 @@ export default function H2AdsOrderLinkControl({ instanceId }: { instanceId: numb
   const selectableOrders = useMemo(() => orders.filter(order => {
     const sub = order.subOrderIndex ?? 0;
     const key = keyFor(order.id, sub);
-    const active = order.latestStatus !== "pedido_entregue" && order.latestStatus !== "cancelado";
-    if (!active && key !== currentKey) return false;
-    if (!normalizedSearch || key === currentKey) return true;
+    const isCurrent = key === currentKey;
+    if (!canShowH2AdsOrderForLink(order.latestStatus, isCurrent, Boolean(normalizedSearch))) return false;
+    if (!normalizedSearch || isCurrent) return true;
     return matchesH2AdsOrderSearch(order, search);
   }).sort((a, b) => (b.orderNumber ?? b.customerNumber ?? b.id) - (a.orderNumber ?? a.customerNumber ?? a.id)), [orders, currentKey, normalizedSearch, search]);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getExactH2AdsCustomerNumberSearch, matchesH2AdsOrderSearch, normalizeH2AdsOrderSearch } from "../shared/h2adsOrderSearch";
+import { canShowH2AdsOrderForLink, getExactH2AdsCustomerNumberSearch, matchesH2AdsOrderSearch, normalizeH2AdsOrderSearch } from "../shared/h2adsOrderSearch";
 
 const order = {
   id: 987,
@@ -41,4 +41,13 @@ describe("H2ADS order search", () => {
   it("não aceita resultado sem correspondência", () => {
     expect(matchesH2AdsOrderSearch(order, "777777")).toBe(false);
   });
+  it("libera pedido entregue apenas dentro de busca do H2ADS", () => {
+    expect(canShowH2AdsOrderForLink("pedido_entregue", false, false)).toBe(false);
+    expect(canShowH2AdsOrderForLink("pedido_entregue", false, true)).toBe(true);
+    expect(canShowH2AdsOrderForLink("entregue", false, true)).toBe(true);
+    expect(canShowH2AdsOrderForLink("login_de_acesso", false, true)).toBe(true);
+    expect(canShowH2AdsOrderForLink("cancelado", false, true)).toBe(false);
+    expect(canShowH2AdsOrderForLink("pedido_entregue", true, false)).toBe(true);
+  });
+
 });
