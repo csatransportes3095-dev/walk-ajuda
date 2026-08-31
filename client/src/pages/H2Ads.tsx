@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";
+import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, Search, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import H2AdsOrderLinkControl from "@/components/H2AdsOrderLinkControl";
 import H2AdsNewInstanceOrderPicker, { suggestedH2AdsInstanceName, type H2AdsPendingOrderLink } from "@/components/H2AdsNewInstanceOrderPicker";
@@ -27,6 +27,7 @@ const readVisualColors = (): VisualColors => {
   } catch { return {}; }
 };
 const colorBackground = (hex: string) => `${hex}22`;
+const normalizeH2AdsSearch = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");
 
 type GroupForm = { id?: number; name: string; description: string; status: "active" | "archived"; cardColor: string };
 type InstanceForm = { id?: number; groupId: string; name: string; notes: string; status: "draft" | "paused" | "archived" };
@@ -97,6 +98,7 @@ export default function H2Ads() {
   const [visualColors, setVisualColors] = useState<VisualColors>(() => readVisualColors());
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(() => new Set());
   const [orderingGroups, setOrderingGroups] = useState(false);
+  const [instanceSearch, setInstanceSearch] = useState("");
 
   const groups = dashboard.data?.groups ?? [];
   const instances = dashboard.data?.instances ?? [];
@@ -112,6 +114,22 @@ export default function H2Ads() {
     map.set(instance.groupId, current);
     return map;
   }, new Map<number, typeof instances>()), [instances]);
+  const instanceSearchKey = useMemo(() => normalizeH2AdsSearch(instanceSearch), [instanceSearch]);
+  const masterSearchResults = useMemo(() => {
+    if (!instanceSearchKey) return [];
+    return groups.map(group => ({
+      group,
+      instances: (instancesByGroup.get(group.id) ?? []).filter(instance => normalizeH2AdsSearch(instance.name).includes(instanceSearchKey)),
+    })).filter(result => result.instances.length > 0);
+  }, [groups, instancesByGroup, instanceSearchKey]);
+  const masterSearchMatchCount = useMemo(() => masterSearchResults.reduce((total, result) => total + result.instances.length, 0), [masterSearchResults]);
+  const visibleGroups = useMemo(() => instanceSearchKey ? masterSearchResults.map(result => result.group) : groups, [groups, instanceSearchKey, masterSearchResults]);
+  const visibleInstancesByGroup = useMemo(() => {
+    if (!instanceSearchKey) return instancesByGroup;
+    const visible = new Map<number, typeof instances>();
+    for (const result of masterSearchResults) visible.set(result.group.id, result.instances);
+    return visible;
+  }, [instanceSearchKey, instancesByGroup, masterSearchResults]);
   const profileByInstance = useMemo(() => new Map(networkProfiles.map(profile => [profile.instanceId, profile])), [networkProfiles]);
   const credentialByInstance = useMemo(() => new Map(credentialStatuses.map(status => [status.instanceId, status])), [credentialStatuses]);
   const workerById = useMemo(() => new Map(browserWorkers.map(worker => [worker.id, worker])), [browserWorkers]);
@@ -351,8 +369,20 @@ export default function H2Ads() {
       <section className="mt-7 grid gap-3 sm:grid-cols-4"><Metric icon={Layers3} value={groups.length} label="grupos" text="Organização própria do módulo." tone="gold" /><Metric icon={Monitor} value={instances.length} label="instâncias" text="Cada uma possui rota própria." tone="blue" /><Metric icon={WifiOff} value={credentialStatuses.length} label="rotas vinculadas" text="Teste manual por instância." tone="red" /><Metric icon={Wifi} value={browserWorkers.filter(worker => worker.connectionStatus === "online").length} label="Workers online" text={`${browserWorkers.length} computador(es) autorizado(s).`} tone="blue" /></section>
       {dashboard.isError && <section className="mt-6 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-5 text-sm text-rose-100" role="alert"><strong>Base H2 Ads indisponível.</strong><p className="mt-1 text-xs">Nenhum dado de outra área será usado como alternativa.</p></section>}
       <WorkerPanel workers={browserWorkers} onCreate={() => { setPairingCode(null); setWorkerForm({ ...emptyWorker }); }} onRevoke={disableWorker} busy={saving} />
-      <section className="mt-6 overflow-hidden rounded-3xl border border-white/10 bg-[#0D1016]/90 shadow-[0_24px_80px_rgba(0,0,0,0.32)]"><header className="flex flex-col gap-4 border-b border-white/10 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-[#FFE37A]">Grupos e instâncias</p><h3 className="mt-1 text-xl font-black text-white">Configuração no lugar certo</h3></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setOrderingGroups(value => !value)} className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black ${orderingGroups ? "border-[#148CFF]/40 bg-[#148CFF]/15 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-300"}`}><ArrowUpDown className="h-4 w-4" />{orderingGroups ? "Concluir ordem" : "Ordenar grupos"}</button><button type="button" onClick={() => setGroupForm({ ...emptyGroup })} className="inline-flex items-center gap-2 rounded-xl border border-[#F5B800]/30 bg-[#F5B800]/10 px-4 py-2.5 text-sm font-black text-[#FFE37A]"><FolderPlus className="h-4 w-4" />Novo grupo</button><button type="button" onClick={() => newInstance()} className="inline-flex items-center gap-2 rounded-xl bg-[#F5B800] px-4 py-2.5 text-sm font-black text-[#171003]"><Plus className="h-4 w-4" />Nova instância</button></div></header>
-        <div className="p-4 sm:p-6">{dashboard.isLoading && <div className="grid min-h-48 place-items-center text-sm text-slate-400">Carregando instâncias H2 Ads...</div>}{!dashboard.isLoading && groups.length === 0 && <EmptyState />}{groups.map((group, groupIndex) => <GroupSection key={group.id} group={group} instances={instancesByGroup.get(group.id) ?? []} profileByInstance={profileByInstance} credentialByInstance={credentialByInstance} workerById={workerById} assignmentByInstance={assignmentByInstance} browserRunByInstance={browserRunByInstance} workers={browserWorkers} busy={saving} visualColors={visualColors} onVisualColor={setVisualColor} onEditGroup={() => setGroupForm({ id: group.id, name: group.name, description: group.description ?? "", status: group.status, cardColor: group.cardColor || INSTANCE_DEFAULT_COLOR })} onNewInstance={() => newInstance(group.id)} onEditInstance={instance => setInstanceForm({ id: instance.id, groupId: String(instance.groupId), name: instance.name, notes: instance.notes ?? "", status: instance.status })} onEditRoute={openRouteEditor} onAssignWorker={updateInstanceWorker} onPrepareBrowser={requestBrowserPreparation} onLaunchBrowser={requestBrowserLaunch} onCloseBrowser={requestBrowserClose} onDeleteInstance={removeInstance} instanceAction={instanceAction} expanded={expandedGroups.has(group.id)} onToggle={() => toggleGroup(group.id)} ordering={orderingGroups} canMoveUp={groupIndex > 0} canMoveDown={groupIndex < groups.length - 1} onMoveUp={() => void moveGroup(group.id, -1)} onMoveDown={() => void moveGroup(group.id, 1)} onDeleteGroup={() => void removeGroup(group.id, group.name)} />)}</div>
+      <section className="mt-6 overflow-hidden rounded-3xl border border-white/10 bg-[#0D1016]/90 shadow-[0_24px_80px_rgba(0,0,0,0.32)]"><header className="flex flex-col gap-4 border-b border-white/10 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-[#FFE37A]">Grupos e instâncias</p><h3 className="mt-1 text-xl font-black text-white">Configuração no lugar certo</h3></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setOrderingGroups(value => !value)} disabled={Boolean(instanceSearchKey)} title={instanceSearchKey ? "Limpe a pesquisa para ordenar os grupos" : undefined} className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40 ${orderingGroups ? "border-[#148CFF]/40 bg-[#148CFF]/15 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-300"}`}><ArrowUpDown className="h-4 w-4" />{orderingGroups ? "Concluir ordem" : "Ordenar grupos"}</button><button type="button" onClick={() => setGroupForm({ ...emptyGroup })} className="inline-flex items-center gap-2 rounded-xl border border-[#F5B800]/30 bg-[#F5B800]/10 px-4 py-2.5 text-sm font-black text-[#FFE37A]"><FolderPlus className="h-4 w-4" />Novo grupo</button><button type="button" onClick={() => newInstance()} className="inline-flex items-center gap-2 rounded-xl bg-[#F5B800] px-4 py-2.5 text-sm font-black text-[#171003]"><Plus className="h-4 w-4" />Nova instância</button></div></header>
+        <div className="border-b border-white/10 bg-black/20 px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#8CC8FF]" />
+              <input type="search" value={instanceSearch} onChange={event => { setInstanceSearch(event.target.value); if (orderingGroups) setOrderingGroups(false); }} onKeyDown={event => { if (event.key === "Escape") setInstanceSearch(""); }} placeholder="Pesquisar instância em todos os grupos..." autoComplete="off" aria-label="Pesquisar instância em todos os grupos" className="h-12 w-full rounded-2xl border border-[#148CFF]/30 bg-[#07101D] pl-12 pr-12 text-sm font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-[#148CFF] focus:ring-2 focus:ring-[#148CFF]/20" />
+              {instanceSearch && <button type="button" onClick={() => setInstanceSearch("")} className="absolute right-3 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white" aria-label="Limpar pesquisa"><X className="h-4 w-4" /></button>}
+            </div>
+            <div className={`rounded-xl border px-4 py-3 text-xs font-black ${instanceSearchKey ? "border-[#148CFF]/30 bg-[#148CFF]/10 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-400"}`}>
+              {instanceSearchKey ? `${masterSearchMatchCount} instância(s) encontrada(s) em ${masterSearchResults.length} grupo(s)` : "Filtro mestre · busca em todos os grupos"}
+            </div>
+          </div>
+        </div>
+        <div className="p-4 sm:p-6">{dashboard.isLoading && <div className="grid min-h-48 place-items-center text-sm text-slate-400">Carregando instâncias H2 Ads...</div>}{!dashboard.isLoading && groups.length === 0 && <EmptyState />}{!dashboard.isLoading && groups.length > 0 && instanceSearchKey && masterSearchMatchCount === 0 && <div className="mb-4 rounded-2xl border border-dashed border-[#F5B800]/30 bg-[#F5B800]/[0.06] p-5 text-center"><p className="font-black text-[#FFE37A]">Nenhuma instância encontrada.</p><p className="mt-1 text-xs text-slate-400">Tente outro nome. A pesquisa verifica todos os grupos.</p></div>}{visibleGroups.map(group => <GroupSection key={group.id} group={group} instances={visibleInstancesByGroup.get(group.id) ?? []} profileByInstance={profileByInstance} credentialByInstance={credentialByInstance} workerById={workerById} assignmentByInstance={assignmentByInstance} browserRunByInstance={browserRunByInstance} workers={browserWorkers} busy={saving} visualColors={visualColors} onVisualColor={setVisualColor} onEditGroup={() => setGroupForm({ id: group.id, name: group.name, description: group.description ?? "", status: group.status, cardColor: group.cardColor || INSTANCE_DEFAULT_COLOR })} onNewInstance={() => newInstance(group.id)} onEditInstance={instance => setInstanceForm({ id: instance.id, groupId: String(instance.groupId), name: instance.name, notes: instance.notes ?? "", status: instance.status })} onEditRoute={openRouteEditor} onAssignWorker={updateInstanceWorker} onPrepareBrowser={requestBrowserPreparation} onLaunchBrowser={requestBrowserLaunch} onCloseBrowser={requestBrowserClose} onDeleteInstance={removeInstance} instanceAction={instanceAction} expanded={instanceSearchKey ? true : expandedGroups.has(group.id)} onToggle={() => toggleGroup(group.id)} ordering={orderingGroups && !instanceSearchKey} canMoveUp={groups.indexOf(group) > 0} canMoveDown={groups.indexOf(group) < groups.length - 1} onMoveUp={() => void moveGroup(group.id, -1)} onMoveDown={() => void moveGroup(group.id, 1)} onDeleteGroup={() => void removeGroup(group.id, group.name)} />)}</div>
       </section>
       <section className="mt-6 grid gap-3 md:grid-cols-2"><article className="rounded-2xl border border-[#148CFF]/20 bg-[#148CFF]/[0.055] p-5"><div className="flex items-center gap-2 text-[#8CC8FF]"><ShieldCheck className="h-4 w-4" /><p className="text-sm font-black">Uma instância, uma rota</p></div><p className="mt-2 text-xs leading-5 text-slate-400">Cada configuração fica vinculada somente à instância escolhida.</p></article><article className="rounded-2xl border border-white/10 bg-white/[0.025] p-5"><div className="flex items-center gap-2 text-slate-300"><Network className="h-4 w-4" /><p className="text-sm font-black">Teste por clique</p></div><p className="mt-2 text-xs leading-5 text-slate-400">IP, localização, ISP, ASN e latência só são atualizados quando você clicar em validar.</p></article></section>
     </main>
