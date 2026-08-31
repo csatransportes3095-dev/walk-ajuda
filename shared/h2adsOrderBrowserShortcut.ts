@@ -41,3 +41,48 @@ export function resolveH2AdsOrderBrowserShortcutState(input: {
   if (state === "blocked") return { linked: true, instanceId: link.instanceId, state, canOpen: false, canClose: false, reason: "Instância bloqueada; revise no H2ADS." };
   return { linked: true, instanceId: link.instanceId, state, canOpen: false, canClose: false, reason: "Prepare a instância no H2ADS antes de abrir." };
 }
+
+
+export type H2AdsOrderRepairLike = {
+  id: number;
+  subOrderIndex?: number | null;
+  customerNumber?: number | null;
+  serviceName?: string | null;
+  serviceOption?: string | null;
+};
+
+function normalizeRepairText(value: unknown): string {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+export function resolveH2AdsOrderLinkRepairCandidate(input: {
+  registrationId: number;
+  subOrderIndex: number;
+  customerNumber: number | null | undefined;
+  serviceName: string | null | undefined;
+  serviceOption: string | null | undefined;
+  links: H2AdsOrderLinkLike[];
+  orders: H2AdsOrderRepairLike[];
+}): number | null {
+  if (input.links.some(link => link.registrationId === input.registrationId && link.subOrderIndex === input.subOrderIndex)) return null;
+  const customerNumber = Number(input.customerNumber || 0);
+  if (!Number.isInteger(customerNumber) || customerNumber < 1) return null;
+  const serviceKey = `${normalizeRepairText(input.serviceName)}|${normalizeRepairText(input.serviceOption)}`;
+  if (serviceKey === "|") return null;
+
+  const orderByKey = new Map(input.orders.map(order => [`${order.id}:${Number(order.subOrderIndex || 0)}`, order]));
+  const candidates = new Set<number>();
+  for (const link of input.links) {
+    const linkedOrder = orderByKey.get(`${link.registrationId}:${link.subOrderIndex}`);
+    if (!linkedOrder || Number(linkedOrder.customerNumber || 0) !== customerNumber) continue;
+    const linkedServiceKey = `${normalizeRepairText(linkedOrder.serviceName)}|${normalizeRepairText(linkedOrder.serviceOption)}`;
+    if (linkedServiceKey === serviceKey) candidates.add(link.instanceId);
+  }
+  return candidates.size === 1 ? [...candidates][0] : null;
+}

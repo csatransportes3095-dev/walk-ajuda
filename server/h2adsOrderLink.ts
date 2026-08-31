@@ -31,10 +31,10 @@ function rowsFrom(result: unknown): Array<Record<string, unknown>> {
   return [];
 }
 
-export function splitH2AdsOrderHistory(historyNewestFirst: HistoryEntry[], initialStatus: string): HistoryEntry[][] {
+export function splitH2AdsOrderHistory<T extends HistoryEntry>(historyNewestFirst: T[], initialStatus: string): T[][] {
   const chronological = [...historyNewestFirst].reverse();
-  const groups: HistoryEntry[][] = [];
-  let current: HistoryEntry[] = [];
+  const groups: T[][] = [];
+  let current: T[] = [];
   for (const entry of chronological) {
     if ((entry.status === initialStatus || entry.status === "recebido") && current.length > 0) {
       groups.push(current);
@@ -110,7 +110,13 @@ export async function searchH2AdsCustomersForNewInstance(search: string): Promis
     `));
   }
 
-  const results: H2AdsCustomerOrderSearchResult[] = [];
+  const initialStatus = await getInitialOrderStatus();
+  const linkedRows = rowsFrom(await db.execute(sql`
+    SELECT registrationId, subOrderIndex FROM h2ads_order_links
+  `));
+  const linkedKeys = new Set(linkedRows.map(row => `${Number(row.registrationId)}:${Number(row.subOrderIndex || 0)}`));
+  const candidates: Array<{ result: H2AdsCustomerOrderSearchResult; sortAt: number }> = [];
+
   for (const customer of customerRows) {
     const phone = String(customer.phone || "").replace(/\D/g, "");
     if (!phone) continue;
@@ -119,43 +125,63 @@ export async function searchH2AdsCustomersForNewInstance(search: string): Promis
       FROM orderStatusHistory
       WHERE ${normalizePhoneSql("customerPhone")} = '${phone.replace(/'/g, "''")}'
       ORDER BY createdAt DESC, id DESC
-      LIMIT 250
+      LIMIT 500
     `)));
 
-    const latestByRegistration = new Map<number, Record<string, unknown>>();
+    const rowsByRegistration = new Map<number, Array<Record<string, unknown> & { status: string }>>();
     for (const row of orderRows) {
       const registrationId = Number(row.registrationId);
-      if (!Number.isInteger(registrationId) || registrationId < 1 || latestByRegistration.has(registrationId)) continue;
-      latestByRegistration.set(registrationId, row);
+      if (!Number.isInteger(registrationId) || registrationId < 1) continue;
+      const current = rowsByRegistration.get(registrationId) ?? [];
+      current.push({ ...row, status: String(row.status || "") });
+      rowsByRegistration.set(registrationId, current);
     }
 
-    const latestOrder = [...latestByRegistration.values()].find(row => String(row.status || "") !== "cancelado");
-    if (!latestOrder) continue;
-    const registrationId = Number(latestOrder.registrationId);
-    const linked = rowsFrom(await db.execute(sql`
-      SELECT instanceId FROM h2ads_order_links
-      WHERE registrationId = ${registrationId} AND subOrderIndex = 0
-      LIMIT 1
-    `))[0];
-    if (linked) continue;
+    for (const [registrationId, historyNewestFirst] of rowsByRegistration) {
+      const subOrders = splitH2AdsOrderHistory(historyNewestFirst, initialStatus);
+      for (let subOrderIndex = 0; subOrderIndex < subOrders.length; subOrderIndex += 1) {
+        const segment = subOrders[subOrderIndex];
+        const latest = segment[segment.length - 1];
+        if (!latest || latest.status === "cancelado") continue;
+        const key = `${registrationId}:${subOrderIndex}`;
+        if (linkedKeys.has(key)) continue;
 
-    results.push({
-      registrationId,
-      subOrderIndex: 0,
-      customerNumber: customer.customerNumber === null || customer.customerNumber === undefined ? null : Number(customer.customerNumber),
-      customerName: customer.name ? String(customer.name) : null,
-      phone: customer.phone ? String(customer.phone) : null,
-      orderNumber: latestOrder.orderNumber === null || latestOrder.orderNumber === undefined ? null : Number(latestOrder.orderNumber),
-      serviceName: latestOrder.serviceName ? String(latestOrder.serviceName) : null,
-      serviceOption: latestOrder.serviceOption ? String(latestOrder.serviceOption) : null,
-      latestStatus: latestOrder.status ? String(latestOrder.status) : null,
-      customerProfilePhotoUrl: customer.profilePhotoUrl ? String(customer.profilePhotoUrl) : null,
-    });
-    if (exactMatch) break;
-    if (results.length >= 8) break;
+        const latestWith = (field: string): unknown => {
+          for (let index = segment.length - 1; index >= 0; index -= 1) {
+            const value = segment[index]?.[field];
+            if (value !== null && value !== undefined && value !== "") return value;
+          }
+          return null;
+        };
+        const createdAtValue = latestWith("createdAt");
+        const sortAt = createdAtValue instanceof Date ? createdAtValue.getTime() : Date.parse(String(createdAtValue || "")) || 0;
+
+        candidates.push({
+          sortAt,
+          result: {
+            registrationId,
+            subOrderIndex,
+            customerNumber: customer.customerNumber === null || customer.customerNumber === undefined ? null : Number(customer.customerNumber),
+            customerName: customer.name ? String(customer.name) : null,
+            phone: customer.phone ? String(customer.phone) : null,
+            orderNumber: latestWith("orderNumber") === null ? null : Number(latestWith("orderNumber")),
+            serviceName: latestWith("serviceName") ? String(latestWith("serviceName")) : null,
+            serviceOption: latestWith("serviceOption") ? String(latestWith("serviceOption")) : null,
+            latestStatus: latest.status || null,
+            customerProfilePhotoUrl: customer.profilePhotoUrl ? String(customer.profilePhotoUrl) : null,
+          },
+        });
+      }
+    }
   }
 
-  return results;
+  candidates.sort((a, b) => b.sortAt - a.sortAt || (b.result.orderNumber ?? b.result.registrationId) - (a.result.orderNumber ?? a.result.registrationId));
+  const unique = new Map<string, H2AdsCustomerOrderSearchResult>();
+  for (const candidate of candidates) {
+    const key = `${candidate.result.registrationId}:${candidate.result.subOrderIndex}`;
+    if (!unique.has(key)) unique.set(key, candidate.result);
+  }
+  return [...unique.values()].slice(0, exactMatch ? 20 : 12);
 }
 
 export async function listH2AdsOrderLinks(): Promise<H2AdsOrderLink[]> {

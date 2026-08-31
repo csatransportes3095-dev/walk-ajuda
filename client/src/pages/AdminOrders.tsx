@@ -5668,7 +5668,7 @@ export default function AdminOrders() {
                           >
                             👤 {attentionMap.has(order.id) ? attentionMap.get(order.id) : 'Atender'}
                           </button>
-                          <OrderH2AdsBrowserShortcut registrationId={order.id} subOrderIndex={order.subOrderIndex ?? 0} />
+                          <OrderH2AdsBrowserShortcut registrationId={order.id} subOrderIndex={order.subOrderIndex ?? 0} customerNumber={order.customerNumber} serviceName={order.serviceName} serviceOption={order.serviceOption} />
                           {/* Selo NOVO */}
                           {!viewedOrders.has(getOrderKey(order)) && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white animate-pulse shadow-sm shadow-red-500/50">
