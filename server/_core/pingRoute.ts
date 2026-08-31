@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { registerUnifiedCustomerSessionRoutes } from "../unifiedCustomerSessionRoutes";
+import { registerRaffleIntegrityRoutes } from "../raffleIntegrityRoutes";
 
 /**
  * Rota mínima usada exclusivamente por monitoramento externo.
@@ -14,6 +15,10 @@ export function registerPingRoute(app: Express): void {
     });
     res.status(200).json({ ok: true, ts: Date.now() });
   });
+
+  // Sorteio: números confirmados são definitivos e as fotos vêm do cadastro principal.
+  // Registrado aqui antes do middleware tRPC para impedir inclusive chamadas de abas antigas.
+  registerRaffleIntegrityRoutes(app);
 
   // Compatibilidade de módulos legados com a sessão única do cliente.
   registerUnifiedCustomerSessionRoutes(app);
