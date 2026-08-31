@@ -6,8 +6,9 @@ export type LateFeeConfigLike = {
 };
 
 export type LateFeeClock = {
-  today: string;
-  hour: number;
+  today?: string;
+  date?: string;
+  hour?: number;
   minute?: number;
 };
 
@@ -26,9 +27,28 @@ function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function getSaoPauloClock(now = new Date()): { today: string; hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const valueOf = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "0";
+  return {
+    today: `${valueOf("year")}-${valueOf("month")}-${valueOf("day")}`,
+    hour: Number(valueOf("hour")),
+    minute: Number(valueOf("minute")),
+  };
+}
+
 /**
  * Calcula a taxa aplicável em um instante específico, sem gravar no banco.
- * A fonte temporal deve ser sempre o relógio de America/Sao_Paulo.
+ * A fonte temporal é sempre America/Sao_Paulo. O clock recebido pode ser usado
+ * para testes/fluxos controlados; campos ausentes são completados com o relógio de SP.
  *
  * Regras do empréstimo diário:
  * - até 18:00: sem taxa;
@@ -41,14 +61,16 @@ export function calculateLateFeeForInstallment(input: {
   dueDate: unknown;
   amount: unknown;
   config: LateFeeConfigLike | null | undefined;
-  clock: LateFeeClock;
+  clock?: LateFeeClock;
 }): number {
   if (!input.config?.enabled || String(input.config.enabled) === "0") return 0;
 
   const amount = asAmount(input.amount);
   const dueDate = asDate(input.dueDate);
-  const { today, hour } = input.clock;
-  const minute = Number(input.clock.minute || 0);
+  const saoPauloNow = getSaoPauloClock();
+  const today = String(input.clock?.today || input.clock?.date || saoPauloNow.today).slice(0, 10);
+  const hour = input.clock?.hour == null ? saoPauloNow.hour : Number(input.clock.hour);
+  const minute = input.clock?.minute == null ? saoPauloNow.minute : Number(input.clock.minute);
   if (!amount || !dueDate || dueDate > today) return 0;
 
   const feeAfter18 = asAmount(input.config.fee_after_18h);
@@ -58,7 +80,7 @@ export function calculateLateFeeForInstallment(input: {
 
   if (dueDate < today) return maximumLateFee;
 
-  const minutesSinceMidnight = (Number(hour) * 60) + minute;
+  const minutesSinceMidnight = (hour * 60) + minute;
   const at1801 = (18 * 60) + 1;
   const at2001 = (20 * 60) + 1;
   const at2359 = (23 * 60) + 59;
