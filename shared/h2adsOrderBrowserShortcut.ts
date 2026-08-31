@@ -22,7 +22,9 @@ export function resolveH2AdsOrderBrowserShortcutState(input: {
   workers: H2AdsWorkerLike[];
   runs: H2AdsBrowserRunLike[];
 }): H2AdsOrderBrowserShortcutState | null {
-  const link = input.links.find(item => item.registrationId === input.registrationId && item.subOrderIndex === input.subOrderIndex);
+  const exactLink = input.links.find(item => item.registrationId === input.registrationId && item.subOrderIndex === input.subOrderIndex);
+  const sameOrderLinks = input.links.filter(item => item.registrationId === input.registrationId);
+  const link = exactLink ?? (sameOrderLinks.length === 1 ? sameOrderLinks[0] : undefined);
   if (!link) return null;
 
   const instance = input.instances.find(item => item.id === link.instanceId);
@@ -41,7 +43,6 @@ export function resolveH2AdsOrderBrowserShortcutState(input: {
   if (state === "blocked") return { linked: true, instanceId: link.instanceId, state, canOpen: false, canClose: false, reason: "Instância bloqueada; revise no H2ADS." };
   return { linked: true, instanceId: link.instanceId, state, canOpen: false, canClose: false, reason: "Prepare a instância no H2ADS antes de abrir." };
 }
-
 
 export type H2AdsOrderRepairLike = {
   id: number;
