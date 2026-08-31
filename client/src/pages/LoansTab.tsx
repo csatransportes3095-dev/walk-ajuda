@@ -459,7 +459,6 @@ export function LoansTab({ token }: LoansTabProps) {
   const [parceladoAmount, setParceladoAmount] = useState(0);
   const [parceladoEnabled, setParceladoEnabled] = useState(false);
   const [parceladoSelecionado, setParceladoSelecionado] = useState<number | null>(null);
-  const [parceladoFrequencia, setParceladoFrequencia] = useState<'mensal' | 'quinzenal' | 'semanal'>('mensal');
   const [parceladoConfirm, setParceladoConfirm] = useState(false);
   const [parceladoPrimeiroVenc, setParceladoPrimeiroVenc] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() + 30);
@@ -1291,7 +1290,7 @@ export function LoansTab({ token }: LoansTabProps) {
             {paymentType === 'parcelado' && parceladoConfirm && parceladoSelecionado && simParceladoQuery.data && (() => {
               const op = simParceladoQuery.data.opcoes.find((o: any) => o.parcelas === parceladoSelecionado);
               if (!op) return null;
-              const diasFreq = parceladoFrequencia === 'semanal' ? 7 : parceladoFrequencia === 'quinzenal' ? 15 : 30;
+              const diasFreq = 30;
               const datas: string[] = [];
               for (let i = 0; i < op.parcelas; i++) {
                 const d = new Date(parceladoPrimeiroVenc + 'T12:00:00');
@@ -1314,7 +1313,7 @@ export function LoansTab({ token }: LoansTabProps) {
                   <Button
                     onClick={() => {
                       if (!parceladoSelecionado) { toast.error('Selecione o parcelamento'); return; }
-                      requestParceladoMutation.mutate({ token, amount: parseFloat(requestAmount), parcelas: parceladoSelecionado, frequencia: parceladoFrequencia });
+                      requestParceladoMutation.mutate({ token, amount: parseFloat(requestAmount), parcelas: parceladoSelecionado, frequencia: 'mensal' });
                     }}
                     disabled={!requestAmount || !parceladoSelecionado || requestParceladoMutation.isPending}
                     className="w-full bg-violet-600 hover:bg-violet-700">

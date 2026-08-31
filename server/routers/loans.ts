@@ -9,6 +9,7 @@ import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
 import { calculateLateFeeDetailsForInstallment, calculateLateFeeForInstallment } from "../loans/lateFee";
+import { calculateParceladoFromAdminPlan } from "../loans/parcelado";
 import PDFDocument from "pdfkit";
 import { sendMailDirect } from "../_core/sendMailDirect";
 import sharp from "sharp";
@@ -581,10 +582,12 @@ export const loanRouter = router({
     const plans = await qRows(db, drizzleSql`SELECT parcelas, percentual FROM loanInstallmentPlans WHERE ativo=1 ORDER BY ordem ASC, parcelas ASC`);
     // Retornar apenas valores finais — sem percentual
     const opcoes = plans.map((p: any) => {
-      const pct = parseFloat(p.percentual);
-      const total = Math.round(input.amount * (1 + pct / 100) * 100) / 100;
-      const parcela = Math.round((total / parseInt(p.parcelas)) * 100) / 100;
-      return { parcelas: parseInt(p.parcelas), valorParcela: parcela, valorTotal: total };
+      const calc = calculateParceladoFromAdminPlan({
+        amount: input.amount,
+        installments: parseInt(p.parcelas),
+        percentage: parseFloat(p.percentual),
+      });
+      return { parcelas: calc.installments, valorParcela: calc.perInstallment, valorTotal: calc.totalAmount };
     });
     return { opcoes };
   }),
@@ -594,18 +597,19 @@ export const loanRouter = router({
     amount: z.number().positive(),
     parcelas: z.number().int().min(1),
     releaseDate: z.string(),
-    frequencia: z.enum(['mensal', 'quinzenal', 'semanal']).default('mensal'),
+    frequencia: z.literal('mensal').default('mensal'),
   })).query(async ({ input }) => {
     const db = await getDb() as any;
     await ensureInstallmentPlansTable(db);
     const plan = await qRows(db, drizzleSql`SELECT * FROM loanInstallmentPlans WHERE parcelas=${input.parcelas} AND ativo=1 LIMIT 1`);
     if (!plan.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Plano não encontrado' });
-    const pct = parseFloat(plan[0].percentual);
-    const valorJuros = Math.round(input.amount * (pct / 100) * 100) / 100;
-    const total = Math.round((input.amount + valorJuros) * 100) / 100;
-    const parcela = Math.round((total / input.parcelas) * 100) / 100;
-    // Gerar datas das parcelas
-    const schedule = generateInstallments(input.releaseDate, input.frequencia === 'mensal' ? 'mensal' : input.frequencia === 'quinzenal' ? 'quinzenal' : 'semanal', input.parcelas, total);
+    const calc = calculateParceladoFromAdminPlan({ amount: input.amount, installments: input.parcelas, percentage: parseFloat(plan[0].percentual) });
+    const pct = calc.percentage;
+    const valorJuros = calc.interestAmount;
+    const total = calc.totalAmount;
+    const parcela = calc.perInstallment;
+    // Parcelado é sempre mensal.
+    const schedule = generateInstallments(input.releaseDate, 'mensal', input.parcelas, total);
     return {
       valorLiberado: input.amount,
       parcelas: input.parcelas,
@@ -623,7 +627,7 @@ export const loanRouter = router({
     token: z.string(),
     amount: z.number().positive(),
     parcelas: z.number().int().min(1),
-    frequencia: z.enum(['mensal', 'quinzenal', 'semanal']).default('mensal'),
+    frequencia: z.literal('mensal').default('mensal'),
     primeiroVencimento: z.string().optional(),
   })).mutation(async ({ input }) => {
     const db = await getDb() as any;
@@ -640,9 +644,10 @@ export const loanRouter = router({
     if (input.amount > parseFloat(client.creditLimit)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Valor excede seu limite.' });
     const plan = await qRows(db, drizzleSql`SELECT * FROM loanInstallmentPlans WHERE parcelas=${input.parcelas} AND ativo=1 LIMIT 1`);
     if (!plan.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Plano de parcelamento não encontrado.' });
-    const pct = parseFloat(plan[0].percentual);
-    const valorJuros = Math.round(input.amount * (pct / 100) * 100) / 100;
-    const total = Math.round((input.amount + valorJuros) * 100) / 100;
+    const calc = calculateParceladoFromAdminPlan({ amount: input.amount, installments: input.parcelas, percentage: parseFloat(plan[0].percentual) });
+    const pct = calc.percentage;
+    const valorJuros = calc.interestAmount;
+    const total = calc.totalAmount;
     const today = getBrazilToday();
     // Parcelado é sempre mensal — data de liberação definida pelo ADM após aprovação
     const schedule = generateInstallments(today, 'mensal', input.parcelas, total);
@@ -659,7 +664,7 @@ export const loanRouter = router({
       for (const inst of schedule) {
         await db.execute(drizzleSql`INSERT INTO loanInstallments (loanId, installmentNumber, dueDate, amount) VALUES (${loanId}, ${inst.installmentNumber}, ${inst.dueDate}, ${inst.amount})`);
       }
-      return { id: loanId, parcelas: input.parcelas, valorParcela: Math.round((total / input.parcelas) * 100) / 100, valorTotal: total, primeiroVencimento: schedule[0].dueDate };
+      return { id: loanId, parcelas: input.parcelas, valorParcela: calc.perInstallment, valorTotal: total, primeiroVencimento: schedule[0].dueDate, frequencia: 'mensal' as const };
     } catch (err: any) {
       console.error('[requestParcelado] DB error:', err?.message || err);
       throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao registrar empréstimo: ' + (err?.message || 'erro desconhecido') });
