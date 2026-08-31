@@ -967,6 +967,39 @@ export default function AdminOrders() {
     }
   }, [ordersQuery.data]);
 
+  const showStatusEmailResult = (
+    data: {
+      success?: boolean;
+      error?: string;
+      notifications?: {
+        customerEmailSent?: boolean;
+        customerEmailError?: string | null;
+      };
+    },
+    vars: { skipEmail?: boolean }
+  ) => {
+    if (data?.success === false) {
+      toast.error(data.error || "Status não foi atualizado.");
+      return;
+    }
+
+    if (vars.skipEmail) {
+      toast.success("Status atualizado sem notificar o cliente.");
+      return;
+    }
+
+    if (data?.notifications?.customerEmailSent) {
+      toast.success("Status atualizado + e-mail enviado ao cliente.");
+      return;
+    }
+
+    const reason = data?.notifications?.customerEmailError || "Falha no envio do e-mail ao cliente";
+    toast.warning("Status atualizado, mas o e-mail não foi enviado.", {
+      description: `${reason}. Use o botão “Reenviar Email do Status Atual”.`,
+      duration: 12000,
+    });
+  };
+
   const updateMutation = trpc.orderStatus.updateStatus.useMutation({
     onMutate: async (vars) => {
       // Atualização imediata via estado local (independente do cache tRPC)
@@ -974,8 +1007,8 @@ export default function AdminOrders() {
       setLocalStatusOverrides(prev => ({ ...prev, [orderKey]: vars.status }));
       return { orderKey };
     },
-    onSuccess: (_data, vars) => {
-      toast.success("Status atualizado!");
+    onSuccess: (data, vars) => {
+      showStatusEmailResult(data, vars);
       // Aguardar servidor persistir, depois refetch e limpar override
       setTimeout(() => {
         ordersQuery.refetch().then(() => {
@@ -1044,8 +1077,8 @@ export default function AdminOrders() {
   });
 
   const updateArchivedStatusMutation = trpc.orderStatus.updateStatus.useMutation({
-    onSuccess: (_, vars) => {
-      toast.success("Status atualizado!");
+    onSuccess: (data, vars) => {
+      showStatusEmailResult(data, vars);
       // Fechar o seletor e limpar o status selecionado
       setArchivedStatusExpanded(prev => { const n = new Set(prev); n.delete(String(vars.registrationId)); return n; });
       setArchivedSelectedStatus(prev => { const n = { ...prev }; delete n[String(vars.registrationId)]; return n; });
@@ -1086,8 +1119,8 @@ export default function AdminOrders() {
   });
 
   const updateRgCnhStatusMutation = trpc.orderStatus.updateStatus.useMutation({
-    onSuccess: (_, vars) => {
-      toast.success("Status atualizado!");
+    onSuccess: (data, vars) => {
+      showStatusEmailResult(data, vars);
       setRgCnhStatusExpanded(prev => { const n = new Set(prev); n.delete(String(vars.registrationId)); return n; });
       setRgCnhSelectedStatus(prev => { const n = { ...prev }; delete n[String(vars.registrationId)]; return n; });
       rgCnhQuery.refetch();
