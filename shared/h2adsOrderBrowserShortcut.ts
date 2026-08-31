@@ -22,9 +22,9 @@ export function resolveH2AdsOrderBrowserShortcutState(input: {
   workers: H2AdsWorkerLike[];
   runs: H2AdsBrowserRunLike[];
 }): H2AdsOrderBrowserShortcutState | null {
-  const exactLink = input.links.find(item => item.registrationId === input.registrationId && item.subOrderIndex === input.subOrderIndex);
-  const sameOrderLinks = input.links.filter(item => item.registrationId === input.registrationId);
-  const link = exactLink ?? (sameOrderLinks.length === 1 ? sameOrderLinks[0] : undefined);
+  // ABRIR/FECHAR nunca deve adivinhar. O controle direto exige o vínculo exato
+  // entre o pedido/subpedido exibido no ADM e a instância H2ADS.
+  const link = input.links.find(item => item.registrationId === input.registrationId && item.subOrderIndex === input.subOrderIndex);
   if (!link) return null;
 
   const instance = input.instances.find(item => item.id === link.instanceId);
@@ -48,18 +48,52 @@ export type H2AdsOrderRepairLike = {
   id: number;
   subOrderIndex?: number | null;
   customerNumber?: number | null;
+  orderNumber?: number | null;
   serviceName?: string | null;
   serviceOption?: string | null;
+};
+
+export type H2AdsOrderLinkRepairCandidate = {
+  instanceId: number;
+  linkedRegistrationId: number;
+  linkedSubOrderIndex: number;
+  linkedOrderNumber: number | null;
+  serviceKey: string;
 };
 
 function normalizeRepairText(value: unknown): string {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[º°]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+export function canonicalH2AdsServiceKey(serviceName: unknown, serviceOption: unknown): string | null {
+  const service = normalizeRepairText(serviceName);
+  const option = normalizeRepairText(serviceOption);
+  const combined = `${service} ${option}`.trim();
+  if (!combined) return null;
+
+  let product = service || "servico";
+  if (/(?:^| )taxi(?: |$)/.test(combined)) product = "taxi";
+  else if (/(?:^| )uber(?: |$)/.test(combined)) product = "uber";
+  else if (/(?:^| )99(?: |$)/.test(combined)) product = "99";
+  else if (combined.includes("indrive") || combined.includes("in drive")) product = "indrive";
+
+  let optionKey = option || "padrao";
+  if (combined.includes("aleatorio")) {
+    optionKey = "nome_aleatorio";
+  } else if (combined.includes("primeiro nome") || /(?:^| )1(?: o)? nome(?: |$)/.test(combined)) {
+    optionKey = "primeiro_nome";
+  } else if (combined.includes("nome completo") || (combined.includes("nome") && combined.includes("completo"))) {
+    optionKey = "nome_completo";
+  }
+
+  return `${product}|${optionKey}`;
 }
 
 export function resolveH2AdsOrderLinkRepairCandidate(input: {
@@ -70,20 +104,36 @@ export function resolveH2AdsOrderLinkRepairCandidate(input: {
   serviceOption: string | null | undefined;
   links: H2AdsOrderLinkLike[];
   orders: H2AdsOrderRepairLike[];
-}): number | null {
+}): H2AdsOrderLinkRepairCandidate | null {
+  // Se o vínculo já é exato, não existe nada para reparar.
   if (input.links.some(link => link.registrationId === input.registrationId && link.subOrderIndex === input.subOrderIndex)) return null;
+
   const customerNumber = Number(input.customerNumber || 0);
   if (!Number.isInteger(customerNumber) || customerNumber < 1) return null;
-  const serviceKey = `${normalizeRepairText(input.serviceName)}|${normalizeRepairText(input.serviceOption)}`;
-  if (serviceKey === "|") return null;
+
+  const targetServiceKey = canonicalH2AdsServiceKey(input.serviceName, input.serviceOption);
+  if (!targetServiceKey) return null;
 
   const orderByKey = new Map(input.orders.map(order => [`${order.id}:${Number(order.subOrderIndex || 0)}`, order]));
-  const candidates = new Set<number>();
+  const candidates = new Map<number, H2AdsOrderLinkRepairCandidate>();
+
   for (const link of input.links) {
     const linkedOrder = orderByKey.get(`${link.registrationId}:${link.subOrderIndex}`);
     if (!linkedOrder || Number(linkedOrder.customerNumber || 0) !== customerNumber) continue;
-    const linkedServiceKey = `${normalizeRepairText(linkedOrder.serviceName)}|${normalizeRepairText(linkedOrder.serviceOption)}`;
-    if (linkedServiceKey === serviceKey) candidates.add(link.instanceId);
+
+    const linkedServiceKey = canonicalH2AdsServiceKey(linkedOrder.serviceName, linkedOrder.serviceOption);
+    if (linkedServiceKey !== targetServiceKey) continue;
+
+    candidates.set(link.instanceId, {
+      instanceId: link.instanceId,
+      linkedRegistrationId: link.registrationId,
+      linkedSubOrderIndex: link.subOrderIndex,
+      linkedOrderNumber: linkedOrder.orderNumber == null ? null : Number(linkedOrder.orderNumber),
+      serviceKey: linkedServiceKey,
+    });
   }
-  return candidates.size === 1 ? [...candidates][0] : null;
+
+  // Nunca adivinha entre duas instâncias. O ADM só recebe a opção VINCULAR
+  // quando existe exatamente um candidato compatível.
+  return candidates.size === 1 ? [...candidates.values()][0] : null;
 }
