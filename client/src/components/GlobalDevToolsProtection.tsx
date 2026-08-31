@@ -14,16 +14,12 @@ export default function GlobalDevToolsProtection() {
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });
-  const enabled = !excluded && settingsQuery.data?.devtools_protection === "1";
+  const protectionEnabled = !excluded && settingsQuery.data?.devtools_protection === "1";
   const [blocked, setBlocked] = useState(false);
   const securityAlertMut = trpc.system.securityAlert.useMutation();
 
-  useEffect(() => {
-    if (!enabled) setBlocked(false);
-  }, [enabled]);
-
-  useDevToolsDetection(() => {
-    if (!enabled) return;
+  const detection = useDevToolsDetection(() => {
+    if (!protectionEnabled) return;
     setBlocked(true);
     let phone: string | undefined;
     try {
@@ -37,9 +33,13 @@ export default function GlobalDevToolsProtection() {
       page: window.location.pathname,
       userAgent: navigator.userAgent.slice(0, 200),
     });
-  }, enabled);
+  }, protectionEnabled);
 
-  if (!enabled || !blocked) return null;
+  useEffect(() => {
+    if (!detection.effectiveEnabled) setBlocked(false);
+  }, [detection.effectiveEnabled]);
+
+  if (!detection.effectiveEnabled || !blocked) return null;
 
   return (
     <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-black p-6 text-white">
