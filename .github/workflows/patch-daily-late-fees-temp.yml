@@ -1,0 +1,395 @@
+name: Patch Daily Late Fees Temp
+
+on:
+  push:
+    branches:
+      - fix/daily-late-fees-20260831
+    paths:
+      - .github/workflows/patch-daily-late-fees-temp.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/daily-late-fees-20260831
+          fetch-depth: 0
+
+      - name: Patch daily loan fee flow only
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected 1 match, found {count}")
+              return text.replace(old, new, 1)
+
+          def replace_exact_count(text, old, new, expected, label):
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f"{label}: expected {expected} matches, found {count}")
+              return text.replace(old, new)
+
+          server_path = Path("server/routers/loans.ts")
+          s = server_path.read_text(encoding="utf-8")
+
+          s = replace_once(s,
+          '''function getBrazilClock(now = new Date()): { date: string; hour: number } {
+            const parts = new Intl.DateTimeFormat("en-US", {
+              timeZone: "America/Sao_Paulo",
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              hourCycle: "h23",
+            }).formatToParts(now);
+            const valueOf = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "0";
+            return {
+              date: `${valueOf("year")}-${valueOf("month")}-${valueOf("day")}`,
+              hour: Number(valueOf("hour")),
+            };
+          }''',
+          '''function getBrazilClock(now = new Date()): { date: string; today: string; hour: number; minute: number } {
+            const parts = new Intl.DateTimeFormat("en-US", {
+              timeZone: "America/Sao_Paulo",
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+              hourCycle: "h23",
+            }).formatToParts(now);
+            const valueOf = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "0";
+            const date = `${valueOf("year")}-${valueOf("month")}-${valueOf("day")}`;
+            return {
+              date,
+              today: date,
+              hour: Number(valueOf("hour")),
+              minute: Number(valueOf("minute")),
+            };
+          }''', "Brazil clock")
+
+          s = replace_once(s,
+          '''        SELECT li.*, l.id as loanId FROM loanInstallments li
+                  JOIN loans l ON l.id = li.loanId''',
+          '''        SELECT li.*, l.id as loanId, l.paymentType as loanPaymentType FROM loanInstallments li
+                  JOIN loans l ON l.id = li.loanId''', "next installment payment type")
+
+          s = replace_once(s,
+          '''      nextInstallment = nextInsts[0] || null;
+              }''',
+          '''      nextInstallment = nextInsts[0] || null;
+                if (nextInstallment && nextInstallment.loanPaymentType === 'diario' && !client.late_fee_disabled) {
+                  const nextFeeConfigRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+                  const nextFeeConfig = nextFeeConfigRows[0];
+                  if (nextFeeConfig?.enabled) {
+                    const baseAmount = nextInstallment.originalAmount != null
+                      ? Number(nextInstallment.originalAmount)
+                      : Number(nextInstallment.amount || 0);
+                    const storedFee = Number(nextInstallment.feeApplied || 0);
+                    const automaticFee = calculateLateFeeForInstallment({
+                      dueDate: nextInstallment.dueDate,
+                      amount: baseAmount,
+                      config: nextFeeConfig,
+                      clock: getBrazilClock(),
+                    });
+                    const effectiveFee = Math.max(storedFee, automaticFee);
+                    if (effectiveFee > 0) {
+                      nextInstallment = {
+                        ...nextInstallment,
+                        amount: Math.round((baseAmount + effectiveFee) * 100) / 100,
+                        originalAmount: baseAmount.toFixed(2),
+                        feeApplied: effectiveFee.toFixed(2),
+                        lateFeePreview: automaticFee > storedFee,
+                      };
+                    }
+                  }
+                }
+              }''', "next installment effective fee")
+
+          old_installments = '''    const installments = rawInstallments.map((i: any) => {
+                const canPreviewLateFee = !client.late_fee_disabled
+                  && i.originalAmount == null
+                  && ["pendente", "atrasado"].includes(i.status);
+                const originalAmount = Number(i.amount || 0);
+                const feeApplied = canPreviewLateFee
+                  ? calculateLateFeeForInstallment({ dueDate: i.dueDate, amount: originalAmount, config: lateFeeConfig, clock })
+                  : 0;
+                const hasPreviewLateFee = feeApplied > 0;
+                const amountWithPreview = hasPreviewLateFee
+                  ? Math.round((originalAmount + feeApplied) * 100) / 100
+                  : i.amount;
+
+                return {
+                  ...i,
+                  amount: amountWithPreview,
+                  ...(hasPreviewLateFee ? {
+                    originalAmount: originalAmount.toFixed(2),
+                    feeApplied: feeApplied.toFixed(2),
+                    lateFeePreview: true,
+                  } : {}),
+                  h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
+                  isOverdue: !["pago"].includes(i.status) && i.dueDate < clock.today,
+                };
+              });'''
+          new_installments = '''    const isDailyLoan = loans[0].paymentType === 'diario';
+              const installments = rawInstallments.map((i: any) => {
+                const canPreviewLateFee = isDailyLoan
+                  && !client.late_fee_disabled
+                  && ["pendente", "atrasado"].includes(i.status);
+                const originalAmount = i.originalAmount != null ? Number(i.originalAmount) : Number(i.amount || 0);
+                const storedFee = Number(i.feeApplied || 0);
+                const automaticFee = canPreviewLateFee
+                  ? calculateLateFeeForInstallment({ dueDate: i.dueDate, amount: originalAmount, config: lateFeeConfig, clock })
+                  : 0;
+                const effectiveFee = isDailyLoan ? Math.max(storedFee, automaticFee) : 0;
+                const hasEffectiveLateFee = effectiveFee > 0;
+                const amountWithFee = hasEffectiveLateFee
+                  ? Math.round((originalAmount + effectiveFee) * 100) / 100
+                  : i.amount;
+
+                return {
+                  ...i,
+                  amount: amountWithFee,
+                  ...(hasEffectiveLateFee ? {
+                    originalAmount: originalAmount.toFixed(2),
+                    feeApplied: effectiveFee.toFixed(2),
+                    lateFeePreview: automaticFee > storedFee,
+                  } : {}),
+                  h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
+                  isOverdue: !["pago"].includes(i.status) && i.dueDate < clock.today,
+                };
+              });'''
+          s = replace_once(s, old_installments, new_installments, "public installments fee preview")
+
+          s = replace_once(s,
+          '''      SELECT li.* FROM loanInstallments li
+                JOIN loans l ON l.id = li.loanId
+                WHERE li.id=${input.installmentId} AND l.clientId IN (${drizzleSql.raw(clientIds.join(','))})''',
+          '''      SELECT li.*, l.paymentType FROM loanInstallments li
+                JOIN loans l ON l.id = li.loanId
+                WHERE li.id=${input.installmentId} AND l.clientId IN (${drizzleSql.raw(clientIds.join(','))})''', "proof payment type")
+
+          old_proof_fee = '''    // O comprovante apenas entra em análise: ele não confirma o pagamento nem elimina a taxa.
+              // Se a parcela já venceu, aplica a regra global vigente uma única vez antes de mudar o status.
+              const today = getBrazilToday();
+              const dueDateValue = inst[0].dueDate;
+              const dueDate = typeof dueDateValue === 'string'
+                ? dueDateValue.slice(0, 10)
+                : new Date(dueDateValue).toISOString().slice(0, 10);
+              const hasExistingFee = inst[0].originalAmount != null;
+              let appliedFee = 0;
+              if (!hasExistingFee && !client.late_fee_disabled && dueDate <= today) {
+                const configRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+                const config = configRows[0];
+                if (config?.enabled) {
+                  const originalAmount = parseFloat(inst[0].amount || 0);
+                  appliedFee = calculateLateFeeForInstallment({
+                    dueDate,
+                    amount: originalAmount,
+                    config,
+                    clock: getBrazilClock(),
+                  });
+                  if (appliedFee > 0) {
+                    const updatedAmount = Math.round((originalAmount + appliedFee) * 100) / 100;
+                    const note = `Taxa de atraso automática: +R$ ${appliedFee.toFixed(2).replace('.', ',')} aplicada no envio do comprovante em ${new Date().toLocaleDateString('pt-BR')}`;
+                    await db.execute(drizzleSql`
+                      UPDATE loanInstallments
+                      SET amount=${updatedAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)},
+                          feeApplied=${appliedFee.toFixed(2)}, notes=${note}, proofUrl=${url}, proofSentAt=${receivedAt}, status='em_analise'
+                      WHERE id=${input.installmentId}
+                    `);
+                  }
+                }
+              }
+
+              if (appliedFee <= 0) {
+                await db.execute(drizzleSql`UPDATE loanInstallments SET proofUrl=${url}, proofSentAt=${receivedAt}, status='em_analise' WHERE id=${input.installmentId}`);
+              }'''
+          new_proof_fee = '''    // O comprovante apenas entra em análise: ele não confirma o pagamento nem elimina a taxa.
+              // Em empréstimo DIÁRIO, o servidor congela no envio o maior valor entre a taxa já gravada e a taxa automática válida naquele instante em São Paulo.
+              const dueDateValue = inst[0].dueDate;
+              const dueDate = typeof dueDateValue === 'string'
+                ? dueDateValue.slice(0, 10)
+                : new Date(dueDateValue).toISOString().slice(0, 10);
+              let appliedFee = 0;
+              if (inst[0].paymentType === 'diario' && !client.late_fee_disabled) {
+                const configRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+                const config = configRows[0];
+                if (config?.enabled) {
+                  const originalAmount = inst[0].originalAmount != null
+                    ? parseFloat(inst[0].originalAmount)
+                    : parseFloat(inst[0].amount || 0);
+                  const storedFee = parseFloat(inst[0].feeApplied || 0);
+                  const automaticFee = calculateLateFeeForInstallment({
+                    dueDate,
+                    amount: originalAmount,
+                    config,
+                    clock: getBrazilClock(),
+                  });
+                  appliedFee = Math.max(storedFee, automaticFee);
+                  if (appliedFee > 0) {
+                    const updatedAmount = Math.round((originalAmount + appliedFee) * 100) / 100;
+                    const note = `Taxa diária efetiva: +R$ ${appliedFee.toFixed(2).replace('.', ',')} congelada no envio do comprovante`;
+                    await db.execute(drizzleSql`
+                      UPDATE loanInstallments
+                      SET amount=${updatedAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)},
+                          feeApplied=${appliedFee.toFixed(2)}, notes=${note}, proofUrl=${url}, proofSentAt=${receivedAt}, status='em_analise'
+                      WHERE id=${input.installmentId}
+                    `);
+                  }
+                }
+              }
+
+              if (appliedFee <= 0) {
+                await db.execute(drizzleSql`UPDATE loanInstallments SET proofUrl=${url}, proofSentAt=${receivedAt}, status='em_analise' WHERE id=${input.installmentId}`);
+              }'''
+          s = replace_once(s, old_proof_fee, new_proof_fee, "proof effective fee")
+
+          s = replace_once(s,
+          '''      SELECT li.*, l.clientId FROM loanInstallments li
+                JOIN loans l ON l.id = li.loanId''',
+          '''      SELECT li.*, l.clientId, l.paymentType FROM loanInstallments li
+                JOIN loans l ON l.id = li.loanId''', "calcLateFee payment type")
+
+          s = replace_once(s,
+          '''    const installment = inst[0];
+
+              // Só apresenta taxa para uma parcela pendente/atrasada. O cálculo é o mesmo da tela e do envio.
+              const clock = getBrazilClock();''',
+          '''    const installment = inst[0];
+              if (installment.paymentType !== 'diario') return { lateFee: 0, breakdown: null };
+
+              // Só apresenta taxa para uma parcela pendente/atrasada. O cálculo é o mesmo da tela e do envio.
+              const clock = getBrazilClock();''', "calcLateFee daily only")
+
+          old_calc = '''    const amount = parseFloat(installment.amount);
+              const lateFee = calculateLateFeeForInstallment({ dueDate: installment.dueDate, amount, config: cfg, clock });
+              const fixedFeeAfter20 = parseFloat(cfg.fee_after_18h || '0') + parseFloat(cfg.fee_after_20h || '0');
+              let breakdown: string[] = [];
+
+              if (installment.dueDate < clock.date) {
+                breakdown = [`Após 23:59: será cobrado o maior valor entre a taxa fixa de R$ ${fixedFeeAfter20.toFixed(2)} e o valor da parcela (taxa aplicada: R$ ${lateFee.toFixed(2)})`];
+              } else if (clock.hour >= 20) {
+                breakdown = [`Após 20h: taxa fixa acumulada de R$ ${lateFee.toFixed(2)}`];
+              } else if (clock.hour >= 18) {
+                breakdown = [`Após 18h: +R$ ${lateFee.toFixed(2)}`];
+              }
+
+              return { lateFee, totalWithFee: amount + lateFee, breakdown };'''
+          new_calc = '''    const amount = installment.originalAmount != null ? parseFloat(installment.originalAmount) : parseFloat(installment.amount);
+              const storedFee = parseFloat(installment.feeApplied || 0);
+              const automaticFee = calculateLateFeeForInstallment({ dueDate: installment.dueDate, amount, config: cfg, clock });
+              const lateFee = Math.max(storedFee, automaticFee);
+              const fixedFeeAfter20 = parseFloat(cfg.fee_after_18h || '0') + parseFloat(cfg.fee_after_20h || '0');
+              const minutes = clock.hour * 60 + clock.minute;
+              let breakdown: string[] = [];
+
+              if (installment.dueDate < clock.date || minutes >= 23 * 60 + 59) {
+                breakdown = [`A partir de 23:59: prevalece o maior valor entre R$ ${fixedFeeAfter20.toFixed(2)} e 100% da parcela (taxa efetiva: R$ ${lateFee.toFixed(2)})`];
+              } else if (minutes >= 20 * 60 + 1) {
+                breakdown = [`A partir de 20:01: taxa fixa acumulada de R$ ${lateFee.toFixed(2)}`];
+              } else if (minutes >= 18 * 60 + 1) {
+                breakdown = [`A partir de 18:01: +R$ ${lateFee.toFixed(2)}`];
+              }
+
+              return { lateFee, totalWithFee: amount + lateFee, breakdown };'''
+          s = replace_once(s, old_calc, new_calc, "calcLateFee effective value")
+
+          old_manual = '''    const inst = await qRows(db, drizzleSql`SELECT * FROM loanInstallments WHERE id=${input.installmentId}`);
+              if (!inst.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Parcela não encontrada' });
+              const current = inst[0];
+              if (current.status === 'pago') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Parcela já está paga' });
+              // Taxa de atraso manual só pode ser aplicada após o vencimento, no horário do Brasil.
+              // Esta barreira é no servidor para impedir chamadas diretas fora da interface ADM.
+              const dueDateValue = current.dueDate;
+              const dueDate = typeof dueDateValue === 'string'
+                ? dueDateValue.slice(0, 10)
+                : new Date(dueDateValue).toISOString().slice(0, 10);
+              if (dueDate >= getBrazilToday()) {
+                throw new TRPCError({
+                  code: 'BAD_REQUEST',
+                  message: 'Taxa de atraso só pode ser aplicada após o vencimento da parcela.',
+                });
+              }
+              // Salva o valor original se ainda não foi salvo
+              const originalAmount = current.originalAmount != null ? parseFloat(current.originalAmount) : parseFloat(current.amount);
+              const newAmount = originalAmount + input.feeAmount;
+              const note = input.feeNote || `Taxa de atraso: +R$ ${input.feeAmount.toFixed(2).replace('.', ',')} aplicada em ${new Date().toLocaleDateString('pt-BR')}`;
+              await db.execute(drizzleSql`
+                UPDATE loanInstallments
+                SET amount=${newAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)}, feeApplied=${input.feeAmount.toFixed(2)}, notes=${note}
+                WHERE id=${input.installmentId}
+              `);
+              return { ok: true, originalAmount, feeAmount: input.feeAmount, newAmount };'''
+          new_manual = '''    const inst = await qRows(db, drizzleSql`
+                SELECT li.*, l.paymentType FROM loanInstallments li
+                JOIN loans l ON l.id = li.loanId
+                WHERE li.id=${input.installmentId}
+              `);
+              if (!inst.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Parcela não encontrada' });
+              const current = inst[0];
+              if (current.paymentType !== 'diario') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Taxa disponível somente para empréstimo diário' });
+              if (current.status === 'pago') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Parcela já está paga' });
+
+              // O ADM pode aplicar taxa manual em qualquer horário, mas nunca reduzir uma taxa automática ou manual já maior.
+              const originalAmount = current.originalAmount != null ? parseFloat(current.originalAmount) : parseFloat(current.amount);
+              const storedFee = parseFloat(current.feeApplied || 0);
+              const configRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+              const automaticFee = calculateLateFeeForInstallment({
+                dueDate: current.dueDate,
+                amount: originalAmount,
+                config: configRows[0],
+                clock: getBrazilClock(),
+              });
+              const effectiveFee = Math.max(storedFee, input.feeAmount, automaticFee);
+              const newAmount = Math.round((originalAmount + effectiveFee) * 100) / 100;
+              const note = input.feeNote || `Taxa diária: +R$ ${effectiveFee.toFixed(2).replace('.', ',')} aplicada manualmente pelo ADM`;
+              await db.execute(drizzleSql`
+                UPDATE loanInstallments
+                SET amount=${newAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)}, feeApplied=${effectiveFee.toFixed(2)}, notes=${note}
+                WHERE id=${input.installmentId}
+              `);
+              return { ok: true, originalAmount, feeAmount: effectiveFee, newAmount };'''
+          s = replace_once(s, old_manual, new_manual, "manual fee daily anytime")
+
+          server_path.write_text(s, encoding="utf-8")
+
+          admin_path = Path("client/src/pages/AdminLoans.tsx")
+          a = admin_path.read_text(encoding="utf-8")
+          a = replace_exact_count(a, ') : inst.isOverdue ? (', ') : loan.paymentType === "diario" ? (', 2, "admin fee button daily")
+          a = a.replace('Taxa 18h–20h', 'Taxa 18:01–20:00')
+          a = a.replace('Taxa 20h–23:59 (acumulada)', 'Taxa 20:01–23:58 (acumulada)')
+          a = a.replace('Taxa após meia-noite', 'Taxa a partir de 23:59')
+          a = a.replace('const feeMidnight = Math.round(originalAmt * (feeMidnightPct / 100) * 100) / 100;', 'const feeMidnight = Math.max(feeTotal18_20, Math.round(originalAmt * (feeMidnightPct / 100) * 100) / 100);')
+          admin_path.write_text(a, encoding="utf-8")
+
+          client_path = Path("client/src/pages/LoansTab.tsx")
+          c = client_path.read_text(encoding="utf-8")
+          c = c.replace('Das 18h até 19:59:', 'Das 18:01 até 20:00:')
+          c = c.replace('A partir das 20h:', 'Das 20:01 até 23:58:')
+          c = c.replace('Após 23:59:', 'A partir de 23:59:')
+          c = replace_once(c,
+              'lateFeeConfig?.enabled && !["pago", "cancelado", "reprovado"].includes(loan.status)',
+              'lateFeeConfig?.enabled && loan.paymentType === "diario" && !["pago", "cancelado", "reprovado"].includes(loan.status)',
+              "client daily late fee panel")
+          client_path.write_text(c, encoding="utf-8")
+
+      - name: Verify patch scope
+        run: |
+          git diff --check
+          git diff -- server/routers/loans.ts server/loans/lateFee.ts server/loans/lateFee.test.ts client/src/pages/AdminLoans.tsx client/src/pages/LoansTab.tsx
+
+      - name: Commit patched files
+        run: |
+          git config user.name "H2 Audit Bot"
+          git config user.email "h2-audit-bot@users.noreply.github.com"
+          git add server/routers/loans.ts client/src/pages/AdminLoans.tsx client/src/pages/LoansTab.tsx
+          git commit -m "fix(loans): centralize daily late-fee enforcement" || exit 0
+          git push origin HEAD:fix/daily-late-fees-20260831
