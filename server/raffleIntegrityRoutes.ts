@@ -68,6 +68,32 @@ export function registerRaffleIntegrityRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/raffle-winner-photo/latest", async (_req, res) => {
+    try {
+      const db = await getDb();
+      if (!db) { res.status(503).json({ error: "Banco indisponível." }); return; }
+      const result = await db.execute(sql`
+        SELECT winnerNumber, winnerProfilePhotoUrl
+        FROM raffles
+        WHERE status = 'drawn'
+        ORDER BY drawnAt DESC, id DESC
+        LIMIT 1
+      `);
+      const row = ((result[0] as unknown as Array<{ winnerNumber: number | string | null; winnerProfilePhotoUrl: string | null }>) || [])[0];
+      res.setHeader("Cache-Control", "no-store, no-cache, max-age=0, must-revalidate");
+      res.json({
+        winnerNumber: row?.winnerNumber == null ? null : Number(row.winnerNumber),
+        winnerProfilePhotoUrl:
+          row?.winnerProfilePhotoUrl && row.winnerProfilePhotoUrl !== "NULL"
+            ? String(row.winnerProfilePhotoUrl)
+            : null,
+      });
+    } catch (error) {
+      console.error("[RaffleIntegrity] erro ao carregar foto do ganhador:", error);
+      res.status(500).json({ error: "Não foi possível carregar a foto do ganhador." });
+    }
+  });
+
   app.get("/api/raffle-entry-photos/:raffleId", async (req, res) => {
     const raffleId = Number(req.params.raffleId);
     if (!Number.isInteger(raffleId) || raffleId <= 0) {
