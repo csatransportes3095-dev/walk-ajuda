@@ -8,6 +8,7 @@ export type LateFeeConfigLike = {
 export type LateFeeClock = {
   today: string;
   hour: number;
+  minute?: number;
 };
 
 function asAmount(value: unknown): number {
@@ -21,9 +22,20 @@ function asDate(value: unknown): string {
     : new Date(value as Date).toISOString().slice(0, 10);
 }
 
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /**
  * Calcula a taxa aplicável em um instante específico, sem gravar no banco.
- * A gravação continua sendo responsabilidade do fluxo de envio do comprovante.
+ * A fonte temporal deve ser sempre o relógio de America/Sao_Paulo.
+ *
+ * Regras do empréstimo diário:
+ * - até 18:00: sem taxa;
+ * - 18:01 até 20:00: primeira taxa fixa;
+ * - 20:01 até 23:58: taxas fixas acumuladas;
+ * - a partir de 23:59: maior valor entre a taxa fixa acumulada e o percentual da parcela;
+ * - nos dias seguintes, permanece a regra do maior valor.
  */
 export function calculateLateFeeForInstallment(input: {
   dueDate: unknown;
@@ -36,17 +48,23 @@ export function calculateLateFeeForInstallment(input: {
   const amount = asAmount(input.amount);
   const dueDate = asDate(input.dueDate);
   const { today, hour } = input.clock;
+  const minute = Number(input.clock.minute || 0);
   if (!amount || !dueDate || dueDate > today) return 0;
 
   const feeAfter18 = asAmount(input.config.fee_after_18h);
-  const fixedFeeAfter20 = feeAfter18 + asAmount(input.config.fee_after_20h);
+  const fixedFeeAfter20 = roundMoney(feeAfter18 + asAmount(input.config.fee_after_20h));
+  const percentageFee = roundMoney(amount * (asAmount(input.config.fee_after_midnight_pct) / 100));
+  const maximumLateFee = Math.max(fixedFeeAfter20, percentageFee);
 
-  if (dueDate < today) {
-    const overnightFee = Math.round(amount * (asAmount(input.config.fee_after_midnight_pct) / 100) * 100) / 100;
-    return Math.max(fixedFeeAfter20, overnightFee);
-  }
+  if (dueDate < today) return maximumLateFee;
 
-  if (hour >= 20) return fixedFeeAfter20;
-  if (hour >= 18) return feeAfter18;
+  const minutesSinceMidnight = (Number(hour) * 60) + minute;
+  const at1801 = (18 * 60) + 1;
+  const at2001 = (20 * 60) + 1;
+  const at2359 = (23 * 60) + 59;
+
+  if (minutesSinceMidnight >= at2359) return maximumLateFee;
+  if (minutesSinceMidnight >= at2001) return fixedFeeAfter20;
+  if (minutesSinceMidnight >= at1801) return feeAfter18;
   return 0;
 }
