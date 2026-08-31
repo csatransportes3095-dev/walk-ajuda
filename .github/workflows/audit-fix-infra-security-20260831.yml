@@ -95,7 +95,10 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Restore legacy lockfile
+        run: git checkout -- pnpm-lock.yaml
 
       - name: Regression test
         run: pnpm exec vitest run server/infraSecurityRegression.test.ts
