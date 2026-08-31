@@ -1,0 +1,42 @@
+name: temporary daily late fee patch
+
+on:
+  push:
+    branches:
+      - fix/daily-late-fee-audit-20260831
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/daily-late-fee-audit-20260831
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Aplicar patch auditado
+        run: node scripts/patch-daily-late-fee.mjs
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Testar formula da taxa diaria
+        run: pnpm test -- server/loans/lateFee.test.ts
+      - name: Verificar TypeScript
+        run: pnpm check
+      - name: Commitar arquivos funcionais
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/loans.ts client/src/pages/AdminLoans.tsx client/src/pages/LoansTab.tsx
+          if ! git diff --cached --quiet; then
+            git commit -m "fix(loans): sincronizar taxa diaria automatica e manual"
+            git push origin HEAD:fix/daily-late-fee-audit-20260831
+          fi
