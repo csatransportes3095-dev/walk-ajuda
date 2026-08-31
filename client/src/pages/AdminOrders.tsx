@@ -17,6 +17,7 @@ import { useTimezone } from "@/hooks/useTimezone";
 import { NotesTab } from "@/components/NotesTab";
 import { AuthenticatorQrAdminField, type PendingQr } from "@/components/AuthenticatorQrAdminField";
 import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
+import OrderH2AdsBrowserShortcut from "@/components/OrderH2AdsBrowserShortcut";
 import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl, publicTrackingShareUrl } from "@shared/publicLinks";
 import { getOperationalBucket } from "@shared/orderBuckets";
 import { repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
@@ -5667,6 +5668,7 @@ export default function AdminOrders() {
                           >
                             👤 {attentionMap.has(order.id) ? attentionMap.get(order.id) : 'Atender'}
                           </button>
+                          <OrderH2AdsBrowserShortcut registrationId={order.id} subOrderIndex={order.subOrderIndex ?? 0} />
                           {/* Selo NOVO */}
                           {!viewedOrders.has(getOrderKey(order)) && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white animate-pulse shadow-sm shadow-red-500/50">
