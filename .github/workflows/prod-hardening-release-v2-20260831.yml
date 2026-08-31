@@ -1,0 +1,74 @@
+name: Prod hardening release v2 20260831
+
+on:
+  push:
+    branches:
+      - release/prod-hardening-20260831
+
+permissions:
+  contents: write
+
+jobs:
+  validate-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply validated daily fee server base
+        run: |
+          git fetch origin fix/daily-late-fees-20260831 fix/daily-late-fee-audit-20260831
+          git checkout origin/fix/daily-late-fees-20260831 -- server/loans/lateFee.ts server/loans/lateFee.test.ts
+          git show origin/fix/daily-late-fee-audit-20260831:scripts/patch-daily-late-fee.mjs > /tmp/daily-patch.mjs
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/daily-patch.mjs')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace("patchLoansRouter();\npatchAdminLoans();\npatchPublicLoans();\nconsole.log('PATCH_DAILY_LATE_FEE_OK');", "patchLoansRouter();\nconsole.log('PATCH_DAILY_LATE_FEE_SERVER_OK');")
+          p.write_text(s, encoding='utf-8')
+          PY
+          node /tmp/daily-patch.mjs
+
+      - name: Finish production-specific integration
+        run: python scripts/finish-prod-hardening-20260831.py
+
+      - name: Apply H2ADS privacy guard
+        run: |
+          git fetch origin fix/h2ads-google-sorry-privacy-20260831 automation/apply-h2ads-linked-instance-20260830
+          git diff --binary origin/automation/apply-h2ads-linked-instance-20260830...origin/fix/h2ads-google-sorry-privacy-20260831 -- workers/windows/browser-session.mjs > /tmp/h2ads.patch
+          git apply --3way /tmp/h2ads.patch
+
+      - name: Add focused regression tests
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+          subprocess.run(['git','checkout','origin/fix/daily-late-fees-20260831','--','server/dailyLateFeeIntegration.test.ts'],check=True)
+          Path('server/prodHardeningRegression.test.ts').write_text('''import fs from "node:fs";\nimport path from "node:path";\nimport { describe, expect, it } from "vitest";\nconst root=path.resolve(import.meta.dirname,"..");\nconst indexSource=fs.readFileSync(path.join(root,"server/_core/index.ts"),"utf8");\nconst router=fs.readFileSync(path.join(root,"server/routers/loans.ts"),"utf8");\nconst worker=fs.readFileSync(path.join(root,"workers/windows/browser-session.mjs"),"utf8");\nconst admin=fs.readFileSync(path.join(root,"client/src/pages/AdminLoans.tsx"),"utf8");\ndescribe("production hardening release",()=>{\n it("binds exact Render port",()=>{expect(indexSource).toContain('server.listen(port, "0.0.0.0"');expect(indexSource).not.toContain('findAvailablePort');});\n it("keeps Zoho debug route absent",()=>{expect(indexSource).not.toContain('/api/zoho-test-session');expect(indexSource).not.toContain('TEST_walk1');});\n it("protects Google sorry",()=>{expect(worker).toContain('createGoogleSorryPrivacyGuard');expect(worker).toContain('declarativeNetRequest');expect(worker).toContain('/sorry');expect(worker).toContain('googleSorryPrivacyGuard: "enabled"');});\n it("keeps daily fee isolated and maximum preserving",()=>{expect(router).toContain("AND l.paymentType = 'diario'");expect(router).toContain("Math.max(storedFee, input.feeAmount, automaticFee)");expect(router).toContain("Math.max(nextStoredFee, nextAutomaticFee)");});\n it("allows ADM manual fee without time gate",()=>{expect(admin).not.toContain('A taxa de atraso fica disponível após 18h.');expect(admin).toContain('data-testid="manual-late-fee-button"');});\n});\n''',encoding='utf-8')
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+      - name: Restore lockfile
+        run: git checkout -- pnpm-lock.yaml
+      - name: Focused tests
+        run: pnpm exec vitest run server/loans/lateFee.test.ts server/dailyLateFeeIntegration.test.ts server/prodHardeningRegression.test.ts
+      - name: TypeScript check
+        run: pnpm check
+      - name: Production build
+        run: pnpm build
+      - name: Commit validated release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/_core/index.ts server/routers/loans.ts server/loans/lateFee.ts server/loans/lateFee.test.ts server/dailyLateFeeIntegration.test.ts server/prodHardeningRegression.test.ts client/src/pages/AdminLoans.tsx client/src/pages/LoansTab.tsx workers/windows/browser-session.mjs
+          git commit -m "fix(release): harden production infra loans and h2ads [skip ci]"
+          git push origin HEAD:release/prod-hardening-20260831
