@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.3.4"
+$AgentVersion = "1.3.5"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -18,6 +18,7 @@ $PackagePath = Join-Path $WorkerDirectory "package.json"
 $ProxyChainPackagePath = Join-Path $WorkerDirectory "node_modules\proxy-chain\package.json"
 $TaskName = "H2 Ads Browser Worker"
 $ShortcutName = "Iniciar H2Ads Worker.lnk"
+$LauncherPath = Join-Path $WorkerDirectory "StartH2AdsWorker.vbs"
 
 function Get-ComputerLabel {
   $name = $env:COMPUTERNAME
@@ -105,7 +106,12 @@ function Close-BrowserSession([object]$Config, [object]$Payload) {
   $sessionPath = Join-Path $profileDirectory "h2ads-browser-session.json"
   if (Test-Path $sessionPath) {
     $session = Get-Content -Raw -Path $sessionPath | ConvertFrom-Json
-    if ($session.nodePid) { & taskkill.exe /PID $session.nodePid /T /F | Out-Null }
+    if ($session.nodePid) {
+      $nodePid = [int]$session.nodePid
+      if (Get-Process -Id $nodePid -ErrorAction SilentlyContinue) {
+        & taskkill.exe /PID $nodePid /T /F 1>$null 2>$null
+      }
+    }
     Remove-Item -Force $sessionPath -ErrorAction SilentlyContinue
   }
   $body = @{ command = "close_browser"; state = "closed" } | ConvertTo-Json -Compress
@@ -185,20 +191,42 @@ function Stop-ExistingWorkerProcesses {
   } catch { }
 }
 
+function Ensure-WorkerScheduledTask {
+  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run"
+  $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+  $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Description "Presença autenticada e controle local do H2 Ads Browser Worker" -Force | Out-Null
+}
+
+function Ensure-BackgroundLauncher {
+  $taskNameEscaped = $TaskName.Replace('"', '""')
+  $launcherContent = @"
+Set shell = CreateObject("WScript.Shell")
+shell.Run "schtasks.exe /Run /TN ""$taskNameEscaped""", 0, False
+Set shell = Nothing
+"@
+  $launcherContent | Set-Content -Path $LauncherPath -Encoding ASCII -NoNewline
+}
+
 function Start-InstalledWorker {
-  Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run" -WindowStyle Hidden
+  try {
+    Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+    return
+  } catch { }
+  Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run" -WindowStyle Hidden
 }
 
 function Ensure-DesktopShortcut {
   $desktop = [Environment]::GetFolderPath("Desktop")
   if ([string]::IsNullOrWhiteSpace($desktop)) { return }
+  Ensure-BackgroundLauncher
   $shortcutPath = Join-Path $desktop $ShortcutName
   $shell = New-Object -ComObject WScript.Shell
   $shortcut = $shell.CreateShortcut($shortcutPath)
-  $shortcut.TargetPath = "powershell.exe"
-  $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run"
+  $shortcut.TargetPath = "$env:SystemRoot\System32\wscript.exe"
+  $shortcut.Arguments = "`"$LauncherPath`""
   $shortcut.WorkingDirectory = $WorkerDirectory
-  $shortcut.Description = "Iniciar H2 Ads Browser Worker"
+  $shortcut.Description = "Iniciar H2 Ads Browser Worker em segundo plano"
   $shortcut.IconLocation = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
   $shortcut.Save()
 }
@@ -222,9 +250,9 @@ if ($Install) {
   $claimed = Invoke-RestMethod -Method Post -Uri "$($PanelUrl.TrimEnd('/'))/api/h2ads/worker/claim" -ContentType "application/json" -Body $claimBody
   Save-WorkerConfig $claimed
   Copy-Item -Path $PSCommandPath -Destination $InstalledScriptPath -Force
-  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run"
-  $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Description "Presença autenticada e controle local do H2 Ads Browser Worker" -Force | Out-Null
+  Ensure-WorkerScheduledTask
+  Ensure-BackgroundLauncher
+  Ensure-DesktopShortcut
   Stop-ExistingWorkerProcesses
   Start-InstalledWorker
   Write-Output "Worker H2 Ads pareado e iniciado."
@@ -248,10 +276,13 @@ if ($Update) {
 if ($Run) {
   if (!(Test-Path $ConfigPath)) { throw "Configuração do Worker não encontrada. Faça o pareamento primeiro." }
   $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
+  try { Ensure-WorkerScheduledTask } catch { }
+  try { Ensure-BackgroundLauncher } catch { }
   try { Ensure-DesktopShortcut } catch { }
+  Stop-ExistingWorkerProcesses
+  Start-Sleep -Milliseconds 250
   $workerMutex = Acquire-WorkerMutex $config
   if ($null -eq $workerMutex) { exit 0 }
-  Stop-ExistingWorkerProcesses
 $nextHeartbeatAt = Get-Date
 try {
   while ($true) {
