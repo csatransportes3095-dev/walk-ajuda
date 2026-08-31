@@ -1,4 +1,4 @@
-name: H2ADS master instance search 20260831
+name: H2ADS master search validation
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  patch-and-validate:
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -17,172 +17,51 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply master instance search
-        shell: python
+      - name: Apply patch
+        run: python scripts/patch-h2ads-master-search-20260831.py
+
+      - name: Verify source
         run: |
-          from pathlib import Path
+          grep -Fq 'Pesquisar instância em todos os grupos...' client/src/pages/H2Ads.tsx
+          grep -Fq 'normalizeH2AdsSearch(instance.name).includes(instanceSearchKey)' client/src/pages/H2Ads.tsx
+          grep -Fq 'visibleGroups.map(group => <GroupSection' client/src/pages/H2Ads.tsx
+          grep -Fq 'expanded={instanceSearchKey ? true : expandedGroups.has(group.id)}' client/src/pages/H2Ads.tsx
 
-          path = Path("client/src/pages/H2Ads.tsx")
-          source = path.read_text(encoding="utf-8")
+      - uses: pnpm/action-setup@v4
 
-          def replace_once(old: str, new: str, label: str):
-              global source
-              count = source.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected 1 match, found {count}")
-              source = source.replace(old, new, 1)
-
-          replace_once(
-              'import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";',
-              'import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, Search, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";',
-              'Search icon import',
-          )
-
-          replace_once(
-              'const colorBackground = (hex: string) => `${hex}22`;\n',
-              'const colorBackground = (hex: string) => `${hex}22`;\nconst normalizeH2AdsSearch = (value: string) => value.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").trim().toLocaleLowerCase("pt-BR");\n',
-              'search normalizer',
-          )
-
-          replace_once(
-              '  const [orderingGroups, setOrderingGroups] = useState(false);\n',
-              '  const [orderingGroups, setOrderingGroups] = useState(false);\n  const [instanceSearch, setInstanceSearch] = useState("");\n',
-              'search state',
-          )
-
-          instances_marker = '''  const instancesByGroup = useMemo(() => instances.reduce((map, instance) => {
-            const current = map.get(instance.groupId) ?? [];
-            current.push(instance);
-            map.set(instance.groupId, current);
-            return map;
-          }, new Map<number, typeof instances>()), [instances]);
-'''
-          search_logic = instances_marker + '''  const instanceSearchKey = useMemo(() => normalizeH2AdsSearch(instanceSearch), [instanceSearch]);
-          const masterSearchResults = useMemo(() => {
-            if (!instanceSearchKey) return [];
-            return groups.map(group => ({
-              group,
-              instances: (instancesByGroup.get(group.id) ?? []).filter(instance => normalizeH2AdsSearch(instance.name).includes(instanceSearchKey)),
-            })).filter(result => result.instances.length > 0);
-          }, [groups, instancesByGroup, instanceSearchKey]);
-          const masterSearchMatchCount = useMemo(() => masterSearchResults.reduce((total, result) => total + result.instances.length, 0), [masterSearchResults]);
-          const visibleGroups = useMemo(() => instanceSearchKey ? masterSearchResults.map(result => result.group) : groups, [groups, instanceSearchKey, masterSearchResults]);
-          const visibleInstancesByGroup = useMemo(() => {
-            if (!instanceSearchKey) return instancesByGroup;
-            const visible = new Map<number, typeof instances>();
-            for (const result of masterSearchResults) visible.set(result.group.id, result.instances);
-            return visible;
-          }, [instanceSearchKey, instancesByGroup, masterSearchResults]);
-'''
-          replace_once(instances_marker, search_logic, 'master search derivation')
-
-          replace_once(
-              'onClick={() => setOrderingGroups(value => !value)} className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black ${orderingGroups ? "border-[#148CFF]/40 bg-[#148CFF]/15 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-300"}`}',
-              'onClick={() => setOrderingGroups(value => !value)} disabled={Boolean(instanceSearchKey)} title={instanceSearchKey ? "Limpe a pesquisa para ordenar os grupos" : undefined} className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40 ${orderingGroups ? "border-[#148CFF]/40 bg-[#148CFF]/15 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-300"}`}',
-              'disable ordering while searching',
-          )
-
-          search_anchor = '<Plus className="h-4 w-4" />Nova instância</button></div></header>\n        <div className="p-4 sm:p-6">'
-          search_block = '''<Plus className="h-4 w-4" />Nova instância</button></div></header>
-        <div className="border-b border-white/10 bg-black/20 px-4 py-4 sm:px-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#8CC8FF]" />
-              <input type="search" value={instanceSearch} onChange={event => { setInstanceSearch(event.target.value); if (orderingGroups) setOrderingGroups(false); }} onKeyDown={event => { if (event.key === "Escape") setInstanceSearch(""); }} placeholder="Pesquisar instância em todos os grupos..." autoComplete="off" aria-label="Pesquisar instância em todos os grupos" className="h-12 w-full rounded-2xl border border-[#148CFF]/30 bg-[#07101D] pl-12 pr-12 text-sm font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-[#148CFF] focus:ring-2 focus:ring-[#148CFF]/20" />
-              {instanceSearch && <button type="button" onClick={() => setInstanceSearch("")} className="absolute right-3 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white" aria-label="Limpar pesquisa"><X className="h-4 w-4" /></button>}
-            </div>
-            <div className={`rounded-xl border px-4 py-3 text-xs font-black ${instanceSearchKey ? "border-[#148CFF]/30 bg-[#148CFF]/10 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-400"}`}>
-              {instanceSearchKey ? `${masterSearchMatchCount} instância(s) encontrada(s) em ${masterSearchResults.length} grupo(s)` : "Filtro mestre · busca em todos os grupos"}
-            </div>
-          </div>
-        </div>
-        <div className="p-4 sm:p-6">'''
-          replace_once(search_anchor, search_block, 'master search UI')
-
-          replace_once(
-              '}{groups.map((group, groupIndex) => <GroupSection',
-              '}{!dashboard.isLoading && groups.length > 0 && instanceSearchKey && masterSearchMatchCount === 0 && <div className="mb-4 rounded-2xl border border-dashed border-[#F5B800]/30 bg-[#F5B800]/[0.06] p-5 text-center"><p className="font-black text-[#FFE37A]">Nenhuma instância encontrada.</p><p className="mt-1 text-xs text-slate-400">Tente outro nome. A pesquisa verifica todos os grupos.</p></div>}{visibleGroups.map(group => <GroupSection',
-              'filtered group rendering',
-          )
-          replace_once('instances={instancesByGroup.get(group.id) ?? []}', 'instances={visibleInstancesByGroup.get(group.id) ?? []}', 'filtered instances')
-          replace_once('expanded={expandedGroups.has(group.id)}', 'expanded={instanceSearchKey ? true : expandedGroups.has(group.id)}', 'auto expand result groups')
-          replace_once('ordering={orderingGroups}', 'ordering={orderingGroups && !instanceSearchKey}', 'disable group ordering in search')
-          replace_once('canMoveUp={groupIndex > 0}', 'canMoveUp={groups.indexOf(group) > 0}', 'original order move up')
-          replace_once('canMoveDown={groupIndex < groups.length - 1}', 'canMoveDown={groups.indexOf(group) < groups.length - 1}', 'original order move down')
-
-          required = [
-              'Pesquisar instância em todos os grupos...',
-              'normalizeH2AdsSearch',
-              'masterSearchResults',
-              'visibleInstancesByGroup',
-              'instanceSearchKey ? true : expandedGroups.has(group.id)',
-              'Nenhuma instância encontrada.',
-              'Filtro mestre · busca em todos os grupos',
-          ]
-          for item in required:
-              if item not in source:
-                  raise SystemExit(f'missing required master search marker: {item}')
-
-          path.write_text(source, encoding="utf-8")
-          print('H2ADS_MASTER_SEARCH_PATCH_OK')
-
-      - name: Source regression guard
-        shell: python
-        run: |
-          from pathlib import Path
-          source = Path('client/src/pages/H2Ads.tsx').read_text(encoding='utf-8')
-          checks = {
-            'global input': 'Pesquisar instância em todos os grupos...',
-            'accent insensitive normalizer': 'normalize("NFD")',
-            'partial instance match': 'normalizeH2AdsSearch(instance.name).includes(instanceSearchKey)',
-            'only matching groups': 'visibleGroups.map(group => <GroupSection',
-            'only matching instances': 'instances={visibleInstancesByGroup.get(group.id) ?? []}',
-            'auto expand': 'expanded={instanceSearchKey ? true : expandedGroups.has(group.id)}',
-            'escape clears': 'if (event.key === "Escape") setInstanceSearch("")',
-          }
-          for label, marker in checks.items():
-              if marker not in source:
-                  raise SystemExit(f'{label} missing')
-          print('H2ADS_MASTER_SEARCH_REGRESSION_OK')
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
-      - name: Install dependencies
+      - name: Install
         run: pnpm install --no-frozen-lockfile
 
       - name: Restore lockfile
         run: git checkout -- pnpm-lock.yaml
 
-      - name: TypeScript guard for H2Ads
-        shell: bash
+      - name: TypeScript guard
         run: |
           set +e
           pnpm check > /tmp/tsc.log 2>&1
           status=$?
           set -e
           cat /tmp/tsc.log
-          if grep -Fq "client/src/pages/H2Ads.tsx" /tmp/tsc.log; then
-            echo "TypeScript error introduced in H2Ads.tsx"
+          if grep -Fq 'client/src/pages/H2Ads.tsx' /tmp/tsc.log; then
+            echo 'TypeScript error introduced in H2Ads.tsx'
             exit 1
           fi
           if [ "$status" -ne 0 ]; then
-            echo "Only pre-existing TypeScript errors outside H2Ads.tsx remain."
+            echo 'Only pre-existing TypeScript errors outside H2Ads.tsx remain.'
           fi
 
       - name: Production build
         run: pnpm build
 
-      - name: Commit validated H2ADS search
+      - name: Commit validated change
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add client/src/pages/H2Ads.tsx
-          git commit -m "feat(h2ads): adicionar filtro mestre de instancias [skip ci]"
+          git commit -m 'feat(h2ads): adicionar filtro mestre de instancias [skip ci]'
           git push origin HEAD:feat/h2ads-master-instance-search-20260831
