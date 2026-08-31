@@ -1,0 +1,52 @@
+name: H2ADS Google sorry v2 validation
+
+on:
+  push:
+    branches:
+      - fix/h2ads-google-sorry-intercept-20260831
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python scripts/patch-h2ads-google-sorry-v2-20260831.py
+
+      - name: Verify protection
+        run: |
+          grep -Fq 'web_accessible_resources' workers/windows/browser-session.mjs
+          grep -Fq 'resources: ["blocked.html"]' workers/windows/browser-session.mjs
+          grep -Fq 'google\\.com/sorry' workers/windows/browser-session.mjs
+          grep -Fq 'Google bloqueou esta conexao' workers/windows/browser-session.mjs
+          grep -Fq 'https://www.bing.com/search' workers/windows/browser-session.mjs
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Restore lockfile
+        run: git checkout -- pnpm-lock.yaml
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Commit validated change
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add workers/windows/browser-session.mjs
+          git commit -m 'fix(h2ads): interceptar bloqueio Google e proteger dados de rede [skip ci]'
+          git push origin HEAD:fix/h2ads-google-sorry-intercept-20260831
