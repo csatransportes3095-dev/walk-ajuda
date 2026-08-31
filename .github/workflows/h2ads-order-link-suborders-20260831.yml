@@ -21,6 +21,15 @@ jobs:
         with:
           ref: fix/h2ads-order-link-suborders-20260831
           fetch-depth: 0
+      - name: Repair temporary patch script
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('scripts/patch-h2ads-order-link-suborders-20260831.py')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('updated, count = re.subn(pattern, replacement, source, count=1, flags=re.S)', 'updated, count = re.subn(pattern, lambda _match: replacement, source, count=1, flags=re.S)')
+          s = s.replace('''source = replace_once(\n    source,\n    '#{order.orderNumber || order.registrationId} · {[order.serviceName, order.serviceOption].filter(Boolean).join(" · ") || "Pedido"}',\n    source='#{order.orderNumber || order.registrationId}{order.subOrderIndex > 0 ? ` · item ${order.subOrderIndex + 1}` : ""} · {[order.serviceName, order.serviceOption].filter(Boolean).join(" · ") || "Pedido"}',\n    label='item resultado',\n)''', '''source = replace_once(\n    source,\n    '#{order.orderNumber || order.registrationId} · {[order.serviceName, order.serviceOption].filter(Boolean).join(" · ") || "Pedido"}',\n    '#{order.orderNumber || order.registrationId}{order.subOrderIndex > 0 ? ` · item ${order.subOrderIndex + 1}` : ""} · {[order.serviceName, order.serviceOption].filter(Boolean).join(" · ") || "Pedido"}',\n    'item resultado',\n)''')
+          p.write_text(s, encoding='utf-8')
       - name: Apply patch
         run: python scripts/patch-h2ads-order-link-suborders-20260831.py
       - uses: pnpm/action-setup@v4
