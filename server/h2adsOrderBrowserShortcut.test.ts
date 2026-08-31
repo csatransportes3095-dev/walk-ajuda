@@ -11,9 +11,28 @@ const base = {
 };
 
 describe("H2ADS order browser shortcut", () => {
-  it("usa o subpedido exato e não encontra outro item do mesmo pedido", () => {
-    expect(resolveH2AdsOrderBrowserShortcutState({ ...base, subOrderIndex: 1, runs: [] })).toBeNull();
+  it("prioriza o subpedido exato", () => {
     expect(resolveH2AdsOrderBrowserShortcutState({ ...base, runs: [] })?.instanceId).toBe(9);
+  });
+
+  it("usa o unico vinculo do mesmo pedido quando o indice legado divergir", () => {
+    const result = resolveH2AdsOrderBrowserShortcutState({ ...base, subOrderIndex: 1, runs: [] });
+    expect(result?.instanceId).toBe(9);
+  });
+
+  it("nao adivinha quando o pedido possui mais de um vinculo e nenhum indice bate", () => {
+    const result = resolveH2AdsOrderBrowserShortcutState({
+      ...base,
+      subOrderIndex: 3,
+      links: [
+        { instanceId: 9, registrationId: 100, subOrderIndex: 0 },
+        { instanceId: 10, registrationId: 100, subOrderIndex: 1 },
+      ],
+      instances: [{ id: 9, status: "draft" }, { id: 10, status: "draft" }],
+      assignments: [{ instanceId: 9, workerId: 7 }, { instanceId: 10, workerId: 7 }],
+      runs: [],
+    });
+    expect(result).toBeNull();
   });
 
   it("libera abrir quando o perfil está pronto ou fechado", () => {
