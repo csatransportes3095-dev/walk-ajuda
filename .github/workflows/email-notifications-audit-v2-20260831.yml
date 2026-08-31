@@ -14,6 +14,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      JWT_SECRET: "email-audit-test-secret-20260831-minimum-32-chars"
     steps:
       - uses: actions/checkout@v4
         with:
