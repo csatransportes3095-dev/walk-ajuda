@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { Play, Square } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -41,7 +42,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     ]);
   };
 
-  const openBrowser = async (event: React.MouseEvent<HTMLButtonElement>) => {
+  const openBrowser = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!shortcut.canOpen || pending) return;
     try {
@@ -53,7 +54,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     }
   };
 
-  const closeBrowserNow = async (event: React.MouseEvent<HTMLButtonElement>) => {
+  const closeBrowserNow = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!shortcut.canClose || pending) return;
     try {
