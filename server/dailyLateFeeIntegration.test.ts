@@ -30,4 +30,9 @@ describe("daily late fee integration", () => {
     expect(adminUi).toContain('loan.paymentType === "diario" ? (');
     expect(adminUi).toContain("Math.max(feeTotal18_20");
   });
+  it("uses the same central maximum fee formula in the ADM loan detail", () => {
+    expect(router).toContain("const isDailyLoan = String(rows[0].paymentType || '') === 'diario';");
+    expect(router).toContain("const effectiveFee = isDailyLoan ? Math.max(storedFee, automaticFee) : 0;");
+    expect(router).toContain("lc.late_fee_disabled as clientLateFeeDisabled");
+  });
 });

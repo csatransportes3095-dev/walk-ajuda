@@ -1101,18 +1101,42 @@ export const loanRouter = router({
   getLoan: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
     const db = await getDb() as any;
     const rows = await qRows(db, drizzleSql`
-      SELECT l.*, lc.name as clientName, lc.phone as clientPhone, lc.cpf as clientCpf
+      SELECT l.*, lc.name as clientName, lc.phone as clientPhone, lc.cpf as clientCpf,
+        lc.late_fee_disabled as clientLateFeeDisabled
       FROM loans l JOIN loanClients lc ON lc.id = l.clientId WHERE l.id=${input.id}
     `);
     if (!rows.length) throw new TRPCError({ code: "NOT_FOUND" });
-    const today = getBrazilToday();
+    const clock = getBrazilClock();
     const rawInstallments = await qRows(db, drizzleSql`SELECT * FROM loanInstallments WHERE loanId=${input.id} ORDER BY installmentNumber ASC`);
     const scoreByInstallment = await getH2ScoreSubmissionMap(db, rawInstallments.map((i: any) => Number(i.id)));
-    const instRows = rawInstallments.map((i: any) => ({
-      ...i,
-      h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
-      isOverdue: !['pago', 'cancelado', 'reprovado', 'em_analise'].includes(i.status) && i.dueDate < today,
-    }));
+    const configRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+    const lateFeeConfig = configRows[0];
+    const isDailyLoan = String(rows[0].paymentType || '') === 'diario';
+    const instRows = rawInstallments.map((i: any) => {
+      const baseAmount = i.originalAmount != null ? Number(i.originalAmount || 0) : Number(i.amount || 0);
+      const storedFee = i.feeApplied != null ? Number(i.feeApplied || 0) : 0;
+      const canCalculateAutomaticFee = isDailyLoan
+        && !rows[0].clientLateFeeDisabled
+        && ['pendente', 'atrasado'].includes(i.status);
+      const automaticFee = canCalculateAutomaticFee
+        ? calculateLateFeeForInstallment({ dueDate: i.dueDate, amount: baseAmount, config: lateFeeConfig, clock })
+        : 0;
+      const effectiveFee = isDailyLoan ? Math.max(storedFee, automaticFee) : 0;
+      const effectiveAmount = effectiveFee > 0
+        ? Math.round((baseAmount + effectiveFee) * 100) / 100
+        : i.amount;
+      return {
+        ...i,
+        amount: effectiveAmount,
+        ...(isDailyLoan && effectiveFee > 0 ? {
+          originalAmount: baseAmount.toFixed(2),
+          feeApplied: effectiveFee.toFixed(2),
+          lateFeePreview: automaticFee > storedFee,
+        } : {}),
+        h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
+        isOverdue: !['pago', 'cancelado', 'reprovado', 'em_analise'].includes(i.status) && i.dueDate < clock.today,
+      };
+    });
     const h2Score = await getClientH2ScoreSummary(db, [Number(rows[0].clientId)]);
     return { ...rows[0], installments: instRows, h2Score };
   }),
