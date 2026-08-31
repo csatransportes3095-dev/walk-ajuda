@@ -8,7 +8,7 @@ import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
-import { calculateLateFeeForInstallment } from "../loans/lateFee";
+import { calculateLateFeeDetailsForInstallment, calculateLateFeeForInstallment } from "../loans/lateFee";
 import PDFDocument from "pdfkit";
 import { sendMailDirect } from "../_core/sendMailDirect";
 import sharp from "sharp";
@@ -490,6 +490,40 @@ async function ensureInstallmentPlansTable(db: any) {
   return _installmentPlansMigrationPromise;
 }
 
+// Controle administrativo explícito da multa diária. Quando ativo, o valor definido
+// pelo ADM (inclusive zero) prevalece sobre o cálculo automático até o ADM voltar ao automático.
+let _lateFeeAdminOverrideReady = false;
+let _lateFeeAdminOverridePromise: Promise<void> | null = null;
+async function ensureLateFeeAdminOverrideColumns(db: any) {
+  if (_lateFeeAdminOverrideReady) return;
+  if (_lateFeeAdminOverridePromise) return _lateFeeAdminOverridePromise;
+  _lateFeeAdminOverridePromise = (async () => {
+    const columns = await qRows(db, drizzleSql`SHOW COLUMNS FROM loanInstallments`);
+    const names = new Set(columns.map((col: any) => String(col.Field || col.field || '').toLowerCase()));
+    if (!names.has('latefeeadminoverride')) await db.execute(drizzleSql.raw(`ALTER TABLE loanInstallments ADD COLUMN lateFeeAdminOverride DECIMAL(12,2) NULL DEFAULT NULL`));
+    if (!names.has('latefeeadminoverrideactive')) await db.execute(drizzleSql.raw(`ALTER TABLE loanInstallments ADD COLUMN lateFeeAdminOverrideActive TINYINT(1) NOT NULL DEFAULT 0`));
+    if (!names.has('latefeeadminoverridenote')) await db.execute(drizzleSql.raw(`ALTER TABLE loanInstallments ADD COLUMN lateFeeAdminOverrideNote VARCHAR(500) NULL DEFAULT NULL`));
+    if (!names.has('latefeeadminoverrideat')) await db.execute(drizzleSql.raw(`ALTER TABLE loanInstallments ADD COLUMN lateFeeAdminOverrideAt DATETIME NULL DEFAULT NULL`));
+    _lateFeeAdminOverrideReady = true;
+  })().catch((error) => {
+    _lateFeeAdminOverridePromise = null;
+    _lateFeeAdminOverrideReady = false;
+    throw error;
+  });
+  return _lateFeeAdminOverridePromise;
+}
+
+function resolveEffectiveLateFee(row: any, automaticFee: number) {
+  const overrideActive = Number(row?.lateFeeAdminOverrideActive || 0) === 1;
+  const overrideFee = Math.max(0, Number(row?.lateFeeAdminOverride || 0));
+  const storedFee = Math.max(0, Number(row?.feeApplied || 0));
+  return {
+    overrideActive,
+    overrideFee,
+    fee: overrideActive ? overrideFee : Math.max(storedFee, automaticFee),
+  };
+}
+
 export const loanRouter = router({
 
   // ââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Âââ€¢Â
@@ -911,6 +945,7 @@ export const loanRouter = router({
     const db = await getDb() as any;
     await ensurePixDisbursementColumns(db);
     await ensureClientPixFieldsSynced(db);
+    await ensureLateFeeAdminOverrideColumns(db);
     await getLoanH2ScoreConfig(db);
     const searchVal = input?.search ? `%${input.search}%` : null;
     const clientId = input?.clientId || null;
@@ -1006,6 +1041,30 @@ export const loanRouter = router({
       ...loan,
       h2ScoreDetail: h2Summaries.get(Number(loan.customerId || 0)) || null,
     }));
+
+    // Multas atuais entram no resumo do card sem alterar principal/juros originais.
+    const lateFeeConfigRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+    const summaryLateFeeConfig = lateFeeConfigRows[0];
+    const summaryClock = getBrazilClock();
+    const feeRows = await qRows(db, drizzleSql`
+      SELECT li.*, l.id AS summaryLoanId, lc.late_fee_disabled AS clientLateFeeDisabled
+      FROM loanInstallments li
+      JOIN loans l ON l.id=li.loanId
+      JOIN loanClients lc ON lc.id=l.clientId
+      WHERE l.paymentType='diario'
+        AND l.status NOT IN ('pago','cancelado','reprovado')
+        AND li.status IN ('pendente','atrasado','em_analise')
+    `);
+    const lateFeeTotalByLoan = new Map<number, number>();
+    for (const inst of feeRows) {
+      const baseAmount = inst.originalAmount != null ? Number(inst.originalAmount || 0) : Number(inst.amount || 0);
+      const automaticFee = Number(inst.clientLateFeeDisabled || 0) === 1 || inst.status === 'em_analise'
+        ? 0
+        : calculateLateFeeForInstallment({ dueDate: inst.dueDate, amount: baseAmount, config: summaryLateFeeConfig, clock: summaryClock });
+      const effective = resolveEffectiveLateFee(inst, automaticFee).fee;
+      lateFeeTotalByLoan.set(Number(inst.summaryLoanId), Math.round(((lateFeeTotalByLoan.get(Number(inst.summaryLoanId)) || 0) + effective) * 100) / 100);
+    }
+    rows = rows.map((loan: any) => ({ ...loan, lateFeeTotal: lateFeeTotalByLoan.get(Number(loan.id)) || 0 }));
 
     const today = getBrazilToday();
     // Busca parcelas que vencem hoje para cada empréstimo aprovado
@@ -1104,6 +1163,7 @@ export const loanRouter = router({
 
   getLoan: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
     const db = await getDb() as any;
+    await ensureLateFeeAdminOverrideColumns(db);
     const rows = await qRows(db, drizzleSql`
       SELECT l.*, lc.name as clientName, lc.phone as clientPhone, lc.cpf as clientCpf,
         lc.late_fee_disabled as clientLateFeeDisabled
@@ -1120,10 +1180,26 @@ export const loanRouter = router({
       const baseAmount = i.originalAmount != null ? Number(i.originalAmount || 0) : Number(i.amount || 0);
       const storedFee = i.feeApplied != null ? Number(i.feeApplied || 0) : 0;
       const canCalculateAutomaticFee = isDailyLoan && !rows[0].clientLateFeeDisabled && ['pendente', 'atrasado'].includes(i.status);
-      const automaticFee = canCalculateAutomaticFee ? calculateLateFeeForInstallment({ dueDate: i.dueDate, amount: baseAmount, config: lateFeeConfig, clock }) : 0;
-      const effectiveFee = isDailyLoan ? Math.max(storedFee, automaticFee) : 0;
-      const effectiveAmount = effectiveFee > 0 ? Math.round((baseAmount + effectiveFee) * 100) / 100 : i.amount;
-      return { ...i, amount: effectiveAmount, ...(isDailyLoan && effectiveFee > 0 ? { originalAmount: baseAmount.toFixed(2), feeApplied: effectiveFee.toFixed(2), lateFeePreview: automaticFee > storedFee } : {}), h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null, isOverdue: !['pago','cancelado','reprovado','em_analise'].includes(i.status) && i.dueDate < clock.today };
+      const feeDetails = canCalculateAutomaticFee ? calculateLateFeeDetailsForInstallment({ dueDate: i.dueDate, amount: baseAmount, config: lateFeeConfig, clock }) : calculateLateFeeDetailsForInstallment({ dueDate: i.dueDate, amount: baseAmount, config: { ...lateFeeConfig, enabled: false }, clock });
+      const automaticFee = feeDetails.fee;
+      const resolvedFee = isDailyLoan ? resolveEffectiveLateFee(i, automaticFee) : { overrideActive: false, overrideFee: 0, fee: 0 };
+      const effectiveFee = resolvedFee.fee;
+      const effectiveAmount = effectiveFee > 0 || resolvedFee.overrideActive ? Math.round((baseAmount + effectiveFee) * 100) / 100 : i.amount;
+      return {
+        ...i,
+        amount: effectiveAmount,
+        ...(isDailyLoan ? {
+          originalAmount: baseAmount.toFixed(2),
+          feeApplied: effectiveFee.toFixed(2),
+          automaticLateFee: automaticFee,
+          lateFeeAdminOverrideActive: resolvedFee.overrideActive ? 1 : 0,
+          lateFeeAdminOverride: resolvedFee.overrideActive ? resolvedFee.overrideFee.toFixed(2) : null,
+          lateFeeDetails: feeDetails,
+          lateFeePreview: !resolvedFee.overrideActive && automaticFee > storedFee,
+        } : {}),
+        h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
+        isOverdue: !['pago','cancelado','reprovado','em_analise'].includes(i.status) && i.dueDate < clock.today,
+      };
     });
     const h2Score = await getClientH2ScoreSummary(db, [Number(rows[0].clientId)]);
     return { ...rows[0], installments: instRows, h2Score };
@@ -1795,7 +1871,7 @@ export const loanRouter = router({
         const nextBaseAmount = nextInstallment.originalAmount != null ? Number(nextInstallment.originalAmount || 0) : Number(nextInstallment.amount || 0);
         const nextStoredFee = Number(nextInstallment.feeApplied || 0);
         const nextAutomaticFee = calculateLateFeeForInstallment({ dueDate: nextInstallment.dueDate, amount: nextBaseAmount, config: nextFeeConfigRows[0], clock: getBrazilClock() });
-        const nextEffectiveFee = Math.max(nextStoredFee, nextAutomaticFee);
+        const nextEffectiveFee = resolveEffectiveLateFee(nextInstallment, nextAutomaticFee).fee;
         if (nextEffectiveFee > 0) {
           nextInstallment = { ...nextInstallment, amount: Math.round((nextBaseAmount + nextEffectiveFee) * 100) / 100, originalAmount: nextBaseAmount.toFixed(2), feeApplied: nextEffectiveFee.toFixed(2), lateFeePreview: nextAutomaticFee > nextStoredFee };
         }
@@ -1872,8 +1948,9 @@ export const loanRouter = router({
         : 0;
       // Uma taxa manual maior nunca e reduzida. Se a regra automatica subir, o cliente
       // ve imediatamente o maior valor, mesmo antes da persistencia no banco.
-      const effectiveFee = Math.max(storedFee, automaticFee);
-      const amountWithFee = effectiveFee > 0
+      const resolvedFee = resolveEffectiveLateFee(i, automaticFee);
+      const effectiveFee = resolvedFee.fee;
+      const amountWithFee = effectiveFee > 0 || resolvedFee.overrideActive
         ? Math.round((baseAmount + effectiveFee) * 100) / 100
         : Number(i.amount || 0);
 
@@ -1883,7 +1960,9 @@ export const loanRouter = router({
         ...(effectiveFee > 0 ? {
           originalAmount: baseAmount.toFixed(2),
           feeApplied: effectiveFee.toFixed(2),
-          lateFeePreview: automaticFee > storedFee,
+          lateFeePreview: !resolvedFee.overrideActive && automaticFee > storedFee,
+          automaticLateFee: automaticFee,
+          lateFeeAdminOverrideActive: resolvedFee.overrideActive ? 1 : 0,
         } : {}),
         h2ScoreSubmission: scoreByInstallment.get(Number(i.id)) || null,
         isOverdue: !["pago"].includes(i.status) && i.dueDate < clock.today,
@@ -1951,7 +2030,7 @@ export const loanRouter = router({
         clock,
       });
     }
-    const effectiveFee = Math.max(storedFee, automaticFee);
+    const effectiveFee = resolveEffectiveLateFee(row, automaticFee).fee;
 
     if (effectiveFee > 0) {
       const updatedAmount = Math.round((baseAmount + effectiveFee) * 100) / 100;
@@ -2152,23 +2231,21 @@ export const loanRouter = router({
     return { ok: true };
   }),
 
-  // Calcula taxa de atraso para uma parcela específica (chamado pelo cliente ao ver parcelas)
+  // Calcula taxa de atraso acumulada para uma parcela específica.
   calcLateFee: publicProcedure.input(z.object({
     token: z.string(),
     installmentId: z.number(),
   })).query(async ({ input }) => {
     const db = await getDb() as any;
+    await ensureLateFeeAdminOverrideColumns(db);
     await requireLoanRouteAccess(db, input.token);
     const token = input.token.trim();
     const clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);
     if (!clients.length) throw new TRPCError({ code: "UNAUTHORIZED" });
     const client = clients[0];
-    if (client.late_fee_disabled) return { lateFee: 0, breakdown: null };
 
     const cfgRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
     const cfg = cfgRows[0];
-    if (!cfg || !cfg.enabled) return { lateFee: 0, breakdown: null };
-
     const inst = await qRows(db, drizzleSql`
       SELECT li.*, l.clientId, l.paymentType AS loanPaymentType FROM loanInstallments li
       JOIN loans l ON l.id = li.loanId
@@ -2176,28 +2253,26 @@ export const loanRouter = router({
     `);
     if (!inst.length) throw new TRPCError({ code: "NOT_FOUND" });
     const installment = inst[0];
-    if (String(installment.loanPaymentType || '') !== 'diario') return { lateFee: 0, breakdown: null };
-
-    const clock = getBrazilClock();
-    if (!["pendente", "atrasado"].includes(installment.status) || installment.dueDate > clock.date) {
-      return { lateFee: 0, breakdown: null };
-    }
+    if (String(installment.loanPaymentType || '') !== 'diario') return { lateFee: 0, totalWithFee: Number(installment.amount || 0), breakdown: [] };
 
     const baseAmount = installment.originalAmount != null ? parseFloat(installment.originalAmount) : parseFloat(installment.amount);
-    const storedFee = installment.feeApplied != null ? parseFloat(installment.feeApplied) : 0;
-    const requiredFee = calculateLateFeeForInstallment({ dueDate: installment.dueDate, amount: baseAmount, config: cfg, clock });
-    const lateFee = Math.max(storedFee, requiredFee);
-    const fixedFee = parseFloat(cfg.fee_after_18h || '0') + parseFloat(cfg.fee_after_20h || '0');
-    const minuteOfDay = clock.hour * 60 + clock.minute;
-    let breakdown: string[] = [];
-    if (installment.dueDate < clock.date || minuteOfDay >= 23 * 60 + 59) {
-      breakdown = [`Às 23:59 e depois: maior valor entre R$ ${fixedFee.toFixed(2)} e ${Number(cfg.fee_after_midnight_pct || 0)}% da parcela (taxa: R$ ${lateFee.toFixed(2)})`];
-    } else if (minuteOfDay >= 20 * 60 + 1) {
-      breakdown = [`A partir de 20:01: taxa fixa acumulada de R$ ${lateFee.toFixed(2)}`];
-    } else if (minuteOfDay >= 18 * 60 + 1) {
-      breakdown = [`A partir de 18:01: +R$ ${lateFee.toFixed(2)}`];
-    }
-    return { lateFee, totalWithFee: baseAmount + lateFee, breakdown };
+    const clock = getBrazilClock();
+    const automaticDetails = !client.late_fee_disabled && cfg?.enabled && ["pendente", "atrasado"].includes(installment.status)
+      ? calculateLateFeeDetailsForInstallment({ dueDate: installment.dueDate, amount: baseAmount, config: cfg, clock })
+      : calculateLateFeeDetailsForInstallment({ dueDate: installment.dueDate, amount: baseAmount, config: { ...cfg, enabled: false }, clock });
+    const resolved = resolveEffectiveLateFee(installment, automaticDetails.fee);
+    const breakdown = resolved.overrideActive
+      ? [`ADM definiu a multa em R$ ${resolved.overrideFee.toFixed(2)}. O cálculo automático está suspenso nesta parcela.`]
+      : automaticDetails.entries.map((entry) => `${entry.date}: R$ ${entry.fee.toFixed(2)} (${entry.stage})`);
+    return {
+      lateFee: resolved.fee,
+      automaticLateFee: automaticDetails.fee,
+      totalWithFee: Math.round((baseAmount + resolved.fee) * 100) / 100,
+      breakdown,
+      details: automaticDetails,
+      adminOverrideActive: resolved.overrideActive,
+      adminOverrideFee: resolved.overrideFee,
+    };
   }),
 
   // Ativar/desativar empréstimo por telefone (cria loanClient se não existir)
@@ -3296,62 +3371,77 @@ export const loanRouter = router({
   }),
 
   // Stats de comprovantes para o dashboard
-  // Aplica taxa de atraso pré-estabelecida a uma parcela (admin)
+  // O ADM define a multa exata (inclusive zero) em qualquer data/horário.
   applyLateFeeToInstallment: adminProcedure.input(z.object({
     installmentId: z.number(),
     feeAmount: z.number().min(0),
     feeNote: z.string().optional(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ input, ctx }) => {
     const db = await getDb() as any;
+    await ensureLateFeeAdminOverrideColumns(db);
     const inst = await qRows(db, drizzleSql`
-      SELECT li.*, l.paymentType AS loanPaymentType
-      FROM loanInstallments li
-      JOIN loans l ON l.id=li.loanId
-      WHERE li.id=${input.installmentId}
-      LIMIT 1
+      SELECT li.*, l.paymentType AS loanPaymentType FROM loanInstallments li
+      JOIN loans l ON l.id=li.loanId WHERE li.id=${input.installmentId} LIMIT 1
     `);
     if (!inst.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Parcela não encontrada' });
     const current = inst[0];
-    if (current.status === 'pago') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Parcela já está paga' });
-    if (String(current.loanPaymentType || '') !== 'diario') {
-      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Taxa diária disponível somente em empréstimos com pagamento diário.' });
-    }
-
-    // O ADM pode aplicar manualmente a taxa em qualquer data/horário.
-    // Mesmo no manual, nunca e permitido reduzir uma taxa automatica valida ou uma taxa ja gravada.
+    if (String(current.loanPaymentType || '') !== 'diario') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Multa diária disponível somente em empréstimos diários.' });
     const originalAmount = current.originalAmount != null ? parseFloat(current.originalAmount) : parseFloat(current.amount);
-    const storedFee = current.feeApplied != null ? parseFloat(current.feeApplied) : 0;
-    const cfgRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
-    const automaticFee = calculateLateFeeForInstallment({ dueDate: current.dueDate, amount: originalAmount, config: cfgRows[0], clock: getBrazilClock() });
-    const effectiveFee = Math.max(storedFee, input.feeAmount, automaticFee);
-    const newAmount = Math.round((originalAmount + effectiveFee) * 100) / 100;
-    const spNow = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-    const note = input.feeNote || `Taxa diaria manual: +R$ ${effectiveFee.toFixed(2).replace('.', ',')} aplicada pelo ADM em ${spNow}`;
+    const feeAmount = Math.round(input.feeAmount * 100) / 100;
+    const newAmount = Math.round((originalAmount + feeAmount) * 100) / 100;
+    const note = input.feeNote?.trim() || `Multa definida manualmente pelo ADM: R$ ${feeAmount.toFixed(2)}`;
+    const adminName = ctx.user?.name || 'ADM';
     await db.execute(drizzleSql`
-      UPDATE loanInstallments
-      SET amount=${newAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)}, feeApplied=${effectiveFee.toFixed(2)}, notes=${note}
+      UPDATE loanInstallments SET
+        amount=${newAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)}, feeApplied=${feeAmount.toFixed(2)},
+        lateFeeAdminOverride=${feeAmount.toFixed(2)}, lateFeeAdminOverrideActive=1,
+        lateFeeAdminOverrideNote=${`${note} | ${adminName}`}, lateFeeAdminOverrideAt=NOW()
       WHERE id=${input.installmentId}
     `);
-    return { ok: true, originalAmount, feeAmount: effectiveFee, newAmount };
+    return { ok: true, originalAmount, feeAmount, newAmount, adminOverrideActive: true };
   }),
 
-  // Remove taxa de atraso de uma parcela (restaura valor original)
-  removeLateFeeFromInstallment: adminProcedure.input(z.object({
-    installmentId: z.number(),
-  })).mutation(async ({ input }) => {
+  // Remover significa definir multa zero pelo ADM. Ela não reaparece automaticamente.
+  removeLateFeeFromInstallment: adminProcedure.input(z.object({ installmentId: z.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb() as any;
-    const inst = await qRows(db, drizzleSql`SELECT * FROM loanInstallments WHERE id=${input.installmentId}`);
-    if (!inst.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Parcela não encontrada' });
-    const current = inst[0];
-    if (current.status === 'pago') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Parcela já está paga' });
-    if (current.originalAmount == null) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nenhuma taxa aplicada nesta parcela' });
-    const originalAmount = parseFloat(current.originalAmount);
+    await ensureLateFeeAdminOverrideColumns(db);
+    const rows = await qRows(db, drizzleSql`SELECT li.*, l.paymentType AS loanPaymentType FROM loanInstallments li JOIN loans l ON l.id=li.loanId WHERE li.id=${input.installmentId} LIMIT 1`);
+    if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Parcela não encontrada' });
+    const current = rows[0];
+    if (String(current.loanPaymentType || '') !== 'diario') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Multa diária disponível somente em empréstimos diários.' });
+    const originalAmount = current.originalAmount != null ? parseFloat(current.originalAmount) : parseFloat(current.amount);
+    const adminName = ctx.user?.name || 'ADM';
     await db.execute(drizzleSql`
-      UPDATE loanInstallments
-      SET amount=${originalAmount.toFixed(2)}, originalAmount=NULL, feeApplied=NULL, notes=NULL
+      UPDATE loanInstallments SET amount=${originalAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)}, feeApplied='0.00',
+        lateFeeAdminOverride='0.00', lateFeeAdminOverrideActive=1,
+        lateFeeAdminOverrideNote=${`Multa removida manualmente por ${adminName}`}, lateFeeAdminOverrideAt=NOW()
       WHERE id=${input.installmentId}
     `);
-    return { ok: true, restoredAmount: originalAmount };
+    return { ok: true, restoredAmount: originalAmount, adminOverrideActive: true };
+  }),
+
+  // Volta a parcela para a regra automática cumulativa atual.
+  restoreAutomaticLateFeeForInstallment: adminProcedure.input(z.object({ installmentId: z.number() })).mutation(async ({ input }) => {
+    const db = await getDb() as any;
+    await ensureLateFeeAdminOverrideColumns(db);
+    const rows = await qRows(db, drizzleSql`
+      SELECT li.*, l.paymentType AS loanPaymentType, lc.late_fee_disabled AS clientLateFeeDisabled
+      FROM loanInstallments li JOIN loans l ON l.id=li.loanId JOIN loanClients lc ON lc.id=l.clientId
+      WHERE li.id=${input.installmentId} LIMIT 1
+    `);
+    if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Parcela não encontrada' });
+    const current = rows[0];
+    if (String(current.loanPaymentType || '') !== 'diario') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Multa diária disponível somente em empréstimos diários.' });
+    const originalAmount = current.originalAmount != null ? parseFloat(current.originalAmount) : parseFloat(current.amount);
+    const cfgRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+    const automaticFee = Number(current.clientLateFeeDisabled || 0) === 1 ? 0 : calculateLateFeeForInstallment({ dueDate: current.dueDate, amount: originalAmount, config: cfgRows[0], clock: getBrazilClock() });
+    const newAmount = Math.round((originalAmount + automaticFee) * 100) / 100;
+    await db.execute(drizzleSql`
+      UPDATE loanInstallments SET amount=${newAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)}, feeApplied=${automaticFee.toFixed(2)},
+        lateFeeAdminOverride=NULL, lateFeeAdminOverrideActive=0, lateFeeAdminOverrideNote=NULL, lateFeeAdminOverrideAt=NULL
+      WHERE id=${input.installmentId}
+    `);
+    return { ok: true, originalAmount, feeAmount: automaticFee, newAmount, adminOverrideActive: false };
   }),
 
   // Corrige taxas históricas previamente auditadas, preservando comprovantes, recibos, datas e status.

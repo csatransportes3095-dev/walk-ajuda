@@ -722,7 +722,15 @@ function LoansTab() {
   });
   const removeLateFee = trpc.loans.removeLateFeeFromInstallment.useMutation({
     onSuccess: (d) => {
-      toast.success(`Taxa removida! Valor restaurado: R$ ${d.restoredAmount.toFixed(2).replace('.', ',')}`);
+      toast.success(`Multa removida pelo ADM. Parcela: R$ ${d.restoredAmount.toFixed(2).replace('.', ',')}`);
+      utils.loans.getLoan.invalidate({ id: expandedLoan! });
+      utils.loans.listLoans.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const restoreAutomaticLateFee = trpc.loans.restoreAutomaticLateFeeForInstallment.useMutation({
+    onSuccess: (d) => {
+      toast.success(`Regra automática restaurada. Multa atual: R$ ${d.feeAmount.toFixed(2).replace('.', ',')}`);
       utils.loans.getLoan.invalidate({ id: expandedLoan! });
       utils.loans.listLoans.invalidate();
     },
@@ -1145,8 +1153,11 @@ function LoansTab() {
                       // Juros restantes = apenas os juros das parcelas ainda não pagas (não subtrair rolagem pois ela gera novas parcelas)
                       const interestLeft = isEncerrado ? 0 : Math.round(interestTotal * (1 - ratio) * 100) / 100;
                       const totalLeft = isEncerrado ? 0 : Math.round((principalLeft + interestLeft) * 100) / 100;
+                      const lateFeeTotal = isEncerrado ? 0 : Math.round((Number(loan.lateFeeTotal || 0)) * 100) / 100;
+                      const totalUpdated = Math.round((totalLeft + lateFeeTotal) * 100) / 100;
                       return (
-                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 mb-3">
+                        <>
+                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 mb-2">
                           <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 text-center">
                             <p className="text-[10px] text-emerald-400/80 mb-0.5 leading-tight">✅ Pago (principal)</p>
                             <p className="font-bold text-xs text-emerald-400">{fmt(principalPaid)}</p>
@@ -1172,6 +1183,17 @@ function LoansTab() {
                             <p className="font-bold text-xs text-red-300">{fmt(totalLeft)}</p>
                           </div>
                         </div>
+                        <div className="grid grid-cols-2 gap-1.5 mb-3">
+                          <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-2 text-center">
+                            <p className="text-[10px] text-orange-300/80 mb-0.5 leading-tight">⚠ Multas / taxas atuais</p>
+                            <p className="font-black text-sm text-orange-300">{fmt(lateFeeTotal)}</p>
+                          </div>
+                          <div className="rounded-lg border border-red-500/40 bg-red-600/15 p-2 text-center">
+                            <p className="text-[10px] text-red-300/80 mb-0.5 leading-tight">💰 Total atualizado a receber</p>
+                            <p className="font-black text-sm text-red-300">{fmt(totalUpdated)}</p>
+                          </div>
+                        </div>
+                        </>
                       );
                     })()}
 
@@ -1317,6 +1339,15 @@ function LoansTab() {
                             <div>
                               <p className="text-sm font-medium">{fmt(inst.amount)}</p>
                               <p className="text-xs text-muted-foreground">Vence: {fmtDate(inst.dueDate)}</p>
+                              {loan.paymentType === 'diario' && Number(inst.feeApplied || 0) > 0 && (
+                                <p className="mt-0.5 text-xs font-semibold text-orange-300">Multa: {fmt(inst.feeApplied)} · Base: {fmt(inst.originalAmount || inst.amount)} · Total: {fmt(inst.amount)}</p>
+                              )}
+                              {loan.paymentType === 'diario' && inst.lateFeeDetails?.entries?.length > 0 && !Number(inst.lateFeeAdminOverrideActive || 0) && (
+                                <p className="mt-0.5 text-[11px] text-orange-300/80">{inst.lateFeeDetails.entries.map((e: any) => `${fmtDate(e.date)} +${fmt(e.fee)}`).join(' · ')}</p>
+                              )}
+                              {loan.paymentType === 'diario' && Number(inst.lateFeeAdminOverrideActive || 0) === 1 && (
+                                <p className="mt-0.5 text-[11px] font-bold text-sky-300">Controle ADM ativo: multa fixada em {fmt(inst.lateFeeAdminOverride || 0)}</p>
+                              )}
                               {inst.paidAt && <p className="text-xs text-emerald-400">Pago em: {fmtDateTime(inst.paidAt)}{inst.paidBy ? ` por ${inst.paidBy.replace(/CSA TRANSPORTES LTDA/gi, 'CSA EMPRESTIMOS SP')}` : ""}</p>}
                               {/* Indicador de comprovante admin */}
                               {inst.status === "pago" && adminProof?.hasProof ? (
@@ -1395,23 +1426,15 @@ function LoansTab() {
                                   <DollarSign className="w-4 h-4" />
                                   Cobrar Juros
                                 </button>
-                              ) : inst.feeApplied != null ? (
-                                <button
-                                  className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-orange-500/10 border border-orange-500/30 text-orange-400 hover:bg-orange-500/20 transition-all text-xs font-semibold active:scale-95"
-                                  onClick={() => { if (confirm(`Remover taxa de atraso de R$ ${parseFloat(inst.feeApplied).toFixed(2).replace('.',',')} da parcela #${inst.installmentNumber}?`)) removeLateFee.mutate({ installmentId: inst.id }); }}
-                                  disabled={removeLateFee.isPending}>
-                                  <AlertTriangle className="w-4 h-4" />
-                                  -Taxa
-                                </button>
-                              ) : (
+                              ) : loan.paymentType === 'diario' ? (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
                                   onClick={() => handleOpenLateFee(inst, loan.id)}
                                   data-testid="manual-late-fee-button">
                                   <AlertTriangle className="w-4 h-4" />
-                                  +Taxa
+                                  Taxa / Multa
                                 </button>
-                              )}
+                              ) : null}
                               {/* Botão Avisar Parcela */}
                               {!loan.interestOnlyEnabled || !inst.isOverdue ? (
                                 <button
@@ -1437,23 +1460,15 @@ function LoansTab() {
                                 <CheckCircle className="w-4 h-4" />
                                 Confirmar
                               </button>
-                              {inst.feeApplied != null ? (
-                                <button
-                                  className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-orange-500/10 border border-orange-500/30 text-orange-400 hover:bg-orange-500/20 transition-all text-xs font-semibold active:scale-95"
-                                  onClick={() => { if (confirm(`Remover taxa de atraso de R$ ${parseFloat(inst.feeApplied).toFixed(2).replace('.',',')} da parcela #${inst.installmentNumber}?`)) removeLateFee.mutate({ installmentId: inst.id }); }}
-                                  disabled={removeLateFee.isPending}>
-                                  <AlertTriangle className="w-4 h-4" />
-                                  -Taxa
-                                </button>
-                              ) : (
+                              {loan.paymentType === 'diario' ? (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
                                   onClick={() => handleOpenLateFee(inst, loan.id)}
                                   data-testid="manual-late-fee-button">
                                   <AlertTriangle className="w-4 h-4" />
-                                  +Taxa
+                                  Taxa / Multa
                                 </button>
-                              )}
+                              ) : <span />}
                               <button
                                 className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all text-xs font-semibold active:scale-95"
                                 onClick={() => refusePayment.mutate({ installmentId: inst.id, reason: "Comprovante inválido" })}>
@@ -2001,7 +2016,7 @@ function LoansTab() {
           </DialogHeader>
           {feeModal && (() => {
             const inst = feeModal.inst;
-            const originalAmt = parseFloat(inst.amount);
+            const originalAmt = parseFloat(inst.originalAmount ?? inst.amount);
             const dueDate = civilDate(inst.dueDate);
             const clock = brazilClock();
             const cfg = lateFeeConfig;
@@ -2025,7 +2040,7 @@ function LoansTab() {
                     <button
                       className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-left transition-colors"
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeAfter18h })}
-                      disabled={activeTier !== "after_18" || applyLateFee.isPending}
+                      disabled={applyLateFee.isPending}
                     >
                       <span className="text-sm text-amber-300">Taxa manual — regra 18:01{activeTier === "after_18" ? " (faixa atual)" : ""}</span>
                       <span className="text-sm font-bold text-amber-400">+R$ {feeAfter18h.toFixed(2).replace('.', ',')}</span>
@@ -2033,7 +2048,7 @@ function LoansTab() {
                     <button
                       className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-left transition-colors"
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeTotal18_20 })}
-                      disabled={activeTier !== "after_20" || applyLateFee.isPending}
+                      disabled={applyLateFee.isPending}
                     >
                       <span className="text-sm text-orange-300">Taxa manual acumulada — regra 20:01{activeTier === "after_20" ? " (faixa atual)" : ""}</span>
                       <span className="text-sm font-bold text-orange-400">+R$ {feeTotal18_20.toFixed(2).replace('.', ',')}</span>
@@ -2041,7 +2056,7 @@ function LoansTab() {
                     <button
                       className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-left transition-colors"
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeAfterMidnight })}
-                      disabled={activeTier !== "after_midnight" || applyLateFee.isPending}
+                      disabled={applyLateFee.isPending}
                     >
                       <span className="text-sm text-red-300">Taxa final — 23:59 ({feeMidnightPct}%){activeTier === "after_midnight" ? " (faixa atual)" : ""}</span>
                       <span className="text-sm font-bold text-red-400">+R$ {feeAfterMidnight.toFixed(2).replace('.', ',')}</span>
@@ -2060,17 +2075,22 @@ function LoansTab() {
                     />
                     <Button
                       size="sm"
-                      disabled={customFee <= 0 || applyLateFee.isPending}
+                      disabled={feeCustomAmount.trim() === "" || customFee < 0 || applyLateFee.isPending}
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: customFee })}
                       className="bg-amber-600 hover:bg-amber-500 text-white"
                     >
-                      Aplicar
+                      Definir
                     </Button>
                   </div>
-                  {customFee > 0 && (
+                  {feeCustomAmount.trim() !== "" && customFee >= 0 && (
                     <p className="text-xs text-muted-foreground">Novo valor: <strong className="text-foreground">{fmt(String(originalAmt + customFee))}</strong></p>
                   )}
                 </div>
+                <div className="grid grid-cols-2 gap-2 border-t border-border pt-3">
+                  <Button variant="destructive" disabled={removeLateFee.isPending} onClick={() => removeLateFee.mutate({ installmentId: inst.id })}>Remover multa (R$ 0)</Button>
+                  <Button variant="outline" disabled={restoreAutomaticLateFee.isPending} onClick={() => restoreAutomaticLateFee.mutate({ installmentId: inst.id })}>Voltar automático</Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">O ADM pode definir qualquer valor, inclusive zero, em qualquer data/horário. “Voltar automático” reativa o cálculo cumulativo por dia.</p>
               </div>
             );
           })()}
