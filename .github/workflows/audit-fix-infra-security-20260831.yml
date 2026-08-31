@@ -21,40 +21,27 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           path = Path("server/_core/index.ts")
           source = path.read_text(encoding="utf-8")
           original = source
 
-          def replace_exact(old: str, new: str, label: str):
+          def replace_once(pattern: str, replacement: str, label: str, flags=0):
               global source
-              count = source.count(old)
+              updated, count = re.subn(pattern, replacement, source, count=1, flags=flags)
               if count != 1:
                   raise SystemExit(f"{label}: expected exactly 1 match, found {count}")
-              source = source.replace(old, new, 1)
+              source = updated
 
-          replace_exact('import net from "net";\n', '', 'remove net import')
+          replace_once(r'^import net from "net";\n', '', 'remove net import', re.MULTILINE)
 
-          replace_exact('''function isPortAvailable(port: number): Promise<boolean> {
-            return new Promise(resolve => {
-              const server = net.createServer();
-              server.listen(port, () => {
-                server.close(() => resolve(true));
-              });
-              server.on("error", () => resolve(false));
-            });
-          }
-
-          async function findAvailablePort(startPort: number = 3000): Promise<number> {
-            for (let port = startPort; port < startPort + 20; port++) {
-              if (await isPortAvailable(port)) {
-                return port;
-              }
-            }
-            throw new Error(`No available port found starting from ${startPort}`);
-          }
-
-          ''', '', 'remove port scanner')
+          replace_once(
+              r'function isPortAvailable\(port: number\): Promise<boolean> \{.*?\n\}\n\nasync function findAvailablePort\(startPort: number = 3000\): Promise<number> \{.*?\n\}\n\n',
+              '',
+              'remove port scanner',
+              re.DOTALL,
+          )
 
           start_marker = '  // Endpoint de teste para debugar sessão OAuth\n'
           end_marker = '  // Pixel de rastreamento de abertura de e-mail\n'
@@ -62,30 +49,13 @@ jobs:
               raise SystemExit('Zoho test route markers changed; refusing unsafe patch')
           start = source.index(start_marker)
           end = source.index(end_marker, start)
-          source = source[:start] + end_marker + source[end + len(end_marker):]
+          source = source[:start] + source[end:]
 
-          replace_exact('''  const preferredPort = parseInt(process.env.PORT || "3000");
-          const port = await findAvailablePort(preferredPort);
-
-          if (port !== preferredPort) {
-            console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-          }
-
-          server.listen(port, () => {
-            console.log(`Server running on http://localhost:${port}/`);
-          ''', '''  const port = Number.parseInt(process.env.PORT || "3000", 10);
-          if (!Number.isInteger(port) || port < 1 || port > 65535) {
-            throw new Error("Invalid PORT configuration");
-          }
-
-          server.once("error", (error) => {
-            console.error("[Server] failed to listen on configured PORT:", error);
-            process.exit(1);
-          });
-
-          server.listen(port, "0.0.0.0", () => {
-            console.log(`Server running on http://0.0.0.0:${port}/`);
-          ''', 'Render PORT binding')
+          replace_once(
+              r'  const preferredPort = parseInt\(process\.env\.PORT \|\| "3000"\);\n\s*const port = await findAvailablePort\(preferredPort\);\n\s*if \(port !== preferredPort\) \{\n\s*console\.log\(`Port \$\{preferredPort\} is busy, using port \$\{port\} instead`\);\n\s*\}\n\s*server\.listen\(port, \(\) => \{\n\s*console\.log\(`Server running on http://localhost:\$\{port\}/`\);',
+              '''  const port = Number.parseInt(process.env.PORT || "3000", 10);\n  if (!Number.isInteger(port) || port < 1 || port > 65535) {\n    throw new Error("Invalid PORT configuration");\n  }\n\n  server.once("error", (error) => {\n    console.error("[Server] failed to listen on configured PORT:", error);\n    process.exit(1);\n  });\n\n  server.listen(port, "0.0.0.0", () => {\n    console.log(`Server running on http://0.0.0.0:${port}/`);''',
+              'Render PORT binding',
+          )
 
           if source == original:
               raise SystemExit('No changes produced')
