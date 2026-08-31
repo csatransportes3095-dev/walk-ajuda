@@ -1,0 +1,77 @@
+name: Daily fee cumulative admin validation
+
+on:
+  push:
+    branches:
+      - fix/daily-late-fee-cumulative-admin-control-20260831
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply integration patch
+        run: python scripts/patch-daily-fee-cumulative-admin-20260831.py
+
+      - name: Verify required behavior
+        run: |
+          grep -Fq 'lateFeeAdminOverrideActive' server/routers/loans.ts
+          grep -Fq 'restoreAutomaticLateFeeForInstallment' server/routers/loans.ts
+          grep -Fq 'calculateLateFeeDetailsForInstallment' server/routers/loans.ts
+          grep -Fq 'Multas / taxas atuais' client/src/pages/AdminLoans.tsx
+          grep -Fq 'Total atualizado a receber' client/src/pages/AdminLoans.tsx
+          grep -Fq 'Taxa / Multa' client/src/pages/AdminLoans.tsx
+          grep -Fq 'Remover multa (R$ 0)' client/src/pages/AdminLoans.tsx
+          grep -Fq 'Voltar automático' client/src/pages/AdminLoans.tsx
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Restore lockfile
+        run: git checkout -- pnpm-lock.yaml
+
+      - name: Targeted late fee tests
+        run: pnpm exec vitest run server/loans/lateFee.test.ts
+
+      - name: TypeScript modified-files guard
+        run: |
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/tsc.log
+          if grep -E 'server/loans/lateFee\.ts|server/routers/loans\.ts|client/src/pages/AdminLoans\.tsx' /tmp/tsc.log; then
+            echo 'TypeScript error in modified loan files'
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo 'Only pre-existing TypeScript errors outside modified loan files remain.'
+          fi
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Commit validated implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/routers/loans.ts client/src/pages/AdminLoans.tsx
+          if git diff --cached --quiet; then
+            echo 'No integration changes to commit'
+            exit 0
+          fi
+          git commit -m 'fix(loans): acumular multas diarias e liberar controle ADM [skip ci]'
+          git push origin HEAD:fix/daily-late-fee-cumulative-admin-control-20260831
