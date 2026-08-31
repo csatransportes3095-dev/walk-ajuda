@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveH2AdsOrderBrowserShortcutState } from "../shared/h2adsOrderBrowserShortcut";
+import {
+  canonicalH2AdsServiceKey,
+  resolveH2AdsOrderBrowserShortcutState,
+  resolveH2AdsOrderLinkRepairCandidate,
+} from "../shared/h2adsOrderBrowserShortcut";
 
 const base = {
   registrationId: 100,
@@ -11,16 +15,12 @@ const base = {
 };
 
 describe("H2ADS order browser shortcut", () => {
-  it("prioriza o subpedido exato", () => {
+  it("usa somente o vínculo exato de pedido e subpedido", () => {
     expect(resolveH2AdsOrderBrowserShortcutState({ ...base, runs: [] })?.instanceId).toBe(9);
+    expect(resolveH2AdsOrderBrowserShortcutState({ ...base, subOrderIndex: 1, runs: [] })).toBeNull();
   });
 
-  it("usa o unico vinculo do mesmo pedido quando o indice legado divergir", () => {
-    const result = resolveH2AdsOrderBrowserShortcutState({ ...base, subOrderIndex: 1, runs: [] });
-    expect(result?.instanceId).toBe(9);
-  });
-
-  it("nao adivinha quando o pedido possui mais de um vinculo e nenhum indice bate", () => {
+  it("não adivinha quando o pedido possui outro vínculo", () => {
     const result = resolveH2AdsOrderBrowserShortcutState({
       ...base,
       subOrderIndex: 3,
@@ -57,5 +57,78 @@ describe("H2ADS order browser shortcut", () => {
     const result = resolveH2AdsOrderBrowserShortcutState({ ...base, instances: [{ id: 9, status: "archived" }], runs: [{ instanceId: 9, state: "closed" }] });
     expect(result?.canOpen).toBe(false);
     expect(result?.reason).toContain("arquivada");
+  });
+});
+
+describe("H2ADS legacy order link repair", () => {
+  it("normaliza aliases equivalentes de nome completo", () => {
+    expect(canonicalH2AdsServiceKey("UBER APP", "NOME COMPLETO")).toBe("uber|nome_completo");
+    expect(canonicalH2AdsServiceKey("UBER APP", "UBER NOME / COMPLETO")).toBe("uber|nome_completo");
+  });
+
+  it("normaliza aliases tradicionais das opções", () => {
+    expect(canonicalH2AdsServiceKey("UBER APP", "NOME ALEATÓRIO")).toBe("uber|nome_aleatorio");
+    expect(canonicalH2AdsServiceKey("UBER APP", "PRIMEIRO NOME")).toBe("uber|primeiro_nome");
+  });
+
+  it("oferece reparo somente quando existe um candidato único do mesmo cliente e serviço", () => {
+    const result = resolveH2AdsOrderLinkRepairCandidate({
+      registrationId: 200,
+      subOrderIndex: 0,
+      customerNumber: 2021,
+      serviceName: "UBER APP",
+      serviceOption: "NOME COMPLETO",
+      links: [{ instanceId: 9, registrationId: 100, subOrderIndex: 0 }],
+      orders: [
+        { id: 100, subOrderIndex: 0, customerNumber: 2021, orderNumber: 310000, serviceName: "UBER APP", serviceOption: "UBER NOME / COMPLETO" },
+        { id: 200, subOrderIndex: 0, customerNumber: 2021, orderNumber: 100008, serviceName: "UBER APP", serviceOption: "NOME COMPLETO" },
+      ],
+    });
+    expect(result).toMatchObject({ instanceId: 9, linkedRegistrationId: 100, linkedSubOrderIndex: 0, linkedOrderNumber: 310000, serviceKey: "uber|nome_completo" });
+  });
+
+  it("não oferece reparo quando há dois candidatos compatíveis", () => {
+    const result = resolveH2AdsOrderLinkRepairCandidate({
+      registrationId: 200,
+      subOrderIndex: 0,
+      customerNumber: 2021,
+      serviceName: "UBER APP",
+      serviceOption: "NOME COMPLETO",
+      links: [
+        { instanceId: 9, registrationId: 100, subOrderIndex: 0 },
+        { instanceId: 10, registrationId: 101, subOrderIndex: 0 },
+      ],
+      orders: [
+        { id: 100, subOrderIndex: 0, customerNumber: 2021, orderNumber: 310000, serviceName: "UBER APP", serviceOption: "UBER NOME / COMPLETO" },
+        { id: 101, subOrderIndex: 0, customerNumber: 2021, orderNumber: 310001, serviceName: "UBER APP", serviceOption: "NOME COMPLETO" },
+      ],
+    });
+    expect(result).toBeNull();
+  });
+
+  it("não oferece reparo para cliente diferente", () => {
+    const result = resolveH2AdsOrderLinkRepairCandidate({
+      registrationId: 200,
+      subOrderIndex: 0,
+      customerNumber: 2021,
+      serviceName: "UBER APP",
+      serviceOption: "NOME COMPLETO",
+      links: [{ instanceId: 9, registrationId: 100, subOrderIndex: 0 }],
+      orders: [{ id: 100, subOrderIndex: 0, customerNumber: 9999, orderNumber: 310000, serviceName: "UBER APP", serviceOption: "NOME COMPLETO" }],
+    });
+    expect(result).toBeNull();
+  });
+
+  it("não oferece reparo para serviço diferente", () => {
+    const result = resolveH2AdsOrderLinkRepairCandidate({
+      registrationId: 200,
+      subOrderIndex: 0,
+      customerNumber: 2021,
+      serviceName: "UBER APP",
+      serviceOption: "NOME COMPLETO",
+      links: [{ instanceId: 9, registrationId: 100, subOrderIndex: 0 }],
+      orders: [{ id: 100, subOrderIndex: 0, customerNumber: 2021, orderNumber: 310000, serviceName: "UBER APP", serviceOption: "NOME ALEATÓRIO" }],
+    });
+    expect(result).toBeNull();
   });
 });
