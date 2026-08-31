@@ -1,0 +1,91 @@
+name: Apply email status feedback
+
+on:
+  push:
+    branches:
+      - fix/email-status-feedback-20260831
+    paths:
+      - ".github/workflows/email-status-feedback-apply.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JWT_SECRET: "email-feedback-test-secret-20260831-minimum-32-chars"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/email-status-feedback-20260831
+          fetch-depth: 0
+
+      - name: Apply isolated AdminOrders change
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('client/src/pages/AdminOrders.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          marker = '  const updateMutation = trpc.orderStatus.updateStatus.useMutation({\n'
+          helper = '''  const showStatusEmailResult = (\n    data: {\n      success?: boolean;\n      error?: string;\n      notifications?: {\n        customerEmailSent?: boolean;\n        customerEmailError?: string | null;\n      };\n    },\n    vars: { skipEmail?: boolean }\n  ) => {\n    if (data?.success === false) {\n      toast.error(data.error || "Status não foi atualizado.");\n      return;\n    }\n\n    if (vars.skipEmail) {\n      toast.success("Status atualizado sem notificar o cliente.");\n      return;\n    }\n\n    if (data?.notifications?.customerEmailSent) {\n      toast.success("Status atualizado + e-mail enviado ao cliente.");\n      return;\n    }\n\n    const reason = data?.notifications?.customerEmailError || "Falha no envio do e-mail ao cliente";\n    toast.warning("Status atualizado, mas o e-mail não foi enviado.", {\n      description: `${reason}. Use o botão “Reenviar Email do Status Atual”.`,\n      duration: 12000,\n    });\n  };\n\n'''
+
+          if 'const showStatusEmailResult =' not in text:
+              if marker not in text:
+                  raise SystemExit('marker updateMutation not found')
+              text = text.replace(marker, helper + marker, 1)
+
+          replacements = [
+              (
+                  '    onSuccess: (_data, vars) => {\n      toast.success("Status atualizado!");\n      // Aguardar servidor persistir, depois refetch e limpar override',
+                  '    onSuccess: (data, vars) => {\n      showStatusEmailResult(data, vars);\n      // Aguardar servidor persistir, depois refetch e limpar override',
+              ),
+              (
+                  '  const updateArchivedStatusMutation = trpc.orderStatus.updateStatus.useMutation({\n    onSuccess: (_, vars) => {\n      toast.success("Status atualizado!");',
+                  '  const updateArchivedStatusMutation = trpc.orderStatus.updateStatus.useMutation({\n    onSuccess: (data, vars) => {\n      showStatusEmailResult(data, vars);',
+              ),
+              (
+                  '  const updateRgCnhStatusMutation = trpc.orderStatus.updateStatus.useMutation({\n    onSuccess: (_, vars) => {\n      toast.success("Status atualizado!");',
+                  '  const updateRgCnhStatusMutation = trpc.orderStatus.updateStatus.useMutation({\n    onSuccess: (data, vars) => {\n      showStatusEmailResult(data, vars);',
+              ),
+          ]
+
+          for old, new in replacements:
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif new not in text:
+                  raise SystemExit(f'expected snippet not found: {old[:80]}')
+
+          if text.count('showStatusEmailResult(data, vars);') != 3:
+              raise SystemExit('expected exactly 3 status feedback call sites')
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Email notification tests
+        run: pnpm vitest run server/email-notifications.test.ts
+      - name: Type check
+        run: pnpm check
+      - name: Production build
+        run: pnpm build
+
+      - name: Commit validated change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminOrders.tsx
+          if git diff --cached --quiet; then
+            echo "No code changes to commit"
+            exit 0
+          fi
+          git commit -m "fix(admin): mostrar resultado real do email de status [skip ci]"
+          git push origin HEAD:fix/email-status-feedback-20260831
