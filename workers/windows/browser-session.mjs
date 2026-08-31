@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -19,6 +19,7 @@ const profileDirectory = process.env.H2ADS_PROFILE_DIRECTORY;
 const proxy = JSON.parse(process.env.H2ADS_PROXY_JSON);
 const sessionPath = join(profileDirectory, "h2ads-browser-session.json");
 const labelPagePath = join(profileDirectory, "h2ads-instance-label.html");
+const privacyExtensionDirectory = join(profileDirectory, "h2ads-privacy-extension");
 const instanceName = String(proxy.instanceName || `Instancia ${instanceId}`).trim().slice(0, 128);
 const instanceWindowTitle = `H2ADS | ${instanceName}`;
 const parsedRotationMinutes = Number(proxy.rotationMinutes);
@@ -90,7 +91,7 @@ async function reportObservedIp() {
     lastReportedIp = observedIp;
     writeSession({ observedIp, lastIpReportedAt: checkedAt });
   } catch {
-    // A medição de IP é auxiliar e nunca deve derrubar a sessão ativa.
+    // A medicao de IP e auxiliar e nunca deve derrubar a sessao ativa.
   } finally {
     ipCheckInProgress = false;
   }
@@ -125,9 +126,56 @@ function escapeHtml(value) {
 function createInstanceLabelPage() {
   const safeTitle = escapeHtml(instanceWindowTitle);
   const safeName = escapeHtml(instanceName);
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><style>html,body{margin:0;min-height:100%;font-family:Arial,sans-serif;background:#0b1220;color:#e5eefc}main{min-height:100vh;display:grid;place-items:center;padding:32px;box-sizing:border-box}section{max-width:720px;text-align:center;border:1px solid #23324d;border-radius:20px;padding:32px;background:#101b2e}small{color:#7dd3fc;font-weight:700;letter-spacing:.14em}h1{font-size:32px;margin:12px 0}p{color:#a9bad3;margin:0}</style></head><body><main><section><small>H2 ADS · INSTÂNCIA LOCAL</small><h1>${safeName}</h1><p>Privacy Guard ativo. Esta aba serve somente para identificar esta janela.</p></section></main></body></html>`;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><style>html,body{margin:0;min-height:100%;font-family:Arial,sans-serif;background:#0b1220;color:#e5eefc}main{min-height:100vh;display:grid;place-items:center;padding:32px;box-sizing:border-box}section{max-width:720px;text-align:center;border:1px solid #23324d;border-radius:20px;padding:32px;background:#101b2e}small{color:#7dd3fc;font-weight:700;letter-spacing:.14em}h1{font-size:32px;margin:12px 0}p{color:#a9bad3;margin:0}</style></head><body><main><section><small>H2 ADS · INSTANCIA LOCAL</small><h1>${safeName}</h1><p>Privacy Guard ativo. Esta aba serve somente para identificar esta janela.</p></section></main></body></html>`;
   writeFileSync(labelPagePath, html, { encoding: "utf8", mode: 0o600 });
   return pathToFileURL(labelPagePath).href;
+}
+
+function createGoogleSorryPrivacyGuard() {
+  mkdirSync(privacyExtensionDirectory, { recursive: true });
+
+  const manifest = {
+    manifest_version: 3,
+    name: "H2ADS Privacy Guard",
+    version: "1.0.0",
+    description: "Oculta paginas de bloqueio que exibem informacoes de rede.",
+    permissions: ["declarativeNetRequest"],
+    host_permissions: [
+      "*://*.google.com/*",
+      "*://*.google.com.br/*",
+    ],
+    declarative_net_request: {
+      rule_resources: [{ id: "privacy_rules", enabled: true, path: "rules.json" }],
+    },
+  };
+
+  const rules = [
+    {
+      id: 1,
+      priority: 100,
+      action: { type: "redirect", redirect: { extensionPath: "/blocked.html" } },
+      condition: {
+        regexFilter: "^https?://([^/]+\\.)?google\\.com/sorry(?:[/?#].*)?$",
+        resourceTypes: ["main_frame"],
+      },
+    },
+    {
+      id: 2,
+      priority: 100,
+      action: { type: "redirect", redirect: { extensionPath: "/blocked.html" } },
+      condition: {
+        regexFilter: "^https?://([^/]+\\.)?google\\.com\\.br/sorry(?:[/?#].*)?$",
+        resourceTypes: ["main_frame"],
+      },
+    },
+  ];
+
+  const blockedHtml = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>H2ADS · Protecao de rede</title><style>html,body{margin:0;min-height:100%;font-family:Arial,sans-serif;background:#0b1220;color:#e5eefc}main{min-height:100vh;display:grid;place-items:center;padding:32px;box-sizing:border-box}section{max-width:700px;text-align:center;border:1px solid #23324d;border-radius:20px;padding:36px;background:#101b2e}small{color:#7dd3fc;font-weight:700;letter-spacing:.14em}h1{font-size:30px;margin:12px 0}p{color:#a9bad3;line-height:1.5;margin:0}</style></head><body><main><section><small>H2ADS · PRIVACY GUARD</small><h1>Conexao em verificacao</h1><p>Esta pagina foi ocultada para proteger os dados de rede da instancia. Nenhum endereco IP, usuario, senha, host ou porta do proxy e exibido aqui.</p></section></main></body></html>`;
+
+  writeFileSync(join(privacyExtensionDirectory, "manifest.json"), JSON.stringify(manifest, null, 2), { encoding: "utf8", mode: 0o600 });
+  writeFileSync(join(privacyExtensionDirectory, "rules.json"), JSON.stringify(rules, null, 2), { encoding: "utf8", mode: 0o600 });
+  writeFileSync(join(privacyExtensionDirectory, "blocked.html"), blockedHtml, { encoding: "utf8", mode: 0o600 });
+  return privacyExtensionDirectory;
 }
 
 async function rotateRelay() {
@@ -167,17 +215,19 @@ async function run() {
     const initialIp = await privacyGuardPreflight();
     lastReportedIp = initialIp;
     const labelPageUrl = createInstanceLabelPage();
+    const privacyGuardExtension = createGoogleSorryPrivacyGuard();
     browser = spawn(executable, [
       `--user-data-dir=${profileDirectory}`,
       `--proxy-server=http://127.0.0.1:${relayPort}`,
       "--proxy-bypass-list=<-loopback>",
       "--disable-quic",
       "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      `--load-extension=${privacyGuardExtension}`,
       "--no-first-run",
       "--no-default-browser-check",
       labelPageUrl,
     ], { detached: false, stdio: "ignore", windowsHide: false });
-    writeSession({ startedAt: new Date().toISOString(), instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected" });
+    writeSession({ startedAt: new Date().toISOString(), instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled" });
     if (rotationMinutes) {
       rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
       rotationTimer.unref?.();
