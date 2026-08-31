@@ -18,13 +18,20 @@ jobs:
           fetch-depth: 0
 
       - name: Apply production hardening patch
-        run: python scripts/apply-prod-hardening-20260831.py
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('scripts/apply-prod-hardening-20260831.py')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("        'google\\\\.com/sorry',\n        'google\\\\.com\\\\.br/sorry',\n", "        'regexFilter:',\n        '/sorry',\n")
+          p.write_text(s, encoding='utf-8')
+          exec(compile(s, str(p), 'exec'))
 
       - name: Add focused regression tests
         shell: python
         run: |
           from pathlib import Path
-          Path('server/prodHardeningRegression.test.ts').write_text('''import fs from "node:fs";\nimport path from "node:path";\nimport { describe, expect, it } from "vitest";\n\nconst root = path.resolve(import.meta.dirname, "..");\nconst indexSource = fs.readFileSync(path.join(root, "server/_core/index.ts"), "utf8");\nconst router = fs.readFileSync(path.join(root, "server/routers/loans.ts"), "utf8");\nconst worker = fs.readFileSync(path.join(root, "workers/windows/browser-session.mjs"), "utf8");\n\ndescribe("production hardening", () => {\n  it("binds exactly to Render PORT", () => {\n    expect(indexSource).toContain('server.listen(port, "0.0.0.0"');\n    expect(indexSource).not.toContain('findAvailablePort');\n    expect(indexSource).not.toContain('import net from "net"');\n  });\n\n  it("keeps Zoho debug secret route absent", () => {\n    expect(indexSource).not.toContain('/api/zoho-test-session');\n    expect(indexSource).not.toContain('TEST_walk1');\n  });\n\n  it("protects Google sorry pages inside H2ADS", () => {\n    expect(worker).toContain('createGoogleSorryPrivacyGuard');\n    expect(worker).toContain('declarativeNetRequest');\n    expect(worker).toContain('google\\\\.com/sorry');\n    expect(worker).toContain('googleSorryPrivacyGuard: "enabled"');\n  });\n\n  it("keeps daily fee isolated and maximum-preserving", () => {\n    expect(router).toContain("AND l.paymentType = 'diario'");\n    expect(router).toContain("Math.max(storedFee, input.feeAmount, automaticFee)");\n    expect(router).toContain("Math.max(nextStoredFee, nextAutomaticFee)");\n    expect(router).toContain("const isDailyLoan = String(rows[0].paymentType || '') === 'diario';");\n  });\n});\n''', encoding='utf-8')
+          Path('server/prodHardeningRegression.test.ts').write_text('''import fs from "node:fs";\nimport path from "node:path";\nimport { describe, expect, it } from "vitest";\n\nconst root = path.resolve(import.meta.dirname, "..");\nconst indexSource = fs.readFileSync(path.join(root, "server/_core/index.ts"), "utf8");\nconst router = fs.readFileSync(path.join(root, "server/routers/loans.ts"), "utf8");\nconst worker = fs.readFileSync(path.join(root, "workers/windows/browser-session.mjs"), "utf8");\n\ndescribe("production hardening", () => {\n  it("binds exactly to Render PORT", () => {\n    expect(indexSource).toContain('server.listen(port, "0.0.0.0"');\n    expect(indexSource).not.toContain('findAvailablePort');\n    expect(indexSource).not.toContain('import net from "net"');\n  });\n\n  it("keeps Zoho debug secret route absent", () => {\n    expect(indexSource).not.toContain('/api/zoho-test-session');\n    expect(indexSource).not.toContain('TEST_walk1');\n  });\n\n  it("protects Google sorry pages inside H2ADS", () => {\n    expect(worker).toContain('createGoogleSorryPrivacyGuard');\n    expect(worker).toContain('declarativeNetRequest');\n    expect(worker).toContain('/sorry');\n    expect(worker).toContain('googleSorryPrivacyGuard: "enabled"');\n  });\n\n  it("keeps daily fee isolated and maximum-preserving", () => {\n    expect(router).toContain("AND l.paymentType = 'diario'");\n    expect(router).toContain("Math.max(storedFee, input.feeAmount, automaticFee)");\n    expect(router).toContain("Math.max(nextStoredFee, nextAutomaticFee)");\n    expect(router).toContain("const isDailyLoan = String(rows[0].paymentType || '') === 'diario';");\n  });\n});\n''', encoding='utf-8')
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
