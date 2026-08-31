@@ -17,6 +17,7 @@ import UnifiedCustomerAccessGate from "./components/UnifiedCustomerAccessGate";
 import UnifiedCustomerModuleBootstrap from "./components/UnifiedCustomerModuleBootstrap";
 import GlobalDevToolsProtection from "./components/GlobalDevToolsProtection";
 import AdminDevToolsTargetSelector from "./components/AdminDevToolsTargetSelector";
+import RafflePhotoRestorer from "./components/RafflePhotoRestorer";
 import "./index.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
@@ -100,6 +101,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <GlobalDevToolsProtection />
       <AdminDevToolsTargetSelector />
+      <RafflePhotoRestorer />
       <AdminProductsQuestionUXEnhancer />
       <AdminQuestionEditOptionsEnhancer />
       <AdminQuestionTreeOrderEnhancer />
