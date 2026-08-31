@@ -2,9 +2,9 @@ import type { MouseEvent } from "react";
 import { Play, Square } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { resolveH2AdsOrderBrowserShortcutState } from "@shared/h2adsOrderBrowserShortcut";
+import { resolveH2AdsOrderBrowserShortcutState, resolveH2AdsOrderLinkRepairCandidate } from "@shared/h2adsOrderBrowserShortcut";
 
-export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderIndex }: { registrationId: number; subOrderIndex: number }) {
+export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderIndex, customerNumber, serviceName, serviceOption }: { registrationId: number; subOrderIndex: number; customerNumber?: number | null; serviceName?: string | null; serviceOption?: string | null }) {
   const utils = trpc.useUtils();
   const linksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, {
     staleTime: 0,
@@ -18,8 +18,10 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
+  const ordersQuery = trpc.orderStatus.listOrders.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
   const launchBrowser = trpc.h2Ads.launchBrowser.useMutation();
   const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();
+  const setOrderLink = trpc.h2Ads.setOrderLink.useMutation();
 
   const dashboard = dashboardQuery.data;
   const shortcut = resolveH2AdsOrderBrowserShortcutState({
@@ -32,9 +34,18 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     runs: (dashboard?.instanceBrowserRuns ?? []) as any[],
   });
 
-  if (!shortcut) return null;
+  const repairCandidateInstanceId = shortcut ? null : resolveH2AdsOrderLinkRepairCandidate({
+    registrationId,
+    subOrderIndex,
+    customerNumber,
+    serviceName,
+    serviceOption,
+    links: (linksQuery.data ?? []) as any[],
+    orders: (ordersQuery.data ?? []) as any[],
+  });
 
-  const pending = launchBrowser.isPending || closeBrowser.isPending;
+  const pending = launchBrowser.isPending || closeBrowser.isPending || setOrderLink.isPending;
+  if (!shortcut && repairCandidateInstanceId === null) return null;
   const refresh = async () => {
     await Promise.all([
       utils.h2Ads.listDashboard.invalidate(),
@@ -65,6 +76,25 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       toast.error(error instanceof Error ? error.message : "Não foi possível fechar o browser H2ADS.");
     }
   };
+
+  const repairLink = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (repairCandidateInstanceId === null || pending) return;
+    try {
+      await setOrderLink.mutateAsync({ instanceId: repairCandidateInstanceId, registrationId, subOrderIndex });
+      toast.success("Vínculo H2ADS corrigido para este pedido.");
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível corrigir o vínculo H2ADS.");
+    }
+  };
+
+  if (!shortcut) {
+    return <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/10 p-0.5" title="Existe uma instância compatível vinculada a outro pedido deste mesmo cliente/serviço." onClick={event => event.stopPropagation()}>
+      <span className="px-1 text-[9px] font-black uppercase tracking-wide text-amber-300">H2ADS</span>
+      <button type="button" onClick={repairLink} disabled={pending} className="rounded-full border border-amber-500/35 bg-amber-500/15 px-2 py-1 text-[9px] font-black text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-30">VINCULAR</button>
+    </span>;
+  }
 
   const statusTitle = shortcut.reason || (shortcut.state === "browser_open" ? "Browser H2ADS aberto" : "Browser H2ADS pronto");
 
