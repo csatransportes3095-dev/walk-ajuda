@@ -5,7 +5,6 @@ process.env.TZ = "UTC";
 import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
-import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerStorageProxy } from "./storageProxy";
 import { registerUploadRoute } from "../uploadRoute";
@@ -110,25 +109,6 @@ export function getClientIp(req: express.Request): string {
     return ips[0].trim();
   }
   return req.socket?.remoteAddress || "unknown";
-}
-
-function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
-  });
-}
-
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`No available port found starting from ${startPort}`);
 }
 
 function escapeHtml(value: string) {
@@ -358,10 +338,14 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = Number(process.env.PORT || 3000);
-  const port = await findAvailablePort(preferredPort);
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+  const port = Number.parseInt(process.env.PORT || "3000", 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid PORT configuration");
+  server.once("error", (error) => {
+    console.error("[Server] failed to listen on configured PORT:", error);
+    scheduleFatalProcessExit();
+  });
+  server.listen(port, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${port}/`);
   });
 }
 

@@ -703,19 +703,11 @@ function LoansTab() {
   const [feeCustomAmount, setFeeCustomAmount] = useState("");
   const handleOpenLateFee = useCallback((inst: any, loanId: number) => {
     const dueDate = civilDate(inst.dueDate);
-    const clock = brazilClock();
     if (!dueDate) {
       toast.error(`A parcela #${inst.installmentNumber} não possui um vencimento válido.`);
       return;
     }
-    if (dueDate > clock.date) {
-      toast.info(`A parcela #${inst.installmentNumber} ainda não venceu (vencimento: ${fmtDate(dueDate)}). A taxa de atraso só pode ser aplicada após o vencimento.`);
-      return;
-    }
-    if (dueDate === clock.date && clock.hour < 18) {
-      toast.info(`A parcela #${inst.installmentNumber} vence hoje (${fmtDate(dueDate)}). A taxa de atraso fica disponível após 18h.`);
-      return;
-    }
+    // Taxa manual do ADM pode ser aplicada em qualquer data/horario para emprestimo diario.
     setFeeModal({ inst, loanId });
     setFeeCustomAmount("");
   }, []);
@@ -2017,7 +2009,7 @@ function LoansTab() {
             const feeAfter20h = cfg ? parseFloat(String(cfg.fee_after_20h)) || 0 : 10;
             const feeMidnightPct = cfg ? parseFloat(String(cfg.fee_after_midnight_pct)) || 100 : 100;
             const feeTotal18_20 = feeAfter18h + feeAfter20h;
-            const feeMidnight = Math.round(originalAmt * (feeMidnightPct / 100) * 100) / 100;
+            const feeMidnight = Math.max(feeTotal18_20, Math.round(originalAmt * (feeMidnightPct / 100) * 100) / 100);
             const feeAfterMidnight = Math.max(feeTotal18_20, feeMidnight);
             const activeTier = dueDate < clock.date ? "after_midnight" : clock.hour >= 20 ? "after_20" : "after_18";
             const customFee = parseFloat(feeCustomAmount) || 0;
@@ -2035,7 +2027,7 @@ function LoansTab() {
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeAfter18h })}
                       disabled={activeTier !== "after_18" || applyLateFee.isPending}
                     >
-                      <span className="text-sm text-amber-300">Taxa 18h–20h{activeTier === "after_18" ? " (faixa atual)" : ""}</span>
+                      <span className="text-sm text-amber-300">Taxa manual — regra 18:01{activeTier === "after_18" ? " (faixa atual)" : ""}</span>
                       <span className="text-sm font-bold text-amber-400">+R$ {feeAfter18h.toFixed(2).replace('.', ',')}</span>
                     </button>
                     <button
@@ -2043,7 +2035,7 @@ function LoansTab() {
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeTotal18_20 })}
                       disabled={activeTier !== "after_20" || applyLateFee.isPending}
                     >
-                      <span className="text-sm text-orange-300">Taxa 20h–23:59 (acumulada){activeTier === "after_20" ? " (faixa atual)" : ""}</span>
+                      <span className="text-sm text-orange-300">Taxa manual acumulada — regra 20:01{activeTier === "after_20" ? " (faixa atual)" : ""}</span>
                       <span className="text-sm font-bold text-orange-400">+R$ {feeTotal18_20.toFixed(2).replace('.', ',')}</span>
                     </button>
                     <button
@@ -2051,7 +2043,7 @@ function LoansTab() {
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeAfterMidnight })}
                       disabled={activeTier !== "after_midnight" || applyLateFee.isPending}
                     >
-                      <span className="text-sm text-red-300">Taxa após meia-noite ({feeMidnightPct}%){activeTier === "after_midnight" ? " (faixa atual)" : ""}</span>
+                      <span className="text-sm text-red-300">Taxa final — 23:59 ({feeMidnightPct}%){activeTier === "after_midnight" ? " (faixa atual)" : ""}</span>
                       <span className="text-sm font-bold text-red-400">+R$ {feeAfterMidnight.toFixed(2).replace('.', ',')}</span>
                     </button>
                   </div>
