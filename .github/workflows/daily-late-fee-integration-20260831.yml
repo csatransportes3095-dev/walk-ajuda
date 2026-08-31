@@ -1,0 +1,236 @@
+name: Daily late fee integration 20260831
+
+on:
+  push:
+    branches:
+      - fix/daily-late-fees-20260831
+
+permissions:
+  contents: write
+
+jobs:
+  patch-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare proven server patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p = Path('server/routers/loans.ts')
+          s = p.read_text(encoding='utf-8')
+          old_import = 'import { calculateLateFeeForInstallment } from "../loans/lateFee";'
+          if s.count(old_import) != 1:
+              raise SystemExit('lateFee import changed')
+          s = s.replace(old_import, 'import { calculateLateFeeForInstallment, isLateFeeWindowOpen } from "../loans/lateFee";', 1)
+          pattern = r'function getBrazilClock\(now = new Date\(\)\): \{ date: string; hour: number \} \{[\s\S]*?\n\}\n\nfunction getBrazilToday\(\): string \{'
+          replacement = '''function getBrazilClock(now = new Date()): { today: string; date: string; hour: number } {
+            const parts = new Intl.DateTimeFormat("en-US", {
+              timeZone: "America/Sao_Paulo",
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              hourCycle: "h23",
+            }).formatToParts(now);
+            const valueOf = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "0";
+            const today = `${valueOf("year")}-${valueOf("month")}-${valueOf("day")}`;
+            return { today, date: today, hour: Number(valueOf("hour")) };
+          }
+
+          function getBrazilToday(): string {'''
+          s2, n = re.subn(pattern, replacement, s, count=1)
+          if n != 1:
+              raise SystemExit(f'clock prepare mismatch: {n}')
+          p.write_text(s2, encoding='utf-8')
+
+      - name: Reuse isolated daily server patch logic
+        run: |
+          git fetch origin fix/daily-late-fee-audit-20260831
+          git show origin/fix/daily-late-fee-audit-20260831:scripts/patch-daily-late-fee.mjs > /tmp/patch-daily.mjs
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/patch-daily.mjs')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace("patchLoansRouter();\npatchAdminLoans();\npatchPublicLoans();\nconsole.log('PATCH_DAILY_LATE_FEE_OK');", "patchLoansRouter();\nconsole.log('PATCH_DAILY_LATE_FEE_SERVER_OK');")
+          p.write_text(s, encoding='utf-8')
+          PY
+          node /tmp/patch-daily.mjs
+
+      - name: Harden maximum fee and next installment
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('server/routers/loans.ts')
+          s=p.read_text(encoding='utf-8')
+
+          old = 'SELECT li.*, l.id as loanId FROM loanInstallments li'
+          if s.count(old) != 1:
+              raise SystemExit(f'next installment select mismatch: {s.count(old)}')
+          s=s.replace(old, 'SELECT li.*, l.id as loanId, l.paymentType AS loanPaymentType FROM loanInstallments li', 1)
+
+          anchor = '      nextInstallment = nextInsts[0] || null;\n'
+          if s.count(anchor) != 1:
+              raise SystemExit('next installment assignment mismatch')
+          extra = '''      nextInstallment = nextInsts[0] || null;
+      if (nextInstallment && String(nextInstallment.loanPaymentType || '') === 'diario' && !client.late_fee_disabled) {
+        const nextFeeConfigRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+        const nextBaseAmount = nextInstallment.originalAmount != null ? Number(nextInstallment.originalAmount || 0) : Number(nextInstallment.amount || 0);
+        const nextStoredFee = Number(nextInstallment.feeApplied || 0);
+        const nextAutomaticFee = calculateLateFeeForInstallment({
+          dueDate: nextInstallment.dueDate,
+          amount: nextBaseAmount,
+          config: nextFeeConfigRows[0],
+          clock: getBrazilClock(),
+        });
+        const nextEffectiveFee = Math.max(nextStoredFee, nextAutomaticFee);
+        if (nextEffectiveFee > 0) {
+          nextInstallment = {
+            ...nextInstallment,
+            amount: Math.round((nextBaseAmount + nextEffectiveFee) * 100) / 100,
+            originalAmount: nextBaseAmount.toFixed(2),
+            feeApplied: nextEffectiveFee.toFixed(2),
+            lateFeePreview: nextAutomaticFee > nextStoredFee,
+          };
+        }
+      }
+'''
+          s=s.replace(anchor, extra, 1)
+
+          manual_pattern = r'''    // O ADM pode aplicar manualmente a taxa em qualquer data/horário\.[\s\S]*?    return \{ ok: true, originalAmount, feeAmount: input\.feeAmount, newAmount \};'''
+          manual_repl = '''    // O ADM pode aplicar manualmente a taxa em qualquer data/horário.
+    // Mesmo no manual, nunca e permitido reduzir uma taxa automatica valida ou uma taxa ja gravada.
+    const originalAmount = current.originalAmount != null ? parseFloat(current.originalAmount) : parseFloat(current.amount);
+    const storedFee = current.feeApplied != null ? parseFloat(current.feeApplied) : 0;
+    const cfgRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+    const automaticFee = calculateLateFeeForInstallment({
+      dueDate: current.dueDate,
+      amount: originalAmount,
+      config: cfgRows[0],
+      clock: getBrazilClock(),
+    });
+    const effectiveFee = Math.max(storedFee, input.feeAmount, automaticFee);
+    const newAmount = Math.round((originalAmount + effectiveFee) * 100) / 100;
+    const spNow = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const note = input.feeNote || `Taxa diaria manual: +R$ ${effectiveFee.toFixed(2).replace('.', ',')} aplicada pelo ADM em ${spNow}`;
+    await db.execute(drizzleSql`
+      UPDATE loanInstallments
+      SET amount=${newAmount.toFixed(2)}, originalAmount=${originalAmount.toFixed(2)}, feeApplied=${effectiveFee.toFixed(2)}, notes=${note}
+      WHERE id=${input.installmentId}
+    `);
+    return { ok: true, originalAmount, feeAmount: effectiveFee, newAmount };'''
+          s2,n=re.subn(manual_pattern, manual_repl, s, count=1)
+          if n != 1:
+              raise SystemExit(f'manual maximum patch mismatch: {n}')
+          s=s2
+
+          # Regression invariants in production source.
+          required = [
+            "l.paymentType AS loanPaymentType",
+            "String(row.loanPaymentType || '') === 'diario'",
+            "const effectiveFee = Math.max(storedFee, automaticFee);",
+            "String(installment.loanPaymentType || '') !== 'diario'",
+            "Math.max(storedFee, input.feeAmount, automaticFee)",
+            "AND l.paymentType = 'diario'",
+            "li.dueDate <= ${clock.today}",
+            "nextEffectiveFee = Math.max(nextStoredFee, nextAutomaticFee)",
+          ]
+          for item in required:
+              if item not in s:
+                  raise SystemExit(f'missing server invariant: {item}')
+          if 'Taxa de atraso só pode ser aplicada após o vencimento' in s:
+              raise SystemExit('manual due-date barrier still present')
+          p.write_text(s, encoding='utf-8')
+
+      - name: Patch public and admin UI
+        shell: python
+        run: |
+          from pathlib import Path
+
+          pub=Path('client/src/pages/LoansTab.tsx')
+          s=pub.read_text(encoding='utf-8')
+          pairs=[
+            ('function LateFeePanel({ config, installmentAmount }: { config: any; installmentAmount?: number }) {\n  if (!config?.enabled) return null;', 'function LateFeePanel({ config, installmentAmount, paymentType }: { config: any; installmentAmount?: number; paymentType?: string }) {\n  if (!config?.enabled || paymentType !== "diario") return null;'),
+            ('Das 18h até 19:59:', 'Das 18:01 até 20:00:'),
+            ('A partir das 20h:', 'Das 20:01 até 23:58:'),
+            ('Após 23:59:', 'Às 23:59 e depois:'),
+          ]
+          for a,b in pairs:
+              if a not in s: raise SystemExit(f'public marker missing: {a}')
+              s=s.replace(a,b,1)
+          if '<LateFeePanel config={lateFeeConfig} />' in s:
+              s=s.replace('<LateFeePanel config={lateFeeConfig} />','<LateFeePanel config={lateFeeConfig} paymentType="diario" />',1)
+          marker='<LateFeePanel config={lateFeeConfig} installmentAmount={totalAmt / Math.max(totalCount, 1)} />'
+          if marker not in s: raise SystemExit('loan late fee panel marker missing')
+          s=s.replace(marker,'<LateFeePanel config={lateFeeConfig} installmentAmount={totalAmt / Math.max(totalCount, 1)} paymentType={loan.paymentType} />',1)
+          pub.write_text(s,encoding='utf-8')
+
+          adm=Path('client/src/pages/AdminLoans.tsx')
+          a=adm.read_text(encoding='utf-8')
+          old='const feeMidnight = Math.round(originalAmt * (feeMidnightPct / 100) * 100) / 100;'
+          if old not in a: raise SystemExit('admin midnight formula marker missing')
+          a=a.replace(old,'const feeMidnight = Math.max(feeTotal18_20, Math.round(originalAmt * (feeMidnightPct / 100) * 100) / 100);',1)
+          count=a.count(') : inst.isOverdue ? (')
+          if count != 2: raise SystemExit(f'expected 2 +Taxa visibility markers, found {count}')
+          a=a.replace(') : inst.isOverdue ? (', ') : loan.paymentType === "diario" ? (')
+          a=a.replace('Taxa 18h–20h', 'Taxa manual — regra 18:01')
+          a=a.replace('Taxa 20h–23:59 (acumulada)', 'Taxa manual acumulada — regra 20:01')
+          a=a.replace('Taxa após meia-noite ({feeMidnightPct}%)', 'Taxa final — 23:59 ({feeMidnightPct}%)')
+          adm.write_text(a,encoding='utf-8')
+
+      - name: Add integration regression test
+        shell: python
+        run: |
+          from pathlib import Path
+          Path('server/dailyLateFeeIntegration.test.ts').write_text('''import fs from "node:fs";\nimport path from "node:path";\nimport { describe, expect, it } from "vitest";\n\nconst root = path.resolve(import.meta.dirname, "..");\nconst router = fs.readFileSync(path.join(root, "server/routers/loans.ts"), "utf8");\nconst publicUi = fs.readFileSync(path.join(root, "client/src/pages/LoansTab.tsx"), "utf8");\nconst adminUi = fs.readFileSync(path.join(root, "client/src/pages/AdminLoans.tsx"), "utf8");\n\ndescribe("daily late fee integration", () => {\n  it("restricts automatic and manual late fees to daily loans", () => {\n    expect(router).toContain("String(row.loanPaymentType || '') === 'diario'");\n    expect(router).toContain("String(installment.loanPaymentType || '') !== 'diario'");\n    expect(router).toContain("AND l.paymentType = 'diario'");\n    expect(router).toContain("Taxa diária disponível somente em empréstimos com pagamento diário.");\n  });\n  it("never lowers a valid stored, manual or automatic fee", () => {\n    expect(router).toContain("Math.max(storedFee, input.feeAmount, automaticFee)");\n    expect(router).toContain("Math.max(storedFee, automaticFee)");\n    expect(router).toContain("Math.max(nextStoredFee, nextAutomaticFee)");\n  });\n  it("uses minute-exact Sao Paulo bands and public daily-only panel", () => {\n    expect(router).toContain("minute: Number(valueOf(\\\"minute\\\"))");\n    expect(publicUi).toContain("Das 18:01 até 20:00:");\n    expect(publicUi).toContain("Das 20:01 até 23:58:");\n    expect(publicUi).toContain("Às 23:59 e depois:");\n    expect(publicUi).toContain('paymentType={loan.paymentType}');\n  });\n  it("keeps ADM manual button available on daily installments and correct midnight preset", () => {\n    expect(adminUi).toContain('loan.paymentType === "diario" ? (');\n    expect(adminUi).toContain("Math.max(feeTotal18_20");\n  });\n});\n''', encoding='utf-8')
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Restore legacy lockfile
+        run: git checkout -- pnpm-lock.yaml
+
+      - name: Formula and integration tests
+        run: pnpm exec vitest run server/loans/lateFee.test.ts server/dailyLateFeeIntegration.test.ts
+
+      - name: TypeScript baseline guard
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/check.log 2>&1
+          status=$?
+          cat /tmp/check.log
+          set -e
+          if [ "$status" -eq 0 ]; then exit 0; fi
+          errors=$(grep -c "error TS" /tmp/check.log || true)
+          if [ "$errors" -eq 1 ] && grep -Fq "tsconfig.json(17,29): error TS5103: Invalid value for '--ignoreDeprecations'." /tmp/check.log; then
+            echo "Known main-branch tsconfig baseline only."
+            exit 0
+          fi
+          exit 1
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Commit validated integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/loans.ts client/src/pages/LoansTab.tsx client/src/pages/AdminLoans.tsx server/dailyLateFeeIntegration.test.ts
+          git commit -m "fix(loans): integrate daily late fee end to end [skip ci]"
+          git push origin HEAD:fix/daily-late-fees-20260831
