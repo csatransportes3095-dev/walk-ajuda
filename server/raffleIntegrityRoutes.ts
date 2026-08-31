@@ -1,11 +1,29 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { sql } from "drizzle-orm";
+import { parse as parseCookieHeader } from "cookie";
+import jwt from "jsonwebtoken";
 import { getDb } from "./db";
+import { getAdminJwtSecret } from "./adminJwt";
 
 type RafflePhotoRow = {
   number: number | string;
   customerProfilePhotoUrl: string | null;
 };
+
+type AdminPayload = { sub?: string; role?: string };
+
+function isAuthenticatedAdmin(req: Request): boolean {
+  try {
+    const cookies = parseCookieHeader(req.headers.cookie || "");
+    const token = cookies.admin_token;
+    const secret = getAdminJwtSecret();
+    if (!token || !secret) return false;
+    const payload = jwt.verify(token, secret) as AdminPayload;
+    return payload.role === "admin";
+  } catch {
+    return false;
+  }
+}
 
 async function loadRafflePhotos(raffleId: number) {
   const db = await getDb();
@@ -31,7 +49,9 @@ async function loadRafflePhotos(raffleId: number) {
 /**
  * Regras de integridade do sorteio:
  * - número confirmado nunca pode ser liberado;
- * - fotos do mapa vêm sempre do cadastro principal do cliente.
+ * - fotos do mapa vêm sempre do cadastro principal do cliente;
+ * - um sorteio já marcado como realizado pode ser reaberto pelo ADM sem tocar
+ *   em nenhuma entrada/número, apenas limpando o resultado anterior.
  */
 export function registerRaffleIntegrityRoutes(app: Express): void {
   app.use((req, res, next) => {
@@ -108,6 +128,105 @@ export function registerRaffleIntegrityRoutes(app: Express): void {
     } catch (error) {
       console.error("[RaffleIntegrity] erro ao carregar fotos do mapa:", error);
       res.status(500).json({ error: "Não foi possível carregar as fotos do sorteio." });
+    }
+  });
+
+  app.get("/api/admin/raffle/reopen-status", async (req, res) => {
+    if (!isAuthenticatedAdmin(req)) {
+      res.status(401).json({ error: "Não autorizado." });
+      return;
+    }
+    try {
+      const db = await getDb();
+      if (!db) { res.status(503).json({ error: "Banco indisponível." }); return; }
+      const result = await db.execute(sql`
+        SELECT id, title, status, winnerNumber, winnerName
+        FROM raffles
+        ORDER BY id DESC
+        LIMIT 1
+      `);
+      const row = ((result[0] as unknown as Array<{
+        id: number | string;
+        title: string;
+        status: string;
+        winnerNumber: number | string | null;
+        winnerName: string | null;
+      }>) || [])[0];
+      res.setHeader("Cache-Control", "no-store, no-cache, max-age=0, must-revalidate");
+      if (!row) {
+        res.json({ canReopen: false, raffle: null });
+        return;
+      }
+      res.json({
+        canReopen: row.status === "drawn",
+        raffle: {
+          id: Number(row.id),
+          title: row.title,
+          status: row.status,
+          winnerNumber: row.winnerNumber == null ? null : Number(row.winnerNumber),
+          winnerName: row.winnerName,
+        },
+      });
+    } catch (error) {
+      console.error("[RaffleIntegrity] erro ao verificar reabertura:", error);
+      res.status(500).json({ error: "Não foi possível verificar o sorteio." });
+    }
+  });
+
+  app.post("/api/admin/raffle/reopen", async (req, res) => {
+    if (!isAuthenticatedAdmin(req)) {
+      res.status(401).json({ error: "Não autorizado." });
+      return;
+    }
+    const raffleId = Number(req.body?.raffleId);
+    if (!Number.isInteger(raffleId) || raffleId <= 0) {
+      res.status(400).json({ error: "Sorteio inválido." });
+      return;
+    }
+    try {
+      const db = await getDb();
+      if (!db) { res.status(503).json({ error: "Banco indisponível." }); return; }
+
+      const check = await db.execute(sql`
+        SELECT id, status FROM raffles WHERE id = ${raffleId} LIMIT 1
+      `);
+      const raffle = ((check[0] as unknown as Array<{ id: number | string; status: string }>) || [])[0];
+      if (!raffle) {
+        res.status(404).json({ error: "Sorteio não encontrado." });
+        return;
+      }
+      if (raffle.status !== "drawn") {
+        res.status(409).json({ error: "Este sorteio não está marcado como realizado." });
+        return;
+      }
+
+      const countResult = await db.execute(sql`
+        SELECT COUNT(*) AS total FROM raffleEntries WHERE raffleId = ${raffleId}
+      `);
+      const totalEntries = Number(((countResult[0] as unknown as Array<{ total: number | string }>) || [])[0]?.total || 0);
+      if (totalEntries === 0) {
+        res.status(409).json({ error: "Sorteio sem participantes; reabertura cancelada." });
+        return;
+      }
+
+      // IMPORTANTE: nenhuma linha de raffleEntries é alterada ou removida.
+      // Apenas o resultado anterior é limpo e o mesmo sorteio volta para 'open'.
+      await db.execute(sql`
+        UPDATE raffles
+        SET
+          status = 'open',
+          winnerNumber = NULL,
+          winnerName = NULL,
+          winnerPhone = NULL,
+          winnerProfilePhotoUrl = NULL,
+          drawnAt = NULL
+        WHERE id = ${raffleId} AND status = 'drawn'
+      `);
+
+      res.json({ success: true, raffleId, preservedEntries: totalEntries });
+    } catch (error) {
+      console.error("[RaffleIntegrity] erro ao reabrir sorteio:", error);
+      res.status(500).json({ error: "Não foi possível reabrir o sorteio." });
     }
   });
 }
