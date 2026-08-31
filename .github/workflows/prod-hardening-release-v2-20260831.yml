@@ -60,8 +60,39 @@ jobs:
         run: git checkout -- pnpm-lock.yaml
       - name: Focused tests
         run: pnpm exec vitest run server/loans/lateFee.test.ts server/dailyLateFeeIntegration.test.ts server/prodHardeningRegression.test.ts
-      - name: TypeScript check
-        run: pnpm check
+      - name: TypeScript regression guard against production
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/release-check.log 2>&1
+          release_status=$?
+          set -e
+          grep "error TS" /tmp/release-check.log | sort > /tmp/release-errors.txt || true
+          echo "Release TypeScript errors:"
+          cat /tmp/release-errors.txt
+
+          git stash push -u -m release-validation-state
+          git checkout --detach origin/recovery/organizar-salvos-2026-08-24
+          set +e
+          pnpm check > /tmp/base-check.log 2>&1
+          base_status=$?
+          set -e
+          grep "error TS" /tmp/base-check.log | sort > /tmp/base-errors.txt || true
+          echo "Production baseline TypeScript errors:"
+          cat /tmp/base-errors.txt
+
+          git checkout release/prod-hardening-20260831
+          git stash pop
+
+          if ! diff -u /tmp/base-errors.txt /tmp/release-errors.txt; then
+            echo "Release introduced or changed TypeScript errors. Refusing release."
+            exit 1
+          fi
+          if [ "$release_status" -ne "$base_status" ]; then
+            echo "TypeScript exit status differs from production baseline. Refusing release."
+            exit 1
+          fi
+          echo "No new TypeScript errors versus current production baseline."
       - name: Production build
         run: pnpm build
       - name: Commit validated release
