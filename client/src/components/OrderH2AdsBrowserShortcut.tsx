@@ -34,7 +34,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     runs: (dashboard?.instanceBrowserRuns ?? []) as any[],
   });
 
-  const repairCandidateInstanceId = shortcut ? null : resolveH2AdsOrderLinkRepairCandidate({
+  const repairCandidate = shortcut ? null : resolveH2AdsOrderLinkRepairCandidate({
     registrationId,
     subOrderIndex,
     customerNumber,
@@ -45,7 +45,8 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   });
 
   const pending = launchBrowser.isPending || closeBrowser.isPending || setOrderLink.isPending;
-  if (!shortcut && repairCandidateInstanceId === null) return null;
+  if (!shortcut && repairCandidate === null) return null;
+
   const refresh = async () => {
     await Promise.all([
       utils.h2Ads.listDashboard.invalidate(),
@@ -55,7 +56,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
 
   const openBrowser = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (!shortcut.canOpen || pending) return;
+    if (!shortcut?.canOpen || pending) return;
     try {
       await launchBrowser.mutateAsync({ instanceId: shortcut.instanceId });
       toast.success("Comando para abrir o browser H2ADS enviado.");
@@ -67,7 +68,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
 
   const closeBrowserNow = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (!shortcut.canClose || pending) return;
+    if (!shortcut?.canClose || pending) return;
     try {
       await closeBrowser.mutateAsync({ instanceId: shortcut.instanceId });
       toast.success("Comando para fechar o browser H2ADS enviado.");
@@ -79,9 +80,18 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
 
   const repairLink = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (repairCandidateInstanceId === null || pending) return;
+    if (!repairCandidate || pending) return;
+
+    const sourceLabel = repairCandidate.linkedOrderNumber
+      ? `pedido #${repairCandidate.linkedOrderNumber}`
+      : `registro ${repairCandidate.linkedRegistrationId}, subpedido ${repairCandidate.linkedSubOrderIndex + 1}`;
+    const confirmed = window.confirm(
+      `A instância H2ADS compatível está vinculada atualmente ao ${sourceLabel}.\n\nDeseja transferir o vínculo para este pedido/subpedido?\n\nO browser não será aberto automaticamente.`
+    );
+    if (!confirmed) return;
+
     try {
-      await setOrderLink.mutateAsync({ instanceId: repairCandidateInstanceId, registrationId, subOrderIndex });
+      await setOrderLink.mutateAsync({ instanceId: repairCandidate.instanceId, registrationId, subOrderIndex });
       toast.success("Vínculo H2ADS corrigido para este pedido.");
       await refresh();
     } catch (error) {
@@ -89,13 +99,17 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     }
   };
 
-  if (!shortcut) {
-    return <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/10 p-0.5" title="Existe uma instância compatível vinculada a outro pedido deste mesmo cliente/serviço." onClick={event => event.stopPropagation()}>
+  if (!shortcut && repairCandidate) {
+    const sourceTitle = repairCandidate.linkedOrderNumber
+      ? `Instância compatível vinculada ao pedido #${repairCandidate.linkedOrderNumber}. Clique em VINCULAR para revisar e confirmar a transferência.`
+      : "Instância compatível vinculada a outro pedido/subpedido. Clique em VINCULAR para revisar e confirmar a transferência.";
+    return <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/10 p-0.5" title={sourceTitle} onClick={event => event.stopPropagation()}>
       <span className="px-1 text-[9px] font-black uppercase tracking-wide text-amber-300">H2ADS</span>
       <button type="button" onClick={repairLink} disabled={pending} className="rounded-full border border-amber-500/35 bg-amber-500/15 px-2 py-1 text-[9px] font-black text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-30">VINCULAR</button>
     </span>;
   }
 
+  if (!shortcut) return null;
   const statusTitle = shortcut.reason || (shortcut.state === "browser_open" ? "Browser H2ADS aberto" : "Browser H2ADS pronto");
 
   return <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/35 bg-cyan-500/10 p-0.5" title={statusTitle} onClick={event => event.stopPropagation()}>
