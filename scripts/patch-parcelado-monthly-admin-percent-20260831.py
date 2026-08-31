@@ -36,12 +36,11 @@ source = replace_once(
     'simulacao cliente usa plano ADM',
 )
 
-source = replace_once(
-    source,
-    '''    frequencia: z.enum(['mensal', 'quinzenal', 'semanal']).default('mensal'),''',
-    '''    frequencia: z.literal('mensal').default('mensal'),''',
-    'simulacao adm mensal somente',
-)
+old_frequency = "    frequencia: z.enum(['mensal', 'quinzenal', 'semanal']).default('mensal'),"
+count_frequency = source.count(old_frequency)
+if count_frequency != 2:
+    raise SystemExit(f'frequencia parcelado: esperado 2 trechos, encontrado {count_frequency}')
+source = source.replace(old_frequency, "    frequencia: z.literal('mensal').default('mensal'),", 2)
 
 source = replace_once(
     source,
@@ -59,15 +58,6 @@ source = replace_once(
     // Parcelado é sempre mensal.
     const schedule = generateInstallments(input.releaseDate, 'mensal', input.parcelas, total);''',
     'simulacao adm central mensal',
-)
-
-source = replace_once(
-    source,
-    '''    frequencia: z.enum(['mensal', 'quinzenal', 'semanal']).default('mensal'),
-    primeiroVencimento: z.string().optional(),''',
-    '''    frequencia: z.literal('mensal').default('mensal'),
-    primeiroVencimento: z.string().optional(),''',
-    'pedido mensal somente',
 )
 
 source = replace_once(
@@ -90,6 +80,9 @@ source = replace_once(
     '''      return { id: loanId, parcelas: input.parcelas, valorParcela: calc.perInstallment, valorTotal: total, primeiroVencimento: schedule[0].dueDate, frequencia: 'mensal' as const };''',
     'retorno pedido central',
 )
+
+if "z.enum(['mensal', 'quinzenal', 'semanal']).default('mensal')" in source:
+    raise SystemExit('parcelado ainda aceita frequência variável no backend')
 
 router.write_text(source, encoding='utf-8')
 
