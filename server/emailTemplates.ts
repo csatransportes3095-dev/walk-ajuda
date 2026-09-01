@@ -124,9 +124,9 @@ function ctaButton(text: string, url: string): string {
   </div>`;
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // TEMPLATES PÍšBLICOS
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** E-mail de atualização de status para o CLIENTE */
 export function emailStatusCliente(opts: {
@@ -250,7 +250,6 @@ export function emailNovoPedidoAdmin(opts: {
   if (email) rows.push(infoRow('E-mail:', `<a href="mailto:${email}" style="color:#a855f7;text-decoration:none;">${email}</a>`));
   if (cpf) rows.push(infoRow('CPF:', cpf));
 
-  // Bloco de informações extras (cidade, indicação, ano)
   const infoItems: string[] = [];
   if (city) infoItems.push(` <strong>Cidade:</strong> ${city}`);
   if (referrer) infoItems.push(` <strong>Indicado por:</strong> ${referrer}`);
@@ -262,7 +261,6 @@ export function emailNovoPedidoAdmin(opts: {
       ${infoItems.map(item => `<p style="color:#ccc;font-size:13px;margin:6px 0;line-height:1.6;">${item}</p>`).join('')}
     </div>` : '';
 
-  // Bloco de respostas do formulário (cada pergunta em linha separada)
   const answersBlock = answers && answers.length > 0 ? `
     <div style="background:#1a0a2e;border-left:3px solid #a855f7;border-radius:0 8px 8px 0;padding:14px 16px;margin-top:16px;">
       <p style="color:#a855f7;font-size:11px;font-weight:700;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px;"> Respostas do Formulário</p>
@@ -273,7 +271,6 @@ export function emailNovoPedidoAdmin(opts: {
         </div>`).join('')}
     </div>` : '';
 
-  // Bloco de comprovante PIX
   const pixBlock = paymentProofUrl ? `
     <div style="background:#0f1a10;border-left:3px solid #22c55e;border-radius:0 8px 8px 0;padding:14px 16px;margin-top:16px;">
       <p style="color:#22c55e;font-size:11px;font-weight:700;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;"> Comprovante PIX</p>
@@ -284,14 +281,12 @@ export function emailNovoPedidoAdmin(opts: {
       <p style="color:#888;font-size:13px;margin:0;">Não enviado</p>
     </div>`;
 
-  // Bloco de arquivos/documentos
   const docsBlock = documents && documents.length > 0 ? `
     <div style="background:#0a1a1a;border-left:3px solid #06b6d4;border-radius:0 8px 8px 0;padding:14px 16px;margin-top:16px;">
       <p style="color:#06b6d4;font-size:11px;font-weight:700;margin:0 0 10px;text-transform:uppercase;letter-spacing:1px;"> Arquivos Enviados</p>
       ${documents.map(d => `<p style="color:#ccc;font-size:13px;margin:4px 0;"><strong>${d.label}:</strong> <a href="${d.url}" style="color:#06b6d4;text-decoration:underline;">Ver</a></p>`).join('')}
     </div>` : '';
 
-  // Bloco extra legado (fallback caso ainda seja passado como string)
   const extraBlock = extra ? `
     <div style="background:#0f1a10;border-left:3px solid #22c55e;border-radius:0 8px 8px 0;padding:14px 16px;margin-top:16px;">
       <p style="color:#22c55e;font-size:11px;font-weight:700;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;">Informações Adicionais</p>
@@ -351,7 +346,7 @@ export function emailPedidoRecebidoCliente(opts: {
     <p style="color:#aaa;font-size:15px;margin:0 0 20px;">${greeting}</p>
 
     <div style="background:#0f1a10;border:1px solid #22c55e40;border-radius:8px;padding:14px 16px;margin-bottom:20px;text-align:center;">
-      <span style="color:#22c55e;font-size:14px;font-weight:700;">âœ… Seu pedido foi recebido com sucesso!</span>
+      <span style="color:#22c55e;font-size:14px;font-weight:700;">&#9989; Seu pedido foi recebido com sucesso!</span>
     </div>
 
     <table cellpadding="0" cellspacing="0" style="width:100%;background:#0a0a18;border:1px solid #1e1e3a;border-radius:8px;margin-bottom:16px;">
@@ -577,7 +572,7 @@ export function emailStatusAdmin(opts: {
   const content = `
     <div style="background:#0f1a10;border:1px solid #22c55e40;border-radius:8px;padding:10px 16px;margin-bottom:20px;">
       <p style="color:#888;font-size:11px;font-weight:700;margin:0 0 6px;text-transform:uppercase;letter-spacing:1px;">Novo Status:</p>
-      <p style="color:#22c55e;font-size:16px;font-weight:800;margin:0;">âœ… ${statusLabel}</p>
+      <p style="color:#22c55e;font-size:16px;font-weight:800;margin:0;">&#9989; ${statusLabel}</p>
     </div>
 
     <table cellpadding="0" cellspacing="0" style="width:100%;background:#0a0a18;border:1px solid #1e1e3a;border-radius:8px;margin-bottom:16px;">
