@@ -1,0 +1,258 @@
+name: Product Manifest Acceptance
+
+on:
+  push:
+    branches:
+      - feat/product-manifest-acceptance-20260901
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Implementar manifesto por produto
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f'Trecho nao encontrado: {label}')
+              return text.replace(old, new, 1)
+
+          # ADM: editor do manifesto dentro do produto.
+          p = Path('client/src/pages/AdminProducts.tsx')
+          s = p.read_text()
+          anchor = '''const PRESET_COLORS = [\n'''
+          component = r'''type ProductManifestConfig = {
+  enabled: boolean;
+  title: string;
+  body: string;
+  acceptLabel: string;
+  buttonLabel: string;
+};
+
+const DEFAULT_PRODUCT_MANIFEST: ProductManifestConfig = {
+  enabled: false,
+  title: 'Antes de continuar',
+  body: '',
+  acceptLabel: 'Li, entendi e aceito as condições acima.',
+  buttonLabel: 'ACEITAR E CONTINUAR',
+};
+
+function parseProductManifest(raw: unknown): ProductManifestConfig {
+  if (typeof raw !== 'string' || !raw.trim()) return DEFAULT_PRODUCT_MANIFEST;
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      enabled: parsed?.enabled === true,
+      title: String(parsed?.title || DEFAULT_PRODUCT_MANIFEST.title),
+      body: String(parsed?.body || ''),
+      acceptLabel: String(parsed?.acceptLabel || DEFAULT_PRODUCT_MANIFEST.acceptLabel),
+      buttonLabel: String(parsed?.buttonLabel || DEFAULT_PRODUCT_MANIFEST.buttonLabel),
+    };
+  } catch {
+    return DEFAULT_PRODUCT_MANIFEST;
+  }
+}
+
+function ProductManifestEditor({ productId }: { productId: number }) {
+  const key = `product_manifest_${productId}`;
+  const utils = trpc.useUtils();
+  const { data: settings } = trpc.settings.getAll.useQuery();
+  const [enabled, setEnabled] = useState(false);
+  const [title, setTitle] = useState(DEFAULT_PRODUCT_MANIFEST.title);
+  const [body, setBody] = useState('');
+  const [acceptLabel, setAcceptLabel] = useState(DEFAULT_PRODUCT_MANIFEST.acceptLabel);
+  const [buttonLabel, setButtonLabel] = useState(DEFAULT_PRODUCT_MANIFEST.buttonLabel);
+
+  React.useEffect(() => {
+    const config = parseProductManifest((settings as Record<string, string> | undefined)?.[key]);
+    setEnabled(config.enabled);
+    setTitle(config.title);
+    setBody(config.body);
+    setAcceptLabel(config.acceptLabel);
+    setButtonLabel(config.buttonLabel);
+  }, [settings, key]);
+
+  const saveMut = trpc.settings.update.useMutation({
+    onSuccess: () => {
+      utils.settings.getAll.invalidate();
+      toast.success('Manifesto do produto salvo!');
+    },
+  });
+
+  const save = () => {
+    if (enabled && !body.trim()) {
+      toast.error('Digite o texto do manifesto antes de ativar.');
+      return;
+    }
+    if (!title.trim() || !acceptLabel.trim() || !buttonLabel.trim()) {
+      toast.error('Preencha título, frase de aceite e botão.');
+      return;
+    }
+    const config: ProductManifestConfig = {
+      enabled,
+      title: title.trim(),
+      body: body.trim(),
+      acceptLabel: acceptLabel.trim(),
+      buttonLabel: buttonLabel.trim(),
+    };
+    saveMut.mutate({ settings: { [key]: JSON.stringify(config) } });
+  };
+
+  return (
+    <div className="rounded-xl border-2 border-amber-500/30 bg-amber-950/10 p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-black text-amber-300">MANIFESTO / TERMO DE ACEITE</p>
+          <p className="text-[10px] text-gray-400">Configurado por produto. Quando ativo, o cliente precisa ler e aceitar antes de continuar.</p>
+        </div>
+        <label className="flex items-center gap-2 text-xs font-bold text-white">
+          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /> Ativo
+        </label>
+      </div>
+      <div>
+        <label className="text-[10px] text-amber-300 font-bold block mb-1">Título do manifesto</label>
+        <input value={title} onChange={e => setTitle(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '7px 10px' }} placeholder="Ex: Antes de continuar" />
+      </div>
+      <div>
+        <label className="text-[10px] text-amber-300 font-bold block mb-1">Texto que o cliente precisa ler</label>
+        <textarea value={body} onChange={e => setBody(e.target.value)} rows={7} style={{ ...whiteInputStyle, fontSize: '12px', padding: '8px 10px', resize: 'vertical' }} placeholder="Digite aqui todas as regras, condições e avisos deste produto..." />
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        <div>
+          <label className="text-[10px] text-amber-300 font-bold block mb-1">Frase do aceite</label>
+          <input value={acceptLabel} onChange={e => setAcceptLabel(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '7px 10px' }} />
+        </div>
+        <div>
+          <label className="text-[10px] text-amber-300 font-bold block mb-1">Texto do botão</label>
+          <input value={buttonLabel} onChange={e => setButtonLabel(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '7px 10px' }} />
+        </div>
+      </div>
+      <Button type="button" onClick={save} disabled={saveMut.isPending} className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black">
+        <Save className="w-3 h-3 mr-1" /> Salvar Manifesto
+      </Button>
+    </div>
+  );
+}
+
+'''
+          s = replace_once(s, anchor, component + anchor, 'componente manifesto adm')
+          s = replace_once(s,
+              '''                    <h4 className="text-sm font-bold text-purple-400">Editar Card</h4>\n                    <div>''',
+              '''                    <h4 className="text-sm font-bold text-purple-400">Editar Card</h4>\n                    <ProductManifestEditor productId={product.id} />\n                    <div>''',
+              'manifesto dentro do produto')
+          p.write_text(s)
+
+          # Home: carregar manifesto salvo nas settings e anexar ao produto da vitrine.
+          p = Path('client/src/pages/Home.tsx')
+          s = p.read_text()
+          s = replace_once(s,
+              '''type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; selectorLabel?: string | null; };\n\ntype ProductOption = {''',
+              '''type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; selectorLabel?: string | null; };\ntype ProductManifest = { enabled: boolean; title: string; body: string; acceptLabel: string; buttonLabel: string; };\n\ntype ProductOption = {''',
+              'tipo manifesto Home')
+          s = replace_once(s,
+              '''  deliveryDays?: string | null;\n  options: ProductOption[];''',
+              '''  deliveryDays?: string | null;\n  manifest?: ProductManifest | null;\n  options: ProductOption[];''',
+              'manifesto no Product Home')
+          s = replace_once(s,
+              '''  const baseProducts = rawProducts as unknown as Product[] | undefined;\n  const optionIds = useMemo''',
+              '''  const baseProducts = rawProducts as unknown as Product[] | undefined;\n  const { data: settings } = trpc.settings.getAll.useQuery();\n  const optionIds = useMemo''',
+              'settings antes do merge')
+          old_products = '''    return baseProducts.map(product => ({\n      ...product,\n      options: product.options.map(option => ({ ...option, priceModels: byOption.get(option.id) || [] })),\n    }));\n  }, [baseProducts, activeOptionPriceModels]);\n  const { data: settings } = trpc.settings.getAll.useQuery();'''
+          new_products = '''    return baseProducts.map(product => {\n      let manifest: ProductManifest | null = null;\n      const rawManifest = (settings as Record<string, string> | undefined)?.[`product_manifest_${product.id}`];\n      if (rawManifest) {\n        try {\n          const parsed = JSON.parse(rawManifest);\n          manifest = {\n            enabled: parsed?.enabled === true,\n            title: String(parsed?.title || 'Antes de continuar'),\n            body: String(parsed?.body || ''),\n            acceptLabel: String(parsed?.acceptLabel || 'Li, entendi e aceito as condições acima.'),\n            buttonLabel: String(parsed?.buttonLabel || 'ACEITAR E CONTINUAR'),\n          };\n        } catch { manifest = null; }\n      }\n      return {\n        ...product,\n        manifest,\n        options: product.options.map(option => ({ ...option, priceModels: byOption.get(option.id) || [] })),\n      };\n    });\n  }, [baseProducts, activeOptionPriceModels, settings]);'''
+          s = replace_once(s, old_products, new_products, 'merge manifesto Home')
+          p.write_text(s)
+
+          # Card público: manifesto obrigatório ao selecionar ação/categoria ou antes de comprar.
+          p = Path('client/src/components/StorefrontProductCard.tsx')
+          s = p.read_text()
+          s = replace_once(s,
+              '''  deliveryDays?: string | null;\n};''',
+              '''  deliveryDays?: string | null;\n  manifest?: { enabled: boolean; title: string; body: string; acceptLabel: string; buttonLabel: string } | null;\n};''',
+              'manifesto no StorefrontProduct')
+          s = replace_once(s,
+              '''  const [priceModelId, setPriceModelId] = useState<number | null>(null);\n  const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;\n  const requiresPriceModelSelection = priceModels.length > 0;''',
+              '''  const [priceModelId, setPriceModelId] = useState<number | null>(null);\n  const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;\n  const manifest = item.product.manifest;\n  const manifestEnabled = manifest?.enabled === true && !!manifest.body.trim();\n  const [manifestOpen, setManifestOpen] = useState(false);\n  const [manifestChecked, setManifestChecked] = useState(false);\n  const [manifestAcceptedKey, setManifestAcceptedKey] = useState<string | null>(null);\n  const [pendingPriceModelId, setPendingPriceModelId] = useState<number | null>(null);\n  const [pendingAction, setPendingAction] = useState<'buy' | 'cart' | null>(null);\n  const requiresPriceModelSelection = priceModels.length > 0;''',
+              'estado manifesto card')
+          s = replace_once(s,
+              '''  const glassBackground = cardBackground\n    ? `linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(15,23,42,0.60) 42%, rgba(2,6,23,0.90) 100%), ${cardBackground}`\n    : "linear-gradient(145deg, rgba(30,41,59,0.72) 0%, rgba(8,15,32,0.88) 48%, rgba(2,6,23,0.96) 100%)";\n\n  return (''',
+              '''  const glassBackground = cardBackground\n    ? `linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(15,23,42,0.60) 42%, rgba(2,6,23,0.90) 100%), ${cardBackground}`\n    : "linear-gradient(145deg, rgba(30,41,59,0.72) 0%, rgba(8,15,32,0.88) 48%, rgba(2,6,23,0.96) 100%)";\n  const currentManifestKey = selectedPriceModel ? `price:${selectedPriceModel.id}` : `base:${item.option.id}`;\n  const pendingPriceModel = priceModels.find(model => model.id === pendingPriceModelId) || selectedPriceModel;\n\n  const openManifest = (nextPriceModelId: number | null, action: 'buy' | 'cart' | null = null) => {\n    setPendingPriceModelId(nextPriceModelId);\n    setPendingAction(action);\n    setManifestChecked(false);\n    setManifestOpen(true);\n  };\n\n  const closeManifest = () => {\n    setManifestOpen(false);\n    setManifestChecked(false);\n    setPendingPriceModelId(null);\n    setPendingAction(null);\n  };\n\n  const acceptManifest = () => {\n    if (!manifestChecked) return;\n    const resolvedId = pendingPriceModelId ?? priceModelId;\n    const resolvedModel = priceModels.find(model => model.id === resolvedId) || selectedPriceModel;\n    if (pendingPriceModelId !== null) setPriceModelId(pendingPriceModelId);\n    setManifestAcceptedKey(resolvedId ? `price:${resolvedId}` : `base:${item.option.id}`);\n    const action = pendingAction;\n    setManifestOpen(false);\n    setManifestChecked(false);\n    setPendingPriceModelId(null);\n    setPendingAction(null);\n    if (action === 'buy') onBuy(selectedTier, resolvedModel);\n    if (action === 'cart') onAddToCart(selectedTier, resolvedModel);\n  };\n\n  const triggerAction = (action: 'buy' | 'cart') => {\n    if (requiresPriceModelSelection && !selectedPriceModel) return;\n    if (manifestEnabled && manifestAcceptedKey !== currentManifestKey) {\n      openManifest(selectedPriceModel?.id ?? null, action);\n      return;\n    }\n    if (action === 'buy') onBuy(selectedTier, selectedPriceModel);\n    else onAddToCart(selectedTier, selectedPriceModel);\n  };\n\n  return (\n    <>''',
+              'funcoes manifesto card')
+          s = replace_once(s,
+              '''            <select value={priceModelId ?? ""} onChange={(event) => setPriceModelId(event.target.value ? Number(event.target.value) : null)} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">''',
+              '''            <select value={priceModelId ?? ""} onChange={(event) => { const nextId = event.target.value ? Number(event.target.value) : null; if (nextId == null) return; if (manifestEnabled) { openManifest(nextId); return; } setPriceModelId(nextId); }} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">''',
+              'selecao abre manifesto')
+          s = replace_once(s,
+              '''            onClick={() => { if (!requiresPriceModelSelection || selectedPriceModel) onBuy(selectedTier, selectedPriceModel); }}''',
+              '''            onClick={() => triggerAction('buy')}''',
+              'comprar usa manifesto')
+          s = replace_once(s,
+              '''            onClick={() => { if (!requiresPriceModelSelection || selectedPriceModel) onAddToCart(selectedTier, selectedPriceModel); }}''',
+              '''            onClick={() => triggerAction('cart')}''',
+              'carrinho usa manifesto')
+          s = replace_once(s,
+              '''      </div>\n    </article>\n  );\n}''',
+              '''      </div>\n    </article>\n    {manifestOpen && manifest && (\n      <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/90 p-4 backdrop-blur-md">\n        <div className="w-full max-w-lg overflow-hidden rounded-2xl border-2 border-amber-400/60 bg-[#060914] text-white shadow-[0_30px_100px_rgba(0,0,0,.8)]">\n          <div className="border-b border-amber-400/20 bg-amber-500/10 px-5 py-4">\n            <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-300">Leitura obrigatória</p>\n            <h3 className="mt-1 text-xl font-black text-white">{manifest.title}</h3>\n            <p className="mt-2 text-xs font-semibold text-white/60">Ação selecionada: <span className="text-cyan-300">{pendingPriceModel?.label || item.option.label}</span></p>\n          </div>\n          <div className="space-y-4 p-5">\n            <div className="max-h-[45vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-slate-200">{manifest.body}</div>\n            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3 text-sm font-semibold text-white">\n              <input type="checkbox" checked={manifestChecked} onChange={e => setManifestChecked(e.target.checked)} className="mt-1 h-4 w-4" />\n              <span>{manifest.acceptLabel}</span>\n            </label>\n            <div className="grid grid-cols-2 gap-2">\n              <button type="button" onClick={closeManifest} className="rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/80 hover:bg-white/10">VOLTAR</button>\n              <button type="button" disabled={!manifestChecked} onClick={acceptManifest} className="rounded-xl bg-amber-500 px-4 py-3 text-sm font-black text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-35">{manifest.buttonLabel}</button>\n            </div>\n          </div>\n        </div>\n      </div>\n    )}\n    </>\n  );\n}''',
+              'modal manifesto')
+          p.write_text(s)
+
+          # Teste de regressao do manifesto por produto.
+          Path('server/productManifestFlow.test.ts').write_text(r'''import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+
+const admin = fs.readFileSync('client/src/pages/AdminProducts.tsx', 'utf8');
+const home = fs.readFileSync('client/src/pages/Home.tsx', 'utf8');
+const card = fs.readFileSync('client/src/components/StorefrontProductCard.tsx', 'utf8');
+
+describe('manifesto por produto', () => {
+  it('permite editar e salvar o manifesto pelo ADM no produto', () => {
+    expect(admin).toContain('MANIFESTO / TERMO DE ACEITE');
+    expect(admin).toContain('ProductManifestEditor productId={product.id}');
+    expect(admin).toContain('product_manifest_${productId}');
+    expect(admin).toContain('Salvar Manifesto');
+  });
+
+  it('carrega a configuracao por produto na vitrine', () => {
+    expect(home).toContain('product_manifest_${product.id}');
+    expect(home).toContain('manifest,');
+  });
+
+  it('exige leitura e aceite antes da acao', () => {
+    expect(card).toContain('manifestOpen');
+    expect(card).toContain('manifestAcceptedKey');
+    expect(card).toContain('Leitura obrigatória');
+    expect(card).toContain('disabled={!manifestChecked}');
+    expect(card).toContain("triggerAction('buy')");
+    expect(card).toContain("triggerAction('cart')");
+    expect(card).toContain('openManifest(nextId)');
+  });
+});
+''')
+          PY
+      - name: Validar whitespace
+        run: git diff --check
+      - run: pnpm install --frozen-lockfile
+      - name: Testes direcionados
+        run: pnpm exec vitest run server/optionPriceModelsFlow.test.ts server/productManifestFlow.test.ts
+      - name: Build de producao
+        run: pnpm build
+      - name: Remover workflow temporario
+        run: rm -f .github/workflows/product-manifest-acceptance.yml
+      - name: Commit da implementacao validada
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminProducts.tsx client/src/pages/Home.tsx client/src/components/StorefrontProductCard.tsx server/productManifestFlow.test.ts
+          git add -u .github/workflows/product-manifest-acceptance.yml
+          git commit -m "feat(products): manifesto editavel com aceite obrigatorio"
+          git push origin HEAD:feat/product-manifest-acceptance-20260901
