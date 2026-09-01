@@ -6,6 +6,7 @@ const admin = fs.readFileSync('client/src/pages/AdminProducts.tsx', 'utf8');
 const db = fs.readFileSync('server/db.ts', 'utf8');
 const router = fs.readFileSync('server/routers.ts', 'utf8');
 const catalog = fs.readFileSync('shared/vehicleCatalog.ts', 'utf8');
+const bot = fs.readFileSync('client/src/components/ColombiaBot.tsx', 'utf8');
 
 describe('versoes do produto e filtro de veiculo', () => {
   it('usa versao com valor principal e promocional sem criar outro produto', () => {
@@ -24,5 +25,8 @@ describe('versoes do produto e filtro de veiculo', () => {
     expect(home).toContain("Marca selecionada:");
     expect(home).toContain("getVehicleModels(brand)");
     expect(home).toContain("VEHICLE_YEARS");
+    expect(bot).toContain("getVehicleModels(parentAnswer)");
+    expect(bot).toContain("modelChildren.length > 0");
+    expect(bot).toContain("VEHICLE_YEARS");
   });
 });
