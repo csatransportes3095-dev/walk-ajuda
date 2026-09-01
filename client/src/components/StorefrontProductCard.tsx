@@ -96,8 +96,10 @@ export function StorefrontProductCard({
   const [tierId, setTierId] = useState<number | null>(tiers[0]?.id ?? null);
   const selectedTier = tiers.find((tier) => tier.id === tierId) || null;
   const priceModels = item.option.priceModels || [];
-  const [priceModelId, setPriceModelId] = useState<number | null>(priceModels[0]?.id ?? null);
-  const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;
+  const [priceModelId, setPriceModelId] = useState<number | null>(null);
+  // As categorias chegam por uma query separada. No primeiro render a lista pode estar vazia;
+  // quando ela carregar, a primeira categoria visivel precisa ser a categoria realmente ativa.
+  const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || priceModels[0] || null;
   const effectivePrice = selectedPriceModel?.price || selectedTier?.price || item.option.price;
   const effectiveOriginalPrice = selectedPriceModel?.originalPrice || selectedTier?.originalPrice || item.option.originalPrice;
   const discount = useMemo(() => {
@@ -154,7 +156,7 @@ export function StorefrontProductCard({
         {priceModels.length > 0 && (
           <label className="mt-4 block">
             <span className="mb-1.5 block text-xs font-bold text-cyan-200">Modelo / categoria</span>
-            <select value={priceModelId ?? ""} onChange={(event) => setPriceModelId(Number(event.target.value))} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">
+            <select value={selectedPriceModel?.id ?? ""} onChange={(event) => setPriceModelId(Number(event.target.value))} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">
               {priceModels.map(model => <option key={model.id} value={model.id}>{model.label} — {asMoney(model.price)}</option>)}
             </select>
           </label>
