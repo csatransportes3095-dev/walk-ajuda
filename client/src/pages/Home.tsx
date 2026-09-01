@@ -4225,7 +4225,7 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative overflow-hidden py-4 md:py-20">
         <div className="container">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
+          <div className={`grid grid-cols-1 gap-8 md:gap-12 items-center ${VIDEO_URL && !videoError ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
             {/* Vídeo mobile — só exibe se houver URL e não houver erro */}
             {VIDEO_URL && !videoError && (
               <div className={`relative md:hidden order-first -mx-4 px-4 mb-4 transition-all duration-300 ${videoLoaded ? 'opacity-100' : 'h-0 overflow-hidden opacity-0'}`}>
@@ -4236,9 +4236,9 @@ export default function Home() {
             )}
 
             {/* Conteúdo */}
-            <div className="space-y-6">
-              <div className="space-y-3">
-                {HERO_TITLE && <h2 className="text-4xl md:text-5xl font-bold text-foreground leading-tight" dangerouslySetInnerHTML={{ __html: HERO_TITLE }} />}
+            <div className={`space-y-6 ${VIDEO_URL && !videoError ? '' : 'w-full max-w-6xl mx-auto text-center'}`}>
+              <div className={`space-y-3 ${VIDEO_URL && !videoError ? '' : 'w-full flex flex-col items-center'}`}>
+                {HERO_TITLE && <h2 className={`text-4xl md:text-5xl font-bold text-foreground leading-tight ${VIDEO_URL && !videoError ? '' : 'w-full text-center [&>*]:mx-auto [&>*]:max-w-full'}`} dangerouslySetInnerHTML={{ __html: HERO_TITLE }} />}
                 {HERO_SUBTITLE && <p className="text-lg text-muted-foreground">{HERO_SUBTITLE}</p>}
               </div>
               {(FEATURE1_TITLE || FEATURE2_TITLE || FEATURE3_TITLE) && (
