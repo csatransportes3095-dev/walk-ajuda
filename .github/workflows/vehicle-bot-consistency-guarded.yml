@@ -1,0 +1,39 @@
+name: Vehicle Bot Consistency Guarded
+
+on:
+  push:
+    branches:
+      - feat/product-versions-vehicle-filter-20260901
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply bot consistency patch
+        run: node scripts/apply-vehicle-bot-consistency.mjs
+      - name: Validate whitespace
+        run: git diff --check
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Targeted regression
+        run: pnpm exec vitest run server/productVersionVehicleFlow.test.ts
+      - name: Production build
+        run: pnpm build
+      - name: Commit validated implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/components/ColombiaBot.tsx server/productVersionVehicleFlow.test.ts
+          git commit -m "fix(products): unificar filtro de veiculo no assistente"
+          git push origin HEAD:feat/product-versions-vehicle-filter-20260901
