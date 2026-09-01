@@ -27,15 +27,25 @@ describe("independência entre status do pedido e agendamento", () => {
     expect(completion).not.toContain("db.delete(scheduleAppointments)");
   });
 
-  it("não encerra agendamento confirmado ao alterar o pedido para foto em análise", async () => {
+  it("encerra agenda pendente ou confirmada ao alterar o pedido para foto em análise", async () => {
     const source = await routerSource();
     const updateStart = source.indexOf("updateStatus: adminProcedure");
     const updateEnd = source.indexOf("// Admin: atualizar orderSource", updateStart);
     const updateProcedure = source.slice(updateStart, updateEnd);
 
-    expect(updateProcedure).not.toContain("SCHEDULE_COMPLETION_STATUSES");
-    expect(updateProcedure).not.toContain("completeConfirmedAppointmentsForOrder");
-    expect(updateProcedure).toContain("Alterar o status do pedido não encerra nem modifica a agenda do cliente.");
+    expect(updateProcedure).toContain("if (input.status === 'foto_em_anal')");
+    expect(updateProcedure).toContain("completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex)");
+  });
+
+  it("helper de Foto em Análise conclui somente agenda aberta do mesmo pedido/subpedido", async () => {
+    const source = await dbSource();
+    const start = source.indexOf("export async function completeOpenAppointmentsForOrder");
+    const helper = source.slice(start, source.indexOf("// CONFIRMAÇÃO ATÔMICA", start));
+
+    expect(helper).toContain("eq(scheduleAppointments.registrationId, registrationId)");
+    expect(helper).toContain("eq(scheduleAppointments.subOrderIndex, subOrderIndex)");
+    expect(helper).toContain("inArray(scheduleAppointments.status, ['pending', 'confirmed'])");
+    expect(helper).toContain("await completeAppointment(appointment.id)");
   });
 
   it("mantém a regra de filtro: somente agenda aberta tem prioridade operacional", async () => {
