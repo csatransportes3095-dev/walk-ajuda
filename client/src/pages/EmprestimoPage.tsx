@@ -54,7 +54,7 @@ export function EmprestimoPage() {
   const [manifestCompleted, setManifestCompleted] = useState(false);
   const [, navigate] = useLocation();
   const [savedToken] = useState<string>(() => localStorage.getItem(TOKEN_KEY) || localStorage.getItem('cp_token') || '');
-  const [isLoading, setIsLoading] = useState<boolean>(() => !!localStorage.getItem(TOKEN_KEY));
+  const [isLoading, setIsLoading] = useState<boolean>(() => !!(localStorage.getItem(TOKEN_KEY) || localStorage.getItem('cp_token')));
 
   const logoutMutation = trpc.spreadsheet.logout.useMutation();
 

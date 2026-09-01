@@ -15,6 +15,8 @@ describe('sessao persistente do cliente', () => {
     expect(gastos).toContain("localStorage.getItem('cp_token')");
     expect(emprestimo).toContain("localStorage.getItem('cp_token')");
     expect(entry).toContain("localStorage.getItem('cp_token')");
+    expect(gastos).toContain("!!(localStorage.getItem(TOKEN_KEY) || localStorage.getItem('cp_token'))");
+    expect(emprestimo).toContain("!!(localStorage.getItem(TOKEN_KEY) || localStorage.getItem('cp_token'))");
   });
 
   it('backend nao transforma banco indisponivel em token invalido', () => {
