@@ -1,0 +1,39 @@
+name: Unified Customer Session Refresh Fix
+
+on:
+  push:
+    branches:
+      - fix/unify-customer-session-refresh-20260901
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Apply guarded patch
+        run: node scripts/apply-unified-customer-session-fix.mjs
+      - name: Validate patch
+        run: git diff --check
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Session regression tests
+        run: pnpm exec vitest run server/customerSessionRefreshRegression.test.ts
+      - name: Type and production build
+        run: pnpm build
+      - name: Commit validated code
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/components/WelcomeScreen.tsx client/src/components/PasswordGate.tsx client/src/components/OnlineEntryPanel.tsx client/src/pages/GastosPage.tsx client/src/pages/EmprestimoPage.tsx client/src/pages/GastosLoginPage.tsx client/src/pages/Home.tsx server/routers/customerPassword.ts server/routers/online-support.ts server/online-support/entry.ts server/routers/customerUpdate.ts server/routers/spreadsheet.ts server/customerSessionRefreshRegression.test.ts
+          git commit -m "fix(auth): manter sessao do cliente no refresh e unificar rotas"
+          git push origin HEAD:fix/unify-customer-session-refresh-20260901
