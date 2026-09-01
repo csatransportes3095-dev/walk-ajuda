@@ -54,6 +54,7 @@ import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
 import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
+import { getConfiguredGlobalProgressKeys, sanitizeGlobalProgressKeys } from "../shared/orderProgressSequence";
 import { isRecoveredCustomerName } from "../shared/customerProfile";
 import { getCustomerProfileUpdatePolicy, getCustomerProfileUpdateState, hasCustomerProfilePhotoSubmission, markCustomerProfilePhotoSubmitted, markCustomerProfileUpdateCompleted, saveCustomerProfileUpdatePolicy } from "./customerProfileUpdatePolicy";
 import { isLoanEditPasswordValid } from "./loanEditAuthorization";
@@ -84,6 +85,7 @@ import {
   addOrderFile, getOrderFiles, getOrderFilesByPhone, getOrderFilesByPhoneGrouped, deleteOrderFile,
   getStatusLabelFromDb,
   getStatusInfoFromDb,
+  setGlobalOrderProgressSequence,
   generateOrderNumber,
   updateLastOrderStatus,
   createDocRequest, getDocRequestsByRegistration, getDocRequestsByPhone,
@@ -5843,6 +5845,29 @@ export const appRouter = router({
       const { listOrderStatusTypes } = await import('./db');
       return await listOrderStatusTypes();
     }),
+
+    // Sequência global exibida em /acompanhar. Enquanto não for ativada,
+    // pedidos antigos continuam usando a configuração individual legada.
+    getProgressSequence: publicProcedure.query(async () => {
+      const statuses = await listOrderStatusTypes();
+      const enabled = (await getSetting("order_progress_global_enabled")) === "1";
+      return { enabled, keys: enabled ? getConfiguredGlobalProgressKeys(statuses) : [] };
+    }),
+
+    // Salva a sequência inteira como uma única operação. Não altera sortOrder,
+    // latestStatus, scheduleStatus, Arquivo, RG/CNH, grupos ou filtros operacionais.
+    setProgressSequence: adminProcedure
+      .input(z.object({ statusKeys: z.array(z.string().min(1).max(64)).min(1).max(64) }))
+      .mutation(async ({ input }) => {
+        const statuses = await listOrderStatusTypes();
+        const statusKeys = sanitizeGlobalProgressKeys(statuses, input.statusKeys);
+        if (statusKeys.length === 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione pelo menos um status ativo para o progresso do cliente." });
+        }
+        await setGlobalOrderProgressSequence(statusKeys);
+        await upsertSetting("order_progress_global_enabled", "1");
+        return { success: true, keys: statusKeys };
+      }),
     // Admin: criar novo status
     create: adminProcedure
       .input(z.object({

@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { publicSiteUrl } from "@shared/publicLinks";
+import { chunkProgressKeys, resolveProgressPosition } from "@shared/orderProgressSequence";
 import { Link, useSearch } from "wouter";
 import { useDevToolsDetection } from "@/hooks/useDevToolsDetection";
 import {
@@ -617,11 +618,17 @@ export default function OrderTracking() {
     [dynamicStatuses]
   );
 
-  // Configuração de progresso por pedido (definida pelo admin individualmente)
+  // Sequência global do cliente. Enquanto ela ainda não foi ativada pelo ADM,
+  // preserva a configuração individual antiga como fallback de compatibilidade.
   const subOrderIndex = selectedOrderIdx;
+  const globalProgressSequenceQuery = trpc.statusTypes.getProgressSequence.useQuery(undefined, {
+    enabled: canAccess,
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
   const progressConfigPublicQuery = trpc.orderStatus.getProgressConfigPublic.useQuery(
     { registrationId, subOrderIndex },
-    { enabled: canAccess && registrationId > 0, staleTime: 30000, refetchInterval: 60000 }
+    { enabled: canAccess && registrationId > 0 && globalProgressSequenceQuery.data?.enabled !== true, staleTime: 30000, refetchInterval: 60000 }
   );
 
   // Agendamentos deste cliente (busca por telefone — chave confiável)
@@ -1244,54 +1251,42 @@ export default function OrderTracking() {
               )}
             </div>
 
-            {/* === BARRA DE PROGRESSO DO CLIENTE (configuração por pedido) === */}
+            {/* === BARRA DE PROGRESSO DO CLIENTE (sequência global com fallback legado) === */}
             {(() => {
-              // Usar a configuração de progresso específica deste pedido
-              const progressConfigData = progressConfigPublicQuery?.data ?? [];
-              // Se não há configuração por pedido, não exibir a barra
+              const progressConfigData = globalProgressSequenceQuery.data?.enabled
+                ? (globalProgressSequenceQuery.data.keys ?? [])
+                : (progressConfigPublicQuery?.data ?? []);
               if (progressConfigData.length === 0) return null;
               // Montar os steps na ordem configurada pelo admin
               const progressSteps = progressConfigData
                 .map((key: string) => (statusTypesQuery.data ?? []).find((s: any) => s.key === key))
                 .filter(Boolean);
               if (progressSteps.length === 0) return null;
-              // Encontrar o índice do status atual na barra de progresso
-              let currentIdx = progressSteps.findIndex((s: any) => s.key === latestStatus);
-              // Se o status atual não está na lista, encontrar o último status concluído
-              // que esteja na lista (baseado no histórico do pedido)
-              if (currentIdx === -1) {
-                // Pegar todos os status do histórico do pedido
-                const historyKeys = new Set(history.map((h: any) => h.status));
-                // Encontrar o último step da lista que está no histórico
-                let lastDoneIdx = -1;
-                for (let i = 0; i < progressSteps.length; i++) {
-                  if (progressSteps[i] && historyKeys.has((progressSteps[i] as any).key)) {
-                    lastDoneIdx = i;
-                  }
-                }
-                // Usar o próximo step após o último concluído como "atual" na barra
-                currentIdx = lastDoneIdx >= 0 ? lastDoneIdx : 0;
-              }
+              const progressPosition = resolveProgressPosition({
+                progressKeys: progressSteps.map((s: any) => s.key),
+                latestStatus,
+                historyStatuses: history.map((h: any) => h.status),
+              });
+              const currentIdx = progressPosition.currentIndex;
               const prevStep = currentIdx > 0 ? progressSteps[currentIdx - 1] : null;
               const currStep = progressSteps[currentIdx] ?? progressSteps[0];
               const nextStep = currentIdx < progressSteps.length - 1 ? progressSteps[currentIdx + 1] : null;
               return (
                 <div className="bg-[#12122a] rounded-2xl border border-white/10 p-4 space-y-3">
                   <p className="text-xs text-white/40 font-semibold uppercase tracking-wider">Progresso do Pedido</p>
-                  {/* Duas linhas sequenciais de progresso: até seis etapas configuradas pelo ADM */}
+                  {/* Quantas linhas forem necessárias; três etapas por linha. */}
                   {(() => {
-                    const visibleSteps = progressSteps.slice(0, 6);
-                    const rows = [visibleSteps.slice(0, 3), visibleSteps.slice(3, 6)].filter(row => row.length > 0);
+                    const rows = chunkProgressKeys(progressSteps, 3);
                     return (
-                      <div className="space-y-4" aria-label="Seis etapas do progresso do pedido">
+                      <div className="space-y-4" aria-label="Etapas do progresso do pedido">
                         {rows.map((row, rowIndex) => (
                           <div key={`progress-row-${rowIndex}`} className="relative">
-                            {rowIndex === 1 && <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-white/25">Continuação do progresso</p>}
+                            {rowIndex > 0 && <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-white/25">Continuação do progresso</p>}
                             <div className="flex items-center gap-0">
                               {row.map((step: any, localIdx: number) => {
                                 const idx = rowIndex * 3 + localIdx;
-                                const isDone = idx < currentIdx;
-                                const isCurrent = idx === currentIdx;
+                                const isDone = !progressPosition.cancelled && idx < currentIdx;
+                                const isCurrent = !progressPosition.cancelled && idx === currentIdx;
                                 const stepCfg = getStatusCfg(step.key);
                                 return (
                                   <React.Fragment key={step.id}>
@@ -1329,8 +1324,11 @@ export default function OrderTracking() {
                       </div>
                     );
                   })()}
+                  {progressPosition.cancelled && (
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-semibold text-red-300">Pedido cancelado. O progresso foi encerrado e nenhuma próxima etapa será exibida.</div>
+                  )}
                   {/* Cards anterior / atual / próximo */}
-                  <div className="grid gap-2" style={{ gridTemplateColumns: [prevStep, currStep, nextStep].filter(Boolean).length === 1 ? '1fr' : [prevStep, currStep, nextStep].filter(Boolean).length === 2 ? '1fr 1fr' : '1fr 1fr 1fr' }}>
+                  {!progressPosition.cancelled && <div className="grid gap-2" style={{ gridTemplateColumns: [prevStep, currStep, nextStep].filter(Boolean).length === 1 ? '1fr' : [prevStep, currStep, nextStep].filter(Boolean).length === 2 ? '1fr 1fr' : '1fr 1fr 1fr' }}>
                     {prevStep && (() => {
                       const cfg = getStatusCfg(prevStep.key);
                       return (
@@ -1373,7 +1371,7 @@ export default function OrderTracking() {
                         </div>
                       );
                     })()}
-                  </div>
+                  </div>}
                 </div>
               );
             })()}

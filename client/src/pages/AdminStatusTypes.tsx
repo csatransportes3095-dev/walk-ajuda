@@ -391,35 +391,8 @@ export default function AdminStatusTypes() {
                         </div>
                       </div>
                     </div>
-                    {/* Configuração de Progresso do Cliente */}
-                    <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-3 space-y-3">
-                      <p className="text-xs font-semibold text-purple-400 flex items-center gap-1.5">📊 Progresso do Cliente</p>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setEditForm(f => ({ ...f, showInProgress: (f as any).showInProgress === 1 ? 0 : 1 } as any))}
-                          className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
-                            (editForm as any).showInProgress === 1 ? 'bg-purple-500' : 'bg-white/10'
-                          }`}
-                        >
-                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                            (editForm as any).showInProgress === 1 ? 'translate-x-5' : 'translate-x-0.5'
-                          }`} />
-                        </button>
-                        <span className="text-xs text-white/60">Mostrar na barra de progresso do cliente</span>
-                      </div>
-                      {(editForm as any).showInProgress === 1 && (
-                        <div className="space-y-1">
-                          <label className="text-xs text-white/50">Posição na barra de progresso</label>
-                          <Input
-                            type="number"
-                            className={inputCls}
-                            value={(editForm as any).progressOrder ?? 0}
-                            onChange={e => setEditForm(f => ({ ...f, progressOrder: parseInt(e.target.value) || 0 } as any))}
-                          />
-                          <p className="text-[10px] text-white/30">Menor número = aparece primeiro na barra</p>
-                        </div>
-                      )}
+                    <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 text-xs text-white/45">
+                      A sequência exibida ao cliente é configurada uma única vez em <b>Pedidos → Sequência do Cliente</b>.
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -462,11 +435,6 @@ export default function AdminStatusTypes() {
                       )}
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <p className="text-[10px] text-white/20">Ordem: {s.sortOrder}</p>
-                        {s.showInProgress === 1 && (
-                          <span className="text-[10px] bg-purple-500/20 border border-purple-500/40 text-purple-400 px-1.5 py-0.5 rounded flex items-center gap-1">
-                            📊 Progresso #{s.progressOrder ?? 0}
-                          </span>
-                        )}
                       </div>
                     </div>
                     {/* Ações */}
