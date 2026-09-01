@@ -94,6 +94,7 @@ type Order = {
   cartItemIndex?: number;
   thirdPartyName?: string | null;
   resellerDiscountApplied?: number | null;
+  warrantyDisplay?: string | null;
 };
 // Helper para gerar chave única de cada sub-pedidoo
 const getOrderKey = (order: Order): string => `${order.id}_${order.subOrderIndex ?? 0}`;
@@ -5538,7 +5539,7 @@ export default function AdminOrders() {
                           const svcOpt = order.serviceOption;
                           const garantiaMatch = svcOpt ? svcOpt.match(/^(.*?)\s*-?\s*(Garantia:.*)$/i) : null;
                           const mainOpt = garantiaMatch ? garantiaMatch[1].replace(/\s*-\s*$/, '').trim() : svcOpt;
-                          const garantiaPart = garantiaMatch ? garantiaMatch[2] : null;
+                          const garantiaPart = garantiaMatch ? garantiaMatch[2] : (order.warrantyDisplay || null);
                           return (
                             <div className="mt-0.5">
                               <p className="text-xs text-primary/80 font-medium truncate">
