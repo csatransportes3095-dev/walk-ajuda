@@ -8,6 +8,7 @@ on:
       - ".github/workflows/tracking-live-vertical-20260901.yml"
       - "scripts/patch-tracking-live-vertical-20260901.py"
       - "server/orderTrackingLiveVertical.test.ts"
+      - "server/globalOrderProgressIntegration.test.ts"
 
 permissions:
   contents: write
