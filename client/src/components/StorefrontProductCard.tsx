@@ -129,7 +129,7 @@ export function StorefrontProductCard({
     if (!nextId) return;
     const nextModel = priceModels.find(model => model.id === nextId);
     const key = `price:${nextId}`;
-    const accepted = await requestProductManifest(item.product.id, key, nextModel?.label || item.option.label);
+    const accepted = await requestProductManifest([`price_model_manifest_${nextId}`, `option_manifest_${item.option.id}`], key, nextModel?.label || item.option.label);
     if (!accepted) { select.value = previousId ? String(previousId) : ""; return; }
     setPriceModelId(nextId);
     setManifestAcceptedKey(key);
@@ -139,7 +139,10 @@ export function StorefrontProductCard({
     if (requiresPriceModelSelection && !selectedPriceModel) return;
     const key = selectedPriceModel ? `price:${selectedPriceModel.id}` : `base:${item.option.id}`;
     if (manifestAcceptedKey !== key) {
-      const accepted = await requestProductManifest(item.product.id, key, selectedPriceModel?.label || item.option.label);
+      const manifestKeys = selectedPriceModel
+        ? [`price_model_manifest_${selectedPriceModel.id}`, `option_manifest_${item.option.id}`]
+        : [`option_manifest_${item.option.id}`];
+      const accepted = await requestProductManifest(manifestKeys, key, selectedPriceModel?.label || item.option.label);
       if (!accepted) return;
       setManifestAcceptedKey(key);
     }

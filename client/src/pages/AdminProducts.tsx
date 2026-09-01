@@ -192,6 +192,7 @@ function OptionPriceModelRow({ model, onChanged }: { model: OptionPriceModelType
           <Button type="button" size="sm" variant="destructive" disabled={deleteMut.isPending} onClick={() => { if (confirm(`Excluir a categoria ${model.label}?`)) deleteMut.mutate({ id: model.id }); }}><Trash2 className="w-3 h-3" /></Button>
         </div>
       </div>
+      <ProductManifestEditor storageKey={`price_model_manifest_${model.id}`} scopeLabel={`Modelo/Categoria: ${label || model.label}`} />
     </div>
   );
 }
@@ -482,6 +483,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
       {/* Expanded: Config + Docs + Questions */}
       {expanded && (
         <div className="border-t border-gray-700/20 p-3 space-y-4">
+          <ProductManifestEditor storageKey={`option_manifest_${opt.id}`} scopeLabel={`Acao / Opcao: ${opt.label}`} />
           <OptionPriceModelsEditor optionId={opt.id} />
 
           {/* === CONFIGURAÇÕES GERAIS DA OPÇÃO === */}
@@ -1575,7 +1577,6 @@ export default function AdminProducts() {
                 {editingProduct === product.id && (
                   <div className="border-t border-purple-500/20 p-4 bg-[#0d0d22] space-y-4">
                     <h4 className="text-sm font-bold text-purple-400">Editar Card</h4>
-                    <ProductManifestEditor productId={product.id} />
                     <div>
                       <label className="text-xs text-gray-400 block mb-2">Foto do Card</label>
                       <ImageUploader productId={product.id} currentUrl={product.iconUrl} onUploaded={() => utils.products.list.invalidate()} />

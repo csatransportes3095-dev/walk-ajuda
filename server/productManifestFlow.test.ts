@@ -7,20 +7,23 @@ const guard = fs.readFileSync('client/src/components/ProductManifestGuard.tsx', 
 const card = fs.readFileSync('client/src/components/StorefrontProductCard.tsx', 'utf8');
 const main = fs.readFileSync('client/src/main.tsx', 'utf8');
 
-describe('manifesto editavel por produto', () => {
-  it('fica dentro do produto no ADM e salva configuracao individual', () => {
-    expect(admin).toContain('ProductManifestEditor productId={product.id}');
-    expect(editor).toContain('MANIFESTO / TERMO DE ACEITE');
-    expect(editor).toContain('product_manifest_${productId}');
-    expect(editor).toContain('Salvar Manifesto');
+describe('manifesto individual por subproduto', () => {
+  it('nao fica mais no produto principal', () => {
+    expect(admin).not.toContain('ProductManifestEditor productId={product.id}');
+    expect(admin).toContain('storageKey={`option_manifest_${opt.id}`}');
   });
 
-  it('bloqueia cliente ate ler e aceitar', () => {
+  it('cada modelo/categoria tem seu proprio manifesto no ADM', () => {
+    expect(admin).toContain('storageKey={`price_model_manifest_${model.id}`}');
+    expect(editor).toContain('Individual deste item');
+    expect(editor).toContain('storageKey');
+  });
+
+  it('cliente prioriza manifesto da categoria e usa opcao como fallback', () => {
     expect(main).toContain('<ProductManifestGuard />');
-    expect(guard).toContain('LEITURA OBRIGATORIA');
-    expect(guard).toContain('disabled={!checked}');
-    expect(card).toContain('requestProductManifest');
-    expect(card).toContain('handlePriceModelChange');
+    expect(guard).toContain('req.manifestKeys.map');
+    expect(card).toContain('price_model_manifest_${nextId}');
+    expect(card).toContain('option_manifest_${item.option.id}');
     expect(card).toContain('runProtectedAction');
   });
 });

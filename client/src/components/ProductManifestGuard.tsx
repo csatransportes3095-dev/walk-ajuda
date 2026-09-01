@@ -33,7 +33,7 @@ export default function ProductManifestGuard() {
   const process = (req: ProductManifestRequest) => {
     const current = settingsRef.current as Record<string, string> | undefined;
     if (!current) { queueRef.current.push(req); return; }
-    const cfg = parse(current[`product_manifest_${req.productId}`]);
+    const cfg = req.manifestKeys.map(key => parse(current[key])).find(Boolean) || null;
     if (!cfg) { req.resolve(true); return; }
     setChecked(false);
     setPending({ ...req, config: cfg });
