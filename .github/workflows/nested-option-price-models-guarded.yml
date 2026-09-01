@@ -1,0 +1,41 @@
+name: Nested Option Price Models Guarded
+
+on:
+  push:
+    branches:
+      - fix/nested-option-price-models-20260901
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply implementation patch
+        run: python3 scripts/apply-nested-option-price-models.py
+      - name: Validate whitespace
+        run: git diff --check
+      - run: pnpm install --frozen-lockfile
+      - name: Targeted tests
+        run: pnpm exec vitest run server/optionPriceModelsFlow.test.ts server/productVersionVehicleFlow.test.ts
+      - name: Production build
+        run: pnpm build
+      - name: Remove temporary machinery
+        run: rm -f scripts/apply-nested-option-price-models.py .github/workflows/nested-option-price-models-guarded.yml
+      - name: Commit validated implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/optionPriceModels.ts server/routers.ts client/src/pages/AdminProducts.tsx client/src/components/StorefrontProductCard.tsx client/src/pages/Home.tsx client/src/components/ColombiaBot.tsx shared/vehicleCatalog.ts scripts/rebuild-question-tree.mjs server/optionPriceModelsFlow.test.ts
+          git add -u scripts/apply-nested-option-price-models.py .github/workflows/nested-option-price-models-guarded.yml
+          git commit -m "feat(products): adicionar categorias de preco dentro da opcao"
+          git push origin HEAD:fix/nested-option-price-models-20260901
