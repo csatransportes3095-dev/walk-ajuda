@@ -40,6 +40,13 @@ describe('sessao persistente do cliente', () => {
     expect(spreadsheet).toContain('if (!db) throw new TRPCError');
   });
 
+  it('emprestimos aceita a sessao central do cliente', () => {
+    const loans = fs.readFileSync('server/routers/loans.ts', 'utf8');
+    expect(loans).toContain('FROM customerPasswordSessions');
+    expect(loans).toContain("access.routes.includes('emprestimo')");
+    expect(loans).toContain("source: 'customer'");
+  });
+
   it('logout invalida os dois tipos de sessao', () => {
     const customer = fs.readFileSync('server/routers/customerPassword.ts', 'utf8');
     const spreadsheet = fs.readFileSync('server/routers/spreadsheet.ts', 'utf8');

@@ -63,14 +63,40 @@ async function syncLegacyLoanAccess(db: any, session: any, enabled: boolean): Pr
 
 async function requireLoanRouteAccess(db: any, rawToken: string): Promise<any> {
   const token = rawToken.trim();
-  const sessions = await qRows(db, drizzleSql`
+  if (!token) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão inválida ou expirada.' });
+
+  // A Planilha e o módulo de Empréstimos compartilham a mesma sessão central.
+  const spreadsheetSessionRows = await qRows(db, drizzleSql`
     SELECT ss.*, sc.name, sc.phone, sc.cpf
     FROM spreadsheetSessions ss
     JOIN spreadsheetClients sc ON sc.id=ss.clientId
     WHERE ss.token=${token} AND ss.expiresAt > NOW()
     LIMIT 1
   `);
-  const session = sessions[0];
+  let session: any = spreadsheetSessionRows[0] || null;
+
+  if (!session) {
+    const customerSessionRows = await qRows(db, drizzleSql`
+      SELECT token, phone, expiresAt, lastAccessAt
+      FROM customerPasswordSessions
+      WHERE token=${token} AND expiresAt > NOW()
+      LIMIT 1
+    `);
+    const customerSession = customerSessionRows[0] || null;
+    if (customerSession) {
+      const main = await findMainCustomerByIdentity({ phone: customerSession.phone }, db);
+      if (main) {
+        session = {
+          ...customerSession,
+          name: main.name || main.phone,
+          phone: main.phone || customerSession.phone,
+          cpf: main.cpf || null,
+          source: 'customer',
+        };
+      }
+    }
+  }
+
   if (!session) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão inválida ou expirada.' });
   try {
     await requireCompleteMainCustomerProfile(db, { phone: session.phone, cpf: session.cpf });
