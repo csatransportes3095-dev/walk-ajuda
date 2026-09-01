@@ -1349,6 +1349,19 @@ export async function updateOrderStatusType(id: number, data: Partial<Pick<Order
   await db.update(orderStatusTypes).set(data).where(eq(orderStatusTypes.id, id));
 }
 
+export async function setGlobalOrderProgressSequence(statusKeys: string[]): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.transaction(async (tx) => {
+    await tx.update(orderStatusTypes).set({ showInProgress: 0, progressOrder: 9999 });
+    for (let index = 0; index < statusKeys.length; index++) {
+      await tx.update(orderStatusTypes)
+        .set({ showInProgress: 1, progressOrder: index + 1 })
+        .where(eq(orderStatusTypes.key, statusKeys[index]));
+    }
+  });
+}
+
 export async function deleteOrderStatusType(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;

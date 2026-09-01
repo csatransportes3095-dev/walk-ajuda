@@ -23,6 +23,7 @@ import { getOperationalBucket } from "@shared/orderBuckets";
 import { repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
 import { selectWhatsappTemplateForStatus } from "@shared/whatsappTemplateSelection";
 import { snapshotUnicodeText } from "@shared/whatsappUnicodeDiagnostics";
+import { getConfiguredGlobalProgressKeys, getDefaultGlobalProgressKeys } from "@shared/orderProgressSequence";
 
 type OrderStatus = "recebido" | "pagamento_recebido" | "em_andamento" | "em_montagem" | "documentos_aprovados" | "conta_ativa" | "aguardando_ativa" | "pedido_entregue" | "cancelado";
 
@@ -156,138 +157,103 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   );
 }
 
-// Componente separado para o painel de configuração de progresso por pedido
-// Componente para buscar automaticamente o nome do indicador pelo telefone
-function ReferrerLookup({
-  phone,
-  onNameFound,
-}: {
-  phone: string;
-  onNameFound: (name: string) => void;
-}) {
-  const cleanPhone = phone.replace(/\D/g, '');
-  const lookupQuery = trpc.orderStatus.lookupReferrerByPhone.useQuery(
-    { phone: cleanPhone },
-    { enabled: cleanPhone.length >= 10, staleTime: 0 }
-  );
-
-  React.useEffect(() => {
-    if (lookupQuery.data?.found && lookupQuery.data.name) {
-      onNameFound(lookupQuery.data.name);
-    }
-  }, [lookupQuery.data?.found, lookupQuery.data?.name]);
-
-  if (cleanPhone.length < 10) return null;
-  if (lookupQuery.isLoading) return <span className="text-xs text-muted-foreground">Buscando...</span>;
-  if (lookupQuery.data?.found) return <span className="text-xs text-green-400">✓ {lookupQuery.data.name}</span>;
-  return <span className="text-xs text-yellow-400">⚠ Telefone não encontrado no sistema</span>;
-}
-
-function ProgressConfigPanel({
-  registrationId,
-  subOrderIndex,
+// Configuração global da sequência exibida para TODOS os clientes em /acompanhar.
+function GlobalProgressSequenceModal({
+  open,
+  onClose,
+  statuses,
   savedKeys,
+  enabled,
   onSave,
   isSaving,
   statusConfig,
-  statusOrder,
 }: {
-  registrationId: number;
-  subOrderIndex: number;
+  open: boolean;
+  onClose: () => void;
+  statuses: any[];
   savedKeys: string[];
+  enabled: boolean;
   onSave: (keys: string[]) => void;
   isSaving: boolean;
   statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }>;
-  statusOrder: string[];
 }) {
-  const allStatuses = statusOrder.filter(s => s !== 'cancelado' && s !== 'recebido');
-  const [localKeys, setLocalKeys] = useState<string[]>(savedKeys);
+  const initialKeys = React.useMemo(() => {
+    if (enabled && savedKeys.length > 0) return savedKeys;
+    const configured = getConfiguredGlobalProgressKeys(statuses);
+    return configured.length > 0 ? configured : getDefaultGlobalProgressKeys(statuses);
+  }, [enabled, savedKeys.join(','), statuses]);
+  const [localKeys, setLocalKeys] = useState<string[]>(initialKeys);
 
-  useEffect(() => {
-    setLocalKeys(savedKeys);
-  }, [savedKeys.join(',')]);
+  useEffect(() => { if (open) setLocalKeys(initialKeys); }, [open, initialKeys.join(',')]);
+  if (!open) return null;
 
-  const toggleKey = (key: string) => {
-    setLocalKeys(prev =>
-      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-    );
-  };
-  const moveUp = (idx: number) => {
-    if (idx === 0) return;
-    setLocalKeys(prev => {
-      const arr = [...prev];
-      [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
-      return arr;
-    });
-  };
-  const moveDown = (idx: number) => {
-    setLocalKeys(prev => {
-      if (idx >= prev.length - 1) return prev;
-      const arr = [...prev];
-      [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
-      return arr;
-    });
-  };
+  const available = statuses.filter((s: any) => s.isActive === 1 && s.key !== 'cancelado');
+  const add = (key: string) => setLocalKeys(prev => prev.includes(key) ? prev : [...prev, key]);
+  const remove = (key: string) => setLocalKeys(prev => prev.filter(k => k !== key));
+  const move = (idx: number, delta: number) => setLocalKeys(prev => {
+    const target = idx + delta;
+    if (target < 0 || target >= prev.length) return prev;
+    const next = [...prev];
+    [next[idx], next[target]] = [next[target], next[idx]];
+    return next;
+  });
 
-  return (
-    <div className="border border-purple-500/30 bg-purple-500/5 rounded-xl p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-purple-300">📊 Progresso visível ao cliente</p>
-        <button
-          onClick={() => onSave(localKeys)}
-          disabled={isSaving}
-          className="text-[10px] px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold disabled:opacity-50 transition-colors"
-        >
-          {isSaving ? 'Salvando...' : 'Salvar'}
-        </button>
-      </div>
-      {localKeys.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-[10px] text-purple-300/60 uppercase tracking-wider">Ordem do progresso:</p>
-          {localKeys.map((key, idx) => {
-            const cfg = statusConfig[key];
-            if (!cfg) return null;
-            return (
-              <div key={key} className={`flex items-center gap-2 p-1.5 rounded-lg border ${cfg.bg} border-white/10`}>
-                <span className="text-[10px] font-bold text-white/40 w-4 text-center">{idx + 1}</span>
-                <span className="scale-75">{cfg.icon}</span>
-                <span className={`flex-1 text-xs font-medium ${cfg.color}`}>{cfg.label}</span>
-                <div className="flex gap-0.5">
-                  <button onClick={() => moveUp(idx)} disabled={idx === 0} className="p-0.5 rounded hover:bg-white/10 disabled:opacity-20 text-white/50">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
-                  </button>
-                  <button onClick={() => moveDown(idx)} disabled={idx === localKeys.length - 1} className="p-0.5 rounded hover:bg-white/10 disabled:opacity-20 text-white/50">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                  </button>
-                  <button onClick={() => toggleKey(key)} className="p-0.5 rounded hover:bg-red-500/20 text-red-400/60 hover:text-red-400">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 p-4" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-purple-500/40 bg-[#09091a] shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/10 bg-[#09091a]/95 p-4 backdrop-blur">
+          <div>
+            <p className="text-sm font-black text-purple-300">SEQUÊNCIA GLOBAL DO CLIENTE</p>
+            <p className="mt-1 text-xs text-white/45">Configure uma vez. Esta ordem passa a valer automaticamente para pedidos antigos e novos em /acompanhar.</p>
+            <p className="mt-1 text-[10px] text-emerald-400/80">Não altera filtros, pastas, agendamentos, status atual, Arquivo, RG/CNH ou Entregues.</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg border border-white/10 p-2 text-white/50 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="space-y-4 p-4">
+          {!enabled && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+              Modo seguro: nada muda para os clientes até você clicar em <b>Salvar sequência global</b> pela primeira vez.
+            </div>
+          )}
+          <div className="space-y-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">Ordem que o cliente verá</p>
+            {localKeys.length === 0 && <p className="rounded-xl border border-dashed border-white/10 p-4 text-center text-xs text-white/35">Adicione pelo menos um status.</p>}
+            {localKeys.map((key, idx) => {
+              const cfg = statusConfig[key];
+              if (!cfg) return null;
+              return (
+                <div key={key} className={`flex items-center gap-2 rounded-xl border border-white/10 p-2.5 ${cfg.bg}`}>
+                  <span className="w-6 text-center text-xs font-black text-white/50">{idx + 1}</span>
+                  <span className="scale-90">{cfg.icon}</span>
+                  <span className={`min-w-0 flex-1 text-sm font-bold ${cfg.color}`}>{cfg.label}</span>
+                  <button onClick={() => move(idx, -1)} disabled={idx === 0} className="rounded-lg p-1.5 text-white/50 hover:bg-white/10 disabled:opacity-20"><ArrowUp className="h-4 w-4" /></button>
+                  <button onClick={() => move(idx, 1)} disabled={idx === localKeys.length - 1} className="rounded-lg p-1.5 text-white/50 hover:bg-white/10 disabled:opacity-20"><ArrowDown className="h-4 w-4" /></button>
+                  <button onClick={() => remove(key)} className="rounded-lg p-1.5 text-red-400/70 hover:bg-red-500/15 hover:text-red-300"><X className="h-4 w-4" /></button>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      <div className="space-y-1">
-        <p className="text-[10px] text-white/30 uppercase tracking-wider">Adicionar ao progresso:</p>
-        <div className="flex flex-wrap gap-1">
-          {allStatuses.filter(s => !localKeys.includes(s)).map(s => {
-            const cfg = statusConfig[s];
-            if (!cfg) return null;
-            return (
-              <button
-                key={s}
-                onClick={() => toggleKey(s)}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-[10px] text-white/50 hover:text-white/80 transition-colors"
-              >
-                <span className="scale-75">{cfg.icon}</span>
-                {cfg.label}
-              </button>
-            );
-          })}
+              );
+            })}
+          </div>
+          <div className="space-y-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-white/45">Adicionar status</p>
+            <div className="flex flex-wrap gap-2">
+              {available.filter((s: any) => !localKeys.includes(s.key)).map((s: any) => {
+                const cfg = statusConfig[s.key];
+                if (!cfg) return null;
+                return <button key={s.key} onClick={() => add(s.key)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/65 hover:bg-white/10">+ {cfg.label}</button>;
+              })}
+            </div>
+          </div>
+          <button
+            onClick={() => onSave(localKeys)}
+            disabled={isSaving || localKeys.length === 0}
+            className="w-full rounded-xl bg-purple-600 px-4 py-3 text-sm font-black text-white hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isSaving ? 'SALVANDO...' : 'SALVAR SEQUÊNCIA GLOBAL'}
+          </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -791,6 +757,16 @@ export default function AdminOrders() {
   // Status dinâmicos do banco
   const statusTypesQuery = trpc.statusTypes.list.useQuery();
   const dynamicStatuses = statusTypesQuery.data ?? [];
+  const [showGlobalProgressSequence, setShowGlobalProgressSequence] = useState(false);
+  const globalProgressSequenceQuery = trpc.statusTypes.getProgressSequence.useQuery(undefined, { staleTime: 0 });
+  const saveGlobalProgressSequence = trpc.statusTypes.setProgressSequence.useMutation({
+    onSuccess: async () => {
+      toast.success('Sequência global salva para todos os clientes!');
+      await Promise.all([statusTypesQuery.refetch(), globalProgressSequenceQuery.refetch()]);
+      setShowGlobalProgressSequence(false);
+    },
+    onError: (e) => toast.error(e.message || 'Erro ao salvar sequência global'),
+  });
   // Template editável da mensagem WhatsApp de pedidos
   const waOrderTemplateQuery = trpc.settings.getWhatsappOrderTemplate.useQuery();
   const waOrderTemplate = waOrderTemplateQuery.data?.template || null;
@@ -1387,16 +1363,6 @@ export default function AdminOrders() {
     { phone: expandedPhone },
     { enabled: !!expandedPhone && expandedId !== null && activeTab[expandedId!] === "status" }
   );
-
-  // Query e mutation de configuração de progresso por pedido
-  const progressConfigQuery = trpc.orderStatus.getProgressConfig.useQuery(
-    { registrationId: expandedNumericId, subOrderIndex: expandedOrder?.subOrderIndex ?? 0 },
-    { enabled: expandedId !== null && activeTab[expandedId!] === "status" }
-  );
-  const setProgressConfigMut = trpc.orderStatus.setProgressConfig.useMutation({
-    onSuccess: () => { toast.success('Progresso salvo!'); progressConfigQuery.refetch(); },
-    onError: () => toast.error('Erro ao salvar progresso'),
-  });
 
   // Queries para aba Perguntas
   const tqListQuery = trpc.trackingQuestions.list.useQuery();
@@ -2394,6 +2360,16 @@ export default function AdminOrders() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <GlobalProgressSequenceModal
+        open={showGlobalProgressSequence}
+        onClose={() => setShowGlobalProgressSequence(false)}
+        statuses={dynamicStatuses as any[]}
+        savedKeys={globalProgressSequenceQuery.data?.keys ?? []}
+        enabled={globalProgressSequenceQuery.data?.enabled === true}
+        onSave={(keys) => saveGlobalProgressSequence.mutate({ statusKeys: keys })}
+        isSaving={saveGlobalProgressSequence.isPending}
+        statusConfig={ACTIVE_STATUS_CONFIG}
+      />
       {/* Lightbox de foto do cliente */}
       {photoLightboxUrl && (
         <div
@@ -2481,6 +2457,9 @@ export default function AdminOrders() {
                 💰{commissionPendingCount}
               </button>
             )}
+            <button onClick={() => setShowGlobalProgressSequence(true)} className="flex items-center gap-1 px-2 py-1.5 bg-purple-600/20 border border-purple-500/40 text-purple-300 rounded-lg text-xs font-bold hover:bg-purple-600/30 transition-colors" title="Definir uma única sequência de progresso para todos os clientes">
+              <Layers className="w-3.5 h-3.5" /><span className="hidden lg:inline">Sequência do Cliente</span>
+            </button>
             <button onClick={() => navigate("/admin/orders/new")} className="flex items-center gap-1 px-2 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors">
               <Plus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Novo</span>
             </button>
@@ -5856,20 +5835,6 @@ export default function AdminOrders() {
                       </div>
 
                       {/* === CONTROLE DE PROGRESSO DO CLIENTE === */}
-                      <ProgressConfigPanel
-                        registrationId={order.id}
-                        subOrderIndex={order.subOrderIndex ?? 0}
-                        savedKeys={progressConfigQuery.data ?? []}
-                        onSave={(keys) => setProgressConfigMut.mutate({
-                          registrationId: order.id,
-                          subOrderIndex: order.subOrderIndex ?? 0,
-                          statusKeys: keys,
-                        })}
-                        isSaving={setProgressConfigMut.isPending}
-                        statusConfig={ACTIVE_STATUS_CONFIG}
-                        statusOrder={ACTIVE_STATUS_ORDER}
-                      />
-
                       <textarea
                         value={note[getOrderKey(order)] || ""}
                         onChange={e => setNote(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
