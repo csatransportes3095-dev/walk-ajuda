@@ -2832,21 +2832,60 @@ export async function completeConfirmedAppointmentsForOrder(registrationId: numb
  * Ao avançar o pedido para Foto em Análise, encerra toda agenda ainda aberta
  * daquele pedido/subpedido. Preserva o histórico: pending/confirmed viram completed.
  */
-export async function completeOpenAppointmentsForOrder(registrationId: number, subOrderIndex: number): Promise<number> {
+export async function completeOpenAppointmentsForOrder(
+  registrationId: number,
+  subOrderIndex: number,
+  customerPhone?: string,
+): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-  const appointments = await db.select()
+
+  // Regra principal: encerrar somente agenda aberta ligada exatamente ao pedido/subpedido.
+  const directHistory = await db.select()
     .from(scheduleAppointments)
     .where(and(
       eq(scheduleAppointments.registrationId, registrationId),
       eq(scheduleAppointments.subOrderIndex, subOrderIndex),
-      inArray(scheduleAppointments.status, ['pending', 'confirmed']),
-    ));
+    ))
+    .orderBy(desc(scheduleAppointments.id));
 
-  for (const appointment of appointments) {
-    await completeAppointment(appointment.id);
+  const directOpen = directHistory.filter(
+    appointment => appointment.status === 'pending' || appointment.status === 'confirmed',
+  );
+  if (directOpen.length > 0) {
+    for (const appointment of directOpen) {
+      await completeAppointment(appointment.id);
+    }
+    return directOpen.length;
   }
-  return appointments.length;
+
+  // Se este pedido já teve qualquer agenda própria, nunca encerrar agenda de outro pedido por telefone.
+  if (directHistory.length > 0) return 0;
+
+  // Compatibilidade com re-cadastro: algumas agendas antigas ficaram ligadas a outro registrationId.
+  // O fallback só é usado quando não existe histórico direto e casa o mesmo telefone do pedido atual.
+  const phoneDigits = String(customerPhone || '').replace(/\D/g, '');
+  if (phoneDigits.length < 8) return 0;
+  const tail = phoneDigits.slice(-11);
+
+  const openAppointments = await db.select()
+    .from(scheduleAppointments)
+    .where(inArray(scheduleAppointments.status, ['pending', 'confirmed']))
+    .orderBy(desc(scheduleAppointments.id));
+
+  const byPhone = openAppointments.filter(appointment => {
+    const appointmentPhone = String(appointment.customerPhone || '').replace(/\D/g, '');
+    if (!appointmentPhone) return false;
+    return appointmentPhone.endsWith(tail) || tail.endsWith(appointmentPhone.slice(-11));
+  });
+
+  // Mesma prioridade usada pelo ADM: confirmado antes de pendente, sempre no registro mais recente.
+  const fallback = byPhone.find(appointment => appointment.status === 'confirmed')
+    ?? byPhone.find(appointment => appointment.status === 'pending');
+  if (!fallback) return 0;
+
+  await completeAppointment(fallback.id);
+  return 1;
 }
 
 // CONFIRMAÇÃO ATÔMICA: reserva o slot de forma exclusiva.
