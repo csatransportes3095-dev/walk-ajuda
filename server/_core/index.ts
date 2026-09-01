@@ -304,19 +304,47 @@ async function startServer() {
 
   app.get("/video/:slug", async (req, res) => {
     const { slug } = req.params;
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), 30_000);
     try {
       const { getDb } = await import('../db');
       const { adminMediaFiles } = await import('../../drizzle/schema');
       const { eq: eqOp } = await import('drizzle-orm');
+      const { Readable } = await import('node:stream');
       const db = await getDb();
       if (!db) { res.status(503).end(); return; }
       const rows = await db.select().from(adminMediaFiles).where(eqOp(adminMediaFiles.videoSlug, slug)).limit(1);
       if (!rows.length) { res.status(404).end(); return; }
-      const videoUrl = (rows[0] as any).url || '';
+      const media = rows[0] as any;
+      const videoUrl = media.url || '';
       if (!videoUrl) { res.status(502).end(); return; }
-      res.redirect(videoUrl);
+
+      const headers: Record<string, string> = {};
+      if (req.headers.range) headers.Range = req.headers.range;
+      const upstream = await fetch(videoUrl, { redirect: 'follow', headers, signal: abort.signal });
+      if (!upstream.ok && upstream.status !== 206) {
+        console.error('[PublicVideo] upstream status', upstream.status, 'slug', slug);
+        res.status(upstream.status === 404 ? 404 : 502).end();
+        return;
+      }
+      if (!upstream.body) { res.status(502).end(); return; }
+
+      res.status(upstream.status === 206 ? 206 : 200);
+      res.setHeader('Content-Type', upstream.headers.get('content-type') || media.mimeType || 'video/mp4');
+      res.setHeader('Accept-Ranges', upstream.headers.get('accept-ranges') || 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      for (const name of ['content-length', 'content-range', 'etag', 'last-modified'] as const) {
+        const value = upstream.headers.get(name);
+        if (value) res.setHeader(name, value);
+      }
+      Readable.fromWeb(upstream.body as any).pipe(res);
     } catch (err) {
-      res.status(500).end();
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[PublicVideo] falha', slug, message);
+      if (!res.headersSent) res.status(message.toLowerCase().includes('abort') ? 504 : 500).end();
+    } finally {
+      clearTimeout(timeout);
     }
   });
 
