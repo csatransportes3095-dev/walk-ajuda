@@ -14,10 +14,17 @@ function replaceOnce(source, from, to, label) {
 function replaceEndedBlock(source, path) {
   const start = source.indexOf('onEnded={(e) => {');
   if (start < 0) throw new Error(`onEnded start not found: ${path}`);
-  const errorStart = source.indexOf('onError=', start);
-  if (errorStart < 0) throw new Error(`onError anchor not found after onEnded: ${path}`);
+
+  const onErrorStart = source.indexOf('onError=', start);
+  const selfCloseStart = source.indexOf('/>', start);
+  const endAnchor = onErrorStart >= 0 && (selfCloseStart < 0 || onErrorStart < selfCloseStart)
+    ? onErrorStart
+    : selfCloseStart;
+
+  if (endAnchor < 0) throw new Error(`video end anchor not found: ${path}`);
+
   const before = source.slice(0, start);
-  const after = source.slice(errorStart);
+  const after = source.slice(endAnchor);
   const replacement = `onEnded={() => {\n                      setAdProgress(100);\n                      setAdCanClose(true);\n                      setTimeout(() => setAdVisible(false), 250);\n                    }}\n                    `;
   return before + replacement + after;
 }
