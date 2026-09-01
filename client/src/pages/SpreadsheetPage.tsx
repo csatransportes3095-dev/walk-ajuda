@@ -310,7 +310,7 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adData?.campaign?.id]);
   useEffect(() => {
-    if (!adVisible || !adCampaign) return;
+    if (!adVisible || !adCampaign || adCampaign.type !== 'image') return;
     const total = (adCampaign.requiredSeconds || 20) * 1000;
     const interval = 100;
     let elapsed = 0;
@@ -1024,16 +1024,10 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
                         if (pct >= 100) setAdCanClose(true);
                       }
                     }}
-                    onEnded={(e) => {
+                    onEnded={() => {
                       setAdProgress(100);
-                      const v = e.currentTarget;
-                      const videoDuration = v.duration || 0;
-                      const required = adCampaign.requiredSeconds || 20;
-                      if (videoDuration <= required) {
-                        setTimeout(() => setAdVisible(false), 300);
-                      } else {
-                        setAdCanClose(true);
-                      }
+                      setAdCanClose(true);
+                      setTimeout(() => setAdVisible(false), 250);
                     }}
                     onError={(e) => {
                       console.error('[Ad] Erro ao carregar vídeo:', adCampaign.videoUrl, e);
@@ -1057,7 +1051,7 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs text-gray-400 flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    {adCanClose ? 'Propaganda concluída' : `Encerrando em ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s`}
+                    {adCanClose ? 'Propaganda concluída' : adCampaign.type === 'video' ? 'Reproduzindo vídeo' : `Encerrando em ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s`}
                   </span>
                   <span className="text-xs font-bold" style={{ color: adProgress < 30 ? '#ef4444' : adProgress < 70 ? '#f59e0b' : adProgress < 100 ? '#00d4ff' : '#22c55e' }}>
                     {adProgress}%
@@ -1103,7 +1097,7 @@ const { data: chatUserData } = trpc.chatUsers.getPhoneFromToken.useQuery(
                     cursor: adCanClose ? 'pointer' : 'not-allowed',
                   }}
                 >
-                  {adCanClose ? 'Fechar propaganda ✕' : `Aguarde ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s para fechar`}
+                  {adCanClose ? 'Fechar propaganda ✕' : adCampaign.type === 'video' ? 'Aguarde o fim do vídeo' : `Aguarde ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s para fechar`}
                 </button>
               </div>
             </div>
