@@ -1562,31 +1562,64 @@ export default function AdminOrders() {
 
   // ─── ETAPAS INTERNAS ──────────────────────────────────────────────────────
   const stagesListQuery = trpc.stages.list.useQuery();
-  const [selectedStageId, setSelectedStageId] = useState<Record<number, number | null>>({});
-  // IDs de todos os pedidos visíveis para batch query de etapas
-  const allVisibleOrderIds = React.useMemo(
-    () => ((ordersQuery.data || []) as Order[]).map(o => o.id),
-    [ordersQuery.data]
+  // Override otimista temporário por pedido+subpedido. A fonte definitiva continua sendo o banco.
+  const [pendingStageByOrder, setPendingStageByOrder] = useState<Record<string, number>>({});
+  const allVisibleOrderTargets = React.useMemo(() => {
+    const unique = new Map<string, { registrationId: number; subOrderIndex: number }>();
+    for (const order of ((ordersQuery.data || []) as Order[])) {
+      const subOrderIndex = order.subOrderIndex ?? 0;
+      unique.set(`${order.id}_${subOrderIndex}`, { registrationId: order.id, subOrderIndex });
+    }
+    // Ordem estável evita trocar a query key apenas porque a grade foi reordenada/refetchada.
+    return [...unique.values()].sort((a, b) => a.registrationId - b.registrationId || a.subOrderIndex - b.subOrderIndex);
+  }, [ordersQuery.data]);
+  const orderStagesBatchQuery = trpc.stages.getOrderStagesBatchByOrder.useQuery(
+    { orders: allVisibleOrderTargets },
+    {
+      enabled: allVisibleOrderTargets.length > 0,
+      staleTime: 10000,
+      refetchInterval: 30000,
+      refetchOnWindowFocus: true,
+      placeholderData: previousData => previousData,
+    }
   );
-  const orderStagesBatchQuery = trpc.stages.getOrderStagesBatch.useQuery(
-    { registrationIds: allVisibleOrderIds },
-    { enabled: allVisibleOrderIds.length > 0, staleTime: 10000 }
-  );
-  // Mapa de registrationId -> { stageId, setAt }
   const orderStagesMap = React.useMemo(() => {
-    const map = new Map<number, { stageId: number; setAt: number }>();
+    const map = new Map<string, { stageId: number; setAt: number }>();
     (orderStagesBatchQuery.data ?? []).forEach((entry: any) => {
-      if (entry.stageId) map.set(entry.registrationId, { stageId: entry.stageId, setAt: entry.setAt });
+      if (entry.stageId) map.set(`${entry.registrationId}_${entry.subOrderIndex ?? 0}`, { stageId: entry.stageId, setAt: entry.setAt });
     });
     return map;
   }, [orderStagesBatchQuery.data]);
-  const setOrderStageMut = trpc.stages.setOrderStage.useMutation({
-    onSuccess: (_, vars) => {
-      toast.success('Etapa atualizada!');
-      setSelectedStageId(prev => ({ ...prev, [vars.registrationId]: vars.stageId }));
+
+  // Assim que o servidor confirma a mesma etapa, removemos o override local.
+  useEffect(() => {
+    setPendingStageByOrder(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [key, stageId] of Object.entries(prev)) {
+        if (orderStagesMap.get(key)?.stageId === stageId) {
+          delete next[key];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [orderStagesMap]);
+
+  const setOrderStageMut = trpc.stages.setOrderStageForOrder.useMutation({
+    onSuccess: () => {
+      toast.success('Etapa salva no pedido!');
       orderStagesBatchQuery.refetch();
     },
-    onError: () => toast.error('Erro ao atualizar etapa'),
+    onError: (_err, vars) => {
+      const key = `${vars.registrationId}_${vars.subOrderIndex ?? 0}`;
+      setPendingStageByOrder(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      toast.error('Erro ao salvar etapa');
+    },
   });
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -5265,8 +5298,9 @@ export default function AdminOrders() {
                         {(() => {
                           const stages = stagesListQuery.data ?? [];
                           if (stages.length === 0) return null;
-                          const batchEntry = orderStagesMap.get(order.id);
-                          const currentStageId = selectedStageId[order.id] ?? batchEntry?.stageId ?? null;
+                          const stageOrderKey = getOrderKey(order);
+                          const batchEntry = orderStagesMap.get(stageOrderKey);
+                          const currentStageId = pendingStageByOrder[stageOrderKey] ?? batchEntry?.stageId ?? null;
                           return (
                             <div className="flex flex-col gap-1 mt-2 w-[72px]">
                               {stages.map(stage => {
@@ -5276,7 +5310,9 @@ export default function AdminOrders() {
                                     key={stage.id}
                                     onClick={e => {
                                       e.stopPropagation();
-                                      setOrderStageMut.mutate({ registrationId: order.id, stageId: stage.id });
+                                      const stageOrderKey = getOrderKey(order);
+                                      setPendingStageByOrder(prev => ({ ...prev, [stageOrderKey]: stage.id }));
+                                      setOrderStageMut.mutate({ registrationId: order.id, subOrderIndex: order.subOrderIndex ?? 0, stageId: stage.id });
                                     }}
                                     disabled={setOrderStageMut.isPending}
                                     title={stage.name}

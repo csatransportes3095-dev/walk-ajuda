@@ -3131,6 +3131,76 @@ export async function setOrderStage(registrationId: number, stageId: number): Pr
   await db.insert(orderStageHistory).values({ registrationId, stageId, setAt: new Date() });
 }
 
+let orderStageSubOrderColumnReady = false;
+async function ensureOrderStageSubOrderColumn(db: any): Promise<void> {
+  if (orderStageSubOrderColumnReady) return;
+  try {
+    await db.execute(sql.raw("ALTER TABLE `orderStageHistory` ADD COLUMN IF NOT EXISTS `subOrderIndex` INT NOT NULL DEFAULT 0 AFTER `registrationId`"));
+  } catch {
+    try {
+      await db.execute(sql.raw("ALTER TABLE `orderStageHistory` ADD COLUMN `subOrderIndex` INT NOT NULL DEFAULT 0 AFTER `registrationId`"));
+    } catch {
+      // Coluna já existente em bancos que não suportam IF NOT EXISTS neste ALTER.
+    }
+  }
+  orderStageSubOrderColumnReady = true;
+}
+
+/**
+ * Fonte de verdade para a etapa interna de um item do pedido.
+ * Usa registrationId + subOrderIndex para não misturar subpedidos do mesmo cadastro.
+ */
+export async function setOrderStageForOrder(registrationId: number, subOrderIndex: number, stageId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error('Database not available');
+  await ensureOrderStageSubOrderColumn(db);
+  await db.insert(orderStageHistory).values({
+    registrationId,
+    subOrderIndex: Number.isFinite(subOrderIndex) ? Math.max(0, Math.trunc(subOrderIndex)) : 0,
+    stageId,
+    setAt: new Date(),
+  });
+}
+
+export async function getOrderCurrentStagesBatchByOrder(
+  orders: Array<{ registrationId: number; subOrderIndex: number }>,
+): Promise<Map<string, { registrationId: number; subOrderIndex: number; stageId: number; stageName: string; stageIcon: string; stageColor: string; setAt: Date }>> {
+  const db = await getDb();
+  const result = new Map<string, { registrationId: number; subOrderIndex: number; stageId: number; stageName: string; stageIcon: string; stageColor: string; setAt: Date }>();
+  if (!db || orders.length === 0) return result;
+  await ensureOrderStageSubOrderColumn(db);
+
+  const targetKeys = new Set<string>();
+  const registrationIds = new Set<number>();
+  for (const order of orders) {
+    const registrationId = Math.trunc(Number(order.registrationId));
+    const subOrderIndex = Math.max(0, Math.trunc(Number(order.subOrderIndex) || 0));
+    if (!Number.isFinite(registrationId) || registrationId <= 0) continue;
+    targetKeys.add(`${registrationId}_${subOrderIndex}`);
+    registrationIds.add(registrationId);
+  }
+  if (registrationIds.size === 0) return result;
+
+  // Busca do mais novo para o mais antigo. O primeiro registro de cada chave é a etapa atual.
+  const rows = await db.execute(sql`
+    SELECT osh.registrationId, osh.subOrderIndex, osh.stageId, osh.setAt,
+           s.name AS stageName, s.icon AS stageIcon, s.color AS stageColor
+    FROM orderStageHistory osh
+    INNER JOIN internalStages s ON s.id = osh.stageId
+    WHERE osh.registrationId IN (${sql.join([...registrationIds].map(id => sql`${id}`), sql`, `)})
+    ORDER BY osh.id DESC
+  `);
+  const data = (rows[0] as unknown as Array<{ registrationId: number; subOrderIndex: number; stageId: number; stageName: string; stageIcon: string; stageColor: string; setAt: Date }>);
+  for (const row of data) {
+    const registrationId = Number(row.registrationId);
+    const subOrderIndex = Number(row.subOrderIndex || 0);
+    const key = `${registrationId}_${subOrderIndex}`;
+    if (!targetKeys.has(key) || result.has(key)) continue;
+    result.set(key, { registrationId, subOrderIndex, stageId: Number(row.stageId), stageName: row.stageName, stageIcon: row.stageIcon, stageColor: row.stageColor, setAt: row.setAt });
+  }
+  return result;
+}
+
 export async function getOrderCurrentStage(registrationId: number): Promise<(OrderStageHistory & { stage?: InternalStage }) | null> {
   const db = await getDb();
   if (!db) return null;

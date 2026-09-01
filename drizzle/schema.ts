@@ -1234,6 +1234,8 @@ export type InsertInternalStage = typeof internalStages.$inferInsert;
 export const orderStageHistory = mysqlTable("orderStageHistory", {
   id: int("id").autoincrement().primaryKey(),
   registrationId: int("registrationId").notNull(),
+  // Identifica corretamente cada item quando um mesmo registrationId possui subpedidos.
+  subOrderIndex: int("subOrderIndex").notNull().default(0),
   stageId: int("stageId").notNull(),
   setAt: timestamp("setAt").defaultNow().notNull(),
 });
