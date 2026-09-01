@@ -1,28 +1,30 @@
 export type VehicleQuestionKind = 'brand' | 'model' | 'year' | 'color' | null;
 
+// Catálogo canônico usado pela página pública e pelo Assistente Colombia.
+// Manter as marcas e modelos aqui evita listas diferentes entre os dois fluxos.
 export const VEHICLE_MODELS: Record<string, string[]> = {
-  CHEVROLET: ['ONIX', 'ONIX PLUS', 'PRISMA', 'COBALT', 'SPIN', 'TRACKER', 'CRUZE'],
-  FIAT: ['ARGO', 'CRONOS', 'MOBI', 'UNO', 'GRAND SIENA', 'PULSE', 'FASTBACK'],
-  FORD: ['KA', 'KA SEDAN', 'ECOSPORT', 'TERRITORY'],
-  HONDA: ['CITY', 'CIVIC', 'FIT', 'HR-V'],
-  HYUNDAI: ['HB20', 'HB20S', 'CRETA', 'IX35'],
+  VOLKSWAGEN: ['GOL', 'VOYAGE', 'POLO', 'VIRTUS', 'FOX', 'SPACEFOX', 'JETTA', 'T-CROSS', 'NIVUS', 'TAOS'],
+  FIAT: ['MOBI', 'UNO', 'ARGO', 'CRONOS', 'GRAND SIENA', 'SIENA', 'PULSE', 'FASTBACK', 'TIPO'],
+  CHEVROLET: ['ONIX', 'ONIX PLUS', 'PRISMA', 'COBALT', 'SPIN', 'CRUZE', 'TRACKER', 'JOY', 'JOY PLUS', 'EQUINOX'],
+  HYUNDAI: ['HB20', 'HB20S', 'HB20X', 'CRETA', 'ELANTRA', 'I30', 'TUCSON', 'IX35', 'AZERA'],
+  TOYOTA: ['ETIOS', 'ETIOS SEDAN', 'YARIS', 'YARIS SEDAN', 'COROLLA', 'COROLLA CROSS', 'PRIUS', 'RAV4'],
+  RENAULT: ['KWID', 'SANDERO', 'LOGAN', 'DUSTER', 'CAPTUR', 'FLUENCE', 'KARDIAN'],
+  NISSAN: ['MARCH', 'VERSA', 'V-DRIVE', 'SENTRA', 'KICKS', 'LEAF'],
+  HONDA: ['FIT', 'CITY', 'CIVIC', 'HR-V', 'WR-V', 'ACCORD'],
   JEEP: ['RENEGADE', 'COMPASS', 'COMMANDER'],
-  KIA: ['CERATO', 'SOUL', 'SPORTAGE'],
-  NISSAN: ['VERSA', 'KICKS', 'SENTRA', 'MARCH'],
-  PEUGEOT: ['208', '2008', '308'],
-  RENAULT: ['LOGAN', 'SANDERO', 'KWID', 'DUSTER', 'CAPTUR'],
-  TOYOTA: ['COROLLA', 'YARIS', 'ETIOS', 'COROLLA CROSS'],
-  VOLKSWAGEN: ['GOL', 'VOYAGE', 'POLO', 'VIRTUS', 'T-CROSS', 'NIVUS', 'JETTA'],
-  'CITROËN': ['C3', 'C4 CACTUS', 'C4 LOUNGE', 'AIRCROSS'],
-  CITROEN: ['C3', 'C4 CACTUS', 'C4 LOUNGE', 'AIRCROSS'],
-  'CAOA CHERY': ['ARRIZO 5', 'ARRIZO 6', 'TIGGO 2', 'TIGGO 5X', 'TIGGO 7'],
-  MITSUBISHI: ['ASX', 'LANCER', 'ECLIPSE CROSS'],
-  BMW: ['320I', 'X1', 'X2'],
-  MERCEDES: ['CLASSE A', 'CLASSE C', 'GLA'],
-  AUDI: ['A3', 'A4', 'Q3'],
+  BYD: ['DOLPHIN MINI', 'DOLPHIN', 'DOLPHIN GS', 'KING', 'YUAN PLUS', 'SONG PLUS', 'SEAL'],
+  'CAOA CHERY': ['ARRIZO 5', 'ARRIZO 5E', 'ARRIZO 6', 'TIGGO 2', 'TIGGO 3X', 'TIGGO 5X', 'TIGGO 7', 'TIGGO 8'],
+  GWM: ['ORA 03', 'HAVAL H6', 'HAVAL H6 HEV', 'HAVAL H6 PHEV'],
+  'CITROËN': ['C3', 'C3 AIRCROSS', 'C4 LOUNGE', 'C4 CACTUS', 'AIRCROSS'],
+  PEUGEOT: ['208', '2008', '308', '408'],
+  FORD: ['KA', 'KA SEDAN', 'FIESTA', 'FOCUS', 'FOCUS SEDAN', 'ECOSPORT', 'FUSION', 'TERRITORY'],
+  KIA: ['RIO', 'CERATO', 'SOUL', 'SPORTAGE', 'STONIC', 'NIRO'],
+  MITSUBISHI: ['LANCER', 'ASX', 'ECLIPSE CROSS', 'OUTLANDER'],
+  'JAC MOTORS': ['T40', 'T50', 'T60', 'E-JS1', 'E-JS4', 'IEV20', 'IEV40'],
+  GEELY: ['EX2', 'EX5'],
 };
 
-export const VEHICLE_BRANDS = Object.keys(VEHICLE_MODELS).filter((brand, index, all) => brand !== 'CITROEN' || !all.includes('CITROËN'));
+export const VEHICLE_BRANDS = Object.keys(VEHICLE_MODELS);
 export const VEHICLE_YEARS = Array.from({ length: 11 }, (_, index) => String(2026 - index));
 export const VEHICLE_COLORS = ['BRANCO', 'PRETO', 'PRATA', 'CINZA', 'VERMELHO', 'AZUL', 'VERDE', 'AMARELO', 'MARROM', 'BEGE', 'OUTRA'];
 
@@ -32,6 +34,12 @@ const normalize = (value: string) => value
   .replace(/\s+/g, ' ')
   .trim()
   .toUpperCase();
+
+const VEHICLE_BRAND_ALIASES: Record<string, string> = {
+  CITROEN: 'CITROËN',
+  CHERY: 'CAOA CHERY',
+  JAC: 'JAC MOTORS',
+};
 
 export function getVehicleQuestionKind(question: string): VehicleQuestionKind {
   const q = normalize(question);
@@ -44,6 +52,7 @@ export function getVehicleQuestionKind(question: string): VehicleQuestionKind {
 
 export function getVehicleModels(brand: string): string[] {
   const normalized = normalize(brand);
-  const key = Object.keys(VEHICLE_MODELS).find(item => normalize(item) === normalized);
+  const alias = VEHICLE_BRAND_ALIASES[normalized];
+  const key = alias ?? Object.keys(VEHICLE_MODELS).find(item => normalize(item) === normalized);
   return key ? VEHICLE_MODELS[key] : [];
 }
