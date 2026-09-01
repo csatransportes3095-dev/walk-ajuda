@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { CalendarCheck, CalendarClock, CalendarX } from "lucide-react";
 
@@ -7,6 +8,13 @@ interface Props {
   customerPhone?: string | null;
   orderStatus?: string | null;
 }
+
+const PHOTO_ANALYSIS_STATUSES = new Set([
+  "foto_em_anal",
+  "foto_em_analise",
+  "foto_analise",
+  "em_analise",
+]);
 
 function formatDate(d: string): string {
   const [y, m, day] = d.split("-").map(Number);
@@ -36,9 +44,28 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
       utils.schedule.getForOrder.invalidate({ registrationId, subOrderIndex, customerPhone: customerPhone ?? undefined });
     },
   });
+  const completeMut = trpc.schedule.complete.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.schedule.getForOrder.invalidate({ registrationId, subOrderIndex, customerPhone: customerPhone ?? undefined }),
+        utils.orderStatus.listOrders.invalidate(),
+      ]);
+    },
+  });
 
   const appt = apptQuery.data;
+  const analysisOrder = PHOTO_ANALYSIS_STATUSES.has(String(orderStatus || ""));
   const showConfirmedAlert = appt && appt.status === "confirmed" && appt.slotDate && !appt.adminSeenConfirmedAt;
+
+  // Proteção de auto-correção: qualquer chave conhecida de Foto em Análise encerra
+  // um agendamento ainda aberto. Isso cobre chaves antigas e atuais do banco e
+  // mantém o filtro operacional sincronizado mesmo em pedidos históricos.
+  useEffect(() => {
+    if (!analysisOrder || !appt?.id) return;
+    if (appt.status !== "pending" && appt.status !== "confirmed") return;
+    if (completeMut.isPending) return;
+    completeMut.mutate({ id: appt.id });
+  }, [analysisOrder, appt?.id, appt?.status, completeMut.isPending]);
 
   if (apptQuery.isLoading) {
     return (
@@ -50,10 +77,10 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
     );
   }
 
-  // Quando o agendamento ou o pedido já foi concluído, o card mostra somente o status atual do pedido.
-  // O histórico de agendamento continua preservado, mas não é trabalho operacional aberto.
+  // Foto em Análise já encerra a etapa de agenda no fluxo operacional. O badge
+  // some imediatamente enquanto a mutation acima grava "completed" no banco.
   const finalOrder = ['entregue', 'pedido_entregue', 'cancelado'].includes(String(orderStatus || ''));
-  if (appt?.status === "completed" || finalOrder) return null;
+  if (appt?.status === "completed" || finalOrder || analysisOrder) return null;
 
   // CONFIRMADO — cliente escolheu dia e hora
   if (appt && appt.status === "confirmed" && appt.slotDate) {
