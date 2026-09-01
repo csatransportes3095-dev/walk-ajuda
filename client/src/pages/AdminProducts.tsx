@@ -223,7 +223,7 @@ function OptionPriceModelsEditor({ optionId }: { optionId: number }) {
           <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Promocional: 100,00" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
           <input type="datetime-local" value={newPromoEndsAt} onChange={e => setNewPromoEndsAt(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
         </div>
-        <Button type="button" className="mt-2 w-full bg-cyan-600 hover:bg-cyan-500 text-white" disabled={createMut.isPending} onClick={() => { if (!newLabel.trim() || !newPrice.trim()) { toast.error('Informe categoria e valor.'); return; } createMut.mutate({ optionId, label: newLabel.trim(), price: newPrice.trim(), originalPrice: newOriginalPrice.trim(), promoEndsAt: newPromoEndsAt ? new Date(newPromoEndsAt).getTime() : null, sortOrder: models.length, isActive: true }); }}><Plus className="w-3 h-3 mr-1" /> Adicionar categoria</Button>
+        <Button type="button" className="mt-2 w-full bg-cyan-600 hover:bg-cyan-500 text-white" disabled={createMut.isPending} onClick={() => { const label = newLabel.trim(); const principal = newOriginalPrice.trim(); const promotional = newPrice.trim(); if (!label || (!principal && !promotional)) { toast.error('Informe categoria e pelo menos um valor.'); return; } createMut.mutate({ optionId, label, price: promotional || principal, originalPrice: promotional ? principal : '', promoEndsAt: promotional && newPromoEndsAt ? new Date(newPromoEndsAt).getTime() : null, sortOrder: models.length, isActive: true }); }}><Plus className="w-3 h-3 mr-1" /> Adicionar categoria</Button>
       </div>
     </div>
   );
