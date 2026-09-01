@@ -1,0 +1,135 @@
+name: H2 Safe Foto Analise Fix
+
+on:
+  push:
+    branches:
+      - fix/h2-foto-analise-safe-20260901
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Apply minimal server-side patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          db = Path('server/db.ts')
+          s = db.read_text()
+          old = '''export async function completeOpenAppointmentsForOrder(registrationId: number, subOrderIndex: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const appointments = await db.select()
+    .from(scheduleAppointments)
+    .where(and(
+      eq(scheduleAppointments.registrationId, registrationId),
+      eq(scheduleAppointments.subOrderIndex, subOrderIndex),
+      inArray(scheduleAppointments.status, ['pending', 'confirmed']),
+    ));
+
+  for (const appointment of appointments) {
+    await completeAppointment(appointment.id);
+  }
+  return appointments.length;
+}'''
+          new = '''export async function completeOpenAppointmentsForOrder(registrationId: number, subOrderIndex: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  // 1) Regra principal: vínculo exato do pedido/subpedido.
+  const directAppointments = await db.select()
+    .from(scheduleAppointments)
+    .where(and(
+      eq(scheduleAppointments.registrationId, registrationId),
+      eq(scheduleAppointments.subOrderIndex, subOrderIndex),
+    ))
+    .orderBy(desc(scheduleAppointments.id));
+
+  const directOpen = directAppointments.filter(a => a.status === 'pending' || a.status === 'confirmed');
+  if (directOpen.length > 0) {
+    for (const appointment of directOpen) await completeAppointment(appointment.id);
+    return directOpen.length;
+  }
+
+  // Se já existe qualquer histórico de agenda ligado exatamente ao pedido,
+  // não usamos fallback por telefone: evita encerrar agenda de outro pedido.
+  if (directAppointments.length > 0) return 0;
+
+  // 2) Compatibilidade com re-cadastros antigos: o ADM já exibe, por telefone,
+  // o agendamento mais recente quando não existe vínculo direto. Ao avançar para
+  // Foto em Análise, encerramos exatamente o mesmo fallback que a tela exibiria.
+  const registrationRows = await db.select({ phone: accessCodePhones.phone })
+    .from(accessCodePhones)
+    .where(eq(accessCodePhones.id, registrationId))
+    .limit(1);
+  const phoneDigits = String(registrationRows[0]?.phone || '').replace(/\\D/g, '');
+  if (phoneDigits.length < 8) return 0;
+  const tail = phoneDigits.slice(-11);
+
+  const byPhone = (await db.select().from(scheduleAppointments).orderBy(desc(scheduleAppointments.id)))
+    .filter(a => {
+      if (a.status !== 'pending' && a.status !== 'confirmed') return false;
+      const apptPhone = String(a.customerPhone || '').replace(/\\D/g, '');
+      return apptPhone.endsWith(tail) || tail.endsWith(apptPhone.slice(-11));
+    });
+
+  const fallback = byPhone.find(a => a.status === 'confirmed')
+    ?? byPhone.find(a => a.status === 'pending');
+  if (!fallback) return 0;
+
+  await completeAppointment(fallback.id);
+  return 1;
+}'''
+          if old not in s:
+              raise SystemExit('Bloco completeOpenAppointmentsForOrder esperado nao encontrado')
+          db.write_text(s.replace(old, new, 1))
+
+          routers = Path('server/routers.ts')
+          r = routers.read_text()
+          old_trigger = "if (input.status === 'foto_em_anal') {\n          await completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex);\n        }"
+          new_trigger = "if (['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise'].includes(input.status)) {\n          await completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex);\n        }"
+          if old_trigger not in r:
+              raise SystemExit('Gatilho Foto em Analise esperado nao encontrado')
+          routers.write_text(r.replace(old_trigger, new_trigger, 1))
+
+          test = Path('server/h2FotoAnaliseSafe.test.ts')
+          test.write_text('''import { describe, expect, it } from "vitest";\nimport fs from "node:fs";\n\nconst dbSource = fs.readFileSync("server/db.ts", "utf8");\nconst routerSource = fs.readFileSync("server/routers.ts", "utf8");\n\ndescribe("H2 Foto em Analise - sincronizacao segura de agenda", () => {\n  it("aceita todas as chaves conhecidas de Foto em Analise", () => {\n    expect(routerSource).toContain("['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise'].includes(input.status)");\n  });\n\n  it("prioriza registrationId + subOrderIndex e preserva historico", () => {\n    expect(dbSource).toContain("eq(scheduleAppointments.registrationId, registrationId)");\n    expect(dbSource).toContain("eq(scheduleAppointments.subOrderIndex, subOrderIndex)");\n    expect(dbSource).toContain("if (directAppointments.length > 0) return 0;");\n    expect(dbSource).toContain("await completeAppointment(appointment.id)");\n  });\n\n  it("usa fallback por telefone somente quando nao existe nenhum vinculo direto", () => {\n    expect(dbSource).toContain("accessCodePhones.phone");\n    expect(dbSource).toContain("const fallback = byPhone.find(a => a.status === 'confirmed')");\n    expect(dbSource).toContain("await completeAppointment(fallback.id)");\n  });\n});\n''')
+          PY
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run focused tests
+        run: pnpm vitest run server/scheduleOrderSync.test.ts server/adminOrdersOperationalFilters.test.ts server/h2FotoAnaliseSafe.test.ts
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Commit validated patch to safe branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/db.ts server/routers.ts server/h2FotoAnaliseSafe.test.ts
+          if git diff --cached --quiet; then
+            echo "No patch changes to commit"
+            exit 0
+          fi
+          git commit -m "fix(h2): sincronizar Foto em Analise e agenda com fallback seguro"
+          git push origin HEAD:fix/h2-foto-analise-safe-20260901
