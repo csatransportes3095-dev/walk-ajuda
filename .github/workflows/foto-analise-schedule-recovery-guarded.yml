@@ -1,0 +1,58 @@
+name: Foto Analise Recovery Guarded Patch
+
+on:
+  push:
+    branches:
+      - fix/foto-em-analise-agendamento-recovery-work
+    paths:
+      - scripts/foto-analise-schedule-recovery-patch.mjs
+      - .github/workflows/foto-analise-schedule-recovery-guarded.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-validate-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/foto-em-analise-agendamento-recovery-work
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Apply guarded patch
+        run: node scripts/foto-analise-schedule-recovery-patch.mjs
+
+      - name: Validate whitespace
+        run: git diff --check
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Targeted regression tests
+        run: pnpm exec vitest run server/scheduleOrderSync.test.ts server/adminOrdersOperationalFilters.test.ts
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Remove temporary patch machinery
+        run: git rm scripts/foto-analise-schedule-recovery-patch.mjs .github/workflows/foto-analise-schedule-recovery-guarded.yml
+
+      - name: Commit validated change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/db.ts server/routers.ts server/scheduleOrderSync.test.ts
+          git commit -m "fix(schedule): concluir agenda ao entrar em foto em analise"
+          git push origin HEAD:fix/foto-em-analise-agendamento-recovery-work
