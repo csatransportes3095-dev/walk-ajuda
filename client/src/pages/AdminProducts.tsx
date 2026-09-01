@@ -161,6 +161,74 @@ const docModes = [
   { value: 'custom', label: 'Nome Personalizado' },
 ];
 
+
+type OptionPriceModelType = {
+  id: number; optionId: number; label: string; price: string; originalPrice: string | null;
+  promoEndsAt: number | null; sortOrder: number; isActive: number;
+};
+
+function OptionPriceModelRow({ model, onChanged }: { model: OptionPriceModelType; onChanged: () => void }) {
+  const [label, setLabel] = useState(model.label);
+  const [price, setPrice] = useState(model.price);
+  const [originalPrice, setOriginalPrice] = useState(model.originalPrice || '');
+  const [promoEndsAt, setPromoEndsAt] = useState(model.promoEndsAt ? new Date(model.promoEndsAt).toISOString().slice(0, 16) : '');
+  const [active, setActive] = useState(model.isActive === 1);
+  const updateMut = trpc.optionPriceModels.update.useMutation({ onSuccess: onChanged });
+  const deleteMut = trpc.optionPriceModels.delete.useMutation({ onSuccess: onChanged });
+
+  return (
+    <div className="rounded-lg border border-cyan-500/20 bg-black/30 p-3 space-y-2">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+        <div><label className="text-[10px] text-cyan-300 block mb-1">Modelo / Categoria</label><input value={label} onChange={e => setLabel(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} /></div>
+        <div><label className="text-[10px] text-orange-300 block mb-1">Valor Principal</label><input value={originalPrice} onChange={e => setOriginalPrice(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} placeholder="Ex: 150,00" /></div>
+        <div><label className="text-[10px] text-green-300 block mb-1">Valor Promocional</label><input value={price} onChange={e => setPrice(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} placeholder="Ex: 100,00" /></div>
+        <div><label className="text-[10px] text-red-300 block mb-1">Fim da promoção</label><input type="datetime-local" value={promoEndsAt} onChange={e => setPromoEndsAt(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} /></div>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <label className="flex items-center gap-2 text-[11px] text-gray-300"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Ativo para o cliente</label>
+        <div className="flex gap-2">
+          <Button type="button" size="sm" className="bg-cyan-600 hover:bg-cyan-500 text-white" disabled={updateMut.isPending} onClick={() => updateMut.mutate({ id: model.id, optionId: model.optionId, label: label.trim(), price: price.trim(), originalPrice: originalPrice.trim(), promoEndsAt: promoEndsAt ? new Date(promoEndsAt).getTime() : null, sortOrder: model.sortOrder, isActive: active })}><Save className="w-3 h-3 mr-1" /> Salvar</Button>
+          <Button type="button" size="sm" variant="destructive" disabled={deleteMut.isPending} onClick={() => { if (confirm(`Excluir a categoria ${model.label}?`)) deleteMut.mutate({ id: model.id }); }}><Trash2 className="w-3 h-3" /></Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OptionPriceModelsEditor({ optionId }: { optionId: number }) {
+  const utils = trpc.useUtils();
+  const query = trpc.optionPriceModels.list.useQuery({ optionId });
+  const [newLabel, setNewLabel] = useState('');
+  const [newOriginalPrice, setNewOriginalPrice] = useState('');
+  const [newPrice, setNewPrice] = useState('');
+  const [newPromoEndsAt, setNewPromoEndsAt] = useState('');
+  const refresh = () => { utils.optionPriceModels.list.invalidate({ optionId }); utils.products.list.invalidate(); };
+  const createMut = trpc.optionPriceModels.create.useMutation({ onSuccess: () => { setNewLabel(''); setNewOriginalPrice(''); setNewPrice(''); setNewPromoEndsAt(''); refresh(); toast.success('Categoria de preço criada!'); } });
+  const models = (query.data || []) as OptionPriceModelType[];
+
+  return (
+    <div className="rounded-xl border-2 border-cyan-500/30 bg-cyan-950/10 p-3 space-y-3">
+      <div>
+        <p className="text-sm font-black text-cyan-300">MODELOS / CATEGORIAS DE PREÇO</p>
+        <p className="text-[10px] text-gray-400">Ficam dentro desta Opção de Compra. Não criam outro produto e não duplicam perguntas ou documentos.</p>
+      </div>
+      {query.isLoading ? <div className="text-xs text-gray-400 flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Carregando...</div> : models.length > 0 ? (
+        <div className="space-y-2">{models.map(model => <OptionPriceModelRow key={model.id} model={model} onChanged={refresh} />)}</div>
+      ) : <p className="text-xs text-gray-500">Nenhuma categoria cadastrada. O preço base da opção continua funcionando normalmente.</p>}
+      <div className="rounded-lg border border-dashed border-cyan-500/30 p-3">
+        <p className="text-[11px] font-bold text-cyan-300 mb-2">+ Adicionar categoria de preço</p>
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+          <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Ex: SÓ PARA BLOCO" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
+          <input value={newOriginalPrice} onChange={e => setNewOriginalPrice(e.target.value)} placeholder="Principal: 150,00" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
+          <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Promocional: 100,00" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
+          <input type="datetime-local" value={newPromoEndsAt} onChange={e => setNewPromoEndsAt(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
+        </div>
+        <Button type="button" className="mt-2 w-full bg-cyan-600 hover:bg-cyan-500 text-white" disabled={createMut.isPending} onClick={() => { if (!newLabel.trim() || !newPrice.trim()) { toast.error('Informe categoria e valor.'); return; } createMut.mutate({ optionId, label: newLabel.trim(), price: newPrice.trim(), originalPrice: newOriginalPrice.trim(), promoEndsAt: newPromoEndsAt ? new Date(newPromoEndsAt).getTime() : null, sortOrder: models.length, isActive: true }); }}><Plus className="w-3 h-3 mr-1" /> Adicionar categoria</Button>
+      </div>
+    </div>
+  );
+}
+
 // Componente completo para cada opção: documentos dinâmicos + perguntas
 function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, isLast, onMoveUp, onMoveDown }: {
   opt: OptionType; productId: number;
@@ -403,6 +471,8 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
       {/* Expanded: Config + Docs + Questions */}
       {expanded && (
         <div className="border-t border-gray-700/20 p-3 space-y-4">
+          <OptionPriceModelsEditor optionId={opt.id} />
+
           {/* === CONFIGURAÇÕES GERAIS DA OPÇÃO === */}
           <div className="p-3 bg-black/40 rounded-lg border border-green-500/20 space-y-3">
             <p className="text-xs text-green-400 font-bold flex items-center gap-1"><Settings2 className="w-3 h-3" /> Configurações da Opção</p>
@@ -1604,7 +1674,7 @@ export default function AdminProducts() {
                       <div className="bg-black/20 border border-dashed border-green-500/30 rounded-lg p-3 space-y-3">
                         <p className="text-xs text-green-400 font-bold">+ Nova Opção de Compra</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
-                          <div className="col-span-1"><label className="text-xs text-gray-400 block mb-1">Modelo / Versão</label><input value={newOptLabel} onChange={e => setNewOptLabel(e.target.value)} placeholder="Ex: Nome Aleatório" style={whiteInputStyle} /></div>
+                          <div className="col-span-1"><label className="text-xs text-gray-400 block mb-1">Nome da Opção</label><input value={newOptLabel} onChange={e => setNewOptLabel(e.target.value)} placeholder="Ex: Nome Aleatório" style={whiteInputStyle} /></div>
                           <div className="col-span-1"><label className="text-xs text-gray-400 block mb-1">Valor Principal</label><input value={newOptBasePrice} onChange={e => setNewOptBasePrice(e.target.value)} placeholder="Ex: 300,00" style={whiteInputStyle} /></div>
                           <div className="col-span-1"><label className="text-xs text-green-400 block mb-1">Valor Promocional (opcional)</label><input value={newOptPrice} onChange={e => setNewOptPrice(e.target.value)} placeholder="Ex: 100,00" style={whiteInputStyle} /></div>
                           <div className="col-span-1"><label className="text-xs text-red-300 block mb-1">Fim da Promoção (opcional)</label><input type="datetime-local" value={newOptPromoEndsAt} onChange={e => setNewOptPromoEndsAt(e.target.value)} style={whiteInputStyle} /></div>
@@ -1633,10 +1703,10 @@ export default function AdminProducts() {
                           )}
                         </div>
 
-                        <p className="text-[10px] text-gray-500">Cada opção funciona como uma versão do mesmo produto. Ela mantém preço, promoção, documentos, perguntas e garantia próprios.</p>
+                        <p className="text-[10px] text-gray-500">Cada opção de compra é independente. Dentro dela você pode cadastrar várias categorias de preço acima.</p>
 
                         <Button onClick={() => {
-                          if (!newOptLabel.trim() || !newOptBasePrice.trim()) { toast.error("Preencha a versão e o valor principal"); return; }
+                          if (!newOptLabel.trim() || !newOptBasePrice.trim()) { toast.error("Preencha o nome da opção e o valor principal"); return; }
                           createOptMut.mutate({
                             productId: product.id, label: newOptLabel,
                             price: newOptPrice.trim() || newOptBasePrice,

@@ -17,8 +17,9 @@ type Product = {
   id: number; name: string; description?: string; iconUrl?: string;
   options: ProductOption[];
 };
+type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice?: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; };
 type ProductOption = {
-  id: number; name: string; price?: string; label?: string; type?: string; isPdfOnly?: number;
+  id: number; name: string; price?: string; label?: string; type?: string; isPdfOnly?: number; priceModels?: OptionPriceModel[];
   questions: ProductQuestion[];
   documents: ProductDocument[];
 };
@@ -117,6 +118,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const flowState = useRef<{
     product: Product | null;
     option: ProductOption | null;
+    priceModel: OptionPriceModel | null;
     answers: Record<number, string>;
     audioAnswers: Record<number, AudioDraft>;
     audioFlowId: string;
@@ -127,7 +129,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     pixProofMime: string;
     couponCode: string;
     couponDiscount: { type: string; value: number } | null;
-  }>({ product: null, option: null, answers: {}, audioAnswers: {}, audioFlowId: createAudioFlowId(), docFiles: {}, clientName: '', clientPhone: '', pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null });
+  }>({ product: null, option: null, priceModel: null, answers: {}, audioAnswers: {}, audioFlowId: createAudioFlowId(), docFiles: {}, clientName: '', clientPhone: '', pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null });
 
   const [pixCopied, setPixCopied] = useState(false);
   const [uploadingPix, setUploadingPix] = useState(false);
@@ -171,6 +173,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         cadastroSubStep,
         productId: fs.product.id,
         optionId: fs.option?.id ?? null,
+        priceModelId: fs.priceModel?.id ?? null,
         questionAnswers: Object.entries(fs.answers).reduce((acc, [qId, ans]) => {
           // Converter Record<number, string> para o formato {[questionId]: answer}
           acc[qId] = ans;
@@ -309,6 +312,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const resetOptionFlow = () => {
     const fs = flowState.current;
     fs.option = null;
+    fs.priceModel = null;
     fs.answers = {};
     fs.audioAnswers = {};
     fs.audioFlowId = createAudioFlowId();
@@ -362,6 +366,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       flowState.current = {
         product,
         option,
+        priceModel: option.priceModels?.find(model => model.id === saved.priceModelId) || null,
         answers,
         audioAnswers: saved.questionAudioAnswers || {},
         audioFlowId: saved.questionAudioFlowId || createAudioFlowId(),
@@ -433,7 +438,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           finishWithProduct(product, null);
         } else if (product.options.length === 1) {
           flowState.current.option = product.options[0];
-          setTimeout(() => askQuestions(product, product.options[0], {}), 300);
+          setTimeout(() => startOptionPricing(product, product.options[0]), 300);
         } else {
           askOption(product);
         }
@@ -460,7 +465,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       flowState.current.product = product;
       flowState.current.option = option;
       saveBotProgress('questions', 'dados');
-      setTimeout(() => askQuestions(product, option, {}), 300);
+      setTimeout(() => startOptionPricing(product, option), 300);
     };
     addMsgs(
       { type: "bot", id: uid(), text: `Qual opção de ${product.name} você quer?` },
@@ -470,6 +475,36 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         options: product.options.map(o => `${o.label || o.name}${o.price ? ` — R$ ${o.price}` : ""}`),
         answered: false
       }
+    );
+  };
+
+  const startOptionPricing = (product: Product, option: ProductOption) => {
+    const models = option.priceModels || [];
+    if (models.length === 0) {
+      flowState.current.priceModel = null;
+      setTimeout(() => askQuestions(product, option, {}), 200);
+      return;
+    }
+    if (models.length === 1) {
+      flowState.current.priceModel = models[0];
+      saveBotProgress('questions', 'dados');
+      setTimeout(() => askQuestions(product, option, {}), 200);
+      return;
+    }
+    saveSnapshot();
+    const msgId = uid();
+    callbacks.current[msgId] = (answer: string) => {
+      markAnswered(msgId);
+      addMsgs({ type: 'user', id: uid(), text: answer });
+      const model = models.find(item => `${item.label} — R$ ${item.price}` === answer);
+      if (!model) return;
+      flowState.current.priceModel = model;
+      saveBotProgress('questions', 'dados');
+      setTimeout(() => askQuestions(product, option, {}), 250);
+    };
+    addMsgs(
+      { type: 'bot', id: uid(), text: 'Qual modelo / categoria de preço você deseja?' },
+      { type: 'options', id: msgId, options: models.map(model => `${model.label} — R$ ${model.price}`), answered: false }
     );
   };
 
@@ -694,7 +729,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const pixKey = activePix?.pixKey || settingsData?.pix_key || '';
     const pixName = activePix?.pixName || settingsData?.pix_name || '';
     const pixBank = activePix?.pixBank || settingsData?.pix_bank || '';
-    const price = option?.price || '';
+    const price = flowState.current.priceModel?.price || option?.price || '';
 
     const msgId = uid();
     pendingPixMsgId.current = msgId;
@@ -788,7 +823,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         const result = await submitMutation.mutateAsync({
           clientName: flowState.current.clientName || profileQuery.data?.name || 'Cliente',
           service: product.name,
-          nameOption: option?.label || option?.name || 'N/A',
+          nameOption: option ? `${option.label || option.name || 'N/A'}${flowState.current.priceModel ? ` — ${flowState.current.priceModel.label}` : ''}` : 'N/A',
           documents: docsArray.length > 0 ? docsArray : undefined,
           phone: clientPhoneForSubmit || undefined,
           city: profileQuery.data?.city || undefined,
@@ -801,7 +836,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           audioDraftIds: hasAudioAnswersForCurrentOption ? audioDraftIdsForSubmit : undefined,
           couponCode: flowState.current.couponCode || undefined,
           price: (() => {
-            const rawPrice = option?.price;
+            const rawPrice = flowState.current.priceModel?.price || option?.price;
             if (!rawPrice) return undefined;
             const discount = flowState.current.couponDiscount;
             if (!discount) return rawPrice;

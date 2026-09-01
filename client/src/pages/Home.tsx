@@ -27,11 +27,14 @@ type CartItem = {
   id: string; // unique key
   product: Product;
   option: ProductOption | null;
+  priceModel: OptionPriceModel | null;
 };
 
 type ProductQuestion = { id: number; question: string; fieldType: string; options: string | null; isRequired: number; sortOrder: number; helpText?: string | null; audioMinDurationSeconds?: number; audioMaxDurationSeconds?: number; allowAudioRerecord?: number; allowAudioFileUpload?: number; questionPresentation?: 'text' | 'audio'; questionAudioUrl?: string | null; showQuestionTextWithAudio?: number; parentQuestionId: number | null; triggerOption: string | null };
 type OptionDocument = { id: number; optionId: number; label: string; exampleImageUrl: string | null; inputSource?: string; sortOrder: number; instruction?: string | null; exampleText?: string | null };
 type WarrantyTier = { id: number; optionId: number; warrantyType: string; warrantyValue: number; warrantyLabel: string | null; price: string; originalPrice: string | null; sortOrder: number; isActive: number; };
+type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; };
+
 type ProductOption = {
   id: number; label: string; price: string; originalPrice: string | null; type: string | null; sortOrder: number; isActive: number;
   requireProfilePhoto: number; requireCarDocument: number; requireAlvara: number;
@@ -41,6 +44,7 @@ type ProductOption = {
   documents: OptionDocument[];
   warrantyTiers?: WarrantyTier[];
   promoEndsAt?: number | null;
+  priceModels?: OptionPriceModel[];
   cardBorderColor?: string | null; cardBgColor?: string | null; cardTextColor?: string | null;
   cardButtonColor?: string | null; cardAccentColor?: string | null;
 };
@@ -255,7 +259,25 @@ export default function Home() {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
-  const products = rawProducts as unknown as Product[] | undefined;
+  const baseProducts = rawProducts as unknown as Product[] | undefined;
+  const optionIds = useMemo(() => (baseProducts || []).flatMap(product => product.options.map(option => option.id)), [baseProducts]);
+  const { data: activeOptionPriceModels = [] } = trpc.optionPriceModels.listActive.useQuery(
+    { optionIds },
+    { enabled: optionIds.length > 0, staleTime: 30_000, refetchOnWindowFocus: true }
+  );
+  const products = useMemo(() => {
+    if (!baseProducts) return undefined;
+    const byOption = new Map<number, OptionPriceModel[]>();
+    (activeOptionPriceModels as OptionPriceModel[]).forEach(model => {
+      const list = byOption.get(model.optionId) || [];
+      list.push(model);
+      byOption.set(model.optionId, list);
+    });
+    return baseProducts.map(product => ({
+      ...product,
+      options: product.options.map(option => ({ ...option, priceModels: byOption.get(option.id) || [] })),
+    }));
+  }, [baseProducts, activeOptionPriceModels]);
   const { data: settings } = trpc.settings.getAll.useQuery();
   const botEnabled = settings?.bot_assistant_enabled !== '0';
   const { data: activePix } = trpc.pix.getActive.useQuery();
@@ -293,6 +315,7 @@ export default function Home() {
     return true;
   });
   const [selectedOption, setSelectedOption] = useState<ProductOption | null>(null);
+  const [selectedPriceModel, setSelectedPriceModel] = useState<OptionPriceModel | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedTier, setSelectedTier] = useState<WarrantyTier | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
@@ -477,6 +500,7 @@ export default function Home() {
       step,
       productId: selectedProduct.id,
       optionId: selectedOption?.id ?? null,
+      priceModelId: selectedPriceModel?.id ?? null,
       questionAnswers,
       questionAudioAnswers,
       questionAudioFlowId,
@@ -564,7 +588,10 @@ export default function Home() {
       setSelectedProduct(prod);
       if (saved.optionId) {
         const opt = prod.options.find((o: ProductOption) => o.id === saved.optionId);
-        if (opt) setSelectedOption(opt);
+        if (opt) {
+          setSelectedOption(opt);
+          if (saved.priceModelId) setSelectedPriceModel(opt.priceModels?.find(model => model.id === saved.priceModelId) || null);
+        }
       }
       if (saved.questionAnswers) setQuestionAnswers(saved.questionAnswers);
       if (saved.questionAudioAnswers) setQuestionAudioAnswers(saved.questionAudioAnswers);
@@ -718,9 +745,9 @@ export default function Home() {
   const [showCart, setShowCart] = useState(false);
   const [cartPendingProduct, setCartPendingProduct] = useState<Product | null>(null);
 
-  const addToCart = (product: Product, option: ProductOption | null) => {
-    const id = `${product.id}-${option?.id ?? 'none'}-${Date.now()}`;
-    setCart(prev => [...prev, { id, product, option }]);
+  const addToCart = (product: Product, option: ProductOption | null, priceModel: OptionPriceModel | null = null) => {
+    const id = `${product.id}-${option?.id ?? 'none'}-${priceModel?.id ?? 'base'}-${Date.now()}`;
+    setCart(prev => [...prev, { id, product, option, priceModel }]);
     toast.success(`"${product.name}" adicionado ao carrinho!`);
     setShowCart(true);
   };
@@ -752,6 +779,7 @@ export default function Home() {
     const first = cart[0];
     setSelectedProduct(first.product);
     setSelectedOption(first.option);
+    setSelectedPriceModel(first.priceModel);
     // Limpar uploads anteriores
     localStorage.removeItem(UPLOADED_FILES_KEY);
     setDocFiles({});
@@ -947,6 +975,7 @@ export default function Home() {
 
   // Obter valor atual (usa tier se selecionado, caso contrário usa preço da opção)
   const getCurrentServiceValue = (): string => {
+    if (selectedPriceModel) return selectedPriceModel.price;
     if (selectedTier) return selectedTier.price;
     if (selectedOption) return selectedOption.price;
     return "Consulte";
@@ -954,6 +983,7 @@ export default function Home() {
 
   // Calcula se o item atual tem promoção ativa (preço riscado)
   const hasActivePromotion = (): boolean => {
+    if (selectedPriceModel) return !!selectedPriceModel.originalPrice;
     // Se tem tier selecionado, verifica se o tier tem promoção
     if (selectedTier) return !!(selectedTier as any).originalPrice;
     // Se tem opção selecionada, verifica se a opção tem promoção
@@ -1474,7 +1504,7 @@ export default function Home() {
         // Calcular total bruto do carrinho
         let cartTotalValue = 0;
         for (const item of cartItems) {
-          const price = item.option?.price || '0';
+          const price = item.priceModel?.price || item.option?.price || '0';
           const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
           if (!isNaN(num)) cartTotalValue += num;
         }
@@ -1494,12 +1524,12 @@ export default function Home() {
           const item = cartItems[i];
           setSubmitProgress(`Enviando pedido ${i + 1} de ${cartItems.length}: ${item.product.name}...`);
           // Calcular preço individual do item (sem desconto — o desconto é do carrinho todo)
-          const itemRawPrice = item.option?.price || undefined;
+          const itemRawPrice = item.priceModel?.price || item.option?.price || undefined;
           try {
             const itemResult = await submitMutation.mutateAsync({
               clientName: clientName.trim() || 'Cliente',
               service: item.product.name,
-              nameOption: item.option?.label || 'N/A',
+              nameOption: item.option ? `${item.option.label}${item.priceModel ? ` — ${item.priceModel.label}` : ''}` : 'N/A',
               referrerName: referrerName.trim() || undefined,
               referrerPhone: referrerPhone.trim() || undefined,
               bypassCode: bypassCode.trim() || undefined,
@@ -1584,10 +1614,11 @@ export default function Home() {
 
       setSubmitProgress('Enviando pedido...');
       // Construir nameOption com tier de garantia se selecionado
+      const optionNameWithModel = selectedOption ? `${selectedOption.label}${selectedPriceModel ? ` — ${selectedPriceModel.label}` : ''}` : 'N/A';
       const nameOptionWithTier = selectedOption
         ? (selectedTier
-          ? `${selectedOption.label} - Garantia: ${selectedTier.warrantyValue > 0 ? `${selectedTier.warrantyValue} ${selectedTier.warrantyType}` : (selectedTier.warrantyLabel || selectedTier.warrantyType)}${selectedTier.warrantyLabel && selectedTier.warrantyValue > 0 ? ` ${selectedTier.warrantyLabel}` : ''}`
-          : selectedOption.label)
+          ? `${optionNameWithModel} - Garantia: ${selectedTier.warrantyValue > 0 ? `${selectedTier.warrantyValue} ${selectedTier.warrantyType}` : (selectedTier.warrantyLabel || selectedTier.warrantyType)}${selectedTier.warrantyLabel && selectedTier.warrantyValue > 0 ? ` ${selectedTier.warrantyLabel}` : ''}`
+          : optionNameWithModel)
         : 'N/A';
       const result = await submitMutation.mutateAsync({
         clientName: clientName.trim() || 'Cliente',
@@ -1745,12 +1776,13 @@ export default function Home() {
     }
   };
 
-  const startDirectOptionCheckout = (product: Product, option: ProductOption, tier: WarrantyTier | null = null) => {
+  const startDirectOptionCheckout = (product: Product, option: ProductOption, tier: WarrantyTier | null = null, priceModel: OptionPriceModel | null = null) => {
     setFlowOrigin('storefront');
     storefrontScrollRef.current = typeof window !== 'undefined' ? window.scrollY : 0;
     setSelectedProduct(product);
     setSelectedOption(option);
     setSelectedTier(tier);
+    setSelectedPriceModel(priceModel);
     setDocFiles({});
     setProfilePhoto(null); setProfilePhotoPreview(null);
     setCarDocument(null); setCarDocumentYear('');
@@ -3584,7 +3616,7 @@ export default function Home() {
                     {selectedOption && (
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-white/70 text-sm">Opção:</span>
-                        <span className="text-white text-sm">{selectedOption.label}</span>
+                        <span className="text-white text-sm">{selectedOption.label}{selectedPriceModel ? ` — ${selectedPriceModel.label}` : ''}</span>
                       </div>
                     )}
                     <div className="border-t border-white/10 mt-2 pt-2">
@@ -4174,12 +4206,12 @@ export default function Home() {
                         {item.option && (
                           <p className="text-white/60 text-xs mt-0.5">{item.option.label}</p>
                         )}
-                        {item.option?.price && (
+                        {(item.priceModel?.price || item.option?.price) && (
                           <div className="flex items-center gap-2 mt-1">
-                            {item.option.originalPrice && item.option.originalPrice.trim() !== '' && (
-                              <span className="text-gray-500 text-xs line-through">{item.option.originalPrice}</span>
+                            {(item.priceModel?.originalPrice || item.option?.originalPrice) && (
+                              <span className="text-gray-500 text-xs line-through">{item.priceModel?.originalPrice || item.option?.originalPrice}</span>
                             )}
-                            <p className="text-green-400 font-bold text-sm">{resellerPriceMap[item.option.id] || item.option.price}</p>
+                            <p className="text-green-400 font-bold text-sm">{item.priceModel?.price || resellerPriceMap[item.option.id] || item.option.price}</p>
                           </div>
                         )}
                       </div>
@@ -4507,8 +4539,8 @@ export default function Home() {
                       <StorefrontProductCard
                         key={`${item.product.id}-${item.option.id}`}
                         item={item as StorefrontCatalogItem}
-                        onBuy={(tier) => startDirectOptionCheckout(item.product, item.option, tier as unknown as WarrantyTier | null)}
-                        onAddToCart={() => addToCart(item.product, item.option)}
+                        onBuy={(tier, priceModel) => startDirectOptionCheckout(item.product, item.option, tier as unknown as WarrantyTier | null, priceModel as OptionPriceModel | null)}
+                        onAddToCart={(_tier, priceModel) => addToCart(item.product, item.option, priceModel as OptionPriceModel | null)}
                       />
                     ))}
                   </div>

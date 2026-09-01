@@ -22,6 +22,8 @@ export type StorefrontWarrantyTier = {
   originalPrice: string | null;
 };
 
+export type StorefrontPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; };
+
 export type StorefrontOption = {
   id: number;
   label: string;
@@ -30,6 +32,7 @@ export type StorefrontOption = {
   description?: string | null;
   warranty?: string | null;
   promoEndsAt?: number | null;
+  priceModels?: StorefrontPriceModel[];
   questions: StorefrontQuestion[];
   documents: StorefrontDocument[];
   warrantyTiers?: StorefrontWarrantyTier[];
@@ -85,15 +88,18 @@ export function StorefrontProductCard({
   onAddToCart,
 }: {
   item: StorefrontCatalogItem;
-  onBuy: (tier: StorefrontWarrantyTier | null) => void;
-  onAddToCart: (tier: StorefrontWarrantyTier | null) => void;
+  onBuy: (tier: StorefrontWarrantyTier | null, priceModel: StorefrontPriceModel | null) => void;
+  onAddToCart: (tier: StorefrontWarrantyTier | null, priceModel: StorefrontPriceModel | null) => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const tiers = item.option.warrantyTiers || [];
   const [tierId, setTierId] = useState<number | null>(tiers[0]?.id ?? null);
   const selectedTier = tiers.find((tier) => tier.id === tierId) || null;
-  const effectivePrice = selectedTier?.price || item.option.price;
-  const effectiveOriginalPrice = selectedTier?.originalPrice || item.option.originalPrice;
+  const priceModels = item.option.priceModels || [];
+  const [priceModelId, setPriceModelId] = useState<number | null>(priceModels[0]?.id ?? null);
+  const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;
+  const effectivePrice = selectedPriceModel?.price || selectedTier?.price || item.option.price;
+  const effectiveOriginalPrice = selectedPriceModel?.originalPrice || selectedTier?.originalPrice || item.option.originalPrice;
   const discount = useMemo(() => {
     const original = asNumber(effectiveOriginalPrice);
     const price = asNumber(effectivePrice);
@@ -145,6 +151,15 @@ export function StorefrontProductCard({
 
         <p className="min-h-[43px] whitespace-pre-wrap text-sm leading-relaxed text-white/75" style={textColor ? { color: `${textColor}cc` } : undefined}>{shortText(description)}</p>
 
+        {priceModels.length > 0 && (
+          <label className="mt-4 block">
+            <span className="mb-1.5 block text-xs font-bold text-cyan-200">Modelo / categoria</span>
+            <select value={priceModelId ?? ""} onChange={(event) => setPriceModelId(Number(event.target.value))} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">
+              {priceModels.map(model => <option key={model.id} value={model.id}>{model.label} — {asMoney(model.price)}</option>)}
+            </select>
+          </label>
+        )}
+
         {tiers.length > 0 && (
           <label className="mt-4 block">
             <span className="mb-1.5 block text-xs font-bold text-white/70">Garantia</span>
@@ -182,14 +197,14 @@ export function StorefrontProductCard({
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => onBuy(selectedTier)}
+            onClick={() => onBuy(selectedTier, selectedPriceModel)}
             className="min-h-12 rounded-xl border border-white/60 bg-white/95 px-3 py-3 text-sm font-black text-slate-950 shadow-[0_8px_24px_rgba(255,255,255,.14)] transition-all hover:bg-white hover:shadow-[0_8px_28px_rgba(255,255,255,.25)] active:scale-[0.98]"
           >
             Comprar agora
           </button>
           <button
             type="button"
-            onClick={() => onAddToCart(selectedTier)}
+            onClick={() => onAddToCart(selectedTier, selectedPriceModel)}
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-black text-white shadow-[0_8px_24px_rgba(0,0,0,.18)] backdrop-blur-xl transition-all hover:brightness-125 active:scale-[0.98]"
             style={{ background: `linear-gradient(135deg, ${cartButtonColor}52, ${cartButtonColor}24)`, borderColor: `${cartButtonColor}cc`, boxShadow: `0 8px 24px ${cartButtonColor}24, inset 0 1px 0 rgba(255,255,255,.18)` }}
           >
