@@ -8,15 +8,29 @@ describe('sessao persistente do cliente', () => {
     expect(src).not.toContain('clearPreviousCustomerIdentity();');
   });
 
-  it('rotas reaproveitam cp_token', () => {
+  it('gastos e emprestimo priorizam cp_token sobre token legado', () => {
     const gastos = fs.readFileSync('client/src/pages/GastosPage.tsx', 'utf8');
     const emprestimo = fs.readFileSync('client/src/pages/EmprestimoPage.tsx', 'utf8');
     const entry = fs.readFileSync('client/src/components/OnlineEntryPanel.tsx', 'utf8');
-    expect(gastos).toContain("localStorage.getItem('cp_token')");
-    expect(emprestimo).toContain("localStorage.getItem('cp_token')");
+
+    expect(gastos).toContain("localStorage.getItem('cp_token') || localStorage.getItem(TOKEN_KEY)");
+    expect(emprestimo).toContain("localStorage.getItem('cp_token') || localStorage.getItem(TOKEN_KEY)");
     expect(entry).toContain("localStorage.getItem('cp_token')");
-    expect(gastos).toContain("!!(localStorage.getItem(TOKEN_KEY) || localStorage.getItem('cp_token'))");
-    expect(emprestimo).toContain("!!(localStorage.getItem(TOKEN_KEY) || localStorage.getItem('cp_token'))");
+
+    expect(gastos).toContain('trpc.customerPassword.checkSession.useQuery');
+    expect(emprestimo).toContain('trpc.customerPassword.checkSession.useQuery');
+
+    expect(gastos).toContain("localStorage.setItem(TOKEN_KEY, savedToken)");
+    expect(emprestimo).toContain("localStorage.setItem(TOKEN_KEY, savedToken)");
+  });
+
+  it('falha transitoria da verificacao central nao expulsa cliente', () => {
+    const gastos = fs.readFileSync('client/src/pages/GastosPage.tsx', 'utf8');
+    const emprestimo = fs.readFileSync('client/src/pages/EmprestimoPage.tsx', 'utf8');
+    expect(gastos).toContain('if (sessionQuery.isError)');
+    expect(emprestimo).toContain('if (sessionQuery.isError)');
+    expect(gastos).toContain('setIsLoggedIn(true)');
+    expect(emprestimo).toContain('setIsLoggedIn(true)');
   });
 
   it('backend nao transforma banco indisponivel em token invalido', () => {
