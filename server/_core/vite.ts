@@ -344,14 +344,41 @@ export async function serveStatic(app: Express) {
     }
   }));
 
+  // CRÍTICO: um HTML antigo pode apontar para um bundle Vite com hash que já saiu do deploy.
+  // Se esse asset não existir, NUNCA devolver o SPA index.html (HTML) como se fosse JS/CSS.
+  // O 404 permite ao watchdog do cliente limpar SW/cache e buscar a versão atual.
+  app.use('/assets', (_req, res) => {
+    res.status(404).set({
+      'Cache-Control': 'no-store, max-age=0, must-revalidate',
+      'CDN-Cache-Control': 'no-store',
+      'Cloudflare-CDN-Cache-Control': 'no-store',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    }).type('text/plain').send('Asset not found');
+  });
+
   // fall through to index.html with dynamic OG meta tags
   app.use("*", async (req, res) => {
     try {
       let html = await fs.promises.readFile(path.resolve(distPath, "index.html"), "utf-8");
       const og = await getOgMeta(req.originalUrl || req.path);
       html = injectOgMeta(html, og, req.originalUrl || req.path);
-      res.set("Content-Type", "text/html; charset=utf-8").send(html);
+      res.set({
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store, max-age=0, must-revalidate',
+        'CDN-Cache-Control': 'no-store',
+        'Cloudflare-CDN-Cache-Control': 'no-store',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      }).send(html);
     } catch {
+      res.set({
+        'Cache-Control': 'no-store, max-age=0, must-revalidate',
+        'CDN-Cache-Control': 'no-store',
+        'Cloudflare-CDN-Cache-Control': 'no-store',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      });
       res.sendFile(path.resolve(distPath, "index.html"));
     }
   });
