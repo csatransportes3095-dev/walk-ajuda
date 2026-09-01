@@ -41,28 +41,6 @@ const ONLINE_SUPPORT_VISITOR_KEY = "walk_online_support_visitor_id";
 const HOME_ACCESS_GRANTED_KEY = "walk_home_access_granted";
 const HOME_ACCESS_TTL_MS = 30 * 60 * 1000;
 
-function clearPreviousCustomerIdentity() {
-  const localKeys = [
-    "cp_token",
-    "walk_access_granted",
-    "walk_access_code",
-    "walk_access_type",
-    "walk_access_expires",
-    "walk_client_phone",
-    "customer_update_phone_hint",
-    "customer_update_token",
-  ];
-  for (const key of localKeys) localStorage.removeItem(key);
-
-  const sessionKeys = [
-    "h2_customer_return_to",
-    "walk_home_existing_phone",
-    "walk_home_referral_phone",
-    "walk_home_new_phone",
-  ];
-  for (const key of sessionKeys) sessionStorage.removeItem(key);
-}
-
 function hasActiveHomeAccessGrant() {
   const expiresAt = Number(sessionStorage.getItem(HOME_ACCESS_GRANTED_KEY) || 0);
   if (!expiresAt || Date.now() >= expiresAt) {
@@ -395,7 +373,6 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
       // A tela inicial nunca herda a identidade do cliente anterior.
       // Primeiro o usuario escolhe a rota; depois informa telefone/login;
       // somente entao o sistema pode verificar se existe atualizacao pendente.
-      clearPreviousCustomerIdentity();
       if (justClickedCard.current) {
         // Veio do clique no card "Cadastro": mantém o fluxo aberto
         setChoiceMade(true);
@@ -464,7 +441,6 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   };
 
   const handleFazerPedido = () => {
-    clearPreviousCustomerIdentity();
     justClickedCard.current = true;
     sessionStorage.setItem(WELCOME_CHOICE_KEY, "pedido");
     setChoiceMade(true);
@@ -481,7 +457,6 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   };
 
   const handleAcompanhar = () => {
-    clearPreviousCustomerIdentity();
     sessionStorage.setItem(WELCOME_CHOICE_KEY, "acompanhar");
     setChoiceMade(true);
     const btn2Url = settings?.home_btn2_url?.trim();
@@ -497,7 +472,6 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
   };
 
   const handleExtraBtn = (url: string, waMsg?: string, openInNewTab?: number) => {
-    clearPreviousCustomerIdentity();
     sessionStorage.setItem(WELCOME_CHOICE_KEY, "extra");
     setChoiceMade(true);
     if (url.startsWith("http")) {

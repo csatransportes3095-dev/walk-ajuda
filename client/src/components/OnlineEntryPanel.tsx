@@ -9,7 +9,7 @@ type ProtectedRoute = 'gastos' | 'emprestimo';
 type Props = { onBack: () => void; onOpenCadastro: () => void; intendedRoute?: ProtectedRoute | null };
 
 export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null }: Props) {
-  const [token, setToken] = useState(() => localStorage.getItem(ENTRY_TOKEN_KEY) || "");
+  const [token, setToken] = useState(() => localStorage.getItem(ENTRY_TOKEN_KEY) || localStorage.getItem('cp_token') || "");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,7 +20,7 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null 
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [passwordCreatedPending, setPasswordCreatedPending] = useState(false);
   const [autoRouteHandled, setAutoRouteHandled] = useState(false);
-  const sessionQ = trpc.onlineSupport.entrySession.useQuery({ token }, { enabled: !!token, retry: false, refetchInterval: token ? 10000 : false });
+  const sessionQ = trpc.onlineSupport.entrySession.useQuery({ token }, { enabled: !!token, retry: 2, refetchInterval: token ? 10000 : false, refetchOnReconnect: true });
   const loginMut = trpc.customerPassword.login.useMutation();
   const passwordStatusMut = trpc.customerPassword.checkStatusMutation.useMutation();
   const passwordModeQ = trpc.customerPassword.getMode.useQuery(undefined, { enabled: !!passwordSetupPhone, retry: false });
@@ -38,11 +38,17 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null 
   const proofMut = trpc.onlineSupport.entrySubmitInstallmentProof.useMutation();
 
   useEffect(() => {
-    if (sessionQ.data && !sessionQ.data.authenticated) {
+    if (sessionQ.data?.authenticated && token) {
+      localStorage.setItem(ENTRY_TOKEN_KEY, token);
+      localStorage.setItem('cp_token', token);
+      return;
+    }
+    if (sessionQ.data && !sessionQ.data.authenticated && sessionQ.data.invalidSession) {
       localStorage.removeItem(ENTRY_TOKEN_KEY);
+      localStorage.removeItem('cp_token');
       setToken("");
     }
-  }, [sessionQ.data]);
+  }, [sessionQ.data, token]);
 
   const openPasswordSetup = (resolvedPhone?: string) => {
     const cleanPhone = (resolvedPhone || phone).replace(/\D/g, "");

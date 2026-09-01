@@ -4201,6 +4201,10 @@ export default function Home() {
                 localStorage.removeItem('walk_client_phone');
                 localStorage.removeItem('vip_allowed_products');
                 localStorage.removeItem('cp_token');
+                localStorage.removeItem('gastos_token');
+                localStorage.removeItem('gastos_clientId');
+                localStorage.removeItem('gastos_clientName');
+                localStorage.removeItem('walk_online_entry_token');
                 localStorage.removeItem('cp_expires_at');
                 localStorage.removeItem('cp_session_type');
                 window.location.reload();

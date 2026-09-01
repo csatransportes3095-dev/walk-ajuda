@@ -24,30 +24,49 @@ import { buildSpreadsheetClientBackup, restoreSpreadsheetClientBackup } from "..
 export async function resolveClientId(token: string): Promise<number> {
   const db = await getDb() as any;
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
-  
-  // Remover espaços em branco do token
   const cleanToken = token.trim();
-  
-  const sessionResult = await db.select().from(spreadsheetSessions)
+
+  let sessionResult = await db.select().from(spreadsheetSessions)
     .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
-  const session = sessionResult?.[0] || null;
-  
-  if (!session) {
-    console.error('[resolveClientId] Token não encontrado:', { token: cleanToken, length: cleanToken.length });
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão inválida ou expirada. Faça login novamente." });
-  }
-  
-  if (new Date(session.expiresAt) < new Date()) {
-    console.error('[resolveClientId] Sessão expirada:', { expiresAt: session.expiresAt });
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão inválida ou expirada. Faça login novamente." });
+  let session: any = sessionResult?.[0] || null;
+  let client: any = null;
+  let source: 'spreadsheet' | 'customer' = 'spreadsheet';
+
+  if (session) {
+    const clientResult = await db.select().from(spreadsheetClients)
+      .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
+    client = clientResult?.[0] || null;
+  } else {
+    const cpRows = await db.select().from(customerPasswordSessions)
+      .where(eq(customerPasswordSessions.token, cleanToken)).limit(1);
+    const cpSession = cpRows?.[0] || null;
+    if (cpSession) {
+      source = 'customer';
+      session = cpSession;
+      const cleanPhone = normalizeCustomerPhone(cpSession.phone || '');
+      let clientRows = await db.select().from(spreadsheetClients)
+        .where(eq(spreadsheetClients.phone, cleanPhone)).limit(1);
+      client = clientRows?.[0] || null;
+      if (!client && cleanPhone) {
+        const mainCustomer = await findMainCustomerByIdentity({ phone: cleanPhone }, db);
+        if (mainCustomer) {
+          const inserted = await db.insert(spreadsheetClients).values({
+            phone: cleanPhone,
+            name: mainCustomer.name || cleanPhone,
+            cpf: mainCustomer.cpf || null,
+            status: 'active',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+          client = { id: (inserted as any).insertId, phone: cleanPhone, name: mainCustomer.name || cleanPhone, cpf: mainCustomer.cpf || null, status: 'active' };
+        }
+      }
+    }
   }
 
-  // Regra de segurança no backend: um token não permite ignorar o perfil obrigatório
-  // nem uma rota removida pelo ADM através de chamadas diretas à API.
-  const clientResult = await db.select().from(spreadsheetClients)
-    .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
-  const client = clientResult?.[0] || null;
-  if (!client) throw new TRPCError({ code: "UNAUTHORIZED", message: "Cadastro de acesso não encontrado." });
+  if (!session || !client) throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão inválida ou expirada. Faça login novamente." });
+  if (!session.expiresAt || new Date(session.expiresAt) < new Date()) throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão inválida ou expirada. Faça login novamente." });
+
   try {
     await requireCompleteMainCustomerProfile(db, { phone: client.phone || '', cpf: client.cpf || '' });
   } catch {
@@ -56,27 +75,20 @@ export async function resolveClientId(token: string): Promise<number> {
   const accessCustomer = await findMainCustomerByIdentity({ phone: client.phone || '', cpf: client.cpf || '' }, db);
   if (!accessCustomer) throw new TRPCError({ code: "FORBIDDEN", message: "Conclua o cadastro principal para continuar." });
   const access = await getRouteAccess(accessCustomer.id, db);
-  if (access.restricted && !access.routes.includes('gastos')) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Acesso não autorizado para a área de Gastos." });
+  if (access.restricted && !access.routes.includes('gastos') && !access.routes.includes('emprestimo')) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Acesso não autorizado para esta área." });
   }
 
-  // Sliding session: renova a validade a cada uso ativo (login persistente).
-  // Renova no maximo 1x por dia para evitar escrita excessiva.
   try {
     const newExpiry = new Date(Date.now() + SESSION_DURATION_MS);
     const currentExpiry = new Date(session.expiresAt);
-    const oneDayMs = 24 * 60 * 60 * 1000;
-    if (newExpiry.getTime() - currentExpiry.getTime() > oneDayMs) {
-      await db.update(spreadsheetSessions)
-        .set({ expiresAt: newExpiry })
-        .where(eq(spreadsheetSessions.token, cleanToken));
+    if (newExpiry.getTime() - currentExpiry.getTime() > 24 * 60 * 60 * 1000) {
+      if (source === 'spreadsheet') await db.update(spreadsheetSessions).set({ expiresAt: newExpiry }).where(eq(spreadsheetSessions.token, cleanToken));
+      else await db.update(customerPasswordSessions).set({ expiresAt: newExpiry, lastAccessAt: new Date() }).where(eq(customerPasswordSessions.token, cleanToken));
     }
-  } catch (e) {
-    // Se a renovacao falhar, nao bloqueia o uso da sessao ainda valida
-    console.error('[resolveClientId] Falha ao renovar sessao (ignorado):', e);
-  }
+  } catch {}
 
-  return session.clientId as number;
+  return Number(client.id);
 }
 
 // Resolve o cliente autenticado para o manifesto de indicação da rota informada.
@@ -980,63 +992,53 @@ export const spreadsheetRouter = router({
   verifySession: publicProcedure
     .input(z.object({ token: z.string() }))
     .query(async ({ input }) => {
-      try {
-        const db = await getDb() as any;
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
+      const cleanToken = input.token.trim();
 
-        const sessionResult = await db.select().from(spreadsheetSessions)
-          .where(eq(spreadsheetSessions.token, input.token)).limit(1);
-        
-        const session = sessionResult?.[0] || null;
+      let sessionRows = await db.select().from(spreadsheetSessions)
+        .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
+      let session: any = sessionRows?.[0] || null;
+      let client: any = null;
+      let source: 'spreadsheet' | 'customer' = 'spreadsheet';
 
-        if (!session || new Date(session.expiresAt) < new Date()) {
-          return { valid: false };
-        }
-
-        const clientResult = await db.select().from(spreadsheetClients)
-          .where(eq(spreadsheetClients.id, session.clientId)).limit(1);
-        
-                const client = clientResult?.[0] || null;
-        if (!client) return { valid: false };
-        const mainCustomer = await findMainCustomerByIdentity({ phone: client.phone || undefined, cpf: client.cpf || undefined }, db);
-        if (mainCustomer) {
-          const profileUpdateState = await getCustomerProfileUpdateState(mainCustomer);
-          if (profileUpdateState.pending) {
-            return {
-              valid: true,
-              profileIncomplete: true,
-              profileUpdateRequired: true,
-              profileUpdateFields: profileUpdateState.effectiveFields,
-              clientId: session.clientId,
-              clientName: client.name,
-              clientPhone: client.phone,
-              message: 'Atualização cadastral obrigatória pelo administrador. Conclua os campos solicitados para continuar.',
-            };
+      if (session) {
+        const clientRows = await db.select().from(spreadsheetClients).where(eq(spreadsheetClients.id, session.clientId)).limit(1);
+        client = clientRows?.[0] || null;
+      } else {
+        const cpRows = await db.select().from(customerPasswordSessions).where(eq(customerPasswordSessions.token, cleanToken)).limit(1);
+        const cpSession = cpRows?.[0] || null;
+        if (cpSession) {
+          source = 'customer';
+          session = cpSession;
+          const cleanPhone = normalizeCustomerPhone(cpSession.phone || '');
+          let clientRows = await db.select().from(spreadsheetClients).where(eq(spreadsheetClients.phone, cleanPhone)).limit(1);
+          client = clientRows?.[0] || null;
+          if (!client && cleanPhone) {
+            const main = await findMainCustomerByIdentity({ phone: cleanPhone }, db);
+            if (main) {
+              const inserted = await db.insert(spreadsheetClients).values({ phone: cleanPhone, name: main.name || cleanPhone, cpf: main.cpf || null, status: 'active', createdAt: new Date(), updatedAt: new Date() });
+              client = { id: (inserted as any).insertId, phone: cleanPhone, name: main.name || cleanPhone, cpf: main.cpf || null, status: 'active' };
+            }
           }
         }
-        try {
-          await requireCompleteMainCustomerProfile(db, { phone: client.phone || '', cpf: client.cpf || '' });
-        } catch (profileError: any) {
-          return {
-            valid: true,
-            profileIncomplete: true,
-            clientId: session.clientId,
-            clientName: client.name,
-            clientPhone: client.phone,
-            message: profileError?.message || 'Atualize foto, e-mail, CPF e telefone para continuar.',
-          };
-        }
-        return {
-          valid: true,
-          profileIncomplete: false,
-          clientId: session.clientId,
-          clientName: client.name,
-          clientPhone: client.phone,
-        };
-
-      } catch (error) {
-        return { valid: false };
       }
+
+      if (!session || !session.expiresAt || new Date(session.expiresAt) < new Date() || !client) return { valid: false };
+
+      const mainCustomer = await findMainCustomerByIdentity({ phone: client.phone || undefined, cpf: client.cpf || undefined }, db);
+      if (mainCustomer) {
+        const profileUpdateState = await getCustomerProfileUpdateState(mainCustomer);
+        if (profileUpdateState.pending) {
+          return { valid: true, source, profileIncomplete: true, profileUpdateRequired: true, profileUpdateFields: profileUpdateState.effectiveFields, clientId: client.id, clientName: client.name, clientPhone: client.phone, message: 'Atualização cadastral obrigatória pelo administrador.' };
+        }
+      }
+      try {
+        await requireCompleteMainCustomerProfile(db, { phone: client.phone || '', cpf: client.cpf || '' });
+      } catch (profileError: any) {
+        return { valid: true, source, profileIncomplete: true, clientId: client.id, clientName: client.name, clientPhone: client.phone, message: profileError?.message || 'Atualize seus dados para continuar.' };
+      }
+      return { valid: true, source, profileIncomplete: false, clientId: client.id, clientName: client.name, clientPhone: client.phone };
     }),
 
   // Retornar informações do plano para o cliente logado (vencimento da senha)
@@ -1094,7 +1096,9 @@ export const spreadsheetRouter = router({
         const db = await getDb() as any;
         if (!db) return { success: false };
 
-        await db.delete(spreadsheetSessions).where(eq(spreadsheetSessions.token, input.token));
+        const cleanToken = input.token.trim();
+        await db.delete(spreadsheetSessions).where(eq(spreadsheetSessions.token, cleanToken));
+        await db.delete(customerPasswordSessions).where(eq(customerPasswordSessions.token, cleanToken));
         return { success: true };
       } catch (error) {
         return { success: false };
