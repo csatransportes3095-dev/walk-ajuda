@@ -152,12 +152,29 @@ export function StorefrontProductCard({
         <p className="min-h-[43px] whitespace-pre-wrap text-sm leading-relaxed text-white/75" style={textColor ? { color: `${textColor}cc` } : undefined}>{shortText(description)}</p>
 
         {priceModels.length > 0 && (
-          <label className="mt-4 block">
+          <div className="mt-4">
             <span className="mb-1.5 block text-xs font-bold text-cyan-200">Modelo / categoria</span>
-            <select value={priceModelId ?? ""} onChange={(event) => setPriceModelId(Number(event.target.value))} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">
-              {priceModels.map(model => <option key={model.id} value={model.id}>{model.label} — {asMoney(model.price)}</option>)}
-            </select>
-          </label>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {priceModels.map((model) => {
+                const isSelected = model.id === priceModelId;
+                return (
+                  <button
+                    key={model.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => setPriceModelId(model.id)}
+                    className={`w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-left text-sm font-black text-white outline-none transition-all focus:border-cyan-300 ${isSelected ? "ring-2 ring-cyan-300/30" : ""}`}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{model.label}</span>
+                      {isSelected && <Check className="h-4 w-4 shrink-0" />}
+                    </span>
+                    <span className="mt-1 block">{asMoney(model.price)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {tiers.length > 0 && (
