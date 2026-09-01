@@ -681,7 +681,7 @@ export const appRouter = router({
     create: adminProcedure
       .input(z.object({
         productId: z.number(), label: z.string().min(1),
-        price: z.string().min(1), type: z.string().optional(),
+        price: z.string().min(1), originalPrice: z.string().optional(), promoEndsAt: z.number().nullable().optional(), type: z.string().optional(),
         sortOrder: z.number().optional(),
         requireProfilePhoto: z.boolean().optional(),
         requireCarDocument: z.boolean().optional(),

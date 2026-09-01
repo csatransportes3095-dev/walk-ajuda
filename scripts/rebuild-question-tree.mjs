@@ -12,13 +12,13 @@ const json = values => JSON.stringify(values);
 const yesNo = json(["SIM", "NÃO"]);
 const brands = [
   "CHEVROLET", "FIAT", "FORD", "HONDA", "HYUNDAI", "JEEP",
-  "KIA", "NISSAN", "PEUGEOT", "RENAULT", "TOYOTA", "VOLKSWAGEN",
+  "KIA", "NISSAN", "PEUGEOT", "RENAULT", "TOYOTA", "VOLKSWAGEN", "CITROËN", "CAOA CHERY", "MITSUBISHI",
 ];
 const colors = [
   "BRANCO", "PRETO", "PRATA", "CINZA", "VERMELHO", "AZUL",
   "VERDE", "AMARELO", "MARROM", "BEGE", "OUTRA",
 ];
-const years = Array.from({ length: 27 }, (_, index) => String(2026 - index));
+const years = Array.from({ length: 11 }, (_, index) => String(2026 - index));
 
 function optionsFor(question, productName) {
   const q = normalize(question);

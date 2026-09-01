@@ -9,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
+import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -267,25 +268,34 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     return trimmed.split(',').map(s => s.trim()).filter(Boolean);
   };
 
-  // Retorna perguntas visíveis ordenadas de forma que sub-perguntas aparecem logo após o pai
+  // Retorna perguntas visíveis ordenadas. Para veículo, perguntas legadas de modelo
+  // por marca são compactadas em um único passo Marca -> Modelo.
   const getVisibleQuestions = (questions: ProductQuestion[], answers: Record<number, string>): ProductQuestion[] => {
     const visible = questions.filter(q => {
       if (!q.parentQuestionId) return true;
+      const parent = questions.find(item => item.id === q.parentQuestionId);
       const parentAnswer = answers[q.parentQuestionId]?.trim() || "";
+      if (getVehicleQuestionKind(q.question) === 'model' && parent && getVehicleQuestionKind(parent.question) === 'brand') {
+        return !!parentAnswer;
+      }
       if (!q.triggerOption) return !!parentAnswer;
       return parentAnswer === q.triggerOption;
     });
 
-    // Ordenar: cada sub-pergunta fica logo após seu pai
     const ordered: ProductQuestion[] = [];
     const roots = visible.filter(q => !q.parentQuestionId).sort((a, b) => a.sortOrder - b.sortOrder);
 
     const insertWithChildren = (q: ProductQuestion) => {
       ordered.push(q);
-      // Filhos diretos desta pergunta que estão visíveis
-      const children = visible
+      const rawChildren = visible
         .filter(c => c.parentQuestionId === q.id)
         .sort((a, b) => a.sortOrder - b.sortOrder);
+      const modelChildren = getVehicleQuestionKind(q.question) === 'brand'
+        ? rawChildren.filter(child => getVehicleQuestionKind(child.question) === 'model')
+        : [];
+      const children = modelChildren.length > 0
+        ? [modelChildren[0], ...rawChildren.filter(child => getVehicleQuestionKind(child.question) !== 'model')]
+        : rawChildren;
       children.forEach(child => insertWithChildren(child));
     };
 
@@ -493,6 +503,51 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         { type: "bot", id: uid(), text: nextQ.question, audioUrl: nextQ.questionPresentation === 'audio' ? nextQ.questionAudioUrl : null, hideText: nextQ.questionPresentation === 'audio' && nextQ.showQuestionTextWithAudio !== 1, questionLevel },
         { type: "audio-input", id: msgId, question: nextQ, answered: false, questionLevel }
       );
+    } else if (getVehicleQuestionKind(nextQ.question)) {
+      const kind = getVehicleQuestionKind(nextQ.question);
+      const parentAnswer = nextQ.parentQuestionId ? currentAnswers[nextQ.parentQuestionId] || '' : '';
+      const opts = kind === 'brand'
+        ? VEHICLE_BRANDS
+        : kind === 'model'
+          ? getVehicleModels(parentAnswer)
+          : kind === 'year'
+            ? VEHICLE_YEARS
+            : VEHICLE_COLORS;
+
+      if (kind === 'model' && opts.length === 0) {
+        callbacks.current[msgId] = (val: string) => {
+          markAnswered(msgId);
+          const normalized = val.toUpperCase();
+          addMsgs({ type: "user", id: uid(), text: normalized });
+          const newAnswers = { ...currentAnswers, [nextQ.id]: normalized };
+          flowState.current.answers = newAnswers;
+          saveBotProgress('questions', 'dados');
+          setTimeout(() => askQuestions(product, option, newAnswers), 300);
+        };
+        const questionLevel = nextQ.parentQuestionId ? "sub" as const : "principal" as const;
+        addMsgs(
+          { type: "bot", id: uid(), text: nextQ.question + (parentAnswer ? ' — ' + parentAnswer : ''), questionLevel },
+          { type: "input", id: msgId, multiline: false, answered: false, questionLevel }
+        );
+      } else {
+        callbacks.current[msgId] = (val: string) => {
+          markAnswered(msgId);
+          addMsgs({ type: "user", id: uid(), text: val });
+          const newAnswers = { ...currentAnswers };
+          if (kind === 'brand') {
+            for (const child of option.questions.filter(item => item.parentQuestionId === nextQ.id)) delete newAnswers[child.id];
+          }
+          newAnswers[nextQ.id] = val;
+          flowState.current.answers = newAnswers;
+          saveBotProgress('questions', 'dados');
+          setTimeout(() => askQuestions(product, option, newAnswers), 300);
+        };
+        const questionLevel = nextQ.parentQuestionId ? "sub" as const : "principal" as const;
+        addMsgs(
+          { type: "bot", id: uid(), text: kind === 'model' && parentAnswer ? 'MODELO — ' + parentAnswer : nextQ.question, questionLevel },
+          { type: "options", id: msgId, options: opts, answered: false, questionLevel }
+        );
+      }
     } else if (nextQ.fieldType === "select" && nextQ.options) {
       const opts = parseOptions(nextQ.options);
       callbacks.current[msgId] = (val: string) => {
