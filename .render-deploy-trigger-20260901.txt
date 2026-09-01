@@ -1,0 +1,2 @@
+Deploy autorizado em 2026-09-01.
+Publicar o commit 74e0ff8167fc9c550aa868265fb7a346e6306dbd com o seletor visual em cards, sem alterar cores.
