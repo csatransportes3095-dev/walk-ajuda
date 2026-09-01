@@ -188,7 +188,7 @@ export default function OrderTracking() {
     }
   }, [adData?.campaign?.id]);
   useEffect(() => {
-    if (!adVisible || !adCampaign) return;
+    if (!adVisible || !adCampaign || adCampaign.type !== 'image') return;
     const total = (adCampaign.requiredSeconds || 20) * 1000;
     const interval = 100;
     let elapsed = 0;
@@ -689,15 +689,12 @@ export default function OrderTracking() {
                         if (pct >= 100) setAdCanClose(true);
                       }
                     }}
-                    onEnded={(e) => {
+                    onEnded={() => {
                       setAdProgress(100);
-                      const v = e.currentTarget;
-                      const videoDuration = v.duration || 0;
-                      const required = adCampaign.requiredSeconds || 20;
-                      if (videoDuration <= required) { setTimeout(() => setAdVisible(false), 300); }
-                      else { setAdCanClose(true); }
+                      setAdCanClose(true);
+                      setTimeout(() => setAdVisible(false), 250);
                     }}
-                  />
+                    />
                 </div>
               ) : (
                 <div className="w-full h-40 flex items-center justify-center bg-gradient-to-br from-blue-900/40 to-cyan-900/30">
@@ -712,7 +709,7 @@ export default function OrderTracking() {
               )}
               <div className="px-4 pt-3 pb-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-400">{adCanClose ? 'Propaganda concluída' : `Encerrando em ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s`}</span>
+                  <span className="text-xs text-gray-400">{adCanClose ? 'Propaganda concluída' : adCampaign.type === 'video' ? 'Reproduzindo vídeo' : `Encerrando em ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s`}</span>
                   <span className="text-xs font-bold" style={{ color: adProgress < 30 ? '#ef4444' : adProgress < 70 ? '#f59e0b' : adProgress < 100 ? '#00d4ff' : '#22c55e' }}>{adProgress}%</span>
                 </div>
                 <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
@@ -724,7 +721,7 @@ export default function OrderTracking() {
                   </a>
                 )}
                 <button onClick={() => adCanClose && setAdVisible(false)} disabled={!adCanClose} className="mt-3 w-full py-2.5 rounded-lg text-sm font-semibold transition-all" style={{ background: adCanClose ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)', color: adCanClose ? '#fff' : '#555', border: adCanClose ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(255,255,255,0.05)', cursor: adCanClose ? 'pointer' : 'not-allowed' }}>
-                  {adCanClose ? 'Fechar propaganda ✕' : `Aguarde ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s para fechar`}
+                  {adCanClose ? 'Fechar propaganda ✕' : adCampaign.type === 'video' ? 'Aguarde o fim do vídeo' : `Aguarde ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s para fechar`}
                 </button>
               </div>
             </div>
