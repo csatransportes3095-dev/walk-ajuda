@@ -1,5 +1,5 @@
-// Service Worker v106 — evita HTML antigo apontando para assets/CSS removidos
-const CACHE_NAME = 'walk-ajuda-v106-assets';
+// Service Worker v107 — evita HTML antigo apontando para assets/CSS removidos
+const CACHE_NAME = 'walk-ajuda-v107-assets';
 const CARTOES_CACHE = 'meus-cartoes-v1';
 
 self.addEventListener('install', (event) => {
@@ -18,6 +18,7 @@ self.addEventListener('install', (event) => {
         '/h2-brand-180.png',
         '/h2-brand-192.png',
         '/h2-brand-512.png',
+        '/h2-colombia-background.webp',
         '/icon-192x192.png',
         '/icon-512x512.png',
         '/apple-touch-icon.png',
@@ -82,6 +83,7 @@ self.addEventListener('fetch', (event) => {
     url.pathname === '/manifest.json' ||
     url.pathname === '/manifest-admin.json' ||
     url.pathname.startsWith('/h2-brand-') ||
+    url.pathname === '/h2-colombia-background.webp' ||
     url.pathname.match(/\/icon-\d+x\d+\.png$/) ||
     url.pathname === '/apple-touch-icon.png' ||
     url.pathname === '/favicon-32x32.png' ||

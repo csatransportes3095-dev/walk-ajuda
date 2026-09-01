@@ -43,6 +43,92 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // H2 BOOT WATCHDOG v1
+      // Se um deploy trocar os hashes dos bundles enquanto o navegador ainda tem HTML/SW antigo,
+      // recupera uma única vez automaticamente em vez de deixar o usuário preso só na imagem de fundo.
+      (() => {
+        const RETRY_KEY = 'h2_boot_recovery_v1';
+        let recoveryStarted = false;
+
+        const rootMounted = () => {
+          const root = document.getElementById('root');
+          return !!root && root.childElementCount > 0;
+        };
+
+        const clearRuntimeCaches = async () => {
+          try {
+            if ('serviceWorker' in navigator) {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(regs.map((reg) => reg.unregister()));
+            }
+          } catch (_) {}
+          try {
+            if ('caches' in window) {
+              const names = await caches.keys();
+              await Promise.all(names.map((name) => caches.delete(name)));
+            }
+          } catch (_) {}
+        };
+
+        const showRecovery = () => {
+          const root = document.getElementById('root');
+          if (!root) return;
+          root.innerHTML = `
+            <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,6,23,.82);font-family:Arial,sans-serif;color:white;text-align:center">
+              <div style="max-width:440px;padding:28px;border:1px solid rgba(250,204,21,.45);border-radius:20px;background:rgba(3,7,18,.94);box-shadow:0 20px 60px rgba(0,0,0,.45)">
+                <div style="font-size:28px;margin-bottom:10px">H2 COLOMBIANO</div>
+                <div style="font-size:15px;line-height:1.5;color:#d1d5db;margin-bottom:18px">A versão do sistema foi atualizada e o navegador não conseguiu concluir o carregamento.</div>
+                <button id="h2-boot-reload" style="border:0;border-radius:12px;padding:12px 20px;background:#eab308;color:#111827;font-weight:800;cursor:pointer">RECARREGAR SISTEMA</button>
+              </div>
+            </div>`;
+          document.getElementById('h2-boot-reload')?.addEventListener('click', async () => {
+            sessionStorage.removeItem(RETRY_KEY);
+            await clearRuntimeCaches();
+            const url = new URL(location.href);
+            url.searchParams.set('_h2boot', String(Date.now()));
+            location.replace(url.toString());
+          });
+        };
+
+        const recover = async (reason) => {
+          if (recoveryStarted || rootMounted()) return;
+          recoveryStarted = true;
+          const alreadyRetried = sessionStorage.getItem(RETRY_KEY) === '1';
+          if (alreadyRetried) {
+            showRecovery();
+            return;
+          }
+          sessionStorage.setItem(RETRY_KEY, '1');
+          console.warn('[H2 Boot Recovery]', reason);
+          await clearRuntimeCaches();
+          const url = new URL(location.href);
+          url.searchParams.set('_h2boot', String(Date.now()));
+          location.replace(url.toString());
+        };
+
+        // Erro de bundle/stylesheet: recuperar rápido, sem esperar o timeout geral.
+        window.addEventListener('error', (event) => {
+          const target = event.target;
+          const assetUrl = target?.src || target?.href || '';
+          if (typeof assetUrl === 'string' && assetUrl.includes('/assets/')) {
+            setTimeout(() => recover('asset-load-error'), 50);
+          }
+        }, true);
+
+        // Se React montar normalmente, limpar a trava de retry para futuros deploys.
+        const observer = new MutationObserver(() => {
+          if (rootMounted()) {
+            sessionStorage.removeItem(RETRY_KEY);
+            observer.disconnect();
+          }
+        });
+        const root = document.getElementById('root');
+        if (root) observer.observe(root, { childList: true });
+
+        setTimeout(() => recover('boot-timeout'), 12000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
 
     <script>
