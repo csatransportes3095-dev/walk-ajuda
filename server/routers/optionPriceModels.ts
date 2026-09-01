@@ -12,6 +12,7 @@ export type OptionPriceModel = {
   promoEndsAt: number | null;
   sortOrder: number;
   isActive: number;
+  selectorLabel?: string | null;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
 };
@@ -44,6 +45,13 @@ async function ensureInfrastructure() {
         updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uq_optionPriceModels_option_label (optionId, label),
         KEY idx_optionPriceModels_optionId (optionId)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS optionPriceModelSettings (
+        optionId INT NOT NULL PRIMARY KEY,
+        selectorLabel VARCHAR(128) NOT NULL DEFAULT 'Modelo / categoria',
+        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
@@ -88,12 +96,14 @@ async function listModels(optionIds: number[], onlyActive: boolean): Promise<Opt
   const safeIds = optionIds.filter(Number.isFinite).map(Number);
   if (safeIds.length === 0) return [];
   const idList = safeIds.join(",");
-  const activeSql = onlyActive ? " AND isActive = 1" : "";
+  const activeSql = onlyActive ? " AND m.isActive = 1" : "";
   const result = await db.execute(sql.raw(`
-    SELECT id, optionId, label, price, originalPrice, promoEndsAt, sortOrder, isActive, createdAt, updatedAt
-    FROM optionPriceModels
-    WHERE optionId IN (${idList})${activeSql}
-    ORDER BY optionId ASC, sortOrder ASC, id ASC
+    SELECT m.id, m.optionId, m.label, m.price, m.originalPrice, m.promoEndsAt, m.sortOrder, m.isActive,
+           m.createdAt, m.updatedAt, COALESCE(s.selectorLabel, 'Modelo / categoria') AS selectorLabel
+    FROM optionPriceModels m
+    LEFT JOIN optionPriceModelSettings s ON s.optionId = m.optionId
+    WHERE m.optionId IN (${idList})${activeSql}
+    ORDER BY m.optionId ASC, m.sortOrder ASC, m.id ASC
   `));
   const rows = asRows<OptionPriceModel>(result).map(row => ({
     ...row,
@@ -138,6 +148,33 @@ export const optionPriceModelsRouter = router({
   list: adminProcedure
     .input(z.object({ optionId: z.number().int().positive() }))
     .query(async ({ input }) => listModels([input.optionId], false)),
+
+  getSettings: adminProcedure
+    .input(z.object({ optionId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      await ensureInfrastructure();
+      const db = await getDb();
+      if (!db) throw new Error("Banco de dados indisponível.");
+      const result = await db.execute(sql`
+        SELECT selectorLabel FROM optionPriceModelSettings WHERE optionId=${input.optionId} LIMIT 1
+      `);
+      const row = asRows<{ selectorLabel?: string | null }>(result)[0];
+      return { selectorLabel: row?.selectorLabel?.trim() || "Modelo / categoria" };
+    }),
+
+  updateSettings: adminProcedure
+    .input(z.object({ optionId: z.number().int().positive(), selectorLabel: z.string().trim().min(1).max(128) }))
+    .mutation(async ({ input }) => {
+      await ensureInfrastructure();
+      const db = await getDb();
+      if (!db) throw new Error("Banco de dados indisponível.");
+      await db.execute(sql`
+        INSERT INTO optionPriceModelSettings (optionId, selectorLabel)
+        VALUES (${input.optionId}, ${input.selectorLabel})
+        ON DUPLICATE KEY UPDATE selectorLabel=VALUES(selectorLabel)
+      `);
+      return { success: true };
+    }),
 
   create: adminProcedure
     .input(modelInput)

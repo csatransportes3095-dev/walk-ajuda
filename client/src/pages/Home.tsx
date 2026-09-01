@@ -33,7 +33,7 @@ type CartItem = {
 type ProductQuestion = { id: number; question: string; fieldType: string; options: string | null; isRequired: number; sortOrder: number; helpText?: string | null; audioMinDurationSeconds?: number; audioMaxDurationSeconds?: number; allowAudioRerecord?: number; allowAudioFileUpload?: number; questionPresentation?: 'text' | 'audio'; questionAudioUrl?: string | null; showQuestionTextWithAudio?: number; parentQuestionId: number | null; triggerOption: string | null };
 type OptionDocument = { id: number; optionId: number; label: string; exampleImageUrl: string | null; inputSource?: string; sortOrder: number; instruction?: string | null; exampleText?: string | null };
 type WarrantyTier = { id: number; optionId: number; warrantyType: string; warrantyValue: number; warrantyLabel: string | null; price: string; originalPrice: string | null; sortOrder: number; isActive: number; };
-type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; };
+type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; selectorLabel?: string | null; };
 
 type ProductOption = {
   id: number; label: string; price: string; originalPrice: string | null; type: string | null; sortOrder: number; isActive: number;
@@ -516,7 +516,7 @@ export default function Home() {
       savedAt: Date.now(),
     };
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch {}
-  }, [step, selectedProduct, selectedOption, questionAnswers, questionAudioAnswers, questionAudioFlowId, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin]);
+  }, [step, selectedProduct, selectedOption, selectedPriceModel, questionAnswers, questionAudioAnswers, questionAudioFlowId, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin]);
 
   // Cada rascunho é retomado somente no canal onde foi iniciado.
   useEffect(() => {
@@ -1591,8 +1591,8 @@ export default function Home() {
         setSubmittedOrderData({
           cartItems: cartItems.map(item => ({
             service: item.product.name,
-            nameOption: item.option?.label || 'N/A',
-            price: item.option?.price || ''
+            nameOption: item.option ? `${item.option.label}${item.priceModel ? ` — ${item.priceModel.label}` : ''}` : 'N/A',
+            price: item.priceModel?.price || item.option?.price || ''
           })),
           answers: answersArray,
           docs: dynamicDocsArray.filter(d => d.url).map(d => ({ label: d.label, url: d.url! })),
@@ -1653,7 +1653,7 @@ export default function Home() {
         docNameMode: selectedOption?.docNameMode || 'none',
         docCustomName: selectedOption?.docCustomName || '',
         price: (() => {
-          const rawPrice = selectedTier?.price || selectedOption?.price;
+          const rawPrice = selectedPriceModel?.price || selectedTier?.price || selectedOption?.price;
           if (!rawPrice) return undefined;
           const resellerDiscount = getResellerDiscountAmount();
           return (couponDiscount || resellerDiscount > 0) ? calculateDiscountedValue(rawPrice) : rawPrice;
@@ -1680,7 +1680,7 @@ export default function Home() {
         }
         // Salvar dados do pedido para mensagem WhatsApp
         const singlePrice = (() => {
-          const rawPrice = selectedTier?.price || selectedOption?.price;
+          const rawPrice = selectedPriceModel?.price || selectedTier?.price || selectedOption?.price;
           if (!rawPrice) return '';
           const resellerDiscount = getResellerDiscountAmount();
           return (couponDiscount || resellerDiscount > 0) ? calculateDiscountedValue(rawPrice) : rawPrice;
@@ -1688,7 +1688,7 @@ export default function Home() {
         setSubmittedOrderData({
           cartItems: [{
             service: selectedProduct?.name || 'N/A',
-            nameOption: selectedOption?.label || 'N/A',
+            nameOption: selectedOption ? `${selectedOption.label}${selectedPriceModel ? ` — ${selectedPriceModel.label}` : ''}` : 'N/A',
             price: singlePrice,
           }],
           answers: answersArray,
@@ -1886,7 +1886,7 @@ export default function Home() {
     if (cart.length <= 1) return null;
     let total = 0;
     for (const item of cart) {
-      const price = item.option?.price || '0';
+      const price = item.priceModel?.price || item.option?.price || '0';
       const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
       if (!isNaN(num)) total += num;
     }
@@ -3576,7 +3576,7 @@ export default function Home() {
                         )}
                         <div className="flex justify-between items-center">
                           <span className="text-white/70 text-xs">Valor:</span>
-                          <span className="text-green-400 font-bold text-sm">{item.option?.price || 'Consulte'}</span>
+                          <span className="text-green-400 font-bold text-sm">{item.priceModel?.price || item.option?.price || 'Consulte'}</span>
                         </div>
                       </div>
                     ))}
@@ -4227,7 +4227,7 @@ export default function Home() {
                 {cart.length > 1 && (() => {
                   let total = 0;
                   for (const item of cart) {
-                    const price = item.option?.price || '0';
+                    const price = item.priceModel?.price || item.option?.price || '0';
                     const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
                     if (!isNaN(num)) total += num;
                   }

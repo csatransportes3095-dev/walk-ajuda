@@ -22,7 +22,7 @@ export type StorefrontWarrantyTier = {
   originalPrice: string | null;
 };
 
-export type StorefrontPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; };
+export type StorefrontPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; selectorLabel?: string | null; };
 
 export type StorefrontOption = {
   id: number;
@@ -97,11 +97,11 @@ export function StorefrontProductCard({
   const selectedTier = tiers.find((tier) => tier.id === tierId) || null;
   const priceModels = item.option.priceModels || [];
   const [priceModelId, setPriceModelId] = useState<number | null>(null);
-  // As categorias chegam por uma query separada. No primeiro render a lista pode estar vazia;
-  // quando ela carregar, a primeira categoria visivel precisa ser a categoria realmente ativa.
-  const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || priceModels[0] || null;
-  const effectivePrice = selectedPriceModel?.price || selectedTier?.price || item.option.price;
-  const effectiveOriginalPrice = selectedPriceModel?.originalPrice || selectedTier?.originalPrice || item.option.originalPrice;
+  const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;
+  const requiresPriceModelSelection = priceModels.length > 0;
+  const selectorLabel = priceModels[0]?.selectorLabel?.trim() || "Modelo / categoria";
+  const effectivePrice = requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);
+  const effectiveOriginalPrice = requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);
   const discount = useMemo(() => {
     const original = asNumber(effectiveOriginalPrice);
     const price = asNumber(effectivePrice);
@@ -155,10 +155,12 @@ export function StorefrontProductCard({
 
         {priceModels.length > 0 && (
           <label className="mt-4 block">
-            <span className="mb-1.5 block text-xs font-bold text-cyan-200">Modelo / categoria</span>
-            <select value={selectedPriceModel?.id ?? ""} onChange={(event) => setPriceModelId(Number(event.target.value))} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">
+            <span className="mb-1.5 block text-xs font-bold text-cyan-200">{selectorLabel}</span>
+            <select value={priceModelId ?? ""} onChange={(event) => setPriceModelId(event.target.value ? Number(event.target.value) : null)} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">
+              <option value="" disabled>Selecione...</option>
               {priceModels.map(model => <option key={model.id} value={model.id}>{model.label} — {asMoney(model.price)}</option>)}
             </select>
+            {!selectedPriceModel && <span className="mt-1.5 block text-[11px] font-semibold text-amber-300">Escolha uma opção para ver o valor e continuar.</span>}
           </label>
         )}
 
@@ -181,9 +183,15 @@ export function StorefrontProductCard({
 
         <div className="mt-5 flex items-end justify-between gap-3">
           <div>
-            {effectiveOriginalPrice && <p className="mb-0.5 text-xs font-semibold text-white/40 line-through">{asMoney(effectiveOriginalPrice)}</p>}
-            <p className="text-2xl font-black text-white" style={textColor ? { color: textColor } : undefined}>{asMoney(effectivePrice)}</p>
-            {discount > 0 && <p className="mt-0.5 text-xs font-bold text-emerald-300">Economize {discount}%</p>}
+            {requiresPriceModelSelection && !selectedPriceModel ? (
+              <p className="text-sm font-bold text-white/50">Valor disponível após a escolha</p>
+            ) : (
+              <>
+                {effectiveOriginalPrice && <p className="mb-0.5 text-xs font-semibold text-white/40 line-through">{asMoney(effectiveOriginalPrice)}</p>}
+                <p className="text-2xl font-black text-white" style={textColor ? { color: textColor } : undefined}>{asMoney(effectivePrice)}</p>
+                {discount > 0 && <p className="mt-0.5 text-xs font-bold text-emerald-300">Economize {discount}%</p>}
+              </>
+            )}
           </div>
           {item.product.deliveryDays && <span className="rounded-lg border border-white/20 bg-white/[0.08] px-2 py-1 text-right text-[11px] font-bold text-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,.12)] backdrop-blur-xl">Prazo: {item.product.deliveryDays}</span>}
         </div>
@@ -199,15 +207,17 @@ export function StorefrontProductCard({
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => onBuy(selectedTier, selectedPriceModel)}
-            className="min-h-12 rounded-xl border border-white/60 bg-white/95 px-3 py-3 text-sm font-black text-slate-950 shadow-[0_8px_24px_rgba(255,255,255,.14)] transition-all hover:bg-white hover:shadow-[0_8px_28px_rgba(255,255,255,.25)] active:scale-[0.98]"
+            disabled={requiresPriceModelSelection && !selectedPriceModel}
+            onClick={() => { if (!requiresPriceModelSelection || selectedPriceModel) onBuy(selectedTier, selectedPriceModel); }}
+            className="min-h-12 rounded-xl border border-white/60 bg-white/95 px-3 py-3 text-sm font-black text-slate-950 shadow-[0_8px_24px_rgba(255,255,255,.14)] transition-all hover:bg-white hover:shadow-[0_8px_28px_rgba(255,255,255,.25)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
           >
             Comprar agora
           </button>
           <button
             type="button"
-            onClick={() => onAddToCart(selectedTier, selectedPriceModel)}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-black text-white shadow-[0_8px_24px_rgba(0,0,0,.18)] backdrop-blur-xl transition-all hover:brightness-125 active:scale-[0.98]"
+            disabled={requiresPriceModelSelection && !selectedPriceModel}
+            onClick={() => { if (!requiresPriceModelSelection || selectedPriceModel) onAddToCart(selectedTier, selectedPriceModel); }}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-black text-white shadow-[0_8px_24px_rgba(0,0,0,.18)] backdrop-blur-xl transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
             style={{ background: `linear-gradient(135deg, ${cartButtonColor}52, ${cartButtonColor}24)`, borderColor: `${cartButtonColor}cc`, boxShadow: `0 8px 24px ${cartButtonColor}24, inset 0 1px 0 rgba(255,255,255,.18)` }}
           >
             <ShoppingCart className="h-4 w-4" /> Carrinho

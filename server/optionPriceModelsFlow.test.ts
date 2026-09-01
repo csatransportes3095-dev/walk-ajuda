@@ -22,13 +22,19 @@ describe('categorias de preco dentro da opcao existente', () => {
   it('edita as categorias dentro do card da opcao no ADM', () => {
     expect(admin).toContain('MODELOS / CATEGORIAS DE PREÇO');
     expect(admin).toContain('<OptionPriceModelsEditor optionId={opt.id} />');
-    expect(admin).toContain('Não criam outro produto e não duplicam perguntas ou documentos.');
+    expect(admin).toContain('Nome do campo exibido ao cliente');
+    expect(router).toContain('optionPriceModelSettings');
+    expect(router).toContain('updateSettings');
   });
 
   it('cliente escolhe categoria e checkout preserva a opcao original', () => {
-    expect(card).toContain('Modelo / categoria');
+    expect(card).toContain('selectorLabel');
+    expect(card).toContain('Selecione...');
+    expect(card).toContain('Valor disponível após a escolha');
+    expect(card).toContain('disabled={requiresPriceModelSelection && !selectedPriceModel}');
     expect(card).toContain('selectedPriceModel');
     expect(home).toContain('selectedPriceModel.price');
+    expect(home).toContain('selectedPriceModel?.price || selectedTier?.price || selectedOption?.price');
     expect(home).toContain('priceModelId: selectedPriceModel?.id');
     expect(home).toContain('item.priceModel?.price || item.option?.price');
     expect(home).toContain('selectedPriceModel.label');
