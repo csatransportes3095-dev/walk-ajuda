@@ -402,7 +402,7 @@ export default function Home() {
     }
   }, [adData?.campaign?.id]);
   useEffect(() => {
-    if (!adVisible || !adCampaign || adCampaign.type !== 'image') return;
+    if (!adVisible || !adCampaign) return;
     const total = (adCampaign.requiredSeconds || 20) * 1000;
     const interval = 100;
     let elapsed = 0;
