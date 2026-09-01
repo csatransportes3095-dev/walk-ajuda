@@ -34,6 +34,7 @@ const newBlock = `async function requireLoanRouteAccess(db: any, rawToken: strin
   const token = rawToken.trim();
   if (!token) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão inválida ou expirada.' });
 
+  // A Planilha e o módulo de Empréstimos compartilham a mesma sessão central.
   const spreadsheetSessionRows = await qRows(db, drizzleSql\`
     SELECT ss.*, sc.name, sc.phone, sc.cpf
     FROM spreadsheetSessions ss
@@ -84,12 +85,6 @@ const newBlock = `async function requireLoanRouteAccess(db: any, rawToken: strin
 
 if (!src.includes(oldBlock)) throw new Error('requireLoanRouteAccess anchor not found');
 src = src.replace(oldBlock, newBlock);
-
-// Consultas do cliente não podem depender exclusivamente de spreadsheetToken.
-const replacements = [
-  ["let clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);", "let clients = await qRows(db, drizzleSql`SELECT * FROM loanClients WHERE spreadsheetToken=${token}`);"],
-];
-
 fs.writeFileSync(path, src, 'utf8');
 
 const testPath = 'server/customerSessionRefreshRegression.test.ts';
