@@ -21,46 +21,6 @@ import AdminDevToolsTargetSelector from "./components/AdminDevToolsTargetSelecto
 import RafflePhotoIntegrityEnhancer from "./components/RafflePhotoIntegrityEnhancer";
 import "./index.css";
 
-// Em alguns Androids/PWAs, abrir wa.me em uma nova janela cria um WebView
-// secundário que não consegue entregar o redirect whatsapp:// ao aplicativo.
-// Para links oficiais do WhatsApp, mantemos o mesmo HTTPS e navegamos no
-// contexto principal. O navegador/Android então pode encaminhar ao WhatsApp
-// sem alterar a mensagem, telefone ou qualquer dado do pedido.
-function installAndroidWhatsAppNavigationFix() {
-  if (typeof window === "undefined" || typeof navigator === "undefined") return;
-  if (!/Android/i.test(navigator.userAgent)) return;
-
-  const compatWindow = window as typeof window & { __h2WhatsAppNavigationFix?: boolean };
-  if (compatWindow.__h2WhatsAppNavigationFix) return;
-  compatWindow.__h2WhatsAppNavigationFix = true;
-
-  const originalOpen = window.open.bind(window);
-
-  window.open = ((url?: string | URL, target?: string, features?: string) => {
-    const href = typeof url === "string" ? url : url instanceof URL ? url.toString() : "";
-
-    if (href) {
-      try {
-        const parsed = new URL(href, window.location.href);
-        const isWhatsAppHttps =
-          parsed.protocol === "https:" &&
-          (parsed.hostname === "wa.me" || parsed.hostname === "api.whatsapp.com");
-
-        if (isWhatsAppHttps) {
-          window.location.assign(parsed.toString());
-          return null;
-        }
-      } catch {
-        // URL fora do padrão: preserva o comportamento original do navegador.
-      }
-    }
-
-    return originalOpen(href || undefined, target, features);
-  }) as typeof window.open;
-}
-
-installAndroidWhatsAppNavigationFix();
-
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
 // responde lentamente ou ocorre algum erro. Mutations continuam com prazo maior
 // porque uploads, geração de arquivos e envio de e-mails podem levar mais tempo.
