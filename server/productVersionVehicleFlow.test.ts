@@ -18,3 +18,5 @@ describe('filtro compacto de veiculo', () => {
     expect(bot).toContain("VEHICLE_YEARS");
   });
 });
+
+// Guard: a opcao existente continua sendo opcao; categorias de preco ficam aninhadas nela.
