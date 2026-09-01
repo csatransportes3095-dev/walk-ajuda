@@ -79,6 +79,7 @@ import {
   getStatusInfoFromDb,
   generateOrderNumber,
   updateLastOrderStatus,
+  completeOpenAppointmentsForOrder,
   createDocRequest, getDocRequestsByRegistration, getDocRequestsByPhone,
   updateDocRequestStatus, deleteDocRequest,
   getBlocklist, addToBlocklist, removeFromBlocklist, checkBlocklist,
@@ -4153,9 +4154,12 @@ export const appRouter = router({
         });
         if (!result.success) return result;
 
-        // Alterar o status do pedido não encerra nem modifica a agenda do cliente.
-        // Um agendamento confirmado permanece reservado e visível até uma ação
-        // explícita de concluir, cancelar ou reagendar no módulo de agendamentos.
+        // Foto em Análise encerra automaticamente a etapa de agendamento do mesmo
+        // pedido/subpedido. O histórico é preservado como completed, fazendo o pedido
+        // sair dos filtros Agendamento/Confirmado e cair somente em Foto em Análise.
+        if (input.status === 'foto_em_anal') {
+          await completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex);
+        }
 
         // Ao marcar como entregue, remover urgência obrigatoriamente
         const FINAL_STATUSES = ['entregue', 'pedido_entregue', 'cancelado'];
