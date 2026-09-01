@@ -6,6 +6,7 @@ on:
       - recovery/organizar-salvos-2026-08-24
     paths:
       - "scripts/apply-manifest-per-subproduct.py"
+      - ".github/workflows/apply-manifest-per-subproduct.yml"
 
 permissions:
   contents: write
