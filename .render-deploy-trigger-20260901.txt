@@ -1,0 +1,2 @@
+Trigger seguro de deploy para forcar o Render a reconhecer o HEAD correto da branch feat/option-price-models-final-20260901.
+Commit alvo anterior: 7f33f837fd144c4fc7f132443c45d3f8f2d8032c
