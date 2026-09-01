@@ -1,0 +1,64 @@
+name: Fix Price Model Selection Sync
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Corrigir categoria visivel sem preco aplicado
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          card = Path('client/src/components/StorefrontProductCard.tsx')
+          s = card.read_text()
+          old = """  const [priceModelId, setPriceModelId] = useState<number | null>(priceModels[0]?.id ?? null);\n  const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;"""
+          new = """  const [priceModelId, setPriceModelId] = useState<number | null>(null);\n  // As categorias chegam por uma query separada. No primeiro render a lista pode estar vazia;\n  // quando ela carregar, a primeira categoria visivel precisa ser a categoria realmente ativa.\n  const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || priceModels[0] || null;"""
+          if old not in s:
+              raise SystemExit('Trecho de selecao de categoria nao encontrado; abortando.')
+          s = s.replace(old, new, 1)
+          old_value = '            <select value={priceModelId ?? ""} onChange={(event) => setPriceModelId(Number(event.target.value))}'
+          new_value = '            <select value={selectedPriceModel?.id ?? ""} onChange={(event) => setPriceModelId(Number(event.target.value))}'
+          if old_value not in s:
+              raise SystemExit('Select de categoria nao encontrado; abortando.')
+          s = s.replace(old_value, new_value, 1)
+          card.write_text(s)
+
+          test = Path('server/optionPriceModelsFlow.test.ts')
+          t = test.read_text()
+          needle = "    expect(card).toContain('selectedPriceModel');\n"
+          replacement = needle + "    expect(card).toContain('|| priceModels[0] || null');\n    expect(card).toContain('value={selectedPriceModel?.id ?? \\\"\\\"}');\n"
+          if needle not in t:
+              raise SystemExit('Ponto de teste nao encontrado; abortando.')
+          test.write_text(t.replace(needle, replacement, 1))
+          PY
+      - name: Validar whitespace
+        run: git diff --check
+      - run: pnpm install --frozen-lockfile
+      - name: Teste direcionado
+        run: pnpm exec vitest run server/optionPriceModelsFlow.test.ts
+      - name: Build de producao
+        run: pnpm build
+      - name: Remover workflow temporario
+        run: rm -f .github/workflows/fix-price-model-selection-sync.yml
+      - name: Commit da correcao validada
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/components/StorefrontProductCard.tsx server/optionPriceModelsFlow.test.ts
+          git add -u .github/workflows/fix-price-model-selection-sync.yml
+          git commit -m "fix(storefront): aplicar preco da categoria selecionada"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
