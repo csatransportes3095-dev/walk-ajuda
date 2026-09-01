@@ -33,8 +33,8 @@ describe("independência entre status do pedido e agendamento", () => {
     const updateEnd = source.indexOf("// Admin: atualizar orderSource", updateStart);
     const updateProcedure = source.slice(updateStart, updateEnd);
 
-    expect(updateProcedure).toContain("if (input.status === 'foto_em_anal')");
-    expect(updateProcedure).toContain("completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex)");
+    expect(updateProcedure).toContain("if (['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise'].includes(input.status))");
+    expect(updateProcedure).toContain("completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex, input.customerPhone)");
   });
 
   it("helper de Foto em Análise conclui somente agenda aberta do mesmo pedido/subpedido", async () => {

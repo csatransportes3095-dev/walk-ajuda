@@ -4079,8 +4079,8 @@ export const appRouter = router({
         // Foto em Análise encerra automaticamente a etapa de agendamento do mesmo
         // pedido/subpedido. O histórico é preservado como completed, fazendo o pedido
         // sair dos filtros Agendamento/Confirmado e cair somente em Foto em Análise.
-        if (input.status === 'foto_em_anal') {
-          await completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex);
+        if (['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise'].includes(input.status)) {
+          await completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex, input.customerPhone);
         }
 
         // Ao marcar como entregue, remover urgência obrigatoriamente
