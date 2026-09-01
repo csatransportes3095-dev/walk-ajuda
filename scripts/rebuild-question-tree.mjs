@@ -11,8 +11,9 @@ const normalize = value => String(value ?? "")
 const json = values => JSON.stringify(values);
 const yesNo = json(["SIM", "NÃO"]);
 const brands = [
-  "CHEVROLET", "FIAT", "FORD", "HONDA", "HYUNDAI", "JEEP",
-  "KIA", "NISSAN", "PEUGEOT", "RENAULT", "TOYOTA", "VOLKSWAGEN", "CITROËN", "CAOA CHERY", "MITSUBISHI",
+  "VOLKSWAGEN", "FIAT", "CHEVROLET", "HYUNDAI", "TOYOTA", "RENAULT",
+  "NISSAN", "HONDA", "JEEP", "BYD", "CAOA CHERY", "GWM", "CITROËN",
+  "PEUGEOT", "FORD", "KIA", "MITSUBISHI", "JAC MOTORS", "GEELY",
 ];
 const colors = [
   "BRANCO", "PRETO", "PRATA", "CINZA", "VERMELHO", "AZUL",

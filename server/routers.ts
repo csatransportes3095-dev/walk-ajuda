@@ -32,6 +32,7 @@ import { syncUnifiedCustomerRegistry } from "./customerIdentity";
 import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, setCustomerCommercialProfileMode } from "./loans/h2Score";
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
+import { optionPriceModelsRouter } from "./routers/optionPriceModels";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -326,6 +327,7 @@ async function ensureCommissionReferralStatusColumns(db: any): Promise<void> {
 
 export const appRouter = router({
   system: systemRouter,
+  optionPriceModels: optionPriceModelsRouter,
   resellers: resellersRouter,
   schedule: scheduleRouter,
   spreadsheet: spreadsheetRouter,
