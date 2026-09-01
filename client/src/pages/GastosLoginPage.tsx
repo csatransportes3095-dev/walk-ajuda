@@ -346,6 +346,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
         const loginResult = await loginMutation.mutateAsync({ phone: cleanPhone, password });
         if (loginResult.success) {
           localStorage.setItem('gastos_token', loginResult.token);
+          localStorage.setItem('cp_token', loginResult.token);
           localStorage.setItem('gastos_clientId', loginResult.clientId.toString());
           localStorage.setItem('gastos_clientName', loginResult.clientName);
           onLoginSuccess(loginResult.token, loginResult.clientId, loginResult.clientName);
@@ -379,6 +380,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
       const result = await loginMutation.mutateAsync({ phone: phone.replace(/\D/g, ''), password, isCpf: false });
       if (result.success) {
         localStorage.setItem('gastos_token', result.token);
+        localStorage.setItem('cp_token', result.token);
         localStorage.setItem('gastos_clientId', result.clientId.toString());
         localStorage.setItem('gastos_clientName', result.clientName);
         onLoginSuccess(result.token, result.clientId, result.clientName);

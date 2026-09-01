@@ -85,7 +85,7 @@ function useInstallPWA() {
 type GateStep = "phone" | "newUser" | "indicador" | "registration" | "profilePhoto" | "referral" | "password" | "blocked" | "updateCpf" | "cpwd_create" | "cpwd_pending" | "cpwd_add_cpf" | "route_blocked";
 
 export default function PasswordGate({ children }: PasswordGateProps) {
-  const [accessGranted, setAccessGranted] = useState(false);
+  const [accessGranted, setAccessGranted] = useState(() => !!localStorage.getItem(CP_TOKEN_KEY) || localStorage.getItem(SESSION_KEY) === "true");
   const [gateStep, setGateStep] = useState<GateStep>("phone");
   const [blockedRoutes, setBlockedRoutes] = useState<string[]>([]);
   const [clientPhone, setClientPhone] = useState("");
@@ -180,7 +180,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       staleTime: 0,                     // sempre busca dados frescos do banco
       refetchOnWindowFocus: true,       // re-executa ao voltar para a aba (pega telefone atualizado)
       refetchOnReconnect: true,         // re-executa ao reconectar
-      retry: false,                     // não tentar novamente em caso de erro
+      retry: 2,                         // falha transitória não pode virar logout
     }
   );
   const [cpwdNewPassword, setCpwdNewPassword] = useState("");
@@ -354,9 +354,9 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         }
         setAccessGranted(true);
         setAccessType('customer');
-      } else if (!accessGranted) {
-        // Token inválido: só limpar se o cliente NÃO estava logado
-        // (evita logout durante pedido ativo por erro transitório)
+      } else {
+        // O servidor só responde valid:false para token realmente inexistente,
+        // expirado, bloqueado ou invalidado. Falhas técnicas viram erro da query.
         localStorage.removeItem(CP_TOKEN_KEY);
         localStorage.removeItem(SESSION_KEY);
         localStorage.removeItem(SESSION_TYPE_KEY);

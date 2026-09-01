@@ -13,6 +13,8 @@ import {
   customers,
   appSettings,
   customerLoginHistory,
+  spreadsheetSessions,
+  spreadsheetClients,
 } from "../../drizzle/schema";
 import { eq, and, sql, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -354,41 +356,55 @@ export const customerPasswordRouter = router({
     .input(z.object({ token: z.string() }))
     .query(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) return { valid: false };
-      const rows = await db
-        .select()
-        .from(customerPasswordSessions)
-        .where(eq(customerPasswordSessions.token, input.token.trim()))
-        .limit(1);
-      const session = rows?.[0];
-      if (!session) return { valid: false };
-      if (new Date(session.expiresAt) < new Date()) return { valid: false };
-      // Verificar se o cliente foi bloqueado após criar a sessão
-      let customerForSession: any = null;
-      try {
-        const custRows2 = await db.select().from(customers).where(eq(customers.phone, session.phone)).limit(1);
-        customerForSession = custRows2?.[0] || null;
-        if (customerForSession && (customerForSession as any).blocked === 1) {
-          return { valid: false, blocked: true, blockReason: (customerForSession as any).blockReason || 'Acesso bloqueado' };
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      const cleanToken = input.token.trim();
+      if (!cleanToken) return { valid: false, reason: 'missing' as const };
+
+      const rows = await db.select().from(customerPasswordSessions)
+        .where(eq(customerPasswordSessions.token, cleanToken)).limit(1);
+      let session: any = rows?.[0] || null;
+      let source: 'customer' | 'spreadsheet' = 'customer';
+      let phone = session?.phone || '';
+
+      if (!session) {
+        const legacyRows = await db.select().from(spreadsheetSessions)
+          .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
+        const legacySession = legacyRows?.[0] || null;
+        if (legacySession) {
+          const clientRows = await db.select().from(spreadsheetClients)
+            .where(eq(spreadsheetClients.id, legacySession.clientId)).limit(1);
+          const client = clientRows?.[0] || null;
+          if (!client) return { valid: false, reason: 'missing' as const };
+          session = legacySession;
+          source = 'spreadsheet';
+          phone = String(client.phone || '');
         }
-      } catch {}
+      }
+
+      if (!session) return { valid: false, reason: 'missing' as const };
+      if (!session.expiresAt || new Date(session.expiresAt) < new Date()) return { valid: false, reason: 'expired' as const };
+
+      const customerForSession = await getCustomerByCleanPhone(String(phone).replace(/\D/g, ''));
+      if (customerForSession && (customerForSession as any).blocked === 1) {
+        return { valid: false, blocked: true, reason: 'blocked' as const, blockReason: (customerForSession as any).blockReason || 'Acesso bloqueado' };
+      }
       const profileUpdateMeta = getProfileUpdateMeta(customerForSession);
-      // Renovar sessão
+
       try {
         const newExpiry = new Date(Date.now() + SESSION_DURATION_MS);
         const diff = newExpiry.getTime() - new Date(session.expiresAt).getTime();
         if (diff > 24 * 60 * 60 * 1000) {
-          await db
-            .update(customerPasswordSessions)
-            .set({ expiresAt: newExpiry, lastAccessAt: new Date() })
-            .where(eq(customerPasswordSessions.token, input.token.trim()));
+          if (source === 'customer') {
+            await db.update(customerPasswordSessions).set({ expiresAt: newExpiry, lastAccessAt: new Date() })
+              .where(eq(customerPasswordSessions.token, cleanToken));
+          } else {
+            await db.update(spreadsheetSessions).set({ expiresAt: newExpiry, lastAccessAt: new Date() })
+              .where(eq(spreadsheetSessions.token, cleanToken));
+          }
         }
       } catch {}
-      return {
-        valid: true,
-        phone: session.phone,
-        ...profileUpdateMeta,
-      };
+
+      return { valid: true, phone, source, ...profileUpdateMeta };
     }),
 
   // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -397,10 +413,10 @@ export const customerPasswordRouter = router({
     .input(z.object({ token: z.string() }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) return { success: true };
-      await db
-        .delete(customerPasswordSessions)
-        .where(eq(customerPasswordSessions.token, input.token.trim()));
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      const cleanToken = input.token.trim();
+      await db.delete(customerPasswordSessions).where(eq(customerPasswordSessions.token, cleanToken));
+      await db.delete(spreadsheetSessions).where(eq(spreadsheetSessions.token, cleanToken));
       return { success: true };
     }),
 

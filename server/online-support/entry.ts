@@ -31,14 +31,25 @@ export async function requireOnlineEntrySession(token: string, options?: { allow
   const safeToken = String(token || "").trim();
   if (!safeToken) throw new Error("Sessão inválida");
 
-  const rows = resultRows(await db.execute(sql`
+  let rows = resultRows(await db.execute(sql`
     SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.cep, c.street, c.addressNumber, c.neighborhood, c.city, c.uf, c.profilePhotoUrl, c.blocked,
            s.expiresAt
     FROM customerPasswordSessions s
-    INNER JOIN customers c ON c.phone = s.phone
+    INNER JOIN customers c ON RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11)=RIGHT(REGEXP_REPLACE(s.phone, '[^0-9]', ''), 11)
     WHERE s.token=${safeToken} AND c.deletedAt IS NULL
     LIMIT 1
   `));
+  if (!rows[0]) {
+    rows = resultRows(await db.execute(sql`
+      SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.cep, c.street, c.addressNumber, c.neighborhood, c.city, c.uf, c.profilePhotoUrl, c.blocked,
+             s.expiresAt
+      FROM spreadsheetSessions s
+      INNER JOIN spreadsheetClients sc ON sc.id=s.clientId
+      INNER JOIN customers c ON RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11)=RIGHT(REGEXP_REPLACE(sc.phone, '[^0-9]', ''), 11)
+      WHERE s.token=${safeToken} AND c.deletedAt IS NULL
+      LIMIT 1
+    `));
+  }
   const session = rows[0];
   if (!session || !session.expiresAt || new Date(session.expiresAt) < new Date()) {
     throw new Error("Sessão expirada. Informe telefone e senha novamente.");

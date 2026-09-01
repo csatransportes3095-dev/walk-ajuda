@@ -105,7 +105,10 @@ export const onlineSupportRouter = router({
         const routeStates = await getCustomerRouteStates(session.customerId);
         return { authenticated: true, customer: session, access, routeStates };
       } catch (error: any) {
-        return { authenticated: false, message: error?.message || 'Sessão inválida.' };
+        const message = String(error?.message || 'Sessão inválida.');
+        const invalidSession = /sessão (inválida|expirada)|acesso bloqueado/i.test(message);
+        if (!invalidSession) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message });
+        return { authenticated: false, invalidSession: true, message };
       }
     }),
 

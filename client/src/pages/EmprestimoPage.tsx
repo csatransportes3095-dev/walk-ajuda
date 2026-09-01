@@ -53,14 +53,14 @@ export function EmprestimoPage() {
   const [requiredProfilePhone, setRequiredProfilePhone] = useState<string>('');
   const [manifestCompleted, setManifestCompleted] = useState(false);
   const [, navigate] = useLocation();
-  const [savedToken] = useState<string>(() => localStorage.getItem(TOKEN_KEY) || '');
-  const [isLoading, setIsLoading] = useState<boolean>(() => !!localStorage.getItem(TOKEN_KEY));
+  const [savedToken] = useState<string>(() => localStorage.getItem(TOKEN_KEY) || localStorage.getItem('cp_token') || '');
+  const [isLoading, setIsLoading] = useState<boolean>(() => !!(localStorage.getItem(TOKEN_KEY) || localStorage.getItem('cp_token')));
 
   const logoutMutation = trpc.spreadsheet.logout.useMutation();
 
   const verifyQuery = trpc.spreadsheet.verifySession.useQuery(
     { token: savedToken },
-    { enabled: !!savedToken && !isLoggedIn, retry: false, refetchOnWindowFocus: false },
+    { enabled: !!savedToken && !isLoggedIn, retry: 2, refetchOnWindowFocus: false, refetchOnReconnect: true },
   );
 
   // Verificar acesso à rota emprestimo
@@ -92,6 +92,8 @@ export function EmprestimoPage() {
       setIsLoggedIn(false);
       setIsLoading(false);
     } else if (verifyQuery.data?.valid) {
+      localStorage.setItem(TOKEN_KEY, savedToken);
+      localStorage.setItem('cp_token', savedToken);
       setToken(savedToken);
       const name = verifyQuery.data.clientName ?? localStorage.getItem(CLIENT_NAME_KEY);
       setClientName(name);
@@ -128,6 +130,8 @@ export function EmprestimoPage() {
     const current = localStorage.getItem(TOKEN_KEY);
     if (current) logoutMutation.mutate({ token: current });
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem('cp_token');
+    localStorage.removeItem('walk_online_entry_token');
     localStorage.removeItem(CLIENT_ID_KEY);
     localStorage.removeItem(CLIENT_NAME_KEY);
     setRequiredProfilePhone('');

@@ -66,12 +66,22 @@ function alreadyUpdatedError() {
 async function requireCustomerSession(token: string) {
   const db = await getDb() as any;
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
-  const sessions = await rows(db, sql`
+  const cleanToken = token.trim();
+  let sessions = await rows(db, sql`
     SELECT phone, expiresAt
     FROM customerPasswordSessions
-    WHERE token=${token.trim()}
+    WHERE token=${cleanToken}
     LIMIT 1
   `);
+  if (!sessions[0]) {
+    sessions = await rows(db, sql`
+      SELECT sc.phone, s.expiresAt
+      FROM spreadsheetSessions s
+      INNER JOIN spreadsheetClients sc ON sc.id=s.clientId
+      WHERE s.token=${cleanToken}
+      LIMIT 1
+    `);
+  }
   const session = sessions[0];
   if (!session || !session.expiresAt || new Date(session.expiresAt).getTime() < Date.now()) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão vencida. Entre novamente." });
@@ -79,7 +89,10 @@ async function requireCustomerSession(token: string) {
   const customer = await findMainCustomerByIdentity({ phone: session.phone }, db);
   if (!customer || customer.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Cadastro não encontrado." });
   if (Number(customer.blocked) === 1) throw new TRPCError({ code: "FORBIDDEN", message: "Cadastro bloqueado. Fale com o atendimento." });
-  await db.execute(sql`UPDATE customerPasswordSessions SET lastAccessAt=NOW() WHERE token=${token.trim()}`);
+  try {
+    await db.execute(sql`UPDATE customerPasswordSessions SET lastAccessAt=NOW() WHERE token=${cleanToken}`);
+    await db.execute(sql`UPDATE spreadsheetSessions SET lastAccessAt=NOW() WHERE token=${cleanToken}`);
+  } catch {}
   return { db, customer };
 }
 
