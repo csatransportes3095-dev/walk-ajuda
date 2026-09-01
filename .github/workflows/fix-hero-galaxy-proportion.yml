@@ -1,0 +1,36 @@
+name: Fix Hero Galaxy Proportion
+
+on:
+  push:
+    branches:
+      - fix/hero-galaxy-proportion-20260901
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - name: Apply hero galaxy fix
+        run: python3 scripts/fix-hero-galaxy-proportion.py
+      - name: Validate diff
+        run: git diff --check
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build production
+        run: pnpm build
+      - name: Commit validated fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/Home.tsx
+          git commit -m "fix(hero): manter fundo galactico proporcional ao titulo"
+          git push origin HEAD:fix/hero-galaxy-proportion-20260901
