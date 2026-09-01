@@ -11,6 +11,17 @@ function replaceOnce(source, from, to, label) {
   return source.replace(from, to);
 }
 
+function replaceEndedBlock(source, path) {
+  const start = source.indexOf('onEnded={(e) => {');
+  if (start < 0) throw new Error(`onEnded start not found: ${path}`);
+  const errorStart = source.indexOf('onError=', start);
+  if (errorStart < 0) throw new Error(`onError anchor not found after onEnded: ${path}`);
+  const before = source.slice(0, start);
+  const after = source.slice(errorStart);
+  const replacement = `onEnded={() => {\n                      setAdProgress(100);\n                      setAdCanClose(true);\n                      setTimeout(() => setAdVisible(false), 250);\n                    }}\n                    `;
+  return before + replacement + after;
+}
+
 for (const path of pages) {
   let src = fs.readFileSync(path, 'utf8');
 
@@ -21,12 +32,7 @@ for (const path of pages) {
     `${path} image-only timer`,
   );
 
-  const endedRegex = /\n\s+onEnded=\{\(e\) => \{\n\s+setAdProgress\(100\);[\s\S]*?\n\s+\}\}(?=\n\s+onError=)/;
-  if (!endedRegex.test(src)) throw new Error(`onEnded block not found: ${path}`);
-  src = src.replace(
-    endedRegex,
-    `\n                    onEnded={() => {\n                      setAdProgress(100);\n                      setAdCanClose(true);\n                      setTimeout(() => setAdVisible(false), 250);\n                    }}`,
-  );
+  src = replaceEndedBlock(src, path);
 
   src = src.replaceAll(
     "{adCanClose ? 'Propaganda concluída' : `Encerrando em ${Math.ceil((adCampaign.requiredSeconds || 20) * (1 - adProgress / 100))}s`}",
