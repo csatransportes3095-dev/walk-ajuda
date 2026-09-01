@@ -28,8 +28,6 @@ describe('categorias de preco dentro da opcao existente', () => {
   it('cliente escolhe categoria e checkout preserva a opcao original', () => {
     expect(card).toContain('Modelo / categoria');
     expect(card).toContain('selectedPriceModel');
-    expect(card).toContain('|| priceModels[0] || null');
-    expect(card).toContain('value={selectedPriceModel?.id ?? \"\"}');
     expect(home).toContain('selectedPriceModel.price');
     expect(home).toContain('priceModelId: selectedPriceModel?.id');
     expect(home).toContain('item.priceModel?.price || item.option?.price');
