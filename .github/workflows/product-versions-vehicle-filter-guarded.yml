@@ -20,6 +20,16 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - name: Harden patch targeting
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/apply-product-versions-vehicle-filter.mjs')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("    if (section.includes('promoEndsAt: z.number().nullable().optional()') && section.includes('originalPrice: z.string().optional()')) return section;\n", "")
+          s = s.replace("  src = src.replace('grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end', 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end');\n", "")
+          p.write_text(s, encoding='utf-8')
+          PY
       - name: Apply guarded patch
         run: node scripts/apply-product-versions-vehicle-filter.mjs
       - name: Validate whitespace
