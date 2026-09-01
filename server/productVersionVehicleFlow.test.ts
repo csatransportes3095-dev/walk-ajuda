@@ -7,6 +7,7 @@ const db = fs.readFileSync('server/db.ts', 'utf8');
 const router = fs.readFileSync('server/routers.ts', 'utf8');
 const catalog = fs.readFileSync('shared/vehicleCatalog.ts', 'utf8');
 const bot = fs.readFileSync('client/src/components/ColombiaBot.tsx', 'utf8');
+const rebuild = fs.readFileSync('scripts/rebuild-question-tree.mjs', 'utf8');
 
 describe('versoes do produto e filtro de veiculo', () => {
   it('usa versao com valor principal e promocional sem criar outro produto', () => {
@@ -28,5 +29,23 @@ describe('versoes do produto e filtro de veiculo', () => {
     expect(bot).toContain("getVehicleModels(parentAnswer)");
     expect(bot).toContain("modelChildren.length > 0");
     expect(bot).toContain("VEHICLE_YEARS");
+  });
+
+  it('mantem as 19 marcas e modelos informados no catalogo canonico', () => {
+    const expected = [
+      ['VOLKSWAGEN', 'TAOS'], ['FIAT', 'TIPO'], ['CHEVROLET', 'EQUINOX'],
+      ['HYUNDAI', 'HB20X'], ['TOYOTA', 'RAV4'], ['RENAULT', 'KARDIAN'],
+      ['NISSAN', 'V-DRIVE'], ['HONDA', 'WR-V'], ['JEEP', 'COMMANDER'],
+      ['BYD', 'DOLPHIN GS'], ['CAOA CHERY', 'TIGGO 8'], ['GWM', 'HAVAL H6 PHEV'],
+      ['CITROËN', 'C3 AIRCROSS'], ['PEUGEOT', '408'], ['FORD', 'FOCUS SEDAN'],
+      ['KIA', 'NIRO'], ['MITSUBISHI', 'OUTLANDER'], ['JAC MOTORS', 'E-JS4'],
+      ['GEELY', 'EX5'],
+    ];
+    for (const [brand, model] of expected) {
+      expect(catalog).toContain(brand);
+      expect(catalog).toContain(model);
+      expect(rebuild).toContain(brand);
+      expect(rebuild).toContain(model);
+    }
   });
 });
