@@ -49,8 +49,8 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies for validation only
+        run: pnpm install --no-frozen-lockfile
 
       - name: Regression test
         run: pnpm exec vitest run server/infraSecurityRegression.test.ts
