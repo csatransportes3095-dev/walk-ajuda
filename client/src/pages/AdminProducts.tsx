@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, GripVertical, Eye, EyeOff, Save, X, HelpCircle, DollarSign, Package, ImagePlus, Loader2, FileText, Settings2, Palette, Gift, Volume2, Upload, Headphones } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
+import ProductManifestEditor from "@/components/ProductManifestEditor";
 import React from "react";
 
 const whiteInputStyle: React.CSSProperties = {
@@ -1574,6 +1575,7 @@ export default function AdminProducts() {
                 {editingProduct === product.id && (
                   <div className="border-t border-purple-500/20 p-4 bg-[#0d0d22] space-y-4">
                     <h4 className="text-sm font-bold text-purple-400">Editar Card</h4>
+                    <ProductManifestEditor productId={product.id} />
                     <div>
                       <label className="text-xs text-gray-400 block mb-2">Foto do Card</label>
                       <ImageUploader productId={product.id} currentUrl={product.iconUrl} onUploaded={() => utils.products.list.invalidate()} />

@@ -1,5 +1,6 @@
 import { Check, ChevronDown, ChevronUp, ShieldCheck, ShoppingCart, Tag } from "lucide-react";
 import { useMemo, useState } from "react";
+import { requestProductManifest } from "@/lib/productManifest";
 
 export type StorefrontQuestion = {
   id: number;
@@ -97,6 +98,7 @@ export function StorefrontProductCard({
   const selectedTier = tiers.find((tier) => tier.id === tierId) || null;
   const priceModels = item.option.priceModels || [];
   const [priceModelId, setPriceModelId] = useState<number | null>(null);
+  const [manifestAcceptedKey, setManifestAcceptedKey] = useState<string | null>(null);
   const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;
   const requiresPriceModelSelection = priceModels.length > 0;
   const selectorLabel = priceModels[0]?.selectorLabel?.trim() || "Modelo / categoria";
@@ -119,6 +121,31 @@ export function StorefrontProductCard({
   const glassBackground = cardBackground
     ? `linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(15,23,42,0.60) 42%, rgba(2,6,23,0.90) 100%), ${cardBackground}`
     : "linear-gradient(145deg, rgba(30,41,59,0.72) 0%, rgba(8,15,32,0.88) 48%, rgba(2,6,23,0.96) 100%)";
+
+  const handlePriceModelChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const select = event.currentTarget;
+    const previousId = priceModelId;
+    const nextId = select.value ? Number(select.value) : null;
+    if (!nextId) return;
+    const nextModel = priceModels.find(model => model.id === nextId);
+    const key = `price:${nextId}`;
+    const accepted = await requestProductManifest(item.product.id, key, nextModel?.label || item.option.label);
+    if (!accepted) { select.value = previousId ? String(previousId) : ""; return; }
+    setPriceModelId(nextId);
+    setManifestAcceptedKey(key);
+  };
+
+  const runProtectedAction = async (action: "buy" | "cart") => {
+    if (requiresPriceModelSelection && !selectedPriceModel) return;
+    const key = selectedPriceModel ? `price:${selectedPriceModel.id}` : `base:${item.option.id}`;
+    if (manifestAcceptedKey !== key) {
+      const accepted = await requestProductManifest(item.product.id, key, selectedPriceModel?.label || item.option.label);
+      if (!accepted) return;
+      setManifestAcceptedKey(key);
+    }
+    if (action === "buy") onBuy(selectedTier, selectedPriceModel);
+    else onAddToCart(selectedTier, selectedPriceModel);
+  };
 
   return (
     <article
@@ -156,7 +183,7 @@ export function StorefrontProductCard({
         {priceModels.length > 0 && (
           <label className="mt-4 block">
             <span className="mb-1.5 block text-xs font-bold text-cyan-200">{selectorLabel}</span>
-            <select value={priceModelId ?? ""} onChange={(event) => setPriceModelId(event.target.value ? Number(event.target.value) : null)} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">
+            <select value={priceModelId ?? ""} onChange={handlePriceModelChange} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">
               <option value="" disabled>Selecione...</option>
               {priceModels.map(model => <option key={model.id} value={model.id}>{model.label} — {asMoney(model.price)}</option>)}
             </select>
@@ -208,7 +235,7 @@ export function StorefrontProductCard({
           <button
             type="button"
             disabled={requiresPriceModelSelection && !selectedPriceModel}
-            onClick={() => { if (!requiresPriceModelSelection || selectedPriceModel) onBuy(selectedTier, selectedPriceModel); }}
+            onClick={() => void runProtectedAction("buy")}
             className="min-h-12 rounded-xl border border-white/60 bg-white/95 px-3 py-3 text-sm font-black text-slate-950 shadow-[0_8px_24px_rgba(255,255,255,.14)] transition-all hover:bg-white hover:shadow-[0_8px_28px_rgba(255,255,255,.25)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
           >
             Comprar agora
@@ -216,7 +243,7 @@ export function StorefrontProductCard({
           <button
             type="button"
             disabled={requiresPriceModelSelection && !selectedPriceModel}
-            onClick={() => { if (!requiresPriceModelSelection || selectedPriceModel) onAddToCart(selectedTier, selectedPriceModel); }}
+            onClick={() => void runProtectedAction("cart")}
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-black text-white shadow-[0_8px_24px_rgba(0,0,0,.18)] backdrop-blur-xl transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
             style={{ background: `linear-gradient(135deg, ${cartButtonColor}52, ${cartButtonColor}24)`, borderColor: `${cartButtonColor}cc`, boxShadow: `0 8px 24px ${cartButtonColor}24, inset 0 1px 0 rgba(255,255,255,.18)` }}
           >

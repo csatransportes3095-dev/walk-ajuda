@@ -12,6 +12,7 @@ import OrderWhatsappQuestionTreeEnhancer from "./components/OrderWhatsappQuestio
 import PublicQuestionFlowEnhancer from "./components/PublicQuestionFlowEnhancer";
 import QuestionBlockingRulesManager from "./components/QuestionBlockingRulesManager";
 import QuestionBlockingManifestGuard from "./components/QuestionBlockingManifestGuard";
+import ProductManifestGuard from "./components/ProductManifestGuard";
 import RegistrationReferralFirstGate from "./components/RegistrationReferralFirstGate";
 import UnifiedCustomerAccessGate from "./components/UnifiedCustomerAccessGate";
 import UnifiedCustomerModuleBootstrap from "./components/UnifiedCustomerModuleBootstrap";
@@ -107,6 +108,7 @@ createRoot(document.getElementById("root")!).render(
       <AdminQuestionTreeOrderEnhancer />
       <QuestionBlockingRulesManager />
       <QuestionBlockingManifestGuard />
+      <ProductManifestGuard />
       <OrderWhatsappQuestionTreeEnhancer />
       <PublicQuestionFlowEnhancer />
       <RegistrationReferralFirstGate />
