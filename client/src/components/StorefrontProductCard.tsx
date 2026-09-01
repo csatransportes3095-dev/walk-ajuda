@@ -122,15 +122,11 @@ export function StorefrontProductCard({
     ? `linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(15,23,42,0.60) 42%, rgba(2,6,23,0.90) 100%), ${cardBackground}`
     : "linear-gradient(145deg, rgba(30,41,59,0.72) 0%, rgba(8,15,32,0.88) 48%, rgba(2,6,23,0.96) 100%)";
 
-  const handlePriceModelChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const select = event.currentTarget;
-    const previousId = priceModelId;
-    const nextId = select.value ? Number(select.value) : null;
-    if (!nextId) return;
+  const handlePriceModelSelect = async (nextId: number) => {
     const nextModel = priceModels.find(model => model.id === nextId);
     const key = `price:${nextId}`;
     const accepted = await requestProductManifest([`price_model_manifest_${nextId}`, `option_manifest_${item.option.id}`], key, nextModel?.label || item.option.label);
-    if (!accepted) { select.value = previousId ? String(previousId) : ""; return; }
+    if (!accepted) return;
     setPriceModelId(nextId);
     setManifestAcceptedKey(key);
   };
@@ -184,14 +180,30 @@ export function StorefrontProductCard({
         <p className="min-h-[43px] whitespace-pre-wrap text-sm leading-relaxed text-white/75" style={textColor ? { color: `${textColor}cc` } : undefined}>{shortText(description)}</p>
 
         {priceModels.length > 0 && (
-          <label className="mt-4 block">
+          <div className="mt-4">
             <span className="mb-1.5 block text-xs font-bold text-cyan-200">{selectorLabel}</span>
-            <select value={priceModelId ?? ""} onChange={handlePriceModelChange} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-sm font-black text-white outline-none focus:border-cyan-300">
-              <option value="" disabled>Selecione...</option>
-              {priceModels.map(model => <option key={model.id} value={model.id}>{model.label} — {asMoney(model.price)}</option>)}
-            </select>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {priceModels.map((model) => {
+                const isSelected = model.id === priceModelId;
+                return (
+                  <button
+                    key={model.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => void handlePriceModelSelect(model.id)}
+                    className={`w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-left text-sm font-black text-white outline-none transition-all focus:border-cyan-300 ${isSelected ? "border-cyan-300 ring-2 ring-cyan-300/30" : ""}`}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{model.label}</span>
+                      {isSelected && <Check className="h-4 w-4 shrink-0" />}
+                    </span>
+                    <span className="mt-1 block">{asMoney(model.price)}</span>
+                  </button>
+                );
+              })}
+            </div>
             {!selectedPriceModel && <span className="mt-1.5 block text-[11px] font-semibold text-amber-300">Escolha uma opção para ver o valor e continuar.</span>}
-          </label>
+          </div>
         )}
 
         {tiers.length > 0 && (
