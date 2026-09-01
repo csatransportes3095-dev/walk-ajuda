@@ -456,7 +456,7 @@ export async function listProductOptions(productId: number): Promise<ProductOpti
 }
 
 export async function createProductOption(data: {
-  productId: number; label: string; price: string; originalPrice?: string; type?: string; sortOrder?: number;
+  productId: number; label: string; price: string; originalPrice?: string; promoEndsAt?: number | null; type?: string; sortOrder?: number;
   requireProfilePhoto?: boolean; requireCarDocument?: boolean; requireAlvara?: boolean;
   requireCondutaxi?: boolean; requireVehicle2016?: boolean; isPdfOnly?: boolean;
   showYearField?: boolean; docNameMode?: string; docCustomName?: string;
@@ -466,6 +466,7 @@ export async function createProductOption(data: {
   const result = await db.insert(productOptions).values({
     productId: data.productId, label: data.label, price: data.price,
     originalPrice: data.originalPrice || '',
+    promoEndsAt: data.promoEndsAt ?? null,
     type: data.type || 'standard', sortOrder: data.sortOrder || 0, isActive: 1,
     requireProfilePhoto: data.requireProfilePhoto ? 1 : 0,
     requireCarDocument: data.requireCarDocument ? 1 : 0,

@@ -1311,7 +1311,9 @@ export default function AdminProducts() {
 
   // New option form
   const [newOptLabel, setNewOptLabel] = useState("");
+  const [newOptBasePrice, setNewOptBasePrice] = useState("");
   const [newOptPrice, setNewOptPrice] = useState("");
+  const [newOptPromoEndsAt, setNewOptPromoEndsAt] = useState("");
   const [newOptType, setNewOptType] = useState("standard");
   const [newOptDocNameMode, setNewOptDocNameMode] = useState("none");
   const [newOptDocCustomName, setNewOptDocCustomName] = useState("");
@@ -1374,7 +1376,7 @@ export default function AdminProducts() {
 
   const resetCreateForm = () => { setNewName(""); setNewDesc(""); setNewButtonText("COMPRAR"); setNewCardColor(""); setNewCardBgColor(""); setNewCardTextColor(""); setNewCardBtnColor(""); };
   const resetOptForm = () => {
-    setNewOptLabel(""); setNewOptPrice(""); setNewOptType("standard");
+    setNewOptLabel(""); setNewOptBasePrice(""); setNewOptPrice(""); setNewOptPromoEndsAt(""); setNewOptType("standard");
     setNewOptDocNameMode("none"); setNewOptDocCustomName("");
   };
 
@@ -1602,8 +1604,10 @@ export default function AdminProducts() {
                       <div className="bg-black/20 border border-dashed border-green-500/30 rounded-lg p-3 space-y-3">
                         <p className="text-xs text-green-400 font-bold">+ Nova Opção de Compra</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
-                          <div className="col-span-1"><label className="text-xs text-gray-400 block mb-1">Nome da Opção</label><input value={newOptLabel} onChange={e => setNewOptLabel(e.target.value)} placeholder="Ex: Nome Aleatório" style={whiteInputStyle} /></div>
-                          <div className="col-span-1"><label className="text-xs text-gray-400 block mb-1">Valor</label><input value={newOptPrice} onChange={e => setNewOptPrice(e.target.value)} placeholder="R$ 400,00" style={whiteInputStyle} /></div>
+                          <div className="col-span-1"><label className="text-xs text-gray-400 block mb-1">Modelo / Versão</label><input value={newOptLabel} onChange={e => setNewOptLabel(e.target.value)} placeholder="Ex: Nome Aleatório" style={whiteInputStyle} /></div>
+                          <div className="col-span-1"><label className="text-xs text-gray-400 block mb-1">Valor Principal</label><input value={newOptBasePrice} onChange={e => setNewOptBasePrice(e.target.value)} placeholder="Ex: 300,00" style={whiteInputStyle} /></div>
+                          <div className="col-span-1"><label className="text-xs text-green-400 block mb-1">Valor Promocional (opcional)</label><input value={newOptPrice} onChange={e => setNewOptPrice(e.target.value)} placeholder="Ex: 100,00" style={whiteInputStyle} /></div>
+                          <div className="col-span-1"><label className="text-xs text-red-300 block mb-1">Fim da Promoção (opcional)</label><input type="datetime-local" value={newOptPromoEndsAt} onChange={e => setNewOptPromoEndsAt(e.target.value)} style={whiteInputStyle} /></div>
                           <div className="col-span-1">
                             <label className="text-xs text-gray-400 block mb-1">Tipo</label>
                             <select value={newOptType} onChange={e => setNewOptType(e.target.value)} style={whiteInputStyle}>
@@ -1629,13 +1633,16 @@ export default function AdminProducts() {
                           )}
                         </div>
 
-                        <p className="text-[10px] text-gray-500">Documentos e perguntas podem ser adicionados após criar a opção (expanda a opção criada).</p>
+                        <p className="text-[10px] text-gray-500">Cada opção funciona como uma versão do mesmo produto. Ela mantém preço, promoção, documentos, perguntas e garantia próprios.</p>
 
                         <Button onClick={() => {
-                          if (!newOptLabel.trim() || !newOptPrice.trim()) { toast.error("Preencha nome e valor"); return; }
+                          if (!newOptLabel.trim() || !newOptBasePrice.trim()) { toast.error("Preencha a versão e o valor principal"); return; }
                           createOptMut.mutate({
-                            productId: product.id, label: newOptLabel, price: newOptPrice, type: newOptType,
-                            sortOrder: product.options.length,
+                            productId: product.id, label: newOptLabel,
+                            price: newOptPrice.trim() || newOptBasePrice,
+                            originalPrice: newOptPrice.trim() ? newOptBasePrice : "",
+                            promoEndsAt: newOptPrice.trim() && newOptPromoEndsAt ? new Date(newOptPromoEndsAt).getTime() : null,
+                            type: newOptType, sortOrder: product.options.length,
                             docNameMode: newOptDocNameMode,
                             docCustomName: newOptDocNameMode === 'custom' ? newOptDocCustomName : '',
                           });

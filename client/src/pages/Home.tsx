@@ -15,6 +15,7 @@ import { StorefrontFilters } from "@/components/StorefrontFilters";
 import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
+import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
 type FlowOrigin = "storefront" | "cart" | "legacy";
@@ -1434,6 +1435,10 @@ export default function Home() {
       const isQVisibleFinal = (q: ProductQuestion): boolean => {
         if (!q.parentQuestionId) return true;
         const parentAnswer = questionAnswers[q.parentQuestionId]?.trim() || "";
+        const parentQuestion = (selectedOption?.questions || []).find(item => item.id === q.parentQuestionId);
+        if (getVehicleQuestionKind(q.question) === 'model' && parentQuestion && getVehicleQuestionKind(parentQuestion.question) === 'brand') {
+          return !!parentAnswer;
+        }
         if (!q.triggerOption) return !!parentAnswer;
         return parentAnswer === q.triggerOption;
       };
@@ -2965,12 +2970,21 @@ export default function Home() {
           for (const root of roots) {
             result.push(root);
             // Inserir sub-perguntas visíveis logo após o pai
-            const subs = allQsModal
+            const rawSubs = allQsModal
               .filter(q => q.parentQuestionId === root.id)
               .sort((a, b) => a.sortOrder - b.sortOrder);
+            // Veículo: modelos antigos eram uma pergunta por marca. Na tela do cliente
+            // usamos uma única pergunta de modelo e filtramos as opções pela marca escolhida.
+            const vehicleModelSubs = getVehicleQuestionKind(root.question) === 'brand'
+              ? rawSubs.filter(q => getVehicleQuestionKind(q.question) === 'model')
+              : [];
+            const subs = vehicleModelSubs.length > 0
+              ? [vehicleModelSubs[0], ...rawSubs.filter(q => getVehicleQuestionKind(q.question) !== 'model')]
+              : rawSubs;
             for (const sub of subs) {
               const parentAnswer = answers[root.id]?.trim() || "";
-              const isVisible = !sub.triggerOption || parentAnswer === sub.triggerOption;
+              const isGenericVehicleModel = getVehicleQuestionKind(root.question) === 'brand' && getVehicleQuestionKind(sub.question) === 'model';
+              const isVisible = isGenericVehicleModel ? !!parentAnswer : (!sub.triggerOption || parentAnswer === sub.triggerOption);
               if (isVisible) {
                 result.push(sub);
                 // Inserir sub-sub-perguntas visíveis logo após a sub-pergunta pai
@@ -3025,6 +3039,61 @@ export default function Home() {
 
         const renderQuestionInput = (q: typeof currentQ) => {
           if (!q) return null;
+
+          const vehicleKind = getVehicleQuestionKind(q.question);
+          if (vehicleKind) {
+            const clearDescendants = (rootId: number, answers: Record<number, string>) => {
+              for (const child of allQsModal.filter(item => item.parentQuestionId === rootId)) {
+                delete answers[child.id];
+                clearDescendants(child.id, answers);
+              }
+            };
+            const chooseVehicleValue = (value: string, autoAdvance = true) => {
+              const nextAnswers = { ...questionAnswers, [q.id]: value };
+              if (vehicleKind === 'brand') clearDescendants(q.id, nextAnswers);
+              setQuestionAnswers(nextAnswers);
+              setBlockedByQuestion(null);
+              if (autoAdvance && value) {
+                const nextIdx = getNextIndex(nextAnswers);
+                const nextList = buildOrderedQs(nextAnswers);
+                setTimeout(() => { if (nextIdx < nextList.length) setCurrentQuestionIndex(nextIdx); }, 180);
+              }
+            };
+
+            if (vehicleKind === 'model') {
+              const brand = q.parentQuestionId ? questionAnswers[q.parentQuestionId] || '' : '';
+              const models = getVehicleModels(brand);
+              const listId = `vehicle-models-${q.id}`;
+              return (
+                <div className="space-y-2">
+                  <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
+                    Marca selecionada: <strong>{brand || 'selecione a marca primeiro'}</strong>
+                  </div>
+                  <input
+                    list={listId}
+                    value={questionAnswers[q.id] || ''}
+                    onChange={(e) => chooseVehicleValue(e.target.value.toUpperCase(), false)}
+                    placeholder={models.length ? 'Selecione ou digite o modelo' : 'Digite o modelo'}
+                    className="w-full rounded-lg border-2 border-white/20 bg-white px-3 py-3 text-center text-base font-semibold text-black"
+                  />
+                  <datalist id={listId}>{models.map(model => <option key={model} value={model} />)}</datalist>
+                </div>
+              );
+            }
+
+            const values = vehicleKind === 'brand' ? VEHICLE_BRANDS : vehicleKind === 'year' ? VEHICLE_YEARS : VEHICLE_COLORS;
+            return (
+              <select
+                value={questionAnswers[q.id] || ''}
+                onChange={(e) => chooseVehicleValue(e.target.value)}
+                className="w-full rounded-lg border-2 border-white/20 bg-white px-3 py-3 text-center text-base font-semibold text-black"
+              >
+                <option value="">Selecione {vehicleKind === 'brand' ? 'a marca' : vehicleKind === 'year' ? 'o ano' : 'a cor'}</option>
+                {values.map(value => <option key={value} value={value}>{value}</option>)}
+              </select>
+            );
+          }
+
           if (q.fieldType === 'select' && q.options) {
             let parsedOpts2: Array<{ label: string; color: string | null }> | null = null;
             try {
