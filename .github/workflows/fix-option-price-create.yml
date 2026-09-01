@@ -1,0 +1,49 @@
+name: Fix Option Price Create
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Corrigir validacao da categoria de preco
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('client/src/pages/AdminProducts.tsx')
+          s = p.read_text()
+          old = "onClick={() => { if (!newLabel.trim() || !newPrice.trim()) { toast.error('Informe categoria e valor.'); return; } createMut.mutate({ optionId, label: newLabel.trim(), price: newPrice.trim(), originalPrice: newOriginalPrice.trim(), promoEndsAt: newPromoEndsAt ? new Date(newPromoEndsAt).getTime() : null, sortOrder: models.length, isActive: true }); }}"
+          new = "onClick={() => { const label = newLabel.trim(); const principal = newOriginalPrice.trim(); const promotional = newPrice.trim(); if (!label || (!principal && !promotional)) { toast.error('Informe categoria e pelo menos um valor.'); return; } createMut.mutate({ optionId, label, price: promotional || principal, originalPrice: promotional ? principal : '', promoEndsAt: promotional && newPromoEndsAt ? new Date(newPromoEndsAt).getTime() : null, sortOrder: models.length, isActive: true }); }}"
+          if old not in s:
+              raise SystemExit('Trecho alvo nao encontrado; abortando sem alterar arquivo.')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Validar whitespace
+        run: git diff --check
+      - run: pnpm install --frozen-lockfile
+      - name: Teste direcionado
+        run: pnpm exec vitest run server/optionPriceModelsFlow.test.ts
+      - name: Build de producao
+        run: pnpm build
+      - name: Remover workflow temporario
+        run: rm -f .github/workflows/fix-option-price-create.yml
+      - name: Commit da correcao validada
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminProducts.tsx
+          git add -u .github/workflows/fix-option-price-create.yml
+          git commit -m "fix(products): aceitar valor principal sem promocao na categoria"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
