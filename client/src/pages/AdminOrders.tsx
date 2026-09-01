@@ -4794,7 +4794,25 @@ export default function AdminOrders() {
                         if (!viewedOrders.has(getOrderKey(order))) counts.novo += 1;
                       }
                       return (
-                        <div className="flex w-full items-stretch gap-2 overflow-x-auto pb-1 pr-1 snap-x" style={{ scrollbarWidth: "none" }} aria-label="Filtros operacionais de pedidos">
+                        <div className="flex w-full min-w-0 items-stretch gap-1.5" aria-label="Navegação dos filtros operacionais de pedidos">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              const scroller = e.currentTarget.parentElement?.querySelector<HTMLElement>('[data-quick-filter-scroll]');
+                              scroller?.scrollBy({ left: -Math.max(260, scroller.clientWidth * 0.7), behavior: 'smooth' });
+                            }}
+                            className="shrink-0 w-9 rounded-xl border border-zinc-700 bg-zinc-900/95 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800 hover:text-white transition-colors flex items-center justify-center"
+                            title="Ver filtros anteriores"
+                            aria-label="Ver filtros anteriores"
+                          >
+                            <ChevronDown className="h-4 w-4 rotate-90" />
+                          </button>
+                          <div
+                            data-quick-filter-scroll
+                            className="flex min-w-0 flex-1 items-stretch gap-2 overflow-x-auto pb-2 snap-x snap-mandatory"
+                            style={{ scrollbarWidth: 'thin', scrollbarColor: '#52525b #18181b' }}
+                            aria-label="Filtros operacionais de pedidos"
+                          >
                           {quickFilters.map(f => {
                             const count = counts[f.id] || 0;
                             const active = todosQuickFilter === f.id;
@@ -4828,6 +4846,19 @@ export default function AdminOrders() {
                               </button>
                             );
                           })}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              const scroller = e.currentTarget.parentElement?.querySelector<HTMLElement>('[data-quick-filter-scroll]');
+                              scroller?.scrollBy({ left: Math.max(260, scroller.clientWidth * 0.7), behavior: 'smooth' });
+                            }}
+                            className="shrink-0 w-9 rounded-xl border border-zinc-700 bg-zinc-900/95 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800 hover:text-white transition-colors flex items-center justify-center"
+                            title="Ver próximos filtros"
+                            aria-label="Ver próximos filtros"
+                          >
+                            <ChevronDown className="h-4 w-4 -rotate-90" />
+                          </button>
                         </div>
                       );
                     })()
