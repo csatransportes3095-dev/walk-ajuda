@@ -20,6 +20,16 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - name: Harden bot patch template
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/apply-vehicle-bot-consistency.mjs')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("text: `${nextQ.question}${parentAnswer ? ` — ${parentAnswer}` : ''}`", "text: nextQ.question + (parentAnswer ? ' — ' + parentAnswer : '')")
+          s = s.replace("text: kind === 'model' && parentAnswer ? `MODELO — ${parentAnswer}` : nextQ.question", "text: kind === 'model' && parentAnswer ? 'MODELO — ' + parentAnswer : nextQ.question")
+          p.write_text(s, encoding='utf-8')
+          PY
       - name: Apply bot consistency patch
         run: node scripts/apply-vehicle-bot-consistency.mjs
       - name: Validate whitespace
