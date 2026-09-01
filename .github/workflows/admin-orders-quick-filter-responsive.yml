@@ -1,0 +1,56 @@
+name: Admin Orders Quick Filters Responsive
+
+on:
+  push:
+    branches:
+      - fix/admin-orders-quick-filters-responsive-20260901
+    paths:
+      - "scripts/apply-admin-orders-quick-filter-scroll.py"
+      - ".github/workflows/admin-orders-quick-filter-responsive.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply guarded patch
+        run: python3 scripts/apply-admin-orders-quick-filter-scroll.py
+
+      - name: Validate responsive source
+        run: |
+          git diff --check
+          grep -q 'data-quick-filter-scroll' client/src/pages/AdminOrders.tsx
+          grep -q 'Ver filtros anteriores' client/src/pages/AdminOrders.tsx
+          grep -q 'Ver próximos filtros' client/src/pages/AdminOrders.tsx
+          grep -q "scrollbarWidth: 'thin'" client/src/pages/AdminOrders.tsx
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Commit validated UI only
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminOrders.tsx
+          git commit -m "fix(ui): permitir navegar todos os filtros extras em telas menores"
+          git push origin HEAD:fix/admin-orders-quick-filters-responsive-20260901
