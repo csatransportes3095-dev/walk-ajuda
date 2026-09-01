@@ -44,6 +44,45 @@ const FREQUENCY_LABELS: Record<string, string> = {
   custom: "Período personalizado",
 };
 
+function normalizeCampaignUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^\/\//.test(trimmed)) return "https:" + trimmed;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:[\/?#]|$)/i.test(trimmed)) return "https://" + trimmed;
+  return trimmed;
+}
+
+function isValidCampaignHttpUrl(value: string): boolean {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function toDatetimeLocalValue(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + "T" + pad(date.getHours()) + ":" + pad(date.getMinutes());
+}
+
+function localDatetimeToIso(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function campaignSaveErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (/invalid_format|invalid url|url inválida/i.test(message)) return "Confira as URLs informadas. Use um endereço válido, por exemplo https://h2colombiano.com";
+  return message || "Não foi possível salvar a campanha.";
+}
+
 const defaultForm = {
   name: "",
   isActive: 1,
@@ -105,8 +144,8 @@ export default function AdminAdCampaigns() {
       requiredSeconds: c.requiredSeconds,
       frequency: c.frequency,
       frequencyMinutes: c.frequencyMinutes || 60,
-      startsAt: c.startsAt ? (typeof c.startsAt === 'string' ? c.startsAt : new Date(c.startsAt as any).toISOString()).slice(0, 16) : "",
-      endsAt: c.endsAt ? (typeof c.endsAt === 'string' ? c.endsAt : new Date(c.endsAt as any).toISOString()).slice(0, 16) : "",
+      startsAt: toDatetimeLocalValue(c.startsAt),
+      endsAt: toDatetimeLocalValue(c.endsAt),
       targetPages: c.targetPages ? c.targetPages.split(',').map(p => p.trim()) : ['gastos'],
       enableAudio: (c as any).enableAudio ?? 0,
     } as any);
@@ -118,18 +157,35 @@ export default function AdminAdCampaigns() {
     if ((form as any).targetPages?.length === 0) { toast({ title: "Selecione pelo menos uma página", variant: "destructive" }); return; }
     if (form.type === "image" && !form.imageUrl.trim()) { toast({ title: "URL da imagem obrigatória", variant: "destructive" }); return; }
     if (form.type === "video" && !form.videoUrl.trim()) { toast({ title: "URL do vídeo obrigatória", variant: "destructive" }); return; }
+
+    const normalizedImageUrl = normalizeCampaignUrl(form.imageUrl);
+    const normalizedVideoUrl = normalizeCampaignUrl(form.videoUrl);
+    const normalizedLinkUrl = normalizeCampaignUrl(form.linkUrl);
+    if (normalizedImageUrl && !isValidCampaignHttpUrl(normalizedImageUrl)) { toast({ title: "URL da imagem inválida", description: "Use um endereço completo, como https://...", variant: "destructive" }); return; }
+    if (normalizedVideoUrl && !isValidCampaignHttpUrl(normalizedVideoUrl)) { toast({ title: "URL do vídeo inválida", description: "Use um endereço http/https que entregue o vídeo diretamente.", variant: "destructive" }); return; }
+    if (normalizedLinkUrl && !isValidCampaignHttpUrl(normalizedLinkUrl)) { toast({ title: "Link de destino inválido", description: "Exemplo: https://h2colombiano.com", variant: "destructive" }); return; }
+
+    const startsAtIso = localDatetimeToIso(form.startsAt);
+    const endsAtIso = localDatetimeToIso(form.endsAt);
+    if (form.startsAt && !startsAtIso) { toast({ title: "Data de início inválida", variant: "destructive" }); return; }
+    if (form.endsAt && !endsAtIso) { toast({ title: "Data de término inválida", variant: "destructive" }); return; }
+    if (startsAtIso && endsAtIso && new Date(endsAtIso).getTime() <= new Date(startsAtIso).getTime()) {
+      toast({ title: "Período inválido", description: "A data de término precisa ser posterior à data de início.", variant: "destructive" });
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
         ...form,
-        imageUrl: form.imageUrl || null,
-        videoUrl: form.videoUrl || null,
-        title: form.title || null,
-        description: form.description || null,
-        linkUrl: form.linkUrl || null,
+        imageUrl: normalizedImageUrl || null,
+        videoUrl: normalizedVideoUrl || null,
+        title: form.title.trim() || null,
+        description: form.description.trim() || null,
+        linkUrl: normalizedLinkUrl || null,
         frequencyMinutes: form.frequency === "custom" ? form.frequencyMinutes : null,
-        startsAt: form.startsAt || null,
-        endsAt: form.endsAt || null,
+        startsAt: startsAtIso,
+        endsAt: endsAtIso,
         targetPages: ((form as any).targetPages as string[]).join(',') || 'gastos',
       };
       if (editId !== null) {
@@ -142,7 +198,7 @@ export default function AdminAdCampaigns() {
       setShowForm(false);
       refetch();
     } catch (e: any) {
-      toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" });
+      toast({ title: "Erro ao salvar", description: campaignSaveErrorMessage(e), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -328,13 +384,13 @@ export default function AdminAdCampaigns() {
               {form.type === "image" ? (
                 <div>
                   <label className="text-xs text-gray-400 mb-1.5 block">URL da imagem *</label>
-                  <Input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} placeholder="https://..." className="bg-white/5 border-white/10 text-white" />
+                  <Input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} onBlur={() => setForm(f => ({ ...f, imageUrl: normalizeCampaignUrl(f.imageUrl) }))} placeholder="https://..." className="bg-white/5 border-white/10 text-white" />
                 </div>
               ) : (
                 <div>
                   <label className="text-xs text-gray-400 mb-1.5 block">URL do vídeo *</label>
-                  <Input value={form.videoUrl} onChange={e => setForm(f => ({ ...f, videoUrl: e.target.value }))} placeholder="https://..." className="bg-white/5 border-white/10 text-white" />
-                  <p className="text-xs text-gray-500 mt-1">Suporta MP4 direto, YouTube embed, etc.</p>
+                  <Input value={form.videoUrl} onChange={e => setForm(f => ({ ...f, videoUrl: e.target.value }))} onBlur={() => setForm(f => ({ ...f, videoUrl: normalizeCampaignUrl(f.videoUrl) }))} placeholder="https://..." className="bg-white/5 border-white/10 text-white" />
+                  <p className="text-xs text-gray-500 mt-1">Use uma URL HTTP/HTTPS que entregue um vídeo reproduzível diretamente (ex.: MP4/WebM). Link de página ou YouTube comum não é reproduzido pelo player atual.</p>
                 </div>
               )}
 
@@ -353,7 +409,7 @@ export default function AdminAdCampaigns() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-gray-400 mb-1.5 block">Link de destino (opcional)</label>
-                  <Input value={form.linkUrl} onChange={e => setForm(f => ({ ...f, linkUrl: e.target.value }))} placeholder="https://..." className="bg-white/5 border-white/10 text-white" />
+                  <Input value={form.linkUrl} onChange={e => setForm(f => ({ ...f, linkUrl: e.target.value }))} onBlur={() => setForm(f => ({ ...f, linkUrl: normalizeCampaignUrl(f.linkUrl) }))} placeholder="https://h2colombiano.com" className="bg-white/5 border-white/10 text-white" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-400 mb-1.5 block">Texto do botão de ação</label>
