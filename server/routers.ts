@@ -121,6 +121,7 @@ import {
   getCustomerDocuments, createCustomerDocument, deleteCustomerDocument,
   listInternalStages, createInternalStage, updateInternalStage, deleteInternalStage, reorderInternalStages,
   setOrderStage, getOrderCurrentStage, getOrderCurrentStagesBatch,
+  setOrderStageForOrder, getOrderCurrentStagesBatchByOrder,
   getViewedOrderKeys, markOrderAsViewed,
 } from "./db";
 import { storagePut } from "./storage";
@@ -8227,6 +8228,12 @@ export const appRouter = router({
         await setOrderStage(input.registrationId, input.stageId);
         return { success: true };
       }),
+    setOrderStageForOrder: adminProcedure
+      .input(z.object({ registrationId: z.number(), subOrderIndex: z.number().int().nonnegative().default(0), stageId: z.number() }))
+      .mutation(async ({ input }) => {
+        await setOrderStageForOrder(input.registrationId, input.subOrderIndex, input.stageId);
+        return { success: true };
+      }),
     getOrderStage: adminProcedure
       .input(z.object({ registrationId: z.number() }))
       .query(async ({ input }) => {
@@ -8238,6 +8245,12 @@ export const appRouter = router({
         const map = await getOrderCurrentStagesBatch(input.registrationIds);
         // Converter Map para array de objetos para serialização
         return Array.from(map.entries()).map(([registrationId, data]) => ({ registrationId, ...data }));
+      }),
+    getOrderStagesBatchByOrder: adminProcedure
+      .input(z.object({ orders: z.array(z.object({ registrationId: z.number(), subOrderIndex: z.number().int().nonnegative().default(0) })) }))
+      .query(async ({ input }) => {
+        const map = await getOrderCurrentStagesBatchByOrder(input.orders);
+        return Array.from(map.values());
       }),
   }),
 
