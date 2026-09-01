@@ -2828,6 +2828,27 @@ export async function completeConfirmedAppointmentsForOrder(registrationId: numb
   return appointments.length;
 }
 
+/**
+ * Ao avançar o pedido para Foto em Análise, encerra toda agenda ainda aberta
+ * daquele pedido/subpedido. Preserva o histórico: pending/confirmed viram completed.
+ */
+export async function completeOpenAppointmentsForOrder(registrationId: number, subOrderIndex: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const appointments = await db.select()
+    .from(scheduleAppointments)
+    .where(and(
+      eq(scheduleAppointments.registrationId, registrationId),
+      eq(scheduleAppointments.subOrderIndex, subOrderIndex),
+      inArray(scheduleAppointments.status, ['pending', 'confirmed']),
+    ));
+
+  for (const appointment of appointments) {
+    await completeAppointment(appointment.id);
+  }
+  return appointments.length;
+}
+
 // CONFIRMAÇÃO ATÔMICA: reserva o slot de forma exclusiva.
 // Usa UPDATE condicional (bookedCount < capacity) para garantir que dois clientes
 // não peguem o mesmo slot simultaneamente.
