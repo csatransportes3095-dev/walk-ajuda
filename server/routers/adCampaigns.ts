@@ -5,6 +5,24 @@ import { router, publicProcedure, adminProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 import { adCampaigns, adImpressions, spreadsheetSessions } from "../../drizzle/schema";
 
+const normalizeCampaignUrlInput = (value: unknown): unknown => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^\/\//.test(trimmed)) return "https:" + trimmed;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:[\/?#]|$)/i.test(trimmed)) return "https://" + trimmed;
+  return trimmed;
+};
+
+const campaignHttpUrlSchema = z.preprocess(
+  normalizeCampaignUrlInput,
+  z.string().url("URL inválida. Informe um endereço como https://h2colombiano.com").refine(
+    value => /^https?:\/\//i.test(value),
+    "A URL deve começar com http:// ou https://",
+  ).optional().nullable(),
+);
+
 // Procedure que verifica se o usuário é admin da planilha (via token de sessão admin)
 // Para simplificar, usamos adminProcedure (Manus OAuth) para o painel ADM
 
@@ -24,11 +42,11 @@ export const adCampaignsRouter = router({
       name: z.string().min(1).max(256),
       isActive: z.number().int().min(0).max(1).default(1),
       type: z.enum(["image", "video"]),
-      imageUrl: z.string().url().optional().nullable(),
-      videoUrl: z.string().url().optional().nullable(),
+      imageUrl: campaignHttpUrlSchema,
+      videoUrl: campaignHttpUrlSchema,
       title: z.string().max(256).optional().nullable(),
       description: z.string().optional().nullable(),
-      linkUrl: z.string().url().optional().nullable(),
+      linkUrl: campaignHttpUrlSchema,
       linkText: z.string().max(128).default("Saiba Mais"),
       linkTarget: z.enum(["_self", "_blank"]).default("_blank"),
       requiredSeconds: z.number().int().min(1).max(300).default(20),
@@ -70,11 +88,11 @@ export const adCampaignsRouter = router({
       name: z.string().min(1).max(256).optional(),
       isActive: z.number().int().min(0).max(1).optional(),
       type: z.enum(["image", "video"]).optional(),
-      imageUrl: z.string().url().optional().nullable(),
-      videoUrl: z.string().url().optional().nullable(),
+      imageUrl: campaignHttpUrlSchema,
+      videoUrl: campaignHttpUrlSchema,
       title: z.string().max(256).optional().nullable(),
       description: z.string().optional().nullable(),
-      linkUrl: z.string().url().optional().nullable(),
+      linkUrl: campaignHttpUrlSchema,
       linkText: z.string().max(128).optional(),
       linkTarget: z.enum(["_self", "_blank"]).optional(),
       requiredSeconds: z.number().int().min(1).max(300).optional(),
