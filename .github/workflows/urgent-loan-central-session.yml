@@ -5,6 +5,9 @@ on:
     branches:
       - fix/loan-central-route-access-20260901
 
+permissions:
+  contents: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest
