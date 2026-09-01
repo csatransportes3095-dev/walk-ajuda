@@ -23,9 +23,11 @@ describe("integração da sequência global do cliente", () => {
     expect(tracking).toContain("trpc.orderStatus.getProgressConfigPublic.useQuery");
   });
 
-  it("não limita o cliente a seis etapas", () => {
+  it("não limita o cliente a seis etapas e renderiza toda a sequência vertical", () => {
     expect(tracking).not.toContain("progressSteps.slice(0, 6)");
-    expect(tracking).toContain("chunkProgressKeys(progressSteps, 3)");
+    expect(tracking).not.toContain("chunkProgressKeys(progressSteps, 3)");
+    expect(tracking).toContain("progressSteps.map((step: any, idx: number)");
+    expect(tracking).toContain("Todas as etapas");
   });
 
   it("salva a sequência global sem tocar na ordem operacional", () => {

@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { publicSiteUrl } from "@shared/publicLinks";
-import { chunkProgressKeys, resolveProgressPosition } from "@shared/orderProgressSequence";
+import { findProgressStatusIndex, resolveProgressPosition } from "@shared/orderProgressSequence";
 import { Link, useSearch } from "wouter";
 import { useDevToolsDetection } from "@/hooks/useDevToolsDetection";
 import {
@@ -148,7 +148,13 @@ export default function OrderTracking() {
 
   const statusQuery = trpc.orderStatus.getMyStatus.useQuery(
     { phone: searchPhone },
-    { enabled: !!searchPhone && searchPhone.length >= 10 }
+    {
+      enabled: !!searchPhone && searchPhone.length >= 10,
+      staleTime: 0,
+      refetchInterval: 5_000,
+      refetchIntervalInBackground: true,
+      refetchOnWindowFocus: true,
+    }
   );
 
   const clientNameQuery = trpc.orderStatus.getClientName.useQuery(
@@ -196,7 +202,12 @@ export default function OrderTracking() {
   }, [adVisible, adCampaign?.id]);
 
   // Query de status dinâmicos do banco
-  const statusTypesQuery = trpc.statusTypes.list.useQuery();
+  const statusTypesQuery = trpc.statusTypes.list.useQuery(undefined, {
+    staleTime: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
   const dynamicStatuses = useMemo(
     () => (statusTypesQuery.data ?? []).filter((s: any) => s.isActive === 1).sort((a: any, b: any) => a.sortOrder - b.sortOrder),
     [statusTypesQuery.data]
@@ -404,6 +415,15 @@ export default function OrderTracking() {
   // Pegar o status mais recente para a timeline
   const latestStatus = history.length > 0 ? history[0].status : null;
   const latestCfg = latestStatus ? getStatusCfg(latestStatus) : null;
+  const previousLiveStatusRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    if (!latestStatus) return;
+    if (previousLiveStatusRef.current && previousLiveStatusRef.current !== latestStatus) {
+      const cfg = getStatusCfg(latestStatus);
+      toast.success(`Pedido atualizado: ${cfg.label}`);
+    }
+    previousLiveStatusRef.current = latestStatus;
+  }, [latestStatus]);
 
   // Conjunto de status que realmente existem no histórico do pedido
   const completedStatusKeys = useMemo(
@@ -623,8 +643,10 @@ export default function OrderTracking() {
   const subOrderIndex = selectedOrderIdx;
   const globalProgressSequenceQuery = trpc.statusTypes.getProgressSequence.useQuery(undefined, {
     enabled: canAccess,
-    staleTime: 30000,
-    refetchInterval: 60000,
+    staleTime: 5_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
   const progressConfigPublicQuery = trpc.orderStatus.getProgressConfigPublic.useQuery(
     { registrationId, subOrderIndex },
@@ -1183,195 +1205,190 @@ export default function OrderTracking() {
               </div>
             )}
 
-            {/* Botão de atualizar */}
-            <div className="flex justify-end">
+            {/* Sincronização automática — botão manual fica apenas como contingência */}
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-300">Acompanhamento ao vivo</p>
+                  <p className="truncate text-[10px] text-white/35">{statusQuery.isFetching ? 'Sincronizando agora...' : 'Atualiza automaticamente a cada 5 segundos'}</p>
+                </div>
+              </div>
               <button
                 onClick={handleRefresh}
                 disabled={statusQuery.isFetching}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white/50 hover:text-white/80 transition-colors disabled:opacity-40"
+                className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[10px] font-semibold text-white/45 transition-colors hover:bg-white/10 hover:text-white/80 disabled:opacity-40"
+                title="Sincronizar agora"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
-                {statusQuery.isFetching ? 'Atualizando...' : 'Atualizar status'}
+                <RefreshCw className={`h-3.5 w-3.5 ${statusQuery.isFetching ? 'animate-spin' : ''}`} />
+                Agora
               </button>
             </div>
 
-            {/* Status atual em destaque */}
-            <div className={`rounded-2xl border p-5 ${latestCfg.bg} ${latestCfg.border}`}>
-              <p className="text-xs text-white/50 mb-2 font-medium uppercase tracking-wider">Status Atual</p>
-              <div className="flex items-center gap-3">
-                {/* Ícone com animação de pulso */}
-                <div className="relative flex-shrink-0 w-14 h-14 flex items-center justify-center">
-                  {/* Anel externo pulsando */}
-                  <span
-                    className="absolute inline-flex w-14 h-14 rounded-full opacity-50 animate-ping"
-                    style={{ backgroundColor: latestCfg.pulseColor ?? '#ffffff', animationDuration: '1.8s' }}
-                  />
-                  {/* Anel médio respirando */}
-                  <span
-                    className="absolute inline-flex w-12 h-12 rounded-full opacity-30 animate-pulse"
-                    style={{ backgroundColor: latestCfg.pulseColor ?? '#ffffff', animationDuration: '2.4s' }}
-                  />
-                  {/* Ícone central */}
-                  <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center border-2 ${latestCfg.bg} ${latestCfg.border} ${latestCfg.color}`}>
-                    {latestCfg.icon}
-                  </div>
-                </div>
-                <div>
-                  <p className={`text-xl font-bold ${latestCfg.color}`}>{latestCfg.label}</p>
-                  <p className="text-xs text-white/40 mt-0.5">{formatDate(history[0].createdAt)}</p>
-                </div>
-              </div>
-              {/* Texto explicativo dinâmico do status (description editado pelo admin) */}
-              {latestCfg.description && (
-                <div className="mt-3 pt-3 border-t border-white/10">
-                  <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                    <p className="text-xs font-semibold text-white/60 mb-1">O que significa este status?</p>
-                    <div className="text-xs text-white/70 leading-relaxed whitespace-pre-wrap break-words">
-                      {renderTextWithLinks(latestCfg.description)}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {currentNote && (
-                <div className="mt-3 pt-3 border-t border-white/10">
-                  <button
-                    onClick={() => setShowNote(v => !v)}
-                    className="flex items-center gap-2 text-xs font-semibold text-white/60 hover:text-white/90 transition-colors w-full"
-                  >
-                    {showNote ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    {showNote ? 'Ocultar informações' : 'Ver informações do pedido'}
-                  </button>
-                  {showNote && (
-                    <div className="mt-2 bg-white/5 rounded-xl p-3 border border-white/10">
-                      <p className="text-sm text-white/90 whitespace-pre-line">{currentNote}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* === BARRA DE PROGRESSO DO CLIENTE (sequência global com fallback legado) === */}
+            {/* === JORNADA VERTICAL DO PEDIDO === */}
             {(() => {
-              const progressConfigData = globalProgressSequenceQuery.data?.enabled
+              const configuredKeys = globalProgressSequenceQuery.data?.enabled
                 ? (globalProgressSequenceQuery.data.keys ?? [])
                 : (progressConfigPublicQuery?.data ?? []);
-              if (progressConfigData.length === 0) return null;
-              // Montar os steps na ordem configurada pelo admin
-              const progressSteps = progressConfigData
-                .map((key: string) => (statusTypesQuery.data ?? []).find((s: any) => s.key === key))
+              const fallbackKeys = dynamicStatuses
+                .filter((status: any) => status.key !== 'cancelado')
+                .map((status: any) => status.key);
+              const progressKeys = configuredKeys.length > 0 ? configuredKeys : fallbackKeys;
+              const progressSteps = progressKeys
+                .map((key: string) => (statusTypesQuery.data ?? []).find((status: any) => status.key === key))
                 .filter(Boolean);
+
               if (progressSteps.length === 0) return null;
+
+              const keys = progressSteps.map((status: any) => status.key);
+              const exactCurrentIdx = findProgressStatusIndex(keys, latestStatus);
               const progressPosition = resolveProgressPosition({
-                progressKeys: progressSteps.map((s: any) => s.key),
+                progressKeys: keys,
                 latestStatus,
-                historyStatuses: history.map((h: any) => h.status),
+                historyStatuses: history.map((entry: any) => entry.status),
               });
-              const currentIdx = progressPosition.currentIndex;
-              const prevStep = currentIdx > 0 ? progressSteps[currentIdx - 1] : null;
-              const currStep = progressSteps[currentIdx] ?? progressSteps[0];
-              const nextStep = currentIdx < progressSteps.length - 1 ? progressSteps[currentIdx + 1] : null;
+              const baseIdx = Math.max(0, Math.min(progressSteps.length - 1, progressPosition.currentIndex));
+              const currentIdx = exactCurrentIdx >= 0 ? exactCurrentIdx : baseIdx;
+              const nextIdx = !progressPosition.cancelled && currentIdx < progressSteps.length - 1 ? currentIdx + 1 : -1;
+              const nextStep = nextIdx >= 0 ? progressSteps[nextIdx] : null;
+              const nextCfg = nextStep ? getStatusCfg(nextStep.key) : null;
+              const totalSteps = progressSteps.length;
+              const stageNumber = Math.min(totalSteps, Math.max(1, currentIdx + 1));
+              const progressPercent = Math.round((stageNumber / totalSteps) * 100);
+              const syncTime = statusQuery.dataUpdatedAt
+                ? new Date(statusQuery.dataUpdatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Sao_Paulo' })
+                : null;
+
               return (
-                <div className="bg-[#12122a] rounded-2xl border border-white/10 p-4 space-y-3">
-                  <p className="text-xs text-white/40 font-semibold uppercase tracking-wider">Progresso do Pedido</p>
-                  {/* Quantas linhas forem necessárias; três etapas por linha. */}
-                  {(() => {
-                    const rows = chunkProgressKeys(progressSteps, 3);
-                    return (
-                      <div className="space-y-4" aria-label="Etapas do progresso do pedido">
-                        {rows.map((row, rowIndex) => (
-                          <div key={`progress-row-${rowIndex}`} className="relative">
-                            {rowIndex > 0 && <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-white/25">Continuação do progresso</p>}
-                            <div className="flex items-center gap-0">
-                              {row.map((step: any, localIdx: number) => {
-                                const idx = rowIndex * 3 + localIdx;
-                                const isDone = !progressPosition.cancelled && idx < currentIdx;
-                                const isCurrent = !progressPosition.cancelled && idx === currentIdx;
-                                const stepCfg = getStatusCfg(step.key);
-                                return (
-                                  <React.Fragment key={step.id}>
-                                    <div className="flex flex-col items-center gap-1 z-10" style={{ minWidth: 0 }}>
-                                      <div
-                                        className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                                          isCurrent
-                                            ? `border-current ${stepCfg.color} ${stepCfg.bg} ring-2 ring-offset-1 ring-offset-[#12122a]`
-                                            : isDone
-                                            ? 'border-green-500 bg-green-500/20'
-                                            : 'border-white/15 bg-white/5'
-                                        }`}
-                                        style={isCurrent ? { outline: `2px solid ${stepCfg.pulseColor ?? 'transparent'}`, outlineOffset: '1px' } : {}}
-                                        title={`${idx + 1}. ${stepCfg.label}`}
-                                      >
-                                        {isDone ? (
-                                          <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                                        ) : isCurrent ? (
-                                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: stepCfg.pulseColor ?? '#fff' }} />
-                                        ) : (
-                                          <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
-                                        )}
-                                      </div>
-                                      <span className={`max-w-[74px] text-center text-[9px] leading-tight line-clamp-2 ${isCurrent ? stepCfg.color : isDone ? 'text-green-400/70' : 'text-white/30'}`}>{stepCfg.label}</span>
-                                    </div>
-                                    {localIdx < row.length - 1 && (
-                                      <div className={`flex-1 h-0.5 ${idx < currentIdx ? 'bg-green-500/60' : 'bg-white/10'}`} />
-                                    )}
-                                  </React.Fragment>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
+                <div className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-b from-[#0b1725] via-[#0c1220] to-[#101020] shadow-2xl shadow-cyan-950/20">
+                  <div className="border-b border-white/10 bg-cyan-500/[0.06] p-4 sm:p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300/70">Jornada do seu pedido</p>
+                        <div className="mt-1 flex flex-wrap items-end gap-x-3 gap-y-1">
+                          <p className="text-2xl font-black text-white">ETAPA {stageNumber} DE {totalSteps}</p>
+                          <p className="pb-0.5 text-sm font-black text-cyan-300">{progressPercent}%</p>
+                        </div>
                       </div>
-                    );
-                  })()}
-                  {progressPosition.cancelled && (
-                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-semibold text-red-300">Pedido cancelado. O progresso foi encerrado e nenhuma próxima etapa será exibida.</div>
-                  )}
-                  {/* Cards anterior / atual / próximo */}
-                  {!progressPosition.cancelled && <div className="grid gap-2" style={{ gridTemplateColumns: [prevStep, currStep, nextStep].filter(Boolean).length === 1 ? '1fr' : [prevStep, currStep, nextStep].filter(Boolean).length === 2 ? '1fr 1fr' : '1fr 1fr 1fr' }}>
-                    {prevStep && (() => {
-                      const cfg = getStatusCfg(prevStep.key);
-                      return (
-                        <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-2.5 space-y-1 opacity-70">
-                          <p className="text-[9px] font-bold text-green-400/60 uppercase tracking-wider">✓ Anterior</p>
-                          <div className="flex items-center gap-1.5">
-                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${cfg.bg} ${cfg.border} ${cfg.color}`}>
-                              <span className="scale-75">{cfg.icon}</span>
-                            </div>
-                            <p className={`text-[11px] font-semibold leading-tight ${cfg.color} line-clamp-2`}>{cfg.label}</p>
+                      <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-emerald-300">
+                        {syncTime ? `Sincronizado ${syncTime}` : 'Sincronizando'}
+                      </div>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
+                      <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 transition-all duration-700" style={{ width: `${progressPercent}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 p-4 sm:p-5">
+                    <div className={`rounded-2xl border-2 p-4 ${latestCfg.bg} ${latestCfg.border}`}>
+                      <div className="flex items-start gap-3">
+                        <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center">
+                          <span className="absolute h-12 w-12 animate-ping rounded-full opacity-25" style={{ backgroundColor: latestCfg.pulseColor ?? '#22d3ee', animationDuration: '1.8s' }} />
+                          <div className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 ${latestCfg.bg} ${latestCfg.border} ${latestCfg.color}`}>
+                            {latestCfg.icon}
                           </div>
                         </div>
-                      );
-                    })()}
-                    {currStep && (() => {
-                      const cfg = getStatusCfg(currStep.key);
-                      return (
-                        <div className={`border-2 rounded-xl p-2.5 space-y-1 ${cfg.bg} ${cfg.border}`}>
-                          <p className={`text-[9px] font-bold uppercase tracking-wider ${cfg.color} opacity-80`}>● Atual</p>
-                          <div className="flex items-center gap-1.5">
-                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${cfg.bg} ${cfg.border} ${cfg.color}`}>
-                              <span className="scale-75">{cfg.icon}</span>
-                            </div>
-                            <p className={`text-[11px] font-bold leading-tight ${cfg.color} line-clamp-2`}>{cfg.label}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">Acontecendo agora</p>
+                          <p className={`mt-0.5 text-xl font-black leading-tight ${latestCfg.color}`}>{latestCfg.label}</p>
+                          <p className="mt-1 text-[10px] text-white/35">Atualizado em {formatDate(history[0].createdAt)}</p>
+                        </div>
+                      </div>
+                      {latestCfg.description && (
+                        <div className="mt-3 rounded-xl border border-white/10 bg-black/10 p-3">
+                          <p className="mb-1 text-[10px] font-black uppercase tracking-wider text-white/40">O que está acontecendo</p>
+                          <div className="text-xs leading-relaxed text-white/70">{renderTextWithLinks(latestCfg.description)}</div>
+                        </div>
+                      )}
+                      {currentNote && (
+                        <div className="mt-2 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-white/75 whitespace-pre-line">{currentNote}</div>
+                      )}
+                    </div>
+
+                    {!progressPosition.cancelled && nextStep && nextCfg && (
+                      <div className="rounded-2xl border border-violet-400/30 bg-violet-500/10 p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-violet-400/30 bg-violet-400/10 text-violet-300">
+                            <ChevronRight className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300/70">Próximo passo</p>
+                            <p className="mt-0.5 text-base font-black text-white">{nextCfg.label}</p>
+                            <p className="mt-1 text-xs leading-relaxed text-white/50">
+                              {nextCfg.description || 'Assim que a etapa atual for concluída, seu pedido seguirá automaticamente para esta fase.'}
+                            </p>
                           </div>
                         </div>
-                      );
-                    })()}
-                    {nextStep && (() => {
-                      const cfg = getStatusCfg(nextStep.key);
-                      return (
-                        <div className="bg-white/3 border border-white/8 rounded-xl p-2.5 space-y-1 opacity-50">
-                          <p className="text-[9px] font-bold text-white/30 uppercase tracking-wider">→ Próximo</p>
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 rounded-full border border-white/15 bg-white/5 flex items-center justify-center flex-shrink-0 text-white/30">
-                              <span className="scale-75">{cfg.icon}</span>
-                            </div>
-                            <p className="text-[11px] font-semibold leading-tight text-white/40 line-clamp-2">{cfg.label}</p>
-                          </div>
+                      </div>
+                    )}
+
+                    {progressPosition.cancelled && (
+                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-semibold text-red-300">Pedido cancelado. Não existem próximas etapas.</div>
+                    )}
+
+                    <div className="pt-1">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-white/70">Todas as etapas</p>
+                          <p className="mt-0.5 text-[10px] text-white/30">Acompanhe todo o caminho até a conclusão.</p>
                         </div>
-                      );
-                    })()}
-                  </div>}
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-bold text-white/35">{totalSteps} etapas</span>
+                      </div>
+
+                      <div className="relative ml-4 space-y-3 border-l border-white/10 pl-6">
+                        {progressSteps.map((step: any, idx: number) => {
+                          const cfg = getStatusCfg(step.key);
+                          const isDone = !progressPosition.cancelled && idx < currentIdx;
+                          const isCurrent = !progressPosition.cancelled && idx === currentIdx;
+                          const isNext = !progressPosition.cancelled && idx === nextIdx;
+                          const stateLabel = isDone ? 'CONCLUÍDO' : isCurrent ? 'AGORA' : isNext ? 'PRÓXIMO' : 'DEPOIS';
+                          return (
+                            <div key={step.id ?? step.key} className={`relative rounded-xl border p-3 transition-all ${
+                              isCurrent
+                                ? `${cfg.bg} ${cfg.border} shadow-lg`
+                                : isNext
+                                  ? 'border-violet-400/30 bg-violet-500/[0.07]'
+                                  : isDone
+                                    ? 'border-emerald-500/20 bg-emerald-500/[0.05]'
+                                    : 'border-white/[0.07] bg-white/[0.025]'
+                            }`}>
+                              <div className={`absolute -left-[39px] top-4 flex h-6 w-6 items-center justify-center rounded-full border-2 ${
+                                isDone
+                                  ? 'border-emerald-400 bg-emerald-500 text-white'
+                                  : isCurrent
+                                    ? `${cfg.border} ${cfg.bg} ${cfg.color} ring-4 ring-cyan-400/10`
+                                    : isNext
+                                      ? 'border-violet-400 bg-violet-500/20 text-violet-300'
+                                      : 'border-white/15 bg-[#0d1220] text-white/25'
+                              }`}>
+                                {isDone ? <Check className="h-3.5 w-3.5" /> : isCurrent ? <span className="h-2 w-2 animate-pulse rounded-full bg-current" /> : <span className="text-[9px] font-black">{idx + 1}</span>}
+                              </div>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className={`text-sm font-bold ${isCurrent ? cfg.color : isDone ? 'text-emerald-300' : isNext ? 'text-violet-200' : 'text-white/40'}`}>{cfg.label}</p>
+                                  {(isCurrent || isNext) && cfg.description && (
+                                    <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-white/40">{cfg.description}</p>
+                                  )}
+                                </div>
+                                <span className={`flex-shrink-0 rounded-full px-2 py-1 text-[8px] font-black tracking-wider ${
+                                  isDone
+                                    ? 'bg-emerald-500/15 text-emerald-300'
+                                    : isCurrent
+                                      ? 'bg-cyan-500/15 text-cyan-300'
+                                      : isNext
+                                        ? 'bg-violet-500/15 text-violet-300'
+                                        : 'bg-white/5 text-white/25'
+                                }`}>{stateLabel}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               );
             })()}
