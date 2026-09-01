@@ -46,4 +46,11 @@ describe('sessao persistente do cliente', () => {
     expect(customer).toContain('db.delete(spreadsheetSessions)');
     expect(spreadsheet).toContain('db.delete(customerPasswordSessions)');
   });
+
+  it('as rotas continuam fora do PasswordGate global', () => {
+    const app = fs.readFileSync('client/src/App.tsx', 'utf8');
+    expect(app).toContain('if (isGastosRoute)');
+    expect(app).toContain('if (isEmprestimoRoute)');
+    expect(app).toContain('return <Router />;');
+  });
 });
