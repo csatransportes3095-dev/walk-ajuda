@@ -4222,6 +4222,25 @@ export default function Home() {
 
 
 
+      {/* O titulo do Hero aceita HTML completo. O fundo galactico e o texto precisam
+          permanecer como uma unica composicao: centraliza o bloco sem esticar sua largura. */}
+      <style>{`
+        .public-hero-title-shell {
+          width: 100%;
+          min-width: 0;
+        }
+        .public-hero-title-html {
+          width: 100%;
+          min-width: 0;
+        }
+        .public-hero-title-html .h2-hero-colombiano {
+          max-width: 100% !important;
+          margin-left: auto !important;
+          margin-right: auto !important;
+          box-sizing: border-box !important;
+        }
+      `}</style>
+
       {/* Hero Section */}
       <section className="relative overflow-hidden py-4 md:py-20">
         <div className="container">
@@ -4238,7 +4257,11 @@ export default function Home() {
             {/* Conteúdo */}
             <div className={`space-y-6 ${VIDEO_URL && !videoError ? '' : 'w-full max-w-6xl mx-auto text-center'}`}>
               <div className={`space-y-3 ${VIDEO_URL && !videoError ? '' : 'w-full flex flex-col items-center'}`}>
-                {HERO_TITLE && <h2 className={`text-4xl md:text-5xl font-bold text-foreground leading-tight ${VIDEO_URL && !videoError ? '' : 'w-full text-center [&>*]:mx-auto [&>*]:max-w-full'}`} dangerouslySetInnerHTML={{ __html: HERO_TITLE }} />}
+                {HERO_TITLE && (
+                  <div className={`public-hero-title-shell text-4xl md:text-5xl font-bold text-foreground leading-tight ${VIDEO_URL && !videoError ? '' : 'w-full text-center'}`}>
+                    <div className="public-hero-title-html w-full" dangerouslySetInnerHTML={{ __html: HERO_TITLE }} />
+                  </div>
+                )}
                 {HERO_SUBTITLE && <p className="text-lg text-muted-foreground">{HERO_SUBTITLE}</p>}
               </div>
               {(FEATURE1_TITLE || FEATURE2_TITLE || FEATURE3_TITLE) && (
