@@ -22,6 +22,8 @@ jobs:
           cache: pnpm
       - name: Apply implementation patch
         run: python3 scripts/apply-nested-option-price-models.py
+      - name: Align generated regression assertion
+        run: sed -i 's/selectedPriceModel?.price/selectedPriceModel.price/' server/optionPriceModelsFlow.test.ts
       - name: Validate whitespace
         run: git diff --check
       - run: pnpm install --frozen-lockfile
