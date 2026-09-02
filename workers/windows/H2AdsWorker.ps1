@@ -2,18 +2,21 @@ param(
   [switch]$Install,
   [switch]$Run,
   [switch]$Update,
+  [switch]$SnapshotQueueWorker,
   [string]$PanelUrl = "https://h2colombiano.com",
   [string]$PairingCode
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.3.7"
+$ProgressPreference = "SilentlyContinue"
+$AgentVersion = "1.3.8"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
 $RunnerPath = Join-Path $WorkerDirectory "browser-runner.mjs"
 $SessionRunnerPath = Join-Path $WorkerDirectory "browser-session.mjs"
 $ProfilesDirectory = Join-Path $WorkerDirectory "profiles"
+$SnapshotQueueDirectory = Join-Path $WorkerDirectory "snapshot-queue"
 $PackagePath = Join-Path $WorkerDirectory "package.json"
 $ProxyChainPackagePath = Join-Path $WorkerDirectory "node_modules\proxy-chain\package.json"
 $DedicatedBrowserDirectory = Join-Path $WorkerDirectory "browser\chrome"
@@ -176,6 +179,25 @@ function Send-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
   }
 }
 
+function Start-H2AdsSnapshotQueueWorker {
+  if (!(Test-Path $SnapshotQueueDirectory)) { return }
+  $pending = Get-ChildItem -Path $SnapshotQueueDirectory -Filter "*.pending" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (!$pending) { return }
+  $arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -SnapshotQueueWorker"
+  $process = Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -WindowStyle Hidden -PassThru
+  try { $process.PriorityClass = "BelowNormal" } catch { }
+}
+
+function Queue-H2AdsProfileSnapshot([int]$InstanceId) {
+  if ($InstanceId -lt 1) { return }
+  New-Item -ItemType Directory -Force -Path $SnapshotQueueDirectory | Out-Null
+  Get-ChildItem -Path $SnapshotQueueDirectory -Filter "*-instance-$InstanceId-*.pending" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+  $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmssfff")
+  $pendingPath = Join-Path $SnapshotQueueDirectory "$stamp-instance-$InstanceId-$([guid]::NewGuid().ToString('N')).pending"
+  [string]$InstanceId | Set-Content -Path $pendingPath -Encoding ASCII -NoNewline
+  Start-H2AdsSnapshotQueueWorker
+}
+
 function Restore-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
   $profileDirectory = Join-Path $ProfilesDirectory "instance-$InstanceId"
   if (Test-H2AdsProfileHasBrowserData $profileDirectory) { return $false }
@@ -253,7 +275,7 @@ function Close-BrowserSession([object]$Config, [object]$Payload) {
   }
   $body = @{ command = "close_browser"; state = "closed" } | ConvertTo-Json -Compress
   Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($Payload.command.id)/result" -Headers (Get-WorkerHeaders $Config) -ContentType "application/json" -Body $body | Out-Null
-  try { Send-H2AdsProfileSnapshot $Config $instanceId | Out-Null } catch { }
+  Queue-H2AdsProfileSnapshot $instanceId
 }
 
 function Initialize-InstanceProfile([int]$InstanceId) {
@@ -387,6 +409,47 @@ function Acquire-WorkerMutex([object]$Config) {
   return $mutex
 }
 
+if ($SnapshotQueueWorker) {
+  if (!(Test-Path $ConfigPath)) { exit 0 }
+  $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
+  New-Item -ItemType Directory -Force -Path $SnapshotQueueDirectory | Out-Null
+  $safeWorkerKey = ([string]$config.workerKey) -replace '[^A-Za-z0-9_-]', '_'
+  $createdNew = $false
+  $snapshotMutex = New-Object System.Threading.Mutex($true, "Local\H2AdsSnapshotQueue-$safeWorkerKey", [ref]$createdNew)
+  if (!$createdNew) {
+    $snapshotMutex.Dispose()
+    exit 0
+  }
+  try {
+    while ($true) {
+      $pending = Get-ChildItem -Path $SnapshotQueueDirectory -Filter "*.pending" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc | Select-Object -First 1
+      if (!$pending) { break }
+      if ($pending.Name -notmatch 'instance-(\d+)-') {
+        Remove-Item -Force $pending.FullName -ErrorAction SilentlyContinue
+        continue
+      }
+      $instanceId = [int]$Matches[1]
+      $workingPath = "$($pending.FullName).working"
+      Move-Item -Path $pending.FullName -Destination $workingPath -Force
+      try {
+        Start-Sleep -Milliseconds 750
+        Send-H2AdsProfileSnapshot $config $instanceId | Out-Null
+        Remove-Item -Force $workingPath -ErrorAction SilentlyContinue
+      } catch {
+        $retryPath = $workingPath -replace '\.working$', ''
+        if (!(Test-Path $retryPath)) {
+          Move-Item -Path $workingPath -Destination $retryPath -Force -ErrorAction SilentlyContinue
+        }
+        break
+      }
+    }
+  } finally {
+    try { $snapshotMutex.ReleaseMutex() } catch { }
+    $snapshotMutex.Dispose()
+  }
+  exit 0
+}
+
 if ($Install) {
   if (!(Test-IsAdministrator)) { throw "Instale o H2ADS como Administrador para ativar o kill switch obrigatório." }
   if (!(Get-SystemChromeExecutable)) { throw "Google Chrome não está instalado neste computador." }
@@ -436,12 +499,17 @@ if ($Run) {
   $workerMutex = Acquire-WorkerMutex $config
   if ($null -eq $workerMutex) { exit 0 }
   $nextHeartbeatAt = Get-Date
+  $nextSnapshotQueueCheckAt = Get-Date
   try {
     while ($true) {
       $now = Get-Date
       if ($now -ge $nextHeartbeatAt) {
         try { Invoke-WorkerHeartbeat $config } catch { }
         $nextHeartbeatAt = $now.AddSeconds(20)
+      }
+      if ($now -ge $nextSnapshotQueueCheckAt) {
+        try { Start-H2AdsSnapshotQueueWorker } catch { }
+        $nextSnapshotQueueCheckAt = $now.AddMinutes(2)
       }
       try { Invoke-PendingBrowserCommand $config } catch { }
       Start-Sleep -Seconds 2
