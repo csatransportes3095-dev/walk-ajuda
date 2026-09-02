@@ -16,7 +16,6 @@ import {
   requestH2AdsBrowserLaunch,
   requestH2AdsBrowserPreparation,
   revokeH2AdsBrowserWorker,
-  assignH2AdsInstanceWorker,
   saveH2AdsProxyCredential,
   saveH2AdsNetworkProfile,
   updateH2AdsGroup,
@@ -27,6 +26,7 @@ import { decryptH2AdsProxy, encryptH2AdsProxy, H2ADS_PROXY_ROTATION_MINUTES_MAX,
 import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "../h2adsProxyValidation";
 import { h2AdsOrderLinkRouterPart } from "../h2adsOrderLinkRouter";
 import { setH2AdsOrderLink } from "../h2adsOrderLink";
+import { assignH2AdsInstanceWorkerPortable } from "../h2adsProfilePortability";
 
 export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
 export const h2AdsInstanceStatusSchema = z.enum(["draft", "paused", "archived"]);
@@ -183,7 +183,7 @@ export const h2AdsRouter = {
   assignWorker: adminProcedure.input(h2AdsAssignWorkerSchema).mutation(async ({ input }) => {
     await requireConfigurableInstance(input.instanceId);
     try {
-      await assignH2AdsInstanceWorker(input.instanceId, input.workerId);
+      await assignH2AdsInstanceWorkerPortable(input.instanceId, input.workerId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Não foi possível atribuir o Worker à instância.";
       throw new TRPCError({ code: "CONFLICT", message });
