@@ -39,13 +39,36 @@ async function requeueStaleWorkerCommands(workerId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   const now = Date.now();
+  const staleBrowserCutoff = new Date(now - STALE_BROWSER_COMMAND_MS);
+
+  // Somente abertura pode ser reentregue. Um close antigo nunca deve atingir uma sessão nova.
   await db.update(h2AdsWorkerBrowserCommands)
     .set({ status: "queued", claimedAt: null })
     .where(and(
       eq(h2AdsWorkerBrowserCommands.workerId, workerId),
+      eq(h2AdsWorkerBrowserCommands.command, "launch_browser"),
       eq(h2AdsWorkerBrowserCommands.status, "claimed"),
-      lt(h2AdsWorkerBrowserCommands.claimedAt, new Date(now - STALE_BROWSER_COMMAND_MS)),
+      lt(h2AdsWorkerBrowserCommands.claimedAt, staleBrowserCutoff),
     ));
+
+  // Close é comando efêmero: se não for consumido rapidamente, cancela em vez de reaparecer depois.
+  await db.update(h2AdsWorkerBrowserCommands)
+    .set({ status: "cancelled", completedAt: new Date() })
+    .where(and(
+      eq(h2AdsWorkerBrowserCommands.workerId, workerId),
+      eq(h2AdsWorkerBrowserCommands.command, "close_browser"),
+      eq(h2AdsWorkerBrowserCommands.status, "claimed"),
+      lt(h2AdsWorkerBrowserCommands.claimedAt, staleBrowserCutoff),
+    ));
+  await db.update(h2AdsWorkerBrowserCommands)
+    .set({ status: "cancelled", completedAt: new Date() })
+    .where(and(
+      eq(h2AdsWorkerBrowserCommands.workerId, workerId),
+      eq(h2AdsWorkerBrowserCommands.command, "close_browser"),
+      eq(h2AdsWorkerBrowserCommands.status, "queued"),
+      lt(h2AdsWorkerBrowserCommands.createdAt, staleBrowserCutoff),
+    ));
+
   await db.update(h2AdsWorkerCommands)
     .set({ status: "queued", claimedAt: null })
     .where(and(
