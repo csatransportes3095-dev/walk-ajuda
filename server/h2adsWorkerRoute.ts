@@ -6,6 +6,7 @@ import { getDb } from "./db";
 import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
 import { recordH2AdsRuntimeIp } from "./h2adsIpHistory";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
+import { openH2AdsProfileSnapshot, recordH2AdsProfileRestoreResult, storeH2AdsProfileSnapshot } from "./h2adsProfileSnapshots";
 
 const MAX_NAME_LENGTH = 128;
 const STALE_BROWSER_COMMAND_MS = 30_000;
@@ -137,6 +138,72 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       return;
     }
     res.status(204).end();
+  });
+
+  app.post("/api/h2ads/worker/profiles/:instanceId/snapshot", async (req: Request, res: Response) => {
+    noStore(res);
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    const plainBytes = Number(req.header("x-h2ads-snapshot-size"));
+    const plainSha256 = workerString(req.header("x-h2ads-snapshot-sha256"), 64);
+    if (!Number.isInteger(instanceId) || instanceId < 1 || !Number.isSafeInteger(plainBytes) || plainBytes < 1 || !plainSha256 || !/^[a-f0-9]{64}$/i.test(plainSha256)) {
+      res.status(400).json({ error: "Metadados do snapshot H2ADS inválidos." });
+      return;
+    }
+    try {
+      const stored = await storeH2AdsProfileSnapshot({ workerId: worker.id, instanceId, body: req, plainBytes, plainSha256 });
+      res.status(201).json({ stored: true, bytes: stored.bytes, sha256: stored.sha256 });
+    } catch (error) {
+      res.status(409).json({ error: error instanceof Error ? error.message : "Não foi possível salvar o snapshot H2ADS." });
+    }
+  });
+
+  app.get("/api/h2ads/worker/profiles/:instanceId/snapshot", async (req: Request, res: Response) => {
+    noStore(res);
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    if (!Number.isInteger(instanceId) || instanceId < 1) {
+      res.status(400).json({ error: "Instância inválida." });
+      return;
+    }
+    try {
+      const snapshot = await openH2AdsProfileSnapshot(worker.id, instanceId);
+      if (!snapshot) {
+        res.status(404).json({ error: "Snapshot H2ADS ainda não disponível." });
+        return;
+      }
+      res.status(200);
+      res.setHeader("Content-Type", "application/gzip");
+      res.setHeader("Content-Length", String(snapshot.bytes));
+      res.setHeader("X-H2ADS-Snapshot-SHA256", snapshot.sha256);
+      res.setHeader("X-H2ADS-Profile-Version", String(snapshot.profileVersion));
+      snapshot.body.on("error", () => {
+        if (!res.headersSent) res.status(500).end(); else res.destroy();
+      });
+      snapshot.body.pipe(res);
+    } catch (error) {
+      if (!res.headersSent) res.status(409).json({ error: error instanceof Error ? error.message : "Não foi possível recuperar o snapshot H2ADS." });
+    }
+  });
+
+  app.post("/api/h2ads/worker/profiles/:instanceId/restore-result", async (req: Request, res: Response) => {
+    noStore(res);
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    const restored = req.body?.state === "restored" ? true : req.body?.state === "failed" ? false : null;
+    if (!Number.isInteger(instanceId) || instanceId < 1 || restored === null) {
+      res.status(400).json({ error: "Resultado de restauração H2ADS inválido." });
+      return;
+    }
+    try {
+      await recordH2AdsProfileRestoreResult({ workerId: worker.id, instanceId, restored });
+      res.status(204).end();
+    } catch (error) {
+      res.status(409).json({ error: error instanceof Error ? error.message : "Não foi possível registrar a restauração H2ADS." });
+    }
   });
 
   app.post("/api/h2ads/worker/commands/next", async (req: Request, res: Response) => {
