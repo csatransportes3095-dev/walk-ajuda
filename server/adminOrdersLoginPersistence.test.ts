@@ -14,4 +14,11 @@ describe("AdminOrders - persistência dos dados de login", () => {
   it("aplica o patch antes do build de produção", () => {
     expect(pkg.scripts.prebuild).toBe("node scripts/patch-admin-login-data-reload.mjs");
   });
+
+  it("salva automaticamente alterações textuais sem mexer no QR privado", () => {
+    expect(patch).toContain("const autoSaveLoginDataMut = trpc.loginData.save.useMutation");
+    expect(patch).toContain("loginAutosaveTimerRef.current = setTimeout");
+    expect(patch).toContain("authenticatorQrAction: 'keep'");
+    expect(patch).toContain("}, 900);");
+  });
 });
