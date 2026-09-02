@@ -1,0 +1,87 @@
+name: Apply independent admin email generator card
+
+on:
+  push:
+    branches:
+      - fix/admin-email-generator-independent-card-20260902
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    if: ${{ !contains(github.event.head_commit.message, 'chore(admin): apply independent email generator card') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch ADM navigation and route
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str):
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"expected block not found in {path}: {old[:120]!r}")
+              file.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "client/src/App.tsx",
+              'import AdminEmail from "./pages/AdminEmail";\nimport AdminZohoConfig from "./pages/AdminZohoConfig";',
+              'import AdminEmail from "./pages/AdminEmail";\nimport AdminEmailGeneratorPage from "./pages/AdminEmailGeneratorPage";\nimport AdminZohoConfig from "./pages/AdminZohoConfig";',
+          )
+
+          replace_once(
+              "client/src/App.tsx",
+              '''      <Route path={"/admin/email"}>\n        <AdminGuard><AdminEmail /></AdminGuard>\n      </Route>\n      <Route path={"/admin/zoho-config"}>''',
+              '''      <Route path={"/admin/email"}>\n        <AdminGuard><AdminEmail /></AdminGuard>\n      </Route>\n      <Route path={"/admin/gerador-emails"}>\n        <AdminGuard><AdminEmailGeneratorPage /></AdminGuard>\n      </Route>\n      <Route path={"/admin/zoho-config"}>''',
+          )
+
+          replace_once(
+              "client/src/pages/AdminCodes.tsx",
+              'Settings2, RotateCcw, Save, ArrowLeftRight, Monitor } from "lucide-react";',
+              'Settings2, RotateCcw, Save, ArrowLeftRight, MailPlus, Monitor } from "lucide-react";',
+          )
+
+          replace_once(
+              "client/src/pages/AdminCodes.tsx",
+              "  { id: 'email', href: '/admin/email', label: 'Emails', icon: Mail, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },",
+              "  { id: 'email', href: '/admin/email', label: 'Emails', icon: Mail, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },\n  { id: 'email-generator', href: '/admin/gerador-emails', label: 'Gerador E-mails', icon: MailPlus, tone: 'bg-yellow-600/20 border-yellow-500/35 hover:bg-yellow-600/30', iconTone: 'text-yellow-300' },",
+          )
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run check
+
+      - name: Production build
+        run: pnpm run build
+
+      - name: Commit generated source changes
+        run: |
+          if git diff --quiet; then
+            echo "No source changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/App.tsx client/src/pages/AdminCodes.tsx
+          git commit -m "chore(admin): apply independent email generator card"
+          git push origin HEAD:${GITHUB_REF_NAME}
