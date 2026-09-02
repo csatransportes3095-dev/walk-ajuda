@@ -13,6 +13,18 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - ".github/workflows/h2ads-validate.yml"
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "server/h2ads*"
+      - "workers/windows/**"
+      - "drizzle/0140_h2ads_browser_workers.sql"
+      - "drizzle/0141_h2ads_browser_preparation.sql"
+      - "drizzle/0142_h2ads_browser_manual_commands.sql"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/h2ads-validate.yml"
 
 permissions:
   contents: read
@@ -44,4 +56,4 @@ jobs:
         run: pnpm build
 
       - name: Verify packaged worker version
-        run: node -e "const fs=require('node:fs'); const text=fs.readFileSync('workers/windows/H2AdsWorker.ps1','utf8'); if (!text.includes('AgentVersion = \\\"1.3.4\\\"')) throw new Error('Packaged worker is not 1.3.4'); console.log('Packaged worker 1.3.4 confirmed');"
+        run: node -e "const fs=require('node:fs'); const text=fs.readFileSync('workers/windows/H2AdsWorker.ps1','utf8'); if (!text.includes('AgentVersion = \\\"1.3.6\\\"')) throw new Error('Packaged worker is not 1.3.6'); console.log('Packaged worker 1.3.6 confirmed');"
