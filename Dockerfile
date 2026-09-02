@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl --proto '=https' --tlsv1.2 -fsSL \
       "https://tiup-mirrors.pingcap.com/dumpling-${DUMPLING_VERSION}-linux-amd64.tar.gz" \
       -o /tmp/dumpling.tar.gz \
-    && printf '%s  %s\n' "${DUMPLING_SHA256" /tmp/dumpling.tar.gz | sha256sum -c - \
+    && printf '%s  %s\n' "${DUMPLING_SHA256}" /tmp/dumpling.tar.gz | sha256sum -c - \
     && tar -xzf /tmp/dumpling.tar.gz -C /usr/local/bin dumpling \
     && chmod 0755 /usr/local/bin/dumpling \
     && rm -f /tmp/dumpling.tar.gz
