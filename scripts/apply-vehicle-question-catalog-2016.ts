@@ -47,7 +47,8 @@ async function run() {
   let questionsRemoved = 0;
 
   try {
-    const [productRows] = await db.query<any[]>('SELECT id, name FROM products ORDER BY id');
+    const [productResult] = await db.query('SELECT id, name FROM products ORDER BY id');
+    const productRows = productResult as any[];
     const targetProducts = productRows.filter(row => isVehicleEditProduct(row.name));
     if (targetProducts.length === 0) {
       console.log('[vehicle-question-catalog] Produto de edição de documento do veículo não encontrado; nenhuma alteração aplicada.');
@@ -57,14 +58,16 @@ async function run() {
     await db.beginTransaction();
 
     for (const product of targetProducts) {
-      const [optionRows] = await db.query<any[]>('SELECT id FROM productOptions WHERE productId = ? ORDER BY sortOrder, id', [product.id]);
+      const [optionResult] = await db.query('SELECT id FROM productOptions WHERE productId = ? ORDER BY sortOrder, id', [product.id]);
+      const optionRows = optionResult as any[];
       let touchedProduct = false;
 
       for (const option of optionRows) {
-        const [rows] = await db.query<any[]>(
+        const [questionResult] = await db.query(
           'SELECT id, question, fieldType, options, isRequired, sortOrder, parentQuestionId, triggerOption FROM productQuestions WHERE productId = ? AND optionId = ? ORDER BY sortOrder, id',
           [product.id, option.id],
         );
+        const rows = questionResult as any[];
         const brandQuestion = rows.find(row => row.parentQuestionId == null && isBrandQuestion(row.question));
         if (!brandQuestion) continue;
 
@@ -95,13 +98,13 @@ async function run() {
             );
             questionsUpdated += 1;
           } else {
-            const [insertResult] = await db.query<any>(
+            const [insertResult] = await db.query(
               `INSERT INTO productQuestions
                 (productId, optionId, question, fieldType, options, isRequired, sortOrder, parentQuestionId, triggerOption)
                VALUES (?, ?, ?, 'select', ?, 1, ?, ?, ?)`,
               [product.id, option.id, 'QUAL É O MODELO DO VEÍCULO?', JSON.stringify(models), nextSortOrder, brandQuestion.id, brand],
             );
-            retainedIds.add(Number(insertResult.insertId));
+            retainedIds.add(Number((insertResult as any).insertId));
             nextSortOrder += 1;
             questionsCreated += 1;
           }
