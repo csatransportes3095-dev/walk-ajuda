@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl --proto '=https' --tlsv1.2 -fsSL \
       "https://tiup-mirrors.pingcap.com/dumpling-${DUMPLING_VERSION}-linux-amd64.tar.gz" \
       -o /tmp/dumpling.tar.gz \
-    && printf '%s  %s\n' "${DUMPLING_SHA256}" /tmp/dumpling.tar.gz | sha256sum -c - \
+    && printf '%s  %s\n' "${DUMPLING_SHA256" /tmp/dumpling.tar.gz | sha256sum -c - \
     && tar -xzf /tmp/dumpling.tar.gz -C /usr/local/bin dumpling \
     && chmod 0755 /usr/local/bin/dumpling \
     && rm -f /tmp/dumpling.tar.gz
@@ -37,7 +37,7 @@ RUN pip3 install weasyprint --break-system-packages
 WORKDIR /app
 COPY . .
 RUN sed -i 's/\r$//' /app/scripts/render-start.sh && chmod +x /app/scripts/render-start.sh
-RUN npm install -g pnpm@10.4.1 && pnpm install --frozen-lockfile && pnpm run build
+RUN npm install -g pnpm@10.4.1 && pnpm install --frozen-lockfile && node scripts/patch-admin-login-data-reload.mjs && pnpm run build
 
 ENV NODE_ENV=production
 ENV BACKUP_DUMPLING_BINARY=/usr/local/bin/dumpling
