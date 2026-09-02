@@ -36,7 +36,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
     const session = read("workers/windows/browser-session.mjs");
-    expect(script).toContain('$AgentVersion = "1.3.6"');
+    expect(script).toContain('$AgentVersion = "1.3.7"');
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
@@ -55,7 +55,9 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(script).toContain("taskkill.exe /PID $nodePid /T /F 1>$null 2>$null");
     expect(script).toContain("/api/h2ads/worker/heartbeat");
     expect(script).toContain("/api/h2ads/worker/commands/next");
+    expect(script).toContain("/api/h2ads/worker/profiles/");
     expect(script).toContain("X-H2ADS-Agent-Version");
+    expect(script).toContain("X-H2ADS-Snapshot-SHA256");
     expect(script).toContain("Acquire-WorkerMutex");
     expect(script).toContain("Stop-ExistingWorkerProcesses");
     expect(script).toContain("Complete-LocalCommandFailure");
@@ -64,6 +66,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(script).toContain("Start-Sleep -Seconds 2");
     expect(session).toContain("rotationMinutes");
     expect(session).toContain("relay.close(true)");
+    expect(session).toContain("uploadProfileSnapshot");
     expect(runner).toContain('host: "127.0.0.1"');
     expect(runner).toContain("https://api.ipify.org?format=json");
     expect(runner).not.toContain("console.log");
@@ -89,7 +92,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(script).toContain("Direction Outbound");
     expect(script).toContain("Action Block");
     expect(script).toContain('RemoteAddress @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255")');
-    expect(script).toContain('RemoteAddress "::/0"');
+    expect(script).toContain('RemoteAddress "Internet6"');
     expect(script).toContain("H2ADS_BROWSER_EXECUTABLE");
     expect(script).toContain("Execute a atualização do Worker como Administrador");
     expect(session).toContain('directBrowserEgress: "blocked_by_windows_firewall"');
