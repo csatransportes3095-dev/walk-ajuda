@@ -1,11 +1,19 @@
 import React from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { HomeButtonsManager } from "@/components/HomeButtonsManager";
-import { Building2, LayoutGrid } from "lucide-react";
-import { useLocation } from "wouter";
+import AdminEmailGenerator from "@/components/AdminEmailGenerator";
+import { LayoutGrid, MailPlus } from "lucide-react";
+import { useLocation, useSearch } from "wouter";
 
 export default function AdminHubCentral() {
   const [, navigate] = useLocation();
+  const search = useSearch();
+  const tool = new URLSearchParams(search).get("tool");
+
+  if (tool === "email-generator") {
+    return <AdminEmailGenerator onBack={() => navigate("/admin/hub-central")} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0a1a]">
       <AdminHeader
@@ -14,7 +22,6 @@ export default function AdminHubCentral() {
         backTo="/admin/codes"
       />
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Cabeçalho da página */}
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center">
             <LayoutGrid className="w-5 h-5 text-sky-400" />
@@ -22,10 +29,27 @@ export default function AdminHubCentral() {
           <div>
             <h1 className="text-xl font-black text-white tracking-wide">Hub Central de Acesso</h1>
             <p className="text-xs text-white/50 mt-0.5">
-              Gerencie os botões rápidos exibidos na tela inicial do app
+              Ferramentas internas e botões rápidos do sistema
             </p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => navigate("/admin/hub-central?tool=email-generator")}
+          className="group w-full rounded-2xl border border-[#FFD400]/35 bg-gradient-to-r from-[#FFD400]/12 via-[#FFD400]/6 to-transparent p-4 text-left transition hover:border-[#FFD400]/70 hover:from-[#FFD400]/18"
+        >
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#FFD400]/35 bg-[#FFD400]/10">
+              <MailPlus className="h-6 w-6 text-[#FFD400]" />
+            </div>
+            <div className="flex-1">
+              <p className="font-black tracking-wide text-white">GERADOR DE E-MAILS H2</p>
+              <p className="mt-0.5 text-xs text-slate-400">Catch-All, múltiplos domínios, histórico, busca e exportação</p>
+            </div>
+            <span className="text-[#FFD400] transition group-hover:translate-x-1">→</span>
+          </div>
+        </button>
 
         <button
           type="button"
@@ -39,7 +63,6 @@ export default function AdminHubCentral() {
           </div>
         </button>
 
-        {/* Gerenciador de botões */}
         <HomeButtonsManager />
       </div>
     </div>
