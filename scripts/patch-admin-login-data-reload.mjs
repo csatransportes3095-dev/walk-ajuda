@@ -26,6 +26,39 @@ const pinAfter = `  const customerPinQuery = trpc.customerPin.adminGet.useQuery(
     { enabled: !!expandedPhone && isExpandedStatusTab, staleTime: 0, refetchOnMount: true, refetchOnWindowFocus: true }
   );`;
 
+const referrerLookupAnchor = `function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-muted-foreground flex-shrink-0">{icon}</span>
+      <span className="text-muted-foreground w-24 flex-shrink-0">{label}</span>
+      <span className="text-foreground flex-1 truncate">{value}</span>
+    </div>
+  );
+}
+`;
+
+const referrerLookupComponent = `
+function ReferrerLookup({ phone, onNameFound }: { phone: string; onNameFound: (name: string) => void }) {
+  const cleanPhone = phone.replace(/\\D/g, '');
+  const lookupQuery = trpc.orderStatus.lookupReferrerByPhone.useQuery(
+    { phone: cleanPhone },
+    { enabled: cleanPhone.length >= 10, staleTime: 0 }
+  );
+
+  useEffect(() => {
+    if (lookupQuery.data?.found && lookupQuery.data.name) {
+      onNameFound(lookupQuery.data.name);
+    }
+  }, [lookupQuery.data?.found, lookupQuery.data?.name]);
+
+  if (cleanPhone.length < 10) return null;
+  if (lookupQuery.isLoading) return <span className="text-xs text-muted-foreground block">Buscando indicador...</span>;
+  if (lookupQuery.data?.found) return <span className="text-xs text-green-400 block">Indicador: {lookupQuery.data.name}</span>;
+  if (lookupQuery.data && !lookupQuery.data.found) return <span className="text-xs text-yellow-400 block">Indicador não encontrado no sistema</span>;
+  return null;
+}
+`;
+
 let next = source;
 
 if (next.includes(loginBefore)) {
@@ -40,5 +73,12 @@ if (next.includes(pinBefore)) {
   throw new Error('Trecho customerPin esperado não encontrado; patch abortado.');
 }
 
+if (!next.includes('function ReferrerLookup(')) {
+  if (!next.includes(referrerLookupAnchor)) {
+    throw new Error('Âncora InfoRow não encontrada; patch ReferrerLookup abortado.');
+  }
+  next = next.replace(referrerLookupAnchor, `${referrerLookupAnchor}${referrerLookupComponent}`);
+}
+
 fs.writeFileSync(file, next);
-console.log('[patch-admin-login-data-reload] correção aplicada.');
+console.log('[patch-admin-login-data-reload] correções aplicadas.');
