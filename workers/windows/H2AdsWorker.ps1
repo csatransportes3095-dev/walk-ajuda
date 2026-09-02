@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.3.6"
+$AgentVersion = "1.3.7"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -85,7 +85,7 @@ function Ensure-H2AdsBrowserFirewall {
   Get-NetFirewallRule -DisplayName $FirewallRuleV4Name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
   Get-NetFirewallRule -DisplayName $FirewallRuleV6Name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
   New-NetFirewallRule -DisplayName $FirewallRuleV4Name -Direction Outbound -Program $DedicatedChromePath -Action Block -Protocol Any -RemoteAddress @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255") -Profile Any -Enabled True | Out-Null
-  New-NetFirewallRule -DisplayName $FirewallRuleV6Name -Direction Outbound -Program $DedicatedChromePath -Action Block -Protocol Any -RemoteAddress "::/0" -Profile Any -Enabled True | Out-Null
+  New-NetFirewallRule -DisplayName $FirewallRuleV6Name -Direction Outbound -Program $DedicatedChromePath -Action Block -Protocol Any -RemoteAddress "Internet6" -Profile Any -Enabled True | Out-Null
   if (!(Test-H2AdsBrowserFirewall)) { throw "O kill switch rígido do H2ADS não foi aplicado corretamente." }
 }
 
@@ -147,6 +147,76 @@ function Ensure-BrowserPreparationComponent([object]$Config) {
   }
 }
 
+function Test-H2AdsProfileHasBrowserData([string]$ProfileDirectory) {
+  if (!(Test-Path $ProfileDirectory)) { return $false }
+  foreach ($relative in @("Local State", "Default\Preferences", "Default\Network\Cookies", "Default\Cookies")) {
+    if (Test-Path (Join-Path $ProfileDirectory $relative)) { return $true }
+  }
+  return $false
+}
+
+function Send-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
+  $profileDirectory = Join-Path $ProfilesDirectory "instance-$InstanceId"
+  if (!(Test-H2AdsProfileHasBrowserData $profileDirectory)) { return $false }
+  if (!(Get-Command tar.exe -ErrorAction SilentlyContinue)) { throw "tar.exe não está disponível para criar o snapshot H2ADS." }
+  $archivePath = Join-Path $env:TEMP "h2ads-profile-$InstanceId-$([guid]::NewGuid().ToString('N')).tar.gz"
+  try {
+    & tar.exe -czf $archivePath -C $profileDirectory .
+    if ($LASTEXITCODE -ne 0 -or !(Test-Path $archivePath)) { throw "Não foi possível compactar o perfil H2ADS." }
+    $file = Get-Item $archivePath
+    if ($file.Length -lt 1) { throw "Snapshot H2ADS vazio." }
+    $sha256 = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
+    $headers = Get-WorkerHeaders $Config
+    $headers["X-H2ADS-Snapshot-Size"] = [string]$file.Length
+    $headers["X-H2ADS-Snapshot-SHA256"] = $sha256
+    Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/profiles/$InstanceId/snapshot" -Headers $headers -ContentType "application/octet-stream" -InFile $archivePath | Out-Null
+    return $true
+  } finally {
+    Remove-Item -Force $archivePath -ErrorAction SilentlyContinue
+  }
+}
+
+function Restore-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
+  $profileDirectory = Join-Path $ProfilesDirectory "instance-$InstanceId"
+  if (Test-H2AdsProfileHasBrowserData $profileDirectory) { return $false }
+  if (!(Get-Command tar.exe -ErrorAction SilentlyContinue)) { throw "tar.exe não está disponível para restaurar o snapshot H2ADS." }
+  $archivePath = Join-Path $env:TEMP "h2ads-restore-$InstanceId-$([guid]::NewGuid().ToString('N')).tar.gz"
+  $stagingDirectory = Join-Path $env:TEMP "h2ads-restore-$InstanceId-$([guid]::NewGuid().ToString('N'))"
+  $headers = Get-WorkerHeaders $Config
+  try {
+    try {
+      $response = Invoke-WebRequest -UseBasicParsing -Method Get -Uri "$($Config.panelUrl)/api/h2ads/worker/profiles/$InstanceId/snapshot" -Headers $headers -OutFile $archivePath -PassThru
+    } catch {
+      $statusCode = $null
+      try { $statusCode = [int]$_.Exception.Response.StatusCode } catch { }
+      if ($statusCode -eq 404) { return $false }
+      throw
+    }
+    if (!(Test-Path $archivePath)) { throw "Snapshot H2ADS não foi baixado." }
+    $expectedHash = [string]$response.Headers["X-H2ADS-Snapshot-SHA256"]
+    $actualHash = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($expectedHash) -or $actualHash -ne $expectedHash.Trim().ToLowerInvariant()) { throw "Integridade do snapshot H2ADS restaurado não confere." }
+    New-Item -ItemType Directory -Force -Path $stagingDirectory | Out-Null
+    & tar.exe -xzf $archivePath -C $stagingDirectory
+    if ($LASTEXITCODE -ne 0) { throw "Não foi possível extrair o snapshot H2ADS." }
+    if (!(Test-H2AdsProfileHasBrowserData $stagingDirectory)) { throw "O snapshot H2ADS não contém dados de navegador válidos." }
+    if (Test-Path $profileDirectory) { Remove-Item -Recurse -Force $profileDirectory }
+    Move-Item -Path $stagingDirectory -Destination $profileDirectory
+    $body = @{ state = "restored" } | ConvertTo-Json -Compress
+    Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/profiles/$InstanceId/restore-result" -Headers $headers -ContentType "application/json" -Body $body | Out-Null
+    return $true
+  } catch {
+    try {
+      $body = @{ state = "failed" } | ConvertTo-Json -Compress
+      Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/profiles/$InstanceId/restore-result" -Headers $headers -ContentType "application/json" -Body $body | Out-Null
+    } catch { }
+    throw
+  } finally {
+    Remove-Item -Force $archivePath -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force $stagingDirectory -ErrorAction SilentlyContinue
+  }
+}
+
 function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $profileDirectory = Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)"
   if (!(Test-Path (Join-Path $profileDirectory "h2ads-profile.json"))) { throw "Perfil local não preparado." }
@@ -168,7 +238,8 @@ function Invoke-BrowserSession([object]$Config, [object]$Payload) {
 }
 
 function Close-BrowserSession([object]$Config, [object]$Payload) {
-  $profileDirectory = Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)"
+  $instanceId = [int]$Payload.command.instanceId
+  $profileDirectory = Join-Path $ProfilesDirectory "instance-$instanceId"
   $sessionPath = Join-Path $profileDirectory "h2ads-browser-session.json"
   if (Test-Path $sessionPath) {
     $session = Get-Content -Raw -Path $sessionPath | ConvertFrom-Json
@@ -182,12 +253,16 @@ function Close-BrowserSession([object]$Config, [object]$Payload) {
   }
   $body = @{ command = "close_browser"; state = "closed" } | ConvertTo-Json -Compress
   Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($Payload.command.id)/result" -Headers (Get-WorkerHeaders $Config) -ContentType "application/json" -Body $body | Out-Null
+  try { Send-H2AdsProfileSnapshot $Config $instanceId | Out-Null } catch { }
 }
 
 function Initialize-InstanceProfile([int]$InstanceId) {
   $profileDirectory = Join-Path $ProfilesDirectory "instance-$InstanceId"
   New-Item -ItemType Directory -Force -Path $profileDirectory | Out-Null
-  @{ instanceId = $InstanceId; profileVersion = 1; createdAt = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json -Compress | Set-Content -Path (Join-Path $profileDirectory "h2ads-profile.json") -Encoding UTF8 -NoNewline
+  $manifestPath = Join-Path $profileDirectory "h2ads-profile.json"
+  if (!(Test-Path $manifestPath)) {
+    @{ instanceId = $InstanceId; profileVersion = 1; createdAt = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json -Compress | Set-Content -Path $manifestPath -Encoding UTF8 -NoNewline
+  }
 }
 
 function Get-WorkerErrorCategory([object]$ErrorRecord) {
@@ -195,6 +270,7 @@ function Get-WorkerErrorCategory([object]$ErrorRecord) {
   if ($message -like "*Node.js*") { return "node_missing" }
   if ($message -like "*npm*") { return "npm_missing" }
   if ($message -like "*Perfil local*") { return "profile_missing" }
+  if ($message -like "*snapshot H2ADS*" -or $message -like "*Snapshot H2ADS*") { return "profile_snapshot_failed" }
   if ($message -like "*relay local*") { return "relay_setup_failed" }
   if ($message -like "*Firewall H2ADS*" -or $message -like "*kill switch rígido*") { return "hard_kill_switch_unavailable" }
   if ($message -like "*Chrome dedicado*" -or $message -like "*Google Chrome*") { return "dedicated_browser_unavailable" }
@@ -224,6 +300,7 @@ function Invoke-PendingBrowserCommand([object]$Config) {
       $runnerOutput = $runnerInput | & node.exe $RunnerPath
       $result = $runnerOutput | ConvertFrom-Json
       if ($result.state -eq "proxy_verified" -and ![string]::IsNullOrWhiteSpace($result.observedIp)) {
+        Restore-H2AdsProfileSnapshot $Config ([int]$payload.command.instanceId) | Out-Null
         Initialize-InstanceProfile ([int]$payload.command.instanceId)
         $resultBody = @{ command = "prepare_browser"; state = "proxy_verified"; observedIp = $result.observedIp } | ConvertTo-Json -Compress
       } else {
