@@ -36,7 +36,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
     const session = read("workers/windows/browser-session.mjs");
-    expect(script).toContain('$AgentVersion = "1.3.7"');
+    expect(script).toContain('$AgentVersion = "1.3.8"');
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
@@ -64,6 +64,10 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(script).toContain("ProxyChainPackagePath");
     expect(script).toContain("Initialize-InstanceProfile");
     expect(script).toContain("Start-Sleep -Seconds 2");
+    expect(script).toContain("SnapshotQueueWorker");
+    expect(script).toContain("Queue-H2AdsProfileSnapshot");
+    expect(script).toContain("Start-H2AdsSnapshotQueueWorker");
+    expect(script).toContain('$ProgressPreference = "SilentlyContinue"');
     expect(session).toContain("rotationMinutes");
     expect(session).toContain("relay.close(true)");
     expect(session).toContain("uploadProfileSnapshot");
