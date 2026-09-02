@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -60,6 +62,46 @@ function headers() {
 async function post(path, body) {
   const response = await fetch(`${panelUrl.replace(/\/$/, "")}${path}`, { method: "POST", headers: headers(), body: JSON.stringify(body) });
   if (!response.ok) throw new Error(`panel_http_${response.status}`);
+}
+
+async function sha256File(filePath) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+function hasBrowserProfileData() {
+  return ["Local State", join("Default", "Preferences"), join("Default", "Network", "Cookies"), join("Default", "Cookies")]
+    .some((relativePath) => existsSync(join(profileDirectory, relativePath)));
+}
+
+async function uploadProfileSnapshot() {
+  if (!hasBrowserProfileData()) return;
+  const archivePath = join(tmpdir(), `h2ads-profile-${instanceId}-${Date.now()}-${process.pid}.tar.gz`);
+  try {
+    await execFileAsync("tar.exe", ["-czf", archivePath, "-C", profileDirectory, "."], { windowsHide: true, timeout: 180_000, maxBuffer: 16_384 });
+    const size = statSync(archivePath).size;
+    if (!Number.isSafeInteger(size) || size < 1) throw new Error("profile_snapshot_empty");
+    const sha256 = await sha256File(archivePath);
+    const response = await fetch(`${panelUrl.replace(/\/$/, "")}/api/h2ads/worker/profiles/${instanceId}/snapshot`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${workerToken}`,
+        "X-H2ADS-Worker-Key": workerKey,
+        "X-H2ADS-Snapshot-Size": String(size),
+        "X-H2ADS-Snapshot-SHA256": sha256,
+        "Content-Type": "application/octet-stream",
+      },
+      body: createReadStream(archivePath),
+      duplex: "half",
+    });
+    if (!response.ok) throw new Error(`profile_snapshot_http_${response.status}`);
+    const manifestPath = join(profileDirectory, "h2ads-profile.json");
+    const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
+    writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastSnapshotAt: new Date().toISOString() }), "utf8");
+  } finally {
+    try { if (existsSync(archivePath)) unlinkSync(archivePath); } catch { }
+  }
 }
 
 async function checkIp() {
@@ -253,6 +295,7 @@ async function run() {
         const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
         writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: new Date().toISOString() }), "utf8");
         await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "closed" });
+        await uploadProfileSnapshot().catch(() => undefined);
       } finally {
         if (relay) await relay.close(true).catch(() => undefined);
       }
