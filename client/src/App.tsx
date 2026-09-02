@@ -69,6 +69,7 @@ import AdminFlowConfig from "./pages/AdminFlowConfig";
 import AdminCep from "./pages/AdminCep";
 import AdminTelefone from "./pages/AdminTelefone";
 import AdminEmail from "./pages/AdminEmail";
+import AdminEmailGeneratorPage from "./pages/AdminEmailGeneratorPage";
 import AdminZohoConfig from "./pages/AdminZohoConfig";
 import AdminMedia from "./pages/AdminMedia";
 import AdminFeatureCards from "./pages/AdminFeatureCards";
@@ -293,6 +294,9 @@ function Router() {
       </Route>
       <Route path={"/admin/email"}>
         <AdminGuard><AdminEmail /></AdminGuard>
+      </Route>
+      <Route path={"/admin/gerador-emails"}>
+        <AdminGuard><AdminEmailGeneratorPage /></AdminGuard>
       </Route>
       <Route path={"/admin/zoho-config"}>
         <AdminGuard><AdminZohoConfig /></AdminGuard>

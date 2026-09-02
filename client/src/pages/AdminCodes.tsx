@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
-import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, Settings2, RotateCcw, Save, ArrowLeftRight, Monitor } from "lucide-react";
+import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, Settings2, RotateCcw, Save, ArrowLeftRight, MailPlus, Monitor } from "lucide-react";
 import { TIMEZONE_OPTIONS, DEFAULT_TIMEZONE } from "@/hooks/useTimezone";
 import AdminHeader from "@/components/AdminHeader";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ const ADMIN_SHORTCUTS: AdminShortcut[] = [
   { id: 'consultas', href: '/admin/consultas', label: 'Consultas', icon: FileSearch, tone: 'bg-orange-600/20 border-orange-500/30 hover:bg-orange-600/30', iconTone: 'text-orange-400' },
   { id: 'coupons', href: '/admin/coupons', label: 'Cupons', icon: Ticket, tone: 'bg-green-600/20 border-green-500/30 hover:bg-green-600/30', iconTone: 'text-green-400' },
   { id: 'email', href: '/admin/email', label: 'Emails', icon: Mail, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },
+  { id: 'email-generator', href: '/admin/gerador-emails', label: 'Gerador E-mails', icon: MailPlus, tone: 'bg-yellow-600/20 border-yellow-500/35 hover:bg-yellow-600/30', iconTone: 'text-yellow-300' },
   { id: 'zoho-config', href: '/admin/zoho-config', label: 'Zoho Config', icon: ShieldCheck, tone: 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30', iconTone: 'text-purple-400' },
   { id: 'loans', href: '/admin/loans', label: 'Empréstimos', emoji: '💳', tone: 'bg-violet-600/20 border-violet-500/30 hover:bg-violet-600/30' },
   { id: 'cartoes-users', href: '/admin/cartoes-users', label: 'Cartões', emoji: '🃏', tone: 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30' },
