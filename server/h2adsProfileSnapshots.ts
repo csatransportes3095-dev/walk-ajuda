@@ -84,7 +84,9 @@ export async function storeH2AdsProfileSnapshot(input: {
   const run = await db.select({ state: h2AdsInstanceBrowserRuns.state }).from(h2AdsInstanceBrowserRuns).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, input.instanceId), eq(h2AdsInstanceBrowserRuns.workerId, input.workerId))).limit(1);
   if (run[0]?.state === "browser_open") throw new Error("Snapshot bloqueado enquanto o browser está aberto.");
 
-  const key = `${SNAPSHOT_PREFIX}instance-${input.instanceId}/latest.h2p.enc`;
+  const nextVersion = Math.max(assignment.profileVersion || 0, 0) + 1;
+  const previousKey = assignment.snapshotKey;
+  const key = `${SNAPSHOT_PREFIX}instance-${input.instanceId}/v${nextVersion}-${randomBytes(6).toString("hex")}.h2p.enc`;
   const iv = randomBytes(SNAPSHOT_IV_BYTES);
   const encryptor = new EncryptAndHashTransform(getSnapshotEncryptionKey(), iv);
   const encrypted = new PassThrough();
@@ -102,7 +104,7 @@ export async function storeH2AdsProfileSnapshot(input: {
 
     await db.update(h2AdsInstanceWorkerAssignments).set({
       profileState: "snapshot_ready",
-      profileVersion: Math.max(assignment.profileVersion || 0, 0) + 1,
+      profileVersion: nextVersion,
       snapshotKey: key,
       integrityHash: actualHash,
       snapshotSizeBytes: input.plainBytes,
@@ -110,6 +112,7 @@ export async function storeH2AdsProfileSnapshot(input: {
       updatedAt: new Date(),
     }).where(eq(h2AdsInstanceWorkerAssignments.id, assignment.id));
 
+    if (previousKey && previousKey !== key) await r2DeleteObjects([previousKey]).catch(() => undefined);
     return { key, bytes: input.plainBytes, sha256: actualHash };
   } catch (error) {
     encrypted.destroy(error as Error);
