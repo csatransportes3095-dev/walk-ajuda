@@ -36,7 +36,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
     const session = read("workers/windows/browser-session.mjs");
-    expect(script).toContain('$AgentVersion = "1.3.5"');
+    expect(script).toContain('$AgentVersion = "1.3.6"');
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
@@ -78,6 +78,28 @@ describe("fundação multi-Worker H2 Ads", () => {
       expect(runner.toLowerCase()).not.toContain(prohibited.toLowerCase());
       expect(session.toLowerCase()).not.toContain(prohibited.toLowerCase());
     }
+  });
+
+  it("bloqueia saída direta do Chrome dedicado antes da sessão", () => {
+    const script = read("workers/windows/H2AdsWorker.ps1");
+    const session = read("workers/windows/browser-session.mjs");
+    expect(script).toContain("DedicatedChromePath");
+    expect(script).toContain("Get-AuthenticodeSignature");
+    expect(script).toContain("New-NetFirewallRule");
+    expect(script).toContain("Direction Outbound");
+    expect(script).toContain("Action Block");
+    expect(script).toContain('RemoteAddress @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255")');
+    expect(script).toContain('RemoteAddress "::/0"');
+    expect(script).toContain("H2ADS_BROWSER_EXECUTABLE");
+    expect(script).toContain("Execute a atualização do Worker como Administrador");
+    expect(session).toContain('directBrowserEgress: "blocked_by_windows_firewall"');
+    expect(session).toContain('const browserExecutable = process.env.H2ADS_BROWSER_EXECUTABLE');
+    expect(session).toContain("KILL_SWITCH_CHECK_INTERVAL_MS = 5_000");
+    expect(session).toContain("triggerKillSwitch");
+    expect(session).toContain("taskkill.exe");
+    expect(session).toContain("--disable-quic");
+    expect(session).toContain("--dns-prefetch-disable");
+    expect(session).toContain("--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
   });
 
   it("mantém a fila de preparação em tabelas H2 Ads idempotentes e isoladas", () => {
