@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "1.3.5"
+$AgentVersion = "1.3.6"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -16,6 +16,10 @@ $SessionRunnerPath = Join-Path $WorkerDirectory "browser-session.mjs"
 $ProfilesDirectory = Join-Path $WorkerDirectory "profiles"
 $PackagePath = Join-Path $WorkerDirectory "package.json"
 $ProxyChainPackagePath = Join-Path $WorkerDirectory "node_modules\proxy-chain\package.json"
+$DedicatedBrowserDirectory = Join-Path $WorkerDirectory "browser\chrome"
+$DedicatedChromePath = Join-Path $DedicatedBrowserDirectory "chrome.exe"
+$FirewallRuleV4Name = "H2ADS Dedicated Chrome - Block Direct IPv4"
+$FirewallRuleV6Name = "H2ADS Dedicated Chrome - Block Direct IPv6"
 $TaskName = "H2 Ads Browser Worker"
 $ShortcutName = "Iniciar H2Ads Worker.lnk"
 $LauncherPath = Join-Path $WorkerDirectory "StartH2AdsWorker.vbs"
@@ -24,6 +28,65 @@ function Get-ComputerLabel {
   $name = $env:COMPUTERNAME
   if ([string]::IsNullOrWhiteSpace($name)) { throw "Não foi possível identificar este computador." }
   return $name.Trim()
+}
+
+function Test-IsAdministrator {
+  $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+  $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+  return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Get-SystemChromeExecutable {
+  $candidates = @(
+    (Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"),
+    $(if (${env:ProgramFiles(x86)}) { Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application\chrome.exe" }),
+    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe" })
+  ) | Where-Object { $_ -and (Test-Path $_) }
+  return $candidates | Select-Object -First 1
+}
+
+function Assert-GoogleChromeSignature([string]$Path) {
+  if (!(Test-Path $Path)) { throw "Chrome dedicado do H2ADS não está disponível." }
+  $signature = Get-AuthenticodeSignature -FilePath $Path
+  if ($signature.Status -ne "Valid") { throw "A assinatura do Chrome usado pelo H2ADS não pôde ser validada." }
+}
+
+function Ensure-DedicatedBrowser {
+  if (Test-Path $DedicatedChromePath) {
+    Assert-GoogleChromeSignature $DedicatedChromePath
+    return
+  }
+  $sourceChrome = Get-SystemChromeExecutable
+  if (!$sourceChrome) { throw "Google Chrome não está instalado neste Worker." }
+  Assert-GoogleChromeSignature $sourceChrome
+  $sourceDirectory = Split-Path $sourceChrome -Parent
+  if (Test-Path $DedicatedBrowserDirectory) { Remove-Item -Recurse -Force $DedicatedBrowserDirectory }
+  New-Item -ItemType Directory -Force -Path $DedicatedBrowserDirectory | Out-Null
+  Copy-Item -Path (Join-Path $sourceDirectory "*") -Destination $DedicatedBrowserDirectory -Recurse -Force
+  Assert-GoogleChromeSignature $DedicatedChromePath
+}
+
+function Test-H2AdsBrowserFirewall {
+  if (!(Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue)) { return $false }
+  foreach ($ruleName in @($FirewallRuleV4Name, $FirewallRuleV6Name)) {
+    $rule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq "True" -and $_.Direction -eq "Outbound" -and $_.Action -eq "Block" } | Select-Object -First 1
+    if (!$rule) { return $false }
+    $application = $rule | Get-NetFirewallApplicationFilter
+    if (!$application -or !([string]$application.Program).Equals($DedicatedChromePath, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+  }
+  return $true
+}
+
+function Ensure-H2AdsBrowserFirewall {
+  if (Test-H2AdsBrowserFirewall) { return }
+  if (!(Test-IsAdministrator)) {
+    throw "Firewall H2ADS obrigatório ausente. Execute a atualização do Worker como Administrador."
+  }
+  Get-NetFirewallRule -DisplayName $FirewallRuleV4Name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+  Get-NetFirewallRule -DisplayName $FirewallRuleV6Name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+  New-NetFirewallRule -DisplayName $FirewallRuleV4Name -Direction Outbound -Program $DedicatedChromePath -Action Block -Protocol Any -RemoteAddress @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255") -Profile Any -Enabled True | Out-Null
+  New-NetFirewallRule -DisplayName $FirewallRuleV6Name -Direction Outbound -Program $DedicatedChromePath -Action Block -Protocol Any -RemoteAddress "::/0" -Profile Any -Enabled True | Out-Null
+  if (!(Test-H2AdsBrowserFirewall)) { throw "O kill switch rígido do H2ADS não foi aplicado corretamente." }
 }
 
 function Read-PairingCode {
@@ -87,6 +150,8 @@ function Ensure-BrowserPreparationComponent([object]$Config) {
 function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $profileDirectory = Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)"
   if (!(Test-Path (Join-Path $profileDirectory "h2ads-profile.json"))) { throw "Perfil local não preparado." }
+  Ensure-DedicatedBrowser
+  Ensure-H2AdsBrowserFirewall
   $env:H2ADS_PANEL_URL = $Config.panelUrl
   $env:H2ADS_WORKER_KEY = $Config.workerKey
   $env:H2ADS_WORKER_TOKEN = Get-WorkerToken $Config
@@ -94,10 +159,11 @@ function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $env:H2ADS_COMMAND_ID = [string]$Payload.command.id
   $env:H2ADS_PROXY_JSON = ($Payload.proxy | ConvertTo-Json -Compress)
   $env:H2ADS_PROFILE_DIRECTORY = $profileDirectory
+  $env:H2ADS_BROWSER_EXECUTABLE = $DedicatedChromePath
   try {
     Start-Process -FilePath "node.exe" -ArgumentList "`"$SessionRunnerPath`"" -WindowStyle Hidden | Out-Null
   } finally {
-    Remove-Item Env:H2ADS_PANEL_URL, Env:H2ADS_WORKER_KEY, Env:H2ADS_WORKER_TOKEN, Env:H2ADS_INSTANCE_ID, Env:H2ADS_COMMAND_ID, Env:H2ADS_PROXY_JSON, Env:H2ADS_PROFILE_DIRECTORY -ErrorAction SilentlyContinue
+    Remove-Item Env:H2ADS_PANEL_URL, Env:H2ADS_WORKER_KEY, Env:H2ADS_WORKER_TOKEN, Env:H2ADS_INSTANCE_ID, Env:H2ADS_COMMAND_ID, Env:H2ADS_PROXY_JSON, Env:H2ADS_PROFILE_DIRECTORY, Env:H2ADS_BROWSER_EXECUTABLE -ErrorAction SilentlyContinue
   }
 }
 
@@ -130,6 +196,8 @@ function Get-WorkerErrorCategory([object]$ErrorRecord) {
   if ($message -like "*npm*") { return "npm_missing" }
   if ($message -like "*Perfil local*") { return "profile_missing" }
   if ($message -like "*relay local*") { return "relay_setup_failed" }
+  if ($message -like "*Firewall H2ADS*" -or $message -like "*kill switch rígido*") { return "hard_kill_switch_unavailable" }
+  if ($message -like "*Chrome dedicado*" -or $message -like "*Google Chrome*") { return "dedicated_browser_unavailable" }
   return "worker_execution_failed"
 }
 
@@ -243,6 +311,8 @@ function Acquire-WorkerMutex([object]$Config) {
 }
 
 if ($Install) {
+  if (!(Test-IsAdministrator)) { throw "Instale o H2ADS como Administrador para ativar o kill switch obrigatório." }
+  if (!(Get-SystemChromeExecutable)) { throw "Google Chrome não está instalado neste computador." }
   New-Item -ItemType Directory -Force -Path $WorkerDirectory | Out-Null
   $validatedPairingCode = Read-PairingCode
   $claimBody = @{ pairingCode = $validatedPairingCode; computerName = Get-ComputerLabel; agentVersion = $AgentVersion } | ConvertTo-Json -Compress
@@ -250,16 +320,19 @@ if ($Install) {
   $claimed = Invoke-RestMethod -Method Post -Uri "$($PanelUrl.TrimEnd('/'))/api/h2ads/worker/claim" -ContentType "application/json" -Body $claimBody
   Save-WorkerConfig $claimed
   Copy-Item -Path $PSCommandPath -Destination $InstalledScriptPath -Force
+  Ensure-DedicatedBrowser
+  Ensure-H2AdsBrowserFirewall
   Ensure-WorkerScheduledTask
   Ensure-BackgroundLauncher
   Ensure-DesktopShortcut
   Stop-ExistingWorkerProcesses
   Start-InstalledWorker
-  Write-Output "Worker H2 Ads pareado e iniciado."
+  Write-Output "Worker H2 Ads pareado com isolamento rígido e iniciado."
   exit 0
 }
 
 if ($Update) {
+  if (!(Test-IsAdministrator)) { throw "Atualize o H2ADS como Administrador para instalar/verificar o kill switch obrigatório." }
   if (!(Test-Path $ConfigPath)) { throw "Configuração do Worker não encontrada. Faça o pareamento primeiro." }
   $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
   $downloadPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1.download"
@@ -268,8 +341,10 @@ if ($Update) {
   Stop-ExistingWorkerProcesses
   Copy-Item -Path $downloadPath -Destination $InstalledScriptPath -Force
   Remove-Item -Force $downloadPath -ErrorAction SilentlyContinue
+  Ensure-DedicatedBrowser
+  Ensure-H2AdsBrowserFirewall
   Start-InstalledWorker
-  Write-Output "Agente H2 Ads atualizado para a versão publicada e iniciado."
+  Write-Output "Agente H2 Ads atualizado com isolamento rígido e iniciado."
   exit 0
 }
 
@@ -283,18 +358,18 @@ if ($Run) {
   Start-Sleep -Milliseconds 250
   $workerMutex = Acquire-WorkerMutex $config
   if ($null -eq $workerMutex) { exit 0 }
-$nextHeartbeatAt = Get-Date
-try {
-  while ($true) {
-    $now = Get-Date
-    if ($now -ge $nextHeartbeatAt) {
-      try { Invoke-WorkerHeartbeat $config } catch { }
-      $nextHeartbeatAt = $now.AddSeconds(20)
+  $nextHeartbeatAt = Get-Date
+  try {
+    while ($true) {
+      $now = Get-Date
+      if ($now -ge $nextHeartbeatAt) {
+        try { Invoke-WorkerHeartbeat $config } catch { }
+        $nextHeartbeatAt = $now.AddSeconds(20)
+      }
+      try { Invoke-PendingBrowserCommand $config } catch { }
+      Start-Sleep -Seconds 2
     }
-    try { Invoke-PendingBrowserCommand $config } catch { }
-    Start-Sleep -Seconds 2
-  }
-} finally {
+  } finally {
     try { $workerMutex.ReleaseMutex() } catch { }
     $workerMutex.Dispose()
   }
