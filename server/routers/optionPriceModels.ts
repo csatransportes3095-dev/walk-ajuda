@@ -9,6 +9,7 @@ export type OptionPriceModel = {
   label: string;
   price: string;
   originalPrice: string | null;
+  promoStartsAt: number | null;
   promoEndsAt: number | null;
   sortOrder: number;
   isActive: number;
@@ -98,7 +99,9 @@ async function listModels(optionIds: number[], onlyActive: boolean): Promise<Opt
   const idList = safeIds.join(",");
   const activeSql = onlyActive ? " AND m.isActive = 1" : "";
   const result = await db.execute(sql.raw(`
-    SELECT m.id, m.optionId, m.label, m.price, m.originalPrice, m.promoEndsAt, m.sortOrder, m.isActive,
+    SELECT m.id, m.optionId, m.label, m.price, m.originalPrice,
+           CASE WHEN COALESCE(TRIM(m.originalPrice), '') <> '' THEN UNIX_TIMESTAMP(m.updatedAt) * 1000 ELSE NULL END AS promoStartsAt,
+           m.promoEndsAt, m.sortOrder, m.isActive,
            m.createdAt, m.updatedAt, COALESCE(s.selectorLabel, 'Modelo / categoria') AS selectorLabel
     FROM optionPriceModels m
     LEFT JOIN optionPriceModelSettings s ON s.optionId = m.optionId
@@ -109,6 +112,7 @@ async function listModels(optionIds: number[], onlyActive: boolean): Promise<Opt
     ...row,
     id: Number(row.id),
     optionId: Number(row.optionId),
+    promoStartsAt: row.promoStartsAt == null ? null : Number(row.promoStartsAt),
     promoEndsAt: row.promoEndsAt == null ? null : Number(row.promoEndsAt),
     sortOrder: Number(row.sortOrder || 0),
     isActive: Number(row.isActive || 0),
@@ -124,6 +128,7 @@ async function listModels(optionIds: number[], onlyActive: boolean): Promise<Opt
       `);
       row.price = row.originalPrice;
       row.originalPrice = '';
+      row.promoStartsAt = null;
       row.promoEndsAt = null;
     }
   }
