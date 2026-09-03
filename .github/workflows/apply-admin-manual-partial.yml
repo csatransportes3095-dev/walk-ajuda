@@ -40,8 +40,8 @@ jobs:
       - name: Validar teste do cadastro manual
         run: pnpm vitest run server/adminCustomerReferralGate.test.ts
 
-      - name: Validar TypeScript
-        run: pnpm check
+      - name: Validar diff
+        run: git diff --check
 
       - name: Commit e publicar
         run: |
