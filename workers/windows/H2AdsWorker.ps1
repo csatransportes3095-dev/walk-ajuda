@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.4.1"
+$AgentVersion = "1.4.2"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -330,22 +330,23 @@ function Invoke-BrowserSession([object]$Config, [object]$Payload) {
 
 function Close-BrowserSession([object]$Config, [object]$Payload) {
   $instanceId = [int]$Payload.command.instanceId
-  $chromeProfileDirectory = Join-Path $ProfilesDirectory "instance-$instanceId"
-  $firefoxProfileDirectory = Join-Path $ProfilesDirectory "instance-$instanceId-firefox"
-  foreach ($profileDirectory in @($chromeProfileDirectory, $firefoxProfileDirectory)) {
-    $sessionPath = Join-Path $profileDirectory "h2ads-browser-session.json"
-    if (Test-Path $sessionPath) {
-      $session = Get-Content -Raw -Path $sessionPath | ConvertFrom-Json
-      if ($session.nodePid) {
-        $nodePid = [int]$session.nodePid
-        if (Get-Process -Id $nodePid -ErrorAction SilentlyContinue) { & taskkill.exe /PID $nodePid /T /F 1>$null 2>$null }
+  $engine = if ([string]$Payload.proxy.browserEngine -eq "firefox") { "firefox" } else { "chrome" }
+  $profileDirectory = if ($engine -eq "firefox") { Join-Path $ProfilesDirectory "instance-$instanceId-firefox" } else { Join-Path $ProfilesDirectory "instance-$instanceId" }
+  $sessionPath = Join-Path $profileDirectory "h2ads-browser-session.json"
+  if (Test-Path $sessionPath) {
+    $session = Get-Content -Raw -Path $sessionPath | ConvertFrom-Json
+    if ($session.nodePid) {
+      $nodePid = [int]$session.nodePid
+      $process = Get-CimInstance Win32_Process -Filter "ProcessId = $nodePid" -ErrorAction SilentlyContinue
+      if ($process -and [string]$process.CommandLine -like "*$SessionRunnerPath*") {
+        & taskkill.exe /PID $nodePid /T /F 1>$null 2>$null
       }
-      Remove-Item -Force $sessionPath -ErrorAction SilentlyContinue
     }
+    Remove-Item -Force $sessionPath -ErrorAction SilentlyContinue
   }
   $body = @{ command = "close_browser"; state = "closed" } | ConvertTo-Json -Compress
   Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($Payload.command.id)/result" -Headers (Get-WorkerHeaders $Config) -ContentType "application/json" -Body $body | Out-Null
-  Queue-H2AdsProfileSnapshot $instanceId
+  if ($engine -eq "chrome") { Queue-H2AdsProfileSnapshot $instanceId }
 }
 
 function Initialize-InstanceProfile([int]$InstanceId) {
