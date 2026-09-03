@@ -12,7 +12,9 @@ import WebSocket from "ws";
 const execFileAsync = promisify(execFile);
 const IP_CHECK_INTERVAL_MS = 10_000;
 const KILL_SWITCH_CHECK_INTERVAL_MS = 2_000;
-const NAVIGATION_GUARD_INTERVAL_MS = 1_000;
+const BROWSER_ROUTE_CHECK_INTERVAL_MS = 30_000;
+const BROWSER_ROUTE_PROBE_TIMEOUT_MS = 5_000;
+const BROWSER_ROUTE_PROBE_FAILURE_LIMIT = 3;
 const FIREFOX_BIDI_CONNECT_TIMEOUT_MS = 1_200;
 const FIREFOX_BIDI_STARTUP_TIMEOUT_MS = 12_000;
 const FIREFOX_GUARD_FAILURE_LIMIT = 3;
@@ -42,7 +44,7 @@ let browser;
 let rotationTimer;
 let ipTimer;
 let killSwitchTimer;
-let navigationGuardTimer;
+let browserRouteTimer;
 let rotationInProgress = false;
 let lastReportedIp = null;
 let ipCheckInProgress = false;
@@ -56,6 +58,8 @@ let firefoxBidiRequestId = 0;
 let firefoxNavigationGuardFailures = 0;
 let navigationGuardInProgress = false;
 let googleSorryBlockedCount = 0;
+let browserRouteCheckInProgress = false;
+let browserRouteProbeFailures = 0;
 const firefoxBidiPending = new Map();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -263,6 +267,189 @@ async function replaceChromeGoogleSorryTargets(targets, port) {
   return true;
 }
 
+
+const BROWSER_IP_PROBE_URL = "https://api.ipify.org?format=json";
+
+function parseBrowserIpPayload(value) {
+  if (typeof value !== "string" || value.length < 2 || value.length > 512) throw new Error("browser_route_probe_invalid_payload");
+  const data = JSON.parse(value);
+  if (typeof data?.ip !== "string" || data.ip.length < 3 || data.ip.length > 64) throw new Error("browser_route_probe_invalid_ip");
+  return data.ip.trim();
+}
+
+function browserIpProbeExpression() {
+  return `(async () => { const response = await fetch(${JSON.stringify(BROWSER_IP_PROBE_URL)}, { cache: "no-store" }); if (!response.ok) throw new Error("probe_http_" + response.status); return await response.text(); })()`;
+}
+
+async function sendChromeDevToolsCommand(target, method, params = {}, timeoutMs = BROWSER_ROUTE_PROBE_TIMEOUT_MS) {
+  const debuggerUrl = typeof target?.webSocketDebuggerUrl === "string" ? target.webSocketDebuggerUrl : "";
+  if (!debuggerUrl) throw new Error("browser_route_probe_chrome_debugger_unavailable");
+  return await new Promise((resolve, reject) => {
+    const socket = new WebSocket(debuggerUrl, { handshakeTimeout: Math.min(timeoutMs, 1_500) });
+    const id = 77;
+    const timer = setTimeout(() => {
+      try { socket.terminate(); } catch { }
+      reject(new Error("browser_route_probe_chrome_timeout"));
+    }, timeoutMs);
+    const fail = (error) => {
+      clearTimeout(timer);
+      try { socket.terminate(); } catch { }
+      reject(error instanceof Error ? error : new Error("browser_route_probe_chrome_failed"));
+    };
+    socket.once("error", fail);
+    socket.once("open", () => {
+      try { socket.send(JSON.stringify({ id, method, params })); } catch (error) { fail(error); }
+    });
+    socket.on("message", (data) => {
+      let message;
+      try { message = JSON.parse(String(data)); } catch { return; }
+      if (message?.id !== id) return;
+      clearTimeout(timer);
+      try { socket.terminate(); } catch { }
+      if (message.error) reject(new Error(String(message.error.message || "browser_route_probe_chrome_failed")));
+      else resolve(message.result);
+    });
+  });
+}
+
+async function getChromeLabelTarget() {
+  const portFile = join(profileDirectory, "DevToolsActivePort");
+  if (!existsSync(portFile)) throw new Error("browser_route_probe_chrome_port_unavailable");
+  const [portLine] = readFileSync(portFile, "utf8").split(/\r?\n/);
+  const port = Number(portLine);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("browser_route_probe_chrome_port_invalid");
+  const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1_500) });
+  if (!response.ok) throw new Error("browser_route_probe_chrome_targets_unavailable");
+  const targets = await response.json();
+  if (!Array.isArray(targets)) throw new Error("browser_route_probe_chrome_targets_invalid");
+  const labelUrl = pathToFileURL(labelPagePath).href;
+  const target = targets.find((item) => item?.type === "page" && item?.url === labelUrl)
+    || targets.find((item) => item?.type === "page" && item?.title === instanceWindowTitle)
+    || targets.find((item) => item?.type === "page");
+  if (!target) throw new Error("browser_route_probe_chrome_target_unavailable");
+  return target;
+}
+
+async function readChromeBrowserIp() {
+  const target = await getChromeLabelTarget();
+  const result = await sendChromeDevToolsCommand(target, "Runtime.evaluate", {
+    expression: browserIpProbeExpression(),
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  const exception = result?.exceptionDetails?.text || result?.exceptionDetails?.exception?.description;
+  if (exception) throw new Error("browser_route_probe_chrome_eval_failed");
+  return parseBrowserIpPayload(result?.result?.value);
+}
+
+function findFirefoxLabelContext(contexts) {
+  if (!Array.isArray(contexts)) return null;
+  const labelUrl = pathToFileURL(labelPagePath).href;
+  for (const context of contexts) {
+    if (context?.url === labelUrl || (typeof context?.url === "string" && context.url.includes("h2ads-instance-label.html"))) return context;
+    const child = findFirefoxLabelContext(context?.children);
+    if (child) return child;
+  }
+  for (const context of contexts) {
+    if (typeof context?.context === "string") return context;
+  }
+  return null;
+}
+
+async function readFirefoxBrowserIp() {
+  await connectFirefoxBidi();
+  const tree = await sendFirefoxBidiCommand("browsingContext.getTree", {}, 1_500);
+  const context = findFirefoxLabelContext(tree?.contexts);
+  if (!context?.context) throw new Error("browser_route_probe_firefox_context_unavailable");
+  const result = await sendFirefoxBidiCommand("script.evaluate", {
+    expression: browserIpProbeExpression(),
+    target: { context: context.context },
+    awaitPromise: true,
+    resultOwnership: "none",
+  }, BROWSER_ROUTE_PROBE_TIMEOUT_MS);
+  const remote = result?.result;
+  if (!remote || remote.type !== "string") throw new Error("browser_route_probe_firefox_eval_failed");
+  return parseBrowserIpPayload(remote.value);
+}
+
+async function readBrowserObservedIp() {
+  return browserEngine === "firefox" ? await readFirefoxBrowserIp() : await readChromeBrowserIp();
+}
+
+async function checkDirectHostIp() {
+  const { stdout } = await execFileAsync("curl.exe", ["--silent", "--show-error", "--fail", "--max-time", "15", BROWSER_IP_PROBE_URL], { windowsHide: true, timeout: 20_000, maxBuffer: 8_192 });
+  return parseBrowserIpPayload(stdout);
+}
+
+async function verifyBrowserRouteProof(expectedRelayIp = null) {
+  const relayIp = expectedRelayIp || await checkIp();
+  const browserIp = await readBrowserObservedIp();
+  let proof = "relay_ip_match";
+  let matchedRelayIp = relayIp;
+
+  if (browserIp !== relayIp) {
+    const secondRelayIp = await checkIp();
+    if (browserIp === secondRelayIp) {
+      proof = "relay_ip_match_second_sample";
+      matchedRelayIp = secondRelayIp;
+    } else {
+      const directHostIp = await checkDirectHostIp();
+      if (browserIp === directHostIp) {
+        writeSession({ browserRouteProof: "blocked", browserObservedIp: browserIp, browserRouteFailure: "direct_host_ip_detected", browserRouteCheckedAt: new Date().toISOString() });
+        throw new Error("browser_direct_ip_exposure");
+      }
+      proof = "isolated_proxy_variant";
+      matchedRelayIp = secondRelayIp;
+    }
+  }
+
+  writeSession({
+    browserRouteProof: proof,
+    browserObservedIp: browserIp,
+    relayObservedIp: matchedRelayIp,
+    browserRouteCheckedAt: new Date().toISOString(),
+    browserRouteProbeFailures: 0,
+  });
+  return { browserIp, relayIp: matchedRelayIp, proof };
+}
+
+async function waitForBrowserRouteProof(expectedRelayIp) {
+  const deadline = Date.now() + 15_000;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    if (!browser || browser.exitCode !== null) throw new Error("browser_route_probe_browser_exited");
+    try {
+      return await verifyBrowserRouteProof(expectedRelayIp);
+    } catch (error) {
+      if (error instanceof Error && error.message === "browser_direct_ip_exposure") throw error;
+      lastError = error;
+      await sleep(300);
+    }
+  }
+  throw new Error(lastError instanceof Error ? `browser_route_probe_unavailable:${lastError.message}` : "browser_route_probe_unavailable");
+}
+
+async function enforceBrowserRouteProof() {
+  if (!browser || browser.exitCode !== null || killSwitchTriggered || rotationInProgress || browserRouteCheckInProgress) return;
+  browserRouteCheckInProgress = true;
+  try {
+    await verifyBrowserRouteProof();
+    browserRouteProbeFailures = 0;
+  } catch (error) {
+    if (error instanceof Error && error.message === "browser_direct_ip_exposure") {
+      await triggerKillSwitch("browser_direct_ip_exposure");
+      return;
+    }
+    browserRouteProbeFailures += 1;
+    writeSession({ browserRouteProof: "degraded", browserRouteProbeFailures, browserRouteLastError: error instanceof Error ? error.message.slice(0, 160) : "unknown", browserRouteCheckedAt: new Date().toISOString() });
+    if (browserRouteProbeFailures >= BROWSER_ROUTE_PROBE_FAILURE_LIMIT) {
+      await triggerKillSwitch("browser_route_probe_unavailable");
+    }
+  } finally {
+    browserRouteCheckInProgress = false;
+  }
+}
+
 function upstreamUrl() {
   const protocol = proxy.protocol === "socks5" ? "socks5" : proxy.protocol === "https" ? "https" : "http";
   return `${protocol}://${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@${proxy.host}:${proxy.port}`;
@@ -383,7 +570,7 @@ async function triggerKillSwitch(reason = "proxy_path_unverified") {
   if (rotationTimer) clearInterval(rotationTimer);
   if (ipTimer) clearInterval(ipTimer);
   if (killSwitchTimer) clearInterval(killSwitchTimer);
-  if (navigationGuardTimer) clearInterval(navigationGuardTimer);
+  if (browserRouteTimer) clearInterval(browserRouteTimer);
   closeFirefoxBidi();
   writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: reason, killSwitchTriggeredAt: new Date().toISOString() });
   await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "blocked", errorCategory: reason }).catch(() => undefined);
@@ -544,7 +731,6 @@ async function run() {
       browser = spawn(executable, ["-profile", profileDirectory, "-new-instance", "--remote-debugging-port", String(firefoxRemotePort), labelPageUrl], { detached: false, stdio: "ignore", windowsHide: false });
       await waitForFirefoxNavigationGuard();
     } else {
-      const privacyGuardExtension = createGoogleSorryPrivacyGuard();
       browser = spawn(executable, [
         "--user-data-dir=" + profileDirectory,
         "--proxy-server=http://127.0.0.1:" + relayPort,
@@ -554,13 +740,13 @@ async function run() {
         "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
         "--remote-debugging-address=127.0.0.1",
         "--remote-debugging-port=0",
-        "--load-extension=" + privacyGuardExtension,
         "--no-first-run",
         "--no-default-browser-check",
         labelPageUrl,
       ], { detached: false, stdio: "ignore", windowsHide: false });
     }
-    writeSession({ startedAt: new Date().toISOString(), browserEngine, instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected", googleSorryPrivacyGuard: browserEngine === "chrome" ? "extension_plus_devtools_tab_guard" : "webdriver_bidi_tab_guard_plus_firewall_plus_route_guard", navigationGuard: "armed", firefoxRemotePort: browserEngine === "firefox" ? firefoxRemotePort : null, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
+    await waitForBrowserRouteProof(initialIp);
+    writeSession({ startedAt: new Date().toISOString(), browserEngine, instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected", googleSorryPrivacyGuard: "disabled_diagnostic_only", navigationGuard: "disabled", browserRouteGuard: "browser_native_ip_proof", firefoxRemotePort: browserEngine === "firefox" ? firefoxRemotePort : null, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
     if (rotationMinutes) {
       rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
       rotationTimer.unref?.();
@@ -571,14 +757,14 @@ async function run() {
     ipTimer.unref?.();
     killSwitchTimer = setInterval(() => { void enforceKillSwitch(); }, KILL_SWITCH_CHECK_INTERVAL_MS);
     killSwitchTimer.unref?.();
-    navigationGuardTimer = setInterval(() => { void enforceNavigationGuard(); }, NAVIGATION_GUARD_INTERVAL_MS);
-    navigationGuardTimer.unref?.();
+    browserRouteTimer = setInterval(() => { void enforceBrowserRouteProof(); }, BROWSER_ROUTE_CHECK_INTERVAL_MS);
+    browserRouteTimer.unref?.();
     browser.once("exit", async () => {
       try {
         if (rotationTimer) clearInterval(rotationTimer);
         if (ipTimer) clearInterval(ipTimer);
         if (killSwitchTimer) clearInterval(killSwitchTimer);
-        if (navigationGuardTimer) clearInterval(navigationGuardTimer);
+        if (browserRouteTimer) clearInterval(browserRouteTimer);
         closeFirefoxBidi();
         const manifestPath = join(profileDirectory, "h2ads-profile.json");
         const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
@@ -593,10 +779,10 @@ async function run() {
     if (rotationTimer) clearInterval(rotationTimer);
     if (ipTimer) clearInterval(ipTimer);
     if (killSwitchTimer) clearInterval(killSwitchTimer);
-    if (navigationGuardTimer) clearInterval(navigationGuardTimer);
+    if (browserRouteTimer) clearInterval(browserRouteTimer);
     closeFirefoxBidi();
     writeSession({ privacyGuard: "blocked", killSwitch: "triggered", privacyGuardFailureAt: new Date().toISOString(), privacyGuardFailure: error instanceof Error ? error.message.slice(0, 160) : "unknown" });
-    const category = error instanceof Error && error.message === "browser_not_found" ? "browser_not_found" : error instanceof Error && error.message.startsWith("privacy_guard_") ? "privacy_guard_blocked" : error instanceof Error && error.message.startsWith("firefox_navigation_guard_") ? "firefox_navigation_guard_unavailable" : "browser_launch_failed";
+    const category = error instanceof Error && error.message === "browser_not_found" ? "browser_not_found" : error instanceof Error && error.message === "browser_direct_ip_exposure" ? "browser_direct_ip_exposure" : error instanceof Error && error.message.startsWith("browser_route_probe_unavailable") ? "browser_route_probe_unavailable" : error instanceof Error && error.message.startsWith("privacy_guard_") ? "privacy_guard_blocked" : error instanceof Error && error.message.startsWith("firefox_navigation_guard_") ? "firefox_navigation_guard_unavailable" : "browser_launch_failed";
     await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "blocked", errorCategory: category }).catch(() => undefined);
     if (relay) await relay.close(true).catch(() => undefined);
     await terminateBrowserProcess();
