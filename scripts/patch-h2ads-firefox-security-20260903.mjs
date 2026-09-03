@@ -195,7 +195,7 @@ function Read-PairingCode {`
     const [portLine] = readFileSync(portFile, "utf8").split(/\\r?\\n/);
     const port = Number(portLine);
     if (!Number.isInteger(port) || port < 1 || port > 65535) return;
-    const response = await fetch(`http://127.0.0.1:\${port}/json/list`, { signal: AbortSignal.timeout(800) });
+    const response = await fetch("http://127.0.0.1:" + port + "/json/list", { signal: AbortSignal.timeout(800) });
     if (!response.ok) return;
     const targets = await response.json();
     const blocked = Array.isArray(targets) && targets.some((target) => {
@@ -210,9 +210,9 @@ function configureFirefoxProfile() {
   const preferences = [
     'user_pref("network.proxy.type", 1);',
     'user_pref("network.proxy.http", "127.0.0.1");',
-    `user_pref("network.proxy.http_port", \${relayPort});`,
+    'user_pref("network.proxy.http_port", ' + relayPort + ');',
     'user_pref("network.proxy.ssl", "127.0.0.1");',
-    `user_pref("network.proxy.ssl_port", \${relayPort});`,
+    'user_pref("network.proxy.ssl_port", ' + relayPort + ');',
     'user_pref("network.proxy.no_proxies_on", "localhost, 127.0.0.1");',
     'user_pref("media.peerconnection.enabled", false);',
     'user_pref("network.dns.disablePrefetch", true);',
@@ -238,15 +238,15 @@ function escapeHtml(value) {`
     } else {
       const privacyGuardExtension = createGoogleSorryPrivacyGuard();
       browser = spawn(executable, [
-        `--user-data-dir=\${profileDirectory}`,
-        `--proxy-server=http://127.0.0.1:\${relayPort}`,
+        "--user-data-dir=" + profileDirectory,
+        "--proxy-server=http://127.0.0.1:" + relayPort,
         "--proxy-bypass-list=<-loopback>",
         "--disable-quic",
         "--dns-prefetch-disable",
         "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
         "--remote-debugging-address=127.0.0.1",
         "--remote-debugging-port=0",
-        `--load-extension=\${privacyGuardExtension}`,
+        "--load-extension=" + privacyGuardExtension,
         "--no-first-run",
         "--no-default-browser-check",
         labelPageUrl,
