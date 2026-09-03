@@ -33,6 +33,12 @@ const STATUS_LABELS: Record<string, string> = {
 const keyFor = (registrationId: number, subOrderIndex: number) => `${registrationId}:${subOrderIndex}`;
 const statusLabel = (status?: string | null) => status ? (STATUS_LABELS[status] || status.replace(/_/g, " ")) : "Sem status";
 const customerInitial = (name?: string | null) => (name || "C").trim().charAt(0).toUpperCase() || "C";
+const normalizeGroupName = (value: string) => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .trim()
+  .toLocaleLowerCase("pt-BR")
+  .replace(/\s+/g, " ");
 
 export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, groups, onMoveGroup }: {
   instanceId: number;
@@ -100,11 +106,21 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
   const currentOrder = current ? orders.find(order => order.id === current.registrationId && (order.subOrderIndex ?? 0) === current.subOrderIndex) : undefined;
   const automaticGroup = resolveH2AdsAutomaticGroup(groups, currentOrder);
   const currentGroup = groups.find(group => group.id === currentGroupId);
+  const deliveredGroup = useMemo(() => groups.find(group => {
+    if (group.status !== "active") return false;
+    const name = normalizeGroupName(group.name);
+    return name === "entregue" || name === "entregues" || name === "grupo entregue" || name === "grupo entregues";
+  }) ?? null, [groups]);
   const moveAutomatic = () => {
     if (!currentOrder) { toast.error("Vincule um pedido antes de direcionar automaticamente."); return; }
     if (!automaticGroup) { toast.error("Não encontrei um grupo compatível com a opção/status deste pedido."); return; }
     if (automaticGroup.id === currentGroupId) { toast.info(`A instância já está em ${automaticGroup.name}.`); return; }
     onMoveGroup(automaticGroup.id);
+  };
+  const moveToDelivered = () => {
+    if (!deliveredGroup) { toast.error("Não encontrei um grupo ativo chamado ENTREGUE."); return; }
+    if (deliveredGroup.id === currentGroupId) { toast.info(`A instância já está em ${deliveredGroup.name}.`); return; }
+    onMoveGroup(deliveredGroup.id);
   };
 
   return <div className="mt-3 rounded-xl border border-violet-400/20 bg-violet-400/[0.04] p-3">
@@ -129,7 +145,7 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
 
     <div className="mt-3 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.05] p-2.5">
       <div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200">Grupo da instância</p><p className="mt-0.5 text-[11px] font-bold text-white">{currentGroup?.name || "Grupo atual"}</p></div>{automaticGroup && <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-1 text-[9px] font-black uppercase text-emerald-200">Auto: {automaticGroup.name}</span>}</div>
-      <div className="mt-2 grid grid-cols-2 gap-2"><button type="button" onClick={() => setGroupPickerOpen(value => !value)} className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-2 text-[10px] font-black text-slate-200">Trocar grupo</button><button type="button" onClick={moveAutomatic} disabled={!currentOrder} className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2 py-2 text-[10px] font-black text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40">Direcionar automático</button></div>
+      <div className="mt-2 grid grid-cols-2 gap-2"><button type="button" onClick={() => setGroupPickerOpen(value => !value)} className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-2 text-[10px] font-black text-slate-200">Trocar grupo</button><button type="button" onClick={moveAutomatic} disabled={!currentOrder} className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2 py-2 text-[10px] font-black text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40">Direcionar automático</button><button type="button" onClick={moveToDelivered} disabled={!deliveredGroup || deliveredGroup.id === currentGroupId} className="col-span-2 rounded-lg border border-emerald-400/35 bg-emerald-400/10 px-2 py-2 text-[10px] font-black text-emerald-100 disabled:cursor-not-allowed disabled:opacity-40">{deliveredGroup?.id === currentGroupId ? "JÁ ESTÁ EM ENTREGUE" : "MOVER PARA ENTREGUE"}</button></div>
       {groupPickerOpen && <div className="mt-2 grid gap-1 rounded-lg border border-white/10 bg-black/25 p-1.5">{groups.filter(group => group.status === "active").map(group => <button key={group.id} type="button" disabled={group.id === currentGroupId} onClick={() => { onMoveGroup(group.id); setGroupPickerOpen(false); }} className="rounded-md px-2 py-2 text-left text-[10px] font-bold text-slate-200 hover:bg-white/[0.06] disabled:cursor-default disabled:bg-emerald-400/10 disabled:text-emerald-200">{group.name}{group.id === currentGroupId ? " · atual" : ""}</button>)}</div>}
     </div>
 
