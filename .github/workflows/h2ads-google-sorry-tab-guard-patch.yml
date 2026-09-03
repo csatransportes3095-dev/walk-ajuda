@@ -1,0 +1,43 @@
+name: H2ADS Google Sorry Tab Guard Patch
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - scripts/patch-h2ads-google-sorry-tab-guard-20260903.py
+      - .github/workflows/h2ads-google-sorry-tab-guard-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Apply selective Google Sorry tab guard
+        run: python3 scripts/patch-h2ads-google-sorry-tab-guard-20260903.py
+
+      - name: Validate JavaScript syntax
+        run: node --check workers/windows/browser-session.mjs
+
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Commit patched H2ADS worker
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add workers/windows/browser-session.mjs
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "fix(h2ads): manter browser aberto ao bloquear Google Sorry"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
