@@ -394,7 +394,7 @@ export default function AdminCustomers() {
   const [csvImportResult, setCsvImportResult] = useState<{ imported: number; duplicates: number; errors: number; details: string[] } | null>(null);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
 
-  const adminCreateMut = trpc.customers.adminCreate.useMutation({
+  const adminCreateMut = trpc.customerUpdate.adminCreatePartial.useMutation({
     onSuccess: (data) => {
       if (data.success) {
         toast.success('Cliente cadastrado com sucesso!');
@@ -1922,7 +1922,7 @@ export default function AdminCustomers() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Nome completo *</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Nome completo</label>
                 <input
                   type="text"
                   value={createName}
@@ -1943,8 +1943,8 @@ export default function AdminCustomers() {
                 />
               </div>
               <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
-                <label className="block text-xs font-bold text-amber-200 mb-1">Telefone do indicador cadastrado *</label>
-                <p className="mb-2 text-[11px] leading-snug text-amber-100/70">Obrigatório para criar o cadastro. O sistema confere se o número já pertence a um cliente.</p>
+                <label className="block text-xs font-bold text-amber-200 mb-1">Telefone do indicador cadastrado (opcional)</label>
+                <p className="mb-2 text-[11px] leading-snug text-amber-100/70">Opcional no cadastro manual do ADM. Se informado, o sistema confere se o número pertence a um cliente.</p>
                 <input
                   type="tel"
                   value={createReferrerPhone}
@@ -1976,10 +1976,10 @@ export default function AdminCustomers() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Foto de perfil *</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Foto de perfil</label>
                 <input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if (file) handleCreatePhotoUpload(file); }} className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary/15 file:px-3 file:py-2 file:text-primary" />
                 {uploadingPhotoFor === -1 && <p className="mt-1 text-xs text-primary">Enviando foto...</p>}
-                {createPhotoUrl && <p className="mt-1 text-xs text-green-500">✓ Foto obrigatória enviada</p>}
+                {createPhotoUrl && <p className="mt-1 text-xs text-green-500">✓ Foto enviada</p>}
               </div>
               <div className="flex gap-2">
                 <div className="flex-1">
@@ -2014,19 +2014,14 @@ export default function AdminCustomers() {
                 <button
                   onClick={() => {
                     setCreateError('');
-                    if (!createName.trim()) { setCreateError('Nome é obrigatório'); return; }
                     if (createPhone.length < 10) { setCreateError('Telefone inválido (mínimo 10 dígitos)'); return; }
-                    if (createReferrerPhone.length < 10) { setCreateError('Informe o telefone válido do indicador cadastrado'); return; }
-                    if (createCpf.length !== 11) { setCreateError('CPF obrigatório e inválido'); return; }
-                    if (!/^\S+@\S+\.\S+$/.test(createEmail.trim())) { setCreateError('E-mail obrigatório e inválido'); return; }
-                    if (!createPhotoUrl) { setCreateError('Foto de perfil obrigatória'); return; }
                     adminCreateMut.mutate({
-                      name: createName.trim(),
+                      name: createName.trim() || undefined,
                       phone: createPhone,
-                      email: createEmail.trim(),
-                      cpf: createCpf,
-                      profilePhotoUrl: createPhotoUrl,
-                      referredByPhone: createReferrerPhone,
+                      email: createEmail.trim() || undefined,
+                      cpf: createCpf || undefined,
+                      profilePhotoUrl: createPhotoUrl || undefined,
+                      referredByPhone: createReferrerPhone || undefined,
                       city: createCity.trim() || undefined,
                       uf: createUf || undefined,
                     });

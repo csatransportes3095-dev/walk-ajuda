@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const root = path.resolve(process.cwd());
 const routerSource = fs.readFileSync(path.join(root, "server/routers.ts"), "utf8");
+const customerUpdateSource = fs.readFileSync(path.join(root, "server/routers/customerUpdate.ts"), "utf8");
 const customerPage = fs.readFileSync(path.join(root, "client/src/pages/AdminCustomers.tsx"), "utf8");
 
 describe("indicação obrigatória no cadastro manual e visual do ADM", () => {
@@ -18,11 +19,14 @@ describe("indicação obrigatória no cadastro manual e visual do ADM", () => {
     expect(customerPage).toContain("c.referredByPhone");
   });
 
-  it("exige telefone de indicador e reutiliza a regra central no cadastro manual", () => {
-    expect(routerSource).toContain("referredByPhone: z.string().regex(/^\\d{10,11}$/");
-    expect(routerSource).toContain("const restrictedAccessError = restrictedReferralAccessError(referral);");
-    expect(routerSource).toContain("Erro ao registrar indicação do cadastro manual");
-    expect(customerPage).toContain("Telefone do indicador cadastrado *");
-    expect(customerPage).toContain("referredByPhone: createReferrerPhone");
+  it("cadastro manual do ADM permite campos vazios e exige somente telefone", () => {
+    expect(customerUpdateSource).toContain("adminCreatePartial: adminProcedure");
+    expect(customerUpdateSource).toContain("phone: z.string().min(10).max(32)");
+    expect(customerPage).toContain("trpc.customerUpdate.adminCreatePartial.useMutation");
+    expect(customerPage).toContain("Telefone do indicador cadastrado (opcional)");
+    expect(customerPage).toContain("cpf: createCpf || undefined");
+    expect(customerPage).toContain("profilePhotoUrl: createPhotoUrl || undefined");
+    expect(customerPage).not.toContain("CPF obrigatório e inválido");
+    expect(customerPage).not.toContain("Foto de perfil obrigatória");
   });
 });

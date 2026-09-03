@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { isValidCPF } from "@shared/cpf";
 import { isRecoveredCustomerName } from "../../shared/customerProfile";
-import { publicProcedure, router } from "../_core/trpc";
+import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import {
   ensureCustomerIdentityInfrastructure,
@@ -213,6 +213,92 @@ export const customerUpdateRouter = router({
       const { url } = await storagePut(fileKey, buffer, mime);
       await db.execute(sql`UPDATE customers SET profilePhotoUrl=${url}, updatedAt=NOW() WHERE id=${customer.id}`);
       return { success: true, url };
+    }),
+
+  adminCreatePartial: adminProcedure
+    .input(z.object({
+      phone: z.string().min(10).max(32),
+      name: z.string().max(128).optional(),
+      email: z.string().max(320).optional(),
+      cpf: z.string().max(18).optional(),
+      city: z.string().max(128).optional(),
+      uf: z.string().max(2).optional(),
+      profilePhotoUrl: z.string().max(2048).optional(),
+      referredByPhone: z.string().max(32).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      await ensureCustomerIdentityInfrastructure(db);
+
+      const phone = normalizeCustomerPhone(input.phone);
+      if (!phone || !/^\d{10,11}$/.test(phone)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone inválido." });
+      }
+      const duplicate = await findMainCustomerByIdentity({ phone }, db);
+      if (duplicate) {
+        throw new TRPCError({ code: "CONFLICT", message: "Este telefone já identifica outro cadastro." });
+      }
+
+      const email = input.email?.trim() ? normalizeCustomerEmail(input.email) : "";
+      if (input.email?.trim() && !email) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
+      }
+      const cpf = input.cpf?.trim() ? normalizeCustomerCpf(input.cpf) : "";
+      if (input.cpf?.trim() && (!cpf || !isValidCPF(cpf))) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "CPF inválido." });
+      }
+      const uf = String(input.uf || "").trim().toUpperCase();
+      if (uf && !/^[A-Z]{2}$/.test(uf)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "UF inválida." });
+      }
+
+      if (cpf) {
+        const conflict = await findMainCustomerByIdentity({ cpf }, db);
+        if (conflict) throw new TRPCError({ code: "CONFLICT", message: "CPF já pertence a outro cadastro." });
+      }
+      if (email) {
+        const conflict = await findMainCustomerByIdentity({ email }, db);
+        if (conflict) throw new TRPCError({ code: "CONFLICT", message: "E-mail já pertence a outro cadastro." });
+      }
+
+      let referredBy = "";
+      const referredByPhone = input.referredByPhone?.trim() ? normalizeCustomerPhone(input.referredByPhone) : "";
+      if (input.referredByPhone?.trim()) {
+        if (!referredByPhone || !/^\d{10,11}$/.test(referredByPhone)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone do indicador inválido." });
+        }
+        const referrer = await findMainCustomerByIdentity({ phone: referredByPhone }, db);
+        if (!referrer) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone do indicador não encontrado no sistema." });
+        }
+        referredBy = String(referrer.name || "").trim();
+      }
+
+      const nextRows = await rows(db, sql`SELECT COALESCE(MAX(CASE WHEN customerNumber <> 99999 THEN customerNumber END), 451) + 1 AS nextNum FROM customers`);
+      const customerNumber = Number(nextRows[0]?.nextNum || 1);
+      const name = String(input.name || "").trim().replace(/\s+/g, " ") || "CADASTRO RECUPERADO";
+      const city = String(input.city || "").trim().replace(/\s+/g, " ");
+      const profilePhotoUrl = String(input.profilePhotoUrl || "").trim();
+
+      await db.execute(sql`
+        INSERT INTO customers (
+          customerNumber, name, phone, email, city, uf, cpf,
+          referredBy, referredByPhone, profilePhotoUrl
+        ) VALUES (
+          ${customerNumber}, ${name.toUpperCase()}, ${phone}, ${email || null},
+          ${city ? city.toUpperCase() : null}, ${uf || null}, ${cpf || null},
+          ${referredBy ? referredBy.toUpperCase() : null}, ${referredByPhone || null}, ${profilePhotoUrl || null}
+        )
+      `);
+
+      try {
+        await syncUnifiedCustomerRegistry();
+      } catch (error: any) {
+        console.warn('[customerUpdate.adminCreatePartial] sincronização unificada não aplicada:', error?.message);
+      }
+      const customer = await findMainCustomerByIdentity({ phone }, db);
+      return { success: true, customer, incomplete: customer ? missingFields(customer).length > 0 : true };
     }),
 
   save: publicProcedure
