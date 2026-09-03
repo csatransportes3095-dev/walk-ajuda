@@ -403,8 +403,6 @@ export default function AdminCustomers() {
         setCreateCpf(''); setCreateCity(''); setCreateUf(''); setCreatePhotoUrl(''); setCreateReferrerPhone('');
         setCreateError('');
         customersQuery.refetch();
-      } else {
-        setCreateError(data.message || 'Erro ao cadastrar cliente');
       }
     },
     onError: (e) => setCreateError(e.message || 'Erro ao cadastrar cliente'),
