@@ -54,9 +54,12 @@ let firefoxBidiReady = false;
 let firefoxBidiConnecting = null;
 let firefoxBidiRequestId = 0;
 let firefoxNavigationGuardFailures = 0;
+let navigationGuardInProgress = false;
+let googleSorryBlockedCount = 0;
 const firefoxBidiPending = new Map();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const googleSorryBlockedPageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>H2ADS · Página protegida</title><style>html,body{margin:0;min-height:100%;font-family:Arial,sans-serif;background:#0b1220;color:#e5eefc}main{min-height:100vh;display:grid;place-items:center;padding:32px;box-sizing:border-box}section{width:min(720px,100%);text-align:center;border:1px solid #23324d;border-radius:20px;padding:36px;background:#101b2e;box-sizing:border-box}small{color:#7dd3fc;font-weight:700;letter-spacing:.14em}h1{font-size:30px;margin:12px 0}p{color:#a9bad3;line-height:1.55;margin:0 auto;max-width:620px}.notice{margin-top:18px;border:1px solid #334155;background:#0b1526;border-radius:14px;padding:14px;color:#cbd5e1;font-size:14px;line-height:1.5}</style></head><body><main><section><small>H2ADS · PRIVACY GUARD</small><h1>Google recusou esta página</h1><p>A página de verificação foi removida desta aba para manter a sessão protegida.</p><div class="notice">O navegador continua aberto. O H2ADS não tenta contornar CAPTCHA ou bloqueios do Google. Use outro site ou aguarde antes de tentar novamente.</div></section></main></body></html>`)}`;
 
 function isGoogleSorryUrl(value) {
   return /^https?:\/\/(?:[^/]+\.)?google\.(?:com|com\.br)\/sorry(?:[/?#]|$)/i.test(typeof value === "string" ? value : "");
@@ -195,13 +198,69 @@ async function waitForFirefoxNavigationGuard() {
   throw new Error(lastError instanceof Error ? `firefox_navigation_guard_unavailable:${lastError.message}` : "firefox_navigation_guard_unavailable");
 }
 
-function firefoxContextContainsGoogleSorry(contexts) {
-  if (!Array.isArray(contexts)) return false;
+function collectFirefoxGoogleSorryContexts(contexts, output = []) {
+  if (!Array.isArray(contexts)) return output;
   for (const context of contexts) {
-    if (isGoogleSorryUrl(context?.url)) return true;
-    if (firefoxContextContainsGoogleSorry(context?.children)) return true;
+    if (isGoogleSorryUrl(context?.url) && typeof context?.context === "string") output.push(context.context);
+    collectFirefoxGoogleSorryContexts(context?.children, output);
   }
-  return false;
+  return output;
+}
+
+async function replaceFirefoxGoogleSorryContexts(contexts) {
+  const blockedContexts = collectFirefoxGoogleSorryContexts(contexts);
+  if (blockedContexts.length === 0) return false;
+  for (const context of blockedContexts) {
+    try {
+      await sendFirefoxBidiCommand("browsingContext.navigate", { context, url: googleSorryBlockedPageUrl, wait: "none" }, 1_500);
+    } catch {
+      await sendFirefoxBidiCommand("browsingContext.close", { context }, 1_200).catch(() => undefined);
+    }
+  }
+  googleSorryBlockedCount += blockedContexts.length;
+  writeSession({ googleSorryBlockedCount, googleSorryLastDetectedAt: new Date().toISOString(), googleSorryAction: "blocked_tab_replaced", privacyGuard: "protected", killSwitch: "armed" });
+  return true;
+}
+
+async function navigateChromeTargetToProtectedPage(target) {
+  const debuggerUrl = typeof target?.webSocketDebuggerUrl === "string" ? target.webSocketDebuggerUrl : "";
+  if (!debuggerUrl) throw new Error("chrome_target_debugger_unavailable");
+  await new Promise((resolve, reject) => {
+    const socket = new WebSocket(debuggerUrl, { handshakeTimeout: 1_000 });
+    const id = 1;
+    const timer = setTimeout(() => { try { socket.terminate(); } catch { } reject(new Error("chrome_navigation_guard_timeout")); }, 1_500);
+    const fail = (error) => { clearTimeout(timer); try { socket.terminate(); } catch { } reject(error instanceof Error ? error : new Error("chrome_navigation_guard_failed")); };
+    socket.once("error", fail);
+    socket.once("open", () => {
+      try { socket.send(JSON.stringify({ id, method: "Page.navigate", params: { url: googleSorryBlockedPageUrl } })); } catch (error) { fail(error); }
+    });
+    socket.on("message", (data) => {
+      let message;
+      try { message = JSON.parse(String(data)); } catch { return; }
+      if (message?.id !== id) return;
+      clearTimeout(timer);
+      try { socket.terminate(); } catch { }
+      if (message.error) reject(new Error(String(message.error.message || "chrome_navigation_guard_failed")));
+      else resolve();
+    });
+  });
+}
+
+async function replaceChromeGoogleSorryTargets(targets, port) {
+  const blockedTargets = Array.isArray(targets) ? targets.filter((target) => isGoogleSorryUrl(target?.url)) : [];
+  if (blockedTargets.length === 0) return false;
+  for (const target of blockedTargets) {
+    try {
+      await navigateChromeTargetToProtectedPage(target);
+    } catch {
+      if (typeof target?.id === "string") {
+        await fetch(`http://127.0.0.1:${port}/json/close/${encodeURIComponent(target.id)}`, { signal: AbortSignal.timeout(800) }).catch(() => undefined);
+      }
+    }
+  }
+  googleSorryBlockedCount += blockedTargets.length;
+  writeSession({ googleSorryBlockedCount, googleSorryLastDetectedAt: new Date().toISOString(), googleSorryAction: "blocked_tab_replaced", privacyGuard: "protected", killSwitch: "armed" });
+  return true;
 }
 
 function upstreamUrl() {
@@ -364,13 +423,14 @@ async function enforceKillSwitch() {
 }
 
 async function enforceNavigationGuard() {
-  if (!browser || browser.exitCode !== null || killSwitchTriggered) return;
+  if (!browser || browser.exitCode !== null || killSwitchTriggered || navigationGuardInProgress) return;
+  navigationGuardInProgress = true;
   try {
     if (browserEngine === "firefox") {
       await connectFirefoxBidi();
       const tree = await sendFirefoxBidiCommand("browsingContext.getTree", {}, 900);
       firefoxNavigationGuardFailures = 0;
-      if (firefoxContextContainsGoogleSorry(tree?.contexts)) await triggerKillSwitch("google_sorry_detected");
+      await replaceFirefoxGoogleSorryContexts(tree?.contexts);
       return;
     }
 
@@ -382,14 +442,16 @@ async function enforceNavigationGuard() {
     const response = await fetch("http://127.0.0.1:" + port + "/json/list", { signal: AbortSignal.timeout(800) });
     if (!response.ok) return;
     const targets = await response.json();
-    const blocked = Array.isArray(targets) && targets.some((target) => isGoogleSorryUrl(target?.url));
-    if (blocked) await triggerKillSwitch("google_sorry_detected");
+    await replaceChromeGoogleSorryTargets(targets, port);
   } catch {
-    if (browserEngine !== "firefox" || killSwitchTriggered) return;
-    firefoxNavigationGuardFailures += 1;
-    if (firefoxNavigationGuardFailures >= FIREFOX_GUARD_FAILURE_LIMIT) {
-      await triggerKillSwitch("firefox_navigation_guard_unavailable");
+    if (browserEngine === "firefox" && !killSwitchTriggered) {
+      firefoxNavigationGuardFailures += 1;
+      if (firefoxNavigationGuardFailures >= FIREFOX_GUARD_FAILURE_LIMIT) {
+        await triggerKillSwitch("firefox_navigation_guard_unavailable");
+      }
     }
+  } finally {
+    navigationGuardInProgress = false;
   }
 }
 
@@ -498,7 +560,7 @@ async function run() {
         labelPageUrl,
       ], { detached: false, stdio: "ignore", windowsHide: false });
     }
-    writeSession({ startedAt: new Date().toISOString(), browserEngine, instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected", googleSorryPrivacyGuard: browserEngine === "chrome" ? "extension_plus_devtools_guard" : "webdriver_bidi_guard_plus_firewall_plus_route_guard", navigationGuard: "armed", firefoxRemotePort: browserEngine === "firefox" ? firefoxRemotePort : null, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
+    writeSession({ startedAt: new Date().toISOString(), browserEngine, instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected", googleSorryPrivacyGuard: browserEngine === "chrome" ? "extension_plus_devtools_tab_guard" : "webdriver_bidi_tab_guard_plus_firewall_plus_route_guard", navigationGuard: "armed", firefoxRemotePort: browserEngine === "firefox" ? firefoxRemotePort : null, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
     if (rotationMinutes) {
       rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
       rotationTimer.unref?.();
