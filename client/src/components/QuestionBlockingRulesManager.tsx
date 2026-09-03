@@ -63,7 +63,13 @@ function parseRules(raw: unknown): Rule[] {
 
 export default function QuestionBlockingRulesManager() {
   const isAdminProducts = typeof window !== "undefined" && window.location.pathname.toLowerCase() === "/admin/products";
-  const { data: products = [] } = trpc.products.list.useQuery(undefined, { enabled: isAdminProducts });
+  const [open, setOpen] = useState(false);
+  const { data: products = [], refetch: refetchProducts } = trpc.products.list.useQuery(undefined, {
+    enabled: isAdminProducts,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
   const { data: settings } = trpc.settings.getAll.useQuery(undefined, { enabled: isAdminProducts });
   const utils = trpc.useUtils();
   const saveMutation = trpc.settings.update.useMutation({
@@ -74,7 +80,6 @@ export default function QuestionBlockingRulesManager() {
     onError: (error) => toast.error(error.message || "Erro ao salvar regras"),
   });
 
-  const [open, setOpen] = useState(false);
   const [rules, setRules] = useState<Rule[]>([]);
   const [questionId, setQuestionId] = useState<number | null>(null);
   const [answer, setAnswer] = useState("");
@@ -86,6 +91,19 @@ export default function QuestionBlockingRulesManager() {
     if (!settings) return;
     setRules(parseRules((settings as Record<string, string>)[SETTING_KEY]));
   }, [settings]);
+
+  // O editor de perguntas e este manifesto usam a mesma lista de produtos, mas o modal
+  // pode permanecer montado com um snapshot antigo. Ao abrir, força uma leitura nova e,
+  // enquanto estiver aberto, sincroniza a cada 1 segundo. Assim perguntas recém-criadas,
+  // editadas, copiadas ou removidas aparecem sem F5 e sem fechar o painel administrativo.
+  useEffect(() => {
+    if (!open || !isAdminProducts) return;
+    void refetchProducts();
+    const timer = window.setInterval(() => {
+      void refetchProducts();
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [open, isAdminProducts, refetchProducts]);
 
   const questions = useMemo<FlatQuestion[]>(() => {
     const result: FlatQuestion[] = [];
