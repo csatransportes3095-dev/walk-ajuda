@@ -135,7 +135,7 @@ export async function deleteH2AdsGroup(id: number): Promise<boolean> {
   const db = await requireH2AdsDb();
   const existing = await db.select({ id: h2AdsGroups.id }).from(h2AdsGroups).where(eq(h2AdsGroups.id, id)).limit(1);
   if (!existing[0]) return false;
-  const child = await db.select({ id: h2AdsInstances.id }).from(h2AdsGroups).where(eq(h2AdsInstances.groupId, id)).limit(1);
+  const child = await db.select({ id: h2AdsInstances.id }).from(h2AdsInstances).where(eq(h2AdsInstances.groupId, id)).limit(1);
   if (child[0]) throw new Error("Este grupo possui instâncias. Mova ou exclua as instâncias antes de apagar o grupo.");
   const deleted = await db.delete(h2AdsGroups).where(eq(h2AdsGroups.id, id));
   return Number(deleted[0].affectedRows) === 1;
