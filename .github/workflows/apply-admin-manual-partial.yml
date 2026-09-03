@@ -1,0 +1,56 @@
+name: Aplicar cadastro manual ADM parcial
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - scripts/patch-admin-manual-partial-20260903.mjs
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+          run_install: false
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Aplicar patch seguro
+        run: node scripts/patch-admin-manual-partial-20260903.mjs
+
+      - name: Validar teste do cadastro manual
+        run: pnpm vitest run server/adminCustomerReferralGate.test.ts
+
+      - name: Validar TypeScript
+        run: pnpm check
+
+      - name: Commit e publicar
+        run: |
+          if git diff --quiet; then
+            echo "Nenhuma alteração necessária."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminCustomers.tsx server/routers/customerUpdate.ts server/adminCustomerReferralGate.test.ts
+          git commit -m "fix(admin): permitir cadastro manual parcial"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
