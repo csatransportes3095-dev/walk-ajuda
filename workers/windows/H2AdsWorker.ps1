@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.4.0"
+$AgentVersion = "1.4.1"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -19,6 +19,7 @@ $ProfilesDirectory = Join-Path $WorkerDirectory "profiles"
 $SnapshotQueueDirectory = Join-Path $WorkerDirectory "snapshot-queue"
 $PackagePath = Join-Path $WorkerDirectory "package.json"
 $ProxyChainPackagePath = Join-Path $WorkerDirectory "node_modules\proxy-chain\package.json"
+$WsPackagePath = Join-Path $WorkerDirectory "node_modules\ws\package.json"
 $DedicatedBrowserDirectory = Join-Path $WorkerDirectory "browser\chrome"
 $DedicatedChromePath = Join-Path $DedicatedBrowserDirectory "chrome.exe"
 $DedicatedFirefoxDirectory = Join-Path $WorkerDirectory "browser\firefox"
@@ -200,10 +201,10 @@ function Ensure-BrowserPreparationComponent([object]$Config) {
   if (!(Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw "npm não está disponível neste Worker." }
   Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-runner.mjs" -OutFile $RunnerPath
   Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-session.mjs" -OutFile $SessionRunnerPath
-  @{ name = "h2ads-worker-local"; private = $true; type = "module"; dependencies = @{ "proxy-chain" = "3.0.0" } } | ConvertTo-Json -Compress | Set-Content -Path $PackagePath -Encoding UTF8 -NoNewline
-  if (!(Test-Path $ProxyChainPackagePath)) {
+  @{ name = "h2ads-worker-local"; private = $true; type = "module"; dependencies = @{ "proxy-chain" = "3.0.0"; "ws" = "8.21.3" } } | ConvertTo-Json -Compress | Set-Content -Path $PackagePath -Encoding UTF8 -NoNewline
+  if (!(Test-Path $ProxyChainPackagePath) -or !(Test-Path $WsPackagePath)) {
     & npm.cmd install --omit=dev --ignore-scripts --no-audit --no-fund --prefix $WorkerDirectory | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Não foi possível preparar o relay local deste Worker." }
+    if ($LASTEXITCODE -ne 0) { throw "Não foi possível preparar os componentes de proteção local deste Worker." }
   }
 }
 

@@ -3,14 +3,19 @@ import { execFile, spawn } from "node:child_process";
 import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:net";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { Server } from "proxy-chain";
+import WebSocket from "ws";
 
 const execFileAsync = promisify(execFile);
 const IP_CHECK_INTERVAL_MS = 10_000;
 const KILL_SWITCH_CHECK_INTERVAL_MS = 2_000;
 const NAVIGATION_GUARD_INTERVAL_MS = 1_000;
+const FIREFOX_BIDI_CONNECT_TIMEOUT_MS = 1_200;
+const FIREFOX_BIDI_STARTUP_TIMEOUT_MS = 12_000;
+const FIREFOX_GUARD_FAILURE_LIMIT = 3;
 const required = ["H2ADS_PANEL_URL", "H2ADS_WORKER_KEY", "H2ADS_WORKER_TOKEN", "H2ADS_INSTANCE_ID", "H2ADS_COMMAND_ID", "H2ADS_PROXY_JSON", "H2ADS_PROFILE_DIRECTORY", "H2ADS_BROWSER_EXECUTABLE"];
 if (required.some((key) => !process.env[key])) process.exit(2);
 
@@ -43,6 +48,161 @@ let lastReportedIp = null;
 let ipCheckInProgress = false;
 let killSwitchCheckInProgress = false;
 let killSwitchTriggered = false;
+let firefoxRemotePort = null;
+let firefoxBidiSocket = null;
+let firefoxBidiReady = false;
+let firefoxBidiConnecting = null;
+let firefoxBidiRequestId = 0;
+let firefoxNavigationGuardFailures = 0;
+const firefoxBidiPending = new Map();
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isGoogleSorryUrl(value) {
+  return /^https?:\/\/(?:[^/]+\.)?google\.(?:com|com\.br)\/sorry(?:[/?#]|$)/i.test(typeof value === "string" ? value : "");
+}
+
+async function allocateLoopbackPort() {
+  return await new Promise((resolve, reject) => {
+    const server = createServer();
+    server.unref();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = address && typeof address === "object" ? address.port : null;
+      server.close((error) => {
+        if (error) reject(error);
+        else if (!Number.isInteger(port) || port < 1 || port > 65535) reject(new Error("firefox_remote_port_unavailable"));
+        else resolve(port);
+      });
+    });
+  });
+}
+
+function rejectFirefoxBidiPending(error) {
+  for (const pending of firefoxBidiPending.values()) {
+    clearTimeout(pending.timer);
+    pending.reject(error);
+  }
+  firefoxBidiPending.clear();
+}
+
+function closeFirefoxBidi() {
+  const socket = firefoxBidiSocket;
+  firefoxBidiSocket = null;
+  firefoxBidiReady = false;
+  firefoxBidiConnecting = null;
+  rejectFirefoxBidiPending(new Error("firefox_bidi_closed"));
+  if (!socket) return;
+  try {
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.terminate();
+  } catch { }
+}
+
+function handleFirefoxBidiMessage(data) {
+  let message;
+  try { message = JSON.parse(String(data)); } catch { return; }
+  if (!Number.isInteger(message?.id)) return;
+  const pending = firefoxBidiPending.get(message.id);
+  if (!pending) return;
+  firefoxBidiPending.delete(message.id);
+  clearTimeout(pending.timer);
+  if (message.type === "error" || message.error) pending.reject(new Error(String(message.message || message.error || "firefox_bidi_error")));
+  else pending.resolve(message.result);
+}
+
+function sendFirefoxBidiCommand(method, params, timeoutMs = 1_000) {
+  const socket = firefoxBidiSocket;
+  if (!socket || socket.readyState !== WebSocket.OPEN) return Promise.reject(new Error("firefox_bidi_not_connected"));
+  const id = ++firefoxBidiRequestId;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      firefoxBidiPending.delete(id);
+      reject(new Error("firefox_bidi_timeout"));
+    }, timeoutMs);
+    firefoxBidiPending.set(id, { resolve, reject, timer });
+    try {
+      socket.send(JSON.stringify({ id, method, params }));
+    } catch (error) {
+      clearTimeout(timer);
+      firefoxBidiPending.delete(id);
+      reject(error);
+    }
+  });
+}
+
+async function connectFirefoxBidi() {
+  if (firefoxBidiReady && firefoxBidiSocket?.readyState === WebSocket.OPEN) return;
+  if (firefoxBidiConnecting) return firefoxBidiConnecting;
+  if (!Number.isInteger(firefoxRemotePort)) throw new Error("firefox_remote_port_unavailable");
+
+  firefoxBidiConnecting = new Promise((resolve, reject) => {
+    const socket = new WebSocket(`ws://127.0.0.1:${firefoxRemotePort}/session`, { handshakeTimeout: FIREFOX_BIDI_CONNECT_TIMEOUT_MS });
+    let opened = false;
+    const failBeforeOpen = (error) => {
+      if (opened) return;
+      try { socket.terminate(); } catch { }
+      reject(error instanceof Error ? error : new Error("firefox_bidi_connect_failed"));
+    };
+    socket.once("error", failBeforeOpen);
+    socket.once("open", async () => {
+      opened = true;
+      firefoxBidiSocket = socket;
+      socket.on("message", handleFirefoxBidiMessage);
+      socket.on("close", () => {
+        if (firefoxBidiSocket !== socket) return;
+        firefoxBidiSocket = null;
+        firefoxBidiReady = false;
+        rejectFirefoxBidiPending(new Error("firefox_bidi_disconnected"));
+      });
+      socket.on("error", () => undefined);
+      try {
+        await sendFirefoxBidiCommand("session.new", { capabilities: { alwaysMatch: {} } }, FIREFOX_BIDI_CONNECT_TIMEOUT_MS);
+        firefoxBidiReady = true;
+        resolve();
+      } catch (error) {
+        if (firefoxBidiSocket === socket) firefoxBidiSocket = null;
+        firefoxBidiReady = false;
+        try { socket.terminate(); } catch { }
+        reject(error);
+      }
+    });
+  });
+
+  try {
+    await firefoxBidiConnecting;
+  } finally {
+    firefoxBidiConnecting = null;
+  }
+}
+
+async function waitForFirefoxNavigationGuard() {
+  const deadline = Date.now() + FIREFOX_BIDI_STARTUP_TIMEOUT_MS;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    if (!browser || browser.exitCode !== null) throw new Error("firefox_browser_exited_before_guard");
+    try {
+      await connectFirefoxBidi();
+      const tree = await sendFirefoxBidiCommand("browsingContext.getTree", {}, FIREFOX_BIDI_CONNECT_TIMEOUT_MS);
+      if (Array.isArray(tree?.contexts)) return;
+      lastError = new Error("firefox_bidi_contexts_unavailable");
+    } catch (error) {
+      lastError = error;
+      closeFirefoxBidi();
+    }
+    await sleep(250);
+  }
+  throw new Error(lastError instanceof Error ? `firefox_navigation_guard_unavailable:${lastError.message}` : "firefox_navigation_guard_unavailable");
+}
+
+function firefoxContextContainsGoogleSorry(contexts) {
+  if (!Array.isArray(contexts)) return false;
+  for (const context of contexts) {
+    if (isGoogleSorryUrl(context?.url)) return true;
+    if (firefoxContextContainsGoogleSorry(context?.children)) return true;
+  }
+  return false;
+}
 
 function upstreamUrl() {
   const protocol = proxy.protocol === "socks5" ? "socks5" : proxy.protocol === "https" ? "https" : "http";
@@ -165,6 +325,7 @@ async function triggerKillSwitch(reason = "proxy_path_unverified") {
   if (ipTimer) clearInterval(ipTimer);
   if (killSwitchTimer) clearInterval(killSwitchTimer);
   if (navigationGuardTimer) clearInterval(navigationGuardTimer);
+  closeFirefoxBidi();
   writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: reason, killSwitchTriggeredAt: new Date().toISOString() });
   if (relay) await relay.close(true).catch(() => undefined);
   await terminateBrowserProcess();
@@ -202,8 +363,16 @@ async function enforceKillSwitch() {
 }
 
 async function enforceNavigationGuard() {
-  if (browserEngine !== "chrome" || !browser || browser.exitCode !== null || killSwitchTriggered) return;
+  if (!browser || browser.exitCode !== null || killSwitchTriggered) return;
   try {
+    if (browserEngine === "firefox") {
+      await connectFirefoxBidi();
+      const tree = await sendFirefoxBidiCommand("browsingContext.getTree", {}, 900);
+      firefoxNavigationGuardFailures = 0;
+      if (firefoxContextContainsGoogleSorry(tree?.contexts)) await triggerKillSwitch("google_sorry_detected");
+      return;
+    }
+
     const portFile = join(profileDirectory, "DevToolsActivePort");
     if (!existsSync(portFile)) return;
     const [portLine] = readFileSync(portFile, "utf8").split(/\r?\n/);
@@ -212,12 +381,15 @@ async function enforceNavigationGuard() {
     const response = await fetch("http://127.0.0.1:" + port + "/json/list", { signal: AbortSignal.timeout(800) });
     if (!response.ok) return;
     const targets = await response.json();
-    const blocked = Array.isArray(targets) && targets.some((target) => {
-      const url = typeof target?.url === "string" ? target.url : "";
-      return /^https?:\/\/(?:[^/]+\.)?google\.(?:com|com\.br)\/sorry(?:[/?#]|$)/i.test(url);
-    });
+    const blocked = Array.isArray(targets) && targets.some((target) => isGoogleSorryUrl(target?.url));
     if (blocked) await triggerKillSwitch("google_sorry_detected");
-  } catch { }
+  } catch {
+    if (browserEngine !== "firefox" || killSwitchTriggered) return;
+    firefoxNavigationGuardFailures += 1;
+    if (firefoxNavigationGuardFailures >= FIREFOX_GUARD_FAILURE_LIMIT) {
+      await triggerKillSwitch("firefox_navigation_guard_unavailable");
+    }
+  }
 }
 
 function configureFirefoxProfile() {
@@ -305,7 +477,9 @@ async function run() {
     const labelPageUrl = createInstanceLabelPage();
     if (browserEngine === "firefox") {
       configureFirefoxProfile();
-      browser = spawn(executable, ["-profile", profileDirectory, "-new-instance", labelPageUrl], { detached: false, stdio: "ignore", windowsHide: false });
+      firefoxRemotePort = await allocateLoopbackPort();
+      browser = spawn(executable, ["-profile", profileDirectory, "-new-instance", "--remote-debugging-port", String(firefoxRemotePort), labelPageUrl], { detached: false, stdio: "ignore", windowsHide: false });
+      await waitForFirefoxNavigationGuard();
     } else {
       const privacyGuardExtension = createGoogleSorryPrivacyGuard();
       browser = spawn(executable, [
@@ -323,7 +497,7 @@ async function run() {
         labelPageUrl,
       ], { detached: false, stdio: "ignore", windowsHide: false });
     }
-    writeSession({ startedAt: new Date().toISOString(), browserEngine, instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected", googleSorryPrivacyGuard: browserEngine === "chrome" ? "extension_plus_devtools_guard" : "firewall_plus_route_guard", navigationGuard: browserEngine === "chrome" ? "armed" : "not_applicable", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
+    writeSession({ startedAt: new Date().toISOString(), browserEngine, instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected", googleSorryPrivacyGuard: browserEngine === "chrome" ? "extension_plus_devtools_guard" : "webdriver_bidi_guard_plus_firewall_plus_route_guard", navigationGuard: "armed", firefoxRemotePort: browserEngine === "firefox" ? firefoxRemotePort : null, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
     if (rotationMinutes) {
       rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
       rotationTimer.unref?.();
@@ -334,16 +508,15 @@ async function run() {
     ipTimer.unref?.();
     killSwitchTimer = setInterval(() => { void enforceKillSwitch(); }, KILL_SWITCH_CHECK_INTERVAL_MS);
     killSwitchTimer.unref?.();
-    if (browserEngine === "chrome") {
-      navigationGuardTimer = setInterval(() => { void enforceNavigationGuard(); }, NAVIGATION_GUARD_INTERVAL_MS);
-      navigationGuardTimer.unref?.();
-    }
+    navigationGuardTimer = setInterval(() => { void enforceNavigationGuard(); }, NAVIGATION_GUARD_INTERVAL_MS);
+    navigationGuardTimer.unref?.();
     browser.once("exit", async () => {
       try {
         if (rotationTimer) clearInterval(rotationTimer);
         if (ipTimer) clearInterval(ipTimer);
         if (killSwitchTimer) clearInterval(killSwitchTimer);
         if (navigationGuardTimer) clearInterval(navigationGuardTimer);
+        closeFirefoxBidi();
         const manifestPath = join(profileDirectory, "h2ads-profile.json");
         const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
         writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: new Date().toISOString() }), "utf8");
@@ -358,8 +531,9 @@ async function run() {
     if (ipTimer) clearInterval(ipTimer);
     if (killSwitchTimer) clearInterval(killSwitchTimer);
     if (navigationGuardTimer) clearInterval(navigationGuardTimer);
-    writeSession({ privacyGuard: "blocked", killSwitch: "triggered", privacyGuardFailureAt: new Date().toISOString() });
-    const category = error instanceof Error && error.message === "browser_not_found" ? "browser_not_found" : error instanceof Error && error.message.startsWith("privacy_guard_") ? "privacy_guard_blocked" : "browser_launch_failed";
+    closeFirefoxBidi();
+    writeSession({ privacyGuard: "blocked", killSwitch: "triggered", privacyGuardFailureAt: new Date().toISOString(), privacyGuardFailure: error instanceof Error ? error.message.slice(0, 160) : "unknown" });
+    const category = error instanceof Error && error.message === "browser_not_found" ? "browser_not_found" : error instanceof Error && error.message.startsWith("privacy_guard_") ? "privacy_guard_blocked" : error instanceof Error && error.message.startsWith("firefox_navigation_guard_") ? "firefox_navigation_guard_unavailable" : "browser_launch_failed";
     await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "blocked", errorCategory: category }).catch(() => undefined);
     if (relay) await relay.close(true).catch(() => undefined);
     await terminateBrowserProcess();
