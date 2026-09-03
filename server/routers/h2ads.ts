@@ -27,6 +27,7 @@ import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyR
 import { h2AdsOrderLinkRouterPart } from "../h2adsOrderLinkRouter";
 import { setH2AdsOrderLink } from "../h2adsOrderLink";
 import { assignH2AdsInstanceWorkerPortable } from "../h2adsProfilePortability";
+import { setH2AdsBrowserEngine } from "../h2adsBrowserEngine";
 
 export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
 export const h2AdsInstanceStatusSchema = z.enum(["draft", "paused", "archived"]);
@@ -139,6 +140,7 @@ export const h2AdsPrepareBrowserSchema = z.object({
 
 export const h2AdsBrowserManualCommandSchema = z.object({
   instanceId: z.number().int().positive(),
+  engine: z.enum(["chrome", "firefox"]).optional(),
 }).strict();
 
 async function requireWritableGroup(groupId: number) {
@@ -204,6 +206,7 @@ export const h2AdsRouter = {
   launchBrowser: adminProcedure.input(h2AdsBrowserManualCommandSchema).mutation(async ({ input }) => {
     await requireConfigurableInstance(input.instanceId);
     try {
+      await setH2AdsBrowserEngine(input.instanceId, input.engine ?? "chrome");
       return { success: true, ...(await requestH2AdsBrowserLaunch(input.instanceId)) };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Não foi possível solicitar a abertura manual do browser.";

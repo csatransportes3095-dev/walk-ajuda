@@ -8,8 +8,9 @@ import { promisify } from "node:util";
 import { Server } from "proxy-chain";
 
 const execFileAsync = promisify(execFile);
-const IP_CHECK_INTERVAL_MS = 15_000;
-const KILL_SWITCH_CHECK_INTERVAL_MS = 5_000;
+const IP_CHECK_INTERVAL_MS = 10_000;
+const KILL_SWITCH_CHECK_INTERVAL_MS = 2_000;
+const NAVIGATION_GUARD_INTERVAL_MS = 1_000;
 const required = ["H2ADS_PANEL_URL", "H2ADS_WORKER_KEY", "H2ADS_WORKER_TOKEN", "H2ADS_INSTANCE_ID", "H2ADS_COMMAND_ID", "H2ADS_PROXY_JSON", "H2ADS_PROFILE_DIRECTORY", "H2ADS_BROWSER_EXECUTABLE"];
 if (required.some((key) => !process.env[key])) process.exit(2);
 
@@ -20,6 +21,7 @@ const instanceId = Number(process.env.H2ADS_INSTANCE_ID);
 const commandId = Number(process.env.H2ADS_COMMAND_ID);
 const profileDirectory = process.env.H2ADS_PROFILE_DIRECTORY;
 const browserExecutable = process.env.H2ADS_BROWSER_EXECUTABLE;
+const browserEngine = process.env.H2ADS_BROWSER_ENGINE === "firefox" ? "firefox" : "chrome";
 const proxy = JSON.parse(process.env.H2ADS_PROXY_JSON);
 const sessionPath = join(profileDirectory, "h2ads-browser-session.json");
 const labelPagePath = join(profileDirectory, "h2ads-instance-label.html");
@@ -35,6 +37,7 @@ let browser;
 let rotationTimer;
 let ipTimer;
 let killSwitchTimer;
+let navigationGuardTimer;
 let rotationInProgress = false;
 let lastReportedIp = null;
 let ipCheckInProgress = false;
@@ -50,7 +53,7 @@ function createRelay(port = 0) {
   return new Server({ host: "127.0.0.1", port, verbose: false, prepareRequestFunction: () => ({ upstreamProxyUrl: upstreamUrl() }) });
 }
 
-function chromeExecutable() {
+function selectedBrowserExecutable() {
   if (!browserExecutable || !existsSync(browserExecutable)) return undefined;
   return browserExecutable;
 }
@@ -161,6 +164,7 @@ async function triggerKillSwitch(reason = "proxy_path_unverified") {
   if (rotationTimer) clearInterval(rotationTimer);
   if (ipTimer) clearInterval(ipTimer);
   if (killSwitchTimer) clearInterval(killSwitchTimer);
+  if (navigationGuardTimer) clearInterval(navigationGuardTimer);
   writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: reason, killSwitchTriggeredAt: new Date().toISOString() });
   if (relay) await relay.close(true).catch(() => undefined);
   await terminateBrowserProcess();
@@ -195,6 +199,43 @@ async function enforceKillSwitch() {
   } finally {
     killSwitchCheckInProgress = false;
   }
+}
+
+async function enforceNavigationGuard() {
+  if (browserEngine !== "chrome" || !browser || browser.exitCode !== null || killSwitchTriggered) return;
+  try {
+    const portFile = join(profileDirectory, "DevToolsActivePort");
+    if (!existsSync(portFile)) return;
+    const [portLine] = readFileSync(portFile, "utf8").split(/\r?\n/);
+    const port = Number(portLine);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return;
+    const response = await fetch("http://127.0.0.1:" + port + "/json/list", { signal: AbortSignal.timeout(800) });
+    if (!response.ok) return;
+    const targets = await response.json();
+    const blocked = Array.isArray(targets) && targets.some((target) => {
+      const url = typeof target?.url === "string" ? target.url : "";
+      return /^https?:\/\/(?:[^/]+\.)?google\.(?:com|com\.br)\/sorry(?:[/?#]|$)/i.test(url);
+    });
+    if (blocked) await triggerKillSwitch("google_sorry_detected");
+  } catch { }
+}
+
+function configureFirefoxProfile() {
+  const preferences = [
+    'user_pref("network.proxy.type", 1);',
+    'user_pref("network.proxy.http", "127.0.0.1");',
+    'user_pref("network.proxy.http_port", ' + relayPort + ');',
+    'user_pref("network.proxy.ssl", "127.0.0.1");',
+    'user_pref("network.proxy.ssl_port", ' + relayPort + ');',
+    'user_pref("network.proxy.no_proxies_on", "localhost, 127.0.0.1");',
+    'user_pref("media.peerconnection.enabled", false);',
+    'user_pref("network.dns.disablePrefetch", true);',
+    'user_pref("network.predictor.enabled", false);',
+    'user_pref("network.prefetch-next", false);',
+    'user_pref("network.http.speculative-parallel-limit", 0);',
+    'user_pref("network.proxy.socks_remote_dns", true);',
+  ];
+  writeFileSync(join(profileDirectory, "user.js"), preferences.join("\n") + "\n", { encoding: "utf8", mode: 0o600 });
 }
 
 function escapeHtml(value) {
@@ -254,7 +295,7 @@ async function rotateRelay() {
 
 async function run() {
   try {
-    const executable = chromeExecutable();
+    const executable = selectedBrowserExecutable();
     if (!executable) throw new Error("browser_not_found");
     relay = createRelay();
     await relay.listen();
@@ -262,20 +303,27 @@ async function run() {
     const initialIp = await privacyGuardPreflight();
     lastReportedIp = initialIp;
     const labelPageUrl = createInstanceLabelPage();
-    const privacyGuardExtension = createGoogleSorryPrivacyGuard();
-    browser = spawn(executable, [
-      `--user-data-dir=${profileDirectory}`,
-      `--proxy-server=http://127.0.0.1:${relayPort}`,
-      "--proxy-bypass-list=<-loopback>",
-      "--disable-quic",
-      "--dns-prefetch-disable",
-      "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-      `--load-extension=${privacyGuardExtension}`,
-      "--no-first-run",
-      "--no-default-browser-check",
-      labelPageUrl,
-    ], { detached: false, stdio: "ignore", windowsHide: false });
-    writeSession({ startedAt: new Date().toISOString(), instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
+    if (browserEngine === "firefox") {
+      configureFirefoxProfile();
+      browser = spawn(executable, ["-profile", profileDirectory, "-new-instance", labelPageUrl], { detached: false, stdio: "ignore", windowsHide: false });
+    } else {
+      const privacyGuardExtension = createGoogleSorryPrivacyGuard();
+      browser = spawn(executable, [
+        "--user-data-dir=" + profileDirectory,
+        "--proxy-server=http://127.0.0.1:" + relayPort,
+        "--proxy-bypass-list=<-loopback>",
+        "--disable-quic",
+        "--dns-prefetch-disable",
+        "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+        "--remote-debugging-address=127.0.0.1",
+        "--remote-debugging-port=0",
+        "--load-extension=" + privacyGuardExtension,
+        "--no-first-run",
+        "--no-default-browser-check",
+        labelPageUrl,
+      ], { detached: false, stdio: "ignore", windowsHide: false });
+    }
+    writeSession({ startedAt: new Date().toISOString(), browserEngine, instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected", googleSorryPrivacyGuard: browserEngine === "chrome" ? "extension_plus_devtools_guard" : "firewall_plus_route_guard", navigationGuard: browserEngine === "chrome" ? "armed" : "not_applicable", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
     if (rotationMinutes) {
       rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
       rotationTimer.unref?.();
@@ -286,16 +334,21 @@ async function run() {
     ipTimer.unref?.();
     killSwitchTimer = setInterval(() => { void enforceKillSwitch(); }, KILL_SWITCH_CHECK_INTERVAL_MS);
     killSwitchTimer.unref?.();
+    if (browserEngine === "chrome") {
+      navigationGuardTimer = setInterval(() => { void enforceNavigationGuard(); }, NAVIGATION_GUARD_INTERVAL_MS);
+      navigationGuardTimer.unref?.();
+    }
     browser.once("exit", async () => {
       try {
         if (rotationTimer) clearInterval(rotationTimer);
         if (ipTimer) clearInterval(ipTimer);
         if (killSwitchTimer) clearInterval(killSwitchTimer);
+        if (navigationGuardTimer) clearInterval(navigationGuardTimer);
         const manifestPath = join(profileDirectory, "h2ads-profile.json");
         const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
         writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: new Date().toISOString() }), "utf8");
         await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "closed" });
-        await uploadProfileSnapshot().catch(() => undefined);
+        if (browserEngine === "chrome") await uploadProfileSnapshot().catch(() => undefined);
       } finally {
         if (relay) await relay.close(true).catch(() => undefined);
       }
@@ -304,6 +357,7 @@ async function run() {
     if (rotationTimer) clearInterval(rotationTimer);
     if (ipTimer) clearInterval(ipTimer);
     if (killSwitchTimer) clearInterval(killSwitchTimer);
+    if (navigationGuardTimer) clearInterval(navigationGuardTimer);
     writeSession({ privacyGuard: "blocked", killSwitch: "triggered", privacyGuardFailureAt: new Date().toISOString() });
     const category = error instanceof Error && error.message === "browser_not_found" ? "browser_not_found" : error instanceof Error && error.message.startsWith("privacy_guard_") ? "privacy_guard_blocked" : "browser_launch_failed";
     await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "blocked", errorCategory: category }).catch(() => undefined);

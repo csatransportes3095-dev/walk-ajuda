@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.3.8"
+$AgentVersion = "1.4.0"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -21,8 +21,12 @@ $PackagePath = Join-Path $WorkerDirectory "package.json"
 $ProxyChainPackagePath = Join-Path $WorkerDirectory "node_modules\proxy-chain\package.json"
 $DedicatedBrowserDirectory = Join-Path $WorkerDirectory "browser\chrome"
 $DedicatedChromePath = Join-Path $DedicatedBrowserDirectory "chrome.exe"
+$DedicatedFirefoxDirectory = Join-Path $WorkerDirectory "browser\firefox"
+$DedicatedFirefoxPath = Join-Path $DedicatedFirefoxDirectory "firefox.exe"
 $FirewallRuleV4Name = "H2ADS Dedicated Chrome - Block Direct IPv4"
 $FirewallRuleV6Name = "H2ADS Dedicated Chrome - Block Direct IPv6"
+$FirefoxFirewallRuleV4Name = "H2ADS Dedicated Firefox - Block Direct IPv4"
+$FirefoxFirewallRuleV6Name = "H2ADS Dedicated Firefox - Block Direct IPv6"
 $TaskName = "H2 Ads Browser Worker"
 $ShortcutName = "Iniciar H2Ads Worker.lnk"
 $LauncherPath = Join-Path $WorkerDirectory "StartH2AdsWorker.vbs"
@@ -46,6 +50,38 @@ function Get-SystemChromeExecutable {
     $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe" })
   ) | Where-Object { $_ -and (Test-Path $_) }
   return $candidates | Select-Object -First 1
+}
+
+function Get-SystemFirefoxExecutable {
+  $candidates = @(
+    (Join-Path $env:ProgramFiles "Mozilla Firefox\firefox.exe"),
+    $(if (${env:ProgramFiles(x86)}) { Join-Path ${env:ProgramFiles(x86)} "Mozilla Firefox\firefox.exe" }),
+    $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Mozilla Firefox\firefox.exe" })
+  ) | Where-Object { $_ -and (Test-Path $_) }
+  return $candidates | Select-Object -First 1
+}
+
+function Assert-MozillaFirefoxSignature([string]$Path) {
+  if (!(Test-Path $Path)) { throw "Firefox dedicado do H2ADS não está disponível." }
+  $signature = Get-AuthenticodeSignature -FilePath $Path
+  if ($signature.Status -ne "Valid" -or !$signature.SignerCertificate -or $signature.SignerCertificate.Subject -notmatch '(?i)Mozilla') {
+    throw "A assinatura do Firefox usado pelo H2ADS não pôde ser validada."
+  }
+}
+
+function Ensure-DedicatedFirefox {
+  if (Test-Path $DedicatedFirefoxPath) {
+    Assert-MozillaFirefoxSignature $DedicatedFirefoxPath
+    return
+  }
+  $sourceFirefox = Get-SystemFirefoxExecutable
+  if (!$sourceFirefox) { throw "Mozilla Firefox não está instalado neste Worker." }
+  Assert-MozillaFirefoxSignature $sourceFirefox
+  $sourceDirectory = Split-Path $sourceFirefox -Parent
+  if (Test-Path $DedicatedFirefoxDirectory) { Remove-Item -Recurse -Force $DedicatedFirefoxDirectory }
+  New-Item -ItemType Directory -Force -Path $DedicatedFirefoxDirectory | Out-Null
+  Copy-Item -Path (Join-Path $sourceDirectory "*") -Destination $DedicatedFirefoxDirectory -Recurse -Force
+  Assert-MozillaFirefoxSignature $DedicatedFirefoxPath
 }
 
 function Assert-GoogleChromeSignature([string]$Path) {
@@ -90,6 +126,27 @@ function Ensure-H2AdsBrowserFirewall {
   New-NetFirewallRule -DisplayName $FirewallRuleV4Name -Direction Outbound -Program $DedicatedChromePath -Action Block -Protocol Any -RemoteAddress @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255") -Profile Any -Enabled True | Out-Null
   New-NetFirewallRule -DisplayName $FirewallRuleV6Name -Direction Outbound -Program $DedicatedChromePath -Action Block -Protocol Any -RemoteAddress "Internet6" -Profile Any -Enabled True | Out-Null
   if (!(Test-H2AdsBrowserFirewall)) { throw "O kill switch rígido do H2ADS não foi aplicado corretamente." }
+}
+
+function Test-H2AdsFirefoxFirewall {
+  if (!(Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue)) { return $false }
+  foreach ($ruleName in @($FirefoxFirewallRuleV4Name, $FirefoxFirewallRuleV6Name)) {
+    $rule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq "True" -and $_.Direction -eq "Outbound" -and $_.Action -eq "Block" } | Select-Object -First 1
+    if (!$rule) { return $false }
+    $application = $rule | Get-NetFirewallApplicationFilter
+    if (!$application -or !([string]$application.Program).Equals($DedicatedFirefoxPath, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+  }
+  return $true
+}
+
+function Ensure-H2AdsFirefoxFirewall {
+  if (Test-H2AdsFirefoxFirewall) { return }
+  if (!(Test-IsAdministrator)) { throw "Firewall Firefox H2ADS obrigatório ausente. Atualize o Worker como Administrador." }
+  Get-NetFirewallRule -DisplayName $FirefoxFirewallRuleV4Name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+  Get-NetFirewallRule -DisplayName $FirefoxFirewallRuleV6Name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+  New-NetFirewallRule -DisplayName $FirefoxFirewallRuleV4Name -Direction Outbound -Program $DedicatedFirefoxPath -Action Block -Protocol Any -RemoteAddress @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255") -Profile Any -Enabled True | Out-Null
+  New-NetFirewallRule -DisplayName $FirefoxFirewallRuleV6Name -Direction Outbound -Program $DedicatedFirefoxPath -Action Block -Protocol Any -RemoteAddress "Internet6" -Profile Any -Enabled True | Out-Null
+  if (!(Test-H2AdsFirefoxFirewall)) { throw "O kill switch rígido do Firefox H2ADS não foi aplicado corretamente." }
 }
 
 function Read-PairingCode {
@@ -240,10 +297,20 @@ function Restore-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
 }
 
 function Invoke-BrowserSession([object]$Config, [object]$Payload) {
-  $profileDirectory = Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)"
-  if (!(Test-Path (Join-Path $profileDirectory "h2ads-profile.json"))) { throw "Perfil local não preparado." }
-  Ensure-DedicatedBrowser
-  Ensure-H2AdsBrowserFirewall
+  $engine = if ([string]$Payload.proxy.browserEngine -eq "firefox") { "firefox" } else { "chrome" }
+  $profileDirectory = if ($engine -eq "firefox") { Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)-firefox" } else { Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)" }
+  New-Item -ItemType Directory -Force -Path $profileDirectory | Out-Null
+  $manifestPath = Join-Path $profileDirectory "h2ads-profile.json"
+  if (!(Test-Path $manifestPath)) { @{ instanceId = [int]$Payload.command.instanceId; browserEngine = $engine; profileVersion = 1; createdAt = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json -Compress | Set-Content -Path $manifestPath -Encoding UTF8 -NoNewline }
+  if ($engine -eq "firefox") {
+    Ensure-DedicatedFirefox
+    Ensure-H2AdsFirefoxFirewall
+    $browserExecutable = $DedicatedFirefoxPath
+  } else {
+    Ensure-DedicatedBrowser
+    Ensure-H2AdsBrowserFirewall
+    $browserExecutable = $DedicatedChromePath
+  }
   $env:H2ADS_PANEL_URL = $Config.panelUrl
   $env:H2ADS_WORKER_KEY = $Config.workerKey
   $env:H2ADS_WORKER_TOKEN = Get-WorkerToken $Config
@@ -251,27 +318,29 @@ function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $env:H2ADS_COMMAND_ID = [string]$Payload.command.id
   $env:H2ADS_PROXY_JSON = ($Payload.proxy | ConvertTo-Json -Compress)
   $env:H2ADS_PROFILE_DIRECTORY = $profileDirectory
-  $env:H2ADS_BROWSER_EXECUTABLE = $DedicatedChromePath
+  $env:H2ADS_BROWSER_EXECUTABLE = $browserExecutable
+  $env:H2ADS_BROWSER_ENGINE = $engine
   try {
     Start-Process -FilePath "node.exe" -ArgumentList "`"$SessionRunnerPath`"" -WindowStyle Hidden | Out-Null
   } finally {
-    Remove-Item Env:H2ADS_PANEL_URL, Env:H2ADS_WORKER_KEY, Env:H2ADS_WORKER_TOKEN, Env:H2ADS_INSTANCE_ID, Env:H2ADS_COMMAND_ID, Env:H2ADS_PROXY_JSON, Env:H2ADS_PROFILE_DIRECTORY, Env:H2ADS_BROWSER_EXECUTABLE -ErrorAction SilentlyContinue
+    Remove-Item Env:H2ADS_PANEL_URL, Env:H2ADS_WORKER_KEY, Env:H2ADS_WORKER_TOKEN, Env:H2ADS_INSTANCE_ID, Env:H2ADS_COMMAND_ID, Env:H2ADS_PROXY_JSON, Env:H2ADS_PROFILE_DIRECTORY, Env:H2ADS_BROWSER_EXECUTABLE, Env:H2ADS_BROWSER_ENGINE -ErrorAction SilentlyContinue
   }
 }
 
 function Close-BrowserSession([object]$Config, [object]$Payload) {
   $instanceId = [int]$Payload.command.instanceId
-  $profileDirectory = Join-Path $ProfilesDirectory "instance-$instanceId"
-  $sessionPath = Join-Path $profileDirectory "h2ads-browser-session.json"
-  if (Test-Path $sessionPath) {
-    $session = Get-Content -Raw -Path $sessionPath | ConvertFrom-Json
-    if ($session.nodePid) {
-      $nodePid = [int]$session.nodePid
-      if (Get-Process -Id $nodePid -ErrorAction SilentlyContinue) {
-        & taskkill.exe /PID $nodePid /T /F 1>$null 2>$null
+  $chromeProfileDirectory = Join-Path $ProfilesDirectory "instance-$instanceId"
+  $firefoxProfileDirectory = Join-Path $ProfilesDirectory "instance-$instanceId-firefox"
+  foreach ($profileDirectory in @($chromeProfileDirectory, $firefoxProfileDirectory)) {
+    $sessionPath = Join-Path $profileDirectory "h2ads-browser-session.json"
+    if (Test-Path $sessionPath) {
+      $session = Get-Content -Raw -Path $sessionPath | ConvertFrom-Json
+      if ($session.nodePid) {
+        $nodePid = [int]$session.nodePid
+        if (Get-Process -Id $nodePid -ErrorAction SilentlyContinue) { & taskkill.exe /PID $nodePid /T /F 1>$null 2>$null }
       }
+      Remove-Item -Force $sessionPath -ErrorAction SilentlyContinue
     }
-    Remove-Item -Force $sessionPath -ErrorAction SilentlyContinue
   }
   $body = @{ command = "close_browser"; state = "closed" } | ConvertTo-Json -Compress
   Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($Payload.command.id)/result" -Headers (Get-WorkerHeaders $Config) -ContentType "application/json" -Body $body | Out-Null
@@ -295,6 +364,7 @@ function Get-WorkerErrorCategory([object]$ErrorRecord) {
   if ($message -like "*snapshot H2ADS*" -or $message -like "*Snapshot H2ADS*") { return "profile_snapshot_failed" }
   if ($message -like "*relay local*") { return "relay_setup_failed" }
   if ($message -like "*Firewall H2ADS*" -or $message -like "*kill switch rígido*") { return "hard_kill_switch_unavailable" }
+  if ($message -like "*Firefox dedicado*" -or $message -like "*Mozilla Firefox*") { return "firefox_unavailable" }
   if ($message -like "*Chrome dedicado*" -or $message -like "*Google Chrome*") { return "dedicated_browser_unavailable" }
   return "worker_execution_failed"
 }
@@ -462,6 +532,7 @@ if ($Install) {
   Copy-Item -Path $PSCommandPath -Destination $InstalledScriptPath -Force
   Ensure-DedicatedBrowser
   Ensure-H2AdsBrowserFirewall
+  if (Get-SystemFirefoxExecutable) { Ensure-DedicatedFirefox; Ensure-H2AdsFirefoxFirewall }
   Ensure-WorkerScheduledTask
   Ensure-BackgroundLauncher
   Ensure-DesktopShortcut
@@ -483,6 +554,7 @@ if ($Update) {
   Remove-Item -Force $downloadPath -ErrorAction SilentlyContinue
   Ensure-DedicatedBrowser
   Ensure-H2AdsBrowserFirewall
+  if (Get-SystemFirefoxExecutable) { Ensure-DedicatedFirefox; Ensure-H2AdsFirefoxFirewall }
   Start-InstalledWorker
   Write-Output "Agente H2 Ads atualizado com isolamento rígido e iniciado."
   exit 0

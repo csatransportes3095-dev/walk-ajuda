@@ -7,6 +7,7 @@ import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand,
 import { recordH2AdsRuntimeIp } from "./h2adsIpHistory";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 import { openH2AdsProfileSnapshot, recordH2AdsProfileRestoreResult, storeH2AdsProfileSnapshot } from "./h2adsProfileSnapshots";
+import { getH2AdsBrowserEngine } from "./h2adsBrowserEngine";
 
 const MAX_NAME_LENGTH = 128;
 const STALE_BROWSER_COMMAND_MS = 30_000;
@@ -235,9 +236,10 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       const proxy = decryptH2AdsProxy(encryptedPayload);
       const instance = await getH2AdsInstance(command.instanceId);
       const instanceName = workerString(instance?.name) ?? `Instância ${command.instanceId}`;
+      const browserEngine = await getH2AdsBrowserEngine(command.instanceId);
       res.status(200).json({
         command: { id: command.id, instanceId: command.instanceId, command: command.command },
-        proxy: { ...proxy, instanceName },
+        proxy: { ...proxy, instanceName, browserEngine },
       });
     } catch (_error) {
       if (command.command === "prepare_browser") await completeH2AdsWorkerPreparation({ workerId: worker.id, commandId: command.id, state: "blocked", errorCategory: "route_unavailable" });
