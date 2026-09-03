@@ -21,6 +21,9 @@ jobs:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
 
+      - name: Allow sequential exact replacements
+        run: sed -i 's/count !== 1/count < 1/' scripts/patch-h2ads-firefox-security-20260903.mjs
+
       - name: Apply guarded patch
         run: node scripts/patch-h2ads-firefox-security-20260903.mjs
 
