@@ -276,15 +276,16 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
     const instanceId = Number(req.params.instanceId);
-    const state = req.body?.state === "closed" || req.body?.state === "browser_open" ? req.body.state : null;
+    const state = req.body?.state === "closed" || req.body?.state === "browser_open" || req.body?.state === "blocked" ? req.body.state : null;
     const observedIp = workerString(req.body?.observedIp, 64);
-    if (!Number.isInteger(instanceId) || instanceId < 1 || !state || (state === "browser_open" && !observedIp)) {
+    const errorCategory = workerString(req.body?.errorCategory, 64);
+    if (!Number.isInteger(instanceId) || instanceId < 1 || !state || (state === "browser_open" && !observedIp) || (state === "blocked" && !errorCategory)) {
       res.status(400).json({ error: "Estado de execução inválido." });
       return;
     }
     const updated = state === "browser_open"
       ? await recordH2AdsRuntimeIp({ workerId: worker.id, instanceId, observedIp: observedIp! })
-      : await recordH2AdsBrowserRuntimeState({ workerId: worker.id, instanceId, state: "closed" });
+      : await recordH2AdsBrowserRuntimeState({ workerId: worker.id, instanceId, state, errorCategory });
     if (!updated) {
       res.status(409).json({ error: "Execução não disponível para este Worker." });
       return;

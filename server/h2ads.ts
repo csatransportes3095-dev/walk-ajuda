@@ -381,12 +381,12 @@ export async function completeH2AdsWorkerBrowserCommand(input: { workerId: numbe
   return true;
 }
 
-export async function recordH2AdsBrowserRuntimeState(input: { workerId: number; instanceId: number; state: "closed" }): Promise<boolean> {
+export async function recordH2AdsBrowserRuntimeState(input: { workerId: number; instanceId: number; state: "closed" | "blocked"; errorCategory?: string | null }): Promise<boolean> {
   const db = await requireH2AdsDb();
   const assignments = await db.select().from(h2AdsInstanceWorkerAssignments).where(and(eq(h2AdsInstanceWorkerAssignments.instanceId, input.instanceId), eq(h2AdsInstanceWorkerAssignments.workerId, input.workerId))).limit(1);
   if (!assignments[0]) return false;
   const runs = await db.select({ id: h2AdsInstanceBrowserRuns.id, state: h2AdsInstanceBrowserRuns.state }).from(h2AdsInstanceBrowserRuns).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, input.instanceId), eq(h2AdsInstanceBrowserRuns.workerId, input.workerId))).limit(1);
   if (!runs[0] || runs[0].state !== "browser_open") return false;
-  await db.update(h2AdsInstanceBrowserRuns).set({ state: "closed", lastErrorCategory: null, lastChangedAt: new Date() }).where(eq(h2AdsInstanceBrowserRuns.id, runs[0].id));
+  await db.update(h2AdsInstanceBrowserRuns).set({ state: input.state, lastErrorCategory: input.state === "blocked" ? (input.errorCategory ?? "runtime_blocked") : null, lastChangedAt: new Date() }).where(eq(h2AdsInstanceBrowserRuns.id, runs[0].id));
   return true;
 }

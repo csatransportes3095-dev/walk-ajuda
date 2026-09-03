@@ -327,6 +327,7 @@ async function triggerKillSwitch(reason = "proxy_path_unverified") {
   if (navigationGuardTimer) clearInterval(navigationGuardTimer);
   closeFirefoxBidi();
   writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: reason, killSwitchTriggeredAt: new Date().toISOString() });
+  await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "blocked", errorCategory: reason }).catch(() => undefined);
   if (relay) await relay.close(true).catch(() => undefined);
   await terminateBrowserProcess();
 }
@@ -520,7 +521,7 @@ async function run() {
         const manifestPath = join(profileDirectory, "h2ads-profile.json");
         const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
         writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: new Date().toISOString() }), "utf8");
-        await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "closed" });
+        if (!killSwitchTriggered) await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "closed" });
         if (browserEngine === "chrome") await uploadProfileSnapshot().catch(() => undefined);
       } finally {
         if (relay) await relay.close(true).catch(() => undefined);
