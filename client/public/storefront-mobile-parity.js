@@ -11,7 +11,7 @@
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
-      @media (min-width: 640px) {
+      @media (min-width: 640px) and (max-width: 1023px) {
         .${GRID_CLASS} {
           grid-template-columns: minmax(0, 430px) !important;
           justify-content: center !important;
@@ -25,7 +25,25 @@
           margin-left: auto !important;
           margin-right: auto !important;
         }
+      }
 
+      @media (min-width: 1024px) {
+        .${GRID_CLASS} {
+          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+          justify-content: stretch !important;
+          align-items: stretch !important;
+          width: 100% !important;
+        }
+
+        .${CARD_CLASS} {
+          width: 100% !important;
+          max-width: none !important;
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+        }
+      }
+
+      @media (min-width: 640px) {
         .${CARD_CLASS} .${PRICE_GRID_CLASS} {
           grid-template-columns: minmax(0, 1fr) !important;
         }
