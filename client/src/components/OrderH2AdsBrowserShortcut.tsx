@@ -3,7 +3,7 @@ import { Play, Plus, Square } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { resolveH2AdsOrderBrowserShortcutState, resolveH2AdsOrderLinkRepairCandidate } from "@shared/h2adsOrderBrowserShortcut";
-import { resolveH2AdsAutomaticGroup } from "@shared/h2adsGroupRouting";
+import { normalizeH2AdsRoutingText, resolveH2AdsAutomaticGroup } from "@shared/h2adsGroupRouting";
 
 export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderIndex, customerNumber, serviceName, serviceOption }: { registrationId: number; subOrderIndex: number; customerNumber?: number | null; serviceName?: string | null; serviceOption?: string | null }) {
   const utils = trpc.useUtils();
@@ -22,6 +22,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const ordersQuery = trpc.orderStatus.listOrders.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
   const launchBrowser = trpc.h2Ads.launchBrowser.useMutation();
   const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();
+  const updateInstance = trpc.h2Ads.updateInstance.useMutation();
   const setOrderLink = trpc.h2Ads.setOrderLink.useMutation();
   const createInstanceLinkedOrder = trpc.h2Ads.createInstanceLinkedOrder.useMutation();
 
@@ -30,6 +31,10 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const currentOrder = orders.find(order => order.id === registrationId && (order.subOrderIndex ?? 0) === subOrderIndex);
   const activeGroups = (dashboard?.groups ?? []).filter(group => group.status === "active");
   const automaticGroup = resolveH2AdsAutomaticGroup(activeGroups, currentOrder ?? { serviceName, serviceOption, latestStatus: null });
+  const deliveredGroup = activeGroups.find(group => {
+    const name = normalizeH2AdsRoutingText(group.name);
+    return name === "entregue" || name === "entregues" || name === "grupo entregue" || name === "grupo entregues";
+  }) ?? null;
 
   const shortcut = resolveH2AdsOrderBrowserShortcutState({
     registrationId,
@@ -40,6 +45,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     workers: (dashboard?.browserWorkers ?? []) as any[],
     runs: (dashboard?.instanceBrowserRuns ?? []) as any[],
   });
+  const linkedInstance = shortcut ? (dashboard?.instances ?? []).find(instance => instance.id === shortcut.instanceId) : undefined;
 
   const repairCandidate = shortcut ? null : resolveH2AdsOrderLinkRepairCandidate({
     registrationId,
@@ -51,7 +57,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     orders,
   });
 
-  const pending = launchBrowser.isPending || closeBrowser.isPending || setOrderLink.isPending || createInstanceLinkedOrder.isPending;
+  const pending = launchBrowser.isPending || closeBrowser.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrder.isPending;
 
   const refresh = async () => {
     await Promise.all([
@@ -131,6 +137,26 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     }
   };
 
+  const moveToDelivered = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!shortcut || pending) return;
+    if (!deliveredGroup) {
+      toast.error("Não encontrei um grupo H2ADS ativo chamado ENTREGUE.");
+      return;
+    }
+    if (linkedInstance?.groupId === deliveredGroup.id) {
+      toast.info(`A instância já está em ${deliveredGroup.name}.`);
+      return;
+    }
+    try {
+      await updateInstance.mutateAsync({ id: shortcut.instanceId, groupId: deliveredGroup.id });
+      toast.success(`Instância movida para ${deliveredGroup.name}.`);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível mover a instância para ENTREGUE.");
+    }
+  };
+
   const repairLink = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!repairCandidate || pending) return;
@@ -178,6 +204,12 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   }
 
   const statusTitle = shortcut.reason || (shortcut.state === "browser_open" ? "Browser H2ADS aberto" : "Browser H2ADS pronto");
+  const alreadyDelivered = Boolean(deliveredGroup && linkedInstance?.groupId === deliveredGroup.id);
+  const deliveredTitle = !deliveredGroup
+    ? "Crie um grupo H2ADS ativo chamado ENTREGUE para usar este atalho."
+    : alreadyDelivered
+      ? `A instância já está em ${deliveredGroup.name}.`
+      : `Mover esta instância para ${deliveredGroup.name}.`;
 
   return <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/35 bg-cyan-500/10 p-0.5" title={statusTitle} onClick={event => event.stopPropagation()}>
     <span className="px-1 text-[9px] font-black uppercase tracking-wide text-cyan-300">H2ADS</span>
@@ -198,6 +230,15 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       title={shortcut.canClose ? "Fechar browser da instância vinculada" : statusTitle}
     >
       <Square className="h-3 w-3" />FECHAR
+    </button>
+    <button
+      type="button"
+      onClick={moveToDelivered}
+      disabled={!deliveredGroup || alreadyDelivered || pending}
+      className="inline-flex items-center gap-1 rounded-full border border-teal-400/35 bg-teal-400/15 px-2 py-1 text-[9px] font-black text-teal-200 transition hover:bg-teal-400/25 disabled:cursor-not-allowed disabled:opacity-30"
+      title={deliveredTitle}
+    >
+      {alreadyDelivered ? "ENTREGUE ✓" : "ENTREGUE"}
     </button>
   </span>;
 }
