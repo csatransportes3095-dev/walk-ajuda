@@ -1,5 +1,5 @@
 import { Check, ChevronDown, ChevronUp, ShieldCheck, ShoppingCart, Tag } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
 
 export type StorefrontQuestion = {
@@ -23,7 +23,7 @@ export type StorefrontWarrantyTier = {
   originalPrice: string | null;
 };
 
-export type StorefrontPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; selectorLabel?: string | null; };
+export type StorefrontPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoStartsAt?: number | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; selectorLabel?: string | null; };
 
 export type StorefrontOption = {
   id: number;
@@ -79,6 +79,26 @@ function priceModelDiscount(model: StorefrontPriceModel) {
   return original > price && price > 0 ? Math.round(((original - price) / original) * 100) : 0;
 }
 
+function formatPromoDate(value: number | null | undefined) {
+  if (!value) return null;
+  return new Date(value).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatRemaining(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  if (days > 0) return `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
+  return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+}
+
 function shortText(value: string | null | undefined, limit = 172) {
   const text = String(value || "")
     .replace(/\r\n/g, "\n")
@@ -100,6 +120,7 @@ export function StorefrontProductCard({
   onAddToCart: (tier: StorefrontWarrantyTier | null, priceModel: StorefrontPriceModel | null) => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const tiers = item.option.warrantyTiers || [];
   const [tierId, setTierId] = useState<number | null>(tiers[0]?.id ?? null);
   const selectedTier = tiers.find((tier) => tier.id === tierId) || null;
@@ -109,7 +130,11 @@ export function StorefrontProductCard({
   const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;
   const requiresPriceModelSelection = priceModels.length > 0;
   const selectorLabel = priceModels[0]?.selectorLabel?.trim() || "Modelo / categoria";
-  const hasPriceModelPromotion = priceModels.some((model) => priceModelDiscount(model) > 0);
+  const promotionalModels = priceModels.filter((model) => priceModelDiscount(model) > 0);
+  const hasPriceModelPromotion = promotionalModels.length > 0;
+  const promoEndsAt = promotionalModels.map(model => model.promoEndsAt || 0).filter(Boolean).sort((a, b) => a - b)[0] || null;
+  const promoStartsAt = promotionalModels.map(model => model.promoStartsAt || 0).filter(Boolean).sort((a, b) => a - b)[0] || null;
+  const promoRemaining = promoEndsAt ? Math.max(0, promoEndsAt - now) : null;
   const effectivePrice = requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);
   const effectiveOriginalPrice = requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);
   const discount = useMemo(() => {
@@ -129,6 +154,12 @@ export function StorefrontProductCard({
   const glassBackground = cardBackground
     ? `linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(15,23,42,0.60) 42%, rgba(2,6,23,0.90) 100%), ${cardBackground}`
     : "linear-gradient(145deg, rgba(30,41,59,0.72) 0%, rgba(8,15,32,0.88) 48%, rgba(2,6,23,0.96) 100%)";
+
+  useEffect(() => {
+    if (!promoEndsAt) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [promoEndsAt]);
 
   const handlePriceModelSelect = async (nextId: number) => {
     const nextModel = priceModels.find(model => model.id === nextId);
@@ -199,6 +230,13 @@ export function StorefrontProductCard({
                   <span className="text-xs font-black uppercase tracking-wide text-rose-200">🔥 Promoção disponível neste produto</span>
                 </div>
                 <p className="mt-1 text-[11px] font-semibold leading-4 text-white/70">Escolha uma opção abaixo para revelar o valor promocional e a economia.</p>
+                {(promoStartsAt || promoEndsAt) && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/20 p-2 text-[10px] font-bold">
+                    <div><span className="block text-white/45">Início</span><span className="text-white/85">{formatPromoDate(promoStartsAt) || "Agora"}</span></div>
+                    <div><span className="block text-white/45">Fim</span><span className="text-rose-200">{formatPromoDate(promoEndsAt) || "Sem prazo"}</span></div>
+                    {promoRemaining !== null && <div className="col-span-2 rounded-lg border border-amber-300/20 bg-amber-300/[0.08] px-2 py-1.5 text-center text-[11px] font-black text-amber-200">⏱ Restam {formatRemaining(promoRemaining)}</div>}
+                  </div>
+                )}
               </div>
             )}
             <span className="mb-1.5 block text-xs font-bold text-cyan-200">{selectorLabel}</span>
@@ -207,6 +245,9 @@ export function StorefrontProductCard({
                 const isSelected = model.id === priceModelId;
                 const modelDiscount = priceModelDiscount(model);
                 const hasPromotion = modelDiscount > 0;
+                const modelStart = formatPromoDate(model.promoStartsAt);
+                const modelEnd = formatPromoDate(model.promoEndsAt);
+                const modelRemaining = model.promoEndsAt ? Math.max(0, model.promoEndsAt - now) : null;
                 return (
                   <button
                     key={model.id}
@@ -226,6 +267,8 @@ export function StorefrontProductCard({
                           <span className="block text-[10px] font-semibold text-white/45 line-through">{asMoney(model.originalPrice)}</span>
                           <span className="mt-0.5 block text-base font-black text-emerald-300">{asMoney(model.price)}</span>
                           <span className="mt-0.5 block text-[10px] font-black uppercase tracking-wide text-emerald-200">Economize {modelDiscount}%</span>
+                          {(modelStart || modelEnd) && <span className="mt-2 block border-t border-white/10 pt-2 text-[10px] font-bold leading-4 text-white/60">{modelStart ? `Início: ${modelStart}` : ""}{modelStart && modelEnd ? " · " : ""}{modelEnd ? `Fim: ${modelEnd}` : ""}</span>}
+                          {modelRemaining !== null && <span className="mt-1 block text-[10px] font-black text-amber-200">⏱ Restam {formatRemaining(modelRemaining)}</span>}
                         </span>
                       ) : <span className="mt-1 block">{asMoney(model.price)}</span>
                     ) : (
