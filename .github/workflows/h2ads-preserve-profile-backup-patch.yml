@@ -1,0 +1,42 @@
+name: H2ADS Preserve Profile Backup Patch
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - scripts/patch-h2ads-preserve-profile-backup-20260903.py
+      - .github/workflows/h2ads-preserve-profile-backup-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Apply profile backup preservation patch
+        run: python3 scripts/patch-h2ads-preserve-profile-backup-20260903.py
+
+      - name: Validate JavaScript and TypeScript touched files
+        run: |
+          node --check workers/windows/browser-session.mjs
+          git diff --check
+
+      - name: Commit patched H2ADS files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/h2ads.ts workers/windows/H2AdsWorker.ps1
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "fix(h2ads): preservar estado e versão do backup de perfil"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
