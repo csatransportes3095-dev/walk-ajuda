@@ -72,6 +72,13 @@ function asNumber(value: string | null | undefined) {
   return Number(String(value || "0").replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
 }
 
+function priceModelDiscount(model: StorefrontPriceModel) {
+  if (model.promoEndsAt && model.promoEndsAt <= Date.now()) return 0;
+  const original = asNumber(model.originalPrice);
+  const price = asNumber(model.price);
+  return original > price && price > 0 ? Math.round(((original - price) / original) * 100) : 0;
+}
+
 function shortText(value: string | null | undefined, limit = 172) {
   const text = String(value || "")
     .replace(/\r\n/g, "\n")
@@ -102,6 +109,7 @@ export function StorefrontProductCard({
   const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;
   const requiresPriceModelSelection = priceModels.length > 0;
   const selectorLabel = priceModels[0]?.selectorLabel?.trim() || "Modelo / categoria";
+  const hasPriceModelPromotion = priceModels.some((model) => priceModelDiscount(model) > 0);
   const effectivePrice = requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);
   const effectiveOriginalPrice = requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);
   const discount = useMemo(() => {
@@ -181,23 +189,48 @@ export function StorefrontProductCard({
 
         {priceModels.length > 0 && (
           <div className="mt-4">
+            {hasPriceModelPromotion && !selectedPriceModel && (
+              <div className="mb-3 overflow-hidden rounded-2xl border border-rose-400/45 bg-gradient-to-r from-rose-500/15 via-fuchsia-500/10 to-amber-400/10 p-3 shadow-[0_0_24px_rgba(244,63,94,0.18),inset_0_1px_0_rgba(255,255,255,0.10)]">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-3 w-3 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-60" />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-400" />
+                  </span>
+                  <span className="text-xs font-black uppercase tracking-wide text-rose-200">🔥 Promoção disponível neste produto</span>
+                </div>
+                <p className="mt-1 text-[11px] font-semibold leading-4 text-white/70">Escolha uma opção abaixo para revelar o valor promocional e a economia.</p>
+              </div>
+            )}
             <span className="mb-1.5 block text-xs font-bold text-cyan-200">{selectorLabel}</span>
             <div className="grid gap-2 sm:grid-cols-3">
               {priceModels.map((model) => {
                 const isSelected = model.id === priceModelId;
+                const modelDiscount = priceModelDiscount(model);
+                const hasPromotion = modelDiscount > 0;
                 return (
                   <button
                     key={model.id}
                     type="button"
                     aria-pressed={isSelected}
                     onClick={() => void handlePriceModelSelect(model.id)}
-                    className={`w-full rounded-xl border border-cyan-300/30 bg-slate-950/55 px-3 py-2.5 text-left text-sm font-black text-white outline-none transition-all focus:border-cyan-300 ${isSelected ? "border-cyan-300 ring-2 ring-cyan-300/30" : ""}`}
+                    className={`relative w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left text-sm font-black text-white outline-none transition-all focus:border-cyan-300 ${isSelected ? "border-cyan-300 bg-slate-950/70 ring-2 ring-cyan-300/30" : hasPromotion ? "border-rose-400/55 bg-gradient-to-br from-rose-500/12 via-slate-950/65 to-amber-400/8 shadow-[0_0_18px_rgba(244,63,94,0.15)] hover:border-rose-300/80" : "border-cyan-300/30 bg-slate-950/55 hover:border-cyan-300/55"}`}
                   >
+                    {!isSelected && hasPromotion && <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-rose-300 to-transparent shadow-[0_0_10px_rgba(251,113,133,0.9)]" />}
                     <span className="flex items-center justify-between gap-2">
                       <span>{model.label}</span>
-                      {isSelected && <Check className="h-4 w-4 shrink-0" />}
+                      {isSelected ? <Check className="h-4 w-4 shrink-0" /> : hasPromotion ? <span className="shrink-0 rounded-full border border-rose-300/40 bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-200">🔥 Promo</span> : null}
                     </span>
-                    <span className="mt-1 block">{asMoney(model.price)}</span>
+                    {isSelected ? (
+                      hasPromotion ? (
+                        <span className="mt-2 block rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] p-2">
+                          <span className="block text-[10px] font-semibold text-white/45 line-through">{asMoney(model.originalPrice)}</span>
+                          <span className="mt-0.5 block text-base font-black text-emerald-300">{asMoney(model.price)}</span>
+                          <span className="mt-0.5 block text-[10px] font-black uppercase tracking-wide text-emerald-200">Economize {modelDiscount}%</span>
+                        </span>
+                      ) : <span className="mt-1 block">{asMoney(model.price)}</span>
+                    ) : (
+                      <span className={`mt-1.5 block text-[10px] font-bold ${hasPromotion ? "text-rose-200" : "text-white/45"}`}>{hasPromotion ? "Toque para revelar a oferta" : "Toque para ver o valor"}</span>
+                    )}
                   </button>
                 );
               })}
