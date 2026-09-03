@@ -6,6 +6,7 @@ on:
       - recovery/organizar-salvos-2026-08-24
     paths:
       - scripts/patch-h2ads-firefox-navigation-guard-20260903.py
+      - .github/workflows/apply-h2ads-firefox-navigation-guard.yml
 
 permissions:
   contents: write
