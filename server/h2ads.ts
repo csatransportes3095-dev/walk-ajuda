@@ -25,8 +25,48 @@ async function requireH2AdsDb() {
   return db;
 }
 
+function h2AdsSnapshotVersionFromKey(snapshotKey: string | null | undefined): number | null {
+  const match = typeof snapshotKey === "string" ? snapshotKey.match(/\/v(\d+)-/i) : null;
+  if (!match) return null;
+  const version = Number(match[1]);
+  return Number.isInteger(version) && version > 0 ? version : null;
+}
+
+function hasVerifiedH2AdsSnapshot(assignment: { snapshotKey?: string | null; integrityHash?: string | null; snapshotSizeBytes?: number | null }): boolean {
+  return Boolean(
+    assignment.snapshotKey &&
+    assignment.integrityHash &&
+    /^[a-f0-9]{64}$/i.test(assignment.integrityHash) &&
+    assignment.snapshotSizeBytes &&
+    assignment.snapshotSizeBytes > 0,
+  );
+}
+
+async function repairH2AdsSnapshotProfileStates() {
+  const db = await requireH2AdsDb();
+  const rows = await db.select({
+    id: h2AdsInstanceWorkerAssignments.id,
+    profileState: h2AdsInstanceWorkerAssignments.profileState,
+    profileVersion: h2AdsInstanceWorkerAssignments.profileVersion,
+    snapshotKey: h2AdsInstanceWorkerAssignments.snapshotKey,
+    integrityHash: h2AdsInstanceWorkerAssignments.integrityHash,
+    snapshotSizeBytes: h2AdsInstanceWorkerAssignments.snapshotSizeBytes,
+  }).from(h2AdsInstanceWorkerAssignments).where(eq(h2AdsInstanceWorkerAssignments.profileState, "local_only"));
+
+  for (const assignment of rows) {
+    if (!hasVerifiedH2AdsSnapshot(assignment)) continue;
+    const snapshotVersion = h2AdsSnapshotVersionFromKey(assignment.snapshotKey);
+    await db.update(h2AdsInstanceWorkerAssignments).set({
+      profileState: "snapshot_ready",
+      profileVersion: Math.max(assignment.profileVersion || 0, snapshotVersion || 0, 1),
+      updatedAt: new Date(),
+    }).where(eq(h2AdsInstanceWorkerAssignments.id, assignment.id));
+  }
+}
+
 export async function listH2AdsDashboard(): Promise<H2AdsDashboard> {
   const db = await requireH2AdsDb();
+  await repairH2AdsSnapshotProfileStates();
   const [groups, instances, networkProfiles, proxyCredentialStatuses, browserWorkers, instanceWorkerAssignments, instanceBrowserRuns] = await Promise.all([
     db.select().from(h2AdsGroups).orderBy(asc(h2AdsGroups.sortOrder), asc(h2AdsGroups.id)),
     db.select().from(h2AdsInstances).orderBy(asc(h2AdsInstances.groupId), asc(h2AdsInstances.sortOrder), asc(h2AdsInstances.id)),
@@ -95,7 +135,7 @@ export async function deleteH2AdsGroup(id: number): Promise<boolean> {
   const db = await requireH2AdsDb();
   const existing = await db.select({ id: h2AdsGroups.id }).from(h2AdsGroups).where(eq(h2AdsGroups.id, id)).limit(1);
   if (!existing[0]) return false;
-  const child = await db.select({ id: h2AdsInstances.id }).from(h2AdsInstances).where(eq(h2AdsInstances.groupId, id)).limit(1);
+  const child = await db.select({ id: h2AdsInstances.id }).from(h2AdsGroups).where(eq(h2AdsInstances.groupId, id)).limit(1);
   if (child[0]) throw new Error("Este grupo possui instâncias. Mova ou exclua as instâncias antes de apagar o grupo.");
   const deleted = await db.delete(h2AdsGroups).where(eq(h2AdsGroups.id, id));
   return Number(deleted[0].affectedRows) === 1;
@@ -333,7 +373,24 @@ export async function completeH2AdsWorkerPreparation(input: { workerId: number; 
   await db.update(h2AdsWorkerCommands).set({ status: input.state === "proxy_verified" ? "succeeded" : "failed", errorCategory: input.errorCategory ?? null, completedAt: new Date() }).where(eq(h2AdsWorkerCommands.id, command.id));
   await upsertH2AdsBrowserRun(command.instanceId, input.workerId, { state: input.state, observedIp: input.observedIp ?? null, lastErrorCategory: input.errorCategory ?? null, preparedAt: input.state === "proxy_verified" ? new Date() : null });
   if (input.state === "proxy_verified") {
-    await db.update(h2AdsInstanceWorkerAssignments).set({ profileState: "local_only", profileVersion: 1, updatedAt: new Date() }).where(and(eq(h2AdsInstanceWorkerAssignments.instanceId, command.instanceId), eq(h2AdsInstanceWorkerAssignments.workerId, input.workerId)));
+    const assignments = await db.select({
+      id: h2AdsInstanceWorkerAssignments.id,
+      profileState: h2AdsInstanceWorkerAssignments.profileState,
+      profileVersion: h2AdsInstanceWorkerAssignments.profileVersion,
+      snapshotKey: h2AdsInstanceWorkerAssignments.snapshotKey,
+      integrityHash: h2AdsInstanceWorkerAssignments.integrityHash,
+      snapshotSizeBytes: h2AdsInstanceWorkerAssignments.snapshotSizeBytes,
+    }).from(h2AdsInstanceWorkerAssignments).where(and(eq(h2AdsInstanceWorkerAssignments.instanceId, command.instanceId), eq(h2AdsInstanceWorkerAssignments.workerId, input.workerId))).limit(1);
+    const assignment = assignments[0];
+    if (assignment) {
+      const hasSnapshot = hasVerifiedH2AdsSnapshot(assignment);
+      const snapshotVersion = h2AdsSnapshotVersionFromKey(assignment.snapshotKey);
+      await db.update(h2AdsInstanceWorkerAssignments).set({
+        profileState: hasSnapshot ? "snapshot_ready" : (assignment.profileState === "snapshot_ready" ? "snapshot_ready" : "local_only"),
+        profileVersion: Math.max(assignment.profileVersion || 0, hasSnapshot ? (snapshotVersion || 0) : 0, 1),
+        updatedAt: new Date(),
+      }).where(eq(h2AdsInstanceWorkerAssignments.id, assignment.id));
+    }
   }
   return true;
 }
