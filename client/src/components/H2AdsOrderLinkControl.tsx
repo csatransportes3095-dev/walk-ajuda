@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { canShowH2AdsOrderForLink, getExactH2AdsCustomerNumberSearch, matchesH2AdsOrderSearch, normalizeH2AdsOrderSearch } from "@shared/h2adsOrderSearch";
 import { resolveH2AdsAutomaticGroup } from "@shared/h2adsGroupRouting";
+import { formatH2AdsAppointmentDate, formatH2AdsAppointmentTime, h2AdsAppointmentSortValue } from "@shared/h2adsSchedule";
 
 type AdminOrder = {
   id: number;
@@ -15,6 +16,15 @@ type AdminOrder = {
   serviceName?: string | null;
   serviceOption?: string | null;
   latestStatus?: string | null;
+};
+
+type H2AdsAppointment = {
+  id: number;
+  registrationId: number;
+  subOrderIndex?: number | null;
+  status: string;
+  slotDate?: string | null;
+  slotTime?: string | null;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -56,6 +66,12 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
     refetchInterval: 15_000,
     refetchIntervalInBackground: false,
   });
+  const appointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, {
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
   const setLink = trpc.h2Ads.setOrderLink.useMutation({
     onSuccess: async (_, vars) => {
       toast.success(vars.registrationId === null ? "Vínculo do pedido removido." : "Cliente vinculado à instância.");
@@ -67,8 +83,19 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
 
   const links = linksQuery.data ?? [];
   const orders = (ordersQuery.data ?? []) as unknown as AdminOrder[];
+  const appointments = (appointmentsQuery.data ?? []) as unknown as H2AdsAppointment[];
   const current = links.find(link => link.instanceId === instanceId);
   const currentKey = current ? keyFor(current.registrationId, current.subOrderIndex) : "";
+  const currentAppointment = useMemo(() => {
+    if (!current) return undefined;
+    return appointments
+      .filter(appointment => Number(appointment.registrationId) === Number(current.registrationId)
+        && Number(appointment.subOrderIndex ?? 0) === Number(current.subOrderIndex)
+        && (appointment.status === "confirmed" || appointment.status === "pending"))
+      .sort((a, b) => Number(b.id) - Number(a.id))[0];
+  }, [appointments, current]);
+  const appointmentState = currentAppointment?.status === "confirmed" ? "confirmed" : currentAppointment?.status === "pending" ? "pending" : "none";
+  const appointmentSort = h2AdsAppointmentSortValue(currentAppointment);
   const normalizedSearch = normalizeH2AdsOrderSearch(search);
   const exactCustomerNumber = getExactH2AdsCustomerNumberSearch(search);
   const ownerByOrder = useMemo(() => new Map(links.map(link => [keyFor(link.registrationId, link.subOrderIndex), link.instanceId])), [links]);
@@ -124,6 +151,7 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
   };
 
   return <div className="mt-3 rounded-xl border border-violet-400/20 bg-violet-400/[0.04] p-3">
+    <div data-h2ads-schedule-marker data-h2ads-schedule-state={appointmentState} data-h2ads-schedule-sort={appointmentSort} className="hidden" aria-hidden="true" />
     <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-violet-200">Pedido vinculado</p><span className="text-[10px] font-bold text-slate-500">Sincronização automática</span></div>
     {current && <div className="mt-2 rounded-lg border border-white/8 bg-black/20 p-2 text-[10px]">
       <div className="flex items-center gap-3 border-b border-white/8 pb-2">
@@ -141,6 +169,14 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
         <div><p className="font-semibold text-slate-500">Produto</p><p className="mt-0.5 truncate font-bold text-slate-200" title={currentOrder?.serviceName || ""}>{currentOrder?.serviceName || "Não informado"}</p></div>
         <div><p className="font-semibold text-slate-500">Opção</p><p className="mt-0.5 truncate font-bold text-slate-200" title={currentOrder?.serviceOption || ""}>{currentOrder?.serviceOption || "Não informada"}</p></div>
       </div>
+      {currentAppointment?.status === "confirmed" && <div className="mt-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-2">
+        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-emerald-200">Agendamento confirmado</p>
+        <p className="mt-1 text-sm font-black text-white">{formatH2AdsAppointmentDate(currentAppointment.slotDate)} · {formatH2AdsAppointmentTime(currentAppointment.slotTime)}</p>
+      </div>}
+      {currentAppointment?.status === "pending" && <div className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-2.5 py-2">
+        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-200">Aguardando agendamento</p>
+        <p className="mt-1 text-[10px] font-bold text-slate-300">Cliente ainda não escolheu data e horário.</p>
+      </div>}
     </div>}
 
     <div className="mt-3 rounded-lg border border-cyan-400/20 bg-cyan-400/[0.05] p-2.5">
