@@ -1,10 +1,18 @@
 export const MAX_ORDER_UPLOAD_BYTES = 15 * 1024 * 1024;
+const TARGET_IMAGE_BYTES = 700 * 1024;
+const MAX_IMAGE_SIDE = 1280;
 
-type UploadErrorKind = "session" | "permission" | "file" | "network" | "server";
+export type UploadErrorKind = "session" | "permission" | "file" | "network" | "server";
+export type UploadProgressStage = "preparing" | "uploading" | "confirming" | "retrying" | "uploaded" | "failed";
 
 export type ReliableOrderUploadResult =
-  | { ok: true; url: string; fileKey: string; mimeType: string }
+  | { ok: true; url: string; fileKey: string; mimeType: string; storedBytes: number }
   | { ok: false; kind: UploadErrorKind; message: string };
+
+function emitUploadProgress(stage: UploadProgressStage, detail: Record<string, unknown> = {}) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("h2-order-upload-progress", { detail: { stage, ...detail } }));
+}
 
 function isPdf(file: File) {
   return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
@@ -38,51 +46,73 @@ async function readFileAsBase64(file: File): Promise<string> {
   }
 }
 
-async function compressImageForOrderUpload(file: File): Promise<File> {
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
-    const image = new Image();
-    const timeout = window.setTimeout(() => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("Tempo excedido ao preparar a imagem"));
-    }, 20_000);
-
-    image.onload = () => {
-      window.clearTimeout(timeout);
-      try {
-        const maxSide = 1600;
-        let { width, height } = image;
-        if (width > maxSide || height > maxSide) {
-          if (width >= height) { height = Math.round((height * maxSide) / width); width = maxSide; }
-          else { width = Math.round((width * maxSide) / height); height = maxSide; }
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext("2d");
-        if (!context) throw new Error("Canvas indisponível");
-        context.fillStyle = "#ffffff";
-        context.fillRect(0, 0, width, height);
-        context.drawImage(image, 0, 0, width, height);
-        canvas.toBlob((blob) => {
-          URL.revokeObjectURL(objectUrl);
-          if (!blob) { reject(new Error("Não foi possível preparar a imagem")); return; }
-          const name = (file.name.replace(/\.[^.]+$/, "") || "comprovante") + ".jpg";
-          resolve(new File([blob], name, { type: "image/jpeg" }));
-        }, "image/jpeg", 0.8);
-      } catch (error) {
-        URL.revokeObjectURL(objectUrl);
-        reject(error);
-      }
-    };
-    image.onerror = () => { window.clearTimeout(timeout); URL.revokeObjectURL(objectUrl); reject(new Error("Formato de imagem não pôde ser preparado")); };
-    image.src = objectUrl;
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Não foi possível compactar a imagem")), "image/jpeg", quality);
   });
 }
 
-/** Mantém PDF intacto e reduz imagens grandes antes de enviar por rede móvel. */
+async function compressImageForOrderUpload(file: File): Promise<File> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      const timeout = window.setTimeout(() => reject(new Error("Tempo excedido ao preparar a imagem")), 20_000);
+      img.onload = () => { window.clearTimeout(timeout); resolve(img); };
+      img.onerror = () => { window.clearTimeout(timeout); reject(new Error("Formato de imagem não pôde ser preparado")); };
+      img.src = objectUrl;
+    });
+
+    let width = image.naturalWidth || image.width;
+    let height = image.naturalHeight || image.height;
+    if (!width || !height) throw new Error("Dimensões da imagem inválidas");
+
+    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(width, height));
+    width = Math.max(1, Math.round(width * scale));
+    height = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas indisponível");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+
+    let quality = 0.74;
+    let blob = await canvasToBlob(canvas, quality);
+    while (blob.size > TARGET_IMAGE_BYTES && quality > 0.48) {
+      quality = Math.max(0.48, quality - 0.08);
+      blob = await canvasToBlob(canvas, quality);
+    }
+
+    if (blob.size > TARGET_IMAGE_BYTES && Math.max(width, height) > 1024) {
+      const shrink = 1024 / Math.max(width, height);
+      const smaller = document.createElement("canvas");
+      smaller.width = Math.max(1, Math.round(width * shrink));
+      smaller.height = Math.max(1, Math.round(height * shrink));
+      const smallerContext = smaller.getContext("2d");
+      if (!smallerContext) throw new Error("Canvas indisponível");
+      smallerContext.fillStyle = "#ffffff";
+      smallerContext.fillRect(0, 0, smaller.width, smaller.height);
+      smallerContext.drawImage(canvas, 0, 0, smaller.width, smaller.height);
+      blob = await canvasToBlob(smaller, 0.62);
+    }
+
+    const name = (file.name.replace(/\.[^.]+$/, "") || "comprovante") + ".jpg";
+    return new File([blob], name, { type: "image/jpeg", lastModified: Date.now() });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/**
+ * Imagens são convertidas para JPEG e reduzidas antes do envio para economizar tráfego e espaço no R2.
+ * PDF permanece intacto para não perder conteúdo/validade.
+ */
 export async function prepareOrderUploadFile(file: File): Promise<File> {
-  if (isPdf(file) || !isImage(file) || file.size <= 1.2 * 1024 * 1024) return file;
+  if (isPdf(file) || !isImage(file)) return file;
   try {
     const compressed = await compressImageForOrderUpload(file);
     return compressed.size > 0 && compressed.size < file.size ? compressed : file;
@@ -100,6 +130,7 @@ function failureFromStatus(status: number, message: string): ReliableOrderUpload
 
 /**
  * Único envio de arquivo de pedido para vitrine e Bot H2 Ajuda.
+ * O arquivo é reduzido antes do envio; o servidor grava no R2 e devolve somente URL/chave.
  * A identidade vem exclusivamente da sessão do cliente no servidor.
  */
 export async function uploadOrderFileReliably(file: File, label: string): Promise<ReliableOrderUploadResult> {
@@ -109,6 +140,7 @@ export async function uploadOrderFileReliably(file: File, label: string): Promis
   const token = localStorage.getItem("cp_token") || "";
   if (!token) return { ok: false, kind: "session", message: "Sua sessão não está ativa. Entre novamente antes de enviar o comprovante." };
 
+  emitUploadProgress("preparing", { label, originalBytes: file.size });
   const prepared = await prepareOrderUploadFile(file);
   if (prepared.size > MAX_ORDER_UPLOAD_BYTES) return { ok: false, kind: "file", message: "O arquivo está muito grande. Envie um arquivo de até 15 MB." };
 
@@ -116,7 +148,9 @@ export async function uploadOrderFileReliably(file: File, label: string): Promis
   try {
     base64 = await readFileAsBase64(prepared);
   } catch {
-    return { ok: false, kind: "file", message: "Não foi possível preparar este arquivo no celular. Escolha outra foto ou PDF e tente novamente." };
+    const result: ReliableOrderUploadResult = { ok: false, kind: "file", message: "Não foi possível preparar este arquivo no celular. Escolha outra foto ou PDF e tente novamente." };
+    emitUploadProgress("failed", { label, kind: result.kind, message: result.message });
+    return result;
   }
 
   const payload = JSON.stringify({
@@ -127,6 +161,7 @@ export async function uploadOrderFileReliably(file: File, label: string): Promis
   });
 
   for (let attempt = 1; attempt <= 4; attempt += 1) {
+    emitUploadProgress(attempt === 1 ? "uploading" : "retrying", { label, attempt, preparedBytes: prepared.size });
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 120_000);
     try {
@@ -137,17 +172,32 @@ export async function uploadOrderFileReliably(file: File, label: string): Promis
         body: payload,
         signal: controller.signal,
       });
+      emitUploadProgress("confirming", { label, attempt });
       const body = await response.json().catch(() => ({}));
       if (response.ok && body.fileUrl && body.fileKey) {
-        return { ok: true, url: body.fileUrl, fileKey: body.fileKey, mimeType: body.mimeType || prepared.type || "image/jpeg" };
+        const result = {
+          ok: true as const,
+          url: body.fileUrl as string,
+          fileKey: body.fileKey as string,
+          mimeType: (body.mimeType || prepared.type || "image/jpeg") as string,
+          storedBytes: prepared.size,
+        };
+        emitUploadProgress("uploaded", { label, storedBytes: prepared.size, url: result.url });
+        return result;
       }
       const message = typeof body?.error === "string" ? body.error : response.statusText;
       const transient = response.status === 408 || response.status === 429 || response.status >= 500;
-      if (!transient || attempt === 4) return failureFromStatus(response.status, message);
+      if (!transient || attempt === 4) {
+        const result = failureFromStatus(response.status, message);
+        if (!result.ok) emitUploadProgress("failed", { label, kind: result.kind, message: result.message, status: response.status });
+        return result;
+      }
     } catch (error) {
       if (attempt === 4) {
         const aborted = error instanceof DOMException && error.name === "AbortError";
-        return { ok: false, kind: "network", message: aborted ? "A conexão demorou demais para enviar. Verifique sua internet e tente novamente." : "Não foi possível conectar para enviar agora. Tente novamente." };
+        const result: ReliableOrderUploadResult = { ok: false, kind: "network", message: aborted ? "A conexão demorou demais para enviar. Verifique sua internet e tente novamente." : "Não foi possível conectar para enviar agora. Tente novamente." };
+        emitUploadProgress("failed", { label, kind: result.kind, message: result.message });
+        return result;
       }
     } finally {
       window.clearTimeout(timeout);
@@ -155,5 +205,7 @@ export async function uploadOrderFileReliably(file: File, label: string): Promis
     await new Promise(resolve => window.setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
   }
 
-  return { ok: false, kind: "network", message: "Não foi possível enviar agora. Tente novamente." };
+  const result: ReliableOrderUploadResult = { ok: false, kind: "network", message: "Não foi possível enviar agora. Tente novamente." };
+  emitUploadProgress("failed", { label, kind: result.kind, message: result.message });
+  return result;
 }
