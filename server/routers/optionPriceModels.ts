@@ -222,6 +222,46 @@ export const optionPriceModelsRouter = router({
       return { success: true };
     }),
 
+  move: adminProcedure
+    .input(z.object({ id: z.number().int().positive(), direction: z.enum(["up", "down"]) }))
+    .mutation(async ({ input }) => {
+      await ensureInfrastructure();
+      const db = await getDb();
+      if (!db) throw new Error("Banco de dados indisponível.");
+
+      const currentResult = await db.execute(sql`
+        SELECT id, optionId FROM optionPriceModels WHERE id=${input.id} LIMIT 1
+      `);
+      const current = asRows<{ id: number; optionId: number }>(currentResult)[0];
+      if (!current) throw new Error("Categoria de preço não encontrada.");
+
+      const optionId = Number(current.optionId);
+      const orderedResult = await db.execute(sql`
+        SELECT id FROM optionPriceModels
+        WHERE optionId=${optionId}
+        ORDER BY sortOrder ASC, id ASC
+      `);
+      const orderedIds = asRows<{ id: number }>(orderedResult).map(row => Number(row.id)).filter(Number.isSafeInteger);
+      const currentIndex = orderedIds.indexOf(input.id);
+      if (currentIndex < 0) throw new Error("Categoria de preço não encontrada na ordenação.");
+
+      const targetIndex = input.direction === "up" ? currentIndex - 1 : currentIndex + 1;
+      if (targetIndex < 0 || targetIndex >= orderedIds.length) {
+        return { success: true, optionId, moved: false };
+      }
+
+      [orderedIds[currentIndex], orderedIds[targetIndex]] = [orderedIds[targetIndex], orderedIds[currentIndex]];
+      const caseSql = orderedIds.map((id, index) => `WHEN ${id} THEN ${index}`).join(" ");
+      const idsSql = orderedIds.join(",");
+      await db.execute(sql.raw(`
+        UPDATE optionPriceModels
+        SET sortOrder = CASE id ${caseSql} ELSE sortOrder END
+        WHERE optionId = ${optionId} AND id IN (${idsSql})
+      `));
+
+      return { success: true, optionId, moved: true };
+    }),
+
   delete: adminProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input }) => {

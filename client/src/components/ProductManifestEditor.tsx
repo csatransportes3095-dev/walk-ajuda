@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Save } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
@@ -46,6 +46,10 @@ export default function ProductManifestEditor({ storageKey, scopeLabel }: { stor
   const [body, setBody] = useState("");
   const [acceptLabel, setAcceptLabel] = useState(DEFAULT_CONFIG.acceptLabel);
   const [buttonLabel, setButtonLabel] = useState(DEFAULT_CONFIG.buttonLabel);
+  const priceModelId = useMemo(() => {
+    const match = storageKey.match(/^price_model_manifest_(\d+)$/);
+    return match ? Number(match[1]) : null;
+  }, [storageKey]);
 
   useEffect(() => {
     const cfg = parseConfig((settings as Record<string, string> | undefined)?.[storageKey]);
@@ -63,6 +67,18 @@ export default function ProductManifestEditor({ storageKey, scopeLabel }: { stor
     },
   });
 
+  const movePriceModelMut = trpc.optionPriceModels.move.useMutation({
+    onSuccess: async (result) => {
+      await Promise.all([
+        utils.optionPriceModels.list.invalidate(),
+        utils.optionPriceModels.listActive.invalidate(),
+        utils.products.list.invalidate(),
+      ]);
+      toast.success(result.moved ? "Posição atualizada!" : "Esta categoria já está no limite da lista.");
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível alterar a posição."),
+  });
+
   const save = () => {
     if (enabled && !body.trim()) return toast.error("Digite o texto do manifesto antes de ativar.");
     if (!title.trim() || !acceptLabel.trim() || !buttonLabel.trim()) return toast.error("Preencha titulo, aceite e botao.");
@@ -72,7 +88,31 @@ export default function ProductManifestEditor({ storageKey, scopeLabel }: { stor
   return (
     <details className="rounded-lg border border-amber-500/30 bg-amber-950/10">
       <summary className="cursor-pointer list-none px-3 py-2 text-[11px] font-black text-amber-300">
-        MANIFESTO / TERMO DE ACEITE <span className="ml-2 font-semibold text-white/55">{scopeLabel}</span>
+        <span className="flex flex-wrap items-center justify-between gap-2">
+          <span>MANIFESTO / TERMO DE ACEITE <span className="ml-2 font-semibold text-white/55">{scopeLabel}</span></span>
+          {priceModelId && (
+            <span className="flex items-center gap-1" onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+              <button
+                type="button"
+                disabled={movePriceModelMut.isPending}
+                onClick={() => movePriceModelMut.mutate({ id: priceModelId, direction: "up" })}
+                className="inline-flex items-center gap-1 rounded-md border border-cyan-400/40 bg-cyan-500/10 px-2 py-1 text-[10px] font-black text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                title="Mover esta categoria para cima"
+              >
+                <ChevronUp className="h-3 w-3" /> SUBIR
+              </button>
+              <button
+                type="button"
+                disabled={movePriceModelMut.isPending}
+                onClick={() => movePriceModelMut.mutate({ id: priceModelId, direction: "down" })}
+                className="inline-flex items-center gap-1 rounded-md border border-cyan-400/40 bg-cyan-500/10 px-2 py-1 text-[10px] font-black text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                title="Mover esta categoria para baixo"
+              >
+                <ChevronDown className="h-3 w-3" /> DESCER
+              </button>
+            </span>
+          )}
+        </span>
       </summary>
       <div className="space-y-3 border-t border-amber-500/20 p-3">
         <div className="flex items-center justify-between gap-3">

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 const router = fs.readFileSync('server/routers/optionPriceModels.ts', 'utf8');
 const appRouter = fs.readFileSync('server/routers.ts', 'utf8');
 const admin = fs.readFileSync('client/src/pages/AdminProducts.tsx', 'utf8');
+const manifestEditor = fs.readFileSync('client/src/components/ProductManifestEditor.tsx', 'utf8');
 const card = fs.readFileSync('client/src/components/StorefrontProductCard.tsx', 'utf8');
 const home = fs.readFileSync('client/src/pages/Home.tsx', 'utf8');
 const bot = fs.readFileSync('client/src/components/ColombiaBot.tsx', 'utf8');
@@ -25,6 +26,18 @@ describe('categorias de preco dentro da opcao existente', () => {
     expect(admin).toContain('Nome do campo exibido ao cliente');
     expect(router).toContain('optionPriceModelSettings');
     expect(router).toContain('updateSettings');
+  });
+
+  it('permite ordenar as categorias para cima e para baixo e persiste sortOrder', () => {
+    expect(router).toContain('move: adminProcedure');
+    expect(router).toContain('direction: z.enum(["up", "down"])');
+    expect(router).toContain('ORDER BY sortOrder ASC, id ASC');
+    expect(router).toContain('SET sortOrder = CASE id');
+    expect(manifestEditor).toContain('trpc.optionPriceModels.move.useMutation');
+    expect(manifestEditor).toContain('direction: "up"');
+    expect(manifestEditor).toContain('direction: "down"');
+    expect(manifestEditor).toContain('SUBIR');
+    expect(manifestEditor).toContain('DESCER');
   });
 
   it('cliente escolhe categoria e checkout preserva a opcao original', () => {
