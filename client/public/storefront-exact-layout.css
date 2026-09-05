@@ -1,0 +1,30 @@
+/* H2 storefront: layout final do mockup aprovado.
+   CSS puro: sem observer, sem script e sem interferencia no login. */
+
+article:has(button[aria-controls^="product-details-"]) {
+  grid-column: 1 / -1 !important;
+  width: min(100%, 880px) !important;
+  max-width: 880px !important;
+  justify-self: center !important;
+  margin-inline: auto !important;
+}
+
+/* As garantias do mockup ficam sempre lado a lado, inclusive em telas menores. */
+article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+@media (max-width: 639px) {
+  article:has(button[aria-controls^="product-details-"]) {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) {
+    gap: 7px !important;
+  }
+
+  article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) > button {
+    min-width: 0 !important;
+  }
+}
