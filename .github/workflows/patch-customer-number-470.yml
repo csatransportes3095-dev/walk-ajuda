@@ -1,0 +1,75 @@
+name: Patch automatic customer number from 470
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/patch-customer-number-470.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Patch only automatic customer number generator
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('server/db.ts')
+          text = path.read_text(encoding='utf-8')
+          old = '''  // Gerar número de cadastro sequencial
+          const [maxRow] = await db.execute(sql`SELECT COALESCE(MAX(CASE WHEN customerNumber <> 99999 THEN customerNumber END), 451) + 1 AS nextNum FROM customers`) as unknown as Array<Array<{ nextNum: number }>>;
+          const nextNum = maxRow[0]?.nextNum ?? 1;'''
+          new = '''  // Gerador AUTOMÁTICO: começa em 470 e não usa números manuais altos como base.
+          // Escolhe o primeiro número livre >= 470 sem alterar cadastros já existentes.
+          const numberRows = await db.execute(sql`
+            SELECT customerNumber
+            FROM customers
+            WHERE customerNumber IS NOT NULL
+              AND customerNumber >= 470
+              AND customerNumber <> 99999
+            ORDER BY customerNumber ASC
+          `) as unknown as [Array<{ customerNumber: number | string | null }>, unknown];
+          const usedNumbers = new Set(
+            (numberRows[0] || [])
+              .map((row) => Number(row.customerNumber))
+              .filter((value) => Number.isInteger(value) && value >= 470 && value !== 99999),
+          );
+          let nextNum = 470;
+          while (usedNumbers.has(nextNum) || nextNum === 99999) nextNum += 1;'''
+
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'Bloco automatico esperado nao encontrado exatamente uma vez: {count}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Validate scope
+        shell: bash
+        run: |
+          git diff --check
+          grep -n "Gerador AUTOMÁTICO" server/db.ts
+          grep -n "let nextNum = 470" server/db.ts
+          grep -n "MAX(CASE WHEN customerNumber <> 99999" server/routers/customerUpdate.ts
+
+      - name: Remove one-time workflow
+        run: git rm .github/workflows/patch-customer-number-470.yml
+
+      - name: Commit and publish
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/db.ts
+          git commit -m "fix(customers): reiniciar numeracao automatica em 470"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
