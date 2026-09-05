@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronUp, Crown, LockKeyhole, ShieldCheck, ShoppingCart, Tag, UserRound, Zap } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Crown, LockKeyhole, ShieldCheck, ShoppingCart, Tag, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
 
@@ -110,21 +110,14 @@ function asNumber(value: string | null | undefined) {
   return Number(String(value || "0").replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
 }
 
-function priceModelDiscount(model: StorefrontPriceModel) {
-  if (model.promoEndsAt && model.promoEndsAt <= Date.now()) return 0;
-  const original = asNumber(model.originalPrice);
-  const price = asNumber(model.price);
-  return original > price && price > 0 ? Math.round(((original - price) / original) * 100) : 0;
-}
-
-function shortText(value: string | null | undefined, limit = 420) {
+function shortText(value: string | null | undefined, limit = 260) {
   const text = String(value || "")
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .replace(/[\t ]+/g, " ")
     .replace(/ *\n */g, "\n")
     .trim();
-  if (!text) return "Detalhes e requisitos confirmados durante o pedido.";
+  if (!text) return "Informações do produto disponíveis durante a compra.";
   return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
 }
 
@@ -143,14 +136,6 @@ function productTagline(item: StorefrontCatalogItem) {
   if (value.includes("tax")) return "Seu atendimento com mais rapidez, segurança e acompanhamento.";
   if (value.includes("doc")) return "Seu serviço organizado, rápido e acompanhado do início ao fim.";
   return "Sua jornada com a Uber, mais rápida e segura.";
-}
-
-function accountTitle(item: StorefrontCatalogItem) {
-  const value = `${item.category} ${item.product.name}`.toLowerCase();
-  if (value.includes("99")) return "Conta 99";
-  if (value.includes("tax")) return "Conta Táxi";
-  if (value.includes("doc")) return "Serviço";
-  return "Conta Uber";
 }
 
 export function StorefrontProductCard({
@@ -229,30 +214,17 @@ export function StorefrontProductCard({
       <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-violet-300 to-transparent shadow-[0_0_24px_rgba(167,139,250,.95)]" />
 
       <div className="relative overflow-hidden rounded-b-[28px] border-b border-violet-400/35 bg-[radial-gradient(circle_at_90%_25%,rgba(99,102,241,.22),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.30),rgba(15,23,42,.30)_55%,rgba(2,6,23,.05))] px-5 py-5 sm:px-6 sm:py-6">
-        <div className="pointer-events-none absolute right-5 top-3 text-[56px] font-black tracking-tighter text-violet-300/[0.06] sm:text-[74px]">
-          {item.category}
-        </div>
-
+        <div className="pointer-events-none absolute right-5 top-3 text-[56px] font-black tracking-tighter text-violet-300/[0.06] sm:text-[74px]">{item.category}</div>
         <div className="relative flex items-start gap-4 pr-1">
           <div className="grid h-[74px] w-[74px] shrink-0 place-items-center overflow-hidden rounded-[22px] border border-violet-300/55 bg-black/50 shadow-[0_0_24px_rgba(139,92,246,.45),inset_0_0_18px_rgba(255,255,255,.08)]">
-            {item.product.iconUrl ? (
-              <img src={item.product.iconUrl} alt="" loading="lazy" className="h-[58px] w-[58px] rounded-2xl object-contain" />
-            ) : (
-              <Tag className="h-7 w-7 text-violet-300" />
-            )}
+            {item.product.iconUrl ? <img src={item.product.iconUrl} alt="" loading="lazy" className="h-[58px] w-[58px] rounded-2xl object-contain" /> : <Tag className="h-7 w-7 text-violet-300" />}
           </div>
-
           <div className="min-w-0 flex-1">
-            <span className="inline-flex rounded-full border border-violet-400/60 bg-violet-500/20 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]">
-              {productPill}
-            </span>
+            <span className="inline-flex rounded-full border border-violet-400/60 bg-violet-500/20 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]">{productPill}</span>
             <h3 className="mt-2 text-[24px] font-black leading-[1.02] tracking-tight text-white sm:text-[30px]">{item.option.label.trim()}</h3>
-            <span className="mt-3 inline-flex rounded-full border border-violet-300/40 bg-violet-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.13em] text-violet-200/90">
-              TIPO DE CONTA
-            </span>
+            <span className="mt-3 inline-flex rounded-full border border-violet-300/40 bg-violet-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.13em] text-violet-200/90">TIPO DE CONTA</span>
           </div>
         </div>
-
         <div className="relative mt-5 flex items-end justify-between gap-3">
           <p className="max-w-[72%] text-[12px] font-semibold leading-5 text-violet-100/70 sm:text-sm">{productTagline(item)}</p>
           <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-violet-400/70 bg-violet-950/55 px-3 py-2 text-violet-200 shadow-[0_0_18px_rgba(139,92,246,.20)]">
@@ -263,26 +235,8 @@ export function StorefrontProductCard({
       </div>
 
       <div className="p-4 sm:p-5">
-        <div className="grid grid-cols-3 rounded-[22px] border border-cyan-400/30 bg-[linear-gradient(135deg,rgba(8,47,73,.38),rgba(2,6,23,.55))] px-2 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,.04)] sm:px-3">
-          <div className="min-w-0 px-2 text-center sm:px-3">
-            <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl border border-cyan-300/65 bg-cyan-400/10 text-cyan-200 shadow-[0_0_16px_rgba(34,211,238,.16)]"><UserRound className="h-5 w-5" /></span>
-            <p className="mt-3 text-[11px] font-black text-white sm:text-sm">{accountTitle(item)}</p>
-            <p className="mt-1 text-[10px] font-medium leading-4 text-slate-400 sm:text-xs">Conta pronta<br className="hidden sm:block" /> para uso.</p>
-          </div>
-          <div className="min-w-0 border-x border-white/10 px-2 text-center sm:px-3">
-            <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl border border-cyan-300/65 bg-cyan-400/10 text-cyan-200 shadow-[0_0_16px_rgba(34,211,238,.16)]"><Zap className="h-5 w-5" /></span>
-            <p className="mt-3 text-[11px] font-black leading-4 text-white sm:text-sm">Prazo: {item.product.deliveryDays || "Consulte"}</p>
-            <p className="mt-1 text-[10px] font-medium leading-4 text-slate-400 sm:text-xs">Entrega rápida<br className="hidden sm:block" /> e segura.</p>
-          </div>
-          <div className="min-w-0 px-2 text-center sm:px-3">
-            <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl border border-cyan-300/65 bg-cyan-400/10 text-cyan-200 shadow-[0_0_16px_rgba(34,211,238,.16)]"><ShieldCheck className="h-5 w-5" /></span>
-            <p className="mt-3 text-[11px] font-black leading-4 text-white sm:text-sm">Acompanhamento<br />do início ao fim</p>
-            <p className="mt-1 text-[10px] font-medium leading-4 text-slate-400 sm:text-xs">Suporte em<br className="hidden sm:block" /> todas as etapas.</p>
-          </div>
-        </div>
-
         {priceModels.length > 0 && (
-          <div className="mt-6">
+          <div>
             <div className="flex items-start gap-3">
               <Crown className="mt-0.5 h-7 w-7 shrink-0 fill-violet-500/30 text-violet-400" />
               <div>
@@ -290,36 +244,18 @@ export function StorefrontProductCard({
                 <p className="mt-2 text-[11px] font-medium text-slate-400 sm:text-sm">Mais corridas, mais tempo, mais tranquilidade.</p>
               </div>
             </div>
-
             <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
               {priceModels.map((model, index) => {
                 const isSelected = model.id === priceModelId;
                 const palette = OPTION_PALETTES[Math.min(index, OPTION_PALETTES.length - 1)];
                 const parts = splitModelLabel(model.label);
-                const helper = index === 0 ? "Ideal para começar." : index === 1 ? "Equilíbrio perfeito entre uso e segurança." : "Para quem quer o máximo.";
                 return (
-                  <button
-                    key={model.id}
-                    type="button"
-                    aria-pressed={isSelected}
-                    onClick={() => void handlePriceModelSelect(model.id)}
-                    className={`relative min-h-[205px] overflow-visible rounded-[22px] border bg-gradient-to-b px-2 pb-4 pt-8 text-center transition-all sm:min-h-[245px] sm:px-4 ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"}`}
-                  >
-                    {index === 1 && (
-                      <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-cyan-400 px-3 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">
-                        Mais escolhida
-                      </span>
-                    )}
-                    <ShieldCheck className={`mx-auto h-7 w-7 ${palette.text}`} />
-                    <span className="mt-4 block text-[12px] font-black leading-4 text-white sm:text-lg">{parts.title}</span>
-                    <span className={`mt-2 block text-[13px] font-black sm:text-lg ${palette.text}`}>{parts.subtitle}</span>
-                    <span className="mx-auto mt-4 block h-px w-14 bg-current opacity-35" />
-                    <span className="mx-auto mt-4 block max-w-[120px] text-[9px] font-medium leading-4 text-slate-300 sm:text-xs">{helper}</span>
-                    {isSelected ? (
-                      <span className={`mx-auto mt-4 grid h-9 w-9 place-items-center rounded-full ${palette.badge} text-slate-950 shadow-[0_0_18px_currentColor]`}><Check className="h-5 w-5 stroke-[3]" /></span>
-                    ) : (
-                      <span className="mx-auto mt-4 block h-9 w-9 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />
-                    )}
+                  <button key={model.id} type="button" aria-pressed={isSelected} onClick={() => void handlePriceModelSelect(model.id)} className={`relative min-h-[150px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"}`}>
+                    {index === 1 && <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-cyan-400 px-3 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">Mais escolhida</span>}
+                    <ShieldCheck className={`mx-auto h-6 w-6 ${palette.text}`} />
+                    <span className="mt-3 block text-[12px] font-black leading-4 text-white sm:text-base">{parts.title}</span>
+                    <span className={`mt-1.5 block text-[13px] font-black sm:text-base ${palette.text}`}>{parts.subtitle}</span>
+                    {isSelected ? <span className={`mx-auto mt-4 grid h-8 w-8 place-items-center rounded-full ${palette.badge} text-slate-950`}><Check className="h-4 w-4 stroke-[3]" /></span> : <span className="mx-auto mt-4 block h-8 w-8 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />}
                   </button>
                 );
               })}
@@ -330,14 +266,8 @@ export function StorefrontProductCard({
         {tiers.length > 0 && priceModels.length === 0 && (
           <label className="mt-6 block rounded-2xl border border-violet-400/30 bg-violet-950/30 p-4">
             <span className="mb-2 block text-sm font-black uppercase text-violet-200">Escolha sua garantia</span>
-            <select
-              value={tierId ?? ""}
-              onChange={(event) => setTierId(Number(event.target.value))}
-              className="w-full rounded-xl border border-violet-300/30 bg-slate-950/70 px-3 py-3 text-sm font-semibold text-white outline-none focus:border-violet-300"
-            >
-              {tiers.map((tier) => (
-                <option key={tier.id} value={tier.id}>{tier.warrantyLabel || `${tier.warrantyValue} ${tier.warrantyType}`} — {asMoney(tier.price)}</option>
-              ))}
+            <select value={tierId ?? ""} onChange={(event) => setTierId(Number(event.target.value))} className="w-full rounded-xl border border-violet-300/30 bg-slate-950/70 px-3 py-3 text-sm font-semibold text-white outline-none focus:border-violet-300">
+              {tiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.warrantyLabel || `${tier.warrantyValue} ${tier.warrantyType}`} — {asMoney(tier.price)}</option>)}
             </select>
           </label>
         )}
@@ -348,68 +278,37 @@ export function StorefrontProductCard({
             <p className="text-[12px] font-black uppercase tracking-[0.14em] text-violet-300 sm:text-sm">Sua escolha</p>
             <span className="ml-auto rounded-full border border-violet-300/35 bg-white/[0.04] px-3 py-1 text-[9px] font-black uppercase text-violet-100 sm:text-[10px]">CONTA {categoryLabel}</span>
           </div>
-
-          <p className="mt-4 text-[13px] font-black uppercase leading-5 tracking-wide text-white sm:text-base">
-            {selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}
-          </p>
-
-          <div className="mt-4 flex items-end justify-between gap-4 border-t border-white/15 pt-4">
-            <div className="min-w-0 flex-1">
-              {effectiveOriginalPrice && <p className="text-[11px] font-semibold text-slate-500 line-through">{asMoney(effectiveOriginalPrice)}</p>}
-              <p className={`font-black leading-none tracking-tight ${effectivePrice ? "text-[30px] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)] sm:text-[42px]" : "text-lg text-slate-400 sm:text-2xl"}`}>
-                {effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}
-              </p>
-              {discount > 0 && <p className="mt-2 text-[10px] font-black uppercase text-emerald-300">Economize {discount}%</p>}
-            </div>
-            <div className="hidden max-w-[190px] items-center gap-3 border-l border-white/15 pl-4 text-[11px] font-medium leading-4 text-slate-300 sm:flex">
-              <Tag className="h-5 w-5 shrink-0 text-violet-300" />
-              <span>{selectedPriceModel ? "Valor da garantia selecionada." : "Selecione uma garantia para visualizar o valor."}</span>
-            </div>
+          <p className="mt-4 text-[13px] font-black uppercase leading-5 tracking-wide text-white sm:text-base">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
+          <div className="mt-4 border-t border-white/15 pt-4">
+            {effectiveOriginalPrice && <p className="text-[11px] font-semibold text-slate-500 line-through">{asMoney(effectiveOriginalPrice)}</p>}
+            <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[30px] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)] sm:text-[42px]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
+            {discount > 0 && <p className="mt-2 text-[10px] font-black uppercase text-emerald-300">Economize {discount}%</p>}
           </div>
         </div>
       </div>
 
       <div className="mt-auto px-4 pb-5 sm:px-5">
         <div className="grid grid-cols-[1.22fr_.9fr] gap-3">
-          <button
-            type="button"
-            disabled={requiresPriceModelSelection && !selectedPriceModel}
-            onClick={() => void runProtectedAction("buy")}
-            className="inline-flex min-h-[58px] items-center justify-center gap-3 rounded-2xl border border-white bg-gradient-to-b from-white to-slate-200 px-4 text-[15px] font-black text-[#090b21] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"
-          >
-            <ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span>
-          </button>
-          <button
-            type="button"
-            disabled={requiresPriceModelSelection && !selectedPriceModel}
-            onClick={() => void runProtectedAction("cart")}
-            className="inline-flex min-h-[58px] items-center justify-center gap-2 rounded-2xl border border-violet-400/90 bg-gradient-to-br from-violet-950/90 to-purple-950/75 px-3 text-[15px] font-black text-violet-200 shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"
-          >
-            <ShoppingCart className="h-5 w-5" /> Carrinho
-          </button>
+          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("buy")} className="inline-flex min-h-[58px] items-center justify-center gap-3 rounded-2xl border border-white bg-gradient-to-b from-white to-slate-200 px-4 text-[15px] font-black text-[#090b21] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span></button>
+          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="inline-flex min-h-[58px] items-center justify-center gap-2 rounded-2xl border border-violet-400/90 bg-gradient-to-br from-violet-950/90 to-purple-950/75 px-3 text-[15px] font-black text-violet-200 shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
         </div>
 
         <div className="mt-5 flex items-center gap-3">
           <div className="h-px flex-1 bg-white/15" />
-          <button
-            type="button"
-            aria-expanded={detailsOpen}
-            aria-controls={detailsId}
-            onClick={() => setDetailsOpen((open) => !open)}
-            className="inline-flex items-center justify-center gap-2 text-xs font-bold text-white/90 transition-colors hover:text-white sm:text-sm"
-          >
-            {detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}
-            {detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+          <button type="button" aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen((open) => !open)} className="inline-flex items-center justify-center gap-2 text-xs font-bold text-white/90 transition-colors hover:text-white sm:text-sm">{detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}{detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
           <div className="h-px flex-1 bg-white/15" />
         </div>
 
         {detailsOpen && (
-          <div id={detailsId} className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3 text-xs leading-5 text-slate-300">
-            <p className="mb-2">{shortText(item.option.description || item.product.description, 420)}</p>
-            {warrantyLabel && <p className="mb-2 flex items-center gap-2"><Check className="h-4 w-4 text-emerald-300" />{warrantyLabel}</p>}
-            {item.option.documents.length > 0 && <p className="mb-2"><strong className="text-white">Documentos:</strong> {item.option.documents.map((document) => document.label).join(", ")}</p>}
-            {item.option.questions.length > 0 && <p><strong className="text-white">Etapas:</strong> perguntas específicas desta opção serão apresentadas no fluxo de compra.</p>}
+          <div id={detailsId} className="mt-4 rounded-xl border border-white/10 bg-black/25 p-4 text-xs leading-5 text-slate-300">
+            <div className="grid gap-2">
+              <p><strong className="text-white">Produto:</strong> {item.product.name}</p>
+              <p><strong className="text-white">Opção:</strong> {item.option.label}</p>
+              <p><strong className="text-white">Categoria:</strong> {item.category}</p>
+              {item.product.deliveryDays && <p><strong className="text-white">Prazo:</strong> {item.product.deliveryDays}</p>}
+              {(selectedPriceModel?.label || warrantyLabel) && <p><strong className="text-white">Garantia:</strong> {selectedPriceModel?.label || warrantyLabel}</p>}
+              <p className="pt-1 text-slate-400">{shortText(item.option.description || item.product.description)}</p>
+            </div>
           </div>
         )}
 
