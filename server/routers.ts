@@ -502,14 +502,23 @@ export const appRouter = router({
         discountType: z.enum(['percentage', 'fixed']),
         discountValue: z.number().min(1),
         maxUses: z.number().min(1).default(1),
+        startsAt: z.string().optional(),
         expiresAt: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         try {
+          const startsAt = input.startsAt ? new Date(input.startsAt) : null;
+          const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
+          if ((startsAt && Number.isNaN(startsAt.getTime())) || (expiresAt && Number.isNaN(expiresAt.getTime()))) {
+            return { success: false, message: 'Data ou hora inválida.' };
+          }
+          if (startsAt && expiresAt && expiresAt <= startsAt) {
+            return { success: false, message: 'O fim deve ser posterior ao início.' };
+          }
           const coupon = await createCoupon({
             code: input.code, discountType: input.discountType,
             discountValue: input.discountValue, maxUses: input.maxUses,
-            expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+            startsAt, expiresAt,
           });
           return { success: true, coupon };
         } catch (error) {

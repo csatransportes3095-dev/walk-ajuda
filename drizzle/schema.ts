@@ -74,6 +74,7 @@ export const coupons = mysqlTable("coupons", {
   status: mysqlEnum("status", ["active", "used", "disabled"]).notNull().default("active"),
   maxUses: int("maxUses").default(1),
   currentUses: int("currentUses").default(0),
+  startsAt: timestamp("startsAt"),
   expiresAt: timestamp("expiresAt"),
   usedBy: text("usedBy"),
   usedAt: timestamp("usedAt"),

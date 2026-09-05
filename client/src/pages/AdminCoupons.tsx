@@ -28,6 +28,7 @@ export default function AdminCoupons() {
   const [discountType, setDiscountType] = useState<"fixed" | "percentage">("fixed");
   const [discountValue, setDiscountValue] = useState("");
   const [maxUses, setMaxUses] = useState("1");
+  const [startsAt, setStartsAt] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
@@ -41,6 +42,7 @@ export default function AdminCoupons() {
         setNewCode("");
         setDiscountValue("");
         setMaxUses("1");
+        setStartsAt("");
         setExpiresAt("");
         couponsQuery.refetch();
       } else {
@@ -90,13 +92,18 @@ export default function AdminCoupons() {
       toast.error("Porcentagem não pode ser maior que 100%");
       return;
     }
+    if (startsAt && expiresAt && new Date(expiresAt) <= new Date(startsAt)) {
+      toast.error("O fim deve ser posterior ao início");
+      return;
+    }
     setIsCreating(true);
     createMutation.mutate({
       code: newCode,
       discountType,
       discountValue: Number(discountValue),
       maxUses: Number(maxUses) || 1,
-      expiresAt: expiresAt || undefined,
+      startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
+      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
     });
   };
 
@@ -108,6 +115,20 @@ export default function AdminCoupons() {
   const formatDiscount = (type: string, value: number) => {
     if (type === "percentage") return `${value}%`;
     return `R$ ${value.toFixed(2).replace('.', ',')}`;
+  };
+
+  const formatDateTime = (value: string | number | Date | null | undefined) => {
+    if (!value) return "-";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   const couponsList = couponsQuery.data || [];
@@ -172,7 +193,7 @@ export default function AdminCoupons() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="block text-sm text-white/70 mb-1">Limite de Usos</label>
                 <input
@@ -185,12 +206,25 @@ export default function AdminCoupons() {
                 />
               </div>
               <div>
-                <label className="block text-sm text-white/70 mb-1">Validade (opcional)</label>
+                <label className="block text-sm text-white/70 mb-1">Início — data e hora</label>
                 <input
-                  type="date"
+                  type="datetime-local"
+                  value={startsAt}
+                  onChange={(e) => setStartsAt(e.target.value)}
+                  style={{
+                    ...whiteInputStyle,
+                    cursor: 'pointer',
+                    colorScheme: 'light',
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-white/70 mb-1">Fim — data e hora</label>
+                <input
+                  type="datetime-local"
                   value={expiresAt}
                   onChange={(e) => setExpiresAt(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={startsAt || undefined}
                   style={{
                     ...whiteInputStyle,
                     cursor: 'pointer',
@@ -275,12 +309,12 @@ export default function AdminCoupons() {
                         <p className="text-white/80">{coupon.currentUses || 0}/{coupon.maxUses || 1}</p>
                       </div>
                       <div>
-                        <span className="text-white/50 text-xs">Validade</span>
-                        <p className="text-white/80">
-                          {coupon.expiresAt
-                            ? new Date(coupon.expiresAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
-                            : "Sem validade"}
-                        </p>
+                        <span className="text-white/50 text-xs">Início</span>
+                        <p className="text-white/80">{coupon.startsAt ? formatDateTime(coupon.startsAt) : "Imediato"}</p>
+                      </div>
+                      <div>
+                        <span className="text-white/50 text-xs">Fim</span>
+                        <p className="text-white/80">{coupon.expiresAt ? formatDateTime(coupon.expiresAt) : "Sem limite"}</p>
                       </div>
                       {coupon.usedBy && (
                         <div className="col-span-2">
@@ -331,7 +365,8 @@ export default function AdminCoupons() {
                       <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Desconto</th>
                       <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Status</th>
                       <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Usos</th>
-                      <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Validade</th>
+                      <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Início</th>
+                      <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Fim</th>
                       <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Usado por</th>
                       <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Ações</th>
                     </tr>
@@ -378,10 +413,11 @@ export default function AdminCoupons() {
                         <td className="py-3 px-4 text-white/70">
                           {coupon.currentUses || 0}/{coupon.maxUses || 1}
                         </td>
-                        <td className="py-3 px-4 text-white/70 text-sm">
-                          {coupon.expiresAt
-                            ? new Date(coupon.expiresAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
-                            : "Sem validade"}
+                        <td className="py-3 px-4 text-white/70 text-sm whitespace-nowrap">
+                          {coupon.startsAt ? formatDateTime(coupon.startsAt) : "Imediato"}
+                        </td>
+                        <td className="py-3 px-4 text-white/70 text-sm whitespace-nowrap">
+                          {coupon.expiresAt ? formatDateTime(coupon.expiresAt) : "Sem limite"}
                         </td>
                         <td className="py-3 px-4 text-white/70 text-sm">
                           {coupon.usedBy || "-"}
@@ -435,6 +471,7 @@ export default function AdminCoupons() {
           <p><strong className="text-white/70">Valor Fixo (R$):</strong> Desconto em reais aplicado diretamente no valor do serviço.</p>
           <p><strong className="text-white/70">Porcentagem (%):</strong> Desconto percentual sobre o valor do serviço.</p>
           <p><strong className="text-white/70">Limite de Usos:</strong> Quantas vezes o cupom pode ser utilizado.</p>
+          <p><strong className="text-white/70">Início / Fim:</strong> Define a data e a hora exatas em que o cupom passa a valer e deixa de valer.</p>
         </div>
       </div>
     </div>

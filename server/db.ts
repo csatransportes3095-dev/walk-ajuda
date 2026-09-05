@@ -324,10 +324,32 @@ export async function consumeAccessCode(code: string, phone?: string): Promise<v
 
 // ========== COUPONS ==========
 
-export async function createCoupon(data: { code: string; discountType: 'percentage' | 'fixed'; discountValue: number; maxUses?: number; expiresAt?: Date | null; }): Promise<Coupon> {
+let couponScheduleInfrastructurePromise: Promise<void> | null = null;
+
+async function ensureCouponScheduleInfrastructure(): Promise<void> {
+  if (!couponScheduleInfrastructurePromise) {
+    couponScheduleInfrastructurePromise = (async () => {
+      const db = await getDb();
+      if (!db) throw new Error('Database not available');
+      try {
+        await db.execute(sql`ALTER TABLE coupons ADD COLUMN startsAt TIMESTAMP NULL AFTER currentUses`);
+      } catch (error) {
+        const mysqlError = error as { code?: string; errno?: number };
+        if (mysqlError.code !== 'ER_DUP_FIELDNAME' && mysqlError.errno !== 1060) throw error;
+      }
+    })().catch((error) => {
+      couponScheduleInfrastructurePromise = null;
+      throw error;
+    });
+  }
+  return couponScheduleInfrastructurePromise;
+}
+
+export async function createCoupon(data: { code: string; discountType: 'percentage' | 'fixed'; discountValue: number; maxUses?: number; startsAt?: Date | null; expiresAt?: Date | null; }): Promise<Coupon> {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
-  await db.insert(coupons).values({ code: data.code.toUpperCase(), discountType: data.discountType, discountValue: data.discountValue, maxUses: data.maxUses || 1, currentUses: 0, expiresAt: data.expiresAt || null, status: 'active' });
+  await ensureCouponScheduleInfrastructure();
+  await db.insert(coupons).values({ code: data.code.toUpperCase(), discountType: data.discountType, discountValue: data.discountValue, maxUses: data.maxUses || 1, currentUses: 0, startsAt: data.startsAt || null, expiresAt: data.expiresAt || null, status: 'active' });
   const result = await db.select().from(coupons).where(eq(coupons.code, data.code.toUpperCase())).limit(1);
   return result[0];
 }
@@ -335,6 +357,7 @@ export async function createCoupon(data: { code: string; discountType: 'percenta
 export async function listCoupons(): Promise<Coupon[]> {
   const db = await getDb();
   if (!db) return [];
+  await ensureCouponScheduleInfrastructure();
   return await db.select().from(coupons);
 }
 
@@ -353,9 +376,11 @@ export async function toggleCoupon(id: number, status: 'active' | 'disabled'): P
 export async function validateCoupon(code: string): Promise<{ valid: boolean; coupon?: Coupon; reason?: string; discountType?: 'percentage' | 'fixed'; discountValue?: number; }> {
   const db = await getDb();
   if (!db) return { valid: false, reason: 'Banco de dados indisponível' };
+  await ensureCouponScheduleInfrastructure();
   const results = await db.select().from(coupons).where(eq(coupons.code, code.toUpperCase())).limit(1);
   if (results.length === 0) return { valid: false, reason: 'Cupom não encontrado' };
   const coupon = results[0];
+  if (coupon.startsAt && new Date() < coupon.startsAt) return { valid: false, reason: 'Este cupom ainda não iniciou' };
   if (coupon.status === 'disabled') return { valid: false, reason: 'Este cupom está desativado' };
   if (coupon.status === 'used') return { valid: false, reason: 'Este cupom já foi utilizado' };
   if (coupon.expiresAt && new Date() > coupon.expiresAt) return { valid: false, reason: 'Este cupom expirou' };
@@ -366,6 +391,7 @@ export async function validateCoupon(code: string): Promise<{ valid: boolean; co
 export async function consumeCoupon(code: string, usedBy?: string): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  await ensureCouponScheduleInfrastructure();
   const results = await db.select().from(coupons).where(eq(coupons.code, code.toUpperCase())).limit(1);
   if (results.length === 0) return;
   const coupon = results[0];
