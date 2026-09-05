@@ -842,9 +842,23 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
   const db = await getDb();
   if (!db) throw new Error('Database not available');
   const required = validateMainCustomerProfile(data);
-  // Gerar número de cadastro sequencial
-  const [maxRow] = await db.execute(sql`SELECT COALESCE(MAX(CASE WHEN customerNumber <> 99999 THEN customerNumber END), 451) + 1 AS nextNum FROM customers`) as unknown as Array<Array<{ nextNum: number }>>;
-  const nextNum = maxRow[0]?.nextNum ?? 1;
+  // Gerador AUTOMÁTICO: começa em 470 e não usa números manuais altos como base.
+  // Escolhe o primeiro número livre >= 470 sem alterar cadastros já existentes.
+  const numberRows = await db.execute(sql`
+    SELECT customerNumber
+    FROM customers
+    WHERE customerNumber IS NOT NULL
+      AND customerNumber >= 470
+      AND customerNumber <> 99999
+    ORDER BY customerNumber ASC
+  `) as unknown as [Array<{ customerNumber: number | string | null }>, unknown];
+  const usedNumbers = new Set(
+    (numberRows[0] || [])
+      .map((row) => Number(row.customerNumber))
+      .filter((value) => Number.isInteger(value) && value >= 470 && value !== 99999),
+  );
+  let nextNum = 470;
+  while (usedNumbers.has(nextNum) || nextNum === 99999) nextNum += 1;
   await db.insert(customers).values({
     customerNumber: nextNum,
     name: data.name ? data.name.toUpperCase().trim() : data.name,
