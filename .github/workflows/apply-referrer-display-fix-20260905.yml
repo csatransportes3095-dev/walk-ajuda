@@ -1,0 +1,51 @@
+name: Apply referrer display fix
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/apply-referrer-display-fix-20260905.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch loans referrer data
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path('server/routers/loans.ts')
+          s = p.read_text()
+          anchor = "    // Garante que cada card leia a chave do próprio cadastro ou de um cadastro\n"
+          block = """    // Resolve nome e foto do indicador pelo telefone salvo no cadastro principal.\n    const referralCustomers = await qRows(db, drizzleSql`\n      SELECT id, name, phone, cpf, profilePhotoUrl, referredBy, referredByPhone\n      FROM customers\n      WHERE deletedAt IS NULL\n    `);\n    rows = rows.map((loan: any) => {\n      const borrower = referralCustomers.find((customer: any) =>\n        (Number(loan.customerId || 0) > 0 && Number(customer.id) === Number(loan.customerId)) ||\n        isSameLoanIdentity(customer, loan.clientCpf || loan.customerCpf, loan.clientPhone)\n      );\n      let refPhone = onlyDigits(borrower?.referredByPhone || loan.clientReferredByPhone || '');\n      if ((refPhone.length === 12 || refPhone.length === 13) && refPhone.startsWith('55')) refPhone = refPhone.slice(2);\n      const referrer = refPhone ? referralCustomers.find((customer: any) => isSameLoanIdentity(customer, null, refPhone)) : null;\n      return {\n        ...loan,\n        clientReferredBy: String(referrer?.name || borrower?.referredBy || loan.clientReferredBy || '').trim() || null,\n        clientReferredByPhone: refPhone || null,\n        clientReferrerPhotoUrl: String(referrer?.profilePhotoUrl || '').trim() || null,\n      };\n    });\n\n"""
+          if 'clientReferrerPhotoUrl' not in s:
+              if anchor not in s: raise SystemExit('server anchor not found')
+              s = s.replace(anchor, block + anchor, 1)
+              p.write_text(s)
+
+          p = Path('client/src/pages/AdminLoans.tsx')
+          s = p.read_text()
+          old = """          const referrerName = String(loan.clientReferredBy || '').trim();\n          const referrerPhone = String(loan.clientReferredByPhone || '').trim();\n          const photoUrl = loan.clientPhoto;\n"""
+          new = """          const referrerName = String(loan.clientReferredBy || '').trim();\n          const referrerPhone = String(loan.clientReferredByPhone || '').trim();\n          const referrerPhotoUrl = String(loan.clientReferrerPhotoUrl || '').trim();\n          const referrerInitials = (referrerName || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || '?';\n          const referrerPhoneDigits = referrerPhone.replace(/\\D/g, '');\n          const referrerPhoneFormatted = referrerPhoneDigits.length === 11 ? `(${referrerPhoneDigits.slice(0,2)}) ${referrerPhoneDigits.slice(2,7)}-${referrerPhoneDigits.slice(7)}` : referrerPhone;\n          const photoUrl = loan.clientPhoto;\n"""
+          if 'const referrerPhotoUrl =' not in s:
+              if old not in s: raise SystemExit('client vars anchor not found')
+              s = s.replace(old, new, 1)
+
+          old = """                      <ClientInfoCard\n                        icon=\"🤝\"\n                        label=\"Quem indicou\"\n                        value={referrerName || 'Não informado'}\n                        meta={referrerPhone ? `Telefone do indicador: ${referrerPhone}` : 'Indicador não informado no cadastro principal'}\n                        copiedField={copiedClientField}\n                        tone=\"border-fuchsia-400/45 bg-fuchsia-500/15 sm:col-span-2\"\n                      />\n"""
+          new = """                      <div className=\"min-w-0 rounded-2xl border border-fuchsia-400/45 bg-fuchsia-500/15 p-3 sm:col-span-2\">\n                        <div className=\"flex items-center gap-3\">\n                          {referrerPhotoUrl ? (\n                            <img src={referrerPhotoUrl} alt={referrerName || 'Indicador'} className=\"h-12 w-12 shrink-0 rounded-full border-2 border-fuchsia-300/50 object-cover\" />\n                          ) : (\n                            <div className=\"flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-fuchsia-300/30 bg-fuchsia-500/20 text-sm font-black text-fuchsia-100\">{referrerInitials}</div>\n                          )}\n                          <div className=\"min-w-0 flex-1\">\n                            <span className=\"text-[11px] font-bold uppercase tracking-wide text-fuchsia-100\">🤝 Quem indicou</span>\n                            <p className=\"mt-1 break-words text-sm font-bold text-white\">{referrerName || 'Não informado'}</p>\n                            <p className=\"mt-1 break-words text-xs text-fuchsia-100/75\">{referrerPhone ? `Telefone do indicador: ${referrerPhoneFormatted}` : 'Indicador não informado no cadastro principal'}</p>\n                          </div>\n                        </div>\n                      </div>\n"""
+          if 'src={referrerPhotoUrl}' not in s:
+              if old not in s: raise SystemExit('client card anchor not found')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/loans.ts client/src/pages/AdminLoans.tsx
+          git commit -m "fix(emprestimos): mostrar nome e foto do indicador"
+          git push
