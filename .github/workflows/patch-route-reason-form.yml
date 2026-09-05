@@ -1,0 +1,304 @@
+name: Patch route restriction reason form
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/patch-route-reason-form.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Apply UI patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_str, old, new, label):
+              path = Path(path_str)
+              text = path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: esperado 1 bloco, encontrado {count}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          component = r'''import { useEffect, useState } from 'react';
+          import { AlertTriangle, Check, X } from 'lucide-react';
+
+          const RESTRICTION_PRESETS = [
+            {
+              id: 'temporario',
+              label: 'Bloqueio temporário',
+              text: 'Acesso temporariamente desativado pela administração. Aguarde novas orientações para a liberação.',
+            },
+            {
+              id: 'pagamento',
+              label: 'Pagamento pendente',
+              text: 'Pagamento pendente. Regularize a pendência e entre em contato com a administração para solicitar a liberação.',
+            },
+            {
+              id: 'cadastro',
+              label: 'Cadastro incompleto',
+              text: 'Cadastro incompleto. Atualize os dados solicitados e aguarde a liberação pela administração.',
+            },
+            {
+              id: 'vencido',
+              label: 'Acesso vencido',
+              text: 'O período de acesso venceu. Entre em contato com a administração para solicitar a renovação.',
+            },
+            {
+              id: 'analise',
+              label: 'Em análise',
+              text: 'O acesso está temporariamente em análise pela administração. Aguarde novas orientações.',
+            },
+            {
+              id: 'regras',
+              label: 'Descumprimento das regras',
+              text: 'Acesso suspenso por descumprimento das regras de uso. Entre em contato com a administração para mais informações.',
+            },
+            {
+              id: 'outro',
+              label: 'Outro motivo',
+              text: '',
+            },
+          ] as const;
+
+          type Props = {
+            open: boolean;
+            routeLabel: string;
+            customerName?: string;
+            isSubmitting?: boolean;
+            onClose: () => void;
+            onConfirm: (reason: string) => void | Promise<void>;
+          };
+
+          export function RouteRestrictionModal({
+            open,
+            routeLabel,
+            customerName,
+            isSubmitting = false,
+            onClose,
+            onConfirm,
+          }: Props) {
+            const [presetId, setPresetId] = useState<string>(RESTRICTION_PRESETS[0].id);
+            const [reason, setReason] = useState(RESTRICTION_PRESETS[0].text);
+
+            useEffect(() => {
+              if (!open) return;
+              setPresetId(RESTRICTION_PRESETS[0].id);
+              setReason(RESTRICTION_PRESETS[0].text);
+            }, [open, routeLabel, customerName]);
+
+            if (!open) return null;
+
+            const choosePreset = (id: string, text: string) => {
+              setPresetId(id);
+              setReason(text);
+            };
+
+            const cleanReason = reason.trim();
+
+            return (
+              <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+                <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-red-500/35 bg-[#0b1020] shadow-2xl shadow-black/60">
+                  <div className="flex items-start justify-between gap-4 border-b border-white/10 bg-red-950/20 px-5 py-4">
+                    <div className="flex min-w-0 gap-3">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-red-400/30 bg-red-500/10 text-red-300">
+                        <AlertTriangle className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black uppercase tracking-[0.16em] text-red-300">Desativar acesso</p>
+                        <h3 className="mt-1 text-lg font-black text-white">Escolha o motivo que o cliente receberá</h3>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Área: <strong className="text-slate-200">{routeLabel}</strong>
+                          {customerName ? <> · Cliente: <strong className="text-slate-200">{customerName}</strong></> : null}
+                        </p>
+                      </div>
+                    </div>
+                    <button type="button" onClick={onClose} disabled={isSubmitting} className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white disabled:opacity-50">
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <div className="max-h-[75vh] overflow-y-auto p-5">
+                    <p className="mb-3 text-sm font-bold text-slate-200">Motivos prontos</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {RESTRICTION_PRESETS.map((preset) => {
+                        const selected = presetId === preset.id;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => choosePreset(preset.id, preset.text)}
+                            className={`flex min-h-[54px] items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${selected ? 'border-red-400/70 bg-red-500/15 text-white' : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500 hover:bg-slate-800'}`}
+                          >
+                            <span className="text-sm font-bold">{preset.label}</span>
+                            <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${selected ? 'border-red-300 bg-red-400 text-slate-950' : 'border-slate-600'}`}>
+                              {selected ? <Check className="h-3.5 w-3.5 stroke-[3]" /> : null}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-5">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <label className="text-sm font-bold text-slate-200">Mensagem que será exibida ao cliente</label>
+                        <span className="text-[11px] font-medium text-slate-500">{reason.length}/500</span>
+                      </div>
+                      <textarea
+                        value={reason}
+                        onChange={(event) => {
+                          setReason(event.target.value.slice(0, 500));
+                          if (presetId !== 'outro') setPresetId('outro');
+                        }}
+                        rows={5}
+                        maxLength={500}
+                        placeholder="Digite o motivo da desativação..."
+                        className="w-full resize-y rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-sm leading-6 text-white outline-none transition-colors placeholder:text-slate-600 focus:border-red-400"
+                      />
+                      <p className="mt-2 rounded-lg border border-cyan-400/15 bg-cyan-500/5 px-3 py-2 text-xs leading-5 text-cyan-100/75">
+                        Esse texto ficará salvo para esta área e será mostrado automaticamente ao cliente enquanto o acesso estiver bloqueado.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 border-t border-white/10 bg-black/15 p-4 sm:px-5">
+                    <button type="button" onClick={onClose} disabled={isSubmitting} className="h-11 rounded-xl border border-slate-600 bg-slate-800 text-sm font-bold text-white hover:bg-slate-700 disabled:opacity-50">
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!cleanReason || isSubmitting}
+                      onClick={() => void onConfirm(cleanReason)}
+                      className="h-11 rounded-xl border border-red-400/50 bg-red-600 text-sm font-black text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {isSubmitting ? 'Salvando...' : 'Desativar acesso'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          '''
+          component = '\n'.join(line[10:] if line.startswith('          ') else line for line in component.splitlines()) + '\n'
+          Path('client/src/components/RouteRestrictionModal.tsx').write_text(component, encoding='utf-8')
+
+          # AdminGastosPage: importa modal, cria estado e remove prompt nativo.
+          replace_once(
+              'client/src/pages/AdminGastosPage.tsx',
+              "import { trpc } from '@/lib/trpc';\n",
+              "import { trpc } from '@/lib/trpc';\nimport { RouteRestrictionModal } from '@/components/RouteRestrictionModal';\n",
+              'AdminGastos import modal',
+          )
+          replace_once(
+              'client/src/pages/AdminGastosPage.tsx',
+              "  const [listFilter, setListFilter] = useState('');\n",
+              "  const [listFilter, setListFilter] = useState('');\n  const [routeRestrictionModal, setRouteRestrictionModal] = useState<{ clientId: number; clientName: string; routeKey: 'gastos' | 'emprestimo'; routeLabel: string; currentRoutes: string[] } | null>(null);\n  const [isUpdatingRouteRestriction, setIsUpdatingRouteRestriction] = useState(false);\n",
+              'AdminGastos modal state',
+          )
+          old_helper = '''  const askRouteRestrictionReason = (routeLabel: string): string | null => {\n    const reason = window.prompt(\n      `Informe o motivo da desativação de ${routeLabel}. Esse texto será exibido ao cliente como aviso do sistema.`,\n      'Acesso temporariamente desativado pela administração.',\n    );\n    if (reason === null) return null;\n    const clean = reason.trim();\n    if (!clean) {\n      setError('Informe o motivo da desativação para continuar.');\n      return null;\n    }\n    return clean;\n  };\n\n'''
+          replace_once('client/src/pages/AdminGastosPage.tsx', old_helper, '', 'AdminGastos remove prompt')
+          replace_once(
+              'client/src/pages/AdminGastosPage.tsx',
+              '''  const clientsQuery = trpc.spreadsheet.adminListClientsWithStatus.useQuery(undefined, {\n    refetchInterval: 30000,\n  });\n''',
+              '''  const clientsQuery = trpc.spreadsheet.adminListClientsWithStatus.useQuery(undefined, {\n    refetchInterval: 30000,\n  });\n\n  const handleConfirmRouteRestriction = async (reason: string) => {\n    if (!routeRestrictionModal) return;\n    const { clientId, clientName, routeKey, routeLabel, currentRoutes } = routeRestrictionModal;\n    const newRoutes = currentRoutes.filter((route) => route !== routeKey);\n    setIsUpdatingRouteRestriction(true);\n    setError('');\n    try {\n      await updateAllowedRoutesMutation.mutateAsync({\n        clientId,\n        allowedRoutes: newRoutes.join(','),\n        disabledRoute: routeKey,\n        restrictionReason: reason,\n      });\n      setRouteRestrictionModal(null);\n      setSuccess(`${routeLabel} desativado para ${clientName}. O motivo será mostrado automaticamente ao cliente.`);\n      await clientsQuery.refetch();\n    } catch (err: any) {\n      setError(err?.message || 'Erro ao desativar acesso');\n    } finally {\n      setIsUpdatingRouteRestriction(false);\n    }\n  };\n''',
+              'AdminGastos confirm handler',
+          )
+          old_toggle = '''                                  onChange={async (e) => {\n                                    const checked = e.target.checked;\n                                    const restrictionReason = checked ? undefined : askRouteRestrictionReason(label);\n                                    if (!checked && !restrictionReason) return;\n                                    const newRoutes = checked\n                                      ? [...routes.filter((r: string) => r !== key), key]\n                                      : routes.filter((r: string) => r !== key);\n                                    try {\n                                      await updateAllowedRoutesMutation.mutateAsync({\n                                        clientId: c.id,\n                                        allowedRoutes: newRoutes.join(','),\n                                        disabledRoute: checked ? undefined : (key as 'gastos' | 'emprestimo'),\n                                        restrictionReason: restrictionReason || undefined,\n                                      });\n                                      setSuccess(checked\n                                        ? `${label} liberado para ${c.name}.`\n                                        : `${label} desativado para ${c.name}. O motivo será mostrado automaticamente ao cliente.`);\n                                      clientsQuery.refetch();\n                                    } catch (err: any) {\n                                      setError(err?.message || 'Erro ao atualizar rotas');\n                                    }\n                                  }}\n'''
+          new_toggle = '''                                  onChange={async (e) => {\n                                    const checked = e.target.checked;\n                                    if (!checked) {\n                                      setRouteRestrictionModal({\n                                        clientId: c.id,\n                                        clientName: c.name,\n                                        routeKey: key as 'gastos' | 'emprestimo',\n                                        routeLabel: label,\n                                        currentRoutes: routes,\n                                      });\n                                      return;\n                                    }\n                                    const newRoutes = [...routes.filter((r: string) => r !== key), key];\n                                    try {\n                                      await updateAllowedRoutesMutation.mutateAsync({\n                                        clientId: c.id,\n                                        allowedRoutes: newRoutes.join(','),\n                                      });\n                                      setSuccess(`${label} liberado para ${c.name}.`);\n                                      await clientsQuery.refetch();\n                                    } catch (err: any) {\n                                      setError(err?.message || 'Erro ao atualizar rotas');\n                                    }\n                                  }}\n'''
+          replace_once('client/src/pages/AdminGastosPage.tsx', old_toggle, new_toggle, 'AdminGastos toggle modal')
+          replace_once(
+              'client/src/pages/AdminGastosPage.tsx',
+              '''      {/* ===== MODAL: CONFIRMAR DELEÇÃO DE SENHA ===== */}\n''',
+              '''      <RouteRestrictionModal\n        open={!!routeRestrictionModal}\n        routeLabel={routeRestrictionModal?.routeLabel || ''}\n        customerName={routeRestrictionModal?.clientName}\n        isSubmitting={isUpdatingRouteRestriction}\n        onClose={() => { if (!isUpdatingRouteRestriction) setRouteRestrictionModal(null); }}\n        onConfirm={handleConfirmRouteRestriction}\n      />\n\n      {/* ===== MODAL: CONFIRMAR DELEÇÃO DE SENHA ===== */}\n''',
+              'AdminGastos render modal',
+          )
+
+          # AdminCustomers: usa o mesmo formulário em vez de window.prompt.
+          replace_once(
+              'client/src/pages/AdminCustomers.tsx',
+              '''import AdminHeader from "@/components/AdminHeader";\n''',
+              '''import AdminHeader from "@/components/AdminHeader";\nimport { RouteRestrictionModal } from "@/components/RouteRestrictionModal";\n''',
+              'AdminCustomers import modal',
+          )
+          replace_once(
+              'client/src/pages/AdminCustomers.tsx',
+              '''  const [optimisticRoutes, setOptimisticRoutes] = useState<string[] | null>(null);\n''',
+              '''  const [optimisticRoutes, setOptimisticRoutes] = useState<string[] | null>(null);\n  const [pendingRestriction, setPendingRestriction] = useState<{ routeKey: 'site' | 'gastos' | 'emprestimo'; routeLabel: string; currentRoutes: string[] } | null>(null);\n''',
+              'AdminCustomers modal state',
+          )
+          old_handler = '''  const handleToggle = async (routeKey: string, checked: boolean) => {\n    const routeLabel = ROUTES.find((route) => route.key === routeKey)?.label || routeKey;\n    let restrictionReason: string | undefined;\n    if (!checked) {\n      const reason = window.prompt(\n        `Informe o motivo da desativação de ${routeLabel}. Esse texto será exibido ao cliente como aviso do sistema.`,\n        'Acesso temporariamente desativado pela administração.',\n      );\n      if (reason === null) return;\n      const clean = reason.trim();\n      if (!clean) {\n        toast.error('Informe o motivo da desativação para continuar.');\n        return;\n      }\n      restrictionReason = clean;\n    }\n\n    let newRoutes: string[];\n    if (!hasRestriction) {\n      newRoutes = checked ? ROUTES.map(r => r.key) : ROUTES.map(r => r.key).filter(k => k !== routeKey);\n    } else {\n      newRoutes = checked ? [...routes.filter(r => r !== routeKey), routeKey] : routes.filter(r => r !== routeKey);\n    }\n    setOptimisticRoutes(newRoutes);\n    try {\n      await updateRoutesMut.mutateAsync({\n        phone: phone.replace(/\\D/g, ''),\n        allowedRoutes: newRoutes.join(','),\n        disabledRoute: checked ? undefined : (routeKey as 'site' | 'gastos' | 'emprestimo'),\n        restrictionReason,\n      });\n      toast.success(checked\n        ? `${routeLabel} liberado.`\n        : `${routeLabel} desativado. O motivo será exibido automaticamente ao cliente.`);\n      await refetch();\n    } finally {\n      setOptimisticRoutes(null);\n    }\n  };\n'''
+          new_handler = '''  const handleToggle = async (routeKey: string, checked: boolean) => {\n    const routeLabel = ROUTES.find((route) => route.key === routeKey)?.label || routeKey;\n    if (!checked) {\n      const currentRoutes = hasRestriction ? routes : ROUTES.map((route) => route.key);\n      setPendingRestriction({\n        routeKey: routeKey as 'site' | 'gastos' | 'emprestimo',\n        routeLabel,\n        currentRoutes,\n      });\n      return;\n    }\n\n    const newRoutes = hasRestriction\n      ? [...routes.filter((route) => route !== routeKey), routeKey]\n      : ROUTES.map((route) => route.key);\n    setOptimisticRoutes(newRoutes);\n    try {\n      await updateRoutesMut.mutateAsync({\n        phone: phone.replace(/\\D/g, ''),\n        allowedRoutes: newRoutes.join(','),\n      });\n      toast.success(`${routeLabel} liberado.`);\n      await refetch();\n    } finally {\n      setOptimisticRoutes(null);\n    }\n  };\n\n  const confirmRestriction = async (reason: string) => {\n    if (!pendingRestriction) return;\n    const newRoutes = pendingRestriction.currentRoutes.filter((route) => route !== pendingRestriction.routeKey);\n    setOptimisticRoutes(newRoutes);\n    try {\n      await updateRoutesMut.mutateAsync({\n        phone: phone.replace(/\\D/g, ''),\n        allowedRoutes: newRoutes.join(','),\n        disabledRoute: pendingRestriction.routeKey,\n        restrictionReason: reason,\n      });\n      toast.success(`${pendingRestriction.routeLabel} desativado. O motivo será exibido automaticamente ao cliente.`);\n      setPendingRestriction(null);\n      await refetch();\n    } finally {\n      setOptimisticRoutes(null);\n    }\n  };\n'''
+          replace_once('client/src/pages/AdminCustomers.tsx', old_handler, new_handler, 'AdminCustomers remove prompt')
+          replace_once(
+              'client/src/pages/AdminCustomers.tsx',
+              '''  return (\n    <div className="w-full rounded-xl border border-slate-500/45 bg-gradient-to-r from-slate-700/20 to-slate-700/10 p-2.5">\n''',
+              '''  return (\n    <>\n    <div className="w-full rounded-xl border border-slate-500/45 bg-gradient-to-r from-slate-700/20 to-slate-700/10 p-2.5">\n''',
+              'AdminCustomers fragment open',
+          )
+          replace_once(
+              'client/src/pages/AdminCustomers.tsx',
+              '''      <p className="mt-1.5 text-[9px] font-medium leading-tight text-cyan-200/75">Liberação e bloqueio enviados ao cliente imediatamente.</p>\n    </div>\n  );\n}\n\n// Botão de contador de indicações\n''',
+              '''      <p className="mt-1.5 text-[9px] font-medium leading-tight text-cyan-200/75">Liberação e bloqueio enviados ao cliente imediatamente.</p>\n    </div>\n    <RouteRestrictionModal\n      open={!!pendingRestriction}\n      routeLabel={pendingRestriction?.routeLabel || ''}\n      isSubmitting={updateRoutesMut.isPending}\n      onClose={() => { if (!updateRoutesMut.isPending) setPendingRestriction(null); }}\n      onConfirm={confirmRestriction}\n    />\n    </>\n  );\n}\n\n// Botão de contador de indicações\n''',
+              'AdminCustomers fragment modal',
+          )
+
+          print('route restriction reason form patch applied')
+          PY
+
+      - name: Validate patch scope
+        shell: bash
+        run: |
+          git diff --check
+          grep -n 'RouteRestrictionModal' client/src/pages/AdminGastosPage.tsx
+          grep -n 'RouteRestrictionModal' client/src/pages/AdminCustomers.tsx
+          grep -n 'Motivos prontos' client/src/components/RouteRestrictionModal.tsx
+          grep -n 'Pagamento pendente' client/src/components/RouteRestrictionModal.tsx
+          grep -n 'Descumprimento das regras' client/src/components/RouteRestrictionModal.tsx
+          if grep -n 'window.prompt' client/src/pages/AdminGastosPage.tsx client/src/pages/AdminCustomers.tsx; then
+            echo 'Ainda existe prompt nativo nas telas de rota.'
+            exit 1
+          fi
+          test "$(git diff --name-only | grep -Ev '^(client/src/components/RouteRestrictionModal.tsx|client/src/pages/AdminGastosPage.tsx|client/src/pages/AdminCustomers.tsx)$' | wc -l)" -eq 0
+
+      - name: TypeScript regression check
+        shell: bash
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/tsc.log
+          if [ "$code" -ne 0 ]; then
+            if grep -Eq 'client/src/(components/RouteRestrictionModal|pages/AdminGastosPage|pages/AdminCustomers)\.tsx' /tmp/tsc.log; then
+              echo 'Erro TypeScript relacionado ao novo formulario.'
+              exit 1
+            fi
+            echo 'Somente erros TypeScript preexistentes permaneceram.'
+          fi
+
+      - name: Remove one-time workflow
+        run: git rm .github/workflows/patch-route-reason-form.yml
+
+      - name: Commit and publish
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(acesso): formulario de motivo com opcoes prontas"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
