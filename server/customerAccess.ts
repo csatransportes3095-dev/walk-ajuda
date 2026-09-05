@@ -94,11 +94,75 @@ export async function getRouteAccess(customerId: number, dbArg?: any): Promise<{
     SELECT route FROM customerRoutePermissions
     WHERE customerId=${customerId} AND status='approved'
   `);
+  const restrictionRows = await rows(db, sql`
+    SELECT route FROM customerRouteRestrictionReasons
+    WHERE customerId=${customerId}
+  `);
   const routes = permissions
     .map((row: any) => String(row.route || ""))
     .filter((route: string): route is CustomerRoute => (CUSTOMER_ROUTES as readonly string[]).includes(route));
-  // Sem registro = cliente antigo. Preserva o acesso total já existente.
-  return { restricted: routes.length > 0, routes };
+  // Cliente legado sem permissao e sem motivo continua com acesso total.
+  // Motivo ativo preserva a restricao mesmo quando nenhuma rota esta liberada.
+  return { restricted: routes.length > 0 || restrictionRows.length > 0, routes };
+}
+
+export type CustomerRouteRestrictionReason = {
+  reason: string;
+  updatedBy: string | null;
+  updatedAt: string | null;
+};
+
+export async function getCustomerRouteRestrictionReason(
+  customerId: number,
+  route: CustomerRoute,
+  dbArg?: any,
+): Promise<CustomerRouteRestrictionReason | null> {
+  const db = dbArg || await getDb() as any;
+  if (!db) return null;
+  await ensureCustomerIdentityInfrastructure(db);
+  const result = await rows(db, sql`
+    SELECT reason, updatedBy, updatedAt
+    FROM customerRouteRestrictionReasons
+    WHERE customerId=${customerId} AND route=${route}
+    LIMIT 1
+  `);
+  const row = result[0];
+  const reason = String(row?.reason || '').trim();
+  if (!reason) return null;
+  return {
+    reason,
+    updatedBy: row?.updatedBy ? String(row.updatedBy) : null,
+    updatedAt: row?.updatedAt ? new Date(row.updatedAt).toISOString() : null,
+  };
+}
+
+export async function clearCustomerRouteRestrictionReason(customerId: number, route: CustomerRoute, dbArg?: any): Promise<void> {
+  const db = dbArg || await getDb() as any;
+  if (!db) return;
+  await ensureCustomerIdentityInfrastructure(db);
+  await db.execute(sql`DELETE FROM customerRouteRestrictionReasons WHERE customerId=${customerId} AND route=${route}`);
+}
+
+export async function setCustomerRouteRestrictionReason(
+  customerId: number,
+  route: CustomerRoute,
+  reasonInput: string,
+  updatedBy = 'Administrador',
+  dbArg?: any,
+): Promise<void> {
+  const db = dbArg || await getDb() as any;
+  if (!db) throw new Error('Banco de dados indisponível');
+  await ensureCustomerIdentityInfrastructure(db);
+  const reason = String(reasonInput || '').trim().slice(0, 500);
+  if (!reason) {
+    await clearCustomerRouteRestrictionReason(customerId, route, db);
+    return;
+  }
+  await db.execute(sql`
+    INSERT INTO customerRouteRestrictionReasons (customerId, route, reason, updatedBy, createdAt, updatedAt)
+    VALUES (${customerId}, ${route}, ${reason}, ${updatedBy}, NOW(), NOW())
+    ON DUPLICATE KEY UPDATE reason=VALUES(reason), updatedBy=VALUES(updatedBy), updatedAt=NOW()
+  `);
 }
 
 export async function hasRouteAccess(customerId: number, route: CustomerRoute, dbArg?: any): Promise<{ allowed: boolean; restricted: boolean; routes: CustomerRoute[] }> {
@@ -193,6 +257,8 @@ export async function setCustomerRoutePermissions(
       INSERT INTO customerRoutePermissions (customerId, route, status, grantedBy, grantedAt, updatedAt)
       VALUES (${customerId}, ${route}, 'approved', ${grantedBy}, NOW(), NOW())
     `);
+    // Ao liberar novamente uma rota, remove o motivo antigo para ele não reaparecer ao cliente.
+    await clearCustomerRouteRestrictionReason(customerId, route, db);
   }
   await syncLegacyLoanPermission(db, customerId, routes.includes('emprestimo'));
   return routes;
@@ -348,6 +414,19 @@ export async function ensureCustomerIdentityInfrastructure(dbArg?: any): Promise
           updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           UNIQUE KEY customer_route_permission_unique (customerId, route),
           KEY customer_route_permission_route_status (route, status)
+        )
+      `));
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS customerRouteRestrictionReasons (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          customerId INT NOT NULL,
+          route VARCHAR(32) NOT NULL,
+          reason VARCHAR(500) NOT NULL,
+          updatedBy VARCHAR(100) NULL,
+          createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY customer_route_restriction_reason_unique (customerId, route),
+          KEY customer_route_restriction_reason_route (route, updatedAt)
         )
       `));
       await db.execute(sql.raw(`

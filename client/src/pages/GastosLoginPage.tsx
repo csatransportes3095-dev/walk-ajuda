@@ -83,6 +83,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
   };
   const [allowedRoutes, setAllowedRoutes] = useState<string[]>([]);
   const [restrictedPhone, setRestrictedPhone] = useState('');
+  const [restrictionReason, setRestrictionReason] = useState<string | null>(null);
 
   // Campos de cadastro
   const [regName, setRegName] = useState('');
@@ -180,6 +181,7 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
         case 'access_restricted':
           setAllowedRoutes((result as any).allowedRoutes || []);
           setRestrictedPhone((result as any).clientPhone || cleanPhone);
+          setRestrictionReason((result as any).restrictionReason || null);
           setStep('access_restricted');
           break;
         case 'profile_incomplete': {
@@ -650,8 +652,13 @@ export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePh
             <div className="space-y-4 text-center">
               <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <AlertCircle className="w-7 h-7 text-amber-300 mx-auto mb-2" />
-                <p className="text-base font-semibold text-amber-200">Acesso não autorizado</p>
-                <p className="text-sm text-muted-foreground mt-2">Seu cadastro foi encontrado, mas esta área ainda não foi liberada pelo administrador.</p>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-400">Aviso do sistema</p>
+                <p className="mt-1 text-base font-semibold text-amber-100">Acesso temporariamente suspenso</p>
+                <p className="text-sm text-muted-foreground mt-2">O sistema informa que seu acesso a esta área está desativado no momento.</p>
+                <div className="mt-3 rounded-lg border border-amber-400/25 bg-black/20 p-3 text-left">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-amber-300">Motivo informado</p>
+                  <p className="mt-1 text-sm leading-5 text-foreground">{restrictionReason || 'Acesso ainda não liberado para esta área.'}</p>
+                </div>
                 {allowedRoutes.length > 0 && <p className="text-xs text-green-300 mt-3">Acesso atual: {allowedRoutes.join(', ')}</p>}
               </div>
               <Button type="button" onClick={handleRequestRouteAccess} disabled={requestRouteAccessMutation.isPending || !restrictedPhone} className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">

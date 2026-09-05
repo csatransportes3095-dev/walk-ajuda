@@ -42,6 +42,20 @@ export default function AdminGastosPage() {
   const updateClientMutation = trpc.spreadsheet.adminUpdateClient.useMutation();
   const updateAllowedRoutesMutation = trpc.spreadsheet.adminUpdateAllowedRoutes.useMutation();
 
+  const askRouteRestrictionReason = (routeLabel: string): string | null => {
+    const reason = window.prompt(
+      `Informe o motivo da desativação de ${routeLabel}. Esse texto será exibido ao cliente como aviso do sistema.`,
+      'Acesso temporariamente desativado pela administração.',
+    );
+    if (reason === null) return null;
+    const clean = reason.trim();
+    if (!clean) {
+      setError('Informe o motivo da desativação para continuar.');
+      return null;
+    }
+    return clean;
+  };
+
   // Modal de confirmar renovação de acesso
   const [renewModal, setRenewModal] = useState<{ clientId: number; clientName: string } | null>(null);
   const [isRenewing, setIsRenewing] = useState(false);
@@ -681,17 +695,25 @@ export default function AdminGastosPage() {
                                   type="checkbox"
                                   checked={isAllowed}
                                   onChange={async (e) => {
-                                    const newRoutes = e.target.checked
+                                    const checked = e.target.checked;
+                                    const restrictionReason = checked ? undefined : askRouteRestrictionReason(label);
+                                    if (!checked && !restrictionReason) return;
+                                    const newRoutes = checked
                                       ? [...routes.filter((r: string) => r !== key), key]
                                       : routes.filter((r: string) => r !== key);
                                     try {
                                       await updateAllowedRoutesMutation.mutateAsync({
                                         clientId: c.id,
                                         allowedRoutes: newRoutes.join(','),
+                                        disabledRoute: checked ? undefined : (key as 'gastos' | 'emprestimo'),
+                                        restrictionReason: restrictionReason || undefined,
                                       });
+                                      setSuccess(checked
+                                        ? `${label} liberado para ${c.name}.`
+                                        : `${label} desativado para ${c.name}. O motivo será mostrado automaticamente ao cliente.`);
                                       clientsQuery.refetch();
-                                    } catch (err) {
-                                      console.error('Erro ao atualizar rotas', err);
+                                    } catch (err: any) {
+                                      setError(err?.message || 'Erro ao atualizar rotas');
                                     }
                                   }}
                                   className="w-4 h-4 accent-primary"

@@ -9,7 +9,7 @@ const TOKEN_KEY = 'gastos_token';
 const CLIENT_ID_KEY = 'gastos_clientId';
 const CLIENT_NAME_KEY = 'gastos_clientName';
 
-function AcessoNegado({ routeLabel, onLogout }: { routeLabel: string; onLogout: () => void }) {
+function AcessoNegado({ routeLabel, reason, onLogout }: { routeLabel: string; reason?: string | null; onLogout: () => void }) {
   const { data: settings } = trpc.settings.getAll.useQuery();
   const rawNumber = settings?.whatsapp_number || '5511978307371';
   const adminNumber = rawNumber.replace(/\D/g, '');
@@ -19,8 +19,13 @@ function AcessoNegado({ routeLabel, onLogout }: { routeLabel: string; onLogout: 
     <div className="min-h-screen bg-gradient-to-br from-[#070a16] via-[#0a0f22] to-[#070a16] flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-card/80 border border-red-500/30 rounded-2xl p-8 text-center space-y-4">
         <div className="w-16 h-16 bg-red-500/15 border border-red-500/30 rounded-full flex items-center justify-center mx-auto"><span className="text-3xl">🔒</span></div>
-        <h2 className="text-xl font-bold text-red-300">Acesso não permitido</h2>
-        <p className="text-sm text-muted-foreground">Você não tem permissão para acessar a área de <strong className="text-foreground">{routeLabel}</strong>. Solicite a liberação ao administrador.</p>
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-red-400">Aviso do sistema</p>
+        <h2 className="text-xl font-bold text-red-200">Acesso temporariamente suspenso</h2>
+        <p className="text-sm text-muted-foreground">O sistema informa que seu acesso à área de <strong className="text-foreground">{routeLabel}</strong> está desativado no momento.</p>
+        <div className="rounded-xl border border-red-400/25 bg-red-950/20 p-3 text-left">
+          <p className="text-[11px] font-black uppercase tracking-wide text-red-300">Motivo informado</p>
+          <p className="mt-1 text-sm leading-5 text-foreground">{reason || 'Acesso ainda não liberado para esta área.'}</p>
+        </div>
         <a href={href} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-semibold text-white bg-[#25D366] hover:bg-[#1ebe5d] transition-colors">💬 Solicitar liberação pelo WhatsApp</a>
         <button onClick={onLogout} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">← Sair</button>
       </div>
@@ -134,7 +139,7 @@ export function EmprestimoPage() {
   }
 
   if (!isLoggedIn) return <GastosLoginPage onLoginSuccess={handleLoginSuccess} sourceRoute="emprestimo" requiredProfilePhone={requiredProfilePhone || undefined} />;
-  if (routeAccessQuery.data && !routeAccessQuery.data.allowed) return <AcessoNegado routeLabel="Empréstimos" onLogout={handleLogout} />;
+  if (routeAccessQuery.data && !routeAccessQuery.data.allowed) return <AcessoNegado routeLabel="Empréstimos" reason={(routeAccessQuery.data as any).restrictionReason} onLogout={handleLogout} />;
   if (!manifestCompleted) return <PostLoginReferralManifest token={token || ''} route="emprestimo" onComplete={() => setManifestCompleted(true)} />;
 
   return (

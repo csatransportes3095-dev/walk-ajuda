@@ -11,7 +11,7 @@ import {
 } from "../db";
 import { getDb } from "../db";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
-import { findMainCustomerByIdentity, getRouteAccess, normalizeCustomerPhone, setCustomerRoutePermissions } from "../customerAccess";
+import { findMainCustomerByIdentity, getCustomerRouteRestrictionReason, getRouteAccess, normalizeCustomerPhone, setCustomerRoutePermissions, setCustomerRouteRestrictionReason } from "../customerAccess";
 import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, spreadsheetReferralDeclarations, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -595,7 +595,14 @@ export const spreadsheetRouter = router({
         if (accessCustomer) {
           const access = await getRouteAccess(accessCustomer.id, db);
           if (access.restricted && !access.routes.includes(requestedRoute)) {
-            return { status: 'access_restricted' as const, clientName: client.name, clientPhone: client.phone, allowedRoutes: access.routes };
+            const restriction = await getCustomerRouteRestrictionReason(accessCustomer.id, requestedRoute, db);
+            return {
+              status: 'access_restricted' as const,
+              clientName: client.name,
+              clientPhone: client.phone,
+              allowedRoutes: access.routes,
+              restrictionReason: restriction?.reason || null,
+            };
           }
         }
 
@@ -1807,6 +1814,8 @@ export const spreadsheetRouter = router({
     .input(z.object({
       phone: z.string(),
       allowedRoutes: z.string(),
+      disabledRoute: z.enum(['site', 'acompanhar', 'gastos', 'emprestimo']).optional(),
+      restrictionReason: z.string().trim().max(500).optional(),
     }))
     .mutation(async ({ input }) => {
       try {
@@ -1817,6 +1826,15 @@ export const spreadsheetRouter = router({
         if (!mainCustomer) return { success: false, message: 'Cliente não encontrado' };
         const routes = input.allowedRoutes.split(',').map((route: string) => route.trim()).filter(Boolean);
         await setCustomerRoutePermissions(mainCustomer.id, routes, 'Administrador', db);
+        if (input.disabledRoute && !routes.includes(input.disabledRoute)) {
+          await setCustomerRouteRestrictionReason(
+            mainCustomer.id,
+            input.disabledRoute,
+            input.restrictionReason || 'Acesso temporariamente desativado pela administração.',
+            'Administrador',
+            db,
+          );
+        }
         return { success: true };
       } catch (error) {
         return { success: false };
@@ -1829,6 +1847,8 @@ export const spreadsheetRouter = router({
     .input(z.object({
       clientId: z.number(),
       allowedRoutes: z.string(), // ex: "gastos,emprestimo" ou "gastos" ou ""
+      disabledRoute: z.enum(['site', 'acompanhar', 'gastos', 'emprestimo']).optional(),
+      restrictionReason: z.string().trim().max(500).optional(),
     }))
     .mutation(async ({ input }) => {
       try {
@@ -1846,6 +1866,15 @@ export const spreadsheetRouter = router({
           if (mainCustomer) {
             const routes = input.allowedRoutes.split(',').map((route: string) => route.trim()).filter(Boolean);
             await setCustomerRoutePermissions(mainCustomer.id, routes, 'Administrador', db);
+            if (input.disabledRoute && !routes.includes(input.disabledRoute)) {
+              await setCustomerRouteRestrictionReason(
+                mainCustomer.id,
+                input.disabledRoute,
+                input.restrictionReason || 'Acesso temporariamente desativado pela administração.',
+                'Administrador',
+                db,
+              );
+            }
           }
         }
         // Mantém o campo histórico para a tela antiga de gestão, mas ele não é mais
@@ -1975,7 +2004,14 @@ export const spreadsheetRouter = router({
         if (!mainCustomer) return { allowed: true, allowedRoutes: [] };
         const access = await getRouteAccess(mainCustomer.id, db);
         const allowed = !access.restricted || access.routes.includes(input.route as any);
-        return { allowed, allowedRoutes: access.restricted ? access.routes : [] };
+        const restriction = allowed
+          ? null
+          : await getCustomerRouteRestrictionReason(mainCustomer.id, input.route as any, db);
+        return {
+          allowed,
+          allowedRoutes: access.restricted ? access.routes : [],
+          restrictionReason: restriction?.reason || null,
+        };
       } catch (_) {
         // Erro de infraestrutura não pode virar bloqueio falso para um cliente autenticado.
         return { allowed: true, allowedRoutes: [] };
@@ -1997,9 +2033,16 @@ export const spreadsheetRouter = router({
         if (!mainCustomer) return { allowed: true, allowedRoutes: [] };
         const access = await getRouteAccess(mainCustomer.id, db);
         const allowed = !access.restricted || access.routes.includes(input.route as any);
-        return { allowed, allowedRoutes: access.restricted ? access.routes : [] };
+        const restriction = allowed
+          ? null
+          : await getCustomerRouteRestrictionReason(mainCustomer.id, input.route as any, db);
+        return {
+          allowed,
+          allowedRoutes: access.restricted ? access.routes : [],
+          restrictionReason: restriction?.reason || null,
+        };
       } catch (_) {
-        return { allowed: true, allowedRoutes: [] };
+        return { allowed: true, allowedRoutes: [], restrictionReason: null };
       }
     }),
 

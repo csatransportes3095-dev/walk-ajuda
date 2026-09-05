@@ -124,6 +124,22 @@ function RouteAccessWidget({ phone }: { phone: string }) {
   const routes = optimisticRoutes ?? serverRoutes;
 
   const handleToggle = async (routeKey: string, checked: boolean) => {
+    const routeLabel = ROUTES.find((route) => route.key === routeKey)?.label || routeKey;
+    let restrictionReason: string | undefined;
+    if (!checked) {
+      const reason = window.prompt(
+        `Informe o motivo da desativação de ${routeLabel}. Esse texto será exibido ao cliente como aviso do sistema.`,
+        'Acesso temporariamente desativado pela administração.',
+      );
+      if (reason === null) return;
+      const clean = reason.trim();
+      if (!clean) {
+        toast.error('Informe o motivo da desativação para continuar.');
+        return;
+      }
+      restrictionReason = clean;
+    }
+
     let newRoutes: string[];
     if (!hasRestriction) {
       newRoutes = checked ? ROUTES.map(r => r.key) : ROUTES.map(r => r.key).filter(k => k !== routeKey);
@@ -132,7 +148,15 @@ function RouteAccessWidget({ phone }: { phone: string }) {
     }
     setOptimisticRoutes(newRoutes);
     try {
-      await updateRoutesMut.mutateAsync({ phone: phone.replace(/\D/g, ''), allowedRoutes: newRoutes.join(',') });
+      await updateRoutesMut.mutateAsync({
+        phone: phone.replace(/\D/g, ''),
+        allowedRoutes: newRoutes.join(','),
+        disabledRoute: checked ? undefined : (routeKey as 'site' | 'gastos' | 'emprestimo'),
+        restrictionReason,
+      });
+      toast.success(checked
+        ? `${routeLabel} liberado.`
+        : `${routeLabel} desativado. O motivo será exibido automaticamente ao cliente.`);
       await refetch();
     } finally {
       setOptimisticRoutes(null);
