@@ -1,0 +1,144 @@
+name: Fix referrer name and photo in loans
+
+on:
+  push:
+    branches:
+      - fix/activate-all-customers-20260905
+    paths:
+      - .github/workflows/fix-referrer-name-photo-20260905.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Corrigir resolução do indicador e exibição da foto
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          server = Path('server/routers/loans.ts')
+          s = server.read_text(encoding='utf-8')
+          anchor = '''    // Garante que cada card leia a chave do próprio cadastro ou de um cadastro
+    // equivalente do mesmo CPF/telefone, inclusive para dados antigos já existentes.
+'''
+          if 'clientReferrerPhotoUrl' not in s:
+              insert = '''    // Resolve o indicador pelo telefone salvo no cadastro principal.
+    // O telefone e a identidade do cadastro principal são a fonte de verdade;
+    // assim o nome e a foto aparecem mesmo quando referredBy ficou vazio em cadastros antigos.
+    const customerDirectoryForReferral = await qRows(db, drizzleSql`
+      SELECT id, name, phone, cpf, profilePhotoUrl, referredBy, referredByPhone
+      FROM customers
+      WHERE deletedAt IS NULL
+    `);
+    rows = rows.map((loan: any) => {
+      const borrower = customerDirectoryForReferral.find((customer: any) =>
+        (Number(loan.customerId || 0) > 0 && Number(customer.id) === Number(loan.customerId)) ||
+        isSameLoanIdentity(customer, loan.clientCpf || loan.customerCpf, loan.clientPhone)
+      );
+      const declaredName = String(borrower?.referredBy || loan.clientReferredBy || '').trim();
+      let declaredPhone = onlyDigits(borrower?.referredByPhone || loan.clientReferredByPhone || '');
+      if ((declaredPhone.length === 12 || declaredPhone.length === 13) && declaredPhone.startsWith('55')) declaredPhone = declaredPhone.slice(2);
+      const referrer = declaredPhone
+        ? customerDirectoryForReferral.find((customer: any) => isSameLoanIdentity(customer, null, declaredPhone))
+        : null;
+      return {
+        ...loan,
+        customerId: loan.customerId || borrower?.id || null,
+        clientPhoto: loan.clientPhoto || borrower?.profilePhotoUrl || null,
+        clientReferredBy: String(referrer?.name || declaredName || '').trim() || null,
+        clientReferredByPhone: declaredPhone || null,
+        clientReferrerPhotoUrl: String(referrer?.profilePhotoUrl || '').trim() || null,
+        clientReferrerCustomerId: referrer?.id || null,
+      };
+    });
+
+'''
+              if s.count(anchor) != 1:
+                  raise SystemExit(f'âncora do listLoans inesperada: {s.count(anchor)}')
+              s = s.replace(anchor, insert + anchor, 1)
+              server.write_text(s, encoding='utf-8')
+
+          client = Path('client/src/pages/AdminLoans.tsx')
+          c = client.read_text(encoding='utf-8')
+          vars_old = '''          const referrerName = String(loan.clientReferredBy || '').trim();
+          const referrerPhone = String(loan.clientReferredByPhone || '').trim();
+          const photoUrl = loan.clientPhoto;
+'''
+          vars_new = '''          const referrerName = String(loan.clientReferredBy || '').trim();
+          const referrerPhone = String(loan.clientReferredByPhone || '').trim();
+          const referrerPhotoUrl = String(loan.clientReferrerPhotoUrl || '').trim();
+          const referrerInitials = (referrerName || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || '?';
+          const referrerPhoneDigits = referrerPhone.replace(/\\D/g, '');
+          const referrerPhoneFormatted = referrerPhoneDigits.length === 11
+            ? `(${referrerPhoneDigits.slice(0, 2)}) ${referrerPhoneDigits.slice(2, 7)}-${referrerPhoneDigits.slice(7)}`
+            : referrerPhoneDigits.length === 10
+              ? `(${referrerPhoneDigits.slice(0, 2)}) ${referrerPhoneDigits.slice(2, 6)}-${referrerPhoneDigits.slice(6)}`
+              : referrerPhone;
+          const photoUrl = loan.clientPhoto;
+'''
+          if 'const referrerPhotoUrl =' not in c:
+              if c.count(vars_old) != 1:
+                  raise SystemExit(f'bloco de variáveis do indicador inesperado: {c.count(vars_old)}')
+              c = c.replace(vars_old, vars_new, 1)
+
+          card_old = '''                      <ClientInfoCard
+                        icon="🤝"
+                        label="Quem indicou"
+                        value={referrerName || 'Não informado'}
+                        meta={referrerPhone ? `Telefone do indicador: ${referrerPhone}` : 'Indicador não informado no cadastro principal'}
+                        copiedField={copiedClientField}
+                        tone="border-fuchsia-400/45 bg-fuchsia-500/15 sm:col-span-2"
+                      />
+'''
+          card_new = '''                      <div className="min-w-0 rounded-2xl border border-fuchsia-400/45 bg-fuchsia-500/15 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_24px_rgba(0,0,0,0.16)] backdrop-blur-md sm:col-span-2">
+                        <div className="flex items-center gap-3">
+                          {referrerPhotoUrl ? (
+                            <img
+                              src={referrerPhotoUrl}
+                              alt={referrerName ? `Indicador ${referrerName}` : 'Indicador'}
+                              className="h-12 w-12 shrink-0 rounded-full border-2 border-fuchsia-300/50 object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-fuchsia-300/30 bg-fuchsia-500/20 text-sm font-black text-fuchsia-100">
+                              {referrerInitials}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[11px] font-bold uppercase tracking-wide text-fuchsia-100">🤝 Quem indicou</span>
+                            <p className="mt-1 break-words text-sm font-bold text-white">{referrerName || 'Não informado'}</p>
+                            <p className="mt-1 break-words text-xs text-fuchsia-100/75">
+                              {referrerPhone ? `Telefone do indicador: ${referrerPhoneFormatted}` : 'Indicador não informado no cadastro principal'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+'''
+          if '<img\n                              src={referrerPhotoUrl}' not in c:
+              if c.count(card_old) != 1:
+                  raise SystemExit(f'card do indicador inesperado: {c.count(card_old)}')
+              c = c.replace(card_old, card_new, 1)
+
+          client.write_text(c, encoding='utf-8')
+          PY
+
+          git diff --check
+          grep -n "clientReferrerPhotoUrl" server/routers/loans.ts client/src/pages/AdminLoans.tsx
+          grep -n "Quem indicou" client/src/pages/AdminLoans.tsx | head
+
+      - name: Commit e publicar na branch de produção
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/loans.ts client/src/pages/AdminLoans.tsx
+          git commit -m "fix(emprestimos): mostrar nome e foto do indicador"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
