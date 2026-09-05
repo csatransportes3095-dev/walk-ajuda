@@ -91,6 +91,8 @@ jobs:
 
           git diff --check
           grep -n "Perfil .* definido pelo ADM" server/loans/h2Score.ts
+          corepack enable
+          corepack prepare pnpm@10.4.1 --activate
           pnpm install --frozen-lockfile
           pnpm run check
 
