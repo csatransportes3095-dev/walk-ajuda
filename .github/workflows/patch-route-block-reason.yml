@@ -1,0 +1,67 @@
+name: Patch route block reason
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/patch-route-block-reason.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python3 .github/scripts/patch_route_block_reason.py
+
+      - name: Validate scope
+        shell: bash
+        run: |
+          git diff --check
+          grep -n 'customerRouteRestrictionReasons' server/customerAccess.ts
+          grep -n 'restrictionReason' server/routers/spreadsheet.ts
+          grep -n 'Motivo informado' client/src/pages/GastosPage.tsx
+          grep -n 'Motivo informado' client/src/pages/EmprestimoPage.tsx
+          grep -n 'askRouteRestrictionReason' client/src/pages/AdminGastosPage.tsx
+          grep -n 'restrictionReason' client/src/pages/AdminCustomers.tsx
+          test "$(git diff --name-only | grep -Ev '^(server/customerAccess.ts|server/routers/spreadsheet.ts|client/src/pages/AdminGastosPage.tsx|client/src/pages/AdminCustomers.tsx|client/src/pages/GastosLoginPage.tsx|client/src/pages/GastosPage.tsx|client/src/pages/EmprestimoPage.tsx)$' | wc -l)" -eq 0
+
+      - name: TypeScript check
+        shell: bash
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/tsc.log
+          if [ "$code" -ne 0 ]; then
+            if grep -Eq 'server/customerAccess\.ts|server/routers/spreadsheet\.ts|client/src/pages/(AdminGastosPage|AdminCustomers|GastosLoginPage|GastosPage|EmprestimoPage)\.tsx' /tmp/tsc.log; then
+              echo 'Erro TypeScript relacionado ao ajuste.'
+              exit 1
+            fi
+            echo 'Erros TypeScript preexistentes fora do ajuste; continuando.'
+          fi
+
+      - name: Remove temporary files
+        run: |
+          git rm .github/workflows/patch-route-block-reason.yml
+          git rm .github/scripts/patch_route_block_reason.py
+
+      - name: Commit and publish
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(acesso): informar motivo de bloqueio por rota"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
