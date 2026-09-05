@@ -20,7 +20,12 @@ jobs:
           fetch-depth: 0
 
       - name: Patch coupon schedule
-        run: python3 .github/scripts/patch_coupon_schedule.py
+        shell: bash
+        run: |
+          awk 'BEGIN{in_coupons=0} /export const coupons = mysqlTable\("coupons"/{in_coupons=1} {print} in_coupons && /currentUses: int\("currentUses"\)\.default\(0\),/{print "  startsAt: timestamp(\"startsAt\"),"; in_coupons=0}' drizzle/schema.ts > drizzle/schema.ts.tmp
+          mv drizzle/schema.ts.tmp drizzle/schema.ts
+          sed -i '13,19d' .github/scripts/patch_coupon_schedule.py
+          python3 .github/scripts/patch_coupon_schedule.py
 
       - name: Validate patch scope
         shell: bash
@@ -31,7 +36,7 @@ jobs:
           grep -n 'Este cupom ainda não iniciou' server/db.ts
           grep -n 'startsAt: z.string().optional()' server/routers.ts
           test "$(grep -c 'type="datetime-local"' client/src/pages/AdminCoupons.tsx)" -eq 2
-          test "$(git diff --name-only | grep -Ev '^(drizzle/schema.ts|server/db.ts|server/routers.ts|client/src/pages/AdminCoupons.tsx)$' | wc -l)" -eq 0
+          test "$(git diff --name-only | grep -Ev '^(drizzle/schema.ts|server/db.ts|server/routers.ts|client/src/pages/AdminCoupons.tsx|.github/scripts/patch_coupon_schedule.py)$' | wc -l)" -eq 0
 
       - name: TypeScript check
         shell: bash
