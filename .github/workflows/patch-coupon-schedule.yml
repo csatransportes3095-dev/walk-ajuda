@@ -59,7 +59,7 @@ jobs:
       - name: Remove temporary patch files
         run: |
           git rm .github/workflows/patch-coupon-schedule.yml
-          git rm .github/scripts/patch_coupon_schedule.py
+          git rm -f .github/scripts/patch_coupon_schedule.py
 
       - name: Commit and publish
         shell: bash
