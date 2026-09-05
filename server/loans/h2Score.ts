@@ -348,7 +348,48 @@ async function syncCommercialProfileFromLevel(db: any, customerId: number, level
 export async function ensureCustomerH2ScoreAccount(db: any, customerId: number, loanClientId?: number | null) {
   await ensureLoanH2ScoreTables(db);
   const existing = rows(await db.execute(sql`SELECT * FROM customerH2ScoreAccounts WHERE customerId=${customerId} LIMIT 1`))[0];
-  if (existing) return existing;
+  if (existing) {
+    if (Number(existing?.isCommercialCustom || 0) !== 1) {
+      const config = await getLoanH2ScoreConfig(db);
+      const relatedLoanClientIds = await getRelatedLoanClientIdsForCustomer(db, customerId, loanClientId);
+      const relatedIdsSql = relatedLoanClientIds.length ? sql.raw(relatedLoanClientIds.join(',')) : sql.raw('0');
+      const linkedProfiles = relatedLoanClientIds.length ? rows(await db.execute(sql`
+        SELECT id, profileSlug, updatedAt FROM loanClients
+        WHERE id IN (${relatedIdsSql})
+        ORDER BY CASE WHEN id=${loanClientId || 0} THEN 0 ELSE 1 END, updatedAt DESC, id DESC
+      `)) : [];
+      const selected = linkedProfiles.find((row: any) => ['bronze', 'prata', 'ouro', 'diamante'].includes(String(row.profileSlug || '').toLowerCase()));
+      const selectedSlug = String(selected?.profileSlug || '').toLowerCase();
+      if (selectedSlug) {
+        const before = clampH2Score(Number(existing.totalPoints || 0));
+        const scoreLevel = getH2ScoreLevel(before, config);
+        if (scoreLevel.slug !== selectedSlug) {
+          const targetByProfile: Record<string, number> = {
+            bronze: Math.max(Number(config.initialPoints || 0), Number(config.bronzeMin || 0)),
+            prata: Number(config.prataMin || 0),
+            ouro: Number(config.ouroMin || 0),
+            diamante: Number(config.diamanteMin || 100),
+          };
+          const target = clampH2Score(targetByProfile[selectedSlug]);
+          const change = target - before;
+          const label = selectedSlug.charAt(0).toUpperCase() + selectedSlug.slice(1);
+          await db.execute(sql`
+            INSERT INTO customerH2ScoreEvents
+              (customerId, loanClientId, eventType, pointsBefore, pointsChange, pointsAfter, reason, createdBy)
+            VALUES
+              (${customerId}, ${Number(selected?.id || loanClientId || 0) || null}, 'ajuste_manual', ${before}, ${change}, ${target}, ${`Perfil ${label} definido pelo ADM`}, 'Sistema')
+          `);
+          await db.execute(sql`
+            UPDATE customerH2ScoreAccounts
+            SET totalPoints=${target}, levelSlug=${selectedSlug}, commercialProfileSlug=${selectedSlug}, isCommercialCustom=0, updatedAt=NOW()
+            WHERE customerId=${customerId}
+          `);
+          return rows(await db.execute(sql`SELECT * FROM customerH2ScoreAccounts WHERE customerId=${customerId} LIMIT 1`))[0];
+        }
+      }
+    }
+    return existing;
+  }
   const config = await getLoanH2ScoreConfig(db);
   const relatedLoanClientIds = await getRelatedLoanClientIdsForCustomer(db, customerId, loanClientId);
   const relatedIdsSql = relatedLoanClientIds.length ? sql.raw(relatedLoanClientIds.join(',')) : sql.raw('0');
