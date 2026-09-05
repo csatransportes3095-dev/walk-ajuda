@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronUp, ShieldCheck, ShoppingCart, Tag, UserRound, Zap } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Crown, LockKeyhole, ShieldCheck, ShoppingCart, Tag, UserRound, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
 
@@ -75,25 +75,28 @@ export type StorefrontCatalogItem = {
 
 const OPTION_PALETTES = [
   {
-    border: "border-amber-500/80",
-    bg: "from-amber-950/55 via-slate-950/90 to-slate-950",
-    text: "text-amber-300",
-    glow: "shadow-[0_0_28px_rgba(245,158,11,0.16)]",
-    ring: "ring-amber-300/35",
+    border: "border-orange-500/90",
+    bg: "from-orange-950/60 via-[#160b0c] to-[#050816]",
+    text: "text-orange-300",
+    badge: "bg-orange-400",
+    ring: "ring-orange-300/35",
+    shadow: "shadow-[0_0_26px_rgba(249,115,22,0.18)]",
   },
   {
-    border: "border-cyan-400/80",
-    bg: "from-cyan-950/60 via-slate-950/90 to-slate-950",
+    border: "border-cyan-400",
+    bg: "from-cyan-950/80 via-[#06314d] to-[#050816]",
     text: "text-cyan-300",
-    glow: "shadow-[0_0_32px_rgba(34,211,238,0.22)]",
-    ring: "ring-cyan-300/40",
+    badge: "bg-cyan-400",
+    ring: "ring-cyan-300/45",
+    shadow: "shadow-[0_0_36px_rgba(34,211,238,0.30)]",
   },
   {
-    border: "border-emerald-400/80",
-    bg: "from-emerald-950/55 via-slate-950/90 to-slate-950",
+    border: "border-emerald-400/90",
+    bg: "from-emerald-950/70 via-[#07332c] to-[#050816]",
     text: "text-emerald-300",
-    glow: "shadow-[0_0_28px_rgba(16,185,129,0.16)]",
+    badge: "bg-emerald-400",
     ring: "ring-emerald-300/35",
+    shadow: "shadow-[0_0_26px_rgba(16,185,129,0.18)]",
   },
 ] as const;
 
@@ -114,27 +117,7 @@ function priceModelDiscount(model: StorefrontPriceModel) {
   return original > price && price > 0 ? Math.round(((original - price) / original) * 100) : 0;
 }
 
-function formatPromoDate(value: number | null | undefined) {
-  if (!value) return null;
-  return new Date(value).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatRemaining(ms: number) {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const days = Math.floor(total / 86400);
-  const hours = Math.floor((total % 86400) / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const seconds = total % 60;
-  if (days > 0) return `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
-  return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
-}
-
-function shortText(value: string | null | undefined, limit = 172) {
+function shortText(value: string | null | undefined, limit = 420) {
   const text = String(value || "")
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
@@ -148,12 +131,26 @@ function shortText(value: string | null | undefined, limit = 172) {
 function splitModelLabel(label: string) {
   const clean = label.trim().toUpperCase();
   const match = clean.match(/(?:GARANTIA\s+DE\s+)?(.+?CORRIDAS)(?:\s+OU\s+|\s*[-–—]\s*)(.+?DIAS?)$/i);
-  if (match) {
-    return { title: match[1].trim(), subtitle: match[2].trim() };
-  }
+  if (match) return { title: match[1].trim(), subtitle: match[2].trim() };
   const pipe = clean.split(/\s*[|•]\s*/);
   if (pipe.length > 1) return { title: pipe[0], subtitle: pipe.slice(1).join(" • ") };
   return { title: clean, subtitle: "SELECIONAR" };
+}
+
+function productTagline(item: StorefrontCatalogItem) {
+  const value = `${item.category} ${item.product.name}`.toLowerCase();
+  if (value.includes("99")) return "Sua jornada com a 99, mais rápida e segura.";
+  if (value.includes("tax")) return "Seu atendimento com mais rapidez, segurança e acompanhamento.";
+  if (value.includes("doc")) return "Seu serviço organizado, rápido e acompanhado do início ao fim.";
+  return "Sua jornada com a Uber, mais rápida e segura.";
+}
+
+function accountTitle(item: StorefrontCatalogItem) {
+  const value = `${item.category} ${item.product.name}`.toLowerCase();
+  if (value.includes("99")) return "Conta 99";
+  if (value.includes("tax")) return "Conta Táxi";
+  if (value.includes("doc")) return "Serviço";
+  return "Conta Uber";
 }
 
 export function StorefrontProductCard({
@@ -166,19 +163,26 @@ export function StorefrontProductCard({
   onAddToCart: (tier: StorefrontWarrantyTier | null, priceModel: StorefrontPriceModel | null) => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
   const tiers = item.option.warrantyTiers || [];
   const [tierId, setTierId] = useState<number | null>(tiers[0]?.id ?? null);
   const selectedTier = tiers.find((tier) => tier.id === tierId) || null;
   const priceModels = item.option.priceModels || [];
-  const [priceModelId, setPriceModelId] = useState<number | null>(null);
+  const preferredModel = priceModels[Math.min(1, Math.max(0, priceModels.length - 1))] || null;
+  const [priceModelId, setPriceModelId] = useState<number | null>(preferredModel?.id ?? null);
   const [manifestAcceptedKey, setManifestAcceptedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (priceModels.length === 0) {
+      if (priceModelId !== null) setPriceModelId(null);
+      return;
+    }
+    if (!priceModels.some((model) => model.id === priceModelId)) {
+      setPriceModelId(priceModels[Math.min(1, priceModels.length - 1)]?.id ?? null);
+    }
+  }, [priceModels, priceModelId]);
+
   const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;
   const requiresPriceModelSelection = priceModels.length > 0;
-  const selectorLabel = priceModels[0]?.selectorLabel?.trim() || "Escolha sua opção";
-  const promotionalModels = priceModels.filter((model) => priceModelDiscount(model) > 0);
-  const promoEndsAt = promotionalModels.map(model => model.promoEndsAt || 0).filter(Boolean).sort((a, b) => a - b)[0] || null;
-  const promoRemaining = promoEndsAt ? Math.max(0, promoEndsAt - now) : null;
   const effectivePrice = requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);
   const effectiveOriginalPrice = requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);
   const discount = useMemo(() => {
@@ -186,18 +190,11 @@ export function StorefrontProductCard({
     const price = asNumber(effectivePrice);
     return original > price && price > 0 ? Math.round(((original - price) / original) * 100) : 0;
   }, [effectiveOriginalPrice, effectivePrice]);
-  const productColor = item.product.cardColor || "#7c3aed";
-  const cartButtonColor = item.option.cardButtonColor || productColor;
-  const description = item.option.description || item.product.description;
   const warrantyLabel = selectedTier?.warrantyLabel || (selectedTier ? `${selectedTier.warrantyValue} ${selectedTier.warrantyType}` : item.option.warranty);
+  const selectedParts = selectedPriceModel ? splitModelLabel(selectedPriceModel.label) : null;
   const detailsId = `product-details-${item.product.id}-${item.option.id}`;
-  const selectedLabel = selectedPriceModel?.label || warrantyLabel || item.option.label;
-
-  useEffect(() => {
-    if (!promoEndsAt) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [promoEndsAt]);
+  const categoryLabel = item.category.toUpperCase();
+  const productPill = item.product.name.toUpperCase();
 
   const handlePriceModelSelect = async (nextId: number) => {
     const nextModel = priceModels.find(model => model.id === nextId);
@@ -228,95 +225,100 @@ export function StorefrontProductCard({
   };
 
   return (
-    <article className="relative flex h-full flex-col overflow-hidden rounded-[28px] border border-violet-500/70 bg-[radial-gradient(circle_at_20%_0%,rgba(124,58,237,.20),transparent_28%),linear-gradient(180deg,rgba(9,15,32,.98),rgba(2,6,23,.99))] shadow-[0_28px_72px_rgba(0,0,0,.58),0_0_30px_rgba(124,58,237,.16)]">
-      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-violet-400 to-transparent shadow-[0_0_18px_rgba(167,139,250,.8)]" />
+    <article className="relative flex h-full flex-col overflow-hidden rounded-[34px] border border-violet-500/85 bg-[radial-gradient(circle_at_13%_0%,rgba(124,58,237,.30),transparent_30%),radial-gradient(circle_at_100%_10%,rgba(79,70,229,.20),transparent_28%),linear-gradient(180deg,#090b21_0%,#06091a_55%,#080a22_100%)] shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]">
+      <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-violet-300 to-transparent shadow-[0_0_24px_rgba(167,139,250,.95)]" />
 
-      <div className="relative border-b border-violet-400/25 bg-gradient-to-br from-violet-500/15 via-slate-900/30 to-transparent p-5">
-        {discount > 0 && (
-          <div className="absolute right-4 top-4 rounded-full border border-rose-300/35 bg-rose-500/20 px-2.5 py-1 text-[10px] font-black text-rose-100">
-            -{discount}% OFF
-          </div>
-        )}
-        <div className="flex items-start gap-3 pr-16">
-          <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-violet-300/45 bg-black/35 shadow-[0_0_22px_rgba(139,92,246,.28)]">
+      <div className="relative overflow-hidden rounded-b-[28px] border-b border-violet-400/35 bg-[radial-gradient(circle_at_90%_25%,rgba(99,102,241,.22),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.30),rgba(15,23,42,.30)_55%,rgba(2,6,23,.05))] px-5 py-5 sm:px-6 sm:py-6">
+        <div className="pointer-events-none absolute right-5 top-3 text-[56px] font-black tracking-tighter text-violet-300/[0.06] sm:text-[74px]">
+          {item.category}
+        </div>
+
+        <div className="relative flex items-start gap-4 pr-1">
+          <div className="grid h-[74px] w-[74px] shrink-0 place-items-center overflow-hidden rounded-[22px] border border-violet-300/55 bg-black/50 shadow-[0_0_24px_rgba(139,92,246,.45),inset_0_0_18px_rgba(255,255,255,.08)]">
             {item.product.iconUrl ? (
-              <img src={item.product.iconUrl} alt="" loading="lazy" className="h-11 w-11 object-contain" />
+              <img src={item.product.iconUrl} alt="" loading="lazy" className="h-[58px] w-[58px] rounded-2xl object-contain" />
             ) : (
-              <Tag className="h-6 w-6 text-violet-300" />
+              <Tag className="h-7 w-7 text-violet-300" />
             )}
           </div>
+
           <div className="min-w-0 flex-1">
-            <span className="inline-flex rounded-full border border-violet-400/35 bg-violet-500/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-violet-200">
-              {item.category}
+            <span className="inline-flex rounded-full border border-violet-400/60 bg-violet-500/20 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]">
+              {productPill}
             </span>
-            <h3 className="mt-2 text-xl font-black leading-tight text-white">{item.option.label.trim()}</h3>
-            <span className="mt-2 inline-flex rounded-full border border-violet-300/20 bg-white/[0.04] px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-violet-100/80">
-              {item.product.name}
+            <h3 className="mt-2 text-[24px] font-black leading-[1.02] tracking-tight text-white sm:text-[30px]">{item.option.label.trim()}</h3>
+            <span className="mt-3 inline-flex rounded-full border border-violet-300/40 bg-violet-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.13em] text-violet-200/90">
+              TIPO DE CONTA
             </span>
           </div>
         </div>
-        <p className="mt-4 text-xs font-semibold leading-5 text-slate-300/75">{shortText(description, 110)}</p>
+
+        <div className="relative mt-5 flex items-end justify-between gap-3">
+          <p className="max-w-[72%] text-[12px] font-semibold leading-5 text-violet-100/70 sm:text-sm">{productTagline(item)}</p>
+          <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-violet-400/70 bg-violet-950/55 px-3 py-2 text-violet-200 shadow-[0_0_18px_rgba(139,92,246,.20)]">
+            <Crown className="h-5 w-5" />
+            <div className="text-[9px] font-black uppercase leading-3 tracking-wide"><span className="block">Qualidade</span><span className="text-violet-100">H2</span></div>
+          </div>
+        </div>
       </div>
 
-      <div className="p-5 pb-4">
-        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-950/15 p-3">
-          <div className="min-w-0 text-center">
-            <span className="mx-auto grid h-9 w-9 place-items-center rounded-xl border border-cyan-300/35 bg-cyan-400/10 text-cyan-200"><UserRound className="h-4 w-4" /></span>
-            <p className="mt-2 text-[10px] font-black text-white">{item.product.name}</p>
-            <p className="mt-0.5 text-[9px] font-semibold leading-3 text-slate-400">Produto selecionado</p>
+      <div className="p-4 sm:p-5">
+        <div className="grid grid-cols-3 rounded-[22px] border border-cyan-400/30 bg-[linear-gradient(135deg,rgba(8,47,73,.38),rgba(2,6,23,.55))] px-2 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,.04)] sm:px-3">
+          <div className="min-w-0 px-2 text-center sm:px-3">
+            <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl border border-cyan-300/65 bg-cyan-400/10 text-cyan-200 shadow-[0_0_16px_rgba(34,211,238,.16)]"><UserRound className="h-5 w-5" /></span>
+            <p className="mt-3 text-[11px] font-black text-white sm:text-sm">{accountTitle(item)}</p>
+            <p className="mt-1 text-[10px] font-medium leading-4 text-slate-400 sm:text-xs">Conta pronta<br className="hidden sm:block" /> para uso.</p>
           </div>
-          <div className="min-w-0 border-x border-white/10 px-2 text-center">
-            <span className="mx-auto grid h-9 w-9 place-items-center rounded-xl border border-cyan-300/35 bg-cyan-400/10 text-cyan-200"><Zap className="h-4 w-4" /></span>
-            <p className="mt-2 text-[10px] font-black text-white">Prazo</p>
-            <p className="mt-0.5 text-[9px] font-semibold leading-3 text-slate-400">{item.product.deliveryDays || "Consulte no pedido"}</p>
+          <div className="min-w-0 border-x border-white/10 px-2 text-center sm:px-3">
+            <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl border border-cyan-300/65 bg-cyan-400/10 text-cyan-200 shadow-[0_0_16px_rgba(34,211,238,.16)]"><Zap className="h-5 w-5" /></span>
+            <p className="mt-3 text-[11px] font-black leading-4 text-white sm:text-sm">Prazo: {item.product.deliveryDays || "Consulte"}</p>
+            <p className="mt-1 text-[10px] font-medium leading-4 text-slate-400 sm:text-xs">Entrega rápida<br className="hidden sm:block" /> e segura.</p>
           </div>
-          <div className="min-w-0 text-center">
-            <span className="mx-auto grid h-9 w-9 place-items-center rounded-xl border border-cyan-300/35 bg-cyan-400/10 text-cyan-200"><ShieldCheck className="h-4 w-4" /></span>
-            <p className="mt-2 text-[10px] font-black text-white">Acompanhamento</p>
-            <p className="mt-0.5 text-[9px] font-semibold leading-3 text-slate-400">Do início ao fim</p>
+          <div className="min-w-0 px-2 text-center sm:px-3">
+            <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl border border-cyan-300/65 bg-cyan-400/10 text-cyan-200 shadow-[0_0_16px_rgba(34,211,238,.16)]"><ShieldCheck className="h-5 w-5" /></span>
+            <p className="mt-3 text-[11px] font-black leading-4 text-white sm:text-sm">Acompanhamento<br />do início ao fim</p>
+            <p className="mt-1 text-[10px] font-medium leading-4 text-slate-400 sm:text-xs">Suporte em<br className="hidden sm:block" /> todas as etapas.</p>
           </div>
         </div>
 
         {priceModels.length > 0 && (
-          <div className="mt-5">
-            <div className="mb-3">
-              <p className="text-base font-black uppercase tracking-tight text-white">Escolha sua garantia</p>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">{selectorLabel}</p>
+          <div className="mt-6">
+            <div className="flex items-start gap-3">
+              <Crown className="mt-0.5 h-7 w-7 shrink-0 fill-violet-500/30 text-violet-400" />
+              <div>
+                <p className="text-[21px] font-black uppercase leading-none tracking-tight text-white sm:text-[26px]">Escolha sua garantia</p>
+                <p className="mt-2 text-[11px] font-medium text-slate-400 sm:text-sm">Mais corridas, mais tempo, mais tranquilidade.</p>
+              </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
               {priceModels.map((model, index) => {
                 const isSelected = model.id === priceModelId;
                 const palette = OPTION_PALETTES[Math.min(index, OPTION_PALETTES.length - 1)];
                 const parts = splitModelLabel(model.label);
-                const modelDiscount = priceModelDiscount(model);
-                const modelEnd = formatPromoDate(model.promoEndsAt);
-                const modelRemaining = model.promoEndsAt ? Math.max(0, model.promoEndsAt - now) : null;
+                const helper = index === 0 ? "Ideal para começar." : index === 1 ? "Equilíbrio perfeito entre uso e segurança." : "Para quem quer o máximo.";
                 return (
                   <button
                     key={model.id}
                     type="button"
                     aria-pressed={isSelected}
                     onClick={() => void handlePriceModelSelect(model.id)}
-                    className={`relative min-h-[150px] overflow-hidden rounded-2xl border bg-gradient-to-b p-4 text-center transition-all ${palette.border} ${palette.bg} ${palette.glow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"}`}
+                    className={`relative min-h-[205px] overflow-visible rounded-[22px] border bg-gradient-to-b px-2 pb-4 pt-8 text-center transition-all sm:min-h-[245px] sm:px-4 ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"}`}
                   >
-                    {index === 1 && <span className="absolute inset-x-0 top-0 mx-auto w-max rounded-b-xl bg-cyan-400 px-3 py-1 text-[9px] font-black uppercase text-slate-950">Mais escolhida</span>}
-                    <ShieldCheck className={`mx-auto ${index === 1 ? "mt-4" : "mt-1"} h-6 w-6 ${palette.text}`} />
-                    <span className="mt-3 block text-sm font-black leading-5 text-white">{parts.title}</span>
-                    <span className={`mt-1 block text-sm font-black ${palette.text}`}>{parts.subtitle}</span>
+                    {index === 1 && (
+                      <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-cyan-400 px-3 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">
+                        Mais escolhida
+                      </span>
+                    )}
+                    <ShieldCheck className={`mx-auto h-7 w-7 ${palette.text}`} />
+                    <span className="mt-4 block text-[12px] font-black leading-4 text-white sm:text-lg">{parts.title}</span>
+                    <span className={`mt-2 block text-[13px] font-black sm:text-lg ${palette.text}`}>{parts.subtitle}</span>
+                    <span className="mx-auto mt-4 block h-px w-14 bg-current opacity-35" />
+                    <span className="mx-auto mt-4 block max-w-[120px] text-[9px] font-medium leading-4 text-slate-300 sm:text-xs">{helper}</span>
                     {isSelected ? (
-                      <span className={`mx-auto mt-4 grid h-8 w-8 place-items-center rounded-full ${index === 0 ? "bg-amber-400" : index === 1 ? "bg-cyan-400" : "bg-emerald-400"} text-slate-950`}><Check className="h-4 w-4" /></span>
+                      <span className={`mx-auto mt-4 grid h-9 w-9 place-items-center rounded-full ${palette.badge} text-slate-950 shadow-[0_0_18px_currentColor]`}><Check className="h-5 w-5 stroke-[3]" /></span>
                     ) : (
-                      <span className="mx-auto mt-4 block h-7 w-7 rounded-full border-2 border-slate-500/70 bg-slate-950/60" />
-                    )}
-                    {isSelected && modelDiscount > 0 && (
-                      <span className="mt-3 block text-[9px] font-black uppercase text-emerald-300">Economize {modelDiscount}%</span>
-                    )}
-                    {isSelected && modelEnd && (
-                      <span className="mt-1 block text-[9px] font-semibold text-slate-400">Até {modelEnd}</span>
-                    )}
-                    {isSelected && modelRemaining !== null && (
-                      <span className="mt-1 block text-[9px] font-bold text-amber-200">Restam {formatRemaining(modelRemaining)}</span>
+                      <span className="mx-auto mt-4 block h-9 w-9 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />
                     )}
                   </button>
                 );
@@ -326,92 +328,95 @@ export function StorefrontProductCard({
         )}
 
         {tiers.length > 0 && priceModels.length === 0 && (
-          <label className="mt-5 block">
-            <span className="mb-1.5 block text-xs font-black uppercase text-violet-200">Escolha sua garantia</span>
+          <label className="mt-6 block rounded-2xl border border-violet-400/30 bg-violet-950/30 p-4">
+            <span className="mb-2 block text-sm font-black uppercase text-violet-200">Escolha sua garantia</span>
             <select
               value={tierId ?? ""}
               onChange={(event) => setTierId(Number(event.target.value))}
               className="w-full rounded-xl border border-violet-300/30 bg-slate-950/70 px-3 py-3 text-sm font-semibold text-white outline-none focus:border-violet-300"
             >
               {tiers.map((tier) => (
-                <option key={tier.id} value={tier.id}>
-                  {tier.warrantyLabel || `${tier.warrantyValue} ${tier.warrantyType}`} — {asMoney(tier.price)}
-                </option>
+                <option key={tier.id} value={tier.id}>{tier.warrantyLabel || `${tier.warrantyValue} ${tier.warrantyType}`} — {asMoney(tier.price)}</option>
               ))}
             </select>
           </label>
         )}
 
-        <div className="mt-5 rounded-2xl border border-violet-400/35 bg-gradient-to-br from-violet-950/50 via-slate-950/80 to-slate-950 p-4 shadow-[0_0_26px_rgba(124,58,237,.12)]">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-300">Sua escolha</p>
-              <p className="mt-1 text-xs font-black leading-5 text-white">{requiresPriceModelSelection && !selectedPriceModel ? `${item.option.label} • escolha uma garantia` : `${item.option.label} • ${selectedLabel}`}</p>
-            </div>
-            <span className="rounded-full border border-violet-300/25 bg-white/[0.04] px-2 py-1 text-[9px] font-black uppercase text-violet-100">{item.product.name}</span>
+        <div className="mt-6 rounded-[24px] border border-violet-400/45 bg-[linear-gradient(135deg,rgba(76,29,149,.30),rgba(9,12,35,.88)_48%,rgba(2,6,23,.92))] p-4 shadow-[0_0_28px_rgba(124,58,237,.13)] sm:p-5">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-600/25 text-violet-300"><Tag className="h-5 w-5" /></div>
+            <p className="text-[12px] font-black uppercase tracking-[0.14em] text-violet-300 sm:text-sm">Sua escolha</p>
+            <span className="ml-auto rounded-full border border-violet-300/35 bg-white/[0.04] px-3 py-1 text-[9px] font-black uppercase text-violet-100 sm:text-[10px]">CONTA {categoryLabel}</span>
           </div>
-          <div className="mt-3 border-t border-white/10 pt-3">
-            {requiresPriceModelSelection && !selectedPriceModel ? (
-              <>
-                <p className="text-lg font-black text-slate-400">Valor após a escolha</p>
-                <p className="mt-1 text-[10px] font-semibold text-slate-500">Selecione uma garantia para visualizar o valor.</p>
-              </>
-            ) : (
-              <>
-                {effectiveOriginalPrice && <p className="text-xs font-semibold text-slate-500 line-through">{asMoney(effectiveOriginalPrice)}</p>}
-                <p className="mt-1 text-3xl font-black leading-none text-teal-300 drop-shadow-[0_0_16px_rgba(45,212,191,.28)]">{asMoney(effectivePrice)}</p>
-                {discount > 0 && <p className="mt-1 text-[10px] font-black text-emerald-300">Economize {discount}%</p>}
-              </>
-            )}
+
+          <p className="mt-4 text-[13px] font-black uppercase leading-5 tracking-wide text-white sm:text-base">
+            {selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}
+          </p>
+
+          <div className="mt-4 flex items-end justify-between gap-4 border-t border-white/15 pt-4">
+            <div className="min-w-0 flex-1">
+              {effectiveOriginalPrice && <p className="text-[11px] font-semibold text-slate-500 line-through">{asMoney(effectiveOriginalPrice)}</p>}
+              <p className={`font-black leading-none tracking-tight ${effectivePrice ? "text-[30px] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)] sm:text-[42px]" : "text-lg text-slate-400 sm:text-2xl"}`}>
+                {effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}
+              </p>
+              {discount > 0 && <p className="mt-2 text-[10px] font-black uppercase text-emerald-300">Economize {discount}%</p>}
+            </div>
+            <div className="hidden max-w-[190px] items-center gap-3 border-l border-white/15 pl-4 text-[11px] font-medium leading-4 text-slate-300 sm:flex">
+              <Tag className="h-5 w-5 shrink-0 text-violet-300" />
+              <span>{selectedPriceModel ? "Valor da garantia selecionada." : "Selecione uma garantia para visualizar o valor."}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="mt-auto border-t border-white/10 bg-slate-950/55 p-4">
-        <div className="grid grid-cols-2 gap-2">
+      <div className="mt-auto px-4 pb-5 sm:px-5">
+        <div className="grid grid-cols-[1.22fr_.9fr] gap-3">
           <button
             type="button"
             disabled={requiresPriceModelSelection && !selectedPriceModel}
             onClick={() => void runProtectedAction("buy")}
-            className="min-h-12 rounded-xl border border-white/80 bg-white px-3 py-3 text-sm font-black text-slate-950 shadow-[0_10px_26px_rgba(255,255,255,.16)] transition-all hover:bg-slate-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex min-h-[58px] items-center justify-center gap-3 rounded-2xl border border-white bg-gradient-to-b from-white to-slate-200 px-4 text-[15px] font-black text-[#090b21] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"
           >
-            Comprar agora
+            <ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span>
           </button>
           <button
             type="button"
             disabled={requiresPriceModelSelection && !selectedPriceModel}
             onClick={() => void runProtectedAction("cart")}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-violet-400/70 bg-violet-950/60 px-3 py-3 text-sm font-black text-violet-100 shadow-[0_10px_26px_rgba(124,58,237,.18)] transition-all hover:bg-violet-900/70 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
-            style={{ boxShadow: `0 10px 26px ${cartButtonColor}24` }}
+            className="inline-flex min-h-[58px] items-center justify-center gap-2 rounded-2xl border border-violet-400/90 bg-gradient-to-br from-violet-950/90 to-purple-950/75 px-3 text-[15px] font-black text-violet-200 shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"
           >
-            <ShoppingCart className="h-4 w-4" /> Carrinho
+            <ShoppingCart className="h-5 w-5" /> Carrinho
           </button>
         </div>
 
-        <button
-          type="button"
-          aria-expanded={detailsOpen}
-          aria-controls={detailsId}
-          onClick={() => setDetailsOpen((open) => !open)}
-          className="mt-3 inline-flex w-full items-center justify-center gap-1.5 border-t border-white/10 pt-3 text-xs font-bold text-white/75 transition-colors hover:text-white"
-        >
-          {detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}
-          {detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
+        <div className="mt-5 flex items-center gap-3">
+          <div className="h-px flex-1 bg-white/15" />
+          <button
+            type="button"
+            aria-expanded={detailsOpen}
+            aria-controls={detailsId}
+            onClick={() => setDetailsOpen((open) => !open)}
+            className="inline-flex items-center justify-center gap-2 text-xs font-bold text-white/90 transition-colors hover:text-white sm:text-sm"
+          >
+            {detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}
+            {detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          <div className="h-px flex-1 bg-white/15" />
+        </div>
 
         {detailsOpen && (
-          <div id={detailsId} className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3 text-xs leading-5 text-slate-300">
-            <p className="mb-2">{shortText(description, 420)}</p>
+          <div id={detailsId} className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3 text-xs leading-5 text-slate-300">
+            <p className="mb-2">{shortText(item.option.description || item.product.description, 420)}</p>
             {warrantyLabel && <p className="mb-2 flex items-center gap-2"><Check className="h-4 w-4 text-emerald-300" />{warrantyLabel}</p>}
             {item.option.documents.length > 0 && <p className="mb-2"><strong className="text-white">Documentos:</strong> {item.option.documents.map((document) => document.label).join(", ")}</p>}
             {item.option.questions.length > 0 && <p><strong className="text-white">Etapas:</strong> perguntas específicas desta opção serão apresentadas no fluxo de compra.</p>}
           </div>
         )}
 
-        <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/10 pt-3 text-center text-[9px] font-bold text-slate-500">
-          <span>Compra segura</span>
-          <span>Suporte H2</span>
-          <span>Entrega acompanhada</span>
+        <div className="mt-5 grid grid-cols-3 border-t border-white/10 pt-4 text-center text-[9px] font-medium text-slate-400 sm:text-[11px]">
+          <span className="inline-flex items-center justify-center gap-1.5 border-r border-white/10"><LockKeyhole className="h-4 w-4 text-violet-300" />Compra segura</span>
+          <span className="inline-flex items-center justify-center gap-1.5 border-r border-white/10"><ShieldCheck className="h-4 w-4 text-violet-300" />Suporte H2</span>
+          <span className="inline-flex items-center justify-center gap-1.5"><Zap className="h-4 w-4 text-violet-300" />Entrega garantida</span>
         </div>
       </div>
     </article>
