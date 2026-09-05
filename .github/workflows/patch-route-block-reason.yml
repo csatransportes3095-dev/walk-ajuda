@@ -33,8 +33,6 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
-
-          # Motivo ativo tambem caracteriza restricao quando nenhuma rota ficou liberada.
           p = Path('server/customerAccess.ts')
           s = p.read_text(encoding='utf-8')
           old = '''  const permissions = await rows(db, sql`\n    SELECT route FROM customerRoutePermissions\n    WHERE customerId=${customerId} AND status='approved'\n  `);\n  const routes = permissions\n    .map((row: any) => String(row.route || ""))\n    .filter((route: string): route is CustomerRoute => (CUSTOMER_ROUTES as readonly string[]).includes(route));\n  // Sem registro = cliente antigo. Preserva o acesso total já existente.\n  return { restricted: routes.length > 0, routes };'''
@@ -43,7 +41,6 @@ jobs:
               raise SystemExit(f'getRouteAccess: esperado 1 bloco, encontrado {s.count(old)}')
           p.write_text(s.replace(old, new, 1), encoding='utf-8')
 
-          # Narrowing explícito: o prompt pode retornar null, mas o input tRPC aceita string | undefined.
           p = Path('client/src/pages/AdminGastosPage.tsx')
           s = p.read_text(encoding='utf-8')
           old = '''                                        restrictionReason,\n'''
@@ -79,13 +76,10 @@ jobs:
           set -e
           cat /tmp/tsc.log
           if [ "$code" -ne 0 ]; then
-            # Erros nestes cinco arquivos seriam novos para este patch e bloqueiam a publicação.
             if grep -Eq 'server/customerAccess\.ts|server/routers/spreadsheet\.ts|client/src/pages/(AdminGastosPage|AdminCustomers|GastosLoginPage)\.tsx' /tmp/tsc.log; then
               echo 'Erro TypeScript relacionado ao ajuste.'
               exit 1
             fi
-            # GastosPage/EmprestimoPage já possuem erros de union narrowing no baseline da branch;
-            # este patch altera somente o componente visual AcessoNegado e o argumento reason.
             if grep -E 'client/src/pages/(GastosPage|EmprestimoPage)\.tsx' /tmp/tsc.log | grep -Ev '(66|67|68),' | grep -q .; then
               echo 'Novo erro TypeScript na tela de acesso restrito.'
               exit 1
@@ -96,7 +90,7 @@ jobs:
       - name: Remove temporary files
         run: |
           git rm .github/workflows/patch-route-block-reason.yml
-          git rm .github/scripts/patch_route_block_reason.py
+          git rm -f .github/scripts/patch_route_block_reason.py
 
       - name: Commit and publish
         shell: bash
