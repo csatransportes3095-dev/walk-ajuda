@@ -19,45 +19,51 @@ jobs:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
 
-      - name: Patch only automatic customer number generator
+      - name: Patch automatic generator only
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path('server/db.ts')
           text = path.read_text(encoding='utf-8')
-          pattern = re.compile(
-              r"  // Gerar número de cadastro sequencial\n"
-              r"  const \[maxRow\] = await db\.execute\(sql`SELECT COALESCE\(MAX\(CASE WHEN customerNumber <> 99999 THEN customerNumber END\), 451\) \+ 1 AS nextNum FROM customers`\) as unknown as Array<Array<\{ nextNum: number \}>>;\n"
-              r"  const nextNum = maxRow\[0\]\?\.nextNum \?\? 1;"
-          )
-          new = '''  // Gerador AUTOMÁTICO: começa em 470 e não usa números manuais altos como base.
-  // Escolhe o primeiro número livre >= 470 sem alterar cadastros já existentes.
-  const numberRows = await db.execute(sql`
-    SELECT customerNumber
-    FROM customers
-    WHERE customerNumber IS NOT NULL
-      AND customerNumber >= 470
-      AND customerNumber <> 99999
-    ORDER BY customerNumber ASC
-  `) as unknown as [Array<{ customerNumber: number | string | null }>, unknown];
-  const usedNumbers = new Set(
-    (numberRows[0] || [])
-      .map((row) => Number(row.customerNumber))
-      .filter((value) => Number.isInteger(value) && value >= 470 && value !== 99999),
-  );
-  let nextNum = 470;
-  while (usedNumbers.has(nextNum) || nextNum === 99999) nextNum += 1;'''
+          lines = text.splitlines()
+          marker = 'SELECT COALESCE(MAX(CASE WHEN customerNumber <> 99999 THEN customerNumber END), 451) + 1 AS nextNum FROM customers'
+          matches = [i for i, line in enumerate(lines) if marker in line]
+          if len(matches) != 1:
+              raise SystemExit(f'Gerador automatico esperado nao encontrado exatamente uma vez: {len(matches)}')
+          i = matches[0]
+          if i < 1 or i + 1 >= len(lines):
+              raise SystemExit('Bloco automatico incompleto')
+          if lines[i - 1].strip() != '// Gerar número de cadastro sequencial':
+              raise SystemExit('Comentario do gerador automatico nao confere')
+          if 'const nextNum = maxRow[0]?.nextNum ?? 1;' not in lines[i + 1]:
+              raise SystemExit('Linha nextNum esperada nao confere')
 
-          updated, count = pattern.subn(new, text, count=1)
-          if count != 1:
-              raise SystemExit(f'Bloco automatico esperado nao encontrado exatamente uma vez: {count}')
-          path.write_text(updated, encoding='utf-8')
+          replacement = [
+              '  // Gerador AUTOMÁTICO: começa em 470 e não usa números manuais altos como base.',
+              '  // Escolhe o primeiro número livre >= 470 sem alterar cadastros já existentes.',
+              '  const numberRows = await db.execute(sql`',
+              '    SELECT customerNumber',
+              '    FROM customers',
+              '    WHERE customerNumber IS NOT NULL',
+              '      AND customerNumber >= 470',
+              '      AND customerNumber <> 99999',
+              '    ORDER BY customerNumber ASC',
+              '  `) as unknown as [Array<{ customerNumber: number | string | null }>, unknown];',
+              '  const usedNumbers = new Set(',
+              '    (numberRows[0] || [])',
+              '      .map((row) => Number(row.customerNumber))',
+              '      .filter((value) => Number.isInteger(value) && value >= 470 && value !== 99999),',
+              '  );',
+              '  let nextNum = 470;',
+              '  while (usedNumbers.has(nextNum) || nextNum === 99999) nextNum += 1;',
+          ]
+          lines[i - 1:i + 2] = replacement
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
 
-      - name: Validate scope
+      - name: Validate isolated change
         shell: bash
         run: |
           git diff --check
