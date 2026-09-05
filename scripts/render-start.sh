@@ -44,6 +44,7 @@ run_boot_step "vehicle-question-catalog-2016" pnpm exec tsx scripts/apply-vehicl
 run_boot_step "loans-recovery-preflight" pnpm exec tsx scripts/apply-loans-recovery-preflight.ts
 run_boot_step "loans-recovery-wrapper" pnpm exec tsx scripts/apply-loans-recovery-wrapper.ts
 run_boot_step "loans-recovery-20260822-fix" pnpm exec tsx scripts/apply-loans-recovery-20260822-fix.ts
+run_boot_step "normalize-product-manifests-portuguese" pnpm exec tsx scripts/normalize-product-manifests-portuguese.ts
 
 echo "[BOOT-DIAG] START server timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Iniciando servidor..."
