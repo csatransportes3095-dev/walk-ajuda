@@ -1,0 +1,85 @@
+name: Publish route restriction reason form
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/publish-route-reason-form.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Apply corrected UI patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          workflow = Path('.github/workflows/patch-route-reason-form.yml').read_text(encoding='utf-8')
+          start_marker = "          python3 - <<'PY'\n"
+          start = workflow.index(start_marker) + len(start_marker)
+          end = workflow.index("\n          PY", start)
+          script = workflow[start:end]
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in script.splitlines())
+          script = script.replace(
+              'const [reason, setReason] = useState(RESTRICTION_PRESETS[0].text);',
+              'const [reason, setReason] = useState<string>(RESTRICTION_PRESETS[0].text);',
+              1,
+          )
+          Path('/tmp/apply_route_reason_form.py').write_text(script + '\n', encoding='utf-8')
+          subprocess.run(['python3', '/tmp/apply_route_reason_form.py'], check=True)
+          PY
+
+      - name: Validate scope
+        shell: bash
+        run: |
+          git diff --check
+          grep -n 'RouteRestrictionModal' client/src/pages/AdminGastosPage.tsx
+          grep -n 'RouteRestrictionModal' client/src/pages/AdminCustomers.tsx
+          grep -n 'useState<string>(RESTRICTION_PRESETS\[0\].text)' client/src/components/RouteRestrictionModal.tsx
+          grep -n 'Motivos prontos' client/src/components/RouteRestrictionModal.tsx
+          grep -n 'Pagamento pendente' client/src/components/RouteRestrictionModal.tsx
+          grep -n 'Descumprimento das regras' client/src/components/RouteRestrictionModal.tsx
+          if grep -n 'window.prompt' client/src/pages/AdminGastosPage.tsx client/src/pages/AdminCustomers.tsx; then
+            echo 'Ainda existe prompt nativo nas telas de rota.'
+            exit 1
+          fi
+          test "$(git diff --name-only | grep -Ev '^(client/src/components/RouteRestrictionModal.tsx|client/src/pages/AdminGastosPage.tsx|client/src/pages/AdminCustomers.tsx)$' | wc -l)" -eq 0
+
+      - name: TypeScript regression check
+        shell: bash
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/tsc.log
+          if [ "$code" -ne 0 ]; then
+            if grep -Eq 'client/src/(components/RouteRestrictionModal|pages/AdminGastosPage|pages/AdminCustomers)\.tsx' /tmp/tsc.log; then
+              echo 'Erro TypeScript relacionado ao formulario.'
+              exit 1
+            fi
+            echo 'Somente erros TypeScript preexistentes permaneceram.'
+          fi
+
+      - name: Commit application files
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/components/RouteRestrictionModal.tsx client/src/pages/AdminGastosPage.tsx client/src/pages/AdminCustomers.tsx
+          git commit -m "feat(acesso): formulario de motivo com opcoes prontas"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
