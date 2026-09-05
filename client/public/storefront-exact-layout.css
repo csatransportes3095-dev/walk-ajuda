@@ -1,30 +1,58 @@
-/* H2 storefront: layout final do mockup aprovado.
+/* H2 storefront: proporcao final da vitrine.
    CSS puro: sem observer, sem script e sem interferencia no login. */
 
-article:has(button[aria-controls^="product-details-"]) {
-  grid-column: 1 / -1 !important;
-  width: min(100%, 880px) !important;
-  max-width: 880px !important;
-  justify-self: center !important;
-  margin-inline: auto !important;
+/* Vitrine: 1 produto por linha no celular. */
+div.grid:has(> article button[aria-controls^="product-details-"]) {
+  grid-template-columns: minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  gap: 16px !important;
 }
 
-/* As garantias do mockup ficam sempre lado a lado, inclusive em telas menores. */
+/* Cada produto volta a ocupar apenas a propria celula da vitrine. */
+article:has(button[aria-controls^="product-details-"]) {
+  grid-column: auto !important;
+  width: 100% !important;
+  max-width: none !important;
+  justify-self: stretch !important;
+  margin-inline: 0 !important;
+}
+
+/* As tres garantias continuam lado a lado, como no modelo aprovado. */
 article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) {
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+}
+
+/* Garantias mais compactas e mais quadradas: elimina o aspecto comprido. */
+article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) > button {
+  min-height: 178px !important;
+  padding: 24px 7px 12px !important;
+  border-radius: 18px !important;
 }
 
 @media (max-width: 639px) {
-  article:has(button[aria-controls^="product-details-"]) {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
   article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) {
     gap: 7px !important;
   }
 
   article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) > button {
     min-width: 0 !important;
+    min-height: 172px !important;
+    padding-inline: 6px !important;
+  }
+}
+
+/* Computador: exatamente 4 produtos por linha. */
+@media (min-width: 1024px) {
+  div.grid:has(> article button[aria-controls^="product-details-"]) {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 14px !important;
+  }
+
+  article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) > button {
+    min-height: 164px !important;
+    padding: 22px 5px 10px !important;
+    border-radius: 16px !important;
   }
 }
