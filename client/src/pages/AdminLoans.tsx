@@ -918,6 +918,10 @@ function LoansTab() {
           const phoneFormatted = phoneDigits.length === 11 ? `(${phoneDigits.slice(0, 2)}) ${phoneDigits.slice(2, 7)}-${phoneDigits.slice(7)}` : phoneDisplay;
           const referrerName = String(loan.clientReferredBy || '').trim();
           const referrerPhone = String(loan.clientReferredByPhone || '').trim();
+          const referrerPhotoUrl = String(loan.clientReferrerPhotoUrl || '').trim();
+          const referrerInitials = (referrerName || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || '?';
+          const referrerPhoneDigits = referrerPhone.replace(/\D/g, '');
+          const referrerPhoneFormatted = referrerPhoneDigits.length === 11 ? `(${referrerPhoneDigits.slice(0,2)}) ${referrerPhoneDigits.slice(2,7)}-${referrerPhoneDigits.slice(7)}` : referrerPhone;
           const photoUrl = loan.clientPhoto;
           const initials = (loan.clientName || "?").split(" ").slice(0, 2).map((w: string) => w[0]).join("").toUpperCase();
           const paymentLabel = loan.paymentType === "diario" ? "Diário" : loan.paymentType === "semanal" ? "Semanal" : loan.paymentType === "quinzenal" ? "Quinzenal" : "Mensal";
@@ -1020,14 +1024,20 @@ function LoansTab() {
                         tone="border-cyan-400/50 bg-cyan-500/15 sm:col-span-2"
                         meta={[loan.clientPixName ? `Titular: ${loan.clientPixName}` : '', loan.clientPixBank ? `Banco: ${loan.clientPixBank}` : ''].filter(Boolean).join(' · ') || 'Sem chave PIX cadastrada'}
                       />
-                      <ClientInfoCard
-                        icon="🤝"
-                        label="Quem indicou"
-                        value={referrerName || 'Não informado'}
-                        meta={referrerPhone ? `Telefone do indicador: ${referrerPhone}` : 'Indicador não informado no cadastro principal'}
-                        copiedField={copiedClientField}
-                        tone="border-fuchsia-400/45 bg-fuchsia-500/15 sm:col-span-2"
-                      />
+                      <div className="min-w-0 rounded-2xl border border-fuchsia-400/45 bg-fuchsia-500/15 p-3 sm:col-span-2">
+                        <div className="flex items-center gap-3">
+                          {referrerPhotoUrl ? (
+                            <img src={referrerPhotoUrl} alt={referrerName || 'Indicador'} className="h-12 w-12 shrink-0 rounded-full border-2 border-fuchsia-300/50 object-cover" />
+                          ) : (
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-fuchsia-300/30 bg-fuchsia-500/20 text-sm font-black text-fuchsia-100">{referrerInitials}</div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[11px] font-bold uppercase tracking-wide text-fuchsia-100">🤝 Quem indicou</span>
+                            <p className="mt-1 break-words text-sm font-bold text-white">{referrerName || 'Não informado'}</p>
+                            <p className="mt-1 break-words text-xs text-fuchsia-100/75">{referrerPhone ? `Telefone do indicador: ${referrerPhoneFormatted}` : 'Indicador não informado no cadastro principal'}</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="mb-3 flex flex-wrap items-center gap-2">

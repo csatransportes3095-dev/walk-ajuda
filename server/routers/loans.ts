@@ -1022,6 +1022,28 @@ export const loanRouter = router({
       rows = await qRows(db, drizzleSql`${baseSelect} ORDER BY l.createdAt DESC`);
     }
 
+    // Resolve nome e foto do indicador pelo telefone salvo no cadastro principal.
+    const referralCustomers = await qRows(db, drizzleSql`
+      SELECT id, name, phone, cpf, profilePhotoUrl, referredBy, referredByPhone
+      FROM customers
+      WHERE deletedAt IS NULL
+    `);
+    rows = rows.map((loan: any) => {
+      const borrower = referralCustomers.find((customer: any) =>
+        (Number(loan.customerId || 0) > 0 && Number(customer.id) === Number(loan.customerId)) ||
+        isSameLoanIdentity(customer, loan.clientCpf || loan.customerCpf, loan.clientPhone)
+      );
+      let refPhone = onlyDigits(borrower?.referredByPhone || loan.clientReferredByPhone || '');
+      if ((refPhone.length === 12 || refPhone.length === 13) && refPhone.startsWith('55')) refPhone = refPhone.slice(2);
+      const referrer = refPhone ? referralCustomers.find((customer: any) => isSameLoanIdentity(customer, null, refPhone)) : null;
+      return {
+        ...loan,
+        clientReferredBy: String(referrer?.name || borrower?.referredBy || loan.clientReferredBy || '').trim() || null,
+        clientReferredByPhone: refPhone || null,
+        clientReferrerPhotoUrl: String(referrer?.profilePhotoUrl || '').trim() || null,
+      };
+    });
+
     // Garante que cada card leia a chave do próprio cadastro ou de um cadastro
     // equivalente do mesmo CPF/telefone, inclusive para dados antigos já existentes.
     const pixClients = await qRows(db, drizzleSql`
