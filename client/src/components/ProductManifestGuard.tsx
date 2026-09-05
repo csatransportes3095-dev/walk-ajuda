@@ -15,7 +15,7 @@ function parse(raw: unknown): Config | null {
       enabled: true,
       title: String(v?.title || "Antes de continuar"),
       body: String(v?.body || ""),
-      acceptLabel: String(v?.acceptLabel || "Li, entendi e aceito as condicoes acima."),
+      acceptLabel: String(v?.acceptLabel || "Li, entendi e aceito as condições da garantia e todas as regras informadas."),
       buttonLabel: String(v?.buttonLabel || "ACEITAR E CONTINUAR"),
     };
   } catch { return null; }
@@ -58,7 +58,7 @@ export default function ProductManifestGuard() {
       <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/90 p-4 backdrop-blur-md">
         <div className="w-full max-w-lg overflow-hidden rounded-2xl border-2 border-amber-400/60 bg-[#060914] text-white shadow-[0_30px_100px_rgba(0,0,0,.8)]">
           <div className="border-b border-amber-400/20 bg-amber-500/10 px-5 py-4">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-300">LEITURA OBRIGATORIA</p>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-300">LEITURA OBRIGATÓRIA</p>
             <h3 className="mt-1 text-xl font-black">{pending.config.title}</h3>
             <p className="mt-2 text-xs font-semibold text-white/60">Selecionado: <span className="text-cyan-300">{pending.actionLabel}</span></p>
           </div>
