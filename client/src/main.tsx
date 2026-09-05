@@ -20,6 +20,7 @@ import GlobalDevToolsProtection from "./components/GlobalDevToolsProtection";
 import AdminDevToolsTargetSelector from "./components/AdminDevToolsTargetSelector";
 import RafflePhotoIntegrityEnhancer from "./components/RafflePhotoIntegrityEnhancer";
 import "./index.css";
+import "./storefront-color-redesign.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
 // responde lentamente ou ocorre algum erro. Mutations continuam com prazo maior
