@@ -17,17 +17,6 @@ article:has(button[aria-controls^="product-details-"]) {
   margin-inline: 0 !important;
 }
 
-/* Remove por completo a faixa Conta / Prazo / Acompanhamento.
-   No componente atual ela e o primeiro bloco dentro da area principal do card. */
-article:has(button[aria-controls^="product-details-"]) > div:nth-of-type(3) > div:first-child {
-  display: none !important;
-}
-
-/* Aproxima a secao de garantia do topo depois da remocao da faixa. */
-article:has(button[aria-controls^="product-details-"]) > div:nth-of-type(3) > div:nth-child(2) {
-  margin-top: 6px !important;
-}
-
 /* As tres garantias permanecem lado a lado dentro do produto. */
 article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) {
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
@@ -57,6 +46,12 @@ article:has(button[aria-controls^="product-details-"]) [class*="max-w-[190px]"] 
 article:has(button[aria-controls^="product-details-"]) p[class*="text-teal-300"] {
   overflow-wrap: anywhere !important;
   word-break: normal !important;
+}
+
+/* Mantem exatamente as quebras de linha cadastradas pelo ADM na descricao.
+   Assim cada item com check verde fica em sua propria linha. */
+[id^="product-details-"] p.pt-1.text-slate-400 {
+  white-space: pre-line !important;
 }
 
 @media (max-width: 639px) {
