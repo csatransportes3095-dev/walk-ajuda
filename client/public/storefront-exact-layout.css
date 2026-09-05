@@ -8,7 +8,7 @@ div.grid:has(> article button[aria-controls^="product-details-"]) {
   gap: 16px !important;
 }
 
-/* Cada produto volta a ocupar apenas a propria celula da vitrine. */
+/* Cada produto ocupa apenas a propria celula da vitrine. */
 article:has(button[aria-controls^="product-details-"]) {
   grid-column: auto !important;
   width: 100% !important;
@@ -17,18 +17,46 @@ article:has(button[aria-controls^="product-details-"]) {
   margin-inline: 0 !important;
 }
 
-/* As tres garantias continuam lado a lado, como no modelo aprovado. */
+/* Remove por completo a faixa Conta / Prazo / Acompanhamento.
+   No componente atual ela e o primeiro bloco dentro da area principal do card. */
+article:has(button[aria-controls^="product-details-"]) > div:nth-of-type(3) > div:first-child {
+  display: none !important;
+}
+
+/* Aproxima a secao de garantia do topo depois da remocao da faixa. */
+article:has(button[aria-controls^="product-details-"]) > div:nth-of-type(3) > div:nth-child(2) {
+  margin-top: 6px !important;
+}
+
+/* As tres garantias permanecem lado a lado dentro do produto. */
 article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) {
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   align-items: stretch !important;
   gap: 8px !important;
 }
 
-/* Garantias mais compactas e mais quadradas: elimina o aspecto comprido. */
+/* Selecionaveis mais quadrados e compactos. */
 article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) > button {
-  min-height: 178px !important;
-  padding: 24px 7px 12px !important;
-  border-radius: 18px !important;
+  min-height: 148px !important;
+  padding: 22px 7px 10px !important;
+  border-radius: 16px !important;
+}
+
+/* Remove os textos auxiliares longos dos selecionaveis.
+   Evita quebra excessiva e cards altos/estreitos em grade de 4 produtos. */
+article:has(button[aria-controls^="product-details-"]) button[aria-pressed] [class*="max-w-[120px]"] {
+  display: none !important;
+}
+
+/* O texto lateral do resumo disputava espaco com o preco em cards estreitos. */
+article:has(button[aria-controls^="product-details-"]) [class*="max-w-[190px]"] {
+  display: none !important;
+}
+
+/* Preco nunca invade outro texto/bloco. */
+article:has(button[aria-controls^="product-details-"]) p[class*="text-teal-300"] {
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
 }
 
 @media (max-width: 639px) {
@@ -38,8 +66,8 @@ article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[ari
 
   article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) > button {
     min-width: 0 !important;
-    min-height: 172px !important;
-    padding-inline: 6px !important;
+    min-height: 146px !important;
+    padding: 21px 6px 10px !important;
   }
 }
 
@@ -51,8 +79,8 @@ article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[ari
   }
 
   article:has(button[aria-controls^="product-details-"]) div.grid:has(> button[aria-pressed]) > button {
-    min-height: 164px !important;
-    padding: 22px 5px 10px !important;
-    border-radius: 16px !important;
+    min-height: 142px !important;
+    padding: 20px 5px 9px !important;
+    border-radius: 15px !important;
   }
 }
