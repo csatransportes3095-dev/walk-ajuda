@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Pencil, Trash2, Download, Search, X, Users, Gift, Camera, KeyRound, RefreshCw, Eye, EyeOff, ShieldCheck, ShieldOff, Lock, Unlock, Clock, FileText, FolderOpen, CheckSquare, Square, ListChecks, ExternalLink, Link2, Copy, Plus, DollarSign, BadgePercent, FileCheck, File, FileArchive, FileCode, FileJson, Music, Video, Upload, Image as ImageIcon } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
+import { RouteRestrictionModal } from "@/components/RouteRestrictionModal";
 import { useTimezone } from "@/hooks/useTimezone";
 import { useLocation } from "wouter";
 
@@ -118,6 +119,7 @@ function RouteAccessWidget({ phone }: { phone: string }) {
 
   // A interface reage no mesmo toque; a fonte de verdade continua sendo a rota central no servidor.
   const [optimisticRoutes, setOptimisticRoutes] = useState<string[] | null>(null);
+  const [pendingRestriction, setPendingRestriction] = useState<{ routeKey: 'site' | 'gastos' | 'emprestimo'; routeLabel: string; currentRoutes: string[] } | null>(null);
   const serverHasRestriction = !!(data?.allowedRoutes);
   const serverRoutes = (data?.allowedRoutes || '').split(',').map((r: string) => r.trim()).filter(Boolean);
   const hasRestriction = optimisticRoutes !== null || serverHasRestriction;
@@ -125,38 +127,45 @@ function RouteAccessWidget({ phone }: { phone: string }) {
 
   const handleToggle = async (routeKey: string, checked: boolean) => {
     const routeLabel = ROUTES.find((route) => route.key === routeKey)?.label || routeKey;
-    let restrictionReason: string | undefined;
     if (!checked) {
-      const reason = window.prompt(
-        `Informe o motivo da desativação de ${routeLabel}. Esse texto será exibido ao cliente como aviso do sistema.`,
-        'Acesso temporariamente desativado pela administração.',
-      );
-      if (reason === null) return;
-      const clean = reason.trim();
-      if (!clean) {
-        toast.error('Informe o motivo da desativação para continuar.');
-        return;
-      }
-      restrictionReason = clean;
+      const currentRoutes = hasRestriction ? routes : ROUTES.map((route) => route.key);
+      setPendingRestriction({
+        routeKey: routeKey as 'site' | 'gastos' | 'emprestimo',
+        routeLabel,
+        currentRoutes,
+      });
+      return;
     }
 
-    let newRoutes: string[];
-    if (!hasRestriction) {
-      newRoutes = checked ? ROUTES.map(r => r.key) : ROUTES.map(r => r.key).filter(k => k !== routeKey);
-    } else {
-      newRoutes = checked ? [...routes.filter(r => r !== routeKey), routeKey] : routes.filter(r => r !== routeKey);
-    }
+    const newRoutes = hasRestriction
+      ? [...routes.filter((route) => route !== routeKey), routeKey]
+      : ROUTES.map((route) => route.key);
     setOptimisticRoutes(newRoutes);
     try {
       await updateRoutesMut.mutateAsync({
         phone: phone.replace(/\D/g, ''),
         allowedRoutes: newRoutes.join(','),
-        disabledRoute: checked ? undefined : (routeKey as 'site' | 'gastos' | 'emprestimo'),
-        restrictionReason,
       });
-      toast.success(checked
-        ? `${routeLabel} liberado.`
-        : `${routeLabel} desativado. O motivo será exibido automaticamente ao cliente.`);
+      toast.success(`${routeLabel} liberado.`);
+      await refetch();
+    } finally {
+      setOptimisticRoutes(null);
+    }
+  };
+
+  const confirmRestriction = async (reason: string) => {
+    if (!pendingRestriction) return;
+    const newRoutes = pendingRestriction.currentRoutes.filter((route) => route !== pendingRestriction.routeKey);
+    setOptimisticRoutes(newRoutes);
+    try {
+      await updateRoutesMut.mutateAsync({
+        phone: phone.replace(/\D/g, ''),
+        allowedRoutes: newRoutes.join(','),
+        disabledRoute: pendingRestriction.routeKey,
+        restrictionReason: reason,
+      });
+      toast.success(`${pendingRestriction.routeLabel} desativado. O motivo será exibido automaticamente ao cliente.`);
+      setPendingRestriction(null);
       await refetch();
     } finally {
       setOptimisticRoutes(null);
@@ -164,6 +173,7 @@ function RouteAccessWidget({ phone }: { phone: string }) {
   };
 
   return (
+    <>
     <div className="w-full rounded-xl border border-slate-500/45 bg-gradient-to-r from-slate-700/20 to-slate-700/10 p-2.5">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className="text-xs font-black text-slate-100">🔑 Rotas de acesso</span>
@@ -181,6 +191,14 @@ function RouteAccessWidget({ phone }: { phone: string }) {
       </div>
       <p className="mt-1.5 text-[9px] font-medium leading-tight text-cyan-200/75">Liberação e bloqueio enviados ao cliente imediatamente.</p>
     </div>
+    <RouteRestrictionModal
+      open={!!pendingRestriction}
+      routeLabel={pendingRestriction?.routeLabel || ''}
+      isSubmitting={updateRoutesMut.isPending}
+      onClose={() => { if (!updateRoutesMut.isPending) setPendingRestriction(null); }}
+      onConfirm={confirmRestriction}
+    />
+    </>
   );
 }
 

@@ -10,6 +10,7 @@ import {
   Clock, ShieldCheck, ShieldAlert, ShieldX, Bell, CalendarClock, X, BarChart2
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
+import { RouteRestrictionModal } from '@/components/RouteRestrictionModal';
 
 export default function AdminGastosPage() {
   const [searchPhone, setSearchPhone] = useState('');
@@ -25,6 +26,8 @@ export default function AdminGastosPage() {
   const [generatedData, setGeneratedData] = useState<any>(null);
   const [copied, setCopied] = useState(false);
   const [listFilter, setListFilter] = useState('');
+  const [routeRestrictionModal, setRouteRestrictionModal] = useState<{ clientId: number; clientName: string; routeKey: 'gastos' | 'emprestimo'; routeLabel: string; currentRoutes: string[] } | null>(null);
+  const [isUpdatingRouteRestriction, setIsUpdatingRouteRestriction] = useState(false);
 
   // Modal de definir validade para senha pendente
   const [pendingModal, setPendingModal] = useState<{ clientId: number; clientName: string; mode?: 'pending' | 'edit' } | null>(null);
@@ -42,20 +45,6 @@ export default function AdminGastosPage() {
   const updateClientMutation = trpc.spreadsheet.adminUpdateClient.useMutation();
   const updateAllowedRoutesMutation = trpc.spreadsheet.adminUpdateAllowedRoutes.useMutation();
 
-  const askRouteRestrictionReason = (routeLabel: string): string | null => {
-    const reason = window.prompt(
-      `Informe o motivo da desativação de ${routeLabel}. Esse texto será exibido ao cliente como aviso do sistema.`,
-      'Acesso temporariamente desativado pela administração.',
-    );
-    if (reason === null) return null;
-    const clean = reason.trim();
-    if (!clean) {
-      setError('Informe o motivo da desativação para continuar.');
-      return null;
-    }
-    return clean;
-  };
-
   // Modal de confirmar renovação de acesso
   const [renewModal, setRenewModal] = useState<{ clientId: number; clientName: string } | null>(null);
   const [isRenewing, setIsRenewing] = useState(false);
@@ -70,6 +59,29 @@ export default function AdminGastosPage() {
   const clientsQuery = trpc.spreadsheet.adminListClientsWithStatus.useQuery(undefined, {
     refetchInterval: 30000,
   });
+
+  const handleConfirmRouteRestriction = async (reason: string) => {
+    if (!routeRestrictionModal) return;
+    const { clientId, clientName, routeKey, routeLabel, currentRoutes } = routeRestrictionModal;
+    const newRoutes = currentRoutes.filter((route) => route !== routeKey);
+    setIsUpdatingRouteRestriction(true);
+    setError('');
+    try {
+      await updateAllowedRoutesMutation.mutateAsync({
+        clientId,
+        allowedRoutes: newRoutes.join(','),
+        disabledRoute: routeKey,
+        restrictionReason: reason,
+      });
+      setRouteRestrictionModal(null);
+      setSuccess(`${routeLabel} desativado para ${clientName}. O motivo será mostrado automaticamente ao cliente.`);
+      await clientsQuery.refetch();
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao desativar acesso');
+    } finally {
+      setIsUpdatingRouteRestriction(false);
+    }
+  };
 
   // Toggle global de modo de senha
   const passwordModeQuery = trpc.spreadsheet.getPasswordMode.useQuery();
@@ -696,22 +708,24 @@ export default function AdminGastosPage() {
                                   checked={isAllowed}
                                   onChange={async (e) => {
                                     const checked = e.target.checked;
-                                    const restrictionReason = checked ? undefined : askRouteRestrictionReason(label);
-                                    if (!checked && !restrictionReason) return;
-                                    const newRoutes = checked
-                                      ? [...routes.filter((r: string) => r !== key), key]
-                                      : routes.filter((r: string) => r !== key);
+                                    if (!checked) {
+                                      setRouteRestrictionModal({
+                                        clientId: c.id,
+                                        clientName: c.name,
+                                        routeKey: key as 'gastos' | 'emprestimo',
+                                        routeLabel: label,
+                                        currentRoutes: routes,
+                                      });
+                                      return;
+                                    }
+                                    const newRoutes = [...routes.filter((r: string) => r !== key), key];
                                     try {
                                       await updateAllowedRoutesMutation.mutateAsync({
                                         clientId: c.id,
                                         allowedRoutes: newRoutes.join(','),
-                                        disabledRoute: checked ? undefined : (key as 'gastos' | 'emprestimo'),
-                                        restrictionReason: restrictionReason || undefined,
                                       });
-                                      setSuccess(checked
-                                        ? `${label} liberado para ${c.name}.`
-                                        : `${label} desativado para ${c.name}. O motivo será mostrado automaticamente ao cliente.`);
-                                      clientsQuery.refetch();
+                                      setSuccess(`${label} liberado para ${c.name}.`);
+                                      await clientsQuery.refetch();
                                     } catch (err: any) {
                                       setError(err?.message || 'Erro ao atualizar rotas');
                                     }
@@ -733,6 +747,15 @@ export default function AdminGastosPage() {
           )}
         </Card>
       </div>
+
+      <RouteRestrictionModal
+        open={!!routeRestrictionModal}
+        routeLabel={routeRestrictionModal?.routeLabel || ''}
+        customerName={routeRestrictionModal?.clientName}
+        isSubmitting={isUpdatingRouteRestriction}
+        onClose={() => { if (!isUpdatingRouteRestriction) setRouteRestrictionModal(null); }}
+        onConfirm={handleConfirmRouteRestriction}
+      />
 
       {/* ===== MODAL: CONFIRMAR DELEÇÃO DE SENHA ===== */}
       {deleteModal && (
