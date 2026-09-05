@@ -181,17 +181,9 @@ export function StorefrontProductCard({
   const categoryLabel = item.category.toUpperCase();
   const productPill = item.product.name.toUpperCase();
 
-  const handlePriceModelSelect = async (nextId: number) => {
-    const nextModel = priceModels.find(model => model.id === nextId);
-    const key = `price:${nextId}`;
-    const accepted = await requestProductManifest(
-      [`price_model_manifest_${nextId}`, `option_manifest_${item.option.id}`],
-      key,
-      nextModel?.label || item.option.label,
-    );
-    if (!accepted) return;
+  const handlePriceModelSelect = (nextId: number) => {
     setPriceModelId(nextId);
-    setManifestAcceptedKey(key);
+    setManifestAcceptedKey(null);
   };
 
   const runProtectedAction = async (action: "buy" | "cart") => {
@@ -250,7 +242,7 @@ export function StorefrontProductCard({
                 const palette = OPTION_PALETTES[Math.min(index, OPTION_PALETTES.length - 1)];
                 const parts = splitModelLabel(model.label);
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} onClick={() => void handlePriceModelSelect(model.id)} className={`relative min-h-[150px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} onClick={() => handlePriceModelSelect(model.id)} className={`relative min-h-[150px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"}`}>
                     {index === 1 && <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-cyan-400 px-3 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">Mais escolhida</span>}
                     <ShieldCheck className={`mx-auto h-6 w-6 ${palette.text}`} />
                     <span className="mt-3 block text-[12px] font-black leading-4 text-white sm:text-base">{parts.title}</span>
