@@ -4,7 +4,12 @@ import bcrypt from "bcryptjs";
 import * as jose from "jose";
 import { sql } from "drizzle-orm";
 import { getDb, isIpBlocked } from "./db";
-import { findMainCustomerByIdentity, getRouteAccess, normalizeCustomerPhone } from "./customerAccess";
+import {
+  findMainCustomerByIdentity,
+  getCustomerRouteRestrictionReason,
+  getRouteAccess,
+  normalizeCustomerPhone,
+} from "./customerAccess";
 import { requireCompleteMainCustomerProfile } from "./customerIdentity";
 import { getCustomerProfileUpdateState } from "./customerProfileUpdatePolicy";
 
@@ -179,10 +184,14 @@ async function spreadsheetSession(req: Request, res: Response, route: Spreadshee
 
   const access = await getRouteAccess(Number(customer.id), db);
   if (access.restricted && !access.routes.includes(route)) {
+    const restriction = await getCustomerRouteRestrictionReason(Number(customer.id), route, db);
+    const savedRestrictionReason = String(restriction?.reason || "").trim();
+
     res.status(403).json({
       code: "ROUTE_NOT_ALLOWED",
-      message: "Esta área ainda não foi liberada pelo administrador.",
+      message: savedRestrictionReason || "Esta área ainda não foi liberada pelo administrador.",
       allowedRoutes: access.routes,
+      restrictionReason: savedRestrictionReason || null,
     });
     return;
   }
