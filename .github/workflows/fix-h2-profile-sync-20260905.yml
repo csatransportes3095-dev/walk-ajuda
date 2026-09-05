@@ -1,0 +1,183 @@
+name: Fix H2 profile sync from ADM
+
+on:
+  push:
+    branches:
+      - fix/h2-profile-sync-20260905
+    paths:
+      - .github/workflows/fix-h2-profile-sync-20260905.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Aplicar sincronização do perfil ADM com H2 Score
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('server/routers/loans.ts')
+          s = p.read_text(encoding='utf-8')
+
+          old_import = 'import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";'
+          new_import = 'import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, ensureCustomerH2ScoreAccount, getClientH2ScoreSummary, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";'
+          if s.count(old_import) != 1:
+              raise SystemExit(f'import esperado nao encontrado exatamente uma vez: {s.count(old_import)}')
+          s = s.replace(old_import, new_import, 1)
+
+          qrows_anchor = '''async function qRows(db: any, query: ReturnType<typeof drizzleSql>): Promise<any[]> {
+            const result = await db.execute(query);
+            return (result[0] || result) as any[];
+          }
+          '''
+          helper = '''async function qRows(db: any, query: ReturnType<typeof drizzleSql>): Promise<any[]> {
+            const result = await db.execute(query);
+            return (result[0] || result) as any[];
+          }
+
+          // Quando o ADM muda explicitamente o perfil comercial (Bronze/Prata/Ouro/Diamante),
+          // o H2 Score precisa refletir o mesmo nível imediatamente. O ajuste é auditável e
+          // acontece somente quando o perfil é realmente alterado pelo ADM.
+          async function syncH2ScoreWithAdminProfile(db: any, input: {
+            loanClientId?: number | null;
+            phone?: string | null;
+            cpf?: string | null;
+            profileSlug: string;
+            adminName?: string | null;
+          }) {
+            const slug = String(input.profileSlug || '').trim().toLowerCase();
+            if (!['bronze', 'prata', 'ouro', 'diamante'].includes(slug)) return;
+
+            const customer = await findMainCustomerByIdentity({ phone: input.phone || undefined, cpf: input.cpf || undefined }, db);
+            if (!customer) return;
+
+            const config = await getLoanH2ScoreConfig(db);
+            const targetByProfile: Record<string, number> = {
+              bronze: Math.max(Number(config.initialPoints || 0), Number(config.bronzeMin || 0)),
+              prata: Number(config.prataMin || 0),
+              ouro: Number(config.ouroMin || 0),
+              diamante: Number(config.diamanteMin || 100),
+            };
+            const target = Math.max(0, Math.min(100, Math.round(targetByProfile[slug])));
+            const account = await ensureCustomerH2ScoreAccount(db, Number(customer.id), input.loanClientId || null);
+            const before = Math.max(0, Math.min(100, Math.round(Number(account?.totalPoints || 0))));
+            const profileLabel = slug.charAt(0).toUpperCase() + slug.slice(1);
+
+            if (before !== target) {
+              const change = target - before;
+              await db.execute(drizzleSql`
+                INSERT INTO customerH2ScoreEvents
+                  (customerId, loanClientId, eventType, pointsBefore, pointsChange, pointsAfter, reason, createdBy)
+                VALUES
+                  (${Number(customer.id)}, ${input.loanClientId || null}, 'ajuste_manual', ${before}, ${change}, ${target}, ${`Perfil definido pelo ADM: ${profileLabel}`}, ${input.adminName || 'ADM Empréstimos'})
+              `);
+            }
+
+            await db.execute(drizzleSql`
+              UPDATE customerH2ScoreAccounts
+              SET totalPoints=${target}, levelSlug=${slug}, commercialProfileSlug=${slug}, isCommercialCustom=0, updatedAt=NOW()
+              WHERE customerId=${Number(customer.id)}
+            `);
+          }
+          '''
+          if s.count(qrows_anchor) != 1:
+              raise SystemExit(f'ancora qRows nao encontrada exatamente uma vez: {s.count(qrows_anchor)}')
+          s = s.replace(qrows_anchor, helper, 1)
+
+          start = s.index('  saveClient: adminProcedure.input(z.object({')
+          end = s.index('\n  toggleLoanEnabled:', start)
+          block = s[start:end]
+
+          signature = '  })).mutation(async ({ input }) => {'
+          if block.count(signature) != 1:
+              raise SystemExit(f'assinatura saveClient inesperada: {block.count(signature)}')
+          block = block.replace(signature, '  })).mutation(async ({ input, ctx }) => {', 1)
+
+          state_anchor = '    let resolvedLoanEnabled = input.loanEnabled ?? 0;\n    if (input.id) {'
+          if block.count(state_anchor) != 1:
+              raise SystemExit('ancora de estado do saveClient nao encontrada')
+          block = block.replace(state_anchor, '    let resolvedLoanEnabled = input.loanEnabled ?? 0;\n    let previousProfileSlug: string | null = null;\n    if (input.id) {', 1)
+
+          select_old = 'const existing = await qRows(db, drizzleSql`SELECT allowedPaymentTypes, loanEnabled FROM loanClients WHERE id=${input.id} LIMIT 1`);'
+          select_new = 'const existing = await qRows(db, drizzleSql`SELECT allowedPaymentTypes, loanEnabled, profileSlug FROM loanClients WHERE id=${input.id} LIMIT 1`);\n      previousProfileSlug = String(existing[0]?.profileSlug || \'\').trim().toLowerCase() || null;'
+          if block.count(select_old) != 1:
+              raise SystemExit('consulta do cliente existente nao encontrada')
+          block = block.replace(select_old, select_new, 1)
+
+          edit_tail = '''      try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+                console.warn('[loans.saveClient] sincronização unificada não aplicada:', error?.message);
+              }
+              return { id: input.id };'''
+          edit_new = '''      try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+                console.warn('[loans.saveClient] sincronização unificada não aplicada:', error?.message);
+              }
+              const selectedProfileSlug = String(input.profileSlug || '').trim().toLowerCase();
+              if (previousProfileSlug !== selectedProfileSlug) {
+                try {
+                  await syncH2ScoreWithAdminProfile(db, {
+                    loanClientId: input.id,
+                    phone: input.phone,
+                    cpf: input.cpf,
+                    profileSlug: selectedProfileSlug,
+                    adminName: ctx.user?.name || 'ADM Empréstimos',
+                  });
+                } catch (error: any) {
+                  console.error('[loans.saveClient] falha ao sincronizar perfil ADM com H2 Score:', error?.message);
+                  throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Perfil salvo, mas não foi possível sincronizar o H2 Score. Tente salvar novamente.' });
+                }
+              }
+              return { id: input.id };'''
+          if block.count(edit_tail) != 1:
+              raise SystemExit('cauda de edicao do saveClient nao encontrada')
+          block = block.replace(edit_tail, edit_new, 1)
+
+          create_tail = '''      try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+                console.warn('[loans.saveClient] sincronização unificada não aplicada:', error?.message);
+              }
+              return { id: (result[0] as any).insertId };'''
+          create_new = '''      try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
+                console.warn('[loans.saveClient] sincronização unificada não aplicada:', error?.message);
+              }
+              const insertedLoanClientId = Number((result[0] as any).insertId);
+              try {
+                await syncH2ScoreWithAdminProfile(db, {
+                  loanClientId: insertedLoanClientId,
+                  phone: mainCustomer.phone,
+                  cpf: mainCustomer.cpf,
+                  profileSlug: input.profileSlug,
+                  adminName: ctx.user?.name || 'ADM Empréstimos',
+                });
+              } catch (error: any) {
+                console.error('[loans.saveClient] falha ao sincronizar perfil inicial com H2 Score:', error?.message);
+                throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Cliente criado, mas não foi possível sincronizar o H2 Score. Edite e salve o perfil novamente.' });
+              }
+              return { id: insertedLoanClientId };'''
+          if block.count(create_tail) != 1:
+              raise SystemExit('cauda de criacao do saveClient nao encontrada')
+          block = block.replace(create_tail, create_new, 1)
+
+          s = s[:start] + block + s[end:]
+          p.write_text(s, encoding='utf-8')
+          PY
+
+          git diff --check
+          grep -n "syncH2ScoreWithAdminProfile" server/routers/loans.ts
+          grep -n "Perfil definido pelo ADM" server/routers/loans.ts
+
+      - name: Commit e publicar na branch de produção
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/loans.ts
+          git commit -m "fix(emprestimos): sincronizar perfil ADM com H2 Score"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
