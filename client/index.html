@@ -118,6 +118,27 @@
         setTimeout(() => recover('boot-timeout'), 12000);
       })();
     </script>
+    <script>
+      (() => {
+        // Na tela de Clientes, uma busca deve sempre consultar a lista completa.
+        // Filtros de seleção em massa (pedidos/bloqueados) não podem esconder
+        // resultados por nome ou número de cadastro, como *470.
+        const isCustomerSearchInput = (el) => {
+          if (!(el instanceof HTMLInputElement)) return false;
+          const placeholder = String(el.getAttribute('placeholder') || '').toLowerCase();
+          return placeholder.includes('nº cadastro') || placeholder.includes('*cadastro');
+        };
+
+        document.addEventListener('input', (event) => {
+          const input = event.target;
+          if (!isCustomerSearchInput(input) || !String(input.value || '').trim()) return;
+
+          const buttons = Array.from(document.querySelectorAll('button'));
+          const clearButton = buttons.find((button) => String(button.textContent || '').trim().toLowerCase() === 'limpar');
+          if (clearButton) clearButton.click();
+        }, true);
+      })();
+    </script>
     <script src="/payment-proof-progress.js" defer></script>
     <script src="/h2ads-schedule-filter.js" defer></script>
     <script type="module" src="/src/main.tsx"></script>
