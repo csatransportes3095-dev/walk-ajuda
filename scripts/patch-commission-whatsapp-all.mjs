@@ -3,6 +3,16 @@ import fs from 'node:fs';
 const file = 'client/src/pages/AdminCommissions.tsx';
 let source = fs.readFileSync(file, 'utf8');
 
+// O script também roda em todo build do Render. Se a correção mais nova já
+// estiver aplicada, não deve tentar reaplicar o patch legado nem falhar.
+const finalHelperImport = 'import { repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";';
+const finalMsgRepairs = (source.match(/repairCommissionWhatsappMessage\(msg\)/g) || []).length;
+const finalPixRepairs = (source.match(/repairCommissionWhatsappMessage\(msgPix\)/g) || []).length;
+if (source.includes(finalHelperImport) && finalMsgRepairs >= 2 && finalPixRepairs >= 1) {
+  console.log(`[commission-whatsapp] correção final já aplicada; patch idempotente aprovado (msg=${finalMsgRepairs}, pix=${finalPixRepairs}).`);
+  process.exit(0);
+}
+
 // Usa exatamente a mesma camada de reparo final já adotada no fluxo de
 // pedidos/status: primeiro monta a mensagem, depois recupera marcadores U+FFFD e
 // somente então faz encodeURIComponent para abrir wa.me.

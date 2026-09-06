@@ -2255,3 +2255,5 @@
 - [x] Corrigir exclusivamente UTF-8 nas notificações de comissão/indicação, PIX e pagamento; testar sem envio real.
 - [x] Reconstituir o handler real que ainda produz `�` na rota de comissão e validar a origem efetiva antes de nova correção.
 - [x] Executar correção definitiva da origem real dos caracteres `�` nas notificações de comissão e validar em produção sem envio real.
+- [x] Corrigir a falha do deploy Render do commit 518971e sem alterar outros setores.
+- [x] Tornar o patch de comissão idempotente para permitir o build do Render após a correção já aplicada.
