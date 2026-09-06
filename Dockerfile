@@ -40,6 +40,7 @@ RUN sed -i 's/\r$//' /app/scripts/render-start.sh && chmod +x /app/scripts/rende
 RUN npm install -g pnpm@10.4.1 \
     && pnpm install --frozen-lockfile \
     && node scripts/patch-admin-login-data-reload.mjs \
+    && node scripts/patch-loans-due-today-filter.mjs \
     && pnpm run build
 
 ENV NODE_ENV=production
