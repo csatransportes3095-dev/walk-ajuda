@@ -33,6 +33,7 @@ const STATUS_MAP_FALLBACK: Record<string, { label: string; color: string; bg: st
 
 export default function AdminCommissions() {
   useAdminAuth();
+  const utils = trpc.useUtils();
   const [, navigate] = useLocation();
   const [filterPaid, setFilterPaid] = useState<"all" | "pending" | "paid" | "invalid">("all");
 
@@ -48,33 +49,65 @@ export default function AdminCommissions() {
     dynamicStatuses.length > 0
       ? Object.fromEntries(dynamicStatuses.map(s => [s.key, { label: s.label, color: s.color, bg: s.bgColor }]))
       : STATUS_MAP_FALLBACK;
-  const toggleCommissionPaidMutation = trpc.orderStatus.toggleCommissionPaid.useMutation({
-    onSuccess: (data, variables) => {
-      commissionsQuery.refetch();
-      if (variables.paid) {
-        toast.success("Comissão marcada como paga! E-mail enviado ao indicador.");
-        // Abrir WhatsApp automaticamente com mensagem de pagamento confirmado
-        const wa = (data as any)?.whatsapp;
-        if (wa?.phone) {
-          const commText = wa.commissionValue > 0 ? `\n\n💰 Valor pago: R$ ${(wa.commissionValue / 100).toFixed(2).replace('.', ',')}` : '';
-          const msg = `✅ Olá ${wa.name || 'indicador'}! Sua comissão pela indicação de ${wa.customerName} foi paga com sucesso!${commText}\n\nObrigado por indicar! 🎉`;
-          window.open(`https://wa.me/55${wa.phone}?text=${encodeURIComponent(msg)}`, '_blank');
-        }
-      } else {
-        toast.success("Comissão atualizada!");
-      }
-    },
-    onError: () => toast.error("Erro ao atualizar comissão"),
-  });
-  const deleteCommissionMutation = trpc.orderStatus.deleteCommission.useMutation({
-    onSuccess: () => { commissionsQuery.refetch(); toast.success("Indicação removida!"); setConfirmDelete(null); },
-    onError: () => toast.error("Erro ao remover indicação"),
-  });
+
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [confirmPayment, setConfirmPayment] = useState<number | null>(null);
   const [referralAction, setReferralAction] = useState<{ registrationId: number; mode: 'invalidate' | 'revalidate' } | null>(null);
   const [invalidReason, setInvalidReason] = useState('');
   const [resendingEmail, setResendingEmail] = useState<number | null>(null);
+
+  const toggleCommissionPaidMutation = trpc.orderStatus.toggleCommissionPaid.useMutation({
+    onSuccess: (data, variables) => {
+      // Fecha a confirmação imediatamente e atualiza o cache local antes de abrir o WhatsApp.
+      // Assim, ao voltar para a tela, não entra novamente no fluxo de confirmação.
+      setConfirmPayment(null);
+      utils.orderStatus.listCommissions.setData(undefined, (current: any) => {
+        if (!Array.isArray(current)) return current;
+        return current.map((item: any) => item.registrationId === variables.registrationId
+          ? {
+              ...item,
+              commissionPaid: variables.paid ? 1 : 0,
+              commissionStatus: variables.paid ? 'paga' : 'elegivel',
+            }
+          : item);
+      });
+      void commissionsQuery.refetch();
+
+      if (variables.paid) {
+        toast.success("Pagamento da comissão confirmado.");
+        const wa = (data as any)?.whatsapp;
+        if (wa?.phone) {
+          const valueLine = wa.commissionValue > 0
+            ? `\n💰 *Valor pago:* R$ ${(wa.commissionValue / 100).toFixed(2).replace('.', ',')}`
+            : '';
+          const msg = [
+            '✅ *COMISSÃO PAGA*',
+            '',
+            `Olá, ${wa.name || 'indicador'}!`,
+            '',
+            'Sua comissão foi paga com sucesso.',
+            `👤 *Cliente indicado:* ${wa.customerName || 'Cliente'}`,
+            valueLine.trim(),
+            '',
+            'Obrigado pela indicação! 🎉',
+          ].filter(Boolean).join('\n');
+          window.open(`https://wa.me/55${String(wa.phone).replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+        }
+      } else {
+        toast.success("Pagamento da comissão desmarcado.");
+      }
+    },
+    onError: (error) => {
+      setConfirmPayment(null);
+      toast.error(error.message || "Erro ao atualizar comissão");
+      void commissionsQuery.refetch();
+    },
+  });
+
+  const deleteCommissionMutation = trpc.orderStatus.deleteCommission.useMutation({
+    onSuccess: () => { commissionsQuery.refetch(); toast.success("Indicação removida!"); setConfirmDelete(null); },
+    onError: () => toast.error("Erro ao remover indicação"),
+  });
 
   const setReferralValidityMutation = trpc.orderStatus.setCommissionReferralValidity.useMutation({
     onSuccess: (data) => {
@@ -335,16 +368,16 @@ export default function AdminCommissions() {
                         {pendentes} pendente{pendentes > 1 ? "s" : ""}
                       </span>
                     )}
-                      {pagas > 0 && (
-                        <span className="px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/40 text-green-400 text-xs font-bold">
-                          {pagas} paga{pagas > 1 ? "s" : ""}
-                        </span>
-                      )}
-                      {invalidas > 0 && (
-                        <span className="px-2 py-0.5 rounded-full bg-zinc-500/20 border border-zinc-400/40 text-zinc-300 text-xs font-bold">
-                          {invalidas} não válida{invalidas > 1 ? "s" : ""}
-                        </span>
-                      )}
+                    {pagas > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/40 text-green-400 text-xs font-bold">
+                        {pagas} paga{pagas > 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {invalidas > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-zinc-500/20 border border-zinc-400/40 text-zinc-300 text-xs font-bold">
+                        {invalidas} não válida{invalidas > 1 ? "s" : ""}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -423,7 +456,13 @@ export default function AdminCommissions() {
                                   ? 'bg-green-500/20 border-green-500/40 text-green-400'
                                   : 'bg-red-500/20 border-red-500/40 text-red-400'
                             }`}>
-                              {isInvalid ? '⛔ Indicação não válida' : isUnderReview ? <>🔎 Comissão em análise · {formatMoney((c as any).commissionValue)}</> : <>💰 {(c as any).commissionValue > 0 ? formatMoney((c as any).commissionValue) : 'Valor não definido'}</>}
+                              {isInvalid
+                                ? '⛔ Indicação não válida'
+                                : isPaid
+                                  ? <>✅ Pagamento confirmado{(c as any).commissionValue > 0 ? ` · ${formatMoney((c as any).commissionValue)}` : ''}</>
+                                  : isUnderReview
+                                    ? <>🔎 Comissão em análise · {formatMoney((c as any).commissionValue)}</>
+                                    : <>💰 {(c as any).commissionValue > 0 ? formatMoney((c as any).commissionValue) : 'Valor não definido'}</>}
                             </span>
                             {isInvalid && (c as any).referralInvalidReason && (
                               <span className="text-[10px] text-zinc-400">Motivo: {(c as any).referralInvalidReason}</span>
@@ -437,12 +476,12 @@ export default function AdminCommissions() {
                             <div className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-2 space-y-1.5">
                               <p className="text-[10px] font-semibold text-emerald-300">Confirmar pagamento da comissão?</p>
                               <div className="flex gap-1.5">
-                                <button onClick={() => toggleCommissionPaidMutation.mutate({ registrationId: c.registrationId, paid: true })} disabled={toggleCommissionPaidMutation.isPending} className="flex-1 rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50">Confirmar</button>
-                                <button onClick={() => setConfirmPayment(null)} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground">Cancelar</button>
+                                <button onClick={() => toggleCommissionPaidMutation.mutate({ registrationId: c.registrationId, paid: true })} disabled={toggleCommissionPaidMutation.isPending} className="flex-1 rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50">{toggleCommissionPaidMutation.isPending ? 'Salvando...' : 'Confirmar'}</button>
+                                <button onClick={() => setConfirmPayment(null)} disabled={toggleCommissionPaidMutation.isPending} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground disabled:opacity-50">Cancelar</button>
                               </div>
                             </div>
                           ) : isPaid ? (
-                            <button onClick={() => toggleCommissionPaidMutation.mutate({ registrationId: c.registrationId, paid: false })} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-green-500/20 border-green-500/40 text-green-400 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 disabled:opacity-50" title="Clique para desfazer"><CheckCircle className="w-3.5 h-3.5" /> Paga</button>
+                            <button onClick={() => toggleCommissionPaidMutation.mutate({ registrationId: c.registrationId, paid: false })} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-green-500/20 border-green-500/40 text-green-400 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 disabled:opacity-50" title="Clique para desfazer"><CheckCircle className="w-3.5 h-3.5" /> Pagamento confirmado</button>
                           ) : !isInvalid && isEligible ? (
                             <button onClick={() => setConfirmPayment(c.registrationId)} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-red-500/20 border-red-500/40 text-red-400 hover:bg-green-500/10 hover:border-green-500/30 hover:text-green-400 disabled:opacity-50" title="Marcar como paga"><Clock className="w-3.5 h-3.5" /> Pagar</button>
                           ) : null}
@@ -463,8 +502,21 @@ export default function AdminCommissions() {
                           {indicadorPhone && (() => {
                             const waPhone = `55${indicadorPhone.replace(/\D/g, '')}`;
                             const commVal = (c as any).commissionValue;
-                            const commText = commVal > 0 ? `\n\n💰 Comissão: R$ ${(commVal / 100).toFixed(2).replace('.', ',')}` : '';
-                            const msg = `🎉 Olá ${indicadorNome}! Sua indicação deu certo!\n\nCliente: ${c.customerName ?? c.phone}\nTelefone: ${c.phone}${commText}\n\nA comissão será paga em breve. Obrigado!`;
+                            const valueLine = commVal > 0 ? `💰 *Comissão:* R$ ${(commVal / 100).toFixed(2).replace('.', ',')}` : '';
+                            const msg = [
+                              '🎉 *INDICAÇÃO CONFIRMADA*',
+                              '',
+                              `Olá, ${indicadorNome}!`,
+                              '',
+                              'Sua indicação deu certo.',
+                              `👤 *Cliente indicado:* ${c.customerName ?? c.phone}`,
+                              `📱 *Telefone:* ${formatPhone(c.phone)}`,
+                              valueLine,
+                              '',
+                              isPaid ? '✅ *Pagamento da comissão confirmado.*' : 'A comissão será paga em breve.',
+                              '',
+                              'Obrigado pela indicação!',
+                            ].filter(Boolean).join('\n');
                             return (
                               <a
                                 href={`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`}
@@ -481,8 +533,19 @@ export default function AdminCommissions() {
                           {indicadorPhone && (() => {
                             const waPhone = `55${indicadorPhone.replace(/\D/g, '')}`;
                             const commVal = (c as any).commissionValue;
-                            const commText = commVal > 0 ? ` de R$ ${(commVal / 100).toFixed(2).replace('.', ',')}` : '';
-                            const msgPix = `Olá ${indicadorNome}! 🎉\n\nSua comissão${commText} está pronta para pagamento!\n\nPor favor, me informe sua chave PIX para realizar o pagamento. 💰\n\nObrigado!`;
+                            const valueLine = commVal > 0 ? `💰 *Valor da comissão:* R$ ${(commVal / 100).toFixed(2).replace('.', ',')}` : '';
+                            const msgPix = [
+                              '💳 *DADOS PARA PAGAMENTO DA COMISSÃO*',
+                              '',
+                              `Olá, ${indicadorNome}!`,
+                              '',
+                              'Sua comissão está pronta para pagamento.',
+                              valueLine,
+                              '',
+                              'Por favor, envie sua *chave PIX* para realizarmos o pagamento.',
+                              '',
+                              'Obrigado!',
+                            ].filter(Boolean).join('\n');
                             return (
                               <a
                                 href={`https://wa.me/${waPhone}?text=${encodeURIComponent(msgPix)}`}
