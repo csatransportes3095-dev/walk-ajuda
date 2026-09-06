@@ -1,0 +1,42 @@
+name: Apply loan card color v2
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-loan-card-color-v2-main-20260905.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+      - name: Patch customer cards with loan color
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('client/src/pages/AdminCustomers.tsx')
+          s=p.read_text(encoding='utf-8')
+          anchor="""  const customersQuery = trpc.customers.list.useQuery(undefined, {\n    staleTime: 30_000,\n    refetchOnWindowFocus: false,\n    placeholderData: (previousData) => previousData,\n  });\n"""
+          insert="""  const customersQuery = trpc.customers.list.useQuery(undefined, {\n    staleTime: 30_000,\n    refetchOnWindowFocus: false,\n    placeholderData: (previousData) => previousData,\n  });\n  // Destaque visual apenas: amarelo identifica cliente que realmente possui empréstimo.\n  // As cores atuais de cadastro/pedido continuam intactas.\n  const loanClientsForCardColorQuery = trpc.loans.listClients.useQuery({}, {\n    staleTime: 30_000,\n    refetchOnWindowFocus: false,\n    placeholderData: (previousData) => previousData,\n  });\n  const normalizeLoanCardPhone = (value: unknown) => {\n    let digits = String(value ?? '').replace(/\\D/g, '');\n    if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) digits = digits.slice(2);\n    return digits;\n  };\n  const hasLoanForCustomer = (customer: Customer) => {\n    const phone = normalizeLoanCardPhone(customer.phone);\n    const cpf = String(customer.cpf ?? '').replace(/\\D/g, '');\n    return ((loanClientsForCardColorQuery.data || []) as any[]).some((loanClient: any) => {\n      if (Number(loanClient.totalLoans || 0) <= 0) return false;\n      const loanPhone = normalizeLoanCardPhone(loanClient.phone);\n      const loanCpf = String(loanClient.cpf ?? '').replace(/\\D/g, '');\n      return (!!phone && !!loanPhone && phone === loanPhone) || (!!cpf && !!loanCpf && cpf === loanCpf);\n    });\n  };\n"""
+          if 'loanClientsForCardColorQuery' not in s:
+            if anchor not in s: raise SystemExit('customers query anchor not found')
+            s=s.replace(anchor,insert,1)
+          old="""              background: c.blocked === 1\n                  ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'\n                  : c.hasOrder\n                  ? 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)'\n                  : 'linear-gradient(135deg, #1e1b4b 0%, #0f0b2e 100%)',\n                border: c.blocked === 1\n                  ? '2px solid rgba(239,68,68,0.8)'\n                  : c.hasOrder\n                  ? '2px solid rgba(34,197,94,0.7)'\n                  : '2px solid rgba(99,102,241,0.6)',\n                boxShadow: c.blocked === 1\n                  ? '0 4px 20px rgba(239,68,68,0.35)'\n                  : c.hasOrder\n                  ? '0 4px 20px rgba(34,197,94,0.3)'\n                  : '0 4px 20px rgba(99,102,241,0.25)',\n"""
+          new="""              background: c.blocked === 1\n                  ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'\n                  : c.hasOrder && hasLoanForCustomer(c)\n                  ? 'linear-gradient(135deg, #052e16 0%, #052e16 49.8%, #4a3600 50.2%, #241a00 100%)'\n                  : hasLoanForCustomer(c)\n                  ? 'linear-gradient(135deg, #4a3600 0%, #241a00 100%)'\n                  : c.hasOrder\n                  ? 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)'\n                  : 'linear-gradient(135deg, #1e1b4b 0%, #0f0b2e 100%)',\n                border: c.blocked === 1\n                  ? '2px solid rgba(239,68,68,0.8)'\n                  : c.hasOrder && hasLoanForCustomer(c)\n                  ? '2px solid rgba(202,173,35,0.8)'\n                  : hasLoanForCustomer(c)\n                  ? '2px solid rgba(234,179,8,0.8)'\n                  : c.hasOrder\n                  ? '2px solid rgba(34,197,94,0.7)'\n                  : '2px solid rgba(99,102,241,0.6)',\n                boxShadow: c.blocked === 1\n                  ? '0 4px 20px rgba(239,68,68,0.35)'\n                  : c.hasOrder && hasLoanForCustomer(c)\n                  ? '-8px 4px 20px rgba(34,197,94,0.22), 8px 4px 20px rgba(234,179,8,0.24)'\n                  : hasLoanForCustomer(c)\n                  ? '0 4px 20px rgba(234,179,8,0.3)'\n                  : c.hasOrder\n                  ? '0 4px 20px rgba(34,197,94,0.3)'\n                  : '0 4px 20px rgba(99,102,241,0.25)',\n"""
+          if 'c.hasOrder && hasLoanForCustomer(c)' not in s:
+            if old not in s: raise SystemExit('customer card style anchor not found')
+            s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminCustomers.tsx
+          git commit -m "feat(clientes): destacar cartões com empréstimo"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
