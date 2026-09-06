@@ -2,7 +2,8 @@
   'use strict';
 
   const originalFetch = window.fetch.bind(window);
-  const PAGE_CHECK_MARKER = 'adCampaigns.checkForPage';
+  const CHECK_MARKERS = ['adCampaigns.checkForPage', 'adCampaigns.checkForClient'];
+  const STORAGE_PREFIX = 'h2_ad_frequency_v2';
 
   const safeLocalGet = (key) => {
     try { return window.localStorage.getItem(key); } catch (_) { return null; }
@@ -18,13 +19,20 @@
   };
 
   const campaignId = (campaign) => Number(campaign?.id || 0);
-  const onceKey = (campaign) => `h2_ad_once_${campaignId(campaign)}`;
-  const accessKey = (campaign) => `h2_ad_access_${campaignId(campaign)}`;
-  const customKey = (campaign) => `h2_ad_custom_${campaignId(campaign)}`;
+  const campaignVersion = (campaign) => {
+    const raw = campaign?.updatedAt || campaign?.createdAt || '';
+    return String(raw).replace(/[^0-9A-Za-z_-]/g, '').slice(0, 48) || 'base';
+  };
+  const keyBase = (campaign) => `${STORAGE_PREFIX}_${campaignId(campaign)}_${campaignVersion(campaign)}`;
+  const onceKey = (campaign) => `${keyBase(campaign)}_once`;
+  const accessKey = (campaign) => `${keyBase(campaign)}_access`;
+  const customKey = (campaign) => `${keyBase(campaign)}_custom`;
+
+  const frequencyOf = (campaign) => String(campaign?.frequency || 'every_access').trim().toLowerCase();
 
   const isEligible = (campaign) => {
     if (!campaign || !campaignId(campaign)) return false;
-    const frequency = String(campaign.frequency || 'every_access');
+    const frequency = frequencyOf(campaign);
 
     if (frequency === 'every_reload') return true;
 
@@ -49,38 +57,47 @@
 
   const markShown = (campaign) => {
     if (!campaign || !campaignId(campaign)) return;
-    const frequency = String(campaign.frequency || 'every_access');
+    const frequency = frequencyOf(campaign);
     if (frequency === 'once') safeLocalSet(onceKey(campaign), '1');
     if (frequency === 'every_access') safeSessionSet(accessKey(campaign), '1');
     if (frequency === 'custom') safeLocalSet(customKey(campaign), String(Date.now()));
   };
 
-  const rewritePageCampaignResponse = async (response) => {
+  const locateCampaignContainer = (payload) => {
+    const entries = Array.isArray(payload) ? payload : [payload];
+    for (const entry of entries) {
+      const json = entry?.result?.data?.json;
+      if (json && Object.prototype.hasOwnProperty.call(json, 'campaign')) return json;
+    }
+    return null;
+  };
+
+  const rewriteCampaignResponse = async (response) => {
     try {
       const payload = await response.clone().json();
-      const entry = Array.isArray(payload) ? payload[0] : payload;
-      const json = entry?.result?.data?.json;
-      const campaign = json?.campaign;
+      const container = locateCampaignContainer(payload);
+      const campaign = container?.campaign;
       if (!campaign) return response;
 
       if (!isEligible(campaign)) {
-        json.campaign = null;
+        container.campaign = null;
       } else {
-        // Marca no momento em que o backend autorizou a exibição. Assim uma segunda
-        // consulta da mesma página/sessão não reabre a propaganda configurada como
-        // "Apenas uma vez" ou "A cada acesso".
+        // Marca antes do React abrir o modal. Isso torna "Apenas uma vez" persistente
+        // mesmo se a página for atualizada imediatamente ou se a gravação de impressão
+        // do backend ainda não tiver terminado.
         markShown(campaign);
       }
 
       const headers = new Headers(response.headers);
       headers.set('content-type', 'application/json; charset=utf-8');
+      headers.delete('content-length');
       return new Response(JSON.stringify(payload), {
         status: response.status,
         statusText: response.statusText,
         headers,
       });
     } catch (error) {
-      console.warn('[H2 Ads] Falha ao aplicar controle local de frequência:', error);
+      console.warn('[H2 Ads] Falha no controle de frequência:', error);
       return response;
     }
   };
@@ -94,8 +111,8 @@
         : source instanceof Request
           ? source.url
           : String(source || '');
-      if (!url.includes(PAGE_CHECK_MARKER)) return response;
-      return await rewritePageCampaignResponse(response);
+      if (!CHECK_MARKERS.some((marker) => url.includes(marker))) return response;
+      return await rewriteCampaignResponse(response);
     } catch (_) {
       return response;
     }
