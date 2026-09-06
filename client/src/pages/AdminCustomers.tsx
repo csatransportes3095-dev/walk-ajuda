@@ -463,6 +463,28 @@ export default function AdminCustomers() {
     refetchOnWindowFocus: false,
     placeholderData: (previousData) => previousData,
   });
+  // Destaque visual apenas: amarelo identifica cliente que realmente possui empréstimo.
+  // As cores atuais de cadastro/pedido continuam intactas.
+  const loanClientsForCardColorQuery = trpc.loans.listClients.useQuery({}, {
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
+  const normalizeLoanCardPhone = (value: unknown) => {
+    let digits = String(value ?? '').replace(/\D/g, '');
+    if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) digits = digits.slice(2);
+    return digits;
+  };
+  const hasLoanForCustomer = (customer: Customer) => {
+    const phone = normalizeLoanCardPhone(customer.phone);
+    const cpf = String(customer.cpf ?? '').replace(/\D/g, '');
+    return ((loanClientsForCardColorQuery.data || []) as any[]).some((loanClient: any) => {
+      if (Number(loanClient.totalLoans || 0) <= 0) return false;
+      const loanPhone = normalizeLoanCardPhone(loanClient.phone);
+      const loanCpf = String(loanClient.cpf ?? '').replace(/\D/g, '');
+      return (!!phone && !!loanPhone && phone === loanPhone) || (!!cpf && !!loanCpf && cpf === loanCpf);
+    });
+  };
   const routeReleaseModesQuery = trpc.customers.routeReleaseModes.useQuery();
   const setRouteReleaseModeMut = trpc.customers.setRouteReleaseMode.useMutation({
     onSuccess: () => { routeReleaseModesQuery.refetch(); toast.success('Modo de liberação atualizado.'); },
@@ -1151,16 +1173,28 @@ export default function AdminCustomers() {
             <div key={c.id} className={`rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5 ${selectedIds.has(c.id) ? 'ring-2 ring-green-400' : editingId === c.id ? 'ring-2 ring-blue-400' : ''}`} style={{
                 background: c.blocked === 1
                   ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'
+                  : c.hasOrder && hasLoanForCustomer(c)
+                  ? 'linear-gradient(135deg, #052e16 0%, #052e16 49.8%, #4a3600 50.2%, #241a00 100%)'
+                  : hasLoanForCustomer(c)
+                  ? 'linear-gradient(135deg, #4a3600 0%, #241a00 100%)'
                   : c.hasOrder
                   ? 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)'
                   : 'linear-gradient(135deg, #1e1b4b 0%, #0f0b2e 100%)',
                 border: c.blocked === 1
                   ? '2px solid rgba(239,68,68,0.8)'
+                  : c.hasOrder && hasLoanForCustomer(c)
+                  ? '2px solid rgba(202,173,35,0.8)'
+                  : hasLoanForCustomer(c)
+                  ? '2px solid rgba(234,179,8,0.8)'
                   : c.hasOrder
                   ? '2px solid rgba(34,197,94,0.7)'
                   : '2px solid rgba(99,102,241,0.6)',
                 boxShadow: c.blocked === 1
                   ? '0 4px 20px rgba(239,68,68,0.35)'
+                  : c.hasOrder && hasLoanForCustomer(c)
+                  ? '-8px 4px 20px rgba(34,197,94,0.22), 8px 4px 20px rgba(234,179,8,0.24)'
+                  : hasLoanForCustomer(c)
+                  ? '0 4px 20px rgba(234,179,8,0.3)'
                   : c.hasOrder
                   ? '0 4px 20px rgba(34,197,94,0.3)'
                   : '0 4px 20px rgba(99,102,241,0.25)',
