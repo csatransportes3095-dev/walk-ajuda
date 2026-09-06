@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { OnlineSupportWidget } from "@/components/OnlineSupportWidget";
 import {
   ArrowRight,
   BarChart3,
   ClipboardCheck,
   Download,
   Gift,
+  MessageCircle,
   ShieldCheck,
   Smartphone,
   Star,
@@ -38,6 +40,10 @@ type Palette = {
 };
 
 type CanonicalKind = "pedido" | "acompanhar" | "cadastro" | "gastos" | "emprestimo" | "sorteio";
+
+const WELCOME_CHOICE_KEY = "walk_welcome_choice";
+const ONLINE_SUPPORT_VISITOR_KEY = "walk_online_support_visitor_id";
+const CANONICAL_KINDS = new Set<CanonicalKind>(["pedido", "acompanhar", "cadastro", "gastos", "emprestimo", "sorteio"]);
 
 const PALETTES: Record<string, Palette> = {
   pedido: { from: "#8f19ef", to: "#5a0fbf", glow: "#d13dff", label: "RÁPIDO • SEGURO • SEM BUROCRACIA" },
@@ -87,6 +93,16 @@ function keyFor(text: string) {
   return "default";
 }
 
+function kindForButton(button: HomeButton) {
+  if (button.id === -2) return "pedido";
+  if (button.id === -1) return "acompanhar";
+  if (button.id === -3) return "cadastro";
+  if (button.id === -4) return "gastos";
+  if (button.id === -5) return "emprestimo";
+  if (button.id === -6) return "sorteio";
+  return keyFor(button.text || "");
+}
+
 function CardIcon({ kind }: { kind: string }) {
   const cls = "h-7 w-7";
   if (kind === "acompanhar") return <ClipboardCheck className={cls} />;
@@ -97,36 +113,105 @@ function CardIcon({ kind }: { kind: string }) {
   return <Zap className={cls} />;
 }
 
-function go(url: string, newTab = false) {
-  if (!url) return;
-  if (newTab || /^https?:\/\//i.test(url)) {
-    window.open(url, newTab ? "_blank" : "_self", "noopener,noreferrer");
+function markWelcomeChoice() {
+  try {
+    sessionStorage.setItem(WELCOME_CHOICE_KEY, "premium");
+  } catch {
+    // Navegação continua mesmo se o storage estiver indisponível.
+  }
+}
+
+function withWhatsappMessage(url: string, waMsg?: string | null) {
+  if (!url.includes("wa.me") || !waMsg?.trim()) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}text=${encodeURIComponent(waMsg.trim())}`;
+}
+
+function go(url: string, newTab = false, waMsg?: string | null) {
+  const cleanUrl = url?.trim();
+  if (!cleanUrl) return;
+
+  markWelcomeChoice();
+
+  if (/^https?:\/\//i.test(cleanUrl)) {
+    const finalUrl = withWhatsappMessage(cleanUrl, waMsg);
+    if (newTab) {
+      window.open(finalUrl, "_blank", "noopener,noreferrer");
+    } else {
+      window.location.href = finalUrl;
+    }
     return;
   }
-  window.location.href = url.startsWith("/") ? url : `/${url}`;
+
+  const internalUrl = cleanUrl.startsWith("/") ? cleanUrl : `/${cleanUrl}`;
+  if (newTab) {
+    window.open(internalUrl, "_blank", "noopener,noreferrer");
+  } else {
+    window.location.href = internalUrl;
+  }
+}
+
+function getOrCreateOnlineSupportVisitorId() {
+  if (typeof window === "undefined") return "";
+  try {
+    const stored = localStorage.getItem(ONLINE_SUPPORT_VISITOR_KEY);
+    if (stored) return stored;
+    const created = `v_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(ONLINE_SUPPORT_VISITOR_KEY, created);
+    return created;
+  } catch {
+    return `v_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
 }
 
 export default function H2WelcomePremium() {
   const [active, setActive] = useState(false);
   const [legacyRoot, setLegacyRoot] = useState<HTMLElement | null>(null);
+  const [onlineSupportOpen, setOnlineSupportOpen] = useState(false);
+  const [onlineSupportVisitorId] = useState(() => getOrCreateOnlineSupportVisitorId());
   const isHome = typeof window !== "undefined" && window.location.pathname === "/";
 
   const { data: settings } = trpc.settings.getAll.useQuery(undefined, { enabled: isHome });
   const { data: rawButtons = [] } = trpc.homeButtons.listPublic.useQuery(undefined, { enabled: isHome });
+  const { data: onlineSupportState } = trpc.onlineSupport.publicState.useQuery(
+    { pathname: "/" },
+    { enabled: isHome, refetchInterval: 20_000 },
+  );
+  const { data: onlineSupportUnread } = trpc.onlineSupport.unreadSummary.useQuery(
+    { visitorId: onlineSupportVisitorId },
+    { enabled: isHome && Boolean(onlineSupportVisitorId), refetchInterval: 5_000 },
+  );
 
   useEffect(() => {
-    if (!isHome) return;
+    if (!isHome) {
+      if (legacyRoot) {
+        legacyRoot.style.display = "";
+        legacyRoot.removeAttribute("aria-hidden");
+      }
+      setLegacyRoot(null);
+      setActive(false);
+      setOnlineSupportOpen(false);
+      return;
+    }
 
     const locate = () => {
       const candidates = Array.from(document.querySelectorAll<HTMLElement>("div.min-h-screen"));
-      const target = candidates.find((node) =>
+      const target = candidates.find((node) => {
+        const hasChoiceStack = Boolean(node.querySelector("div.w-full.space-y-3"));
+        const hasWelcomeBackground = node.classList.contains("bg-[#0a0a1a]");
+        return hasChoiceStack && hasWelcomeBackground;
+      }) || candidates.find((node) =>
         node.textContent?.includes("O que você deseja fazer?") &&
         node.textContent?.includes("Baixe o app Android"),
       );
 
       if (target && target !== legacyRoot) {
-        if (legacyRoot) legacyRoot.style.display = "";
+        if (legacyRoot) {
+          legacyRoot.style.display = "";
+          legacyRoot.removeAttribute("aria-hidden");
+        }
         target.style.display = "none";
+        target.setAttribute("aria-hidden", "true");
         setLegacyRoot(target);
         setActive(true);
       }
@@ -139,7 +224,10 @@ export default function H2WelcomePremium() {
   }, [isHome, legacyRoot]);
 
   useEffect(() => () => {
-    if (legacyRoot) legacyRoot.style.display = "";
+    if (legacyRoot) {
+      legacyRoot.style.display = "";
+      legacyRoot.removeAttribute("aria-hidden");
+    }
   }, [legacyRoot]);
 
   const buttons = useMemo(() => {
@@ -169,14 +257,14 @@ export default function H2WelcomePremium() {
         id: -2,
         text: settings?.home_btn1_text || "FAZER PEDIDO",
         subtitle: settings?.home_btn1_subtitle || "Abrir conta Uber, 99 ou InDrive",
-        url: "/login",
+        url: settings?.home_btn1_url?.trim() || "/login",
         color: settings?.home_btn1_color || "#7c3aed",
       },
       {
         id: -1,
         text: settings?.home_btn2_text || "ACOMPANHAR PEDIDO",
         subtitle: settings?.home_btn2_subtitle || "Acompanhar seu pedido em tempo real",
-        url: "/acompanhar",
+        url: settings?.home_btn2_url?.trim() || "/acompanhar",
         color: settings?.home_btn2_color || "#059669",
       },
       canonicalFromDynamic("cadastro"),
@@ -185,13 +273,29 @@ export default function H2WelcomePremium() {
       canonicalFromDynamic("sorteio"),
     ];
 
-    const remaining = dynamic.filter((button) => !used.has(button.id));
+    const remaining = dynamic.filter((button) => {
+      if (used.has(button.id)) return false;
+      const kind = keyFor(button.text || "");
+      return !CANONICAL_KINDS.has(kind as CanonicalKind);
+    });
+
     return [...essential, ...remaining];
   }, [rawButtons, settings]);
 
   if (!isHome || !active) return null;
 
   const logo = settings?.login_image_url?.trim() || "/h2-brand-180.png";
+  const supportVisible = Boolean(onlineSupportState?.chatEnabled);
+  const supportUnreadCount = onlineSupportUnread?.unreadMessages || 0;
+  const supportLabelBase = onlineSupportState?.buttonLabel || "ATENDIMENTO ONLINE";
+  const supportLabel = supportUnreadCount > 0
+    ? `${supportLabelBase} — ${supportUnreadCount} NOVA${supportUnreadCount > 1 ? "S" : ""} MENSAGEM${supportUnreadCount > 1 ? "S" : ""}`
+    : supportLabelBase;
+  const supportDescription = onlineSupportState?.buttonDescription || "Tire suas dúvidas, receba instruções e fale com nossa equipe.";
+  const supportStatus = String((onlineSupportState as any)?.customStatusText || "").trim()
+    || (onlineSupportState?.onlineNow ? "ATENDIMENTO ONLINE" : "FORA DO HORÁRIO");
+  const supportAvatar = (onlineSupportState as any)?.botAvatar as string | undefined;
+  const supportColor = onlineSupportState?.buttonColor || "#126ed2";
 
   return (
     <div className="h2p-shell">
@@ -264,10 +368,19 @@ export default function H2WelcomePremium() {
 
         <section id="h2p-services" className="h2p-services">
           {buttons.map((button, index) => {
-            const kind = keyFor(button.text || "");
-            const palette = PALETTES[kind];
-            const logoKey = button.id > 0 ? `home_extra_button_logo_${button.id}` : button.id === -2 ? "home_btn1_logo_url" : "home_btn2_logo_url";
-            const cardLogo = (settings as Record<string, string> | undefined)?.[logoKey]?.trim();
+            const kind = kindForButton(button);
+            const palette = PALETTES[kind] || PALETTES.default;
+            const logoKey = button.id > 0
+              ? `home_extra_button_logo_${button.id}`
+              : button.id === -2
+                ? "home_btn1_logo_url"
+                : button.id === -1
+                  ? "home_btn2_logo_url"
+                  : "";
+            const cardLogo = logoKey
+              ? (settings as Record<string, string> | undefined)?.[logoKey]?.trim()
+              : "";
+
             return (
               <button
                 type="button"
@@ -278,7 +391,7 @@ export default function H2WelcomePremium() {
                   "--card-to": palette.to,
                   "--card-glow": palette.glow,
                 } as React.CSSProperties}
-                onClick={() => go(button.url, Boolean(button.openInNewTab))}
+                onClick={() => go(button.url, Boolean(button.openInNewTab), button.waMsg)}
               >
                 <span className="h2p-service-media">
                   {cardLogo ? <img src={cardLogo} alt="" /> : <CardIcon kind={kind} />}
@@ -293,6 +406,30 @@ export default function H2WelcomePremium() {
               </button>
             );
           })}
+
+          {supportVisible && (
+            <button
+              type="button"
+              className="h2p-service h2p-default"
+              style={{
+                "--card-from": supportColor,
+                "--card-to": "#07336f",
+                "--card-glow": supportColor,
+              } as React.CSSProperties}
+              onClick={() => setOnlineSupportOpen(true)}
+            >
+              <span className="h2p-service-media">
+                {supportAvatar ? <img src={supportAvatar} alt="" /> : <MessageCircle className="h-7 w-7" />}
+              </span>
+              <span className="h2p-service-copy">
+                <strong>{supportLabel}</strong>
+                <span>{supportDescription}</span>
+                <small>{supportStatus}</small>
+              </span>
+              <span className="h2p-service-watermark"><MessageCircle className="h-7 w-7" /></span>
+              <span className="h2p-service-arrow"><ArrowRight /></span>
+            </button>
+          )}
         </section>
 
         <section id="h2p-about" className="h2p-trust">
@@ -309,6 +446,14 @@ export default function H2WelcomePremium() {
           <span className="h2p-stripes h2p-stripes-right" />
         </footer>
       </main>
+
+      <OnlineSupportWidget
+        isOpen={onlineSupportOpen}
+        onClose={() => setOnlineSupportOpen(false)}
+        onMinimize={() => setOnlineSupportOpen(false)}
+        onBack={() => setOnlineSupportOpen(false)}
+        openMode="fullscreen"
+      />
     </div>
   );
 }
