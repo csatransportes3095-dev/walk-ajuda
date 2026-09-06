@@ -1,0 +1,132 @@
+name: Apply loan card color in customers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-loan-card-color-main-20260905.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Aplicar somente destaque visual de clientes com empréstimo
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('client/src/pages/AdminCustomers.tsx')
+          s = p.read_text(encoding='utf-8')
+
+          query_anchor = '''  const customersQuery = trpc.customers.list.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
+'''
+          query_insert = '''  const customersQuery = trpc.customers.list.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
+  // Somente para o destaque visual dos cartões: considera cliente com empréstimo
+  // quando existe pelo menos um empréstimo vinculado. Não altera acesso, perfil,
+  // limite, status nem qualquer regra do módulo de Empréstimos.
+  const loanClientsForCardColorQuery = trpc.loans.listClients.useQuery({}, {
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
+  const normalizeIdentityPhone = (value: unknown) => {
+    let digits = String(value ?? '').replace(/\\D/g, '');
+    if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) digits = digits.slice(2);
+    return digits;
+  };
+  const hasLoanForCustomer = (customer: Customer) => {
+    const phone = normalizeIdentityPhone(customer.phone);
+    const cpf = String(customer.cpf ?? '').replace(/\\D/g, '');
+    return ((loanClientsForCardColorQuery.data || []) as any[]).some((loanClient: any) => {
+      if (Number(loanClient.totalLoans || 0) <= 0) return false;
+      const loanPhone = normalizeIdentityPhone(loanClient.phone);
+      const loanCpf = String(loanClient.cpf ?? '').replace(/\\D/g, '');
+      return (!!phone && !!loanPhone && phone === loanPhone) || (!!cpf && !!loanCpf && cpf === loanCpf);
+    });
+  };
+'''
+          if 'loanClientsForCardColorQuery' not in s:
+            if s.count(query_anchor) != 1:
+              raise SystemExit(f'âncora da consulta de clientes inesperada: {s.count(query_anchor)}')
+            s = s.replace(query_anchor, query_insert, 1)
+
+          style_old = '''              background: c.blocked === 1
+                  ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'
+                  : c.hasOrder
+                  ? 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)'
+                  : 'linear-gradient(135deg, #1e1b4b 0%, #0f0b2e 100%)',
+                border: c.blocked === 1
+                  ? '2px solid rgba(239,68,68,0.8)'
+                  : c.hasOrder
+                  ? '2px solid rgba(34,197,94,0.7)'
+                  : '2px solid rgba(99,102,241,0.6)',
+                boxShadow: c.blocked === 1
+                  ? '0 4px 20px rgba(239,68,68,0.35)'
+                  : c.hasOrder
+                  ? '0 4px 20px rgba(34,197,94,0.3)'
+                  : '0 4px 20px rgba(99,102,241,0.25)',
+'''
+          style_new = '''              background: c.blocked === 1
+                  ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'
+                  : c.hasOrder && hasLoanForCustomer(c)
+                  ? 'linear-gradient(135deg, #052e16 0%, #052e16 49.8%, #4a3600 50.2%, #241a00 100%)'
+                  : hasLoanForCustomer(c)
+                  ? 'linear-gradient(135deg, #4a3600 0%, #241a00 100%)'
+                  : c.hasOrder
+                  ? 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)'
+                  : 'linear-gradient(135deg, #1e1b4b 0%, #0f0b2e 100%)',
+                border: c.blocked === 1
+                  ? '2px solid rgba(239,68,68,0.8)'
+                  : c.hasOrder && hasLoanForCustomer(c)
+                  ? '2px solid rgba(202,173,35,0.8)'
+                  : hasLoanForCustomer(c)
+                  ? '2px solid rgba(234,179,8,0.8)'
+                  : c.hasOrder
+                  ? '2px solid rgba(34,197,94,0.7)'
+                  : '2px solid rgba(99,102,241,0.6)',
+                boxShadow: c.blocked === 1
+                  ? '0 4px 20px rgba(239,68,68,0.35)'
+                  : c.hasOrder && hasLoanForCustomer(c)
+                  ? '-8px 4px 20px rgba(34,197,94,0.22), 8px 4px 20px rgba(234,179,8,0.24)'
+                  : hasLoanForCustomer(c)
+                  ? '0 4px 20px rgba(234,179,8,0.3)'
+                  : c.hasOrder
+                  ? '0 4px 20px rgba(34,197,94,0.3)'
+                  : '0 4px 20px rgba(99,102,241,0.25)',
+'''
+          if 'c.hasOrder && hasLoanForCustomer(c)' not in s:
+            if s.count(style_old) != 1:
+              raise SystemExit(f'bloco visual do cartão inesperado: {s.count(style_old)}')
+            s = s.replace(style_old, style_new, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+          git diff --check
+          grep -n "loanClientsForCardColorQuery\|hasLoanForCustomer\|4a3600" client/src/pages/AdminCustomers.tsx
+
+      - name: Commit e publicar na branch de produção
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminCustomers.tsx
+          git commit -m "feat(clientes): destacar cartões com empréstimo"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
