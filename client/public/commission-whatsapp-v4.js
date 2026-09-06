@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '4.0.0';
+  const VERSION = '4.1.0';
   const PAGE_PREFIX = '/admin/commissions';
   const BUTTON_ID = 'h2-commission-text-editor-button';
   const MODAL_ID = 'h2-commission-text-editor-modal';
@@ -167,7 +167,7 @@
     return part ? part.slice(5) : '';
   }
 
-  function directWhatsappTransport(safeWaMeUrl) {
+  function buildWhatsappTransport(safeWaMeUrl) {
     const safe = String(safeWaMeUrl || '');
     const parsed = new URL(safe);
     if (parsed.hostname !== 'wa.me') throw new Error('Servidor devolveu destino WhatsApp inválido.');
@@ -181,19 +181,27 @@
 
     const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
     if (mobile) {
-      return `https://api.whatsapp.com/send/?phone=${phone}&text=${encodedText}`;
+      return {
+        kind: 'mobile',
+        primary: `https://api.whatsapp.com/send/?phone=${phone}&text=${encodedText}`,
+        fallback: `https://wa.me/${phone}?text=${encodedText}`,
+      };
     }
 
-    return `https://web.whatsapp.com/send/?phone=${phone}&text=${encodedText}&type=phone_number&app_absent=0`;
+    return {
+      kind: 'desktop-app',
+      primary: `whatsapp://send?phone=${phone}&text=${encodedText}`,
+      fallback: `https://web.whatsapp.com/send/?phone=${phone}&text=${encodedText}&type=phone_number&app_absent=0`,
+    };
   }
 
-  async function requestDirectWhatsappUrl(sourceUrl) {
+  async function requestWhatsappTransport(sourceUrl) {
     const data = await trpc('whatsappTemplates.buildCommissionWhatsappUrl', { sourceUrl: String(sourceUrl) }, 'POST');
     const safeWaMe = String(data?.url || '');
     if (!safeWaMe.startsWith('https://wa.me/') || /[^\x00-\x7F]/.test(safeWaMe) || /%EF%BF%BD/i.test(safeWaMe)) {
       throw new Error('O servidor não devolveu um payload WhatsApp íntegro.');
     }
-    return directWhatsappTransport(safeWaMe);
+    return buildWhatsappTransport(safeWaMe);
   }
 
   function openPendingWindow(target, features) {
@@ -214,17 +222,67 @@
     return pending;
   }
 
+  function showDesktopFallback(pending, transport) {
+    if (!pending || pending.closed) return;
+    try {
+      const doc = pending.document;
+      doc.title = 'Abrir WhatsApp Desktop';
+      doc.body.innerHTML = '';
+      const wrapper = doc.createElement('div');
+      wrapper.style.cssText = 'font-family:Arial,sans-serif;max-width:520px;margin:80px auto;padding:24px;text-align:center;color:#111';
+
+      const title = doc.createElement('h2');
+      title.textContent = 'Abrindo WhatsApp Desktop...';
+      const info = doc.createElement('p');
+      info.textContent = 'Se o navegador pedir confirmação, escolha Abrir WhatsApp. Se o aplicativo não abrir, use o botão abaixo.';
+      info.style.cssText = 'line-height:1.5;color:#444';
+
+      const appButton = doc.createElement('a');
+      appButton.href = transport.primary;
+      appButton.textContent = 'ABRIR WHATSAPP DESKTOP';
+      appButton.style.cssText = 'display:block;margin:18px auto 10px;padding:14px 18px;border-radius:10px;background:#16a34a;color:white;text-decoration:none;font-weight:800';
+
+      const webButton = doc.createElement('a');
+      webButton.href = transport.fallback;
+      webButton.textContent = 'Usar WhatsApp Web';
+      webButton.style.cssText = 'display:inline-block;margin-top:8px;color:#166534;font-weight:700';
+
+      wrapper.append(title, info, appButton, webButton);
+      doc.body.appendChild(wrapper);
+    } catch (_) {}
+  }
+
+  function launchTransport(pending, transport) {
+    if (transport.kind === 'mobile') {
+      if (pending && !pending.closed) pending.location.replace(transport.primary);
+      else nativeOpen(transport.primary, '_blank');
+      return;
+    }
+
+    // Desktop: o fluxo primário é o protocolo nativo do aplicativo instalado.
+    // Não redirecionamos automaticamente para web.whatsapp.com, pois isso força
+    // login/QR quando o usuário quer usar o WhatsApp Desktop já instalado.
+    if (pending && !pending.closed) {
+      showDesktopFallback(pending, transport);
+      try {
+        pending.location.href = transport.primary;
+      } catch (_) {
+        try {
+          const link = pending.document.querySelector('a[href^="whatsapp://"]');
+          link?.click();
+        } catch (_) {}
+      }
+      return;
+    }
+
+    nativeOpen(transport.primary, '_self');
+  }
+
   function sendCommissionWhatsapp(sourceUrl, target = '_blank', features = '') {
     const pending = openPendingWindow(target, features);
 
-    requestDirectWhatsappUrl(sourceUrl)
-      .then((directUrl) => {
-        if (pending && !pending.closed) {
-          pending.location.replace(directUrl);
-        } else {
-          nativeOpen(directUrl, '_blank');
-        }
-      })
+    requestWhatsappTransport(sourceUrl)
+      .then((transport) => launchTransport(pending, transport))
       .catch((error) => {
         try { if (pending && !pending.closed) pending.close(); } catch (_) {}
         console.error(`[H2 Commission WhatsApp ${VERSION}]`, error);
@@ -307,7 +365,7 @@
     body.className = 'body';
     const safe = document.createElement('div');
     safe.className = 'safe';
-    safe.textContent = 'Fluxo V4: o servidor valida e codifica a mensagem; o navegador recebe somente ASCII e abre o WhatsApp direto, sem passar pelo redirecionamento wa.me.';
+    safe.textContent = 'Fluxo V4.1: o servidor valida e codifica a mensagem; no desktop o sistema abre o aplicativo WhatsApp instalado pelo protocolo nativo, sem obrigar login no WhatsApp Web.';
     body.append(
       safe,
       editorSection('INDICAÇÃO CONFIRMADA', 'Variáveis: {indicador}, {cliente}, {telefone}, {comissao}, {status_pagamento}', 'confirmed'),
@@ -392,7 +450,7 @@
 
   const nativeOpen = window.open.bind(window);
 
-  window.open = function h2CommissionWhatsappV4(url, target, features) {
+  window.open = function h2CommissionWhatsappV41(url, target, features) {
     if (!onCommissionPage() || !isCommissionWhatsappUrl(url)) {
       return nativeOpen(url, target, features);
     }
