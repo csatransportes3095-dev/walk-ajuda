@@ -5,6 +5,7 @@ import { httpBatchLink, splitLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
+import H2WelcomePremium from "./components/H2WelcomePremium";
 import AdminCustomerPhoneEditorEnhancer from "./components/AdminCustomerPhoneEditorEnhancer";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
 import AdminQuestionEditOptionsEnhancer from "./components/AdminQuestionEditOptionsEnhancer";
@@ -116,6 +117,7 @@ createRoot(document.getElementById("root")!).render(
       <OrderWhatsappQuestionTreeEnhancer />
       <PublicQuestionFlowEnhancer />
       <RegistrationReferralFirstGate />
+      <H2WelcomePremium />
       <UnifiedCustomerAccessGate>
         <UnifiedCustomerModuleBootstrap>
           <App />
