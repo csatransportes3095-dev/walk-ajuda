@@ -2252,3 +2252,4 @@
 - [x] Quando promoEndsAt expira: reverter price = originalPrice, limpar originalPrice e promoEndsAt automaticamente
 - [x] Backend verifica promoÃ§Ãµes expiradas ao listar produtos e reverte no banco
 - [x] Frontend filtra promoÃ§Ãµes expiradas e invalida query ao expirar
+- [x] Corrigir exclusivamente UTF-8 nas notificações de comissão/indicação, PIX e pagamento; testar sem envio real.

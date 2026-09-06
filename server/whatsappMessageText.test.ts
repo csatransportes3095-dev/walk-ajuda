@@ -26,6 +26,28 @@ describe("ícones de mensagens WhatsApp", () => {
     expect(repairWhatsappReplacementIcons("\uFFFD Texto personalizado")).toBe("\uFFFD Texto personalizado");
   });
 
+  it("recupera os marcadores das três notificações de comissão", () => {
+    const commissionText = [
+      "\uFFFD *COMISSÃO PAGA*",
+      "\uFFFD *INDICAÇÃO CONFIRMADA*",
+      "\uFFFD *DADOS PARA PAGAMENTO DA COMISSÃO*",
+      "\uFFFD *Cliente indicado:* ALEXANDRE",
+      "\uFFFD *Telefone:* (11) 94001-4943",
+      "\uFFFD *Valor da comissão:* R$ 10,00",
+      "Obrigado pela indicação!\uFFFD",
+    ].join("\n");
+
+    expect(repairWhatsappReplacementIcons(commissionText)).toBe([
+      "✅ *COMISSÃO PAGA*",
+      "🎉 *INDICAÇÃO CONFIRMADA*",
+      "💳 *DADOS PARA PAGAMENTO DA COMISSÃO*",
+      "👤 *Cliente indicado:* ALEXANDRE",
+      "📱 *Telefone:* (11) 94001-4943",
+      "💰 *Valor da comissão:* R$ 10,00",
+      "Obrigado pela indicação!🎉",
+    ].join("\n"));
+  });
+
   it("aplica o reparo antes de abrir os três caminhos de template no painel", () => {
     const source = fs.readFileSync(path.join(projectRoot, "client/src/pages/AdminOrders.tsx"), "utf8");
 
