@@ -7,8 +7,9 @@ import jwt from "jsonwebtoken";
 import { getAdminJwtSecret } from "../adminJwt";
 import { isSystemRestoreLocked } from "../backupRestoreService";
 
-// Verifica se o request tem um cookie JWT admin válido (login independente)
-function isAdminJwtValid(req: TrpcContext["req"]): boolean {
+// Verifica se o request tem um cookie JWT admin válido (login independente).
+// Exportada para rotas Express administrativas que precisam da mesma garantia.
+export function isAdminJwtValid(req: TrpcContext["req"]): boolean {
   try {
     const cookieHeader = req.headers.cookie || '';
     const cookies = parseCookieHeader(cookieHeader);
