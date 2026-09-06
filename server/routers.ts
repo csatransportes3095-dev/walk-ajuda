@@ -5122,18 +5122,18 @@ export const appRouter = router({
                 await sendMailDirect({
                   from: `"${siteTitle}" <h2@h2colombiano.com>`,
                   to: referrer.email,
-                  subject: `âÅ“"¦ Sua comissão${commText} foi paga! - ${siteTitle}`,
+                  subject: `\u2705 Sua comissão${commText} foi paga! - ${siteTitle}`,
                   html: `
                     <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#e2e8f0;border-radius:12px;overflow:hidden">
                       <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:28px 24px;text-align:center">
-                        <h1 style="margin:0;font-size:22px;color:#fff">âÅ“"¦ Comissão Paga!</h1>
+                        <h1 style="margin:0;font-size:22px;color:#fff">\u2705 Comissão Paga!</h1>
                         <p style="margin:8px 0 0;color:#c4b5fd;font-size:14px">${siteTitle}</p>
                       </div>
                       <div style="padding:24px">
-                        <p style="font-size:15px;margin:0 0 16px">Olá <strong>${row.referrerName || referrer.name || 'indicador'}</strong>! Í°Å¸Å½"°</p>
+                        <p style="font-size:15px;margin:0 0 16px">Olá <strong>${row.referrerName || referrer.name || 'indicador'}</strong>! \uD83C\uDF89</p>
                         <p style="font-size:14px;color:#94a3b8;margin:0 0 16px">Sua comissão pela indicação de <strong style="color:#e2e8f0">${row.customerName || row.phone}</strong> foi <strong style="color:#4ade80">paga com sucesso</strong>!</p>
                         ${commVal > 0 ? `<div style="background:#1e293b;border-radius:8px;padding:16px;text-align:center;margin:16px 0"><span style="font-size:24px;font-weight:bold;color:#4ade80">R$ ${(commVal / 100).toFixed(2).replace('.', ',')}</span><br><span style="font-size:12px;color:#64748b">Valor da comissão</span></div>` : ''}
-                        <p style="font-size:13px;color:#64748b;margin:16px 0 0">Obrigado por indicar! Continue indicando e ganhe mais. Í°Å¸'ª</p>
+                        <p style="font-size:13px;color:#64748b;margin:16px 0 0">Obrigado por indicar! Continue indicando e ganhe mais. \uD83C\uDF89</p>
                       </div>
                     </div>
                   `,
@@ -5410,12 +5410,12 @@ export const appRouter = router({
           });
           const waLink = `https://wa.me/55${referrerCleanPhone}`;
           const commissionHtml = input.commissionValue && input.commissionValue > 0
-            ? `<p style="margin:12px 0 8px;font-size:13px;color:#fcd34d;font-weight:bold;">Í°Å¸'° Comissão: R$ ${(input.commissionValue / 100).toFixed(2).replace('.', ',')}</p>`
+            ? `<p style="margin:12px 0 8px;font-size:13px;color:#fcd34d;font-weight:bold;">\uD83D\uDCB0 Comissão: R$ ${(input.commissionValue / 100).toFixed(2).replace('.', ',')}</p>`
             : '';
           await sendMailDirect({
             from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
             to: referrer.email,
-            subject: `[Reenvio] Í°Å¸Å½"° Sua indicação deu certo! ${input.referredName} fez um pedido`,
+            subject: `[Reenvio] \uD83C\uDF89 Sua indicação deu certo! ${input.referredName} fez um pedido`,
             html: emailIndicacaoSucesso({
               ...emailBranding,
               referrerName: referrer.name || undefined,
