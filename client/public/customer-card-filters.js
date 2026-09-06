@@ -5,6 +5,7 @@
   const EMPTY_ID = 'h2-customer-filter-empty';
   const STYLE_ID = 'h2-customer-filter-style';
   const LOAN_ENDPOINT = '/api/trpc/loans.listClients?batch=1&input=' + encodeURIComponent(JSON.stringify({ 0: { json: {} } }));
+  const CUSTOMER_ENDPOINT = '/api/trpc/customers.list?batch=1&input=' + encodeURIComponent(JSON.stringify({ 0: { json: null } }));
 
   const ACTIVE_ORDER_LABELS = [
     'pedido recebido',
@@ -20,10 +21,22 @@
   ];
 
   let selectedFilter = 'all';
-  let activeLoanPhones = new Set();
   let loanDataLoaded = false;
+  let customerDataLoaded = false;
   let applying = false;
   let scheduled = false;
+
+  // O filtro anterior ligava empréstimo apenas pelo telefone exibido no cartão.
+  // Isso falhava quando o telefone do cadastro principal e o do módulo de empréstimos
+  // tinham formatação/DDD antigos diferentes. Agora cruzamos telefone + CPF + nº cadastro.
+  let loanCustomerNumbers = new Set();
+  let loanPhones = new Set();
+  let loanCpfs = new Set();
+  let orderStateByCustomerNumber = new Map();
+  let orderStateByPhone = new Map();
+  let orderStateByCpf = new Map();
+  let customerRowsCache = [];
+  let loanRowsCache = [];
 
   const normalize = (value) => String(value || '')
     .normalize('NFD')
@@ -37,6 +50,8 @@
     if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) digits = digits.slice(2);
     return digits;
   };
+
+  const normalizeCpf = (value) => String(value || '').replace(/\D/g, '').slice(-11);
 
   const installStyle = () => {
     if (document.getElementById(STYLE_ID)) return;
@@ -68,6 +83,12 @@
     return cards;
   };
 
+  const getCardCustomerNumber = (card) => {
+    const text = String(card.textContent || '');
+    const match = text.match(/\*(\d{1,12})/);
+    return match ? match[1] : '';
+  };
+
   const getCardPhoneCandidates = (card) => {
     const matches = String(card.textContent || '').match(/(?:\+?55\s*)?\d{10,11}/g) || [];
     return [...new Set(matches.map(normalizePhone).filter((value) => value.length >= 10))];
@@ -80,24 +101,98 @@
     return a === b || a.endsWith(b) || b.endsWith(a);
   };
 
-  const cardHasActiveLoan = (card) => {
+  const getCustomerOrderState = (customer) => {
+    const openOrders = Array.isArray(customer?.openOrders) ? customer.openOrders : [];
+    const latestStatus = normalize(customer?.latestStatus).replace(/\s+/g, '_');
+    const delivered = latestStatus === 'pedido_entregue';
+    const inProgress = openOrders.some((order) => {
+      const status = normalize(order?.latestStatus).replace(/\s+/g, '_');
+      return status !== 'pedido_entregue' && status !== 'cancelado' && status !== 'reprovado';
+    });
+    return { delivered, inProgress };
+  };
+
+  const rebuildIdentityIndexes = () => {
+    const customerNumberByPhone = new Map();
+    const customerNumberByCpf = new Map();
+
+    orderStateByCustomerNumber = new Map();
+    orderStateByPhone = new Map();
+    orderStateByCpf = new Map();
+
+    for (const customer of customerRowsCache) {
+      const number = customer?.customerNumber != null ? String(customer.customerNumber) : '';
+      const phone = normalizePhone(customer?.phone);
+      const cpf = normalizeCpf(customer?.cpf);
+      const state = getCustomerOrderState(customer);
+
+      if (number) orderStateByCustomerNumber.set(number, state);
+      if (phone) {
+        customerNumberByPhone.set(phone, number);
+        orderStateByPhone.set(phone, state);
+      }
+      if (cpf) {
+        customerNumberByCpf.set(cpf, number);
+        orderStateByCpf.set(cpf, state);
+      }
+    }
+
+    const numbers = new Set();
+    const phones = new Set();
+    const cpfs = new Set();
+
+    for (const loan of loanRowsCache) {
+      // Mantém o mesmo critério usado pela cor amarela atual do cartão: cliente que
+      // possui registro de empréstimo. Assim nenhum cartão amarelo fica fora do filtro.
+      if (Number(loan?.totalLoans || 0) <= 0) continue;
+
+      const phone = normalizePhone(loan?.phone);
+      const cpf = normalizeCpf(loan?.cpf);
+      if (phone) phones.add(phone);
+      if (cpf) cpfs.add(cpf);
+
+      const byPhone = phone ? customerNumberByPhone.get(phone) : '';
+      const byCpf = cpf ? customerNumberByCpf.get(cpf) : '';
+      if (byPhone) numbers.add(String(byPhone));
+      if (byCpf) numbers.add(String(byCpf));
+    }
+
+    loanCustomerNumbers = numbers;
+    loanPhones = phones;
+    loanCpfs = cpfs;
+  };
+
+  const cardHasLoan = (card) => {
+    const customerNumber = getCardCustomerNumber(card);
+    if (customerNumber && loanCustomerNumbers.has(customerNumber)) return true;
+
     for (const phone of getCardPhoneCandidates(card)) {
-      for (const activePhone of activeLoanPhones) {
-        if (phoneMatches(phone, activePhone)) return true;
+      for (const loanPhone of loanPhones) {
+        if (phoneMatches(phone, loanPhone)) return true;
       }
     }
     return false;
   };
 
-  const getOrderState = (card) => {
+  const getOrderStateFromCard = (card) => {
+    const number = getCardCustomerNumber(card);
+    if (number && orderStateByCustomerNumber.has(number)) return orderStateByCustomerNumber.get(number);
+
+    for (const phone of getCardPhoneCandidates(card)) {
+      if (orderStateByPhone.has(phone)) return orderStateByPhone.get(phone);
+      for (const [savedPhone, state] of orderStateByPhone.entries()) {
+        if (phoneMatches(phone, savedPhone)) return state;
+      }
+    }
+
+    // Fallback somente enquanto a API ainda está carregando.
     const raw = String(card.textContent || '');
     const text = normalize(raw);
     const delivered = text.includes('pedido entregue');
     const cancelled = text.includes('cancelado') || text.includes('reprovado');
     const explicitActive = ACTIVE_ORDER_LABELS.some((label) => text.includes(label));
     const hasOrderNumber = /pedido:\s*#\d+/i.test(raw);
-    const inProgress = !delivered && !cancelled && (explicitActive || hasOrderNumber);
-    return { delivered, inProgress };
+    return { delivered, inProgress: !delivered && !cancelled && (explicitActive || hasOrderNumber) };
   };
 
   const matchSearch = (card, rawTerm) => {
@@ -108,10 +203,10 @@
 
   const matchStatusFilter = (card) => {
     if (selectedFilter === 'all') return true;
-    if (selectedFilter === 'loan') return cardHasActiveLoan(card);
-    const state = getOrderState(card);
-    if (selectedFilter === 'progress') return state.inProgress;
-    if (selectedFilter === 'delivered') return state.delivered;
+    if (selectedFilter === 'loan') return cardHasLoan(card);
+    const state = getOrderStateFromCard(card);
+    if (selectedFilter === 'progress') return !!state?.inProgress;
+    if (selectedFilter === 'delivered') return !!state?.delivered;
     return true;
   };
 
@@ -160,7 +255,13 @@
   const updateButtons = (counts) => {
     const bar = ensureFilterBar();
     if (!bar) return;
-    const values = { all: counts.all, loan: loanDataLoaded ? counts.loan : '...', progress: counts.progress, delivered: counts.delivered };
+    const values = {
+      all: counts.all,
+      loan: loanDataLoaded && customerDataLoaded ? counts.loan : '...',
+      progress: customerDataLoaded ? counts.progress : '...',
+      delivered: customerDataLoaded ? counts.delivered : '...',
+    };
+
     for (const button of bar.querySelectorAll('button[data-filter-key]')) {
       const key = button.dataset.filterKey || 'all';
       const theme = buttonTheme[key] || buttonTheme.all;
@@ -191,11 +292,11 @@
       let visible = 0;
 
       for (const card of cards) {
-        const orderState = getOrderState(card);
-        const hasLoan = cardHasActiveLoan(card);
+        const orderState = getOrderStateFromCard(card);
+        const hasLoan = cardHasLoan(card);
         if (hasLoan) counts.loan += 1;
-        if (orderState.inProgress) counts.progress += 1;
-        if (orderState.delivered) counts.delivered += 1;
+        if (orderState?.inProgress) counts.progress += 1;
+        if (orderState?.delivered) counts.delivered += 1;
 
         const show = matchSearch(card, rawTerm) && matchStatusFilter(card);
         card.dataset.h2FilterHidden = show ? '0' : '1';
@@ -214,7 +315,9 @@
           empty.textContent = 'Nenhum cliente encontrado neste filtro';
           cards[0]?.parentElement?.appendChild(empty);
         }
-      } else if (empty) empty.remove();
+      } else if (empty) {
+        empty.remove();
+      }
     } finally {
       applying = false;
     }
@@ -229,25 +332,39 @@
     }, delay);
   };
 
-  const loadActiveLoans = async () => {
-    try {
-      const response = await fetch(LOAN_ENDPOINT, { credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json();
-      const rows = payload?.[0]?.result?.data?.json || [];
-      const phones = new Set();
-      for (const row of rows) {
-        if (Number(row?.openAmount || 0) <= 0) continue;
-        const phone = normalizePhone(row?.phone);
-        if (phone) phones.add(phone);
-      }
-      activeLoanPhones = phones;
-    } catch (error) {
-      console.warn('[H2 Customer Filters] Não foi possível carregar empréstimos ativos:', error);
-    } finally {
-      loanDataLoaded = true;
-      applyFilters();
+  const readTrpcRows = async (url) => {
+    const response = await fetch(url, {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    return payload?.[0]?.result?.data?.json || [];
+  };
+
+  const loadFilterData = async () => {
+    const [customersResult, loansResult] = await Promise.allSettled([
+      readTrpcRows(CUSTOMER_ENDPOINT),
+      readTrpcRows(LOAN_ENDPOINT),
+    ]);
+
+    if (customersResult.status === 'fulfilled') {
+      customerRowsCache = Array.isArray(customersResult.value) ? customersResult.value : [];
+      customerDataLoaded = true;
+    } else {
+      console.warn('[H2 Customer Filters] Não foi possível carregar cadastros principais:', customersResult.reason);
     }
+
+    if (loansResult.status === 'fulfilled') {
+      loanRowsCache = Array.isArray(loansResult.value) ? loansResult.value : [];
+      loanDataLoaded = true;
+    } else {
+      console.warn('[H2 Customer Filters] Não foi possível carregar clientes de empréstimos:', loansResult.reason);
+    }
+
+    rebuildIdentityIndexes();
+    applyFilters();
   };
 
   document.addEventListener('input', (event) => {
@@ -259,22 +376,26 @@
     installStyle();
     ensureFilterBar();
     applyFilters();
-    loadActiveLoans();
+    loadFilterData();
 
     const root = document.getElementById('root');
     if (root) {
       new MutationObserver((mutations) => {
         if (applying) return;
-        if (mutations.some((mutation) => mutation.type === 'childList' && (mutation.addedNodes.length || mutation.removedNodes.length))) scheduleApply(40);
+        const structuralChange = mutations.some((mutation) => mutation.type === 'childList' && (mutation.addedNodes.length || mutation.removedNodes.length));
+        if (structuralChange) scheduleApply(40);
       }).observe(root, { childList: true, subtree: true });
     }
 
     window.addEventListener('focus', () => {
-      loadActiveLoans();
+      loadFilterData();
       scheduleApply(0);
     });
   };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
-  else boot();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
 })();
