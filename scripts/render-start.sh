@@ -44,6 +44,7 @@ run_boot_step "vehicle-question-catalog-2016" pnpm exec tsx scripts/apply-vehicl
 run_boot_step "loans-recovery-preflight" pnpm exec tsx scripts/apply-loans-recovery-preflight.ts
 run_boot_step "loans-recovery-wrapper" pnpm exec tsx scripts/apply-loans-recovery-wrapper.ts
 run_boot_step "loans-recovery-20260822-fix" pnpm exec tsx scripts/apply-loans-recovery-20260822-fix.ts
+run_boot_step "ensure-diamond-loan-profile" pnpm exec tsx scripts/ensure-diamond-loan-profile.ts
 run_boot_step "normalize-product-manifests-portuguese" pnpm exec tsx scripts/normalize-product-manifests-portuguese.ts
 run_boot_step "bulk-activate-all-main-customers" pnpm exec tsx scripts/activate-all-main-customers-20260905.ts
 
