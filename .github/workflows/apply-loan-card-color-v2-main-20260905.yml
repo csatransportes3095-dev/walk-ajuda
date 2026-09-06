@@ -68,8 +68,8 @@ jobs:
     return matchSearch;
   });"""
           s=s[:start]+new_filter+s[end:]
-          old="""            value={searchTerm}\n            onChange={(e) => setSearchTerm(e.target.value)}\n            placeholder=\"Buscar por nome, telefone, email, cidade, indicação, #nº pedido, *nº cadastro...\""" 
-          new="""            value={searchTerm}\n            onChange={(e) => {\n              const value = e.target.value;\n              setSearchTerm(value);\n              if (value.trim()) {\n                setShowOnlyOrders(false);\n                setShowOnlyBlocked(false);\n              }\n            }}\n            placeholder=\"Buscar nome, *cadastro, telefone, CPF, email, cidade ou #pedido...\""" 
+          old="""            value={searchTerm}\n            onChange={(e) => setSearchTerm(e.target.value)}\n            placeholder=\"Buscar por nome, telefone, email, cidade, indicação, #nº pedido, *nº cadastro...\"""
+          new="""            value={searchTerm}\n            onChange={(e) => {\n              const value = e.target.value;\n              setSearchTerm(value);\n              if (value.trim()) {\n                setShowOnlyOrders(false);\n                setShowOnlyBlocked(false);\n              }\n            }}\n            placeholder=\"Buscar nome, *cadastro, telefone, CPF, email, cidade ou #pedido...\"""
           if old not in s: raise SystemExit('search input anchor not found')
           s=s.replace(old,new,1)
           p.write_text(s,encoding='utf-8')
@@ -80,3 +80,4 @@ jobs:
           git add client/src/pages/AdminCustomers.tsx
           git commit -m "fix(clientes): corrigir busca por nome e cadastro"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
+# rerun 20260905-2110
