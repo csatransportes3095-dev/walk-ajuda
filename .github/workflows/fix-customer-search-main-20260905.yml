@@ -1,3 +1,4 @@
+# execução 2
 name: Fix customer search filter
 
 on:
@@ -57,7 +58,6 @@ jobs:
       const referrerPhoneDigits = String(c.referredByPhone || '').replace(/\\D/g, '');
 
       if (isCadastroSearch) {
-        // *470 (e também ＊470 em teclados móveis) busca diretamente o número do cadastro.
         matchSearch = !!termDigits && customerNumber.includes(termDigits);
       } else if (isOrderSearch) {
         matchSearch = !!termDigits && orderNumber.includes(termDigits);
@@ -90,7 +90,7 @@ jobs:
           s = s[:start] + new_filter + s[end:]
 
           old_input = '''            value={searchTerm}\n            onChange={(e) => setSearchTerm(e.target.value)}\n            placeholder="Buscar por nome, telefone, email, cidade, indicação, #nº pedido, *nº cadastro..."'''
-          new_input = '''            value={searchTerm}\n            onChange={(e) => {\n              const value = e.target.value;\n              setSearchTerm(value);\n              // Ao iniciar uma busca, pesquisar na lista completa. Filtros em massa\n              // anteriores não podem esconder um cliente pelo nome ou pelo código.\n              if (value.trim()) {\n                setShowOnlyOrders(false);\n                setShowOnlyBlocked(false);\n              }\n            }}\n            placeholder="Buscar nome, *cadastro, telefone, CPF, email, cidade ou #pedido..."'''
+          new_input = '''            value={searchTerm}\n            onChange={(e) => {\n              const value = e.target.value;\n              setSearchTerm(value);\n              if (value.trim()) {\n                setShowOnlyOrders(false);\n                setShowOnlyBlocked(false);\n              }\n            }}\n            placeholder="Buscar nome, *cadastro, telefone, CPF, email, cidade ou #pedido..."'''
           if old_input not in s:
               raise SystemExit('campo de busca atual não encontrado')
           s = s.replace(old_input, new_input, 1)
@@ -99,7 +99,7 @@ jobs:
           PY
 
           git diff --check
-          grep -n "normalizeCustomerSearchText\|\*470\|pesquisar na lista completa" client/src/pages/AdminCustomers.tsx
+          grep -n "normalizeCustomerSearchText\|customerNumber.includes(termDigits)\|setShowOnlyOrders(false)" client/src/pages/AdminCustomers.tsx
 
       - name: Commit e publicar na branch de produção
         shell: bash
