@@ -7,6 +7,7 @@ import superjson from "superjson";
 import App from "./App";
 import { CustomerProfileRedirectGate } from "./components/CustomerProfileRedirectGate";
 import "./index.css";
+import "./admin-loans-mobile-fix.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
 // responde lentamente ou ocorre algum erro. Mutations continuam com prazo maior
