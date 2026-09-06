@@ -37,6 +37,8 @@ type Palette = {
   label: string;
 };
 
+type CanonicalKind = "pedido" | "acompanhar" | "cadastro" | "gastos" | "emprestimo" | "sorteio";
+
 const PALETTES: Record<string, Palette> = {
   pedido: { from: "#8f19ef", to: "#5a0fbf", glow: "#d13dff", label: "RÁPIDO • SEGURO • SEM BUROCRACIA" },
   acompanhar: { from: "#08a76f", to: "#027a55", glow: "#16f6ab", label: "TRANSPARÊNCIA • ATUALIZAÇÃO CONSTANTE" },
@@ -45,6 +47,33 @@ const PALETTES: Record<string, Palette> = {
   emprestimo: { from: "#df1738", to: "#8e0d29", glow: "#ff365d", label: "SIMPLES • RÁPIDO • SEGURO" },
   sorteio: { from: "#e01a95", to: "#910d61", glow: "#ff43cf", label: "PARTICIPE • É GRÁTIS • BOA SORTE" },
   default: { from: "#126ed2", to: "#0c438d", glow: "#27bcff", label: "H2 COLOMBIANO • SEMPRE COM VOCÊ" },
+};
+
+const CANONICAL: Record<Exclude<CanonicalKind, "pedido" | "acompanhar">, HomeButton> = {
+  cadastro: {
+    id: -3,
+    text: "FAZER MEU CADASTRO",
+    subtitle: "Novos clientes - novo cadastro",
+    url: "/pre-cadastro",
+  },
+  gastos: {
+    id: -4,
+    text: "PLANILHA GASTOS",
+    subtitle: "Acesso cliente VIP",
+    url: "/gastos",
+  },
+  emprestimo: {
+    id: -5,
+    text: "EMPRÉSTIMO",
+    subtitle: "Diário para clientes de confiança",
+    url: "/emprestimo",
+  },
+  sorteio: {
+    id: -6,
+    text: "SORTEIO GRÁTIS",
+    subtitle: "Valendo 200,00",
+    url: "/sorteio",
+  },
 };
 
 function keyFor(text: string) {
@@ -118,7 +147,24 @@ export default function H2WelcomePremium() {
       .filter((button) => Number(button.vipOnly || 0) !== 1)
       .map((button) => ({ ...button, subtitle: button.subtitle || "Acesso rápido H2 Colombiano" }));
 
-    return [
+    const used = new Set<number>();
+
+    const canonicalFromDynamic = (
+      kind: Exclude<CanonicalKind, "pedido" | "acompanhar">,
+    ): HomeButton => {
+      const matched = dynamic.find((button) => keyFor(button.text || "") === kind);
+      const fallback = CANONICAL[kind];
+      if (!matched) return fallback;
+      used.add(matched.id);
+      return {
+        ...matched,
+        text: fallback.text,
+        subtitle: fallback.subtitle,
+        url: matched.url || fallback.url,
+      };
+    };
+
+    const essential: HomeButton[] = [
       {
         id: -2,
         text: settings?.home_btn1_text || "FAZER PEDIDO",
@@ -133,8 +179,14 @@ export default function H2WelcomePremium() {
         url: "/acompanhar",
         color: settings?.home_btn2_color || "#059669",
       },
-      ...dynamic,
+      canonicalFromDynamic("cadastro"),
+      canonicalFromDynamic("gastos"),
+      canonicalFromDynamic("emprestimo"),
+      canonicalFromDynamic("sorteio"),
     ];
+
+    const remaining = dynamic.filter((button) => !used.has(button.id));
+    return [...essential, ...remaining];
   }, [rawButtons, settings]);
 
   if (!isHome || !active) return null;
@@ -148,14 +200,14 @@ export default function H2WelcomePremium() {
         <nav className="h2p-nav" aria-label="Navegação H2 Colombiano">
           <div className="h2p-nav-brand">H2 <span>COLOMBIANO</span></div>
           <div className="h2p-nav-links">
-            <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>INÍCIO</button>
-            <button onClick={() => go("/login")}>SISTEMA</button>
-            <button onClick={() => document.getElementById("h2p-services")?.scrollIntoView({ behavior: "smooth" })}>SERVIÇOS</button>
-            <button onClick={() => document.getElementById("h2p-plans")?.scrollIntoView({ behavior: "smooth" })}>PLANOS</button>
-            <button onClick={() => document.getElementById("h2p-about")?.scrollIntoView({ behavior: "smooth" })}>SOBRE</button>
-            <button onClick={() => go("/ajuda")}>CONTATO</button>
+            <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>INÍCIO</button>
+            <button type="button" onClick={() => go("/login")}>SISTEMA</button>
+            <button type="button" onClick={() => document.getElementById("h2p-services")?.scrollIntoView({ behavior: "smooth" })}>SERVIÇOS</button>
+            <button type="button" onClick={() => document.getElementById("h2p-plans")?.scrollIntoView({ behavior: "smooth" })}>PLANOS</button>
+            <button type="button" onClick={() => document.getElementById("h2p-about")?.scrollIntoView({ behavior: "smooth" })}>SOBRE</button>
+            <button type="button" onClick={() => go("/ajuda")}>CONTATO</button>
           </div>
-          <button className="h2p-enter" onClick={() => go("/login")}>ENTRAR</button>
+          <button type="button" className="h2p-enter" onClick={() => go("/login")}>ENTRAR</button>
         </nav>
 
         <section className="h2p-hero">
@@ -194,16 +246,16 @@ export default function H2WelcomePremium() {
             <strong>Baixe o app Android</strong>
             <span>Mais praticidade no seu dia a dia</span>
           </div>
-          <button onClick={() => go("/app")}><Download /> BAIXAR</button>
+          <button type="button" onClick={() => go("/app")}><Download /> BAIXAR</button>
         </section>
 
         <section id="h2p-plans" className="h2p-app-grid">
-          <button onClick={() => go("/app")} className="h2p-app h2p-app-main">
+          <button type="button" onClick={() => go("/app")} className="h2p-app h2p-app-main">
             <Smartphone />
             <span><strong>Colombiano</strong><small>Sistema completo</small></span>
             <ArrowRight />
           </button>
-          <button onClick={() => go("/app-pro")} className="h2p-app h2p-app-pro">
+          <button type="button" onClick={() => go("/app-pro")} className="h2p-app h2p-app-pro">
             <Zap />
             <span><strong>Driver Pro</strong><small>Planilha + Empréstimo</small></span>
             <ArrowRight />
@@ -218,6 +270,7 @@ export default function H2WelcomePremium() {
             const cardLogo = (settings as Record<string, string> | undefined)?.[logoKey]?.trim();
             return (
               <button
+                type="button"
                 key={`${button.id}-${index}`}
                 className={`h2p-service h2p-${kind}`}
                 style={{
