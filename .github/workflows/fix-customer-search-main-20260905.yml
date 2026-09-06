@@ -1,0 +1,111 @@
+name: Fix customer search filter
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-customer-search-main-20260905.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Corrigir busca por nome e número de cadastro
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('client/src/pages/AdminCustomers.tsx')
+          s = p.read_text(encoding='utf-8')
+
+          start_marker = '  const filtered = sortedCustomers.filter((c) => {\n'
+          end_marker = '\n\n  const startEdit = (c: Customer) => {'
+          start = s.find(start_marker)
+          end = s.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('bloco atual do filtro de clientes não encontrado')
+
+          new_filter = '''  const normalizeCustomerSearchText = (value: unknown) =>
+    String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\\u0300-\\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  const filtered = sortedCustomers.filter((c) => {
+    const rawTerm = searchTerm.trim();
+    const normalizedTerm = normalizeCustomerSearchText(rawTerm);
+    const termDigits = rawTerm.replace(/\\D/g, '');
+    const isCadastroSearch = /^[*＊]/.test(rawTerm);
+    const isOrderSearch = /^#/.test(rawTerm);
+
+    let matchSearch = true;
+    if (rawTerm) {
+      const customerNumber = c.customerNumber != null ? String(c.customerNumber) : '';
+      const orderNumber = c.orderNumber != null ? String(c.orderNumber) : '';
+      const phoneDigits = String(c.phone || '').replace(/\\D/g, '');
+      const cpfDigits = String(c.cpf || '').replace(/\\D/g, '');
+      const referrerPhoneDigits = String(c.referredByPhone || '').replace(/\\D/g, '');
+
+      if (isCadastroSearch) {
+        // *470 (e também ＊470 em teclados móveis) busca diretamente o número do cadastro.
+        matchSearch = !!termDigits && customerNumber.includes(termDigits);
+      } else if (isOrderSearch) {
+        matchSearch = !!termDigits && orderNumber.includes(termDigits);
+      } else {
+        const textualFields = [
+          c.name,
+          c.email,
+          c.city,
+          c.uf,
+          c.referredBy,
+          c.phone,
+          c.referredByPhone,
+          c.cpf,
+          customerNumber ? `*${customerNumber}` : '',
+          orderNumber ? `#${orderNumber}` : '',
+        ].map(normalizeCustomerSearchText);
+
+        const textMatch = textualFields.some((field) => field.includes(normalizedTerm));
+        const numericMatch = !!termDigits && [customerNumber, orderNumber, phoneDigits, cpfDigits, referrerPhoneDigits]
+          .some((field) => field.includes(termDigits));
+        matchSearch = textMatch || numericMatch;
+      }
+    }
+
+    if (showOnlyOrders) return matchSearch && !!c.hasOrder;
+    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
+    return matchSearch;
+  });'''
+
+          s = s[:start] + new_filter + s[end:]
+
+          old_input = '''            value={searchTerm}\n            onChange={(e) => setSearchTerm(e.target.value)}\n            placeholder="Buscar por nome, telefone, email, cidade, indicação, #nº pedido, *nº cadastro..."'''
+          new_input = '''            value={searchTerm}\n            onChange={(e) => {\n              const value = e.target.value;\n              setSearchTerm(value);\n              // Ao iniciar uma busca, pesquisar na lista completa. Filtros em massa\n              // anteriores não podem esconder um cliente pelo nome ou pelo código.\n              if (value.trim()) {\n                setShowOnlyOrders(false);\n                setShowOnlyBlocked(false);\n              }\n            }}\n            placeholder="Buscar nome, *cadastro, telefone, CPF, email, cidade ou #pedido..."'''
+          if old_input not in s:
+              raise SystemExit('campo de busca atual não encontrado')
+          s = s.replace(old_input, new_input, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+          git diff --check
+          grep -n "normalizeCustomerSearchText\|\*470\|pesquisar na lista completa" client/src/pages/AdminCustomers.tsx
+
+      - name: Commit e publicar na branch de produção
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminCustomers.tsx
+          git commit -m "fix(clientes): corrigir busca por nome e número de cadastro"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
