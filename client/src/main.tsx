@@ -21,6 +21,7 @@ import GlobalDevToolsProtection from "./components/GlobalDevToolsProtection";
 import AdminDevToolsTargetSelector from "./components/AdminDevToolsTargetSelector";
 import RafflePhotoIntegrityEnhancer from "./components/RafflePhotoIntegrityEnhancer";
 import "./index.css";
+import "./admin-loans-mobile-fix.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
 // responde lentamente ou ocorre algum erro. Mutations continuam com prazo maior
