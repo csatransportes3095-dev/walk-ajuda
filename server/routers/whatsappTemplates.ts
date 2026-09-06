@@ -13,6 +13,8 @@ const COMMISSION_TEMPLATE = {
 
 type CommissionTemplateType = keyof typeof COMMISSION_TEMPLATE;
 
+const COMMISSION_STORAGE_PREFIX = "H2B64:";
+
 const ICON = {
   paid: String.fromCodePoint(0x2705),
   party: String.fromCodePoint(0x1f389),
@@ -130,6 +132,67 @@ function canonical(value: unknown): string {
   }
 }
 
+function ensureLineIcon(line: string, marker: string, icon: string): string {
+  const plain = canonical(line);
+  if (!plain.includes(marker)) return line;
+  if (line.includes(icon)) return line;
+  return `${icon} ${line.trimStart()}`;
+}
+
+function repairBrokenLegacyTemplate(type: CommissionTemplateType, rawValue: string): string {
+  const cleaned = removeBrokenUnicode(rawValue);
+  const lines = cleaned.split(/\r?\n/).map((line) => {
+    if (type === "confirmed") {
+      if (canonical(line).includes("INDICACAO CONFIRMADA")) return ensureLineIcon(line, "INDICACAO CONFIRMADA", ICON.party);
+      if (canonical(line).includes("CLIENTE INDICADO:")) return ensureLineIcon(line, "CLIENTE INDICADO:", ICON.user);
+      if (canonical(line).includes("TELEFONE:")) return ensureLineIcon(line, "TELEFONE:", ICON.phone);
+      if (canonical(line).includes("COMISSAO:")) return ensureLineIcon(line, "COMISSAO:", ICON.money);
+      if (canonical(line).includes("PAGAMENTO DA COMISSAO CONFIRMADO")) return ensureLineIcon(line, "PAGAMENTO DA COMISSAO CONFIRMADO", ICON.paid);
+      if (canonical(line).includes("OBRIGADO PELA INDICACAO!")) return line.includes(ICON.party) ? line : `${line.trimEnd()} ${ICON.party}`;
+    }
+
+    if (type === "pix") {
+      if (canonical(line).includes("DADOS PARA PAGAMENTO DA COMISSAO")) return ensureLineIcon(line, "DADOS PARA PAGAMENTO DA COMISSAO", ICON.card);
+      if (canonical(line).includes("VALOR DA COMISSAO:")) return ensureLineIcon(line, "VALOR DA COMISSAO:", ICON.money);
+    }
+
+    if (type === "paid") {
+      if (canonical(line).includes("COMISSAO PAGA")) return ensureLineIcon(line, "COMISSAO PAGA", ICON.paid);
+      if (canonical(line).includes("CLIENTE INDICADO:")) return ensureLineIcon(line, "CLIENTE INDICADO:", ICON.user);
+      if (canonical(line).includes("VALOR PAGO:")) return ensureLineIcon(line, "VALOR PAGO:", ICON.money);
+      if (canonical(line).includes("OBRIGADO PELA INDICACAO!")) return line.includes(ICON.party) ? line : `${line.trimEnd()} ${ICON.party}`;
+    }
+
+    return line;
+  });
+
+  const repaired = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return repaired || defaultCommissionTemplate(type);
+}
+
+function encodeCommissionTemplateStorage(message: string): string {
+  const clean = removeBrokenUnicode(message).trim();
+  return `${COMMISSION_STORAGE_PREFIX}${Buffer.from(clean, "utf8").toString("base64")}`;
+}
+
+function decodeCommissionTemplateStorage(type: CommissionTemplateType, storedValue: unknown): string {
+  const raw = String(storedValue ?? "");
+  if (!raw) return defaultCommissionTemplate(type);
+
+  if (raw.startsWith(COMMISSION_STORAGE_PREFIX)) {
+    try {
+      const decoded = Buffer.from(raw.slice(COMMISSION_STORAGE_PREFIX.length), "base64").toString("utf8");
+      if (!decoded || hasBrokenUnicode(decoded)) return defaultCommissionTemplate(type);
+      return decoded.normalize("NFC").trim();
+    } catch {
+      return defaultCommissionTemplate(type);
+    }
+  }
+
+  if (hasBrokenUnicode(raw)) return repairBrokenLegacyTemplate(type, raw);
+  return removeBrokenUnicode(raw).trim() || defaultCommissionTemplate(type);
+}
+
 function detectCommissionType(text: string): CommissionTemplateType | null {
   const clean = canonical(text);
   if (clean.includes("DADOS PARA PAGAMENTO DA COMISSAO")) return "pix";
@@ -190,8 +253,7 @@ async function getEffectiveCommissionTemplate(db: any, type: CommissionTemplateT
     LIMIT 1
   `);
   const row = (result[0] as any[])?.[0];
-  const saved = removeBrokenUnicode(row?.message ?? "").trim();
-  return saved || defaultCommissionTemplate(type);
+  return decodeCommissionTemplateStorage(type, row?.message);
 }
 
 async function readCommissionTemplates(db: any) {
@@ -215,6 +277,8 @@ async function saveCommissionTemplate(db: any, type: CommissionTemplateType, raw
   const message = removeBrokenUnicode(rawMessage).trim();
   if (!message) throw new Error(`O texto ${COMMISSION_TEMPLATE[type].title} não pode ficar vazio.`);
 
+  // Armazenamento ASCII: nenhum emoji de 4 bytes toca o charset da coluna MySQL.
+  const storedMessage = encodeCommissionTemplateStorage(message);
   const statusKey = COMMISSION_TEMPLATE[type].key;
   const title = COMMISSION_TEMPLATE[type].title;
   const currentResult = await db.execute(sql`
@@ -229,13 +293,13 @@ async function saveCommissionTemplate(db: any, type: CommissionTemplateType, raw
   if (currentId > 0) {
     await db.execute(sql`
       UPDATE whatsappTemplates
-      SET title = ${title}, message = ${message}, isDefault = 1
+      SET title = ${title}, message = ${storedMessage}, isDefault = 1
       WHERE id = ${currentId}
     `);
   } else {
     await db.execute(sql`
       INSERT INTO whatsappTemplates (title, statusKey, message, sortOrder, isDefault)
-      VALUES (${title}, ${statusKey}, ${message}, 0, 1)
+      VALUES (${title}, ${statusKey}, ${storedMessage}, 0, 1)
     `);
   }
 
@@ -247,12 +311,13 @@ async function saveCommissionTemplate(db: any, type: CommissionTemplateType, raw
     LIMIT 1
   `);
   const verified = (verifyResult[0] as any[])?.[0];
-  const dbMessage = String(verified?.message ?? "");
-  const expectedHex = Buffer.from(message, "utf8").toString("hex").toUpperCase();
+  const dbStored = String(verified?.message ?? "");
+  const expectedHex = Buffer.from(storedMessage, "utf8").toString("hex").toUpperCase();
   const databaseHex = String(verified?.bytesHex ?? "").toUpperCase();
+  const roundTrip = decodeCommissionTemplateStorage(type, dbStored);
 
-  if (hasBrokenUnicode(dbMessage) || dbMessage !== message || databaseHex !== expectedHex) {
-    throw new Error("Falha de integridade UTF-8 ao salvar o texto da comissão. O envio foi bloqueado para evitar mensagem corrompida.");
+  if (dbStored !== storedMessage || databaseHex !== expectedHex || roundTrip !== message || hasBrokenUnicode(roundTrip)) {
+    throw new Error("Falha de integridade ao salvar o texto da comissão. O envio foi bloqueado para evitar mensagem corrompida.");
   }
 }
 
@@ -333,8 +398,6 @@ export const whatsappTemplatesRouter = {
         throw new Error("Mensagem bloqueada: foi detectado Unicode inválido antes do WhatsApp.");
       }
 
-      // O encode ocorre UMA única vez no servidor. A URL devolvida ao navegador
-      // contém somente ASCII (%XX), portanto emojis não passam pela compilação do frontend.
       const encodedText = encodeURIComponent(message);
       const decodedRoundTrip = decodeURIComponent(encodedText);
       if (decodedRoundTrip !== message || hasBrokenUnicode(decodedRoundTrip)) {
@@ -342,14 +405,14 @@ export const whatsappTemplatesRouter = {
       }
 
       const url = `https://wa.me/${parsed.phone}?text=${encodedText}`;
-      if (/[^\x00-\x7F]/.test(url)) {
-        throw new Error("A URL final contém bytes não ASCII e foi bloqueada.");
+      if (/[^\x00-\x7F]/.test(url) || /%EF%BF%BD/i.test(url)) {
+        throw new Error("A URL final contém Unicode inválido e foi bloqueada.");
       }
 
       return {
         success: true,
         url,
-        stage: "server-encoded-ascii",
+        stage: "server-encoded-ascii-base64-template",
         type: parsed.type,
       };
     }),
@@ -389,7 +452,7 @@ export const whatsappTemplatesRouter = {
         LENGTH(message) AS byteLength,
         HEX(message) AS utf8BytesHex
       FROM whatsappTemplates
-      WHERE statusKey IN ('pedido_entregue', 'entregue')
+      WHERE statusKey IN ('pedido_entregue', 'entregue', 'commission_indication_confirmed', 'commission_request_pix', 'commission_paid')
       ORDER BY isDefault DESC, sortOrder ASC, id ASC
     `) as any;
 
