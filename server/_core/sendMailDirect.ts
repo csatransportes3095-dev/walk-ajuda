@@ -15,9 +15,51 @@ export interface MailOptions {
   attachments?: Array<{ filename: string; content: Buffer | string; contentType?: string }>;
 }
 
+/**
+ * Corrige sequências mojibake que já existem em alguns templates antigos do projeto.
+ * A correção é intencionalmente conservadora: só troca sequências conhecidas para não
+ * alterar textos normais nem dados de clientes.
+ */
+function repairKnownMojibake(value: string): string {
+  return String(value || "")
+    .replace(/âÅ“["'”]?¦/g, "✅")
+    .replace(/âœ…/g, "✅")
+    .replace(/Í°Å¸Å½["'”]?°/g, "🎉")
+    .replace(/Í°Å¸['’]?ª/g, "🎉")
+    .replace(/ðŸŽ‰/g, "🎉")
+    .replace(/ðŸ’°/g, "💰")
+    .replace(/ðŸ‘¤/g, "👤")
+    .replace(/ðŸ“±/g, "📱")
+    .replace(/Â·/g, "·")
+    .replace(/Â /g, " ")
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã /g, "à")
+    .replace(/Ã£/g, "ã")
+    .replace(/Ã¢/g, "â")
+    .replace(/Ã©/g, "é")
+    .replace(/Ãª/g, "ê")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ã´/g, "ô")
+    .replace(/Ãµ/g, "õ")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã§/g, "ç")
+    .replace(/Ã/g, "Á")
+    .replace(/Ã‰/g, "É")
+    .replace(/Ã“/g, "Ó")
+    .replace(/Ã‡/g, "Ç");
+}
+
 export async function sendMailDirect(options: MailOptions): Promise<void> {
   const from = options.from || SMTP_FROM;
-  console.log(`[sendMailDirect] to=${options.to} subject="${options.subject}" resend=${!!RESEND_API_KEY}`);
+  const normalizedOptions: MailOptions = {
+    ...options,
+    subject: repairKnownMojibake(options.subject),
+    html: repairKnownMojibake(options.html),
+    text: options.text ? repairKnownMojibake(options.text) : undefined,
+  };
+
+  console.log(`[sendMailDirect] to=${normalizedOptions.to} subject="${normalizedOptions.subject}" resend=${!!RESEND_API_KEY}`);
 
   const channelErrors: string[] = [];
 
@@ -25,13 +67,13 @@ export async function sendMailDirect(options: MailOptions): Promise<void> {
     try {
       const body: Record<string, unknown> = {
         from,
-        to: [options.to],
-        subject: options.subject,
-        html: options.html,
+        to: [normalizedOptions.to],
+        subject: normalizedOptions.subject,
+        html: normalizedOptions.html,
       };
-      if (options.text) body.text = options.text;
-      if (options.attachments?.length) {
-        body.attachments = options.attachments.map((a) => ({
+      if (normalizedOptions.text) body.text = normalizedOptions.text;
+      if (normalizedOptions.attachments?.length) {
+        body.attachments = normalizedOptions.attachments.map((a) => ({
           filename: a.filename,
           content: Buffer.isBuffer(a.content)
             ? a.content.toString("base64")
@@ -42,7 +84,7 @@ export async function sendMailDirect(options: MailOptions): Promise<void> {
         method: "POST",
         headers: {
           Authorization: `Bearer ${RESEND_API_KEY}`,
-          "Content-Type": "application/json",
+          "Content-Type": "application/json; charset=utf-8",
         },
         body: JSON.stringify(body),
       });
@@ -50,7 +92,7 @@ export async function sendMailDirect(options: MailOptions): Promise<void> {
         const err = await res.text();
         throw new Error(`Resend API error ${res.status}: ${err}`);
       }
-      console.log(`[sendMailDirect] Resend OK to=${options.to}`);
+      console.log(`[sendMailDirect] Resend OK to=${normalizedOptions.to}`);
       return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -85,14 +127,14 @@ export async function sendMailDirect(options: MailOptions): Promise<void> {
 
       await transporter.sendMail({
         from,
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-        ...(options.text ? { text: options.text } : {}),
-        ...(options.attachments ? { attachments: options.attachments } : {}),
+        to: normalizedOptions.to,
+        subject: normalizedOptions.subject,
+        html: normalizedOptions.html,
+        ...(normalizedOptions.text ? { text: normalizedOptions.text } : {}),
+        ...(normalizedOptions.attachments ? { attachments: normalizedOptions.attachments } : {}),
       });
 
-      console.log(`[sendMailDirect] SMTP OK to=${options.to}`);
+      console.log(`[sendMailDirect] SMTP OK to=${normalizedOptions.to}`);
       return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
