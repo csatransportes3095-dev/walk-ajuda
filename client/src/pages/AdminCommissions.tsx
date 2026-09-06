@@ -5,7 +5,7 @@ import { Download, CheckCircle, Clock, Users, ExternalLink, Hash, Package, Trend
 import AdminHeader from "@/components/AdminHeader";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
+import { repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";
 
 function formatPhone(phone: string) {
   const d = phone.replace(/\D/g, "");
@@ -92,7 +92,7 @@ export default function AdminCommissions() {
             '',
             'Obrigado pela indicação! 🎉',
           ].filter(Boolean).join('\n');
-          window.open(`https://wa.me/55${String(wa.phone).replace(/\D/g, '')}?text=${encodeURIComponent(repairWhatsappReplacementIcons(msg))}`, '_blank', 'noopener,noreferrer');
+          window.open(`https://wa.me/55${String(wa.phone).replace(/\D/g, '')}?text=${encodeURIComponent(repairCommissionWhatsappMessage(msg))}`, '_blank', 'noopener,noreferrer');
         }
       } else {
         toast.success("Pagamento da comissão desmarcado.");
@@ -520,7 +520,7 @@ export default function AdminCommissions() {
                             ].filter(Boolean).join('\n');
                             return (
                               <a
-                                href={`https://wa.me/${waPhone}?text=${encodeURIComponent(repairWhatsappReplacementIcons(msg))}`}
+                                href={`https://wa.me/${waPhone}?text=${encodeURIComponent(repairCommissionWhatsappMessage(msg))}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-green-600/20 border-green-500/40 text-green-300 hover:bg-green-600/30 transition-colors"
@@ -549,7 +549,7 @@ export default function AdminCommissions() {
                             ].filter(Boolean).join('\n');
                             return (
                               <a
-                                href={`https://wa.me/${waPhone}?text=${encodeURIComponent(repairWhatsappReplacementIcons(msgPix))}`}
+                                href={`https://wa.me/${waPhone}?text=${encodeURIComponent(repairCommissionWhatsappMessage(msgPix))}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-amber-600/20 border-amber-500/40 text-amber-300 hover:bg-amber-600/30 transition-colors"

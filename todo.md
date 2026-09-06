@@ -2253,3 +2253,5 @@
 - [x] Backend verifica promoÃ§Ãµes expiradas ao listar produtos e reverte no banco
 - [x] Frontend filtra promoÃ§Ãµes expiradas e invalida query ao expirar
 - [x] Corrigir exclusivamente UTF-8 nas notificações de comissão/indicação, PIX e pagamento; testar sem envio real.
+- [x] Reconstituir o handler real que ainda produz `�` na rota de comissão e validar a origem efetiva antes de nova correção.
+- [x] Executar correção definitiva da origem real dos caracteres `�` nas notificações de comissão e validar em produção sem envio real.

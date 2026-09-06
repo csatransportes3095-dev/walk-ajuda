@@ -37,3 +37,11 @@ export function repairWhatsappReplacementIcons(value: string): string {
     // Encerramento das mensagens de indicação/comissão.
     .replace(/(Obrigado pela indicação!\s*)\uFFFD/gi, "$1🎉");
 }
+
+/**
+ * Última barreira exclusiva das mensagens de comissão. Depois de recuperar
+ * marcadores conhecidos, não permite que U+FFFD chegue ao payload final.
+ */
+export function repairCommissionWhatsappMessage(value: string): string {
+  return repairWhatsappReplacementIcons(value).replace(/\uFFFD/g, "");
+}

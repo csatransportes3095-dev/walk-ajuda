@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { repairWhatsappReplacementIcons } from "../shared/whatsappMessageText";
+import { repairCommissionWhatsappMessage, repairWhatsappReplacementIcons } from "../shared/whatsappMessageText";
 
 const projectRoot = path.resolve(import.meta.dirname, "..");
 
@@ -46,6 +46,10 @@ describe("ícones de mensagens WhatsApp", () => {
       "💰 *Valor da comissão:* R$ 10,00",
       "Obrigado pela indicação!🎉",
     ].join("\n"));
+  });
+
+  it("não deixa U+FFFD residual no payload final de comissão", () => {
+    expect(repairCommissionWhatsappMessage("\uFFFD *INDICAÇÃO CONFIRMADA*\n\uFFFD texto desconhecido")).toBe("🎉 *INDICAÇÃO CONFIRMADA*\n texto desconhecido");
   });
 
   it("aplica o reparo antes de abrir os três caminhos de template no painel", () => {
