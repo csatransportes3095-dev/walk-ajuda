@@ -6,7 +6,6 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import AdminCustomerPhoneEditorEnhancer from "./components/AdminCustomerPhoneEditorEnhancer";
-import CommissionWhatsappEmojiFix from "./components/CommissionWhatsappEmojiFix";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
 import AdminQuestionEditOptionsEnhancer from "./components/AdminQuestionEditOptionsEnhancer";
 import AdminQuestionTreeOrderEnhancer from "./components/AdminQuestionTreeOrderEnhancer";
@@ -105,7 +104,6 @@ createRoot(document.getElementById("root")!).render(
       <GlobalDevToolsProtection />
       <AdminDevToolsTargetSelector />
       <AdminCustomerPhoneEditorEnhancer />
-      <CommissionWhatsappEmojiFix />
       <RafflePhotoIntegrityEnhancer />
       <AdminProductsQuestionUXEnhancer />
       <AdminQuestionEditOptionsEnhancer />

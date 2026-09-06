@@ -59,4 +59,17 @@ describe("ícones de mensagens WhatsApp", () => {
     expect(source).toContain("repairWhatsappReplacementIcons(normalizeWhatsAppTrackingLinks(waLoginTemplate");
     expect(source.match(/setWaModalMsg\(repairWhatsappReplacementIcons\(/g)).toHaveLength(2);
   });
+
+  it("protege os três envios reais do painel de comissões antes do encodeURIComponent", () => {
+    const source = fs.readFileSync(path.join(projectRoot, "client/src/pages/AdminCommissions.tsx"), "utf8");
+
+    expect(source).toContain('import { repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";');
+    expect(source.match(/encodeURIComponent\(repairCommissionWhatsappMessage\(msg\)\)/g)).toHaveLength(2);
+    expect(source.match(/encodeURIComponent\(repairCommissionWhatsappMessage\(msgPix\)\)/g)).toHaveLength(1);
+  });
+
+  it("não carrega mais o diagnóstico/interceptor temporário de comissões", () => {
+    const main = fs.readFileSync(path.join(projectRoot, "client/src/main.tsx"), "utf8");
+    expect(main).not.toContain("CommissionWhatsappEmojiFix");
+  });
 });
