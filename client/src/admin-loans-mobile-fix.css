@@ -1,0 +1,16 @@
+/* Correção responsiva do modal de perfis de empréstimos.
+   No celular, os cinco modos de pagamento não podem disputar a mesma linha. */
+@media (max-width: 639px) {
+  [role="dialog"] .grid.grid-cols-5.gap-2:has(> button) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  [role="dialog"] .grid.grid-cols-5.gap-2:has(> button) > button {
+    min-width: 0;
+    min-height: 44px;
+    padding: 0.625rem 0.75rem;
+    white-space: nowrap;
+    text-align: center;
+  }
+}
