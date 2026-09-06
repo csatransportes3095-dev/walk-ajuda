@@ -3,7 +3,6 @@ import { trpc } from "@/lib/trpc";
 import {
   ArrowRight,
   BarChart3,
-  CheckCircle2,
   ClipboardCheck,
   Download,
   Gift,
@@ -39,13 +38,13 @@ type Palette = {
 };
 
 const PALETTES: Record<string, Palette> = {
-  pedido: { from: "#8b20e8", to: "#5d16c7", glow: "#c23cff", label: "RÁPIDO • SEGURO • SEM BUROCRACIA" },
-  acompanhar: { from: "#05a36f", to: "#047b5d", glow: "#13f3a8", label: "TRANSPARÊNCIA • ATUALIZAÇÃO CONSTANTE" },
-  cadastro: { from: "#0e95e9", to: "#1269cf", glow: "#20c9ff", label: "PRÁTICO • RÁPIDO • 100% ONLINE" },
-  gastos: { from: "#e58500", to: "#a84a00", glow: "#ffc22e", label: "CONTROLE • RELATÓRIOS • MAIS LUCRO" },
-  emprestimo: { from: "#dc1738", to: "#92102b", glow: "#ff345a", label: "SIMPLES • RÁPIDO • SEGURO" },
-  sorteio: { from: "#dc168d", to: "#97105f", glow: "#ff3ec8", label: "PARTICIPE • É GRÁTIS • BOA SORTE" },
-  default: { from: "#1267c8", to: "#0b3c8c", glow: "#25b8ff", label: "H2 COLOMBIANO • SEMPRE COM VOCÊ" },
+  pedido: { from: "#8f19ef", to: "#5a0fbf", glow: "#d13dff", label: "RÁPIDO • SEGURO • SEM BUROCRACIA" },
+  acompanhar: { from: "#08a76f", to: "#027a55", glow: "#16f6ab", label: "TRANSPARÊNCIA • ATUALIZAÇÃO CONSTANTE" },
+  cadastro: { from: "#149ee9", to: "#0f66cd", glow: "#23c8ff", label: "PRÁTICO • RÁPIDO • 100% ONLINE" },
+  gastos: { from: "#ef8a00", to: "#a94b00", glow: "#ffc52d", label: "CONTROLE • RELATÓRIOS • MAIS LUCRO" },
+  emprestimo: { from: "#df1738", to: "#8e0d29", glow: "#ff365d", label: "SIMPLES • RÁPIDO • SEGURO" },
+  sorteio: { from: "#e01a95", to: "#910d61", glow: "#ff43cf", label: "PARTICIPE • É GRÁTIS • BOA SORTE" },
+  default: { from: "#126ed2", to: "#0c438d", glow: "#27bcff", label: "H2 COLOMBIANO • SEMPRE COM VOCÊ" },
 };
 
 function keyFor(text: string) {
@@ -110,19 +109,14 @@ export default function H2WelcomePremium() {
     return () => observer.disconnect();
   }, [isHome, legacyRoot]);
 
-  useEffect(() => {
-    return () => {
-      if (legacyRoot) legacyRoot.style.display = "";
-    };
+  useEffect(() => () => {
+    if (legacyRoot) legacyRoot.style.display = "";
   }, [legacyRoot]);
 
   const buttons = useMemo(() => {
     const dynamic = (rawButtons as HomeButton[])
       .filter((button) => Number(button.vipOnly || 0) !== 1)
-      .map((button) => ({
-        ...button,
-        subtitle: button.subtitle || "Acesso rápido H2 Colombiano",
-      }));
+      .map((button) => ({ ...button, subtitle: button.subtitle || "Acesso rápido H2 Colombiano" }));
 
     return [
       {
@@ -157,26 +151,37 @@ export default function H2WelcomePremium() {
             <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>INÍCIO</button>
             <button onClick={() => go("/login")}>SISTEMA</button>
             <button onClick={() => document.getElementById("h2p-services")?.scrollIntoView({ behavior: "smooth" })}>SERVIÇOS</button>
-            <button onClick={() => go("/ajuda")}>AJUDA</button>
+            <button onClick={() => document.getElementById("h2p-plans")?.scrollIntoView({ behavior: "smooth" })}>PLANOS</button>
+            <button onClick={() => document.getElementById("h2p-about")?.scrollIntoView({ behavior: "smooth" })}>SOBRE</button>
+            <button onClick={() => go("/ajuda")}>CONTATO</button>
           </div>
           <button className="h2p-enter" onClick={() => go("/login")}>ENTRAR</button>
         </nav>
 
         <section className="h2p-hero">
+          <div className="h2p-city" />
+          <div className="h2p-lights" />
           <div className="h2p-electric h2p-electric-a" />
           <div className="h2p-electric h2p-electric-b" />
+
+          <div className="h2p-side-copy h2p-side-left">PESSOAS<br />VIAGENS<br />CONQUISTAS<br />SEMPRE JUNTOS</div>
+          <div className="h2p-side-copy h2p-side-right">MAIS<br />QUE UM<br />SISTEMA<br />UMA<br />COMUNIDADE</div>
+
           <div className="h2p-hero-logo-wrap">
             <div className="h2p-logo-halo" />
             <img className="h2p-hero-logo" src={logo} alt="H2 Colombiano" />
           </div>
+
           <div className="h2p-hero-copy">
-            <span className="h2p-community">MAIS QUE UM SISTEMA • UMA COMUNIDADE</span>
+            <span className="h2p-community">H2 COLOMBIANO</span>
             <h1><b>H2</b><span>COLOMBIANO</span></h1>
             <p>SEMPRE COM VOCÊ</p>
           </div>
+
           <div className="h2p-car" aria-hidden="true">
             <div className="h2p-car-roof" />
             <div className="h2p-car-body" />
+            <div className="h2p-car-window" />
             <div className="h2p-headlight" />
             <div className="h2p-wheel h2p-wheel-a" />
             <div className="h2p-wheel h2p-wheel-b" />
@@ -192,7 +197,7 @@ export default function H2WelcomePremium() {
           <button onClick={() => go("/app")}><Download /> BAIXAR</button>
         </section>
 
-        <section className="h2p-app-grid">
+        <section id="h2p-plans" className="h2p-app-grid">
           <button onClick={() => go("/app")} className="h2p-app h2p-app-main">
             <Smartphone />
             <span><strong>Colombiano</strong><small>Sistema completo</small></span>
@@ -237,7 +242,7 @@ export default function H2WelcomePremium() {
           })}
         </section>
 
-        <section className="h2p-trust">
+        <section id="h2p-about" className="h2p-trust">
           <div><ShieldCheck /><span>SEGURANÇA<br />EM PRIMEIRO LUGAR</span></div>
           <div><Users /><span>MILHARES<br />DE CLIENTES</span></div>
           <div><Star /><span>QUALIDADE<br />E COMPROMISSO</span></div>
