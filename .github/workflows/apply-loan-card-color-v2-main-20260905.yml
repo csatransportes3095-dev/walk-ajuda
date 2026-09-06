@@ -1,4 +1,4 @@
-name: Apply loan card color v2
+name: Fix customer search filter v2
 on:
   push:
     branches:
@@ -15,28 +15,68 @@ jobs:
         with:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
-      - name: Patch customer cards with loan color
+      - name: Patch customer search
         shell: bash
         run: |
           python3 <<'PY'
           from pathlib import Path
           p=Path('client/src/pages/AdminCustomers.tsx')
           s=p.read_text(encoding='utf-8')
-          anchor="""  const customersQuery = trpc.customers.list.useQuery(undefined, {\n    staleTime: 30_000,\n    refetchOnWindowFocus: false,\n    placeholderData: (previousData) => previousData,\n  });\n"""
-          insert="""  const customersQuery = trpc.customers.list.useQuery(undefined, {\n    staleTime: 30_000,\n    refetchOnWindowFocus: false,\n    placeholderData: (previousData) => previousData,\n  });\n  // Destaque visual apenas: amarelo identifica cliente que realmente possui empréstimo.\n  // As cores atuais de cadastro/pedido continuam intactas.\n  const loanClientsForCardColorQuery = trpc.loans.listClients.useQuery({}, {\n    staleTime: 30_000,\n    refetchOnWindowFocus: false,\n    placeholderData: (previousData) => previousData,\n  });\n  const normalizeLoanCardPhone = (value: unknown) => {\n    let digits = String(value ?? '').replace(/\\D/g, '');\n    if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) digits = digits.slice(2);\n    return digits;\n  };\n  const hasLoanForCustomer = (customer: Customer) => {\n    const phone = normalizeLoanCardPhone(customer.phone);\n    const cpf = String(customer.cpf ?? '').replace(/\\D/g, '');\n    return ((loanClientsForCardColorQuery.data || []) as any[]).some((loanClient: any) => {\n      if (Number(loanClient.totalLoans || 0) <= 0) return false;\n      const loanPhone = normalizeLoanCardPhone(loanClient.phone);\n      const loanCpf = String(loanClient.cpf ?? '').replace(/\\D/g, '');\n      return (!!phone && !!loanPhone && phone === loanPhone) || (!!cpf && !!loanCpf && cpf === loanCpf);\n    });\n  };\n"""
-          if 'loanClientsForCardColorQuery' not in s:
-            if anchor not in s: raise SystemExit('customers query anchor not found')
-            s=s.replace(anchor,insert,1)
-          old="""              background: c.blocked === 1\n                  ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'\n                  : c.hasOrder\n                  ? 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)'\n                  : 'linear-gradient(135deg, #1e1b4b 0%, #0f0b2e 100%)',\n                border: c.blocked === 1\n                  ? '2px solid rgba(239,68,68,0.8)'\n                  : c.hasOrder\n                  ? '2px solid rgba(34,197,94,0.7)'\n                  : '2px solid rgba(99,102,241,0.6)',\n                boxShadow: c.blocked === 1\n                  ? '0 4px 20px rgba(239,68,68,0.35)'\n                  : c.hasOrder\n                  ? '0 4px 20px rgba(34,197,94,0.3)'\n                  : '0 4px 20px rgba(99,102,241,0.25)',\n"""
-          new="""              background: c.blocked === 1\n                  ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'\n                  : c.hasOrder && hasLoanForCustomer(c)\n                  ? 'linear-gradient(135deg, #052e16 0%, #052e16 49.8%, #4a3600 50.2%, #241a00 100%)'\n                  : hasLoanForCustomer(c)\n                  ? 'linear-gradient(135deg, #4a3600 0%, #241a00 100%)'\n                  : c.hasOrder\n                  ? 'linear-gradient(135deg, #052e16 0%, #021a0c 100%)'\n                  : 'linear-gradient(135deg, #1e1b4b 0%, #0f0b2e 100%)',\n                border: c.blocked === 1\n                  ? '2px solid rgba(239,68,68,0.8)'\n                  : c.hasOrder && hasLoanForCustomer(c)\n                  ? '2px solid rgba(202,173,35,0.8)'\n                  : hasLoanForCustomer(c)\n                  ? '2px solid rgba(234,179,8,0.8)'\n                  : c.hasOrder\n                  ? '2px solid rgba(34,197,94,0.7)'\n                  : '2px solid rgba(99,102,241,0.6)',\n                boxShadow: c.blocked === 1\n                  ? '0 4px 20px rgba(239,68,68,0.35)'\n                  : c.hasOrder && hasLoanForCustomer(c)\n                  ? '-8px 4px 20px rgba(34,197,94,0.22), 8px 4px 20px rgba(234,179,8,0.24)'\n                  : hasLoanForCustomer(c)\n                  ? '0 4px 20px rgba(234,179,8,0.3)'\n                  : c.hasOrder\n                  ? '0 4px 20px rgba(34,197,94,0.3)'\n                  : '0 4px 20px rgba(99,102,241,0.25)',\n"""
-          if 'c.hasOrder && hasLoanForCustomer(c)' not in s:
-            if old not in s: raise SystemExit('customer card style anchor not found')
-            s=s.replace(old,new,1)
+          start_marker='  const filtered = sortedCustomers.filter((c) => {\n'
+          end_marker='\n\n  const startEdit = (c: Customer) => {'
+          start=s.find(start_marker)
+          end=s.find(end_marker,start)
+          if start < 0 or end < 0: raise SystemExit('customer filter block not found')
+          new_filter="""  const normalizeCustomerSearchText = (value: unknown) =>
+    String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\\u0300-\\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  const filtered = sortedCustomers.filter((c) => {
+    const rawTerm = searchTerm.trim();
+    const normalizedTerm = normalizeCustomerSearchText(rawTerm);
+    const termDigits = rawTerm.replace(/\\D/g, '');
+    const isCadastroSearch = /^[*＊]/.test(rawTerm);
+    const isOrderSearch = /^#/.test(rawTerm);
+
+    let matchSearch = true;
+    if (rawTerm) {
+      const customerNumber = c.customerNumber != null ? String(c.customerNumber) : '';
+      const orderNumber = c.orderNumber != null ? String(c.orderNumber) : '';
+      const phoneDigits = String(c.phone || '').replace(/\\D/g, '');
+      const cpfDigits = String(c.cpf || '').replace(/\\D/g, '');
+      const referrerPhoneDigits = String(c.referredByPhone || '').replace(/\\D/g, '');
+
+      if (isCadastroSearch) {
+        matchSearch = !!termDigits && customerNumber.includes(termDigits);
+      } else if (isOrderSearch) {
+        matchSearch = !!termDigits && orderNumber.includes(termDigits);
+      } else {
+        const textualFields = [c.name,c.email,c.city,c.uf,c.referredBy,c.phone,c.referredByPhone,c.cpf,
+          customerNumber ? `*${customerNumber}` : '', orderNumber ? `#${orderNumber}` : '']
+          .map(normalizeCustomerSearchText);
+        const textMatch = textualFields.some((field) => field.includes(normalizedTerm));
+        const numericMatch = !!termDigits && [customerNumber,orderNumber,phoneDigits,cpfDigits,referrerPhoneDigits]
+          .some((field) => field.includes(termDigits));
+        matchSearch = textMatch || numericMatch;
+      }
+    }
+    if (showOnlyOrders) return matchSearch && !!c.hasOrder;
+    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
+    return matchSearch;
+  });"""
+          s=s[:start]+new_filter+s[end:]
+          old="""            value={searchTerm}\n            onChange={(e) => setSearchTerm(e.target.value)}\n            placeholder=\"Buscar por nome, telefone, email, cidade, indicação, #nº pedido, *nº cadastro...\""" 
+          new="""            value={searchTerm}\n            onChange={(e) => {\n              const value = e.target.value;\n              setSearchTerm(value);\n              if (value.trim()) {\n                setShowOnlyOrders(false);\n                setShowOnlyBlocked(false);\n              }\n            }}\n            placeholder=\"Buscar nome, *cadastro, telefone, CPF, email, cidade ou #pedido...\""" 
+          if old not in s: raise SystemExit('search input anchor not found')
+          s=s.replace(old,new,1)
           p.write_text(s,encoding='utf-8')
           PY
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add client/src/pages/AdminCustomers.tsx
-          git commit -m "feat(clientes): destacar cartões com empréstimo"
+          git commit -m "fix(clientes): corrigir busca por nome e cadastro"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
