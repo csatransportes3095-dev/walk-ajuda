@@ -301,6 +301,107 @@ export const customerUpdateRouter = router({
       return { success: true, customer, incomplete: customer ? missingFields(customer).length > 0 : true };
     }),
 
+  // O telefone pode ser corrigido somente pelo ADM. A troca preserva o mesmo
+  // cliente e os mesmos pedidos; apenas atualiza os vínculos que usam telefone.
+  adminChangePhone: adminProcedure
+    .input(z.object({
+      currentPhone: z.string().min(10).max(32),
+      newPhone: z.string().min(10).max(32),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      await ensureCustomerIdentityInfrastructure(db);
+      await ensureCustomerUpdateCompletionInfrastructure(db);
+
+      const oldPhone = normalizeCustomerPhone(input.currentPhone);
+      const newPhone = normalizeCustomerPhone(input.newPhone);
+      if (!oldPhone || !newPhone) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um telefone válido com DDD." });
+      }
+
+      const customer = await findMainCustomerByIdentity({ phone: oldPhone }, db);
+      if (!customer || customer.deletedAt) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado para o telefone atual." });
+      }
+      if (oldPhone === newPhone) {
+        return { success: true, phone: newPhone, updatedOrders: 0, unchanged: true };
+      }
+
+      const duplicate = await findMainCustomerByIdentity({ phone: newPhone }, db);
+      if (duplicate && Number(duplicate.id) !== Number(customer.id)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Este telefone já está cadastrado para ${String(duplicate.name || "outro cliente")}.`,
+        });
+      }
+
+      const registrationRows = await rows(db, sql`
+        SELECT id FROM accessCodePhones
+        WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}
+      `);
+      const registrationIds = registrationRows
+        .map((row: any) => Number(row.id))
+        .filter((id: number) => Number.isFinite(id) && id > 0);
+
+      // A identidade principal é atualizada primeiro. Falha aqui interrompe tudo.
+      await db.execute(sql`
+        UPDATE customers
+        SET phone=${newPhone}, updatedAt=NOW()
+        WHERE id=${Number(customer.id)} AND deletedAt IS NULL
+      `);
+
+      const propagationQueries = [
+        sql`UPDATE customerPasswordSessions SET phone=${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+        sql`UPDATE customerPasswords SET phone=${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+        sql`UPDATE customerLoginHistory SET phone=${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+        sql`UPDATE customerPins SET phone=${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+        sql`UPDATE spreadsheetClients SET phone=${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+        sql`UPDATE loanClients SET phone=${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+        sql`UPDATE accessCodes SET accessedByPhone=${newPhone} WHERE REGEXP_REPLACE(accessedByPhone, '[^0-9]', '')=${oldPhone}`,
+        sql`UPDATE accessCodePhones SET phone=${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+        sql`UPDATE customerProductAccess SET phone=${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '')=${oldPhone}`,
+        sql`UPDATE customerProfileUpdateCompletions SET phone=${newPhone} WHERE customerId=${Number(customer.id)}`,
+        sql`UPDATE customers SET referredByPhone=${newPhone} WHERE deletedAt IS NULL AND REGEXP_REPLACE(referredByPhone, '[^0-9]', '')=${oldPhone}`,
+        sql`UPDATE referralUsages SET clientPhone=${newPhone} WHERE REGEXP_REPLACE(clientPhone, '[^0-9]', '')=${oldPhone}`,
+      ];
+      for (const query of propagationQueries) {
+        try {
+          await db.execute(query);
+        } catch (error: any) {
+          console.warn('[customerUpdate.adminChangePhone] sincronização auxiliar não aplicada:', error?.message);
+        }
+      }
+
+      if (registrationIds.length) {
+        const registrationList = sql.join(registrationIds.map((registrationId: number) => sql`${registrationId}`), sql`, `);
+        const orderQueries = [
+          sql`UPDATE orderStatusHistory SET customerPhone=${newPhone} WHERE registrationId IN (${registrationList})`,
+          sql`UPDATE orderFiles SET customerPhone=${newPhone} WHERE registrationId IN (${registrationList})`,
+          sql`UPDATE orderLoginData SET customerPhone=${newPhone} WHERE registrationId IN (${registrationList})`,
+          sql`UPDATE scheduleAppointments SET customerPhone=${newPhone} WHERE registrationId IN (${registrationList})`,
+          sql`UPDATE docRequests SET customerPhone=${newPhone} WHERE registrationId IN (${registrationList})`,
+          sql`UPDATE uploadSessions SET customerPhone=${newPhone} WHERE registrationId IN (${registrationList})`,
+          sql`UPDATE hiddenSubOrders SET customerPhone=${newPhone} WHERE registrationId IN (${registrationList})`,
+        ];
+        for (const query of orderQueries) {
+          try {
+            await db.execute(query);
+          } catch (error: any) {
+            console.warn('[customerUpdate.adminChangePhone] sincronização do pedido não aplicada:', error?.message);
+          }
+        }
+      }
+
+      try {
+        await syncUnifiedCustomerRegistry([{ phone: oldPhone, cpf: String(customer.cpf || "").replace(/\D/g, "") }]);
+      } catch (error: any) {
+        console.warn('[customerUpdate.adminChangePhone] sincronização unificada não aplicada:', error?.message);
+      }
+
+      return { success: true, phone: newPhone, updatedOrders: registrationIds.length, unchanged: false };
+    }),
+
   save: publicProcedure
     .input(z.object({
       token: z.string().min(32).max(255),
