@@ -73,6 +73,33 @@ export const whatsappTemplatesRouter = {
     };
   }),
 
+  reportCommissionDiagnostic: adminProcedure
+    .input(z.object({
+      action: z.string().max(80),
+      source: z.enum(["anchor", "window.open", "auto-scan"]),
+      decodedText: z.string().max(8000),
+      encodedText: z.string().max(20000),
+      resolvedUrl: z.string().max(24000),
+      rawAttribute: z.string().max(24000).nullable().optional(),
+      hasReplacementCharacter: z.boolean(),
+      encodedHasReplacementUtf8: z.boolean(),
+      encodedHasKnownEmojiUtf8: z.boolean(),
+      codePoints: z.array(z.string()).max(8000),
+      utf8BytesHex: z.string().max(40000),
+      capturedAt: z.string().max(80),
+    }))
+    .mutation(async ({ input }) => {
+      const record = {
+        tag: "commission-whatsapp-diag",
+        serverReceivedAt: new Date().toISOString(),
+        ...input,
+      };
+
+      // Diagnóstico temporário: somente log. Não grava banco e não altera mensagens.
+      process.stdout.write(`[commission-whatsapp-diag] ${JSON.stringify(record)}\n`);
+      return { success: true };
+    }),
+
   create: adminProcedure
     .input(z.object({
       title: z.string().min(1),
