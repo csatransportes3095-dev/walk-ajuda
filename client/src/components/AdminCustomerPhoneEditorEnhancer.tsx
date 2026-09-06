@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { createPortal } from "react-dom";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
@@ -21,6 +20,7 @@ function formatPhone(value: string) {
 
 export default function AdminCustomerPhoneEditorEnhancer() {
   const changePhone = trpc.customerUpdate.adminChangePhone.useMutation();
+  const mutateAsync = changePhone.mutateAsync;
 
   useEffect(() => {
     if (!location.pathname.startsWith("/admin/customers")) return;
@@ -126,7 +126,7 @@ export default function AdminCustomerPhoneEditorEnhancer() {
         reset.disabled = true;
         save.textContent = "SALVANDO...";
         try {
-          await changePhone.mutateAsync({ currentPhone: currentOriginal, newPhone: next });
+          await mutateAsync({ currentPhone: currentOriginal, newPhone: next });
           toast.success("Telefone atualizado e sincronizado.");
           currentOriginal = next;
           legacyInput.value = next;
@@ -159,7 +159,7 @@ export default function AdminCustomerPhoneEditorEnhancer() {
       observer?.disconnect();
       detach();
     };
-  }, [changePhone]);
+  }, [mutateAsync]);
 
   return null;
 }
