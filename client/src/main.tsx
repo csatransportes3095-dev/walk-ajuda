@@ -5,6 +5,7 @@ import { httpBatchLink, splitLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
+import AdminCustomerPhoneEditorEnhancer from "./components/AdminCustomerPhoneEditorEnhancer";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
 import AdminQuestionEditOptionsEnhancer from "./components/AdminQuestionEditOptionsEnhancer";
 import AdminQuestionTreeOrderEnhancer from "./components/AdminQuestionTreeOrderEnhancer";
@@ -102,6 +103,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <GlobalDevToolsProtection />
       <AdminDevToolsTargetSelector />
+      <AdminCustomerPhoneEditorEnhancer />
       <RafflePhotoIntegrityEnhancer />
       <AdminProductsQuestionUXEnhancer />
       <AdminQuestionEditOptionsEnhancer />
