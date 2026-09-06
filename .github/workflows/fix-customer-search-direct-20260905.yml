@@ -1,0 +1,76 @@
+name: Fix customer search direct
+'on':
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/fix-customer-search-direct-20260905.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+      - name: Update customer search
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('client/src/pages/AdminCustomers.tsx')
+          s = p.read_text(encoding='utf-8')
+          start = s.find('  const filtered = sortedCustomers.filter((c) => {\n')
+          end = s.find('\n\n  const startEdit = (c: Customer) => {', start)
+          if start < 0 or end < 0:
+              raise SystemExit('filter block not found')
+          new = """  const normalizeCustomerSearchText = (value: unknown) =>
+    String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\\u0300-\\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  const filtered = sortedCustomers.filter((c) => {
+    const rawTerm = searchTerm.trim();
+    const normalizedTerm = normalizeCustomerSearchText(rawTerm);
+    const termDigits = rawTerm.replace(/\\D/g, '');
+    const isCadastroSearch = /^[*＊]/.test(rawTerm);
+    const isOrderSearch = /^#/.test(rawTerm);
+    let matchSearch = true;
+    if (rawTerm) {
+      const customerNumber = c.customerNumber != null ? String(c.customerNumber) : '';
+      const orderNumber = c.orderNumber != null ? String(c.orderNumber) : '';
+      const phoneDigits = String(c.phone || '').replace(/\\D/g, '');
+      const cpfDigits = String(c.cpf || '').replace(/\\D/g, '');
+      const referrerPhoneDigits = String(c.referredByPhone || '').replace(/\\D/g, '');
+      if (isCadastroSearch) {
+        matchSearch = !!termDigits && customerNumber.includes(termDigits);
+      } else if (isOrderSearch) {
+        matchSearch = !!termDigits && orderNumber.includes(termDigits);
+      } else {
+        const fields = [c.name,c.email,c.city,c.uf,c.referredBy,c.phone,c.referredByPhone,c.cpf,customerNumber ? `*${customerNumber}` : '',orderNumber ? `#${orderNumber}` : ''].map(normalizeCustomerSearchText);
+        const textMatch = fields.some((field) => field.includes(normalizedTerm));
+        const numericMatch = !!termDigits && [customerNumber,orderNumber,phoneDigits,cpfDigits,referrerPhoneDigits].some((field) => field.includes(termDigits));
+        matchSearch = textMatch || numericMatch;
+      }
+    }
+    if (showOnlyOrders) return matchSearch && !!c.hasOrder;
+    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
+    return matchSearch;
+  });"""
+          s = s[:start] + new + s[end:]
+          old = '            value={searchTerm}\n            onChange={(e) => setSearchTerm(e.target.value)}\n            placeholder="Buscar por nome, telefone, email, cidade, indicação, #nº pedido, *nº cadastro..."'
+          repl = '            value={searchTerm}\n            onChange={(e) => {\n              const value = e.target.value;\n              setSearchTerm(value);\n              if (value.trim()) {\n                setShowOnlyOrders(false);\n                setShowOnlyBlocked(false);\n              }\n            }}\n            placeholder="Buscar nome, *cadastro, telefone, CPF, email, cidade ou #pedido..."'
+          if old not in s:
+              raise SystemExit('search input not found')
+          s = s.replace(old, repl, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add client/src/pages/AdminCustomers.tsx
+          git commit -m "fix(clientes): corrigir busca por nome e cadastro"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
