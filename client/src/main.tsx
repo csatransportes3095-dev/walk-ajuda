@@ -21,6 +21,7 @@ import GlobalDevToolsProtection from "./components/GlobalDevToolsProtection";
 import AdminDevToolsTargetSelector from "./components/AdminDevToolsTargetSelector";
 import RafflePhotoIntegrityEnhancer from "./components/RafflePhotoIntegrityEnhancer";
 import "./index.css";
+import "./welcome-neon-refresh.css";
 import "./admin-loans-mobile-fix.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
