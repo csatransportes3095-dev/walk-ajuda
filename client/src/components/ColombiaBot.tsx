@@ -10,6 +10,7 @@ import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAud
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
+import { applyVipBenefitToPrice, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ type Product = {
   id: number; name: string; description?: string; iconUrl?: string;
   options: ProductOption[];
 };
-type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice?: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; };
+type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice?: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; vipAccessMode?: 'all' | 'benefit' | 'vip_only'; vipDiscountType?: 'percentage' | 'fixed'; vipDiscountValue?: number; vipHighlight?: number; vipHighlightText?: string | null; };
 type ProductOption = {
   id: number; name: string; price?: string; label?: string; type?: string; isPdfOnly?: number; priceModels?: OptionPriceModel[];
   questions: ProductQuestion[];
@@ -140,6 +141,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: settingsData } = trpc.settings.getAll.useQuery();
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';
+  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';
+  const getModelPrice = (model: OptionPriceModel | null | undefined) => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
   const profileQuery = trpc.customers.getMyProfile.useQuery(
     { phone: clientPhone },
     { enabled: !!clientPhone }
@@ -485,26 +488,43 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       setTimeout(() => askQuestions(product, option, {}), 200);
       return;
     }
-    if (models.length === 1) {
+    const displayLabel = (model: OptionPriceModel) => {
+      const locked = isVipOnlyLocked(model, isVipCustomer);
+      const mode = normalizeVipAccessMode(model.vipAccessMode);
+      const prefix = locked ? '🔒 SOMENTE VIP • ' : (mode !== 'all' ? '👑 VIP • ' : '');
+      const benefit = isVipCustomer ? vipBenefitText(model) : '';
+      return `${prefix}${model.label} — ${getModelPrice(model)}${benefit ? ` • ${benefit}` : ''}`;
+    };
+    if (models.length === 1 && !isVipOnlyLocked(models[0], isVipCustomer)) {
       flowState.current.priceModel = models[0];
       saveBotProgress('questions', 'dados');
       setTimeout(() => askQuestions(product, option, {}), 200);
       return;
     }
+    if (models.length === 1 && isVipOnlyLocked(models[0], isVipCustomer)) {
+      addMsgs({ type: 'bot', id: uid(), text: '🔒 Este modelo / categoria é exclusivo para clientes VIP. Escolha outro serviço ou entre com uma senha VIP.' });
+      setTimeout(() => askService(), 450);
+      return;
+    }
     saveSnapshot();
     const msgId = uid();
     callbacks.current[msgId] = (answer: string) => {
+      const model = models.find(item => displayLabel(item) === answer);
+      if (!model) return;
+      if (isVipOnlyLocked(model, isVipCustomer)) {
+        addMsgs({ type: 'bot', id: uid(), text: '🔒 Este modelo / categoria é SOMENTE VIP. Entre com uma senha VIP para liberar esta escolha.' });
+        setTimeout(() => startOptionPricing(product, option), 350);
+        return;
+      }
       markAnswered(msgId);
       addMsgs({ type: 'user', id: uid(), text: answer });
-      const model = models.find(item => `${item.label} — R$ ${item.price}` === answer);
-      if (!model) return;
       flowState.current.priceModel = model;
       saveBotProgress('questions', 'dados');
       setTimeout(() => askQuestions(product, option, {}), 250);
     };
     addMsgs(
       { type: 'bot', id: uid(), text: 'Qual modelo / categoria de preço você deseja?' },
-      { type: 'options', id: msgId, options: models.map(model => `${model.label} — R$ ${model.price}`), answered: false }
+      { type: 'options', id: msgId, options: models.map(displayLabel), answered: false }
     );
   };
 
@@ -729,7 +749,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const pixKey = activePix?.pixKey || settingsData?.pix_key || '';
     const pixName = activePix?.pixName || settingsData?.pix_name || '';
     const pixBank = activePix?.pixBank || settingsData?.pix_bank || '';
-    const price = flowState.current.priceModel?.price || option?.price || '';
+    const price = getModelPrice(flowState.current.priceModel) || option?.price || '';
 
     const msgId = uid();
     pendingPixMsgId.current = msgId;
@@ -836,7 +856,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           audioDraftIds: hasAudioAnswersForCurrentOption ? audioDraftIdsForSubmit : undefined,
           couponCode: flowState.current.couponCode || undefined,
           price: (() => {
-            const rawPrice = flowState.current.priceModel?.price || option?.price;
+            const rawPrice = getModelPrice(flowState.current.priceModel) || option?.price;
             if (!rawPrice) return undefined;
             const discount = flowState.current.couponDiscount;
             if (!discount) return rawPrice;
@@ -848,6 +868,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               : num - discount.value;
             return `R$ ${Math.max(0, final).toFixed(2).replace('.', ',')}`;
           })(),
+          priceModelId: flowState.current.priceModel?.id || undefined,
           paymentProofUrl: flowState.current.pixProofUrl || undefined,
           paymentProofMime: flowState.current.pixProofMime || undefined,
         });
@@ -857,10 +878,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           clearCompletedBotProgress();
           addMsgs({ type: "bot", id: uid(), text: "Pedido enviado com sucesso! \u2705\n\nO admin j\u00e1 recebeu e entrar\u00e1 em contato em breve." });
           onOrderComplete({
-            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: option?.price || '' }],
+            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: getModelPrice(flowState.current.priceModel) || option?.price || '' }],
             answers: answersArray,
             docs: docsArray,
-            totalValue: option?.price || '',
+            totalValue: getModelPrice(flowState.current.priceModel) || option?.price || '',
             referrerName: '',
             referrerPhone: '',
             clientName: flowState.current.clientName || profileQuery.data?.name || 'Cliente',
@@ -1196,7 +1217,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               setUploadingDocId(null);
               setPixCopied(false);
               setUploadingPix(false);
-              flowState.current = { product: null, option: null, answers: {}, audioAnswers: {}, audioFlowId: createAudioFlowId(), docFiles: {}, clientName: flowState.current.clientName, clientPhone: flowState.current.clientPhone, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
+              flowState.current = { product: null, option: null, priceModel: null, answers: {}, audioAnswers: {}, audioFlowId: createAudioFlowId(), docFiles: {}, clientName: flowState.current.clientName, clientPhone: flowState.current.clientPhone, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
               callbacks.current = {};
               pendingUpload.current = null;
               pendingPixMsgId.current = '';

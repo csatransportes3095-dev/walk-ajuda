@@ -166,6 +166,8 @@ const docModes = [
 type OptionPriceModelType = {
   id: number; optionId: number; label: string; price: string; originalPrice: string | null;
   promoEndsAt: number | null; sortOrder: number; isActive: number;
+  vipAccessMode: 'all' | 'benefit' | 'vip_only'; vipDiscountType: 'percentage' | 'fixed';
+  vipDiscountValue: number; vipHighlight: number; vipHighlightText: string | null;
 };
 
 function OptionPriceModelRow({ model, onChanged }: { model: OptionPriceModelType; onChanged: () => void }) {
@@ -174,6 +176,11 @@ function OptionPriceModelRow({ model, onChanged }: { model: OptionPriceModelType
   const [promotionalPrice, setPromotionalPrice] = useState(model.originalPrice?.trim() ? model.price : '');
   const [promoEndsAt, setPromoEndsAt] = useState(model.promoEndsAt ? new Date(model.promoEndsAt).toISOString().slice(0, 16) : '');
   const [active, setActive] = useState(model.isActive === 1);
+  const [vipAccessMode, setVipAccessMode] = useState<'all' | 'benefit' | 'vip_only'>(model.vipAccessMode || 'all');
+  const [vipDiscountType, setVipDiscountType] = useState<'percentage' | 'fixed'>(model.vipDiscountType || 'percentage');
+  const [vipDiscountValue, setVipDiscountValue] = useState(String(model.vipDiscountValue || ''));
+  const [vipHighlight, setVipHighlight] = useState(model.vipHighlight === 1);
+  const [vipHighlightText, setVipHighlightText] = useState(model.vipHighlightText || 'VIP');
   const updateMut = trpc.optionPriceModels.update.useMutation({ onSuccess: onChanged });
   const deleteMut = trpc.optionPriceModels.delete.useMutation({ onSuccess: onChanged });
 
@@ -185,10 +192,23 @@ function OptionPriceModelRow({ model, onChanged }: { model: OptionPriceModelType
         <div><label className="text-[10px] text-green-300 block mb-1">Valor Promocional</label><input value={promotionalPrice} onChange={e => setPromotionalPrice(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} placeholder="Opcional: 100,00" /></div>
         <div><label className="text-[10px] text-red-300 block mb-1">Fim da promoção</label><input type="datetime-local" value={promoEndsAt} onChange={e => setPromoEndsAt(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} /></div>
       </div>
+      <div className="rounded-lg border border-amber-400/25 bg-amber-500/5 p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-black text-amber-300">👑 VIP DESTE MODELO / CATEGORIA</p>
+          {vipAccessMode !== 'all' && <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[9px] font-black text-amber-200">{vipAccessMode === 'vip_only' ? 'SOMENTE VIP' : 'BENEFÍCIO VIP'}</span>}
+        </div>
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+          <div><label className="text-[10px] text-gray-400 block mb-1">Acesso</label><select value={vipAccessMode} onChange={e => setVipAccessMode(e.target.value as any)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }}><option value="all">Todos os clientes</option><option value="benefit">VIP com benefício</option><option value="vip_only">Somente VIP</option></select></div>
+          <div><label className="text-[10px] text-gray-400 block mb-1">Tipo do benefício</label><select disabled={vipAccessMode === 'all'} value={vipDiscountType} onChange={e => setVipDiscountType(e.target.value as any)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px', opacity: vipAccessMode === 'all' ? .5 : 1 }}><option value="percentage">Percentual (%)</option><option value="fixed">Valor fixo (R$)</option></select></div>
+          <div><label className="text-[10px] text-gray-400 block mb-1">Desconto VIP</label><input disabled={vipAccessMode === 'all'} type="number" min="0" step="0.01" value={vipDiscountValue} onChange={e => setVipDiscountValue(e.target.value)} placeholder={vipDiscountType === 'percentage' ? 'Ex: 20' : 'Ex: 50'} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px', opacity: vipAccessMode === 'all' ? .5 : 1 }} /></div>
+          <div><label className="text-[10px] text-gray-400 block mb-1">Texto do destaque</label><input disabled={vipAccessMode === 'all' || !vipHighlight} value={vipHighlightText} onChange={e => setVipHighlightText(e.target.value)} placeholder="VIP" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px', opacity: vipAccessMode === 'all' || !vipHighlight ? .5 : 1 }} /></div>
+        </div>
+        <label className="flex items-center gap-2 text-[11px] text-amber-200"><input type="checkbox" disabled={vipAccessMode === 'all'} checked={vipHighlight} onChange={e => setVipHighlight(e.target.checked)} /> Destacar este Modelo/Categoria como VIP para o cliente</label>
+      </div>
       <div className="flex items-center justify-between gap-2">
         <label className="flex items-center gap-2 text-[11px] text-gray-300"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Ativo para o cliente</label>
         <div className="flex gap-2">
-          <Button type="button" size="sm" className="bg-cyan-600 hover:bg-cyan-500 text-white" disabled={updateMut.isPending} onClick={() => { const principal = principalPrice.trim(); const promotional = promotionalPrice.trim(); if (!label.trim() || (!principal && !promotional)) { toast.error('Informe categoria e pelo menos um valor.'); return; } updateMut.mutate({ id: model.id, optionId: model.optionId, label: label.trim(), price: promotional || principal, originalPrice: promotional ? principal : '', promoEndsAt: promotional && promoEndsAt ? new Date(promoEndsAt).getTime() : null, sortOrder: model.sortOrder, isActive: active }); }}><Save className="w-3 h-3 mr-1" /> Salvar</Button>
+          <Button type="button" size="sm" className="bg-cyan-600 hover:bg-cyan-500 text-white" disabled={updateMut.isPending} onClick={() => { const principal = principalPrice.trim(); const promotional = promotionalPrice.trim(); if (!label.trim() || (!principal && !promotional)) { toast.error('Informe categoria e pelo menos um valor.'); return; } updateMut.mutate({ id: model.id, optionId: model.optionId, label: label.trim(), price: promotional || principal, originalPrice: promotional ? principal : '', promoEndsAt: promotional && promoEndsAt ? new Date(promoEndsAt).getTime() : null, sortOrder: model.sortOrder, isActive: active, vipAccessMode, vipDiscountType, vipDiscountValue: vipAccessMode === 'all' ? 0 : (parseFloat(vipDiscountValue) || 0), vipHighlight: vipAccessMode === 'all' ? false : vipHighlight, vipHighlightText: vipAccessMode === 'all' || !vipHighlight ? null : (vipHighlightText.trim() || 'VIP') }); }}><Save className="w-3 h-3 mr-1" /> Salvar</Button>
           <Button type="button" size="sm" variant="destructive" disabled={deleteMut.isPending} onClick={() => { if (confirm(`Excluir a categoria ${model.label}?`)) deleteMut.mutate({ id: model.id }); }}><Trash2 className="w-3 h-3" /></Button>
         </div>
       </div>
@@ -206,9 +226,14 @@ function OptionPriceModelsEditor({ optionId }: { optionId: number }) {
   const [newOriginalPrice, setNewOriginalPrice] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [newPromoEndsAt, setNewPromoEndsAt] = useState('');
+  const [newVipAccessMode, setNewVipAccessMode] = useState<'all' | 'benefit' | 'vip_only'>('all');
+  const [newVipDiscountType, setNewVipDiscountType] = useState<'percentage' | 'fixed'>('percentage');
+  const [newVipDiscountValue, setNewVipDiscountValue] = useState('');
+  const [newVipHighlight, setNewVipHighlight] = useState(false);
+  const [newVipHighlightText, setNewVipHighlightText] = useState('VIP');
   const refresh = () => { utils.optionPriceModels.list.invalidate({ optionId }); utils.products.list.invalidate(); };
   const updateSettingsMut = trpc.optionPriceModels.updateSettings.useMutation({ onSuccess: () => { utils.optionPriceModels.getSettings.invalidate({ optionId }); refresh(); toast.success('Nome do seletor atualizado!'); } });
-  const createMut = trpc.optionPriceModels.create.useMutation({ onSuccess: () => { setNewLabel(''); setNewOriginalPrice(''); setNewPrice(''); setNewPromoEndsAt(''); refresh(); toast.success('Categoria de preço criada!'); } });
+  const createMut = trpc.optionPriceModels.create.useMutation({ onSuccess: () => { setNewLabel(''); setNewOriginalPrice(''); setNewPrice(''); setNewPromoEndsAt(''); setNewVipAccessMode('all'); setNewVipDiscountType('percentage'); setNewVipDiscountValue(''); setNewVipHighlight(false); setNewVipHighlightText('VIP'); refresh(); toast.success('Categoria de preço criada!'); } });
   const models = (query.data || []) as OptionPriceModelType[];
 
   return (
@@ -235,7 +260,17 @@ function OptionPriceModelsEditor({ optionId }: { optionId: number }) {
           <input value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="Promocional: 100,00" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
           <input type="datetime-local" value={newPromoEndsAt} onChange={e => setNewPromoEndsAt(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
         </div>
-        <Button type="button" className="mt-2 w-full bg-cyan-600 hover:bg-cyan-500 text-white" disabled={createMut.isPending} onClick={() => { const label = newLabel.trim(); const principal = newOriginalPrice.trim(); const promotional = newPrice.trim(); if (!label || (!principal && !promotional)) { toast.error('Informe categoria e pelo menos um valor.'); return; } createMut.mutate({ optionId, label, price: promotional || principal, originalPrice: promotional ? principal : '', promoEndsAt: promotional && newPromoEndsAt ? new Date(newPromoEndsAt).getTime() : null, sortOrder: models.length, isActive: true }); }}><Plus className="w-3 h-3 mr-1" /> Adicionar categoria</Button>
+        <div className="mt-2 rounded-lg border border-amber-400/20 bg-amber-500/5 p-2 space-y-2">
+          <p className="text-[10px] font-black text-amber-300">VIP DO NOVO MODELO / CATEGORIA</p>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+            <select value={newVipAccessMode} onChange={e => setNewVipAccessMode(e.target.value as any)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }}><option value="all">Todos os clientes</option><option value="benefit">VIP com benefício</option><option value="vip_only">Somente VIP</option></select>
+            <select disabled={newVipAccessMode === 'all'} value={newVipDiscountType} onChange={e => setNewVipDiscountType(e.target.value as any)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }}><option value="percentage">Desconto em %</option><option value="fixed">Desconto em R$</option></select>
+            <input disabled={newVipAccessMode === 'all'} type="number" min="0" step="0.01" value={newVipDiscountValue} onChange={e => setNewVipDiscountValue(e.target.value)} placeholder="Benefício VIP" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
+            <input disabled={newVipAccessMode === 'all' || !newVipHighlight} value={newVipHighlightText} onChange={e => setNewVipHighlightText(e.target.value)} placeholder="Texto: VIP" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
+          </div>
+          <label className="flex items-center gap-2 text-[10px] text-amber-200"><input type="checkbox" disabled={newVipAccessMode === 'all'} checked={newVipHighlight} onChange={e => setNewVipHighlight(e.target.checked)} /> Destacar como VIP</label>
+        </div>
+        <Button type="button" className="mt-2 w-full bg-cyan-600 hover:bg-cyan-500 text-white" disabled={createMut.isPending} onClick={() => { const label = newLabel.trim(); const principal = newOriginalPrice.trim(); const promotional = newPrice.trim(); if (!label || (!principal && !promotional)) { toast.error('Informe categoria e pelo menos um valor.'); return; } createMut.mutate({ optionId, label, price: promotional || principal, originalPrice: promotional ? principal : '', promoEndsAt: promotional && newPromoEndsAt ? new Date(newPromoEndsAt).getTime() : null, sortOrder: models.length, isActive: true, vipAccessMode: newVipAccessMode, vipDiscountType: newVipDiscountType, vipDiscountValue: newVipAccessMode === 'all' ? 0 : (parseFloat(newVipDiscountValue) || 0), vipHighlight: newVipAccessMode === 'all' ? false : newVipHighlight, vipHighlightText: newVipAccessMode === 'all' || !newVipHighlight ? null : (newVipHighlightText.trim() || 'VIP') }); }}><Plus className="w-3 h-3 mr-1" /> Adicionar categoria</Button>
       </div>
     </div>
   );

@@ -32,7 +32,7 @@ import { syncUnifiedCustomerRegistry } from "./customerIdentity";
 import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, setCustomerCommercialProfileMode } from "./loans/h2Score";
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
-import { optionPriceModelsRouter } from "./routers/optionPriceModels";
+import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess } from "./routers/optionPriceModels";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -1263,6 +1263,7 @@ export const appRouter = router({
         docNameMode: z.string().optional(),
         docCustomName: z.string().optional(),
         price: z.string().optional(), // valor pago pelo cliente (ex: "R$ 350,00")
+        priceModelId: z.number().int().positive().optional(), // modelo/categoria de preço escolhido
         thirdPartyName: z.string().optional(), // nome do cliente final (revendedor)
         thirdPartyPhone: z.string().optional(), // telefone do cliente final (revendedor)
         resellerDiscountApplied: z.number().optional(), // valor do desconto aplicado em R$
@@ -1320,6 +1321,20 @@ export const appRouter = router({
             if (!canSubmit.canSubmit) {
               return { success: false, message: canSubmit.reason || 'Esta senha já foi utilizada.' };
             }
+          }
+
+          // Modelo/Categoria com acesso exclusivo VIP é validado também no servidor.
+          // O navegador não consegue liberar um item apenas alterando HTML/localStorage.
+          let isVipModelAccess = false;
+          if (input.accessCode) {
+            try {
+              const vipProbe = await checkAccessCodeCanSubmit(input.accessCode, input.phone);
+              isVipModelAccess = vipProbe.canSubmit && vipProbe.type === 'vip';
+            } catch { /* sessão principal já foi validada acima */ }
+          }
+          if (input.priceModelId) {
+            const modelAccess = await checkOptionPriceModelCheckoutAccess(input.priceModelId, isVipModelAccess);
+            if (!modelAccess.allowed) return { success: false, message: modelAccess.reason || 'Modelo/categoria indisponível.' };
           }
 
           const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';

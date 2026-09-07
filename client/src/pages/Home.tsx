@@ -16,6 +16,7 @@ import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAud
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
+import { applyVipBenefitToPrice } from "@shared/vipPricing";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
 type FlowOrigin = "storefront" | "cart" | "legacy";
@@ -33,7 +34,7 @@ type CartItem = {
 type ProductQuestion = { id: number; question: string; fieldType: string; options: string | null; isRequired: number; sortOrder: number; helpText?: string | null; audioMinDurationSeconds?: number; audioMaxDurationSeconds?: number; allowAudioRerecord?: number; allowAudioFileUpload?: number; questionPresentation?: 'text' | 'audio'; questionAudioUrl?: string | null; showQuestionTextWithAudio?: number; parentQuestionId: number | null; triggerOption: string | null };
 type OptionDocument = { id: number; optionId: number; label: string; exampleImageUrl: string | null; inputSource?: string; sortOrder: number; instruction?: string | null; exampleText?: string | null };
 type WarrantyTier = { id: number; optionId: number; warrantyType: string; warrantyValue: number; warrantyLabel: string | null; price: string; originalPrice: string | null; sortOrder: number; isActive: number; };
-type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; selectorLabel?: string | null; };
+type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; selectorLabel?: string | null; vipAccessMode?: 'all' | 'benefit' | 'vip_only'; vipDiscountType?: 'percentage' | 'fixed'; vipDiscountValue?: number; vipHighlight?: number; vipHighlightText?: string | null; };
 
 type ProductOption = {
   id: number; label: string; price: string; originalPrice: string | null; type: string | null; sortOrder: number; isActive: number;
@@ -973,9 +974,12 @@ export default function Home() {
   const dynamicDocs = selectedOption?.documents || [];
   const hasDynamicDocs = dynamicDocs.length > 0;
 
-  // Obter valor atual (usa tier se selecionado, caso contrário usa preço da opção)
+  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';
+  const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
+
+  // Obter valor atual (usa benefício VIP do Modelo/Categoria quando configurado)
   const getCurrentServiceValue = (): string => {
-    if (selectedPriceModel) return selectedPriceModel.price;
+    if (selectedPriceModel) return getPriceModelServiceValue(selectedPriceModel);
     if (selectedTier) return selectedTier.price;
     if (selectedOption) return selectedOption.price;
     return "Consulte";
@@ -1504,7 +1508,7 @@ export default function Home() {
         // Calcular total bruto do carrinho
         let cartTotalValue = 0;
         for (const item of cartItems) {
-          const price = item.priceModel?.price || item.option?.price || '0';
+          const price = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
           const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
           if (!isNaN(num)) cartTotalValue += num;
         }
@@ -1524,7 +1528,7 @@ export default function Home() {
           const item = cartItems[i];
           setSubmitProgress(`Enviando pedido ${i + 1} de ${cartItems.length}: ${item.product.name}...`);
           // Calcular preço individual do item (sem desconto — o desconto é do carrinho todo)
-          const itemRawPrice = item.priceModel?.price || item.option?.price || undefined;
+          const itemRawPrice = getPriceModelServiceValue(item.priceModel) || item.option?.price || undefined;
           try {
             const itemResult = await submitMutation.mutateAsync({
               clientName: clientName.trim() || 'Cliente',
@@ -1561,7 +1565,9 @@ export default function Home() {
               docNameMode: item.option?.docNameMode || 'none',
               docCustomName: item.option?.docCustomName || '',
               price: itemRawPrice,
-              thirdPartyName: thirdPartyName.trim() || undefined,
+              priceModelId: item.priceModel?.id || undefined,
+              priceModelId: selectedPriceModel?.id || undefined,
+        thirdPartyName: thirdPartyName.trim() || undefined,
               thirdPartyPhone: thirdPartyPhone.trim() || undefined,
               resellerDiscountApplied: (() => { const d = getResellerDiscountAmount(); return d > 0 ? d : undefined; })(),
               // Campos de agrupamento de carrinho
@@ -1592,7 +1598,7 @@ export default function Home() {
           cartItems: cartItems.map(item => ({
             service: item.product.name,
             nameOption: item.option ? `${item.option.label}${item.priceModel ? ` — ${item.priceModel.label}` : ''}` : 'N/A',
-            price: item.priceModel?.price || item.option?.price || ''
+            price: getPriceModelServiceValue(item.priceModel) || item.option?.price || ''
           })),
           answers: answersArray,
           docs: dynamicDocsArray.filter(d => d.url).map(d => ({ label: d.label, url: d.url! })),
@@ -1653,7 +1659,7 @@ export default function Home() {
         docNameMode: selectedOption?.docNameMode || 'none',
         docCustomName: selectedOption?.docCustomName || '',
         price: (() => {
-          const rawPrice = selectedPriceModel?.price || selectedTier?.price || selectedOption?.price;
+          const rawPrice = getPriceModelServiceValue(selectedPriceModel) || selectedTier?.price || selectedOption?.price;
           if (!rawPrice) return undefined;
           const resellerDiscount = getResellerDiscountAmount();
           return (couponDiscount || resellerDiscount > 0) ? calculateDiscountedValue(rawPrice) : rawPrice;
@@ -1680,7 +1686,7 @@ export default function Home() {
         }
         // Salvar dados do pedido para mensagem WhatsApp
         const singlePrice = (() => {
-          const rawPrice = selectedPriceModel?.price || selectedTier?.price || selectedOption?.price;
+          const rawPrice = getPriceModelServiceValue(selectedPriceModel) || selectedTier?.price || selectedOption?.price;
           if (!rawPrice) return '';
           const resellerDiscount = getResellerDiscountAmount();
           return (couponDiscount || resellerDiscount > 0) ? calculateDiscountedValue(rawPrice) : rawPrice;
@@ -1886,7 +1892,7 @@ export default function Home() {
     if (cart.length <= 1) return null;
     let total = 0;
     for (const item of cart) {
-      const price = item.priceModel?.price || item.option?.price || '0';
+      const price = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
       const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
       if (!isNaN(num)) total += num;
     }
@@ -3576,7 +3582,7 @@ export default function Home() {
                         )}
                         <div className="flex justify-between items-center">
                           <span className="text-white/70 text-xs">Valor:</span>
-                          <span className="text-green-400 font-bold text-sm">{item.priceModel?.price || item.option?.price || 'Consulte'}</span>
+                          <span className="text-green-400 font-bold text-sm">{getPriceModelServiceValue(item.priceModel) || item.option?.price || 'Consulte'}</span>
                         </div>
                       </div>
                     ))}
@@ -4206,7 +4212,7 @@ export default function Home() {
                         {item.option && (
                           <p className="text-white/60 text-xs mt-0.5">{item.option.label}</p>
                         )}
-                        {(item.priceModel?.price || item.option?.price) && (
+                        {(getPriceModelServiceValue(item.priceModel) || item.option?.price) && (
                           <div className="flex items-center gap-2 mt-1">
                             {(item.priceModel?.originalPrice || item.option?.originalPrice) && (
                               <span className="text-gray-500 text-xs line-through">{item.priceModel?.originalPrice || item.option?.originalPrice}</span>
@@ -4227,7 +4233,7 @@ export default function Home() {
                 {cart.length > 1 && (() => {
                   let total = 0;
                   for (const item of cart) {
-                    const price = item.priceModel?.price || item.option?.price || '0';
+                    const price = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
                     const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
                     if (!isNaN(num)) total += num;
                   }

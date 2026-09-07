@@ -1,6 +1,7 @@
 import { Check, ChevronDown, ChevronUp, Crown, Flame, LockKeyhole, ShieldCheck, ShoppingCart, Tag, Timer, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
+import { applyVipBenefitToPrice, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";
 
 export type StorefrontQuestion = {
   id: number;
@@ -33,6 +34,11 @@ export type StorefrontPriceModel = {
   promoEndsAt?: number | null;
   sortOrder: number;
   isActive: number;
+  vipAccessMode?: 'all' | 'benefit' | 'vip_only';
+  vipDiscountType?: 'percentage' | 'fixed';
+  vipDiscountValue?: number;
+  vipHighlight?: number;
+  vipHighlightText?: string | null;
   selectorLabel?: string | null;
 };
 
@@ -179,7 +185,9 @@ export function StorefrontProductCard({
   const [tierId, setTierId] = useState<number | null>(tiers[0]?.id ?? null);
   const selectedTier = tiers.find((tier) => tier.id === tierId) || null;
   const priceModels = item.option.priceModels || [];
-  const preferredModel = priceModels[Math.min(1, Math.max(0, priceModels.length - 1))] || null;
+  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';
+  const selectablePriceModels = priceModels.filter(model => !isVipOnlyLocked(model, isVipCustomer));
+  const preferredModel = selectablePriceModels[Math.min(1, Math.max(0, selectablePriceModels.length - 1))] || selectablePriceModels[0] || null;
   const [priceModelId, setPriceModelId] = useState<number | null>(preferredModel?.id ?? null);
   const [manifestAcceptedKey, setManifestAcceptedKey] = useState<string | null>(null);
 
@@ -197,15 +205,17 @@ export function StorefrontProductCard({
       if (priceModelId !== null) setPriceModelId(null);
       return;
     }
-    if (!priceModels.some((model) => model.id === priceModelId)) {
-      setPriceModelId(priceModels[Math.min(1, priceModels.length - 1)]?.id ?? null);
+    if (!selectablePriceModels.some((model) => model.id === priceModelId)) {
+      setPriceModelId(selectablePriceModels[Math.min(1, Math.max(0, selectablePriceModels.length - 1))]?.id ?? selectablePriceModels[0]?.id ?? null);
     }
-  }, [priceModels, priceModelId]);
+  }, [priceModels, priceModelId, isVipCustomer]);
 
   const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;
   const requiresPriceModelSelection = priceModels.length > 0;
-  const effectivePrice = requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);
-  const effectiveOriginalPrice = requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);
+  const vipAdjustedModelPrice = selectedPriceModel ? applyVipBenefitToPrice(selectedPriceModel.price, selectedPriceModel, isVipCustomer) : null;
+  const modelHasVipPrice = Boolean(selectedPriceModel && vipAdjustedModelPrice && vipAdjustedModelPrice !== selectedPriceModel.price);
+  const effectivePrice = requiresPriceModelSelection ? vipAdjustedModelPrice : (selectedTier?.price || item.option.price);
+  const effectiveOriginalPrice = requiresPriceModelSelection ? (modelHasVipPrice ? selectedPriceModel?.price : selectedPriceModel?.originalPrice) : (selectedTier?.originalPrice || item.option.originalPrice);
   const discount = useMemo(() => discountPercent(effectivePrice, effectiveOriginalPrice), [effectiveOriginalPrice, effectivePrice]);
 
   const promotionByModel = new Map(
@@ -244,6 +254,7 @@ export function StorefrontProductCard({
 
   const runProtectedAction = async (action: "buy" | "cart") => {
     if (requiresPriceModelSelection && !selectedPriceModel) return;
+    if (selectedPriceModel && isVipOnlyLocked(selectedPriceModel, isVipCustomer)) return;
     const key = selectedPriceModel ? `price:${selectedPriceModel.id}` : `base:${item.option.id}`;
     if (manifestAcceptedKey !== key) {
       const manifestKeys = selectedPriceModel
@@ -308,8 +319,12 @@ export function StorefrontProductCard({
                 const palette = OPTION_PALETTES[Math.min(index, OPTION_PALETTES.length - 1)];
                 const parts = splitModelLabel(model.label);
                 const modelPromotion = promotionByModel.get(model.id);
+                const modelLocked = isVipOnlyLocked(model, isVipCustomer);
+                const modelVipMode = normalizeVipAccessMode(model.vipAccessMode);
+                const modelVipHighlighted = isVipHighlighted(model);
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} onClick={() => handlePriceModelSelect(model.id)} className={`relative min-h-[150px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} className={`relative min-h-[150px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-55 saturate-50" : ""}`}>
+                    {modelVipMode !== 'all' && <span className={`absolute -right-1 -top-2 z-20 rounded-full border px-2 py-1 text-[8px] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
                     {modelPromotion?.active ? (
                       <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-gradient-to-r from-yellow-300 to-orange-400 px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#1a0d00] shadow-[0_0_16px_rgba(250,204,21,.45)] sm:text-[9px]">Oferta -{modelPromotion.discount}%</span>
                     ) : index === 1 ? (
@@ -346,6 +361,7 @@ export function StorefrontProductCard({
             {effectiveOriginalPrice && <p className={`text-[11px] font-extrabold line-through ${discount > 0 ? "text-red-300 decoration-red-500 decoration-2" : "text-slate-500"}`}>{asMoney(effectiveOriginalPrice)}</p>}
             <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[30px] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)] sm:text-[42px]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
             {discount > 0 && <p className="mt-2 inline-flex rounded-full border border-emerald-400/45 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,.16)]">Economize {discount}%</p>}
+            {selectedPriceModel && normalizeVipAccessMode(selectedPriceModel.vipAccessMode) !== 'all' && <p className="ml-2 mt-2 inline-flex rounded-full border border-amber-300/45 bg-amber-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-200">{isVipCustomer ? `👑 ${vipBenefitText(selectedPriceModel) || 'ACESSO VIP'}` : '👑 BENEFÍCIO VIP DISPONÍVEL'}</p>}
           </div>
         </div>
       </div>

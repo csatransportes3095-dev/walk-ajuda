@@ -13,6 +13,11 @@ export type OptionPriceModel = {
   promoEndsAt: number | null;
   sortOrder: number;
   isActive: number;
+  vipAccessMode: "all" | "benefit" | "vip_only";
+  vipDiscountType: "percentage" | "fixed";
+  vipDiscountValue: number;
+  vipHighlight: number;
+  vipHighlightText: string | null;
   selectorLabel?: string | null;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
@@ -42,6 +47,11 @@ async function ensureInfrastructure() {
         promoEndsAt BIGINT NULL,
         sortOrder INT NOT NULL DEFAULT 0,
         isActive INT NOT NULL DEFAULT 1,
+        vipAccessMode VARCHAR(16) NOT NULL DEFAULT 'all',
+        vipDiscountType VARCHAR(16) NOT NULL DEFAULT 'percentage',
+        vipDiscountValue DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        vipHighlight TINYINT(1) NOT NULL DEFAULT 0,
+        vipHighlightText VARCHAR(96) NULL,
         createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uq_optionPriceModels_option_label (optionId, label),
@@ -55,6 +65,21 @@ async function ensureInfrastructure() {
         updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    const vipColumns = [
+      ["vipAccessMode", "VARCHAR(16) NOT NULL DEFAULT 'all'"],
+      ["vipDiscountType", "VARCHAR(16) NOT NULL DEFAULT 'percentage'"],
+      ["vipDiscountValue", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"],
+      ["vipHighlight", "TINYINT(1) NOT NULL DEFAULT 0"],
+      ["vipHighlightText", "VARCHAR(96) NULL"],
+    ] as const;
+    for (const [column, definition] of vipColumns) {
+      try {
+        await db.execute(sql.raw(`ALTER TABLE optionPriceModels ADD COLUMN ${column} ${definition}`));
+      } catch (error: any) {
+        if (!/duplicate column|exists/i.test(String(error?.message || ''))) throw error;
+      }
+    }
 
     // Preset solicitado para o produto atual. É idempotente por causa da chave única.
     // Fica DENTRO da opção "PARA UBER E 99", não cria produto nem opção nova.
@@ -102,6 +127,11 @@ async function listModels(optionIds: number[], onlyActive: boolean): Promise<Opt
     SELECT m.id, m.optionId, m.label, m.price, m.originalPrice,
            CASE WHEN COALESCE(TRIM(m.originalPrice), '') <> '' THEN UNIX_TIMESTAMP(m.updatedAt) * 1000 ELSE NULL END AS promoStartsAt,
            m.promoEndsAt, m.sortOrder, m.isActive,
+           COALESCE(m.vipAccessMode, 'all') AS vipAccessMode,
+           COALESCE(m.vipDiscountType, 'percentage') AS vipDiscountType,
+           COALESCE(m.vipDiscountValue, 0) AS vipDiscountValue,
+           COALESCE(m.vipHighlight, 0) AS vipHighlight,
+           m.vipHighlightText,
            m.createdAt, m.updatedAt, COALESCE(s.selectorLabel, 'Modelo / categoria') AS selectorLabel
     FROM optionPriceModels m
     LEFT JOIN optionPriceModelSettings s ON s.optionId = m.optionId
@@ -116,6 +146,11 @@ async function listModels(optionIds: number[], onlyActive: boolean): Promise<Opt
     promoEndsAt: row.promoEndsAt == null ? null : Number(row.promoEndsAt),
     sortOrder: Number(row.sortOrder || 0),
     isActive: Number(row.isActive || 0),
+    vipAccessMode: row.vipAccessMode === 'benefit' || row.vipAccessMode === 'vip_only' ? row.vipAccessMode : 'all',
+    vipDiscountType: row.vipDiscountType === 'fixed' ? 'fixed' : 'percentage',
+    vipDiscountValue: Number(row.vipDiscountValue || 0),
+    vipHighlight: Number(row.vipHighlight || 0),
+    vipHighlightText: row.vipHighlightText ? String(row.vipHighlightText) : null,
   }));
 
   const now = Date.now();
@@ -143,7 +178,28 @@ const modelInput = z.object({
   promoEndsAt: z.number().nullable().optional(),
   sortOrder: z.number().int().min(0).optional().default(0),
   isActive: z.boolean().optional().default(true),
+  vipAccessMode: z.enum(["all", "benefit", "vip_only"]).optional().default("all"),
+  vipDiscountType: z.enum(["percentage", "fixed"]).optional().default("percentage"),
+  vipDiscountValue: z.number().min(0).max(100000).optional().default(0),
+  vipHighlight: z.boolean().optional().default(false),
+  vipHighlightText: z.string().trim().max(96).nullable().optional(),
 });
+
+export async function checkOptionPriceModelCheckoutAccess(priceModelId: number, isVipCustomer: boolean): Promise<{ allowed: boolean; reason?: string }> {
+  await ensureInfrastructure();
+  const db = await getDb();
+  if (!db) return { allowed: false, reason: "Banco de dados indisponível." };
+  const result = await db.execute(sql`
+    SELECT isActive, COALESCE(vipAccessMode, 'all') AS vipAccessMode
+    FROM optionPriceModels WHERE id=${priceModelId} LIMIT 1
+  `);
+  const row = asRows<{ isActive: number; vipAccessMode: string }>(result)[0];
+  if (!row || Number(row.isActive) !== 1) return { allowed: false, reason: "Este modelo/categoria não está disponível." };
+  if (row.vipAccessMode === "vip_only" && !isVipCustomer) {
+    return { allowed: false, reason: "Este modelo/categoria é exclusivo para clientes VIP." };
+  }
+  return { allowed: true };
+}
 
 export const optionPriceModelsRouter = router({
   listActive: publicProcedure
@@ -189,9 +245,9 @@ export const optionPriceModelsRouter = router({
       if (!db) throw new Error("Banco de dados indisponível.");
       const result: any = await db.execute(sql`
         INSERT INTO optionPriceModels
-          (optionId, label, price, originalPrice, promoEndsAt, sortOrder, isActive)
+          (optionId, label, price, originalPrice, promoEndsAt, sortOrder, isActive, vipAccessMode, vipDiscountType, vipDiscountValue, vipHighlight, vipHighlightText)
         VALUES
-          (${input.optionId}, ${input.label}, ${input.price}, ${input.originalPrice || ''}, ${input.promoEndsAt ?? null}, ${input.sortOrder}, ${input.isActive ? 1 : 0})
+          (${input.optionId}, ${input.label}, ${input.price}, ${input.originalPrice || ''}, ${input.promoEndsAt ?? null}, ${input.sortOrder}, ${input.isActive ? 1 : 0}, ${input.vipAccessMode}, ${input.vipDiscountType}, ${input.vipDiscountValue}, ${input.vipHighlight ? 1 : 0}, ${input.vipHighlightText || null})
       `);
       const insertId = Number(result?.[0]?.insertId || result?.insertId || 0);
       const rows = await listModels([input.optionId], false);
@@ -208,6 +264,11 @@ export const optionPriceModelsRouter = router({
       promoEndsAt: z.number().nullable().optional(),
       sortOrder: z.number().int().min(0).optional().default(0),
       isActive: z.boolean().optional().default(true),
+      vipAccessMode: z.enum(["all", "benefit", "vip_only"]).optional().default("all"),
+      vipDiscountType: z.enum(["percentage", "fixed"]).optional().default("percentage"),
+      vipDiscountValue: z.number().min(0).max(100000).optional().default(0),
+      vipHighlight: z.boolean().optional().default(false),
+      vipHighlightText: z.string().trim().max(96).nullable().optional(),
     }))
     .mutation(async ({ input }) => {
       await ensureInfrastructure();
@@ -216,7 +277,9 @@ export const optionPriceModelsRouter = router({
       await db.execute(sql`
         UPDATE optionPriceModels
         SET label=${input.label}, price=${input.price}, originalPrice=${input.originalPrice || ''},
-            promoEndsAt=${input.promoEndsAt ?? null}, sortOrder=${input.sortOrder}, isActive=${input.isActive ? 1 : 0}
+            promoEndsAt=${input.promoEndsAt ?? null}, sortOrder=${input.sortOrder}, isActive=${input.isActive ? 1 : 0},
+            vipAccessMode=${input.vipAccessMode}, vipDiscountType=${input.vipDiscountType}, vipDiscountValue=${input.vipDiscountValue},
+            vipHighlight=${input.vipHighlight ? 1 : 0}, vipHighlightText=${input.vipHighlightText || null}
         WHERE id=${input.id} AND optionId=${input.optionId}
       `);
       return { success: true };
