@@ -34,6 +34,14 @@ function clearLegacyAccess() {
   for (const key of LEGACY_KEYS) localStorage.removeItem(key);
 }
 
+function syncValidCustomerSession(data: { phone?: string | null }) {
+  // Mantém o gate legado sincronizado com a sessão central para que /login
+  // abra diretamente a vitrine quando o cliente já estiver autenticado.
+  localStorage.setItem("walk_access_granted", "true");
+  const phone = String(data.phone || "").trim();
+  if (phone) localStorage.setItem("walk_client_phone", phone);
+}
+
 function getSafeReturnTo(): string | null {
   if (typeof window === "undefined") return null;
   const stored = sessionStorage.getItem(RETURN_TO_KEY);
@@ -111,6 +119,8 @@ export default function UnifiedCustomerAccessGate({ children }: { children: Reac
       return;
     }
 
+    syncValidCustomerSession(sessionQuery.data);
+
     if (sessionQuery.data.profileUpdateRequired) {
       sessionStorage.setItem(RETURN_TO_KEY, currentRelativeUrl());
       const phone = sessionQuery.data.phone || localStorage.getItem("walk_client_phone") || "";
@@ -120,27 +130,48 @@ export default function UnifiedCustomerAccessGate({ children }: { children: Reac
     }
   }, [cpToken, isProtectedRoute, redirecting, sessionQuery.data, sessionQuery.isLoading]);
 
+  // /login tem dois comportamentos:
+  // - sem sessão válida: abre o login/cadastro normalmente;
+  // - com sessão válida: sincroniza a identidade e libera imediatamente a vitrine.
   useEffect(() => {
     if (!isCentralLogin || !cpToken || sessionQuery.isLoading || sessionQuery.data === undefined) return;
-    if (sessionQuery.data.valid) return;
-    localStorage.removeItem(CP_TOKEN_KEY);
-    clearLegacyAccess();
-    setCpToken("");
-  }, [cpToken, isCentralLogin, sessionQuery.data, sessionQuery.isLoading]);
 
-  useEffect(() => {
-    if (!isCentralLogin || redirecting || !cpToken) return;
+    if (!sessionQuery.data.valid) {
+      localStorage.removeItem(CP_TOKEN_KEY);
+      clearLegacyAccess();
+      setCpToken("");
+      return;
+    }
+
+    if (sessionQuery.data.profileUpdateRequired) {
+      const phone = sessionQuery.data.phone || localStorage.getItem("walk_client_phone") || "";
+      if (phone) localStorage.setItem("customer_update_phone_hint", phone);
+      setRedirecting(true);
+      window.location.replace("/atualizarcadastro");
+      return;
+    }
+
+    syncValidCustomerSession(sessionQuery.data);
+
     const returnTo = getSafeReturnTo();
-    if (!returnTo) return;
-    if (sessionQuery.data?.valid !== true || sessionQuery.data?.profileUpdateRequired) return;
-    sessionStorage.removeItem(RETURN_TO_KEY);
-    setRedirecting(true);
-    window.location.replace(returnTo);
-  }, [cpToken, isCentralLogin, redirecting, sessionQuery.data]);
+    if (returnTo) {
+      sessionStorage.removeItem(RETURN_TO_KEY);
+      setRedirecting(true);
+      window.location.replace(returnTo);
+    }
+  }, [cpToken, isCentralLogin, sessionQuery.data, sessionQuery.isLoading]);
 
   if (isProtectedRoute) {
     if (redirecting || !cpToken) return <LoadingGate />;
     if (sessionQuery.isLoading || sessionQuery.data === undefined) return <LoadingGate />;
+    if (sessionQuery.data?.valid !== true || sessionQuery.data?.profileUpdateRequired) return <LoadingGate />;
+  }
+
+  // Evita mostrar o formulário de login por um instante enquanto uma sessão
+  // existente está sendo validada. Confirmada a sessão, os children são a Home,
+  // que é a própria vitrine da rota /login.
+  if (isCentralLogin && cpToken) {
+    if (redirecting || sessionQuery.isLoading || sessionQuery.data === undefined) return <LoadingGate />;
     if (sessionQuery.data?.valid !== true || sessionQuery.data?.profileUpdateRequired) return <LoadingGate />;
   }
 
