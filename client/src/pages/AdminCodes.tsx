@@ -35,6 +35,7 @@ const ADMIN_SHORTCUTS: AdminShortcut[] = [
   { id: 'authenticator', href: '/admin/authenticator', label: 'Autenticador', icon: Lock, tone: 'bg-cyan-600/20 border-cyan-500/30 hover:bg-cyan-600/30', iconTone: 'text-cyan-300' },
   { id: 'referrer-bypass', href: '/admin/referrer-bypass', label: 'Bypass Indicador', icon: KeyRound, tone: 'bg-indigo-600/20 border-indigo-500/30 hover:bg-indigo-600/30', iconTone: 'text-indigo-400' },
   { id: 'products', href: '/admin/products', label: 'Cards', icon: Package, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },
+  { id: 'vip', href: '/admin/vip', label: 'VIP', emoji: '👑', tone: 'bg-amber-600/20 border-amber-500/35 hover:bg-amber-600/30' },
   { id: 'feature-cards', href: '/admin/feature-cards', label: 'Cards Início', icon: Layers, tone: 'bg-indigo-600/20 border-indigo-500/30 hover:bg-indigo-600/30', iconTone: 'text-indigo-400' },
   { id: 'customers', href: '/admin/customers', label: 'Clientes', icon: Users, tone: 'bg-cyan-600/20 border-cyan-500/30 hover:bg-cyan-600/30', iconTone: 'text-cyan-400' },
   { id: 'commissions', href: '/admin/commissions', label: 'Comissões', icon: TrendingUp, tone: 'bg-emerald-600/20 border-emerald-500/30 hover:bg-emerald-600/30', iconTone: 'text-emerald-400' },

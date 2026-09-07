@@ -45,6 +45,7 @@ import AdminAdCampaigns from "./pages/AdminAdCampaigns";
 import AdminCoupons from "./pages/AdminCoupons";
 import AdminProducts from "./pages/AdminProducts";
 import AdminSettings from "./pages/AdminSettings";
+import AdminVip from "./pages/AdminVip";
 import AdminBackup from "./pages/AdminBackup";
 import AdminCustomers from "./pages/AdminCustomers";
 import AdminRaffles from "./pages/AdminRaffles";
@@ -101,6 +102,7 @@ import CartaoMercadoPage from "./pages/CartaoMercadoPage";
 import CartaoHistoricoPage from "./pages/CartaoHistoricoPage";
 import AppDownloadPage from "./pages/AppDownloadPage";
 import AppProDownloadPage from "./pages/AppProDownloadPage";
+import VipPage from "./pages/VipPage";
 import Ajuda from "./pages/Ajuda";
 import GeradorChassiPublico from "./pages/GeradorChassiPublico";
 import ProtectedPhotoPage from "./pages/ProtectedPhotoPage";
@@ -201,6 +203,9 @@ function Router() {
       </Route>
       <Route path={"/admin/settings"}>
         <AdminGuard><AdminSettings /></AdminGuard>
+      </Route>
+      <Route path={"/admin/vip"}>
+        <AdminGuard><AdminVip /></AdminGuard>
       </Route>
       <Route path={"/admin/backup"}>
         <AdminGuard><AdminBackup /></AdminGuard>
@@ -351,6 +356,7 @@ function Router() {
       <Route path={"/bot"} component={Home} />
       <Route path={"/app"} component={AppDownloadPage} />
       <Route path={"/app-pro"} component={AppProDownloadPage} />
+      <Route path={"/vip"} component={VipPage} />
       <Route path={"/"} component={Home} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
@@ -374,6 +380,7 @@ function AppContent() {
   const isRaffleRoute = location === "/sorteio";
   const isGeradorChassiRoute = location === "/gerador-chassi";
   const isAppDownloadRoute = location === "/app" || location === "/app-pro";
+  const isVipRoute = location.toLowerCase() === "/vip";
   const isFotoRoute = location === "/foto";
   const isResellerRoute = location.startsWith("/revendedor");
   const isAjudaRoute = location === "/ajuda";
@@ -466,6 +473,11 @@ function AppContent() {
   // O manifesto bloqueia somente as rotas escolhidas pelo ADM; demais rotas seguem inalteradas.
   if (showMaintenanceManifest && maintenanceManifest) {
     return <MaintenanceManifestGate config={maintenanceManifest} />;
+  }
+
+  // Rota /vip é pública — vitrine e contratação do plano H2 VIP
+  if (isVipRoute) {
+    return <Router />;
   }
 
   // Rota /gastos é pública — sem senha

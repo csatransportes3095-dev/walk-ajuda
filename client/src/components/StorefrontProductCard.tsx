@@ -1,7 +1,7 @@
 import { Check, ChevronDown, ChevronUp, Crown, Flame, LockKeyhole, ShieldCheck, ShoppingCart, Tag, Timer, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
-import { applyVipBenefitToPrice, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";
+import { applyVipBenefitToPrice, formatBrazilMoney, hasVipBenefit, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, parseBrazilMoney, vipBenefitText } from "@shared/vipPricing";
 
 export type StorefrontQuestion = {
   id: number;
@@ -246,6 +246,9 @@ export function StorefrontProductCard({
   const detailsId = `product-details-${item.product.id}-${item.option.id}`;
   const categoryLabel = item.category.toUpperCase();
   const productPill = item.product.name.toUpperCase();
+  const vipHref = typeof window !== "undefined" ? `/vip?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}` : "/vip";
+  const vipSavingsValues = priceModels.map((model) => Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(applyVipBenefitToPrice(model.price, model, true))));
+  const maxVipSavings = Math.max(0, ...vipSavingsValues);
 
   const handlePriceModelSelect = (nextId: number) => {
     setPriceModelId(nextId);
@@ -322,8 +325,11 @@ export function StorefrontProductCard({
                 const modelLocked = isVipOnlyLocked(model, isVipCustomer);
                 const modelVipMode = normalizeVipAccessMode(model.vipAccessMode);
                 const modelVipHighlighted = isVipHighlighted(model);
+                const modelHasVipBenefit = hasVipBenefit(model);
+                const vipPreviewPrice = applyVipBenefitToPrice(model.price, model, true);
+                const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} className={`relative min-h-[150px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-55 saturate-50" : ""}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} className={`relative min-h-[205px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
                     {modelVipMode !== 'all' && <span className={`absolute -right-1 -top-2 z-20 rounded-full border px-2 py-1 text-[8px] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
                     {modelPromotion?.active ? (
                       <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-gradient-to-r from-yellow-300 to-orange-400 px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#1a0d00] shadow-[0_0_16px_rgba(250,204,21,.45)] sm:text-[9px]">Oferta -{modelPromotion.discount}%</span>
@@ -333,11 +339,37 @@ export function StorefrontProductCard({
                     <ShieldCheck className={`mx-auto h-6 w-6 ${palette.text}`} />
                     <span className="mt-3 block text-[12px] font-black leading-4 text-white sm:text-base">{parts.title}</span>
                     <span className={`mt-1.5 block text-[13px] font-black sm:text-base ${palette.text}`}>{parts.subtitle}</span>
-                    {isSelected ? <span className={`mx-auto mt-4 grid h-8 w-8 place-items-center rounded-full ${palette.badge} text-slate-950`}><Check className="h-4 w-4 stroke-[3]" /></span> : <span className="mx-auto mt-4 block h-8 w-8 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />}
+                    <div className="mt-3 min-h-[50px] border-t border-white/10 pt-2">
+                      {modelVipMode === 'all' ? (
+                        <span className="block text-[11px] font-black text-white sm:text-sm">{asMoney(model.price)}</span>
+                      ) : modelHasVipBenefit ? (
+                        <>
+                          <span className="block text-[8px] font-bold uppercase text-slate-400 line-through">Normal {asMoney(model.price)}</span>
+                          <span className="mt-0.5 block text-[11px] font-black text-amber-300 sm:text-sm">VIP {asMoney(vipPreviewPrice)}</span>
+                          {vipSavings > 0 && <span className="mt-1 block text-[8px] font-black uppercase text-emerald-300">Poupe {formatBrazilMoney(vipSavings)}</span>}
+                        </>
+                      ) : (
+                        <>
+                          <span className="block text-[8px] font-bold uppercase text-slate-400">Preço exclusivo</span>
+                          <span className="mt-0.5 block text-[11px] font-black text-amber-300 sm:text-sm">VIP {asMoney(model.price)}</span>
+                        </>
+                      )}
+                    </div>
+                    {isSelected ? <span className={`mx-auto mt-3 grid h-8 w-8 place-items-center rounded-full ${palette.badge} text-slate-950`}><Check className="h-4 w-4 stroke-[3]" /></span> : <span className="mx-auto mt-3 block h-8 w-8 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />}
                   </button>
                 );
               })}
             </div>
+            {!isVipCustomer && priceModels.some((model) => normalizeVipAccessMode(model.vipAccessMode) !== 'all') && (
+              <a href={vipHref} className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-300/45 bg-[linear-gradient(135deg,rgba(120,53,15,.22),rgba(76,29,149,.20))] p-4 shadow-[0_0_24px_rgba(251,191,36,.10)] transition-all hover:border-amber-200/70 hover:brightness-110">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-300"><Crown className="h-6 w-6" /></div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-black uppercase tracking-wide text-amber-200">Seja VIP e pague menos</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-300">{maxVipSavings > 0 ? `Economize até ${formatBrazilMoney(maxVipSavings)} neste produto.` : 'Libere opções exclusivas e benefícios VIP.'}</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-amber-300 px-3 py-2 text-[9px] font-black uppercase text-[#251600]">Quero VIP</span>
+              </a>
+            )}
           </div>
         )}
 
@@ -361,6 +393,20 @@ export function StorefrontProductCard({
             {effectiveOriginalPrice && <p className={`text-[11px] font-extrabold line-through ${discount > 0 ? "text-red-300 decoration-red-500 decoration-2" : "text-slate-500"}`}>{asMoney(effectiveOriginalPrice)}</p>}
             <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[30px] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)] sm:text-[42px]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
             {discount > 0 && <p className="mt-2 inline-flex rounded-full border border-emerald-400/45 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,.16)]">Economize {discount}%</p>}
+            {selectedPriceModel && !isVipCustomer && hasVipBenefit(selectedPriceModel) && (() => {
+              const vipPrice = applyVipBenefitToPrice(selectedPriceModel.price, selectedPriceModel, true);
+              const saving = Math.max(0, parseBrazilMoney(selectedPriceModel.price) - parseBrazilMoney(vipPrice));
+              return (
+                <div className="mt-3 rounded-2xl border border-amber-300/45 bg-amber-400/[0.08] p-3">
+                  <p className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-200">👑 Cliente VIP paga</p>
+                  <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
+                    <p className="text-2xl font-black text-amber-300">{asMoney(vipPrice)}</p>
+                    {saving > 0 && <p className="text-[10px] font-black uppercase text-emerald-300">Você economiza {formatBrazilMoney(saving)}</p>}
+                  </div>
+                  <a href={vipHref} className="mt-3 inline-flex min-h-[40px] w-full items-center justify-center rounded-xl bg-amber-300 px-3 text-[11px] font-black uppercase text-[#251600]">Quero ser VIP</a>
+                </div>
+              );
+            })()}
             {selectedPriceModel && normalizeVipAccessMode(selectedPriceModel.vipAccessMode) !== 'all' && <p className="ml-2 mt-2 inline-flex rounded-full border border-amber-300/45 bg-amber-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-200">{isVipCustomer ? `👑 ${vipBenefitText(selectedPriceModel) || 'ACESSO VIP'}` : '👑 BENEFÍCIO VIP DISPONÍVEL'}</p>}
           </div>
         </div>
