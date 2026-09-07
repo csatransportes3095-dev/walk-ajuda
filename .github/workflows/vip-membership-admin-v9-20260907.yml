@@ -147,3 +147,5 @@ jobs:
           git add server/routers/vipMemberships.ts server/routers.ts client/src/hooks/useVipMembership.ts client/src/pages/AdminVip.tsx client/src/pages/VipPage.tsx client/src/pages/Home.tsx client/src/components/StorefrontProductCard.tsx client/src/components/ColombiaBot.tsx client/src/pages/AdminCustomers.tsx audit/check_vip_membership_admin.mjs
           git commit -m "feat(vip): gerenciar clientes validade e destaque no cadastro"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
+
+# trigger v9
