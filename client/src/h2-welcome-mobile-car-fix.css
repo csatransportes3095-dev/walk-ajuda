@@ -1,0 +1,82 @@
+/* Correcao final do carro no hero mobile.
+   Em telas pequenas, desenha um carro proprio em CSS para evitar falha de renderizacao do SVG. */
+
+@media (max-width:760px){
+  .h2p-hero{
+    min-height:250px !important;
+    padding-bottom:88px !important;
+  }
+
+  .h2p-car{
+    display:block !important;
+    position:absolute !important;
+    z-index:4 !important;
+    right:-8px !important;
+    bottom:7px !important;
+    width:min(74vw,315px) !important;
+    height:112px !important;
+    opacity:1 !important;
+    transform:none !important;
+    filter:drop-shadow(0 0 20px rgba(19,135,255,.72)) !important;
+    overflow:visible !important;
+    pointer-events:none !important;
+  }
+
+  .h2p-car svg{
+    display:none !important;
+  }
+
+  .h2p-car::before{
+    content:"" !important;
+    position:absolute !important;
+    left:8px !important;
+    right:8px !important;
+    top:16px !important;
+    bottom:19px !important;
+    display:block !important;
+    background:
+      linear-gradient(168deg,rgba(131,224,255,.96) 0 7%,#1f9cff 8% 22%,#0a66df 43%,#063d93 67%,#021b46 100%) !important;
+    clip-path:polygon(3% 69%,9% 57%,17% 50%,29% 28%,39% 16%,62% 14%,74% 22%,84% 43%,95% 51%,100% 66%,98% 79%,88% 83%,81% 79%,76% 68%,28% 68%,23% 80%,16% 84%,8% 81%,2% 76%) !important;
+    border-radius:26px 38px 18px 18px !important;
+    box-shadow:
+      inset 0 5px 7px rgba(255,255,255,.24),
+      inset 0 -11px 18px rgba(0,7,30,.54),
+      0 0 18px rgba(13,121,255,.58) !important;
+    border:1px solid rgba(91,211,255,.62) !important;
+  }
+
+  .h2p-car::after{
+    content:"" !important;
+    position:absolute !important;
+    inset:0 !important;
+    display:block !important;
+    background:
+      radial-gradient(circle at 22% 79%,#9dc9ef 0 5%,#273b50 6% 12%,#070b11 13% 24%,transparent 25%),
+      radial-gradient(circle at 77% 79%,#9dc9ef 0 5%,#273b50 6% 12%,#070b11 13% 24%,transparent 25%),
+      radial-gradient(ellipse at 92% 51%,#eaffff 0 4%,#65e8ff 5% 9%,rgba(46,176,255,.36) 10% 18%,transparent 19%),
+      linear-gradient(160deg,transparent 0 36%,rgba(145,227,255,.54) 37% 38%,transparent 39% 100%) !important;
+    filter:drop-shadow(0 0 9px rgba(68,210,255,.82)) !important;
+  }
+
+  .h2p-hero-copy{
+    z-index:6 !important;
+  }
+
+  .h2p-hero-logo-wrap{
+    z-index:6 !important;
+  }
+}
+
+@media (max-width:390px){
+  .h2p-hero{
+    min-height:236px !important;
+    padding-bottom:82px !important;
+  }
+
+  .h2p-car{
+    right:-16px !important;
+    bottom:6px !important;
+    width:285px !important;
+    height:104px !important;
+  }
+}
