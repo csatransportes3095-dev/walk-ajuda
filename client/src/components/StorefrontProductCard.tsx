@@ -187,7 +187,10 @@ export function StorefrontProductCard({
   const priceModels = item.option.priceModels || [];
   const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';
   const selectablePriceModels = priceModels.filter(model => !isVipOnlyLocked(model, isVipCustomer));
-  const preferredModel = selectablePriceModels[Math.min(1, Math.max(0, selectablePriceModels.length - 1))] || selectablePriceModels[0] || null;
+  const mostChosenModel = priceModels[1] || null;
+  const preferredModel = mostChosenModel && !isVipOnlyLocked(mostChosenModel, isVipCustomer)
+    ? mostChosenModel
+    : selectablePriceModels[0] || null;
   const [priceModelId, setPriceModelId] = useState<number | null>(preferredModel?.id ?? null);
   const [manifestAcceptedKey, setManifestAcceptedKey] = useState<string | null>(null);
 
@@ -206,7 +209,10 @@ export function StorefrontProductCard({
       return;
     }
     if (!selectablePriceModels.some((model) => model.id === priceModelId)) {
-      setPriceModelId(selectablePriceModels[Math.min(1, Math.max(0, selectablePriceModels.length - 1))]?.id ?? selectablePriceModels[0]?.id ?? null);
+      const nextDefault = mostChosenModel && !isVipOnlyLocked(mostChosenModel, isVipCustomer)
+        ? mostChosenModel
+        : selectablePriceModels[0] || null;
+      setPriceModelId(nextDefault?.id ?? null);
     }
   }, [priceModels, priceModelId, isVipCustomer]);
 
