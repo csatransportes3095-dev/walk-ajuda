@@ -191,14 +191,14 @@ export default function H2WelcomePremium() {
     const dynamic = (rawButtons as HomeButton[]).filter((button) => Number(button.vipOnly || 0) !== 1);
     const used = new Set<number>();
 
-    const resolve = (kind: "cadastro" | "gastos" | "emprestimo" | "sorteio") => {
+    const resolve = (kind: "cadastro" | "gastos" | "emprestimo" | "sorteio"): HomeButton | null => {
       const matched = dynamic.find((button) => kindFor(button) === kind);
-      if (!matched) return FALLBACKS[kind];
+      if (!matched) return null;
       used.add(matched.id);
       return { ...FALLBACKS[kind], ...matched, subtitle: matched.subtitle || FALLBACKS[kind].subtitle, url: matched.url || FALLBACKS[kind].url };
     };
 
-    const essentials: HomeButton[] = [
+    const fixedEssentials: HomeButton[] = [
       {
         id: -2,
         text: settings?.home_btn1_text || "FAZER PEDIDO",
@@ -219,14 +219,17 @@ export default function H2WelcomePremium() {
         subColor: settings?.home_btn2_sub_color || "rgba(255,255,255,.84)",
         font: settings?.home_btn2_font || settings?.home_font || null,
       },
+    ];
+
+    const managedEssentials = [
       resolve("cadastro"),
       resolve("gastos"),
       resolve("emprestimo"),
       resolve("sorteio"),
-    ];
+    ].filter((button): button is HomeButton => button !== null);
 
     const remaining = dynamic.filter((button) => !used.has(button.id) && kindFor(button) === "default");
-    return [...essentials, ...remaining];
+    return [...fixedEssentials, ...managedEssentials, ...remaining];
   }, [rawButtons, settings]);
 
   if (!isHome || !active) return null;
