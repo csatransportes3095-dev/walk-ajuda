@@ -1,4 +1,4 @@
-name: Fix customer search direct
+name: Fix category sync storefront
 'on':
   push:
     branches:
@@ -15,62 +15,110 @@ jobs:
         with:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
-      - name: Update customer search
+      - name: Backup production
+        run: git push origin HEAD:refs/heads/backup/pre-category-sync-storefront-20260907 || true
+      - name: Synchronize edited categories
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('client/src/pages/AdminCustomers.tsx')
-          s = p.read_text(encoding='utf-8')
-          start = s.find('  const filtered = sortedCustomers.filter((c) => {\n')
-          end = s.find('\n\n  const startEdit = (c: Customer) => {', start)
-          if start < 0 or end < 0:
-              raise SystemExit('filter block not found')
-          new = """  const normalizeCustomerSearchText = (value: unknown) =>
-    String(value ?? '')
-      .normalize('NFD')
-      .replace(/[\\u0300-\\u036f]/g, '')
-      .toLowerCase()
-      .trim();
 
-  const filtered = sortedCustomers.filter((c) => {
-    const rawTerm = searchTerm.trim();
-    const normalizedTerm = normalizeCustomerSearchText(rawTerm);
-    const termDigits = rawTerm.replace(/\\D/g, '');
-    const isCadastroSearch = /^[*＊]/.test(rawTerm);
-    const isOrderSearch = /^#/.test(rawTerm);
-    let matchSearch = true;
-    if (rawTerm) {
-      const customerNumber = c.customerNumber != null ? String(c.customerNumber) : '';
-      const orderNumber = c.orderNumber != null ? String(c.orderNumber) : '';
-      const phoneDigits = String(c.phone || '').replace(/\\D/g, '');
-      const cpfDigits = String(c.cpf || '').replace(/\\D/g, '');
-      const referrerPhoneDigits = String(c.referredByPhone || '').replace(/\\D/g, '');
-      if (isCadastroSearch) {
-        matchSearch = !!termDigits && customerNumber.includes(termDigits);
-      } else if (isOrderSearch) {
-        matchSearch = !!termDigits && orderNumber.includes(termDigits);
-      } else {
-        const fields = [c.name,c.email,c.city,c.uf,c.referredBy,c.phone,c.referredByPhone,c.cpf,customerNumber ? `*${customerNumber}` : '',orderNumber ? `#${orderNumber}` : ''].map(normalizeCustomerSearchText);
-        const textMatch = fields.some((field) => field.includes(normalizedTerm));
-        const numericMatch = !!termDigits && [customerNumber,orderNumber,phoneDigits,cpfDigits,referrerPhoneDigits].some((field) => field.includes(termDigits));
-        matchSearch = textMatch || numericMatch;
-      }
-    }
-    if (showOnlyOrders) return matchSearch && !!c.hasOrder;
-    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
-    return matchSearch;
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f'Patch target missing: {label}')
+              return text.replace(old, new, 1)
+
+          p = Path('client/src/pages/AdminProducts.tsx')
+          s = p.read_text(encoding='utf-8')
+          if 'useState, useRef, useCallback, useEffect' not in s:
+              s = replace_once(s,
+                  'import { useState, useRef, useCallback } from "react";',
+                  'import { useState, useRef, useCallback, useEffect } from "react";',
+                  'useEffect import')
+          anchor = "  const [vipHighlightText, setVipHighlightText] = useState(model.vipHighlightText || 'VIP');\n  const updateMut = trpc.optionPriceModels.update.useMutation({ onSuccess: onChanged });"
+          replacement = """  const [vipHighlightText, setVipHighlightText] = useState(model.vipHighlightText || 'VIP');
+
+  useEffect(() => {
+    setLabel(model.label);
+    setPrincipalPrice(model.originalPrice?.trim() ? model.originalPrice : model.price);
+    setPromotionalPrice(model.originalPrice?.trim() ? model.price : '');
+    setPromoEndsAt(model.promoEndsAt ? new Date(model.promoEndsAt).toISOString().slice(0, 16) : '');
+    setActive(model.isActive === 1);
+    setVipAccessMode(model.vipAccessMode || 'all');
+    setVipDiscountType(model.vipDiscountType || 'percentage');
+    setVipDiscountValue(String(model.vipDiscountValue || ''));
+    setVipHighlight(model.vipHighlight === 1);
+    setVipHighlightText(model.vipHighlightText || 'VIP');
+  }, [model.id, model.label, model.price, model.originalPrice, model.promoEndsAt, model.isActive, model.vipAccessMode, model.vipDiscountType, model.vipDiscountValue, model.vipHighlight, model.vipHighlightText]);
+
+  const updateMut = trpc.optionPriceModels.update.useMutation({
+    onSuccess: () => {
+      onChanged();
+      toast.success('Categoria atualizada e sincronizada com o cliente!');
+    },
   });"""
-          s = s[:start] + new + s[end:]
-          old = '            value={searchTerm}\n            onChange={(e) => setSearchTerm(e.target.value)}\n            placeholder="Buscar por nome, telefone, email, cidade, indicação, #nº pedido, *nº cadastro..."'
-          repl = '            value={searchTerm}\n            onChange={(e) => {\n              const value = e.target.value;\n              setSearchTerm(value);\n              if (value.trim()) {\n                setShowOnlyOrders(false);\n                setShowOnlyBlocked(false);\n              }\n            }}\n            placeholder="Buscar nome, *cadastro, telefone, CPF, email, cidade ou #pedido..."'
-          if old not in s:
-              raise SystemExit('search input not found')
-          s = s.replace(old, repl, 1)
+          if 'Categoria atualizada e sincronizada com o cliente!' not in s:
+              s = replace_once(s, anchor, replacement, 'row sync')
+
+          old_refresh = "  const refresh = () => { utils.optionPriceModels.list.invalidate({ optionId }); utils.products.list.invalidate(); };"
+          new_refresh = """  const refresh = () => {
+    utils.optionPriceModels.list.invalidate({ optionId });
+    utils.optionPriceModels.listActive.invalidate();
+    utils.products.list.invalidate();
+    utils.products.listActive.invalidate();
+  };"""
+          if 'utils.optionPriceModels.listActive.invalidate();' not in s:
+              s = replace_once(s, old_refresh, new_refresh, 'public query invalidation')
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('client/src/pages/Home.tsx')
+          s = p.read_text(encoding='utf-8')
+          old = """  const { data: activeOptionPriceModels = [] } = trpc.optionPriceModels.listActive.useQuery(
+    { optionIds },
+    { enabled: optionIds.length > 0, staleTime: 30_000, refetchOnWindowFocus: true }
+  );"""
+          new = """  const { data: activeOptionPriceModels = [] } = trpc.optionPriceModels.listActive.useQuery(
+    { optionIds },
+    {
+      enabled: optionIds.length > 0,
+      staleTime: 0,
+      refetchInterval: 10_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    }
+  );"""
+          if 'refetchInterval: 10_000' not in s:
+              s = replace_once(s, old, new, 'storefront refresh')
           p.write_text(s, encoding='utf-8')
           PY
+          node - <<'NODE'
+          const fs=require('fs');
+          const a=fs.readFileSync('client/src/pages/AdminProducts.tsx','utf8');
+          const h=fs.readFileSync('client/src/pages/Home.tsx','utf8');
+          const checks=[
+            a.includes("Categoria atualizada e sincronizada com o cliente!"),
+            a.includes('utils.optionPriceModels.listActive.invalidate()'),
+            a.includes('utils.products.listActive.invalidate()'),
+            a.includes('setLabel(model.label);'),
+            h.includes('staleTime: 0'),
+            h.includes('refetchInterval: 10_000'),
+            h.includes('refetchOnReconnect: true'),
+          ];
+          if(checks.some(v=>!v)) process.exit(1);
+          console.log('7/7 category synchronization checks OK');
+          NODE
           git diff --check
+      - name: Install and build
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Commit production
+        run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add client/src/pages/AdminCustomers.tsx
-          git commit -m "fix(clientes): corrigir busca por nome e cadastro"
+          git add client/src/pages/AdminProducts.tsx client/src/pages/Home.tsx
+          git commit -m "fix(produtos): sincronizar categoria editada com cliente"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
