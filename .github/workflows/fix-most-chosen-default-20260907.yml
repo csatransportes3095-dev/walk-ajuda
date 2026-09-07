@@ -1,6 +1,5 @@
-name: Fix most chosen default 2026-09-07
+name: Fix category sync storefront 2026-09-07
 
-# trigger v2
 on:
   push:
     branches:
@@ -21,75 +20,100 @@ jobs:
           fetch-depth: 0
 
       - name: Preserve production checkpoint
-        run: git push origin HEAD:refs/heads/backup/pre-most-chosen-default-20260907 || true
+        run: git push origin HEAD:refs/heads/backup/pre-category-sync-storefront-20260907 || true
 
-      - name: Fix default selected model
-        shell: bash
+      - name: Apply category synchronization fix
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          path = Path('client/src/components/StorefrontProductCard.tsx')
-          text = path.read_text(encoding='utf-8')
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f'Patch target missing: {label}')
+              return text.replace(old, new, 1)
 
-          old = '''  const selectablePriceModels = priceModels.filter(model => !isVipOnlyLocked(model, isVipCustomer));
-  const preferredModel = selectablePriceModels[Math.min(1, Math.max(0, selectablePriceModels.length - 1))] || selectablePriceModels[0] || null;
-  const [priceModelId, setPriceModelId] = useState<number | null>(preferredModel?.id ?? null);'''
-          new = '''  const selectablePriceModels = priceModels.filter(model => !isVipOnlyLocked(model, isVipCustomer));
-  // A opção exibida como "MAIS ESCOLHIDA" é a segunda posição original do cadastro.
-  // Ela deve continuar sendo a seleção padrão mesmo quando uma opção anterior é SOMENTE VIP.
-  const mostChosenModel = priceModels[1] || null;
-  const preferredModel = mostChosenModel && !isVipOnlyLocked(mostChosenModel, isVipCustomer)
-    ? mostChosenModel
-    : selectablePriceModels[0] || null;
-  const [priceModelId, setPriceModelId] = useState<number | null>(preferredModel?.id ?? null);'''
+          p = Path('client/src/pages/AdminProducts.tsx')
+          s = p.read_text(encoding='utf-8')
+          if 'useState, useRef, useCallback, useEffect' not in s:
+              s = replace_once(s,
+                  'import { useState, useRef, useCallback } from "react";',
+                  'import { useState, useRef, useCallback, useEffect } from "react";',
+                  'useEffect import')
+          sync_anchor = "  const [vipHighlightText, setVipHighlightText] = useState(model.vipHighlightText || 'VIP');\n  const updateMut = trpc.optionPriceModels.update.useMutation({ onSuccess: onChanged });"
+          sync_block = """  const [vipHighlightText, setVipHighlightText] = useState(model.vipHighlightText || 'VIP');
 
-          if old not in text:
-              raise SystemExit('Trecho inicial de seleção não encontrado; produção não foi alterada.')
-          text = text.replace(old, new, 1)
+  useEffect(() => {
+    setLabel(model.label);
+    setPrincipalPrice(model.originalPrice?.trim() ? model.originalPrice : model.price);
+    setPromotionalPrice(model.originalPrice?.trim() ? model.price : '');
+    setPromoEndsAt(model.promoEndsAt ? new Date(model.promoEndsAt).toISOString().slice(0, 16) : '');
+    setActive(model.isActive === 1);
+    setVipAccessMode(model.vipAccessMode || 'all');
+    setVipDiscountType(model.vipDiscountType || 'percentage');
+    setVipDiscountValue(String(model.vipDiscountValue || ''));
+    setVipHighlight(model.vipHighlight === 1);
+    setVipHighlightText(model.vipHighlightText || 'VIP');
+  }, [model.id, model.label, model.price, model.originalPrice, model.promoEndsAt, model.isActive, model.vipAccessMode, model.vipDiscountType, model.vipDiscountValue, model.vipHighlight, model.vipHighlightText]);
 
-          old_effect = '''    if (!selectablePriceModels.some((model) => model.id === priceModelId)) {
-      setPriceModelId(selectablePriceModels[Math.min(1, Math.max(0, selectablePriceModels.length - 1))]?.id ?? selectablePriceModels[0]?.id ?? null);
-    }'''
-          new_effect = '''    if (!selectablePriceModels.some((model) => model.id === priceModelId)) {
-      const nextDefault = mostChosenModel && !isVipOnlyLocked(mostChosenModel, isVipCustomer)
-        ? mostChosenModel
-        : selectablePriceModels[0] || null;
-      setPriceModelId(nextDefault?.id ?? null);
-    }'''
+  const updateMut = trpc.optionPriceModels.update.useMutation({ onSuccess: onChanged });"""
+          if 'setLabel(model.label);' not in s:
+              s = replace_once(s, sync_anchor, sync_block, 'row server sync')
 
-          if old_effect not in text:
-              raise SystemExit('Trecho de fallback de seleção não encontrado; produção não foi alterada.')
-          text = text.replace(old_effect, new_effect, 1)
+          old_refresh = "  const refresh = () => { utils.optionPriceModels.list.invalidate({ optionId }); utils.products.list.invalidate(); };"
+          new_refresh = """  const refresh = () => {
+    utils.optionPriceModels.list.invalidate({ optionId });
+    utils.optionPriceModels.listActive.invalidate();
+    utils.products.list.invalidate();
+    utils.products.listActive.invalidate();
+  };"""
+          if 'utils.optionPriceModels.listActive.invalidate();' not in s:
+              s = replace_once(s, old_refresh, new_refresh, 'public cache invalidation')
+          p.write_text(s, encoding='utf-8')
 
-          path.write_text(text, encoding='utf-8')
+          p = Path('client/src/pages/Home.tsx')
+          s = p.read_text(encoding='utf-8')
+          old = """  const { data: activeOptionPriceModels = [] } = trpc.optionPriceModels.listActive.useQuery(
+    { optionIds },
+    { enabled: optionIds.length > 0, staleTime: 30_000, refetchOnWindowFocus: true }
+  );"""
+          new = """  const { data: activeOptionPriceModels = [] } = trpc.optionPriceModels.listActive.useQuery(
+    { optionIds },
+    {
+      enabled: optionIds.length > 0,
+      staleTime: 0,
+      refetchInterval: 10_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    }
+  );"""
+          if 'refetchInterval: 10_000' not in s:
+              s = replace_once(s, old, new, 'storefront freshness')
+          p.write_text(s, encoding='utf-8')
           PY
 
-      - name: Audit default selection
+      - name: Audit fix
         run: |
           node - <<'NODE'
           const fs = require('fs');
-          const text = fs.readFileSync('client/src/components/StorefrontProductCard.tsx', 'utf8');
-          const required = [
-            'const mostChosenModel = priceModels[1] || null;',
-            'mostChosenModel && !isVipOnlyLocked(mostChosenModel, isVipCustomer)',
-            'const nextDefault = mostChosenModel',
+          const admin = fs.readFileSync('client/src/pages/AdminProducts.tsx','utf8');
+          const home = fs.readFileSync('client/src/pages/Home.tsx','utf8');
+          const checks = [
+            admin.includes('utils.optionPriceModels.listActive.invalidate()'),
+            admin.includes('utils.products.listActive.invalidate()'),
+            admin.includes('setLabel(model.label);'),
+            home.includes('staleTime: 0'),
+            home.includes('refetchInterval: 10_000'),
+            home.includes('refetchOnReconnect: true'),
           ];
-          const missing = required.filter((needle) => !text.includes(needle));
-          if (missing.length) {
-            console.error('Falha na auditoria:', missing);
-            process.exit(1);
-          }
-          console.log('OK: a opção MAIS ESCOLHIDA é priorizada antes do filtro VIP.');
+          if (checks.some(v => !v)) process.exit(1);
+          console.log('6/6 category sync checks OK');
           NODE
 
       - name: Install dependencies
         run: |
           corepack enable
           pnpm install --frozen-lockfile
-
-      - name: Test VIP pricing rules
-        run: pnpm vitest run server/vipPricing.test.ts
 
       - name: Build production
         run: pnpm build
@@ -98,10 +122,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/src/components/StorefrontProductCard.tsx
-          if git diff --cached --quiet; then
-            echo "No changes"
-            exit 0
-          fi
-          git commit -m "fix(storefront): abrir na opcao mais escolhida"
+          git add client/src/pages/AdminProducts.tsx client/src/pages/Home.tsx
+          git commit -m "fix(produtos): sincronizar categoria editada com cliente"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
