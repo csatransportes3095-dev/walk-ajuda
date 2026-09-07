@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, GripVertical, Eye, EyeOff, Save, X, HelpCircle, DollarSign, Package, ImagePlus, Loader2, FileText, Settings2, Palette, Gift, Volume2, Upload, Headphones } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
@@ -181,7 +181,26 @@ function OptionPriceModelRow({ model, onChanged }: { model: OptionPriceModelType
   const [vipDiscountValue, setVipDiscountValue] = useState(String(model.vipDiscountValue || ''));
   const [vipHighlight, setVipHighlight] = useState(model.vipHighlight === 1);
   const [vipHighlightText, setVipHighlightText] = useState(model.vipHighlightText || 'VIP');
-  const updateMut = trpc.optionPriceModels.update.useMutation({ onSuccess: onChanged });
+
+  useEffect(() => {
+    setLabel(model.label);
+    setPrincipalPrice(model.originalPrice?.trim() ? model.originalPrice : model.price);
+    setPromotionalPrice(model.originalPrice?.trim() ? model.price : '');
+    setPromoEndsAt(model.promoEndsAt ? new Date(model.promoEndsAt).toISOString().slice(0, 16) : '');
+    setActive(model.isActive === 1);
+    setVipAccessMode(model.vipAccessMode || 'all');
+    setVipDiscountType(model.vipDiscountType || 'percentage');
+    setVipDiscountValue(String(model.vipDiscountValue || ''));
+    setVipHighlight(model.vipHighlight === 1);
+    setVipHighlightText(model.vipHighlightText || 'VIP');
+  }, [model.id, model.label, model.price, model.originalPrice, model.promoEndsAt, model.isActive, model.vipAccessMode, model.vipDiscountType, model.vipDiscountValue, model.vipHighlight, model.vipHighlightText]);
+
+  const updateMut = trpc.optionPriceModels.update.useMutation({
+    onSuccess: () => {
+      onChanged();
+      toast.success('Categoria atualizada e sincronizada com o cliente!');
+    },
+  });
   const deleteMut = trpc.optionPriceModels.delete.useMutation({ onSuccess: onChanged });
 
   return (
@@ -231,7 +250,12 @@ function OptionPriceModelsEditor({ optionId }: { optionId: number }) {
   const [newVipDiscountValue, setNewVipDiscountValue] = useState('');
   const [newVipHighlight, setNewVipHighlight] = useState(false);
   const [newVipHighlightText, setNewVipHighlightText] = useState('VIP');
-  const refresh = () => { utils.optionPriceModels.list.invalidate({ optionId }); utils.products.list.invalidate(); };
+  const refresh = () => {
+    utils.optionPriceModels.list.invalidate({ optionId });
+    utils.optionPriceModels.listActive.invalidate();
+    utils.products.list.invalidate();
+    utils.products.listActive.invalidate();
+  };
   const updateSettingsMut = trpc.optionPriceModels.updateSettings.useMutation({ onSuccess: () => { utils.optionPriceModels.getSettings.invalidate({ optionId }); refresh(); toast.success('Nome do seletor atualizado!'); } });
   const createMut = trpc.optionPriceModels.create.useMutation({ onSuccess: () => { setNewLabel(''); setNewOriginalPrice(''); setNewPrice(''); setNewPromoEndsAt(''); setNewVipAccessMode('all'); setNewVipDiscountType('percentage'); setNewVipDiscountValue(''); setNewVipHighlight(false); setNewVipHighlightText('VIP'); refresh(); toast.success('Categoria de preço criada!'); } });
   const models = (query.data || []) as OptionPriceModelType[];

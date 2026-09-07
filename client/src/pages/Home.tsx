@@ -265,7 +265,14 @@ export default function Home() {
   const optionIds = useMemo(() => (baseProducts || []).flatMap(product => product.options.map(option => option.id)), [baseProducts]);
   const { data: activeOptionPriceModels = [] } = trpc.optionPriceModels.listActive.useQuery(
     { optionIds },
-    { enabled: optionIds.length > 0, staleTime: 30_000, refetchOnWindowFocus: true }
+    {
+      enabled: optionIds.length > 0,
+      staleTime: 0,
+      refetchInterval: 10_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    }
   );
   const products = useMemo(() => {
     if (!baseProducts) return undefined;
