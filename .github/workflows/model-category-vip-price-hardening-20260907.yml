@@ -1,0 +1,121 @@
+name: Harden model category VIP price 2026-09-07
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/model-category-vip-price-hardening-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Apply server-side VIP price validation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def patch(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Trecho nao encontrado: {label}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          patch('server/routers/optionPriceModels.ts',
+          'import { adminProcedure, publicProcedure, router } from "../_core/trpc";',
+          'import { adminProcedure, publicProcedure, router } from "../_core/trpc";\nimport { applyVipBenefitToPrice } from "../../shared/vipPricing";',
+          'import vip pricing')
+
+          old = '''export async function checkOptionPriceModelCheckoutAccess(priceModelId: number, isVipCustomer: boolean): Promise<{ allowed: boolean; reason?: string }> {
+            await ensureInfrastructure();
+            const db = await getDb();
+            if (!db) return { allowed: false, reason: "Banco de dados indisponível." };
+            const result = await db.execute(sql`
+              SELECT isActive, COALESCE(vipAccessMode, 'all') AS vipAccessMode
+              FROM optionPriceModels WHERE id=${priceModelId} LIMIT 1
+            `);
+            const row = asRows<{ isActive: number; vipAccessMode: string }>(result)[0];
+            if (!row || Number(row.isActive) !== 1) return { allowed: false, reason: "Este modelo/categoria não está disponível." };
+            if (row.vipAccessMode === "vip_only" && !isVipCustomer) {
+              return { allowed: false, reason: "Este modelo/categoria é exclusivo para clientes VIP." };
+            }
+            return { allowed: true };
+          }'''
+          new = '''export async function checkOptionPriceModelCheckoutAccess(priceModelId: number, isVipCustomer: boolean): Promise<{ allowed: boolean; reason?: string; effectivePrice?: string }> {
+            await ensureInfrastructure();
+            const db = await getDb();
+            if (!db) return { allowed: false, reason: "Banco de dados indisponível." };
+            const result = await db.execute(sql`
+              SELECT isActive, price,
+                     COALESCE(vipAccessMode, 'all') AS vipAccessMode,
+                     COALESCE(vipDiscountType, 'percentage') AS vipDiscountType,
+                     COALESCE(vipDiscountValue, 0) AS vipDiscountValue,
+                     COALESCE(vipHighlight, 0) AS vipHighlight,
+                     vipHighlightText
+              FROM optionPriceModels WHERE id=${priceModelId} LIMIT 1
+            `);
+            const row = asRows<OptionPriceModel>(result)[0];
+            if (!row || Number(row.isActive) !== 1) return { allowed: false, reason: "Este modelo/categoria não está disponível." };
+            if (row.vipAccessMode === "vip_only" && !isVipCustomer) {
+              return { allowed: false, reason: "Este modelo/categoria é exclusivo para clientes VIP." };
+            }
+            const effectivePrice = applyVipBenefitToPrice(String(row.price || ''), row, isVipCustomer);
+            return { allowed: true, effectivePrice };
+          }'''
+          patch('server/routers/optionPriceModels.ts', old, new, 'checkout pricing helper')
+
+          old2 = '''          if (input.priceModelId) {
+            const modelAccess = await checkOptionPriceModelCheckoutAccess(input.priceModelId, isVipModelAccess);
+            if (!modelAccess.allowed) return { success: false, message: modelAccess.reason || 'Modelo/categoria indisponível.' };
+          }'''
+          new2 = '''          if (input.priceModelId) {
+            const modelAccess = await checkOptionPriceModelCheckoutAccess(input.priceModelId, isVipModelAccess);
+            if (!modelAccess.allowed) return { success: false, message: modelAccess.reason || 'Modelo/categoria indisponível.' };
+            // Nunca confiar no preço enviado pelo navegador para um Modelo/Categoria.
+            // O servidor recalcula preço normal ou benefício VIP com base na sessão validada.
+            if (modelAccess.effectivePrice) input.price = modelAccess.effectivePrice;
+          }'''
+          patch('server/routers.ts', old2, new2, 'override submitted model price')
+
+          test = Path('server/vipPricing.test.ts')
+          text = test.read_text(encoding='utf-8')
+          if 'cliente comum nao recebe beneficio' not in text:
+              text = text.replace('describe("VIP por modelo/categoria", () => {', '''describe("VIP por modelo/categoria", () => {
+            it("cliente comum nao recebe beneficio", () => {
+              expect(applyVipBenefitToPrice("R$ 200,00", { vipAccessMode: "benefit", vipDiscountType: "percentage", vipDiscountValue: 50 }, false)).toBe("R$ 200,00");
+            });''', 1)
+              test.write_text(text, encoding='utf-8')
+
+      - name: Verify hardening markers
+        run: |
+          grep -q "effectivePrice" server/routers/optionPriceModels.ts
+          grep -q "input.price = modelAccess.effectivePrice" server/routers.ts
+          grep -q "vipDiscountValue" server/routers/optionPriceModels.ts
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Test VIP rules
+        run: pnpm vitest run server/vipPricing.test.ts
+
+      - name: Build production
+        run: pnpm build
+
+      - name: Commit hardening
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/optionPriceModels.ts server/routers.ts server/vipPricing.test.ts
+          git commit -m "fix(pedidos): validar preco VIP por modelo no servidor"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
