@@ -268,7 +268,7 @@ export default function H2WelcomePremium() {
             <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>INÍCIO</button>
             <button type="button" onClick={() => go("/login")}>SISTEMA</button>
             <button type="button" onClick={() => document.getElementById("h2p-services")?.scrollIntoView({ behavior: "smooth" })}>SERVIÇOS</button>
-            <button type="button" onClick={() => document.getElementById("h2p-plans")?.scrollIntoView({ behavior: "smooth" })}>PLANOS</button>
+            <button type="button" onClick={() => document.getElementById("h2p-downloads")?.scrollIntoView({ behavior: "smooth" })}>APPS</button>
             <button type="button" onClick={() => document.getElementById("h2p-about")?.scrollIntoView({ behavior: "smooth" })}>SOBRE</button>
             <button type="button" onClick={() => go("/ajuda")}>CONTATO</button>
           </div>
@@ -286,20 +286,6 @@ export default function H2WelcomePremium() {
             <h1 style={{ fontSize: "clamp(32px, 7vw, 64px)", lineHeight: .92 }}>{brandTitle}</h1>
             <p style={{ marginTop: 12, fontSize: "clamp(11px, 2.8vw, 17px)", letterSpacing: ".18em" }}>SEMPRE COM VOCÊ</p>
           </div>
-        </section>
-
-        <section className="h2p-download" style={{ margin: "0 24px", padding: "11px 16px", borderRadius: 22, gridTemplateColumns: "54px 1fr auto", gap: 13 }}>
-          <div className="h2p-android" style={{ width: 48, height: 48, borderRadius: 14 }}><Smartphone /></div>
-          <div className="h2p-download-copy">
-            <strong style={{ fontSize: "clamp(17px, 4.2vw, 24px)" }}>Baixe o app Android</strong>
-            <span style={{ fontSize: "clamp(11px, 2.8vw, 15px)" }}>Mais praticidade no seu dia a dia</span>
-          </div>
-          <button type="button" style={{ padding: "12px 20px", fontSize: "clamp(13px, 3vw, 17px)" }} onClick={() => go("/app")}><Download /> BAIXAR</button>
-        </section>
-
-        <section id="h2p-plans" className="h2p-app-grid">
-          <button type="button" onClick={() => go("/app")} className="h2p-app h2p-app-main"><Smartphone /><span><strong>Colombiano</strong><small>Sistema completo</small></span><ArrowRight /></button>
-          <button type="button" onClick={() => go("/app-pro")} className="h2p-app h2p-app-pro"><Zap /><span><strong>Driver Pro</strong><small>Planilha + Empréstimo</small></span><ArrowRight /></button>
         </section>
 
         <section id="h2p-services" className="h2p-services">
@@ -339,6 +325,32 @@ export default function H2WelcomePremium() {
           <div><ShieldCheck /><span>SEGURANÇA<br />EM PRIMEIRO LUGAR</span></div>
           <div><Users /><span>MILHARES<br />DE CLIENTES</span></div>
           <div><Star /><span>QUALIDADE<br />E COMPROMISSO</span></div>
+        </section>
+
+        <section id="h2p-downloads" style={{ margin: "22px 24px 10px" }}>
+          <div style={{ textAlign: "center", marginBottom: 14 }}>
+            <strong style={{ display: "block", fontSize: "clamp(18px, 4.5vw, 26px)", color: "#ffffff", letterSpacing: ".02em" }}>ESCOLHA O APP CERTO PARA VOCÊ</strong>
+            <span style={{ display: "block", marginTop: 5, color: "rgba(255,255,255,.65)", fontSize: "clamp(11px, 2.8vw, 14px)" }}>Baixe a versão de acordo com o que precisa usar.</span>
+          </div>
+
+          <div className="h2p-app-grid" style={{ margin: 0 }}>
+            <button type="button" onClick={() => go("/app")} className="h2p-app h2p-app-main" style={{ minHeight: 94 }}>
+              <Smartphone />
+              <span>
+                <strong>BAIXAR APK COMPLETO</strong>
+                <small>Pedidos, acompanhamento e acesso ao sistema completo.</small>
+              </span>
+              <Download />
+            </button>
+            <button type="button" onClick={() => go("/app-pro")} className="h2p-app h2p-app-pro" style={{ minHeight: 94 }}>
+              <Zap />
+              <span>
+                <strong>BAIXAR APK PLANILHA + EMPRÉSTIMO</strong>
+                <small>Planilha de gastos, controle financeiro e empréstimos.</small>
+              </span>
+              <Download />
+            </button>
+          </div>
         </section>
 
         <footer className="h2p-footer"><strong>{brandTitle}</strong><i>•</i><span>{footerText}</span></footer>
