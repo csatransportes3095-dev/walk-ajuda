@@ -42,7 +42,40 @@ import "./h2-footer-mobile-fix.css";
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false }, mutations: { retry: 0 } } });
 const redirectToLoginIfUnauthorized = (error: unknown) => { if (!(error instanceof TRPCClientError) || typeof window === "undefined" || error.message !== UNAUTHED_ERR_MSG) return; window.location.href = "/admin/login"; };
 queryClient.getQueryCache().subscribe(event => { if (event.type === "updated" && event.action.type === "error") { const error = event.query.state.error; redirectToLoginIfUnauthorized(error); console.error("[API Query Error]", error); } });
-queryClient.getMutationCache().subscribe(event => { if (event.type === "updated" && event.action.type === "error") { const error = event.mutation.state.error; redirectToLoginIfUnauthorized(error); console.error("[API Mutation Error]", error); } });
+
+const isOptionPriceModelKey = (key: unknown) => {
+  try { return JSON.stringify(key ?? []).includes("optionPriceModels"); } catch { return false; }
+};
+const refreshOptionPriceModels = () => {
+  void queryClient.invalidateQueries({
+    predicate: query => isOptionPriceModelKey(query.queryKey),
+    refetchType: "active",
+  });
+};
+let optionPriceModelSyncChannel: BroadcastChannel | null = null;
+if (typeof window !== "undefined") {
+  if (typeof BroadcastChannel !== "undefined") {
+    optionPriceModelSyncChannel = new BroadcastChannel("h2-option-price-model-sync");
+    optionPriceModelSyncChannel.addEventListener("message", refreshOptionPriceModels);
+  }
+  window.addEventListener("focus", refreshOptionPriceModels);
+  window.setInterval(refreshOptionPriceModels, 10_000);
+}
+
+queryClient.getMutationCache().subscribe(event => {
+  if (event.type !== "updated") return;
+  if (event.action.type === "error") {
+    const error = event.mutation.state.error;
+    redirectToLoginIfUnauthorized(error);
+    console.error("[API Mutation Error]", error);
+    return;
+  }
+  if (event.action.type === "success" && isOptionPriceModelKey(event.mutation.options.mutationKey)) {
+    refreshOptionPriceModels();
+    optionPriceModelSyncChannel?.postMessage({ type: "option-price-model-updated", at: Date.now() });
+  }
+});
+
 function fetchWithTimeout(timeoutMs: number) { return (input: RequestInfo | URL, init?: RequestInit) => { const controller = new AbortController(); const timeoutId = setTimeout(() => controller.abort(), timeoutMs); return globalThis.fetch(input, { ...(init ?? {}), credentials: "include", signal: controller.signal }).finally(() => clearTimeout(timeoutId)); }; }
 const trpcClient = trpc.createClient({ links: [splitLink({ condition(op) { return op.type === "mutation"; }, true: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: fetchWithTimeout(150000) }), false: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: fetchWithTimeout(30000) }) })] });
 
