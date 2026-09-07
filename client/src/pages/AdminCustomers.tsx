@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Pencil, Trash2, Download, Search, X, Users, Gift, Camera, KeyRound, RefreshCw, Eye, EyeOff, ShieldCheck, ShieldOff, Lock, Unlock, Clock, FileText, FolderOpen, CheckSquare, Square, ListChecks, ExternalLink, Link2, Copy, Plus, DollarSign, BadgePercent, FileCheck, File, FileArchive, FileCode, FileJson, Music, Video, Upload, Image as ImageIcon } from "lucide-react";
+import { Pencil, Trash2, Download, Search, X, Users, Gift, Camera, KeyRound, RefreshCw, Eye, EyeOff, ShieldCheck, ShieldOff, Lock, Unlock, Clock, FileText, FolderOpen, CheckSquare, Square, ListChecks, ExternalLink, Link2, Copy, Plus, DollarSign, BadgePercent, FileCheck, File, FileArchive, FileCode, FileJson, Music, Video, Upload, Crown, Image as ImageIcon } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import { RouteRestrictionModal } from "@/components/RouteRestrictionModal";
 import { useTimezone } from "@/hooks/useTimezone";
@@ -35,6 +35,11 @@ type Customer = {
   blocked?: number;
   blockReason?: string | null;
   blockedAt?: number | Date | null;
+  vipActive?: boolean;
+  vipStatus?: 'active' | 'expired' | 'cancelled' | 'none';
+  vipStartedAt?: number | null;
+  vipExpiresAt?: number | null;
+  vipDaysLeft?: number;
 };
 
 // Apenas os objetos R2 recuperados precisam ignorar a cópia antiga marcada como imutável no navegador.
@@ -413,6 +418,7 @@ export default function AdminCustomers() {
   const [expandedCustomerIds, setExpandedCustomerIds] = useState<Set<number>>(new Set());
   const [showOnlyOrders, setShowOnlyOrders] = useState(false);
   const [showOnlyBlocked, setShowOnlyBlocked] = useState(false);
+  const [showOnlyVip, setShowOnlyVip] = useState(false);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name">("newest");
   const { fmt: formatDateBR } = useTimezone();
   const [, setLocation] = useLocation();
@@ -754,6 +760,7 @@ export default function AdminCustomers() {
         (c.referredBy || "").toLowerCase().includes(term) ||
         (c.referredByPhone || "").includes(term);
     }
+    if (showOnlyVip) return matchSearch && !!c.vipActive;
     if (showOnlyOrders) return matchSearch && !!c.hasOrder;
     if (showOnlyBlocked) return matchSearch && c.blocked === 1;
     return matchSearch;
@@ -1114,7 +1121,19 @@ export default function AdminCustomers() {
             Selecionar todos com pedidos ({customers.filter(c => c.hasOrder).length})
           </button>
           )}
-          {!showOnlyBlocked && customers.some(c => c.blocked === 1) && (
+          <button
+  onClick={() => {
+    const next = !showOnlyVip;
+    setShowOnlyVip(next);
+    if (next) { setShowOnlyOrders(false); setShowOnlyBlocked(false); setSelectedIds(new Set()); }
+  }}
+  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-colors border ${showOnlyVip ? 'bg-amber-400 text-amber-950 border-amber-300 shadow-[0_0_16px_rgba(251,191,36,.28)]' : 'bg-amber-500/15 border-amber-400/35 text-amber-300 hover:bg-amber-500/25'}`}
+  title="Filtrar somente clientes com VIP ativo"
+>
+  <Crown className="w-3.5 h-3.5 fill-current" />
+  {showOnlyVip ? `Mostrando VIP (${filtered.length})` : `Clientes VIP (${customers.filter(c => c.vipActive).length})`}
+</button>
+{!showOnlyBlocked && customers.some(c => c.blocked === 1) && (
           <button
             onClick={selectAllBlocked}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-medium hover:bg-red-600/30 transition-colors"
@@ -1173,6 +1192,8 @@ export default function AdminCustomers() {
             <div key={c.id} className={`rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5 ${selectedIds.has(c.id) ? 'ring-2 ring-green-400' : editingId === c.id ? 'ring-2 ring-blue-400' : ''}`} style={{
                 background: c.blocked === 1
                   ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'
+                  : c.vipActive
+                  ? 'linear-gradient(135deg, #5b3700 0%, #2a1749 50%, #6b4300 100%)'
                   : c.hasOrder && hasLoanForCustomer(c)
                   ? 'linear-gradient(135deg, #052e16 0%, #052e16 49.8%, #4a3600 50.2%, #241a00 100%)'
                   : hasLoanForCustomer(c)
@@ -1182,6 +1203,8 @@ export default function AdminCustomers() {
                   : 'linear-gradient(135deg, #1e1b4b 0%, #0f0b2e 100%)',
                 border: c.blocked === 1
                   ? '2px solid rgba(239,68,68,0.8)'
+                  : c.vipActive
+                  ? '2px solid rgba(250,204,21,0.95)'
                   : c.hasOrder && hasLoanForCustomer(c)
                   ? '2px solid rgba(202,173,35,0.8)'
                   : hasLoanForCustomer(c)
@@ -1191,6 +1214,8 @@ export default function AdminCustomers() {
                   : '2px solid rgba(99,102,241,0.6)',
                 boxShadow: c.blocked === 1
                   ? '0 4px 20px rgba(239,68,68,0.35)'
+                  : c.vipActive
+                  ? '0 0 0 1px rgba(253,224,71,0.18), 0 8px 30px rgba(250,204,21,0.32), inset 0 0 34px rgba(168,85,247,0.12)'
                   : c.hasOrder && hasLoanForCustomer(c)
                   ? '-8px 4px 20px rgba(34,197,94,0.22), 8px 4px 20px rgba(234,179,8,0.24)'
                   : hasLoanForCustomer(c)
@@ -1225,7 +1250,7 @@ export default function AdminCustomers() {
                         src={getProfilePhotoDisplayUrl(c.profilePhotoUrl)}
                         alt=""
                         aria-label={`Foto de ${c.name}`}
-                        className={`w-16 h-16 rounded-full object-cover shadow cursor-pointer hover:opacity-90 transition-opacity ${c.isBlocked ? 'border-2 border-red-500/60' : 'border-2 border-primary/30'}`}
+                        className={`w-16 h-16 rounded-full object-cover shadow cursor-pointer hover:opacity-90 transition-opacity ${c.isBlocked ? 'border-2 border-red-500/60' : c.vipActive ? 'border-[3px] border-amber-300 shadow-[0_0_18px_rgba(250,204,21,.38)]' : 'border-2 border-primary/30'}`}
                         onError={() => setFailedProfilePhotoIds((previous) => new Set(previous).add(c.id))}
                         onClick={() => setPhotoModal({ url: getProfilePhotoDisplayUrl(c.profilePhotoUrl!), name: c.name })}
                         title="Clique para ampliar a foto"
@@ -1260,7 +1285,12 @@ export default function AdminCustomers() {
                       <span className="truncate">{c.name}</span>
                       {c.fixedPwdActive && <Lock className="w-3 h-3 text-yellow-400 flex-shrink-0" aria-label="Senha fixa ativa" />}
                     </p>
-                    {/* Badge bloqueado */}
+                    {c.vipActive && (
+  <a href={`/admin/vip?phone=${encodeURIComponent(c.phone.replace(/\D/g, ''))}`} onClick={(event) => event.stopPropagation()} className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-950 shadow-[0_0_20px_rgba(250,204,21,.48)] animate-pulse" title="Abrir gestão deste cliente VIP">
+    <Crown className="h-3.5 w-3.5 fill-current" /> VIP ATIVO • {c.vipDaysLeft || 0} DIAS
+  </a>
+)}
+{/* Badge bloqueado */}
                     {c.isBlocked && (
                       <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400 border border-red-500/40 uppercase tracking-wide" title="Telefone na lista negra">🚫 Bloqueado (IP)</span>
                     )}

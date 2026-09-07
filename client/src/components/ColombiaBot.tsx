@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Bot, X, Camera, ChevronRight, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { useVipMembership } from "@/hooks/useVipMembership";
 import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
@@ -141,7 +142,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: settingsData } = trpc.settings.getAll.useQuery();
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';
-  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';
+  const { isVipCustomer } = useVipMembership();
   const getModelPrice = (model: OptionPriceModel | null | undefined) => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
   const profileQuery = trpc.customers.getMyProfile.useQuery(
     { phone: clientPhone },

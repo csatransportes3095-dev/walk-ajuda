@@ -1,6 +1,7 @@
 import { Check, ChevronDown, ChevronUp, Crown, Flame, LockKeyhole, ShieldCheck, ShoppingCart, Tag, Timer, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
+import { useVipMembership } from "@/hooks/useVipMembership";
 import { applyVipBenefitToPrice, formatBrazilMoney, hasVipBenefit, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, parseBrazilMoney, vipBenefitText } from "@shared/vipPricing";
 
 export type StorefrontQuestion = {
@@ -185,7 +186,7 @@ export function StorefrontProductCard({
   const [tierId, setTierId] = useState<number | null>(tiers[0]?.id ?? null);
   const selectedTier = tiers.find((tier) => tier.id === tierId) || null;
   const priceModels = item.option.priceModels || [];
-  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';
+  const { isVipCustomer } = useVipMembership();
   const selectablePriceModels = priceModels.filter(model => !isVipOnlyLocked(model, isVipCustomer));
   const mostChosenModel = priceModels[1] || null;
   const preferredModel = mostChosenModel && !isVipOnlyLocked(mostChosenModel, isVipCustomer)

@@ -1,6 +1,7 @@
 import { ArrowLeft, CheckCircle2, Copy, Crown, LockKeyhole, MessageCircle, ShieldCheck, Sparkles, Timer } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { useVipMembership } from "@/hooks/useVipMembership";
 
 function parsePrice(value: string | undefined) {
   const raw = String(value || "").trim().replace(/R\$/gi, "").replace(/\s/g, "");
@@ -25,8 +26,7 @@ export default function VipPage() {
   const benefit1 = settings?.vip_membership_benefit_1 || "Preços especiais em modelos e categorias selecionados";
   const benefit2 = settings?.vip_membership_benefit_2 || "Acesso a opções exclusivas marcadas como SOMENTE VIP";
   const benefit3 = settings?.vip_membership_benefit_3 || "O valor VIP aparece antes da compra para você comparar";
-  const isVip = typeof window !== "undefined" && localStorage.getItem("walk_access_type") === "vip";
-  const expiresAt = typeof window !== "undefined" ? localStorage.getItem("walk_access_expires") : null;
+  const { isVipCustomer: isVip, expiresAt } = useVipMembership();
   const phone = typeof window !== "undefined" ? localStorage.getItem("walk_client_phone") || "" : "";
   const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const requestedReturn = params.get("returnTo") || "/";

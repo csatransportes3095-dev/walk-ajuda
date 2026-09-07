@@ -33,6 +33,7 @@ import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDir
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess } from "./routers/optionPriceModels";
+import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -328,6 +329,7 @@ async function ensureCommissionReferralStatusColumns(db: any): Promise<void> {
 export const appRouter = router({
   system: systemRouter,
   optionPriceModels: optionPriceModelsRouter,
+  vipMemberships: vipMembershipsRouter,
   resellers: resellersRouter,
   schedule: scheduleRouter,
   spreadsheet: spreadsheetRouter,
@@ -1331,6 +1333,9 @@ export const appRouter = router({
               const vipProbe = await checkAccessCodeCanSubmit(input.accessCode, input.phone);
               isVipModelAccess = vipProbe.canSubmit && vipProbe.type === 'vip';
             } catch { /* sessão principal já foi validada acima */ }
+          }
+          if (!isVipModelAccess && input.phone) {
+            isVipModelAccess = await isVipMemberByPhone(input.phone);
           }
           if (input.priceModelId) {
             const modelAccess = await checkOptionPriceModelCheckoutAccess(input.priceModelId, isVipModelAccess);
@@ -2365,6 +2370,12 @@ export const appRouter = router({
       // enquanto o ADM apenas carrega a lista principal.
       const db = await (await import('./db')).getDb();
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível ao carregar clientes. A lista existente foi preservada.' });
+      let vipMembershipMap = new Map<number, any>();
+      try {
+        vipMembershipMap = await getVipMembershipSnapshotMap();
+      } catch (error: any) {
+        console.warn('[customers.list] VIP indisponível sem afetar lista principal:', error?.message);
+      }
       // Buscar clientes com flag indicando se têm pedido finalizado
       const rows = await db.execute(`
         SELECT c.*,
@@ -2443,6 +2454,11 @@ export const appRouter = router({
         return {
           ...r,
           hasOrder: Number(r.hasOrder) === 1,
+          vipActive: Boolean(vipMembership?.active),
+          vipStatus: vipMembership?.status || 'none',
+          vipStartedAt: vipMembership?.startsAtMs || null,
+          vipExpiresAt: vipMembership?.expiresAtMs || null,
+          vipDaysLeft: vipMembership?.daysLeft || 0,
           fixedPwdActive: Number(r.fixedPwdActive) === 1,
           isBlocked: Number(r.isBlocked) === 1,
           // Retornar timestamps como ms (absolutos, independente de fuso do servidor/TiDB)

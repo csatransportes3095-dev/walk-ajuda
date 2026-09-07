@@ -8,6 +8,7 @@ import { MessageCircle, Zap, Phone, Clock, Users, Upload, FileUp, Ticket, Copy, 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useVipMembership } from "@/hooks/useVipMembership";
 import PaymentTutorial from "@/components/PaymentTutorial";
 import { ColombiaBot } from "@/components/ColombiaBot";
 import { StorefrontProductCard, type StorefrontCatalogItem, type StorefrontWarrantyTier } from "@/components/StorefrontProductCard";
@@ -974,7 +975,7 @@ export default function Home() {
   const dynamicDocs = selectedOption?.documents || [];
   const hasDynamicDocs = dynamicDocs.length > 0;
 
-  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';
+  const { isVipCustomer } = useVipMembership();
   const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
 
   // Obter valor atual (usa benefício VIP do Modelo/Categoria quando configurado)
