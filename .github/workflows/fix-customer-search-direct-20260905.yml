@@ -122,3 +122,5 @@ jobs:
           git fetch origin recovery/organizar-salvos-2026-08-24
           git rebase origin/recovery/organizar-salvos-2026-08-24
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
+      - name: Trigger marker
+        run: echo category-sync-2
