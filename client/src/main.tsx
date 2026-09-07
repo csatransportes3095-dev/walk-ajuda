@@ -30,6 +30,7 @@ import UnifiedCustomerModuleBootstrap from "./components/UnifiedCustomerModuleBo
 import GlobalDevToolsProtection from "./components/GlobalDevToolsProtection";
 import AdminDevToolsTargetSelector from "./components/AdminDevToolsTargetSelector";
 import RafflePhotoIntegrityEnhancer from "./components/RafflePhotoIntegrityEnhancer";
+import H2AdsScheduleFlatView from "./components/H2AdsScheduleFlatView";
 import "./index.css";
 import "./welcome-neon-refresh.css";
 import "./admin-loans-mobile-fix.css";
@@ -52,7 +53,7 @@ createRoot(document.getElementById("root")!).render(
       <AdminOrderLoginQuickEnhancer /><AdminOrderH2EmailQuickFix /><AdminOrderLoginCopyEnhancer /><AdminOrderAuthenticatorSyncEnhancer /><AdminOrderTrackingPinRetirement />
       <AdminCustomerPhoneEditorEnhancer /><RafflePhotoIntegrityEnhancer /><AdminProductsQuestionUXEnhancer /><AdminQuestionEditOptionsEnhancer /><AdminQuestionTreeOrderEnhancer />
       <QuestionBlockingRulesManager /><QuestionBlockingManifestGuard /><ProductManifestGuard /><OrderWhatsappQuestionTreeEnhancer /><PublicQuestionFlowEnhancer /><RegistrationReferralFirstGate />
-      <H2WelcomePremium /><HomeTopRuntimeEnhancer />
+      <H2WelcomePremium /><HomeTopRuntimeEnhancer /><H2AdsScheduleFlatView />
       <UnifiedCustomerAccessGate><UnifiedCustomerModuleBootstrap><App /></UnifiedCustomerModuleBootstrap></UnifiedCustomerAccessGate>
     </QueryClientProvider>
   </trpc.Provider>
