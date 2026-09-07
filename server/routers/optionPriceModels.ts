@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
+import { applyVipBenefitToPrice } from "../../shared/vipPricing";
 
 export type OptionPriceModel = {
   id: number;
@@ -185,20 +186,26 @@ const modelInput = z.object({
   vipHighlightText: z.string().trim().max(96).nullable().optional(),
 });
 
-export async function checkOptionPriceModelCheckoutAccess(priceModelId: number, isVipCustomer: boolean): Promise<{ allowed: boolean; reason?: string }> {
+export async function checkOptionPriceModelCheckoutAccess(priceModelId: number, isVipCustomer: boolean): Promise<{ allowed: boolean; reason?: string; effectivePrice?: string }> {
   await ensureInfrastructure();
   const db = await getDb();
   if (!db) return { allowed: false, reason: "Banco de dados indisponível." };
   const result = await db.execute(sql`
-    SELECT isActive, COALESCE(vipAccessMode, 'all') AS vipAccessMode
+    SELECT id, optionId, label, price, originalPrice, promoEndsAt, sortOrder, isActive,
+           COALESCE(vipAccessMode, 'all') AS vipAccessMode,
+           COALESCE(vipDiscountType, 'percentage') AS vipDiscountType,
+           COALESCE(vipDiscountValue, 0) AS vipDiscountValue,
+           COALESCE(vipHighlight, 0) AS vipHighlight,
+           vipHighlightText
     FROM optionPriceModels WHERE id=${priceModelId} LIMIT 1
   `);
-  const row = asRows<{ isActive: number; vipAccessMode: string }>(result)[0];
+  const row = asRows<OptionPriceModel>(result)[0];
   if (!row || Number(row.isActive) !== 1) return { allowed: false, reason: "Este modelo/categoria não está disponível." };
   if (row.vipAccessMode === "vip_only" && !isVipCustomer) {
     return { allowed: false, reason: "Este modelo/categoria é exclusivo para clientes VIP." };
   }
-  return { allowed: true };
+  const effectivePrice = applyVipBenefitToPrice(String(row.price || ''), row, isVipCustomer);
+  return { allowed: true, effectivePrice };
 }
 
 export const optionPriceModelsRouter = router({

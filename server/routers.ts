@@ -1335,6 +1335,8 @@ export const appRouter = router({
           if (input.priceModelId) {
             const modelAccess = await checkOptionPriceModelCheckoutAccess(input.priceModelId, isVipModelAccess);
             if (!modelAccess.allowed) return { success: false, message: modelAccess.reason || 'Modelo/categoria indisponível.' };
+            // Preco do Modelo/Categoria e recalculado no servidor conforme a sessao VIP validada.
+            if (modelAccess.effectivePrice) input.price = modelAccess.effectivePrice;
           }
 
           const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';

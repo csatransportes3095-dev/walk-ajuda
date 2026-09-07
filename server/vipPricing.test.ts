@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { applyVipBenefitToPrice, isVipOnlyLocked, vipBenefitText } from "../shared/vipPricing";
 
 describe("VIP por modelo/categoria", () => {
+  it("cliente comum nao recebe beneficio", () => {
+    expect(applyVipBenefitToPrice("R$ 200,00", { vipAccessMode: "benefit", vipDiscountType: "percentage", vipDiscountValue: 50 }, false)).toBe("R$ 200,00");
+  });
   it("mantem preco normal para cliente comum", () => {
     expect(applyVipBenefitToPrice("150,00", { vipAccessMode: "benefit", vipDiscountType: "percentage", vipDiscountValue: 20 }, false)).toBe("150,00");
   });
