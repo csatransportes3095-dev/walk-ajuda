@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { trpc } from "@/lib/trpc";
 import { OnlineSupportWidget } from "@/components/OnlineSupportWidget";
@@ -139,8 +139,6 @@ function getVisitorId() {
 }
 
 export default function H2WelcomePremium() {
-  const [active, setActive] = useState(false);
-  const [legacyRoot, setLegacyRoot] = useState<HTMLElement | null>(null);
   const [onlineSupportOpen, setOnlineSupportOpen] = useState(false);
   const [visitorId] = useState(() => getVisitorId());
   const isHome = typeof window !== "undefined" && window.location.pathname === "/";
@@ -155,37 +153,6 @@ export default function H2WelcomePremium() {
     { visitorId },
     { enabled: isHome && Boolean(visitorId), refetchInterval: 5_000 },
   );
-
-  useEffect(() => {
-    if (!isHome) return;
-
-    const locate = () => {
-      const candidates = Array.from(document.querySelectorAll<HTMLElement>("div.min-h-screen"));
-      const target = candidates.find((node) =>
-        Boolean(node.querySelector("div.w-full.space-y-3")) && node.classList.contains("bg-[#0a0a1a]"),
-      ) || candidates.find((node) => node.textContent?.includes("O que você deseja fazer?"));
-
-      if (target && target !== legacyRoot) {
-        if (legacyRoot) legacyRoot.style.display = "";
-        target.style.display = "none";
-        target.setAttribute("aria-hidden", "true");
-        setLegacyRoot(target);
-        setActive(true);
-      }
-    };
-
-    locate();
-    const observer = new MutationObserver(locate);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [isHome, legacyRoot]);
-
-  useEffect(() => () => {
-    if (legacyRoot) {
-      legacyRoot.style.display = "";
-      legacyRoot.removeAttribute("aria-hidden");
-    }
-  }, [legacyRoot]);
 
   const buttons = useMemo(() => {
     const dynamic = (rawButtons as HomeButton[]).filter((button) => Number(button.vipOnly || 0) !== 1);
@@ -232,7 +199,7 @@ export default function H2WelcomePremium() {
     return [...fixedEssentials, ...managedEssentials, ...remaining];
   }, [rawButtons, settings]);
 
-  if (!isHome || !active) return null;
+  if (!isHome) return null;
 
   const brandTitle = settings?.login_title?.trim() || "H2 COLOMBIANO";
   const brandLogo = settings?.login_image_url?.trim() || "/h2-brand-180.png";
@@ -263,6 +230,12 @@ export default function H2WelcomePremium() {
 
   return (
     <div className="h2p-shell" style={{ "--home-font": `'${homeFont}', Inter, system-ui, sans-serif` } as CSSProperties}>
+      <style>{`
+        /* A home premium é a única interface pública da rota /. Qualquer árvore
+           legada montada depois dela fica fora do layout desde o primeiro paint. */
+        #root > .h2p-shell ~ * { display: none !important; }
+        html, body { background: #010611; }
+      `}</style>
       <div className="h2p-ambient" aria-hidden="true" />
       <main className="h2p-page">
         <nav className="h2p-nav" aria-label="Navegação H2 Colombiano">
