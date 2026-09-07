@@ -1,0 +1,116 @@
+name: Fix option price model cache 2026-09-07
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-option-price-model-cache-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Backup production
+        run: git push origin HEAD:refs/heads/backup/pre-fix-option-price-model-cache-20260907 || true
+
+      - name: Apply surgical fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f'Patch target missing: {label}')
+              return text.replace(old, new, 1)
+
+          p = Path('client/src/pages/AdminProducts.tsx')
+          s = p.read_text(encoding='utf-8')
+          s = replace_once(
+              s,
+              'import { useState, useRef, useCallback } from "react";',
+              'import { useState, useRef, useCallback, useEffect } from "react";',
+              'AdminProducts useEffect import',
+          )
+          sync_anchor = "  const [vipHighlightText, setVipHighlightText] = useState(model.vipHighlightText || 'VIP');\n  const updateMut = trpc.optionPriceModels.update.useMutation({ onSuccess: onChanged });"
+          sync_block = """  const [vipHighlightText, setVipHighlightText] = useState(model.vipHighlightText || 'VIP');
+
+  useEffect(() => {
+    setLabel(model.label);
+    setPrincipalPrice(model.originalPrice?.trim() ? model.originalPrice : model.price);
+    setPromotionalPrice(model.originalPrice?.trim() ? model.price : '');
+    setPromoEndsAt(model.promoEndsAt ? new Date(model.promoEndsAt).toISOString().slice(0, 16) : '');
+    setActive(model.isActive === 1);
+    setVipAccessMode(model.vipAccessMode || 'all');
+    setVipDiscountType(model.vipDiscountType || 'percentage');
+    setVipDiscountValue(String(model.vipDiscountValue || ''));
+    setVipHighlight(model.vipHighlight === 1);
+    setVipHighlightText(model.vipHighlightText || 'VIP');
+  }, [model.id, model.label, model.price, model.originalPrice, model.promoEndsAt, model.isActive, model.vipAccessMode, model.vipDiscountType, model.vipDiscountValue, model.vipHighlight, model.vipHighlightText]);
+
+  const updateMut = trpc.optionPriceModels.update.useMutation({ onSuccess: onChanged });"""
+          s = replace_once(s, sync_anchor, sync_block, 'AdminProducts row sync')
+          s = replace_once(
+              s,
+              "  const refresh = () => { utils.optionPriceModels.list.invalidate({ optionId }); utils.products.list.invalidate(); };",
+              """  const refresh = () => {
+    utils.optionPriceModels.list.invalidate({ optionId });
+    utils.optionPriceModels.listActive.invalidate();
+    utils.products.list.invalidate();
+    utils.products.listActive.invalidate();
+  };""",
+              'AdminProducts public cache invalidation',
+          )
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('client/src/pages/Home.tsx')
+          s = p.read_text(encoding='utf-8')
+          old = """  const { data: activeOptionPriceModels = [] } = trpc.optionPriceModels.listActive.useQuery(
+    { optionIds },
+    { enabled: optionIds.length > 0, staleTime: 30_000, refetchOnWindowFocus: true }
+  );"""
+          new = """  const { data: activeOptionPriceModels = [] } = trpc.optionPriceModels.listActive.useQuery(
+    { optionIds },
+    {
+      enabled: optionIds.length > 0,
+      staleTime: 0,
+      refetchInterval: 10_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    }
+  );"""
+          s = replace_once(s, old, new, 'Home active model freshness')
+          p.write_text(s, encoding='utf-8')
+
+          audit = Path('audit/check_option_price_model_cache_fix.mjs')
+          audit.write_text('''import fs from "node:fs";\nconst admin = fs.readFileSync("client/src/pages/AdminProducts.tsx", "utf8");\nconst home = fs.readFileSync("client/src/pages/Home.tsx", "utf8");\nconst checks = [\n  ["admin invalidates public model cache", admin.includes("utils.optionPriceModels.listActive.invalidate()")],\n  ["admin invalidates public products cache", admin.includes("utils.products.listActive.invalidate()")],\n  ["admin form syncs server model", admin.includes("setLabel(model.label)") && admin.includes("setVipDiscountValue(String(model.vipDiscountValue || ''))")],\n  ["storefront model cache is immediately stale", home.includes("staleTime: 0")],\n  ["storefront periodically refreshes categories", home.includes("refetchInterval: 10_000")],\n  ["storefront refreshes on reconnect", home.includes("refetchOnReconnect: true")],\n];\nlet ok = 0;\nfor (const [name, pass] of checks) { if (!pass) { console.error(`FAIL ${name}`); process.exitCode = 1; } else { console.log(`OK ${name}`); ok++; } }\nconsole.log(`${ok}/${checks.length} checks OK`);\n''', encoding='utf-8')
+          PY
+
+      - name: Audit fix
+        run: node audit/check_option_price_model_cache_fix.mjs
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Build production
+        run: pnpm build
+
+      - name: Commit and preserve concurrent work
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminProducts.tsx client/src/pages/Home.tsx audit/check_option_price_model_cache_fix.mjs
+          git commit -m "fix(produtos): sincronizar categoria editada com cliente"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
