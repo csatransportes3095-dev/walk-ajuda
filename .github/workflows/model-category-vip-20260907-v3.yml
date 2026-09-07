@@ -1,0 +1,71 @@
+name: Model category VIP 2026-09-07 v3
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/model-category-vip-20260907-v3.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-production:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Preserve production checkpoint
+        run: git push origin HEAD:refs/heads/backup/pre-model-category-vip-20260907 || true
+
+      - name: Reuse corrected implementation patch
+        shell: bash
+        run: |
+          git show origin/main:.github/workflows/model-category-vip-20260907.yml > /tmp/vip-source.yml
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('/tmp/vip-source.yml').read_text(encoding='utf-8').splitlines()
+          start = next(i for i,l in enumerate(src) if l.strip() == '- name: Implement VIP per model and category')
+          run_line = next(i for i in range(start, len(src)) if src[i].strip() == 'run: |')
+          end = next(i for i in range(run_line + 1, len(src)) if src[i].startswith('      - name: Audit model/category VIP scope'))
+          body = [(line[10:] if line.startswith('          ') else line) for line in src[run_line + 1:end]]
+          script = '\n'.join(body) + '\n'
+          old = '''text = replace_once(text,\n''' + "'''            totalValue: option?.price || '', ''',\n" + "'''            totalValue: getModelPrice(flowState.current.priceModel) || option?.price || '', ''', 'bot complete total price')"
+          new = '''text = text.replace("            totalValue: option?.price || '',", "            totalValue: getModelPrice(flowState.current.priceModel) || option?.price || '',", 1)\nif 'totalValue: getModelPrice(flowState.current.priceModel)' not in text:\n    raise SystemExit('Falha ao ajustar total VIP do bot')'''
+          if old not in script:
+              raise SystemExit('Bloco antigo de total do bot nao encontrado no patch fonte')
+          Path('/tmp/vip-patch.py').write_text(script.replace(old, new, 1), encoding='utf-8')
+          PY
+          python /tmp/vip-patch.py
+          mv shared/vipPricing.test.ts server/vipPricing.test.ts
+          sed -i 's|"./vipPricing"|"../shared/vipPricing"|' server/vipPricing.test.ts
+
+      - name: Audit model/category VIP scope
+        run: node audit/check_model_category_vip.mjs
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Test VIP pricing rules
+        run: pnpm vitest run server/vipPricing.test.ts
+
+      - name: Build production client/server
+        run: pnpm build
+
+      - name: Commit production implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shared/vipPricing.ts server/vipPricing.test.ts server/routers/optionPriceModels.ts server/routers.ts client/src/pages/AdminProducts.tsx client/src/components/StorefrontProductCard.tsx client/src/pages/Home.tsx client/src/components/ColombiaBot.tsx audit/check_model_category_vip.mjs
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "feat(pedidos): VIP por modelo e categoria"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
