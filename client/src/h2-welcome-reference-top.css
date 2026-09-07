@@ -1,50 +1,77 @@
-/* Topo H2 Colombiano - manter somente o que agrega ao layout.
-   O logo real vem da configuracao existente do sistema.
-   O carro ilustrado e os efeitos excessivos ficam ocultos. */
+/* Hero final H2 Colombiano.
+   Mantem o logo real/configuravel e transforma o carro existente em elemento de fundo.
+   O restante da home continua usando as configuracoes e funcoes atuais. */
 
 .h2p-hero{
   position:relative !important;
   display:grid !important;
-  grid-template-columns:minmax(150px,220px) 1fr !important;
+  grid-template-columns:minmax(118px,190px) minmax(0,1fr) !important;
   align-items:center !important;
-  gap:28px !important;
+  gap:24px !important;
   min-height:270px !important;
-  padding:34px 42px !important;
+  padding:30px 38px !important;
   overflow:hidden !important;
+  isolation:isolate !important;
   background:
-    radial-gradient(circle at 18% 44%,rgba(255,199,25,.13),transparent 30%),
-    radial-gradient(circle at 76% 38%,rgba(0,111,255,.18),transparent 38%),
-    linear-gradient(135deg,#030712 0%,#07152c 52%,#041020 100%) !important;
-  border-bottom:1px solid rgba(50,153,255,.30) !important;
+    radial-gradient(circle at 13% 38%,rgba(255,199,25,.20),transparent 28%),
+    radial-gradient(circle at 77% 38%,rgba(0,111,255,.28),transparent 39%),
+    radial-gradient(circle at 54% 104%,rgba(33,87,194,.22),transparent 35%),
+    linear-gradient(135deg,#020611 0%,#07152e 48%,#031126 100%) !important;
+  border-bottom:1px solid rgba(50,153,255,.42) !important;
+  box-shadow:inset 0 -18px 36px rgba(0,0,0,.18) !important;
 }
 
 .h2p-hero:before{
   content:"" !important;
   position:absolute !important;
   inset:0 !important;
+  z-index:0 !important;
   pointer-events:none !important;
   background:
-    linear-gradient(120deg,transparent 0 16%,rgba(255,194,32,.12) 17%,transparent 18% 48%,rgba(22,118,255,.12) 49%,transparent 50%) !important;
-  opacity:.9 !important;
+    linear-gradient(118deg,
+      transparent 0 8%,
+      rgba(255,197,27,.19) 9%,
+      transparent 12% 34%,
+      rgba(20,105,255,.21) 35%,
+      transparent 39% 56%,
+      rgba(255,40,73,.11) 57%,
+      transparent 61% 100%),
+    repeating-linear-gradient(90deg,transparent 0 92px,rgba(255,255,255,.018) 93px 94px) !important;
+  mix-blend-mode:screen !important;
+  opacity:.95 !important;
 }
 
 .h2p-hero:after{
   content:"" !important;
   position:absolute !important;
-  inset:auto 0 0 0 !important;
-  height:72px !important;
+  left:-4% !important;
+  right:-4% !important;
+  bottom:0 !important;
+  height:92px !important;
+  z-index:1 !important;
   pointer-events:none !important;
-  background:linear-gradient(180deg,transparent,rgba(0,0,0,.30)) !important;
+  background:
+    linear-gradient(180deg,transparent,rgba(1,8,19,.92)),
+    repeating-linear-gradient(90deg,transparent 0 26px,rgba(23,126,255,.10) 27px 29px,transparent 30px 54px) !important;
+  clip-path:polygon(0 72%,5% 58%,9% 69%,14% 43%,18% 66%,23% 49%,28% 73%,33% 39%,38% 68%,43% 52%,49% 74%,55% 40%,60% 64%,66% 46%,71% 71%,76% 34%,82% 66%,87% 48%,92% 73%,96% 53%,100% 69%,100% 100%,0 100%) !important;
+  opacity:.72 !important;
 }
 
-.h2p-city,
+.h2p-city{
+  display:block !important;
+  opacity:.34 !important;
+  z-index:0 !important;
+}
+
 .h2p-beams{
-  display:none !important;
+  display:block !important;
+  z-index:0 !important;
+  opacity:.7 !important;
 }
 
 .h2p-hero-logo-wrap{
   position:relative !important;
-  z-index:2 !important;
+  z-index:4 !important;
   display:flex !important;
   align-items:center !important;
   justify-content:center !important;
@@ -55,30 +82,33 @@
 .h2p-hero-logo-wrap:before{
   content:"" !important;
   position:absolute !important;
-  width:180px !important;
-  height:180px !important;
+  width:172px !important;
+  height:172px !important;
   border-radius:50% !important;
-  background:radial-gradient(circle,rgba(255,199,24,.22),rgba(19,106,255,.12) 46%,transparent 72%) !important;
-  filter:blur(14px) !important;
+  background:
+    conic-gradient(from 210deg,rgba(255,205,39,.52),rgba(255,86,0,.18),rgba(14,91,255,.36),rgba(255,205,39,.52)) !important;
+  filter:blur(17px) !important;
+  opacity:.62 !important;
 }
 
 .h2p-hero-logo,
 .h2p-logo-fallback{
   position:relative !important;
-  z-index:2 !important;
-  width:176px !important;
-  height:176px !important;
+  z-index:4 !important;
+  width:164px !important;
+  height:164px !important;
   max-width:100% !important;
   object-fit:contain !important;
-  padding:0 !important;
-  border:0 !important;
-  border-radius:0 !important;
-  transform:none !important;
-  background:transparent !important;
-  box-shadow:none !important;
-  filter:
-    drop-shadow(0 0 12px rgba(255,196,31,.38))
-    drop-shadow(0 0 20px rgba(14,105,255,.28)) !important;
+  padding:2px !important;
+  border:1px solid rgba(255,211,67,.62) !important;
+  border-radius:26px !important;
+  transform:rotate(-1.2deg) !important;
+  background:rgba(4,15,35,.36) !important;
+  box-shadow:
+    0 0 0 3px rgba(255,204,44,.04),
+    0 0 24px rgba(255,190,16,.30),
+    0 0 42px rgba(28,139,255,.25) !important;
+  filter:drop-shadow(0 8px 14px rgba(0,0,0,.30)) !important;
 }
 
 .h2p-logo-fallback{
@@ -86,138 +116,191 @@
   align-items:center !important;
   justify-content:center !important;
   color:#fff !important;
-  font-size:72px !important;
+  font-size:66px !important;
+  font-style:italic !important;
   font-weight:1000 !important;
 }
 
 .h2p-hero-copy{
   position:relative !important;
-  z-index:2 !important;
+  z-index:5 !important;
   align-self:center !important;
   min-width:0 !important;
-  transform:none !important;
+  padding-right:24% !important;
   text-align:left !important;
 }
 
 .h2p-hero-copy small{
-  position:static !important;
   display:block !important;
-  width:auto !important;
-  margin:0 0 10px !important;
-  color:#75cfff !important;
-  font-size:12px !important;
+  width:max-content !important;
+  max-width:100% !important;
+  margin:0 0 9px !important;
+  color:#83d8ff !important;
+  font-size:10px !important;
   line-height:1.25 !important;
-  font-weight:800 !important;
-  letter-spacing:.12em !important;
+  font-weight:900 !important;
+  letter-spacing:.15em !important;
   text-align:left !important;
-  text-shadow:none !important;
+  text-transform:uppercase !important;
+  text-shadow:0 0 12px rgba(56,176,255,.28) !important;
 }
 
 .h2p-hero-copy h1{
-  display:block !important;
-  max-width:none !important;
+  position:relative !important;
+  display:inline-block !important;
+  max-width:100% !important;
   margin:0 !important;
-  color:#fff !important;
-  background:none !important;
-  -webkit-text-fill-color:initial !important;
-  font-size:clamp(42px,6vw,78px) !important;
-  line-height:.94 !important;
+  font-size:clamp(44px,6vw,78px) !important;
+  line-height:.90 !important;
   font-weight:1000 !important;
   font-style:italic !important;
-  letter-spacing:-.055em !important;
+  letter-spacing:-.065em !important;
   text-transform:uppercase !important;
-  text-shadow:0 5px 18px rgba(0,0,0,.34) !important;
-  filter:none !important;
+  background:linear-gradient(180deg,#ffffff 0%,#f7fbff 24%,#cfd9e8 48%,#8392a7 68%,#f8fbff 86%,#ffffff 100%) !important;
+  -webkit-background-clip:text !important;
+  background-clip:text !important;
+  -webkit-text-fill-color:transparent !important;
+  color:transparent !important;
+  filter:
+    drop-shadow(0 4px 0 rgba(42,55,73,.92))
+    drop-shadow(0 7px 0 rgba(13,24,41,.82))
+    drop-shadow(0 0 18px rgba(255,255,255,.10)) !important;
+  text-shadow:none !important;
+}
+
+.h2p-hero-copy h1:before{
+  content:"" !important;
+  position:absolute !important;
+  left:0 !important;
+  right:0 !important;
+  top:6% !important;
+  height:22% !important;
+  pointer-events:none !important;
+  background:linear-gradient(180deg,rgba(255,255,255,.34),transparent) !important;
+  opacity:.48 !important;
+  mix-blend-mode:screen !important;
 }
 
 .h2p-hero-copy h1:after{
   content:"" !important;
   display:block !important;
-  width:min(360px,78%) !important;
+  width:min(350px,86%) !important;
   height:3px !important;
-  margin:14px 0 0 !important;
+  margin:15px 0 0 !important;
   border-radius:999px !important;
-  background:linear-gradient(90deg,#ffd529,rgba(255,213,41,.28),transparent) !important;
-  box-shadow:0 0 12px rgba(255,202,24,.24) !important;
+  background:linear-gradient(90deg,#ffd52d 0%,rgba(255,213,45,.42) 62%,transparent 100%) !important;
+  box-shadow:0 0 12px rgba(255,202,24,.28) !important;
 }
 
 .h2p-hero-copy p{
-  margin:12px 0 0 !important;
+  margin:11px 0 0 !important;
   color:#ffd72f !important;
   font-size:14px !important;
   line-height:1.2 !important;
-  font-weight:900 !important;
-  letter-spacing:.22em !important;
+  font-weight:950 !important;
+  letter-spacing:.24em !important;
   text-align:left !important;
-  text-shadow:none !important;
+  text-shadow:0 0 12px rgba(255,202,31,.18) !important;
 }
 
+/* O SVG do carro continua sendo o mesmo componente, mas agora funciona como fundo lateral. */
 .h2p-car{
-  display:none !important;
+  display:block !important;
+  position:absolute !important;
+  z-index:2 !important;
+  right:-5% !important;
+  bottom:10px !important;
+  width:48% !important;
+  height:78% !important;
+  opacity:.36 !important;
+  pointer-events:none !important;
+  transform:translateY(8px) scale(1.08) !important;
+  transform-origin:right bottom !important;
+  filter:drop-shadow(0 0 24px rgba(18,113,255,.42)) !important;
 }
 
-@media (max-width:640px){
+.h2p-car svg{
+  width:100% !important;
+  height:100% !important;
+}
+
+@media (max-width:760px){
   .h2p-hero{
-    grid-template-columns:105px minmax(0,1fr) !important;
+    grid-template-columns:104px minmax(0,1fr) !important;
     gap:15px !important;
-    min-height:188px !important;
-    padding:22px 18px !important;
+    min-height:205px !important;
+    padding:22px 17px !important;
   }
 
   .h2p-hero-logo-wrap:before{
-    width:104px !important;
-    height:104px !important;
-    filter:blur(10px) !important;
+    width:108px !important;
+    height:108px !important;
+    filter:blur(11px) !important;
   }
 
   .h2p-hero-logo,
   .h2p-logo-fallback{
-    width:100px !important;
-    height:100px !important;
+    width:98px !important;
+    height:98px !important;
+    border-radius:16px !important;
   }
 
   .h2p-logo-fallback{
     font-size:42px !important;
   }
 
+  .h2p-hero-copy{
+    padding-right:10% !important;
+  }
+
   .h2p-hero-copy small{
-    margin-bottom:7px !important;
-    font-size:8px !important;
-    letter-spacing:.06em !important;
+    margin-bottom:6px !important;
+    font-size:7.5px !important;
+    letter-spacing:.07em !important;
   }
 
   .h2p-hero-copy h1{
-    font-size:clamp(30px,10vw,46px) !important;
-    line-height:.92 !important;
-    letter-spacing:-.06em !important;
+    font-size:clamp(30px,9.5vw,46px) !important;
+    line-height:.90 !important;
+    letter-spacing:-.07em !important;
   }
 
   .h2p-hero-copy h1:after{
-    width:82% !important;
+    width:86% !important;
     height:2px !important;
-    margin-top:9px !important;
+    margin-top:10px !important;
   }
 
   .h2p-hero-copy p{
     margin-top:8px !important;
-    font-size:9px !important;
+    font-size:8.5px !important;
     letter-spacing:.13em !important;
     white-space:nowrap !important;
+  }
+
+  .h2p-car{
+    right:-17% !important;
+    bottom:4px !important;
+    width:62% !important;
+    height:62% !important;
+    opacity:.23 !important;
+    transform:translateY(10px) scale(1.12) !important;
   }
 }
 
 @media (max-width:390px){
   .h2p-hero{
-    grid-template-columns:92px minmax(0,1fr) !important;
-    gap:12px !important;
-    min-height:170px !important;
-    padding:19px 14px !important;
+    grid-template-columns:90px minmax(0,1fr) !important;
+    gap:11px !important;
+    min-height:185px !important;
+    padding:19px 13px !important;
   }
 
   .h2p-hero-logo,
   .h2p-logo-fallback{
-    width:88px !important;
-    height:88px !important;
+    width:86px !important;
+    height:86px !important;
+    border-radius:14px !important;
   }
 
   .h2p-hero-logo-wrap:before{
@@ -225,12 +308,27 @@
     height:92px !important;
   }
 
+  .h2p-hero-copy{
+    padding-right:3% !important;
+  }
+
   .h2p-hero-copy h1{
-    font-size:30px !important;
+    font-size:29px !important;
+  }
+
+  .h2p-hero-copy small{
+    font-size:6.7px !important;
   }
 
   .h2p-hero-copy p{
-    font-size:8px !important;
+    font-size:7.6px !important;
     letter-spacing:.10em !important;
+  }
+
+  .h2p-car{
+    right:-24% !important;
+    width:67% !important;
+    height:58% !important;
+    opacity:.18 !important;
   }
 }
