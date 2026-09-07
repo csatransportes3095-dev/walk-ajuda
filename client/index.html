@@ -29,6 +29,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&family=Poppins:wght@400;700;900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/storefront-exact-layout.css" />
+    <link rel="stylesheet" href="/h2-hero-realistic.css?v=202609062121" />
   </head>
   <body>
     <div id="root"></div>
@@ -50,7 +51,7 @@
           try {
             if ('caches' in window) {
               const names = await caches.keys();
-              await Promise.all(names.map((name) => caches.delete(name)));
+              await Promise.all(names.map((name) => caches.delete(name));
             }
           } catch (_) {}
         };
