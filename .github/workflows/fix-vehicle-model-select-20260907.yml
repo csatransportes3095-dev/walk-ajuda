@@ -1,0 +1,154 @@
+name: Fix vehicle model selector 2026-09-07
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/fix-vehicle-model-select-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-production:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Patch vehicle model question flow
+        shell: python
+        run: |
+          from pathlib import Path
+
+          home_path = Path('client/src/pages/Home.tsx')
+          home = home_path.read_text(encoding='utf-8')
+
+          old_order = '''            const vehicleModelSubs = getVehicleQuestionKind(root.question) === 'brand'
+              ? rawSubs.filter(q => getVehicleQuestionKind(q.question) === 'model')
+              : [];
+            const subs = vehicleModelSubs.length > 0
+              ? [vehicleModelSubs[0], ...rawSubs.filter(q => getVehicleQuestionKind(q.question) !== 'model')]
+              : rawSubs;
+            for (const sub of subs) {
+              const parentAnswer = answers[root.id]?.trim() || "";
+              const isGenericVehicleModel = getVehicleQuestionKind(root.question) === 'brand' && getVehicleQuestionKind(sub.question) === 'model';
+              const isVisible = isGenericVehicleModel ? !!parentAnswer : (!sub.triggerOption || parentAnswer === sub.triggerOption);'''
+
+          new_order = '''            const parentAnswerForRoot = answers[root.id]?.trim() || "";
+            const vehicleModelSubs = getVehicleQuestionKind(root.question) === 'brand'
+              ? rawSubs.filter(q => getVehicleQuestionKind(q.question) === 'model')
+              : [];
+            const selectedVehicleModel = vehicleModelSubs.length > 0
+              ? (vehicleModelSubs.find(q => !q.triggerOption || q.triggerOption === parentAnswerForRoot) || vehicleModelSubs[0])
+              : null;
+            const subs = selectedVehicleModel
+              ? [selectedVehicleModel, ...rawSubs.filter(q => getVehicleQuestionKind(q.question) !== 'model')]
+              : rawSubs;
+            for (const sub of subs) {
+              const parentAnswer = answers[root.id]?.trim() || "";
+              const isVehicleModel = getVehicleQuestionKind(root.question) === 'brand' && getVehicleQuestionKind(sub.question) === 'model';
+              const isVisible = isVehicleModel ? (!!parentAnswer && sub.id === selectedVehicleModel?.id) : (!sub.triggerOption || parentAnswer === sub.triggerOption);'''
+
+          if old_order not in home:
+              raise SystemExit('Trecho buildOrderedQs nao encontrado; abortando sem alterar arquivo')
+          home = home.replace(old_order, new_order, 1)
+
+          old_final = '''        if (getVehicleQuestionKind(q.question) === 'model' && parentQuestion && getVehicleQuestionKind(parentQuestion.question) === 'brand') {
+          return !!parentAnswer;
+        }'''
+          new_final = '''        if (getVehicleQuestionKind(q.question) === 'model' && parentQuestion && getVehicleQuestionKind(parentQuestion.question) === 'brand') {
+          const siblingModels = allQs.filter(item => item.parentQuestionId === parentQuestion.id && getVehicleQuestionKind(item.question) === 'model');
+          const selectedModelQuestion = siblingModels.find(item => !item.triggerOption || item.triggerOption === parentAnswer) || siblingModels[0];
+          return !!parentAnswer && selectedModelQuestion?.id === q.id;
+        }'''
+          if old_final not in home:
+              raise SystemExit('Trecho isQVisibleFinal nao encontrado; abortando sem alterar arquivo')
+          home = home.replace(old_final, new_final, 1)
+
+          old_model = '''              const listId = `vehicle-models-${q.id}`;
+              return (
+                <div className="space-y-2">
+                  <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
+                    Marca selecionada: <strong>{brand || 'selecione a marca primeiro'}</strong>
+                  </div>
+                  <input
+                    list={listId}
+                    value={questionAnswers[q.id] || ''}
+                    onChange={(e) => chooseVehicleValue(e.target.value.toUpperCase(), false)}
+                    placeholder={models.length ? 'Selecione ou digite o modelo' : 'Digite o modelo'}
+                    className="w-full rounded-lg border-2 border-white/20 bg-white px-3 py-3 text-center text-base font-semibold text-black"
+                  />
+                  <datalist id={listId}>{models.map(model => <option key={model} value={model} />)}</datalist>
+                </div>
+              );'''
+
+          new_model = '''              return (
+                <div className="space-y-2">
+                  <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
+                    Marca selecionada: <strong>{brand || 'selecione a marca primeiro'}</strong>
+                  </div>
+                  <select
+                    value={questionAnswers[q.id] || ''}
+                    onChange={(e) => chooseVehicleValue(e.target.value)}
+                    disabled={!brand || models.length === 0}
+                    className="w-full rounded-lg border-2 border-white/20 bg-white px-3 py-3 text-center text-base font-semibold text-black disabled:opacity-60"
+                  >
+                    <option value="">{models.length ? 'Selecione o modelo do veículo' : 'Selecione a marca primeiro'}</option>
+                    {models.map(model => <option key={model} value={model}>{model}</option>)}
+                  </select>
+                </div>
+              );'''
+
+          if old_model not in home:
+              raise SystemExit('Trecho do input/datalist de modelo nao encontrado; abortando sem alterar arquivo')
+          home = home.replace(old_model, new_model, 1)
+          home_path.write_text(home, encoding='utf-8')
+
+          rebuild_path = Path('scripts/rebuild-question-tree.mjs')
+          rebuild = rebuild_path.read_text(encoding='utf-8')
+          old_rebuild = '''          await updateQuestion(db, models[index].id, {
+            fieldType: "text",
+            options: null,
+            parentQuestionId: brand.id,
+            triggerOption: brands[index] ?? brands[brands.length - 1],
+          });'''
+          new_rebuild = '''          await updateQuestion(db, models[index].id, {
+            // O cliente usa seletor real de modelos no Home; manter como select evita
+            // futuras reconstrucoes reintroduzirem o campo livre que causou o bug.
+            fieldType: "select",
+            options: null,
+            parentQuestionId: brand.id,
+            triggerOption: brands[index] ?? brands[brands.length - 1],
+          });'''
+          if old_rebuild not in rebuild:
+              raise SystemExit('Trecho de rebuild dos modelos nao encontrado')
+          rebuild = rebuild.replace(old_rebuild, new_rebuild, 1)
+          rebuild_path.write_text(rebuild, encoding='utf-8')
+
+          audit_path = Path('audit/check_vehicle_model_selector.mjs')
+          audit_path.write_text('''import fs from "node:fs";\nconst home = fs.readFileSync("client/src/pages/Home.tsx", "utf8");\nconst rebuild = fs.readFileSync("scripts/rebuild-question-tree.mjs", "utf8");\nconst checks = [\n  ["modelo usa select real", home.includes("Selecione o modelo do veículo") && !home.includes("list={listId}")],\n  ["modelo correto por marca", home.includes("q.triggerOption === parentAnswerForRoot") && home.includes("sub.id === selectedVehicleModel?.id")],\n  ["serializacao usa a mesma pergunta de modelo", home.includes("selectedModelQuestion?.id === q.id")],\n  ["rebuild nao volta modelo para text", rebuild.includes("fieldType: \\\"select\\\"")],\n];\nfor (const [name, ok] of checks) console.log(`${ok ? "OK" : "FAIL"} - ${name}`);\nif (checks.some(([, ok]) => !ok)) process.exit(1);\n''', encoding='utf-8')
+
+      - name: Audit selector fix
+        run: node audit/check_vehicle_model_selector.mjs
+
+      - name: Build production client/server
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Commit production fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/Home.tsx scripts/rebuild-question-tree.mjs audit/check_vehicle_model_selector.mjs
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "fix(pedidos): corrigir selecao do modelo do veiculo"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
