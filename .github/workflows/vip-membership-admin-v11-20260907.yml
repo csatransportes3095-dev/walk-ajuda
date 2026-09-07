@@ -1,0 +1,43 @@
+name: VIP membership admin v11 2026-09-07
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vip-membership-admin-v11-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+      - name: Backup production
+        run: git push origin HEAD:refs/heads/backup/pre-vip-membership-admin-v11-20260907 || true
+      - name: Apply VIP management
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/csatransportes3095-dev/walk-ajuda/main/.github/workflows/vip-membership-admin-20260907.yml -o /tmp/vip-source.yml
+          curl -fsSL https://raw.githubusercontent.com/csatransportes3095-dev/walk-ajuda/main/scripts/apply_vip_membership_admin_20260907.py -o /tmp/apply_vip.py
+          python /tmp/apply_vip.py /tmp/vip-source.yml
+      - name: Audit
+        run: node audit/check_vip_membership_admin.mjs
+      - name: Install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+      - name: Test VIP pricing
+        run: pnpm vitest run server/vipPricing.test.ts
+      - name: Build
+        run: pnpm build
+      - name: Commit production
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/vipMemberships.ts server/routers.ts client/src/hooks/useVipMembership.ts client/src/pages/AdminVip.tsx client/src/pages/VipPage.tsx client/src/pages/Home.tsx client/src/components/StorefrontProductCard.tsx client/src/components/ColombiaBot.tsx client/src/pages/AdminCustomers.tsx audit/check_vip_membership_admin.mjs
+          git commit -m "feat(vip): gerenciar clientes validade e destaque no cadastro"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
