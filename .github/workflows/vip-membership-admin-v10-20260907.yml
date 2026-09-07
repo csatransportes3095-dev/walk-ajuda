@@ -52,7 +52,6 @@ jobs:
               remove_replace_block(label)
           Path('/tmp/vip_patch.py').write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
-          # Robust server insertions before running source patch.
           routers = Path('server/routers.ts')
           text = routers.read_text(encoding='utf-8')
           checkout_target = "          if (input.priceModelId) {\n            const modelAccess = await checkOptionPriceModelCheckoutAccess(input.priceModelId, isVipModelAccess);"
@@ -69,7 +68,6 @@ jobs:
               text = text.replace(customer_target, customer_insert, 1)
           routers.write_text(text, encoding='utf-8')
 
-          # Insert VIP filter into current customer toolbar.
           customers = Path('client/src/pages/AdminCustomers.tsx')
           c = customers.read_text(encoding='utf-8')
           marker = "{!showOnlyBlocked && customers.some(c => c.blocked === 1) && ("
@@ -161,3 +159,5 @@ jobs:
           git add server/routers/vipMemberships.ts server/routers.ts client/src/hooks/useVipMembership.ts client/src/pages/AdminVip.tsx client/src/pages/VipPage.tsx client/src/pages/Home.tsx client/src/components/StorefrontProductCard.tsx client/src/components/ColombiaBot.tsx client/src/pages/AdminCustomers.tsx audit/check_vip_membership_admin.mjs
           git commit -m "feat(vip): gerenciar clientes validade e destaque no cadastro"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
+
+# trigger v10
