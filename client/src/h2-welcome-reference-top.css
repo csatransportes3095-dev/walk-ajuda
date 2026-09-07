@@ -8,13 +8,13 @@
   grid-template-columns:minmax(118px,190px) minmax(0,1fr) !important;
   align-items:center !important;
   gap:24px !important;
-  min-height:270px !important;
+  min-height:285px !important;
   padding:30px 38px !important;
   overflow:hidden !important;
   isolation:isolate !important;
   background:
     radial-gradient(circle at 13% 38%,rgba(255,199,25,.20),transparent 28%),
-    radial-gradient(circle at 77% 38%,rgba(0,111,255,.28),transparent 39%),
+    radial-gradient(circle at 77% 38%,rgba(0,111,255,.30),transparent 39%),
     radial-gradient(circle at 54% 104%,rgba(33,87,194,.22),transparent 35%),
     linear-gradient(135deg,#020611 0%,#07152e 48%,#031126 100%) !important;
   border-bottom:1px solid rgba(50,153,255,.42) !important;
@@ -71,7 +71,7 @@
 
 .h2p-hero-logo-wrap{
   position:relative !important;
-  z-index:4 !important;
+  z-index:5 !important;
   display:flex !important;
   align-items:center !important;
   justify-content:center !important;
@@ -85,8 +85,7 @@
   width:172px !important;
   height:172px !important;
   border-radius:50% !important;
-  background:
-    conic-gradient(from 210deg,rgba(255,205,39,.52),rgba(255,86,0,.18),rgba(14,91,255,.36),rgba(255,205,39,.52)) !important;
+  background:conic-gradient(from 210deg,rgba(255,205,39,.52),rgba(255,86,0,.18),rgba(14,91,255,.36),rgba(255,205,39,.52)) !important;
   filter:blur(17px) !important;
   opacity:.62 !important;
 }
@@ -94,7 +93,7 @@
 .h2p-hero-logo,
 .h2p-logo-fallback{
   position:relative !important;
-  z-index:4 !important;
+  z-index:5 !important;
   width:164px !important;
   height:164px !important;
   max-width:100% !important;
@@ -104,10 +103,7 @@
   border-radius:26px !important;
   transform:rotate(-1.2deg) !important;
   background:rgba(4,15,35,.36) !important;
-  box-shadow:
-    0 0 0 3px rgba(255,204,44,.04),
-    0 0 24px rgba(255,190,16,.30),
-    0 0 42px rgba(28,139,255,.25) !important;
+  box-shadow:0 0 0 3px rgba(255,204,44,.04),0 0 24px rgba(255,190,16,.30),0 0 42px rgba(28,139,255,.25) !important;
   filter:drop-shadow(0 8px 14px rgba(0,0,0,.30)) !important;
 }
 
@@ -123,7 +119,7 @@
 
 .h2p-hero-copy{
   position:relative !important;
-  z-index:5 !important;
+  z-index:6 !important;
   align-self:center !important;
   min-width:0 !important;
   padding-right:24% !important;
@@ -154,18 +150,16 @@
   line-height:.90 !important;
   font-weight:1000 !important;
   font-style:italic !important;
-  letter-spacing:-.065em !important;
+  letter-spacing:-.055em !important;
   text-transform:uppercase !important;
   background:linear-gradient(180deg,#ffffff 0%,#f7fbff 24%,#cfd9e8 48%,#8392a7 68%,#f8fbff 86%,#ffffff 100%) !important;
   -webkit-background-clip:text !important;
   background-clip:text !important;
   -webkit-text-fill-color:transparent !important;
   color:transparent !important;
-  filter:
-    drop-shadow(0 4px 0 rgba(42,55,73,.92))
-    drop-shadow(0 7px 0 rgba(13,24,41,.82))
-    drop-shadow(0 0 18px rgba(255,255,255,.10)) !important;
+  filter:drop-shadow(0 4px 0 rgba(42,55,73,.92)) drop-shadow(0 7px 0 rgba(13,24,41,.82)) drop-shadow(0 0 18px rgba(255,255,255,.10)) !important;
   text-shadow:none !important;
+  white-space:nowrap !important;
 }
 
 .h2p-hero-copy h1:before{
@@ -203,20 +197,19 @@
   text-shadow:0 0 12px rgba(255,202,31,.18) !important;
 }
 
-/* O SVG do carro continua sendo o mesmo componente, mas agora funciona como fundo lateral. */
 .h2p-car{
   display:block !important;
   position:absolute !important;
-  z-index:2 !important;
-  right:-5% !important;
-  bottom:10px !important;
-  width:48% !important;
-  height:78% !important;
-  opacity:.36 !important;
+  z-index:3 !important;
+  right:-2% !important;
+  bottom:4px !important;
+  width:50% !important;
+  height:82% !important;
+  opacity:.58 !important;
   pointer-events:none !important;
-  transform:translateY(8px) scale(1.08) !important;
+  transform:translateY(6px) scale(1.08) !important;
   transform-origin:right bottom !important;
-  filter:drop-shadow(0 0 24px rgba(18,113,255,.42)) !important;
+  filter:drop-shadow(0 0 26px rgba(18,113,255,.58)) !important;
 }
 
 .h2p-car svg{
@@ -226,109 +219,126 @@
 
 @media (max-width:760px){
   .h2p-hero{
-    grid-template-columns:104px minmax(0,1fr) !important;
-    gap:15px !important;
-    min-height:205px !important;
-    padding:22px 17px !important;
+    grid-template-columns:112px minmax(0,1fr) !important;
+    align-items:start !important;
+    gap:14px !important;
+    min-height:255px !important;
+    padding:22px 17px 92px !important;
+  }
+
+  .h2p-hero-logo-wrap{
+    align-self:start !important;
   }
 
   .h2p-hero-logo-wrap:before{
-    width:108px !important;
-    height:108px !important;
+    width:116px !important;
+    height:116px !important;
     filter:blur(11px) !important;
   }
 
   .h2p-hero-logo,
   .h2p-logo-fallback{
-    width:98px !important;
-    height:98px !important;
-    border-radius:16px !important;
+    width:106px !important;
+    height:106px !important;
+    border-radius:18px !important;
   }
 
   .h2p-logo-fallback{
-    font-size:42px !important;
+    font-size:44px !important;
   }
 
   .h2p-hero-copy{
-    padding-right:10% !important;
+    align-self:start !important;
+    padding-right:0 !important;
+    padding-top:7px !important;
   }
 
   .h2p-hero-copy small{
-    margin-bottom:6px !important;
-    font-size:7.5px !important;
-    letter-spacing:.07em !important;
+    margin-bottom:7px !important;
+    font-size:7.6px !important;
+    letter-spacing:.065em !important;
+    white-space:nowrap !important;
   }
 
   .h2p-hero-copy h1{
-    font-size:clamp(30px,9.5vw,46px) !important;
+    font-size:clamp(30px,9.1vw,43px) !important;
     line-height:.90 !important;
-    letter-spacing:-.07em !important;
+    letter-spacing:-.055em !important;
+    white-space:nowrap !important;
   }
 
   .h2p-hero-copy h1:after{
-    width:86% !important;
+    width:88% !important;
     height:2px !important;
     margin-top:10px !important;
   }
 
   .h2p-hero-copy p{
     margin-top:8px !important;
-    font-size:8.5px !important;
-    letter-spacing:.13em !important;
+    font-size:8.8px !important;
+    letter-spacing:.12em !important;
     white-space:nowrap !important;
   }
 
   .h2p-car{
-    right:-17% !important;
-    bottom:4px !important;
-    width:62% !important;
-    height:62% !important;
-    opacity:.23 !important;
-    transform:translateY(10px) scale(1.12) !important;
+    right:-5% !important;
+    bottom:-1px !important;
+    width:72% !important;
+    height:58% !important;
+    opacity:.92 !important;
+    transform:translateY(7px) scale(1.08) !important;
+    filter:drop-shadow(0 0 24px rgba(20,128,255,.72)) !important;
+  }
+
+  .h2p-city{
+    opacity:.42 !important;
   }
 }
 
 @media (max-width:390px){
   .h2p-hero{
-    grid-template-columns:90px minmax(0,1fr) !important;
+    grid-template-columns:94px minmax(0,1fr) !important;
     gap:11px !important;
-    min-height:185px !important;
-    padding:19px 13px !important;
+    min-height:238px !important;
+    padding:19px 13px 86px !important;
   }
 
   .h2p-hero-logo,
   .h2p-logo-fallback{
-    width:86px !important;
-    height:86px !important;
-    border-radius:14px !important;
+    width:90px !important;
+    height:90px !important;
+    border-radius:15px !important;
   }
 
   .h2p-hero-logo-wrap:before{
-    width:92px !important;
-    height:92px !important;
+    width:98px !important;
+    height:98px !important;
   }
 
   .h2p-hero-copy{
-    padding-right:3% !important;
+    padding-top:5px !important;
   }
 
   .h2p-hero-copy h1{
-    font-size:29px !important;
+    font-size:27px !important;
+    letter-spacing:-.05em !important;
   }
 
   .h2p-hero-copy small{
-    font-size:6.7px !important;
+    font-size:6.4px !important;
+    letter-spacing:.045em !important;
   }
 
   .h2p-hero-copy p{
-    font-size:7.6px !important;
-    letter-spacing:.10em !important;
+    font-size:7.5px !important;
+    letter-spacing:.09em !important;
   }
 
   .h2p-car{
-    right:-24% !important;
-    width:67% !important;
-    height:58% !important;
-    opacity:.18 !important;
+    right:-8% !important;
+    bottom:-2px !important;
+    width:78% !important;
+    height:57% !important;
+    opacity:.94 !important;
   }
 }
