@@ -1,0 +1,372 @@
+name: Model category VIP 2026-09-07
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/model-category-vip-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-production:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Preserve production checkpoint
+        run: git push origin HEAD:refs/heads/backup/pre-model-category-vip-20260907 || true
+
+      - name: Implement VIP per model and category
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              p = Path(path)
+              p.parent.mkdir(parents=True, exist_ok=True)
+              p.write_text(text, encoding='utf-8')
+
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f'Trecho nao encontrado: {label}')
+              return text.replace(old, new, 1)
+
+          # ------------------------------------------------------------------
+          # Shared VIP pricing rules
+          # ------------------------------------------------------------------
+          write('shared/vipPricing.ts', '''export type VipAccessMode = "all" | "benefit" | "vip_only";
+          export type VipDiscountType = "percentage" | "fixed";
+
+          export type VipPriceModelLike = {
+            vipAccessMode?: VipAccessMode | string | null;
+            vipDiscountType?: VipDiscountType | string | null;
+            vipDiscountValue?: number | string | null;
+            vipHighlight?: number | boolean | null;
+            vipHighlightText?: string | null;
+          };
+
+          export function normalizeVipAccessMode(value: unknown): VipAccessMode {
+            return value === "benefit" || value === "vip_only" ? value : "all";
+          }
+
+          export function isVipOnlyLocked(model: VipPriceModelLike | null | undefined, isVipCustomer: boolean): boolean {
+            return normalizeVipAccessMode(model?.vipAccessMode) === "vip_only" && !isVipCustomer;
+          }
+
+          export function hasVipBenefit(model: VipPriceModelLike | null | undefined): boolean {
+            const mode = normalizeVipAccessMode(model?.vipAccessMode);
+            const value = Number(model?.vipDiscountValue || 0);
+            return (mode === "benefit" || mode === "vip_only") && Number.isFinite(value) && value > 0;
+          }
+
+          export function isVipHighlighted(model: VipPriceModelLike | null | undefined): boolean {
+            return Boolean(model?.vipHighlight) && normalizeVipAccessMode(model?.vipAccessMode) !== "all";
+          }
+
+          export function parseBrazilMoney(value: string | null | undefined): number {
+            const raw = String(value || "").trim().replace(/R\$/gi, "").replace(/\s/g, "");
+            if (!raw) return 0;
+            if (raw.includes(",")) {
+              const normalized = raw.replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, "");
+              return Number(normalized) || 0;
+            }
+            return Number(raw.replace(/[^0-9.-]/g, "")) || 0;
+          }
+
+          export function formatBrazilMoney(value: number): string {
+            const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
+            return `R$ ${safe.toFixed(2).replace(".", ",")}`;
+          }
+
+          export function applyVipBenefitToPrice(price: string | null | undefined, model: VipPriceModelLike | null | undefined, isVipCustomer: boolean): string {
+            const original = String(price || "").trim();
+            if (!original || !isVipCustomer || !hasVipBenefit(model)) return original;
+            const numeric = parseBrazilMoney(original);
+            if (numeric <= 0) return original;
+            const discountValue = Number(model?.vipDiscountValue || 0);
+            const discountType = model?.vipDiscountType === "fixed" ? "fixed" : "percentage";
+            const finalValue = discountType === "fixed"
+              ? numeric - discountValue
+              : numeric - (numeric * discountValue / 100);
+            return formatBrazilMoney(finalValue);
+          }
+
+          export function vipBenefitText(model: VipPriceModelLike | null | undefined): string {
+            if (!hasVipBenefit(model)) return "";
+            const value = Number(model?.vipDiscountValue || 0);
+            return model?.vipDiscountType === "fixed"
+              ? `${formatBrazilMoney(value)} OFF VIP`
+              : `${value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}% OFF VIP`;
+          }
+          ''')
+
+          write('shared/vipPricing.test.ts', '''import { describe, expect, it } from "vitest";
+          import { applyVipBenefitToPrice, isVipOnlyLocked, vipBenefitText } from "./vipPricing";
+
+          describe("VIP por modelo/categoria", () => {
+            it("mantem preco normal para cliente comum", () => {
+              expect(applyVipBenefitToPrice("150,00", { vipAccessMode: "benefit", vipDiscountType: "percentage", vipDiscountValue: 20 }, false)).toBe("150,00");
+            });
+            it("aplica percentual para VIP", () => {
+              expect(applyVipBenefitToPrice("R$ 150,00", { vipAccessMode: "benefit", vipDiscountType: "percentage", vipDiscountValue: 20 }, true)).toBe("R$ 120,00");
+            });
+            it("aplica desconto fixo para VIP sem ficar negativo", () => {
+              expect(applyVipBenefitToPrice("50,00", { vipAccessMode: "vip_only", vipDiscountType: "fixed", vipDiscountValue: 80 }, true)).toBe("R$ 0,00");
+            });
+            it("bloqueia somente vip para cliente comum", () => {
+              expect(isVipOnlyLocked({ vipAccessMode: "vip_only" }, false)).toBe(true);
+              expect(isVipOnlyLocked({ vipAccessMode: "vip_only" }, true)).toBe(false);
+            });
+            it("gera rotulo do beneficio", () => {
+              expect(vipBenefitText({ vipAccessMode: "benefit", vipDiscountType: "percentage", vipDiscountValue: 15 })).toContain("15% OFF VIP");
+            });
+          });
+          ''')
+
+          # ------------------------------------------------------------------
+          # Backend model/category infrastructure
+          # ------------------------------------------------------------------
+          path = 'server/routers/optionPriceModels.ts'
+          text = read(path)
+          text = replace_once(text,
+          '''  sortOrder: number;\n  isActive: number;\n  selectorLabel?: string | null;''',
+          '''  sortOrder: number;\n  isActive: number;\n  vipAccessMode: "all" | "benefit" | "vip_only";\n  vipDiscountType: "percentage" | "fixed";\n  vipDiscountValue: number;\n  vipHighlight: number;\n  vipHighlightText: string | null;\n  selectorLabel?: string | null;''', 'optionPriceModels type')
+
+          text = replace_once(text,
+          '''        sortOrder INT NOT NULL DEFAULT 0,\n        isActive INT NOT NULL DEFAULT 1,\n        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,''',
+          '''        sortOrder INT NOT NULL DEFAULT 0,\n        isActive INT NOT NULL DEFAULT 1,\n        vipAccessMode VARCHAR(16) NOT NULL DEFAULT 'all',\n        vipDiscountType VARCHAR(16) NOT NULL DEFAULT 'percentage',\n        vipDiscountValue DECIMAL(10,2) NOT NULL DEFAULT 0.00,\n        vipHighlight TINYINT(1) NOT NULL DEFAULT 0,\n        vipHighlightText VARCHAR(96) NULL,\n        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,''', 'optionPriceModels create table')
+
+          text = replace_once(text,
+          '''    `);\n\n    // Preset solicitado para o produto atual. É idempotente por causa da chave única.''',
+          '''    `);\n\n    const vipColumns = [\n      ["vipAccessMode", "VARCHAR(16) NOT NULL DEFAULT 'all'"],\n      ["vipDiscountType", "VARCHAR(16) NOT NULL DEFAULT 'percentage'"],\n      ["vipDiscountValue", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"],\n      ["vipHighlight", "TINYINT(1) NOT NULL DEFAULT 0"],\n      ["vipHighlightText", "VARCHAR(96) NULL"],\n    ] as const;\n    for (const [column, definition] of vipColumns) {\n      try {\n        await db.execute(sql.raw(`ALTER TABLE optionPriceModels ADD COLUMN ${column} ${definition}`));\n      } catch (error: any) {\n        if (!/duplicate column|exists/i.test(String(error?.message || ''))) throw error;\n      }\n    }\n\n    // Preset solicitado para o produto atual. É idempotente por causa da chave única.''', 'optionPriceModels compatibility columns')
+
+          text = replace_once(text,
+          '''           m.promoEndsAt, m.sortOrder, m.isActive,\n           m.createdAt, m.updatedAt, COALESCE(s.selectorLabel, 'Modelo / categoria') AS selectorLabel''',
+          '''           m.promoEndsAt, m.sortOrder, m.isActive,\n           COALESCE(m.vipAccessMode, 'all') AS vipAccessMode,\n           COALESCE(m.vipDiscountType, 'percentage') AS vipDiscountType,\n           COALESCE(m.vipDiscountValue, 0) AS vipDiscountValue,\n           COALESCE(m.vipHighlight, 0) AS vipHighlight,\n           m.vipHighlightText,\n           m.createdAt, m.updatedAt, COALESCE(s.selectorLabel, 'Modelo / categoria') AS selectorLabel''', 'optionPriceModels list fields')
+
+          text = replace_once(text,
+          '''    sortOrder: Number(row.sortOrder || 0),\n    isActive: Number(row.isActive || 0),\n  }));''',
+          '''    sortOrder: Number(row.sortOrder || 0),\n    isActive: Number(row.isActive || 0),\n    vipAccessMode: row.vipAccessMode === 'benefit' || row.vipAccessMode === 'vip_only' ? row.vipAccessMode : 'all',\n    vipDiscountType: row.vipDiscountType === 'fixed' ? 'fixed' : 'percentage',\n    vipDiscountValue: Number(row.vipDiscountValue || 0),\n    vipHighlight: Number(row.vipHighlight || 0),\n    vipHighlightText: row.vipHighlightText ? String(row.vipHighlightText) : null,\n  }));''', 'optionPriceModels normalize fields')
+
+          text = replace_once(text,
+          '''  sortOrder: z.number().int().min(0).optional().default(0),\n  isActive: z.boolean().optional().default(true),\n});''',
+          '''  sortOrder: z.number().int().min(0).optional().default(0),\n  isActive: z.boolean().optional().default(true),\n  vipAccessMode: z.enum(["all", "benefit", "vip_only"]).optional().default("all"),\n  vipDiscountType: z.enum(["percentage", "fixed"]).optional().default("percentage"),\n  vipDiscountValue: z.number().min(0).max(100000).optional().default(0),\n  vipHighlight: z.boolean().optional().default(false),\n  vipHighlightText: z.string().trim().max(96).nullable().optional(),\n});''', 'optionPriceModels create validation')
+
+          text = replace_once(text,
+          '''        INSERT INTO optionPriceModels\n          (optionId, label, price, originalPrice, promoEndsAt, sortOrder, isActive)\n        VALUES\n          (${input.optionId}, ${input.label}, ${input.price}, ${input.originalPrice || ''}, ${input.promoEndsAt ?? null}, ${input.sortOrder}, ${input.isActive ? 1 : 0})''',
+          '''        INSERT INTO optionPriceModels\n          (optionId, label, price, originalPrice, promoEndsAt, sortOrder, isActive, vipAccessMode, vipDiscountType, vipDiscountValue, vipHighlight, vipHighlightText)\n        VALUES\n          (${input.optionId}, ${input.label}, ${input.price}, ${input.originalPrice || ''}, ${input.promoEndsAt ?? null}, ${input.sortOrder}, ${input.isActive ? 1 : 0}, ${input.vipAccessMode}, ${input.vipDiscountType}, ${input.vipDiscountValue}, ${input.vipHighlight ? 1 : 0}, ${input.vipHighlightText || null})''', 'optionPriceModels create values')
+
+          text = replace_once(text,
+          '''      sortOrder: z.number().int().min(0).optional().default(0),\n      isActive: z.boolean().optional().default(true),\n    }))''',
+          '''      sortOrder: z.number().int().min(0).optional().default(0),\n      isActive: z.boolean().optional().default(true),\n      vipAccessMode: z.enum(["all", "benefit", "vip_only"]).optional().default("all"),\n      vipDiscountType: z.enum(["percentage", "fixed"]).optional().default("percentage"),\n      vipDiscountValue: z.number().min(0).max(100000).optional().default(0),\n      vipHighlight: z.boolean().optional().default(false),\n      vipHighlightText: z.string().trim().max(96).nullable().optional(),\n    }))''', 'optionPriceModels update validation')
+
+          text = replace_once(text,
+          '''        SET label=${input.label}, price=${input.price}, originalPrice=${input.originalPrice || ''},\n            promoEndsAt=${input.promoEndsAt ?? null}, sortOrder=${input.sortOrder}, isActive=${input.isActive ? 1 : 0}\n        WHERE id=${input.id} AND optionId=${input.optionId}''',
+          '''        SET label=${input.label}, price=${input.price}, originalPrice=${input.originalPrice || ''},\n            promoEndsAt=${input.promoEndsAt ?? null}, sortOrder=${input.sortOrder}, isActive=${input.isActive ? 1 : 0},\n            vipAccessMode=${input.vipAccessMode}, vipDiscountType=${input.vipDiscountType}, vipDiscountValue=${input.vipDiscountValue},\n            vipHighlight=${input.vipHighlight ? 1 : 0}, vipHighlightText=${input.vipHighlightText || null}\n        WHERE id=${input.id} AND optionId=${input.optionId}''', 'optionPriceModels update values')
+
+          text = replace_once(text,
+          '''export const optionPriceModelsRouter = router({''',
+          '''export async function checkOptionPriceModelCheckoutAccess(priceModelId: number, isVipCustomer: boolean): Promise<{ allowed: boolean; reason?: string }> {\n  await ensureInfrastructure();\n  const db = await getDb();\n  if (!db) return { allowed: false, reason: "Banco de dados indisponível." };\n  const result = await db.execute(sql`\n    SELECT isActive, COALESCE(vipAccessMode, 'all') AS vipAccessMode\n    FROM optionPriceModels WHERE id=${priceModelId} LIMIT 1\n  `);\n  const row = asRows<{ isActive: number; vipAccessMode: string }>(result)[0];\n  if (!row || Number(row.isActive) !== 1) return { allowed: false, reason: "Este modelo/categoria não está disponível." };\n  if (row.vipAccessMode === "vip_only" && !isVipCustomer) {\n    return { allowed: false, reason: "Este modelo/categoria é exclusivo para clientes VIP." };\n  }\n  return { allowed: true };\n}\n\nexport const optionPriceModelsRouter = router({''', 'optionPriceModels checkout helper')
+          write(path, text)
+
+          # ------------------------------------------------------------------
+          # Server checkout enforcement
+          # ------------------------------------------------------------------
+          path = 'server/routers.ts'
+          text = read(path)
+          text = replace_once(text,
+          '''import { optionPriceModelsRouter } from "./routers/optionPriceModels";''',
+          '''import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess } from "./routers/optionPriceModels";''', 'routers optionPriceModels import')
+          text = replace_once(text,
+          '''        price: z.string().optional(), // valor pago pelo cliente (ex: "R$ 350,00")''',
+          '''        price: z.string().optional(), // valor pago pelo cliente (ex: "R$ 350,00")\n        priceModelId: z.number().int().positive().optional(), // modelo/categoria de preço escolhido''', 'submit priceModelId input')
+          text = replace_once(text,
+          '''          const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';''',
+          '''          // Modelo/Categoria com acesso exclusivo VIP é validado também no servidor.\n          // O navegador não consegue liberar um item apenas alterando HTML/localStorage.\n          let isVipModelAccess = false;\n          if (input.accessCode) {\n            try {\n              const vipProbe = await checkAccessCodeCanSubmit(input.accessCode, input.phone);\n              isVipModelAccess = vipProbe.canSubmit && vipProbe.type === 'vip';\n            } catch { /* sessão principal já foi validada acima */ }\n          }\n          if (input.priceModelId) {\n            const modelAccess = await checkOptionPriceModelCheckoutAccess(input.priceModelId, isVipModelAccess);\n            if (!modelAccess.allowed) return { success: false, message: modelAccess.reason || 'Modelo/categoria indisponível.' };\n          }\n\n          const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';''', 'server model VIP enforcement')
+          write(path, text)
+
+          # ------------------------------------------------------------------
+          # Admin editor: VIP controls live on each Modelo/Categoria row
+          # ------------------------------------------------------------------
+          path = 'client/src/pages/AdminProducts.tsx'
+          text = read(path)
+          text = replace_once(text,
+          '''  promoEndsAt: number | null; sortOrder: number; isActive: number;\n};''',
+          '''  promoEndsAt: number | null; sortOrder: number; isActive: number;\n  vipAccessMode: 'all' | 'benefit' | 'vip_only'; vipDiscountType: 'percentage' | 'fixed';\n  vipDiscountValue: number; vipHighlight: number; vipHighlightText: string | null;\n};''', 'admin price model type')
+          text = replace_once(text,
+          '''  const [active, setActive] = useState(model.isActive === 1);\n  const updateMut''',
+          '''  const [active, setActive] = useState(model.isActive === 1);\n  const [vipAccessMode, setVipAccessMode] = useState<'all' | 'benefit' | 'vip_only'>(model.vipAccessMode || 'all');\n  const [vipDiscountType, setVipDiscountType] = useState<'percentage' | 'fixed'>(model.vipDiscountType || 'percentage');\n  const [vipDiscountValue, setVipDiscountValue] = useState(String(model.vipDiscountValue || ''));\n  const [vipHighlight, setVipHighlight] = useState(model.vipHighlight === 1);\n  const [vipHighlightText, setVipHighlightText] = useState(model.vipHighlightText || 'VIP');\n  const updateMut''', 'admin price model state')
+
+          text = replace_once(text,
+          '''      </div>\n      <div className="flex items-center justify-between gap-2">\n        <label className="flex items-center gap-2 text-[11px] text-gray-300"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Ativo para o cliente</label>''',
+          '''      </div>\n      <div className="rounded-lg border border-amber-400/25 bg-amber-500/5 p-3 space-y-2">\n        <div className="flex items-center justify-between gap-2">\n          <p className="text-[11px] font-black text-amber-300">👑 VIP DESTE MODELO / CATEGORIA</p>\n          {vipAccessMode !== 'all' && <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[9px] font-black text-amber-200">{vipAccessMode === 'vip_only' ? 'SOMENTE VIP' : 'BENEFÍCIO VIP'}</span>}\n        </div>\n        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">\n          <div><label className="text-[10px] text-gray-400 block mb-1">Acesso</label><select value={vipAccessMode} onChange={e => setVipAccessMode(e.target.value as any)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }}><option value="all">Todos os clientes</option><option value="benefit">VIP com benefício</option><option value="vip_only">Somente VIP</option></select></div>\n          <div><label className="text-[10px] text-gray-400 block mb-1">Tipo do benefício</label><select disabled={vipAccessMode === 'all'} value={vipDiscountType} onChange={e => setVipDiscountType(e.target.value as any)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px', opacity: vipAccessMode === 'all' ? .5 : 1 }}><option value="percentage">Percentual (%)</option><option value="fixed">Valor fixo (R$)</option></select></div>\n          <div><label className="text-[10px] text-gray-400 block mb-1">Desconto VIP</label><input disabled={vipAccessMode === 'all'} type="number" min="0" step="0.01" value={vipDiscountValue} onChange={e => setVipDiscountValue(e.target.value)} placeholder={vipDiscountType === 'percentage' ? 'Ex: 20' : 'Ex: 50'} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px', opacity: vipAccessMode === 'all' ? .5 : 1 }} /></div>\n          <div><label className="text-[10px] text-gray-400 block mb-1">Texto do destaque</label><input disabled={vipAccessMode === 'all' || !vipHighlight} value={vipHighlightText} onChange={e => setVipHighlightText(e.target.value)} placeholder="VIP" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px', opacity: vipAccessMode === 'all' || !vipHighlight ? .5 : 1 }} /></div>\n        </div>\n        <label className="flex items-center gap-2 text-[11px] text-amber-200"><input type="checkbox" disabled={vipAccessMode === 'all'} checked={vipHighlight} onChange={e => setVipHighlight(e.target.checked)} /> Destacar este Modelo/Categoria como VIP para o cliente</label>\n      </div>\n      <div className="flex items-center justify-between gap-2">\n        <label className="flex items-center gap-2 text-[11px] text-gray-300"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Ativo para o cliente</label>''', 'admin VIP controls')
+
+          text = text.replace(
+          '''sortOrder: model.sortOrder, isActive: active });''',
+          '''sortOrder: model.sortOrder, isActive: active, vipAccessMode, vipDiscountType, vipDiscountValue: vipAccessMode === 'all' ? 0 : (parseFloat(vipDiscountValue) || 0), vipHighlight: vipAccessMode === 'all' ? false : vipHighlight, vipHighlightText: vipAccessMode === 'all' || !vipHighlight ? null : (vipHighlightText.trim() || 'VIP') });''',
+          1)
+          if 'vipAccessMode, vipDiscountType, vipDiscountValue' not in text:
+              raise SystemExit('Falha ao incluir VIP no save de modelo/categoria')
+
+          text = replace_once(text,
+          '''  const [newPromoEndsAt, setNewPromoEndsAt] = useState('');\n  const refresh''',
+          '''  const [newPromoEndsAt, setNewPromoEndsAt] = useState('');\n  const [newVipAccessMode, setNewVipAccessMode] = useState<'all' | 'benefit' | 'vip_only'>('all');\n  const [newVipDiscountType, setNewVipDiscountType] = useState<'percentage' | 'fixed'>('percentage');\n  const [newVipDiscountValue, setNewVipDiscountValue] = useState('');\n  const [newVipHighlight, setNewVipHighlight] = useState(false);\n  const [newVipHighlightText, setNewVipHighlightText] = useState('VIP');\n  const refresh''', 'admin create VIP state')
+
+          text = replace_once(text,
+          '''const createMut = trpc.optionPriceModels.create.useMutation({ onSuccess: () => { setNewLabel(''); setNewOriginalPrice(''); setNewPrice(''); setNewPromoEndsAt(''); refresh(); toast.success('Categoria de preço criada!'); } });''',
+          '''const createMut = trpc.optionPriceModels.create.useMutation({ onSuccess: () => { setNewLabel(''); setNewOriginalPrice(''); setNewPrice(''); setNewPromoEndsAt(''); setNewVipAccessMode('all'); setNewVipDiscountType('percentage'); setNewVipDiscountValue(''); setNewVipHighlight(false); setNewVipHighlightText('VIP'); refresh(); toast.success('Categoria de preço criada!'); } });''', 'admin create reset')
+
+          text = replace_once(text,
+          '''        </div>\n        <Button type="button" className="mt-2 w-full bg-cyan-600 hover:bg-cyan-500 text-white" disabled={createMut.isPending}''',
+          '''        </div>\n        <div className="mt-2 rounded-lg border border-amber-400/20 bg-amber-500/5 p-2 space-y-2">\n          <p className="text-[10px] font-black text-amber-300">VIP DO NOVO MODELO / CATEGORIA</p>\n          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">\n            <select value={newVipAccessMode} onChange={e => setNewVipAccessMode(e.target.value as any)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }}><option value="all">Todos os clientes</option><option value="benefit">VIP com benefício</option><option value="vip_only">Somente VIP</option></select>\n            <select disabled={newVipAccessMode === 'all'} value={newVipDiscountType} onChange={e => setNewVipDiscountType(e.target.value as any)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }}><option value="percentage">Desconto em %</option><option value="fixed">Desconto em R$</option></select>\n            <input disabled={newVipAccessMode === 'all'} type="number" min="0" step="0.01" value={newVipDiscountValue} onChange={e => setNewVipDiscountValue(e.target.value)} placeholder="Benefício VIP" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />\n            <input disabled={newVipAccessMode === 'all' || !newVipHighlight} value={newVipHighlightText} onChange={e => setNewVipHighlightText(e.target.value)} placeholder="Texto: VIP" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />\n          </div>\n          <label className="flex items-center gap-2 text-[10px] text-amber-200"><input type="checkbox" disabled={newVipAccessMode === 'all'} checked={newVipHighlight} onChange={e => setNewVipHighlight(e.target.checked)} /> Destacar como VIP</label>\n        </div>\n        <Button type="button" className="mt-2 w-full bg-cyan-600 hover:bg-cyan-500 text-white" disabled={createMut.isPending}''', 'admin create VIP UI')
+
+          text = text.replace(
+          '''sortOrder: models.length, isActive: true });''',
+          '''sortOrder: models.length, isActive: true, vipAccessMode: newVipAccessMode, vipDiscountType: newVipDiscountType, vipDiscountValue: newVipAccessMode === 'all' ? 0 : (parseFloat(newVipDiscountValue) || 0), vipHighlight: newVipAccessMode === 'all' ? false : newVipHighlight, vipHighlightText: newVipAccessMode === 'all' || !newVipHighlight ? null : (newVipHighlightText.trim() || 'VIP') });''',
+          1)
+          write(path, text)
+
+          # ------------------------------------------------------------------
+          # Storefront visual/locking/benefit
+          # ------------------------------------------------------------------
+          path = 'client/src/components/StorefrontProductCard.tsx'
+          text = read(path)
+          text = replace_once(text,
+          '''import { requestProductManifest } from "@/lib/productManifest";''',
+          '''import { requestProductManifest } from "@/lib/productManifest";\nimport { applyVipBenefitToPrice, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";''', 'storefront VIP import')
+          text = replace_once(text,
+          '''  isActive: number;\n  selectorLabel?: string | null;''',
+          '''  isActive: number;\n  vipAccessMode?: 'all' | 'benefit' | 'vip_only';\n  vipDiscountType?: 'percentage' | 'fixed';\n  vipDiscountValue?: number;\n  vipHighlight?: number;\n  vipHighlightText?: string | null;\n  selectorLabel?: string | null;''', 'storefront model type')
+          text = replace_once(text,
+          '''  const priceModels = item.option.priceModels || [];\n  const preferredModel = priceModels[Math.min(1, Math.max(0, priceModels.length - 1))] || null;\n  const [priceModelId, setPriceModelId] = useState<number | null>(preferredModel?.id ?? null);''',
+          '''  const priceModels = item.option.priceModels || [];\n  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';\n  const selectablePriceModels = priceModels.filter(model => !isVipOnlyLocked(model, isVipCustomer));\n  const preferredModel = selectablePriceModels[Math.min(1, Math.max(0, selectablePriceModels.length - 1))] || selectablePriceModels[0] || null;\n  const [priceModelId, setPriceModelId] = useState<number | null>(preferredModel?.id ?? null);''', 'storefront selectable models')
+          text = replace_once(text,
+          '''    if (!priceModels.some((model) => model.id === priceModelId)) {\n      setPriceModelId(priceModels[Math.min(1, priceModels.length - 1)]?.id ?? null);\n    }\n  }, [priceModels, priceModelId]);''',
+          '''    if (!selectablePriceModels.some((model) => model.id === priceModelId)) {\n      setPriceModelId(selectablePriceModels[Math.min(1, Math.max(0, selectablePriceModels.length - 1))]?.id ?? selectablePriceModels[0]?.id ?? null);\n    }\n  }, [priceModels, priceModelId, isVipCustomer]);''', 'storefront model selection effect')
+          text = replace_once(text,
+          '''  const effectivePrice = requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);\n  const effectiveOriginalPrice = requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);''',
+          '''  const vipAdjustedModelPrice = selectedPriceModel ? applyVipBenefitToPrice(selectedPriceModel.price, selectedPriceModel, isVipCustomer) : null;\n  const modelHasVipPrice = Boolean(selectedPriceModel && vipAdjustedModelPrice && vipAdjustedModelPrice !== selectedPriceModel.price);\n  const effectivePrice = requiresPriceModelSelection ? vipAdjustedModelPrice : (selectedTier?.price || item.option.price);\n  const effectiveOriginalPrice = requiresPriceModelSelection ? (modelHasVipPrice ? selectedPriceModel?.price : selectedPriceModel?.originalPrice) : (selectedTier?.originalPrice || item.option.originalPrice);''', 'storefront VIP effective price')
+          text = replace_once(text,
+          '''  const runProtectedAction = async (action: "buy" | "cart") => {\n    if (requiresPriceModelSelection && !selectedPriceModel) return;''',
+          '''  const runProtectedAction = async (action: "buy" | "cart") => {\n    if (requiresPriceModelSelection && !selectedPriceModel) return;\n    if (selectedPriceModel && isVipOnlyLocked(selectedPriceModel, isVipCustomer)) return;''', 'storefront protected action')
+          text = replace_once(text,
+          '''                const modelPromotion = promotionByModel.get(model.id);\n                return (''',
+          '''                const modelPromotion = promotionByModel.get(model.id);\n                const modelLocked = isVipOnlyLocked(model, isVipCustomer);\n                const modelVipMode = normalizeVipAccessMode(model.vipAccessMode);\n                const modelVipHighlighted = isVipHighlighted(model);\n                return (''', 'storefront model VIP variables')
+          text = text.replace(
+          '''<button key={model.id} type="button" aria-pressed={isSelected} onClick={() => handlePriceModelSelect(model.id)} className={`relative min-h-[150px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""}`}>''',
+          '''<button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} className={`relative min-h-[150px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-55 saturate-50" : ""}`}>\n                    {modelVipMode !== 'all' && <span className={`absolute -right-1 -top-2 z-20 rounded-full border px-2 py-1 text-[8px] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}''',
+          1)
+          if 'SOMENTE VIP' not in text:
+              raise SystemExit('Falha ao inserir badge VIP na vitrine')
+          text = replace_once(text,
+          '''            {discount > 0 && <p className="mt-2 inline-flex rounded-full border border-emerald-400/45 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,.16)]">Economize {discount}%</p>}''',
+          '''            {discount > 0 && <p className="mt-2 inline-flex rounded-full border border-emerald-400/45 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,.16)]">Economize {discount}%</p>}\n            {selectedPriceModel && normalizeVipAccessMode(selectedPriceModel.vipAccessMode) !== 'all' && <p className="ml-2 mt-2 inline-flex rounded-full border border-amber-300/45 bg-amber-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-200">{isVipCustomer ? `👑 ${vipBenefitText(selectedPriceModel) || 'ACESSO VIP'}` : '👑 BENEFÍCIO VIP DISPONÍVEL'}</p>}''', 'storefront VIP choice badge')
+          write(path, text)
+
+          # ------------------------------------------------------------------
+          # Home checkout: VIP price + model id in server request
+          # ------------------------------------------------------------------
+          path = 'client/src/pages/Home.tsx'
+          text = read(path)
+          text = replace_once(text,
+          '''import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";''',
+          '''import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";\nimport { applyVipBenefitToPrice } from "@shared/vipPricing";''', 'home VIP import')
+          text = replace_once(text,
+          '''type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; selectorLabel?: string | null; };''',
+          '''type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; selectorLabel?: string | null; vipAccessMode?: 'all' | 'benefit' | 'vip_only'; vipDiscountType?: 'percentage' | 'fixed'; vipDiscountValue?: number; vipHighlight?: number; vipHighlightText?: string | null; };''', 'home model VIP type')
+          text = replace_once(text,
+          '''  // Obter valor atual (usa tier se selecionado, caso contrário usa preço da opção)\n  const getCurrentServiceValue = (): string => {\n    if (selectedPriceModel) return selectedPriceModel.price;''',
+          '''  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';\n  const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';\n\n  // Obter valor atual (usa benefício VIP do Modelo/Categoria quando configurado)\n  const getCurrentServiceValue = (): string => {\n    if (selectedPriceModel) return getPriceModelServiceValue(selectedPriceModel);''', 'home current VIP price')
+          text = text.replace('item.priceModel?.price || item.option?.price', 'getPriceModelServiceValue(item.priceModel) || item.option?.price')
+          text = text.replace('selectedPriceModel?.price || selectedTier?.price || selectedOption?.price', 'getPriceModelServiceValue(selectedPriceModel) || selectedTier?.price || selectedOption?.price')
+          text = text.replace('selectedPriceModel?.price || selectedTier?.price || selectedOption?.price;', 'getPriceModelServiceValue(selectedPriceModel) || selectedTier?.price || selectedOption?.price;')
+          text = replace_once(text,
+          '''              price: itemRawPrice,\n              thirdPartyName:''',
+          '''              price: itemRawPrice,\n              priceModelId: item.priceModel?.id || undefined,\n              thirdPartyName:''', 'home cart priceModelId')
+          # single checkout object: add id after calculated price expression, before thirdPartyName
+          marker = '''        thirdPartyName: thirdPartyName.trim() || undefined,'''
+          pos = text.find(marker)
+          if pos < 0:
+              raise SystemExit('Trecho single thirdPartyName nao encontrado')
+          before = text[:pos]
+          if 'priceModelId: selectedPriceModel?.id' not in before[-900:]:
+              text = text[:pos] + '''        priceModelId: selectedPriceModel?.id || undefined,\n''' + text[pos:]
+          write(path, text)
+
+          # ------------------------------------------------------------------
+          # Bot: same rules, visual labels, blocked VIP-only, VIP price, model id
+          # ------------------------------------------------------------------
+          path = 'client/src/components/ColombiaBot.tsx'
+          text = read(path)
+          text = replace_once(text,
+          '''import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";''',
+          '''import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";\nimport { applyVipBenefitToPrice, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";''', 'bot VIP import')
+          text = replace_once(text,
+          '''type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice?: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; };''',
+          '''type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice?: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; vipAccessMode?: 'all' | 'benefit' | 'vip_only'; vipDiscountType?: 'percentage' | 'fixed'; vipDiscountValue?: number; vipHighlight?: number; vipHighlightText?: string | null; };''', 'bot model VIP type')
+          text = replace_once(text,
+          '''  const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';''',
+          '''  const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';\n  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';\n  const getModelPrice = (model: OptionPriceModel | null | undefined) => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';''', 'bot VIP state')
+
+          old_fn = '''  const startOptionPricing = (product: Product, option: ProductOption) => {\n    const models = option.priceModels || [];\n    if (models.length === 0) {\n      flowState.current.priceModel = null;\n      setTimeout(() => askQuestions(product, option, {}), 200);\n      return;\n    }\n    if (models.length === 1) {\n      flowState.current.priceModel = models[0];\n      saveBotProgress('questions', 'dados');\n      setTimeout(() => askQuestions(product, option, {}), 200);\n      return;\n    }\n    saveSnapshot();\n    const msgId = uid();\n    callbacks.current[msgId] = (answer: string) => {\n      markAnswered(msgId);\n      addMsgs({ type: 'user', id: uid(), text: answer });\n      const model = models.find(item => `${item.label} — R$ ${item.price}` === answer);\n      if (!model) return;\n      flowState.current.priceModel = model;\n      saveBotProgress('questions', 'dados');\n      setTimeout(() => askQuestions(product, option, {}), 250);\n    };\n    addMsgs(\n      { type: 'bot', id: uid(), text: 'Qual modelo / categoria de preço você deseja?' },\n      { type: 'options', id: msgId, options: models.map(model => `${model.label} — R$ ${model.price}`), answered: false }\n    );\n  };'''
+          new_fn = '''  const startOptionPricing = (product: Product, option: ProductOption) => {\n    const models = option.priceModels || [];\n    if (models.length === 0) {\n      flowState.current.priceModel = null;\n      setTimeout(() => askQuestions(product, option, {}), 200);\n      return;\n    }\n    const displayLabel = (model: OptionPriceModel) => {\n      const locked = isVipOnlyLocked(model, isVipCustomer);\n      const mode = normalizeVipAccessMode(model.vipAccessMode);\n      const prefix = locked ? '🔒 SOMENTE VIP • ' : (mode !== 'all' ? '👑 VIP • ' : '');\n      const benefit = isVipCustomer ? vipBenefitText(model) : '';\n      return `${prefix}${model.label} — ${getModelPrice(model)}${benefit ? ` • ${benefit}` : ''}`;\n    };\n    if (models.length === 1 && !isVipOnlyLocked(models[0], isVipCustomer)) {\n      flowState.current.priceModel = models[0];\n      saveBotProgress('questions', 'dados');\n      setTimeout(() => askQuestions(product, option, {}), 200);\n      return;\n    }\n    if (models.length === 1 && isVipOnlyLocked(models[0], isVipCustomer)) {\n      addMsgs({ type: 'bot', id: uid(), text: '🔒 Este modelo / categoria é exclusivo para clientes VIP. Escolha outro serviço ou entre com uma senha VIP.' });\n      setTimeout(() => askService(), 450);\n      return;\n    }\n    saveSnapshot();\n    const msgId = uid();\n    callbacks.current[msgId] = (answer: string) => {\n      const model = models.find(item => displayLabel(item) === answer);\n      if (!model) return;\n      if (isVipOnlyLocked(model, isVipCustomer)) {\n        addMsgs({ type: 'bot', id: uid(), text: '🔒 Este modelo / categoria é SOMENTE VIP. Entre com uma senha VIP para liberar esta escolha.' });\n        setTimeout(() => startOptionPricing(product, option), 350);\n        return;\n      }\n      markAnswered(msgId);\n      addMsgs({ type: 'user', id: uid(), text: answer });\n      flowState.current.priceModel = model;\n      saveBotProgress('questions', 'dados');\n      setTimeout(() => askQuestions(product, option, {}), 250);\n    };\n    addMsgs(\n      { type: 'bot', id: uid(), text: 'Qual modelo / categoria de preço você deseja?' },\n      { type: 'options', id: msgId, options: models.map(displayLabel), answered: false }\n    );\n  };'''
+          text = replace_once(text, old_fn, new_fn, 'bot model/category selection')
+          text = replace_once(text,
+          '''    const price = flowState.current.priceModel?.price || option?.price || '';''',
+          '''    const price = getModelPrice(flowState.current.priceModel) || option?.price || '';''', 'bot PIX VIP price')
+          text = replace_once(text,
+          '''            const rawPrice = flowState.current.priceModel?.price || option?.price;''',
+          '''            const rawPrice = getModelPrice(flowState.current.priceModel) || option?.price;''', 'bot submit VIP price')
+          text = replace_once(text,
+          '''          paymentProofUrl: flowState.current.pixProofUrl || undefined,''',
+          '''          priceModelId: flowState.current.priceModel?.id || undefined,\n          paymentProofUrl: flowState.current.pixProofUrl || undefined,''', 'bot submit priceModelId')
+          text = replace_once(text,
+          '''            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: option?.price || '' }],''',
+          '''            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: getModelPrice(flowState.current.priceModel) || option?.price || '' }],''', 'bot complete item price')
+          text = replace_once(text,
+          '''            totalValue: option?.price || '', ''',
+          '''            totalValue: getModelPrice(flowState.current.priceModel) || option?.price || '', ''', 'bot complete total price')
+          text = text.replace(
+          '''flowState.current = { product: null, option: null, answers: {},''',
+          '''flowState.current = { product: null, option: null, priceModel: null, answers: {},''',
+          1)
+          write(path, text)
+
+          # ------------------------------------------------------------------
+          # Textual audit guarantees scope: Modelo/Categoria, not product/card
+          # ------------------------------------------------------------------
+          write('audit/check_model_category_vip.mjs', '''import fs from "node:fs";\nconst files = {\n  router: fs.readFileSync("server/routers/optionPriceModels.ts", "utf8"),\n  submit: fs.readFileSync("server/routers.ts", "utf8"),\n  admin: fs.readFileSync("client/src/pages/AdminProducts.tsx", "utf8"),\n  card: fs.readFileSync("client/src/components/StorefrontProductCard.tsx", "utf8"),\n  home: fs.readFileSync("client/src/pages/Home.tsx", "utf8"),\n  bot: fs.readFileSync("client/src/components/ColombiaBot.tsx", "utf8"),\n};\nconst checks = [\n  ["VIP salvo em optionPriceModels", files.router.includes("vipAccessMode") && files.router.includes("vipDiscountValue")],\n  ["admin configura modelo/categoria", files.admin.includes("VIP DESTE MODELO / CATEGORIA") && files.admin.includes("Somente VIP")],\n  ["vitrine bloqueia somente VIP", files.card.includes("isVipOnlyLocked") && files.card.includes("SOMENTE VIP")],\n  ["checkout envia priceModelId", files.home.includes("priceModelId: item.priceModel?.id") && files.home.includes("priceModelId: selectedPriceModel?.id")],\n  ["bot respeita modelo/categoria VIP", files.bot.includes("SOMENTE VIP") && files.bot.includes("priceModelId: flowState.current.priceModel?.id")],\n  ["servidor valida restricao", files.submit.includes("checkOptionPriceModelCheckoutAccess") && files.submit.includes("input.priceModelId")],\n  ["nenhum campo VIP adicionado ao produto pai", !files.submit.includes("productVipAccessMode") && !files.admin.includes("VIP DESTE CARD")],\n];\nfor (const [name, ok] of checks) console.log(`${ok ? "OK" : "FAIL"} - ${name}`);\nif (checks.some(([, ok]) => !ok)) process.exit(1);\n''')
+
+      - name: Audit model/category VIP scope
+        run: node audit/check_model_category_vip.mjs
+
+      - name: Test VIP pricing rules
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm vitest run shared/vipPricing.test.ts
+
+      - name: Build production client/server
+        run: pnpm build
+
+      - name: Commit production implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shared/vipPricing.ts shared/vipPricing.test.ts server/routers/optionPriceModels.ts server/routers.ts client/src/pages/AdminProducts.tsx client/src/components/StorefrontProductCard.tsx client/src/pages/Home.tsx client/src/components/ColombiaBot.tsx audit/check_model_category_vip.mjs
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "feat(pedidos): VIP por modelo e categoria"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
