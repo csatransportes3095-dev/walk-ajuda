@@ -1,0 +1,78 @@
+name: VIP membership admin v4 2026-09-07
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/vip-membership-admin-v4-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Backup production branch
+        run: git push origin HEAD:refs/heads/backup/pre-vip-membership-admin-v4-20260907 || true
+
+      - name: Load reviewed patch and neutralize brittle checkout patch
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/csatransportes3095-dev/walk-ajuda/main/.github/workflows/vip-membership-admin-20260907.yml -o /tmp/vip-source.yml
+          python - <<'PY'
+          from pathlib import Path
+
+          src = Path('/tmp/vip-source.yml').read_text(encoding='utf-8').splitlines()
+          start = next(i for i, line in enumerate(src) if "python - <<'PY'" in line) + 1
+          end = next(i for i in range(start, len(src)) if src[i].strip() == 'PY')
+          prefix = '          '
+          lines = [line[len(prefix):] if line.startswith(prefix) else line for line in src[start:end]]
+
+          marker = next(i for i, line in enumerate(lines) if "'secure checkout membership')" in line)
+          block_start = marker
+          while block_start >= 0 and 's = replace_once(s,' not in lines[block_start]:
+              block_start -= 1
+          if block_start < 0:
+              raise SystemExit('Could not locate checkout replace_once start')
+          del lines[block_start:marker + 1]
+          Path('/tmp/vip_patch.py').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+          routers = Path('server/routers.ts')
+          text = routers.read_text(encoding='utf-8')
+          target = "          if (input.priceModelId) {\n            const modelAccess = await checkOptionPriceModelCheckoutAccess(input.priceModelId, isVipModelAccess);"
+          insertion = "          if (!isVipModelAccess && input.phone) {\n            isVipModelAccess = await isVipMemberByPhone(input.phone);\n          }\n"
+          if insertion.strip() not in text:
+              if target not in text:
+                  raise SystemExit('Checkout price model target not found')
+              text = text.replace(target, insertion + target, 1)
+              routers.write_text(text, encoding='utf-8')
+          PY
+          python /tmp/vip_patch.py
+
+      - name: Audit integration
+        run: node audit/check_vip_membership_admin.mjs
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Existing VIP pricing tests
+        run: pnpm vitest run server/vipPricing.test.ts
+
+      - name: Build production
+        run: pnpm build
+
+      - name: Commit complete VIP management
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/vipMemberships.ts server/routers.ts client/src/hooks/useVipMembership.ts client/src/pages/AdminVip.tsx client/src/pages/VipPage.tsx client/src/pages/Home.tsx client/src/components/StorefrontProductCard.tsx client/src/components/ColombiaBot.tsx client/src/pages/AdminCustomers.tsx audit/check_vip_membership_admin.mjs
+          git commit -m "feat(vip): gerenciar clientes validade e destaque no cadastro"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
