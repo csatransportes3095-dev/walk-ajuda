@@ -28,6 +28,7 @@ import "./welcome-neon-refresh.css";
 import "./admin-loans-mobile-fix.css";
 import "./h2-welcome-reference-top.css";
 import "./h2-welcome-mobile-car-fix.css";
+import "./h2-footer-mobile-fix.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
