@@ -11,6 +11,7 @@ import AdminHomeTopSettingsEnhancer from "./components/AdminHomeTopSettingsEnhan
 import SpreadsheetModulesEnhancer from "./components/SpreadsheetModulesEnhancer";
 import SpreadsheetLegacyModulesCleanup from "./components/SpreadsheetLegacyModulesCleanup";
 import AdminOrderLoginQuickEnhancer from "./components/AdminOrderLoginQuickEnhancer";
+import AdminOrderH2EmailQuickFix from "./components/AdminOrderH2EmailQuickFix";
 import AdminCustomerPhoneEditorEnhancer from "./components/AdminCustomerPhoneEditorEnhancer";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
 import AdminQuestionEditOptionsEnhancer from "./components/AdminQuestionEditOptionsEnhancer";
@@ -110,6 +111,7 @@ createRoot(document.getElementById("root")!).render(
       <SpreadsheetModulesEnhancer />
       <SpreadsheetLegacyModulesCleanup />
       <AdminOrderLoginQuickEnhancer />
+      <AdminOrderH2EmailQuickFix />
       <AdminCustomerPhoneEditorEnhancer />
       <RafflePhotoIntegrityEnhancer />
       <AdminProductsQuestionUXEnhancer />
