@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import H2WelcomePremium from "./components/H2WelcomePremium";
+import AdminHomeTopSettingsEnhancer from "./components/AdminHomeTopSettingsEnhancer";
 import AdminCustomerPhoneEditorEnhancer from "./components/AdminCustomerPhoneEditorEnhancer";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
 import AdminQuestionEditOptionsEnhancer from "./components/AdminQuestionEditOptionsEnhancer";
@@ -27,9 +28,6 @@ import "./admin-loans-mobile-fix.css";
 import "./h2-welcome-reference-top.css";
 import "./h2-welcome-mobile-car-fix.css";
 
-// Consultas de tela não podem ficar em loop por vários minutos quando o servidor
-// responde lentamente ou ocorre algum erro. Mutations continuam com prazo maior
-// porque uploads, geração de arquivos e envio de e-mails podem levar mais tempo.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -47,9 +45,7 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (typeof window === "undefined") return;
 
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
-
   if (!isUnauthorized) return;
-
   window.location.href = "/admin/login";
 };
 
@@ -95,8 +91,6 @@ const trpcClient = trpc.createClient({
       false: httpBatchLink({
         url: "/api/trpc",
         transformer: superjson,
-        // Consultas normais do painel devem responder rapidamente. Se não responderem,
-        // encerramos a tentativa em vez de deixar a tela girando indefinidamente.
         fetch: fetchWithTimeout(30000),
       }),
     }),
@@ -108,6 +102,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <GlobalDevToolsProtection />
       <AdminDevToolsTargetSelector />
+      <AdminHomeTopSettingsEnhancer />
       <AdminCustomerPhoneEditorEnhancer />
       <RafflePhotoIntegrityEnhancer />
       <AdminProductsQuestionUXEnhancer />
@@ -129,17 +124,13 @@ createRoot(document.getElementById("root")!).render(
   </trpc.Provider>
 );
 
-// Registrar Service Worker. updateViaCache:'none' evita que o próprio sw.js
-// fique preso no cache HTTP do navegador em celulares com versões antigas.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("/sw.js", { scope: "/", updateViaCache: "none" })
       .then((reg) => {
         console.log("[SW] Registrado:", reg.scope);
-        // Forçar uma checagem imediata por nova versão após cada carregamento.
         void reg.update().catch(() => undefined);
-        // Detectar quando um novo SW está instalado e recarregar automaticamente
         reg.addEventListener("updatefound", () => {
           const newWorker = reg.installing;
           if (!newWorker) return;
@@ -152,14 +143,12 @@ if ("serviceWorker" in navigator) {
       })
       .catch((err) => console.warn("[SW] Falha ao registrar:", err));
 
-    // Ouvir mensagem do SW kill-switch para recarregar
     navigator.serviceWorker.addEventListener("message", (event) => {
       if (event.data?.type === "SW_KILL" || event.data?.type === "SW_UPDATED") {
         window.location.reload();
       }
     });
 
-    // Se o SW foi atualizado em outra aba, recarregar esta também
     let refreshing = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
       if (!refreshing) {
