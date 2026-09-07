@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Copy, Eye, EyeOff, KeyRound, LockKeyhole, Plus } from "lucide-react";
+import { Copy, Eye, EyeOff, KeyRound, LockKeyhole, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -28,6 +28,15 @@ export function OrderLoginAuthenticatorCode({ registrationId }: { registrationId
     onError: (error) => toast.error(error.message || "Não foi possível criar o autenticador neste pedido."),
   });
 
+  const deleteEntry = trpc.adminAuthenticator.delete.useMutation({
+    onSuccess: async () => {
+      await utils.adminAuthenticator.getCodeForOrder.invalidate({ registrationId });
+      await codeQuery.refetch();
+      toast.success("Autenticador excluído.");
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível excluir o autenticador."),
+  });
+
   useEffect(() => {
     const onVisibilityChange = () => setIsPageVisible(!document.hidden);
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -45,6 +54,11 @@ export function OrderLoginAuthenticatorCode({ registrationId }: { registrationId
     }
   };
 
+  const remove = (entryId: number) => {
+    if (!window.confirm("Excluir este autenticador deste pedido?")) return;
+    deleteEntry.mutate({ id: entryId });
+  };
+
   const create = () => {
     if (!secret.trim()) {
       toast.error("Cole a chave secreta Base32 do autenticador.");
@@ -59,17 +73,20 @@ export function OrderLoginAuthenticatorCode({ registrationId }: { registrationId
         <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-cyan-200" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-black text-cyan-100">AUTENTICADOR PRIVADO DO ADM</p>
-          <p className="mt-0.5 text-[11px] text-cyan-100/70">Crie e vincule direto neste pedido. A chave fica cifrada e nunca é mostrada ao cliente nem entra no WhatsApp.</p>
+          <p className="mt-0.5 text-[11px] text-cyan-100/70">Cole somente a chave real deste pedido. Ela fica cifrada e nunca é mostrada ao cliente nem entra no WhatsApp.</p>
         </div>
       </div>
 
       {codeQuery.data?.length ? (
         <div className="mt-3 space-y-2">
           {codeQuery.data.map((entry) => (
-            <button key={entry.entryId} onClick={() => entry.code && copy(entry.entryId, entry.code)} disabled={!entry.code} className="flex w-full items-center justify-between gap-3 rounded-lg border border-cyan-300/20 bg-slate-950/70 px-3 py-2 text-left hover:bg-slate-900 disabled:cursor-default">
-              <span className="min-w-0"><span className="block truncate text-xs font-bold text-slate-100">{entry.label}</span><span className="block truncate text-[10px] text-slate-400">{entry.issuer || "Conta vinculada a este pedido"}</span></span>
-              {entry.code ? <span className="flex items-center gap-2 font-mono text-xl font-black tracking-[0.18em] text-cyan-100"><span>{entry.code}</span><Copy className="h-4 w-4 text-cyan-300" />{copiedEntryId === entry.entryId && <span className="text-[10px] font-sans tracking-normal text-emerald-300">Copiado</span>}</span> : <span className="text-xs text-red-300">Erro ao gerar</span>}
-            </button>
+            <div key={entry.entryId} className="flex w-full items-center gap-2 rounded-lg border border-cyan-300/20 bg-slate-950/70 px-3 py-2">
+              <button type="button" onClick={() => entry.code && copy(entry.entryId, entry.code)} disabled={!entry.code} className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left hover:opacity-90 disabled:cursor-default">
+                <span className="min-w-0"><span className="block truncate text-xs font-bold text-slate-100">{entry.label}</span><span className="block truncate text-[10px] text-slate-400">{entry.issuer || "Conta vinculada a este pedido"}</span></span>
+                {entry.code ? <span className="flex shrink-0 items-center gap-2 font-mono text-xl font-black tracking-[0.18em] text-cyan-100"><span>{entry.code}</span><Copy className="h-4 w-4 text-cyan-300" />{copiedEntryId === entry.entryId && <span className="text-[10px] font-sans tracking-normal text-emerald-300">Copiado</span>}</span> : <span className="text-xs text-red-300">Erro ao gerar</span>}
+              </button>
+              <button type="button" onClick={() => remove(entry.entryId)} disabled={deleteEntry.isPending} title="Excluir autenticador" className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-red-300 hover:bg-red-500/20 disabled:opacity-40"><Trash2 className="h-4 w-4" /></button>
+            </div>
           ))}
         </div>
       ) : (
@@ -83,7 +100,7 @@ export function OrderLoginAuthenticatorCode({ registrationId }: { registrationId
           <label className="space-y-1 md:col-span-2"><span className="text-[10px] font-semibold text-slate-400">Chave secreta Base32</span><div className="flex rounded-lg border border-white/10 bg-black/30 focus-within:border-cyan-300/50"><input value={secret} onChange={(event) => setSecret(event.target.value)} type={showSecret ? "text" : "password"} autoComplete="off" spellCheck={false} placeholder="Cole a chave do Google Authenticator" className="min-w-0 flex-1 bg-transparent px-3 py-2 font-mono text-xs text-white outline-none" /><button type="button" onClick={() => setShowSecret((value) => !value)} className="px-3 text-slate-400 hover:text-white" aria-label={showSecret ? "Ocultar chave" : "Mostrar chave"}>{showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></label>
         </div>
         <button type="button" onClick={create} disabled={createForOrder.isPending} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-cyan-300 px-3 py-2 text-[11px] font-black text-slate-950 hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"><KeyRound className="h-3.5 w-3.5" />{createForOrder.isPending ? "Criando e vinculando..." : "Criar e vincular"}</button>
-        <p className="mt-2 text-[10px] leading-4 text-slate-500">O nome é criado automaticamente com o cadastro e nome do cliente deste pedido. A chave desaparece após salvar.</p>
+        <p className="mt-2 text-[10px] leading-4 text-slate-500">O campo começa limpo. Se salvar uma chave errada, use a lixeira acima e cadastre novamente.</p>
       </div>
     </section>
   );
