@@ -1,0 +1,78 @@
+name: VIP sales page 2026-09-07 v2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/vip-sales-page-20260907-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-production:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Preserve production checkpoint
+        run: git push origin HEAD:refs/heads/backup/pre-vip-sales-page-v2-20260907 || true
+
+      - name: Apply reviewed VIP patch
+        shell: bash
+        run: |
+          git fetch origin main
+          git show origin/main:.github/workflows/vip-sales-page-20260907.yml > /tmp/vip-v1.yml
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('/tmp/vip-v1.yml').read_text(encoding='utf-8')
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "\n          PY\n\n      - name: Audit VIP sales experience"
+          start = text.index(start_marker) + len(start_marker)
+          end = text.index(end_marker, start)
+          script = text[start:end]
+          lines = script.splitlines()
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          Path('/tmp/apply_vip.py').write_text(script, encoding='utf-8')
+          PY
+          python /tmp/apply_vip.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('client/src/pages/AdminVip.tsx')
+          text = path.read_text(encoding='utf-8')
+          old = '<AdminHeader />'
+          new = '<AdminHeader title="H2 VIP" />'
+          if old not in text:
+              raise SystemExit('AdminHeader VIP nao encontrado')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Audit VIP sales experience
+        run: node audit/check_vip_sales_page.mjs
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Test VIP pricing rules
+        run: pnpm vitest run server/vipPricing.test.ts
+
+      - name: Build production client/server
+        run: pnpm build
+
+      - name: Commit production implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/VipPage.tsx client/src/pages/AdminVip.tsx client/src/App.tsx client/src/pages/AdminCodes.tsx client/src/components/StorefrontProductCard.tsx audit/check_vip_sales_page.mjs
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "feat(vip): exibir economia e pagina de assinatura"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
