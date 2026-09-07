@@ -1,0 +1,938 @@
+name: VIP membership admin 2026-09-07
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/vip-membership-admin-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Backup production branch
+        run: git push origin HEAD:refs/heads/backup/pre-vip-membership-admin-20260907 || true
+
+      - name: Implement VIP membership backend and UI
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f'Patch failed: {label}')
+              return text.replace(old, new, 1)
+
+          server_router = r'''import { TRPCError } from "@trpc/server";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { adminProcedure, publicProcedure, router } from "../_core/trpc";
+import { getDb, getSetting } from "../db";
+
+export type VipMembershipSnapshot = {
+  id: number;
+  customerId: number;
+  phone: string;
+  status: "active" | "expired" | "cancelled";
+  active: boolean;
+  startsAtMs: number;
+  expiresAtMs: number;
+  daysLeft: number;
+  lastPaymentAmount: string | null;
+  notes: string | null;
+};
+
+let infrastructurePromise: Promise<void> | null = null;
+
+function rowsOf<T>(result: any): T[] {
+  if (Array.isArray(result?.[0])) return result[0] as T[];
+  if (Array.isArray(result?.rows)) return result.rows as T[];
+  if (Array.isArray(result)) return result as T[];
+  return [];
+}
+
+function normalizePhone(value: string) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) digits = digits.slice(2);
+  return digits;
+}
+
+function normalizeAmount(value?: string | null): string | null {
+  const raw = String(value || "").trim().replace(/R\$/gi, "").replace(/\s/g, "");
+  if (!raw) return null;
+  const normalized = raw.includes(",")
+    ? raw.replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, "")
+    : raw.replace(/[^0-9.-]/g, "");
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric.toFixed(2) : null;
+}
+
+function derivedStatus(stored: unknown, expiresAtMs: number, now = Date.now()) {
+  if (String(stored) === "cancelled") return { status: "cancelled" as const, active: false, daysLeft: 0 };
+  if (String(stored) === "active" && expiresAtMs > now) {
+    return { status: "active" as const, active: true, daysLeft: Math.max(1, Math.ceil((expiresAtMs - now) / 86400000)) };
+  }
+  return { status: "expired" as const, active: false, daysLeft: 0 };
+}
+
+export async function ensureVipMembershipInfrastructure() {
+  if (!infrastructurePromise) {
+    infrastructurePromise = (async () => {
+      const db = (await getDb()) as any;
+      if (!db) throw new Error("Banco de dados indisponível para VIP.");
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS vipMemberships (
+          id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          customerId INT NOT NULL,
+          phone VARCHAR(32) NOT NULL,
+          status VARCHAR(16) NOT NULL DEFAULT 'active',
+          startsAtMs BIGINT NOT NULL,
+          expiresAtMs BIGINT NOT NULL,
+          lastPaymentAmount DECIMAL(10,2) NULL,
+          notes VARCHAR(255) NULL,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_vipMemberships_customer (customerId),
+          KEY idx_vipMemberships_phone (phone),
+          KEY idx_vipMemberships_status_expiry (status, expiresAtMs)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS vipMembershipHistory (
+          id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          membershipId INT NOT NULL,
+          customerId INT NOT NULL,
+          phone VARCHAR(32) NOT NULL,
+          action VARCHAR(32) NOT NULL,
+          days INT NULL,
+          previousExpiresAtMs BIGINT NULL,
+          newExpiresAtMs BIGINT NULL,
+          amount DECIMAL(10,2) NULL,
+          notes VARCHAR(255) NULL,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          KEY idx_vipMembershipHistory_customer (customerId),
+          KEY idx_vipMembershipHistory_membership (membershipId)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+    })().catch((error) => {
+      infrastructurePromise = null;
+      throw error;
+    });
+  }
+  await infrastructurePromise;
+}
+
+async function refreshExpiredMemberships() {
+  await ensureVipMembershipInfrastructure();
+  const db = (await getDb()) as any;
+  if (!db) return;
+  const now = Date.now();
+  await db.execute(sql`UPDATE vipMemberships SET status='expired' WHERE status='active' AND expiresAtMs <= ${now}`);
+}
+
+async function defaultPlanDays() {
+  const configured = Number(await getSetting("vip_membership_days"));
+  return Number.isFinite(configured) && configured > 0 ? Math.min(3650, Math.floor(configured)) : 30;
+}
+
+async function getCustomerForVip(customerId: number) {
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  const result = await db.execute(sql`
+    SELECT id, name, phone, customerNumber, profilePhotoUrl
+    FROM customers
+    WHERE id=${customerId} AND deletedAt IS NULL
+    LIMIT 1
+  `);
+  const row = rowsOf<any>(result)[0];
+  if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+  return { ...row, id: Number(row.id), phone: normalizePhone(row.phone) };
+}
+
+async function getMembershipByCustomerId(customerId: number) {
+  await ensureVipMembershipInfrastructure();
+  const db = (await getDb()) as any;
+  if (!db) return null;
+  const result = await db.execute(sql`SELECT * FROM vipMemberships WHERE customerId=${customerId} LIMIT 1`);
+  return rowsOf<any>(result)[0] || null;
+}
+
+async function logHistory(input: {
+  membershipId: number;
+  customerId: number;
+  phone: string;
+  action: string;
+  days?: number | null;
+  previousExpiresAtMs?: number | null;
+  newExpiresAtMs?: number | null;
+  amount?: string | null;
+  notes?: string | null;
+}) {
+  const db = (await getDb()) as any;
+  if (!db) return;
+  await db.execute(sql`
+    INSERT INTO vipMembershipHistory
+      (membershipId, customerId, phone, action, days, previousExpiresAtMs, newExpiresAtMs, amount, notes)
+    VALUES
+      (${input.membershipId}, ${input.customerId}, ${input.phone}, ${input.action}, ${input.days ?? null}, ${input.previousExpiresAtMs ?? null}, ${input.newExpiresAtMs ?? null}, ${input.amount ?? null}, ${input.notes || null})
+  `);
+}
+
+export async function getVipMembershipSnapshotMap(): Promise<Map<number, VipMembershipSnapshot>> {
+  await refreshExpiredMemberships();
+  const db = (await getDb()) as any;
+  const map = new Map<number, VipMembershipSnapshot>();
+  if (!db) return map;
+  const result = await db.execute(sql`SELECT id, customerId, phone, status, startsAtMs, expiresAtMs, lastPaymentAmount, notes FROM vipMemberships`);
+  const now = Date.now();
+  for (const row of rowsOf<any>(result)) {
+    const expiresAtMs = Number(row.expiresAtMs || 0);
+    const derived = derivedStatus(row.status, expiresAtMs, now);
+    map.set(Number(row.customerId), {
+      id: Number(row.id),
+      customerId: Number(row.customerId),
+      phone: normalizePhone(row.phone),
+      status: derived.status,
+      active: derived.active,
+      startsAtMs: Number(row.startsAtMs || 0),
+      expiresAtMs,
+      daysLeft: derived.daysLeft,
+      lastPaymentAmount: row.lastPaymentAmount == null ? null : String(row.lastPaymentAmount),
+      notes: row.notes == null ? null : String(row.notes),
+    });
+  }
+  return map;
+}
+
+async function statusByPhone(phoneValue: string) {
+  await refreshExpiredMemberships();
+  const db = (await getDb()) as any;
+  const phone = normalizePhone(phoneValue);
+  if (!db || phone.length < 10) return { active: false, status: "none" as const, startsAtMs: null, expiresAtMs: null, daysLeft: 0 };
+  const result = await db.execute(sql`
+    SELECT vm.id, vm.customerId, vm.phone, vm.status, vm.startsAtMs, vm.expiresAtMs
+    FROM vipMemberships vm
+    LEFT JOIN customers c ON c.id = vm.customerId
+    WHERE vm.phone=${phone} OR REGEXP_REPLACE(COALESCE(c.phone, ''), '[^0-9]', '')=${phone}
+    ORDER BY vm.id DESC
+    LIMIT 1
+  `);
+  const row = rowsOf<any>(result)[0];
+  if (!row) return { active: false, status: "none" as const, startsAtMs: null, expiresAtMs: null, daysLeft: 0 };
+  const expiresAtMs = Number(row.expiresAtMs || 0);
+  const derived = derivedStatus(row.status, expiresAtMs);
+  return {
+    active: derived.active,
+    status: derived.status,
+    startsAtMs: Number(row.startsAtMs || 0) || null,
+    expiresAtMs: expiresAtMs || null,
+    daysLeft: derived.daysLeft,
+  };
+}
+
+export async function isVipMemberByPhone(phone: string) {
+  try {
+    return (await statusByPhone(phone)).active;
+  } catch (error) {
+    console.warn("[VIP] Não foi possível consultar assinatura por telefone:", (error as Error)?.message);
+    return false;
+  }
+}
+
+export const vipMembershipsRouter = router({
+  status: publicProcedure
+    .input(z.object({ phone: z.string().min(8).max(32) }))
+    .query(async ({ input }) => statusByPhone(input.phone)),
+
+  adminDirectory: adminProcedure.query(async () => {
+    await refreshExpiredMemberships();
+    const db = (await getDb()) as any;
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+    const now = Date.now();
+    const result = await db.execute(sql`
+      SELECT
+        c.id AS customerId,
+        c.name,
+        c.phone,
+        c.customerNumber,
+        c.profilePhotoUrl,
+        vm.id AS membershipId,
+        vm.status AS membershipStatus,
+        vm.startsAtMs,
+        vm.expiresAtMs,
+        vm.lastPaymentAmount,
+        vm.notes
+      FROM customers c
+      LEFT JOIN vipMemberships vm ON vm.customerId = c.id
+      WHERE c.deletedAt IS NULL
+      ORDER BY c.name ASC
+    `);
+    return rowsOf<any>(result).map((row) => {
+      const membershipId = row.membershipId == null ? null : Number(row.membershipId);
+      const expiresAtMs = Number(row.expiresAtMs || 0);
+      const derived = membershipId ? derivedStatus(row.membershipStatus, expiresAtMs, now) : { status: "none" as const, active: false, daysLeft: 0 };
+      return {
+        customerId: Number(row.customerId),
+        name: String(row.name || ""),
+        phone: normalizePhone(row.phone),
+        customerNumber: row.customerNumber == null ? null : Number(row.customerNumber),
+        profilePhotoUrl: row.profilePhotoUrl == null ? null : String(row.profilePhotoUrl),
+        membershipId,
+        status: derived.status,
+        active: derived.active,
+        startsAtMs: Number(row.startsAtMs || 0) || null,
+        expiresAtMs: expiresAtMs || null,
+        daysLeft: derived.daysLeft,
+        lastPaymentAmount: row.lastPaymentAmount == null ? null : String(row.lastPaymentAmount),
+        notes: row.notes == null ? null : String(row.notes),
+      };
+    });
+  }),
+
+  history: adminProcedure
+    .input(z.object({ customerId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      await ensureVipMembershipInfrastructure();
+      const db = (await getDb()) as any;
+      if (!db) return [];
+      const result = await db.execute(sql`
+        SELECT id, membershipId, customerId, phone, action, days, previousExpiresAtMs, newExpiresAtMs, amount, notes, createdAt
+        FROM vipMembershipHistory
+        WHERE customerId=${input.customerId}
+        ORDER BY id DESC
+        LIMIT 60
+      `);
+      return rowsOf<any>(result).map((row) => ({
+        ...row,
+        id: Number(row.id),
+        membershipId: Number(row.membershipId),
+        customerId: Number(row.customerId),
+        days: row.days == null ? null : Number(row.days),
+        previousExpiresAtMs: row.previousExpiresAtMs == null ? null : Number(row.previousExpiresAtMs),
+        newExpiresAtMs: row.newExpiresAtMs == null ? null : Number(row.newExpiresAtMs),
+        amount: row.amount == null ? null : String(row.amount),
+        createdAt: row.createdAt ? new Date(row.createdAt).getTime() : null,
+      }));
+    }),
+
+  activate: adminProcedure
+    .input(z.object({
+      customerId: z.number().int().positive(),
+      days: z.number().int().min(1).max(3650).optional(),
+      amount: z.string().max(32).optional(),
+      notes: z.string().max(255).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      await ensureVipMembershipInfrastructure();
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      const customer = await getCustomerForVip(input.customerId);
+      const days = input.days || await defaultPlanDays();
+      const now = Date.now();
+      const expiresAtMs = now + days * 86400000;
+      const amount = normalizeAmount(input.amount);
+      const existing = await getMembershipByCustomerId(input.customerId);
+      const previousExpiresAtMs = existing ? Number(existing.expiresAtMs || 0) : null;
+      if (existing) {
+        await db.execute(sql`
+          UPDATE vipMemberships
+          SET phone=${customer.phone}, status='active', startsAtMs=${now}, expiresAtMs=${expiresAtMs}, lastPaymentAmount=${amount}, notes=${input.notes || null}
+          WHERE customerId=${input.customerId}
+        `);
+      } else {
+        await db.execute(sql`
+          INSERT INTO vipMemberships (customerId, phone, status, startsAtMs, expiresAtMs, lastPaymentAmount, notes)
+          VALUES (${input.customerId}, ${customer.phone}, 'active', ${now}, ${expiresAtMs}, ${amount}, ${input.notes || null})
+        `);
+      }
+      const membership = await getMembershipByCustomerId(input.customerId);
+      await logHistory({ membershipId: Number(membership.id), customerId: input.customerId, phone: customer.phone, action: "activate", days, previousExpiresAtMs, newExpiresAtMs: expiresAtMs, amount, notes: input.notes });
+      return { success: true, expiresAtMs, days };
+    }),
+
+  renew: adminProcedure
+    .input(z.object({
+      customerId: z.number().int().positive(),
+      days: z.number().int().min(1).max(3650).optional(),
+      amount: z.string().max(32).optional(),
+      notes: z.string().max(255).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      await ensureVipMembershipInfrastructure();
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      const customer = await getCustomerForVip(input.customerId);
+      const days = input.days || await defaultPlanDays();
+      const now = Date.now();
+      const existing = await getMembershipByCustomerId(input.customerId);
+      const previousExpiresAtMs = existing ? Number(existing.expiresAtMs || 0) : null;
+      const baseMs = existing && Number(existing.expiresAtMs || 0) > now && String(existing.status) === "active" ? Number(existing.expiresAtMs) : now;
+      const expiresAtMs = baseMs + days * 86400000;
+      const amount = normalizeAmount(input.amount);
+      if (existing) {
+        await db.execute(sql`
+          UPDATE vipMemberships
+          SET phone=${customer.phone}, status='active', startsAtMs=CASE WHEN startsAtMs > 0 THEN startsAtMs ELSE ${now} END, expiresAtMs=${expiresAtMs}, lastPaymentAmount=${amount}, notes=${input.notes || existing.notes || null}
+          WHERE customerId=${input.customerId}
+        `);
+      } else {
+        await db.execute(sql`
+          INSERT INTO vipMemberships (customerId, phone, status, startsAtMs, expiresAtMs, lastPaymentAmount, notes)
+          VALUES (${input.customerId}, ${customer.phone}, 'active', ${now}, ${expiresAtMs}, ${amount}, ${input.notes || null})
+        `);
+      }
+      const membership = await getMembershipByCustomerId(input.customerId);
+      await logHistory({ membershipId: Number(membership.id), customerId: input.customerId, phone: customer.phone, action: "renew", days, previousExpiresAtMs, newExpiresAtMs: expiresAtMs, amount, notes: input.notes });
+      return { success: true, expiresAtMs, days };
+    }),
+
+  setExpiry: adminProcedure
+    .input(z.object({ customerId: z.number().int().positive(), expiresAtMs: z.number().int().positive(), notes: z.string().max(255).optional() }))
+    .mutation(async ({ input }) => {
+      await ensureVipMembershipInfrastructure();
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      const customer = await getCustomerForVip(input.customerId);
+      const existing = await getMembershipByCustomerId(input.customerId);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Ative o VIP desse cliente antes de alterar a validade." });
+      const previousExpiresAtMs = Number(existing.expiresAtMs || 0);
+      const status = input.expiresAtMs > Date.now() ? "active" : "expired";
+      await db.execute(sql`UPDATE vipMemberships SET phone=${customer.phone}, expiresAtMs=${input.expiresAtMs}, status=${status}, notes=${input.notes || existing.notes || null} WHERE customerId=${input.customerId}`);
+      await logHistory({ membershipId: Number(existing.id), customerId: input.customerId, phone: customer.phone, action: "set_expiry", previousExpiresAtMs, newExpiresAtMs: input.expiresAtMs, notes: input.notes });
+      return { success: true, expiresAtMs: input.expiresAtMs, status };
+    }),
+
+  cancel: adminProcedure
+    .input(z.object({ customerId: z.number().int().positive(), notes: z.string().max(255).optional() }))
+    .mutation(async ({ input }) => {
+      await ensureVipMembershipInfrastructure();
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      const customer = await getCustomerForVip(input.customerId);
+      const existing = await getMembershipByCustomerId(input.customerId);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Esse cliente ainda não possui VIP." });
+      await db.execute(sql`UPDATE vipMemberships SET status='cancelled', phone=${customer.phone}, notes=${input.notes || existing.notes || null} WHERE customerId=${input.customerId}`);
+      await logHistory({ membershipId: Number(existing.id), customerId: input.customerId, phone: customer.phone, action: "cancel", previousExpiresAtMs: Number(existing.expiresAtMs || 0), newExpiresAtMs: Number(existing.expiresAtMs || 0), notes: input.notes });
+      return { success: true };
+    }),
+});
+'''
+          Path('server/routers/vipMemberships.ts').write_text(server_router, encoding='utf-8')
+
+          hook = r'''import { useEffect } from "react";
+import { trpc } from "@/lib/trpc";
+
+const VIP_ACTIVE_KEY = "walk_vip_active";
+const VIP_EXPIRES_KEY = "walk_vip_expires";
+
+function normalizePhone(value: string) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) digits = digits.slice(2);
+  return digits;
+}
+
+function legacyVipState() {
+  if (typeof window === "undefined") return { active: false, expiresAt: null as number | null };
+  if (localStorage.getItem("walk_access_type") !== "vip") return { active: false, expiresAt: null };
+  const raw = localStorage.getItem("walk_access_expires");
+  if (!raw) return { active: true, expiresAt: null };
+  const expiresAt = new Date(raw).getTime();
+  return { active: Number.isFinite(expiresAt) && expiresAt > Date.now(), expiresAt: Number.isFinite(expiresAt) ? expiresAt : null };
+}
+
+export function useVipMembership() {
+  const phone = typeof window !== "undefined" ? normalizePhone(localStorage.getItem("walk_client_phone") || "") : "";
+  const cachedExpires = typeof window !== "undefined" ? Number(localStorage.getItem(VIP_EXPIRES_KEY) || 0) : 0;
+  const cachedActive = typeof window !== "undefined" && localStorage.getItem(VIP_ACTIVE_KEY) === "true" && cachedExpires > Date.now();
+  const legacy = legacyVipState();
+  const query = trpc.vipMemberships.status.useQuery(
+    { phone },
+    {
+      enabled: phone.length >= 10,
+      staleTime: 15_000,
+      refetchInterval: 30_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      retry: 2,
+    },
+  );
+
+  const membershipActive = query.data ? Boolean(query.data.active) : cachedActive;
+  const expiresAt = query.data?.active ? Number(query.data.expiresAtMs || 0) || null : (membershipActive ? cachedExpires || null : legacy.expiresAt);
+  const isVipCustomer = membershipActive || legacy.active;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !query.data) return;
+    if (query.data.active && query.data.expiresAtMs) {
+      localStorage.setItem(VIP_ACTIVE_KEY, "true");
+      localStorage.setItem(VIP_EXPIRES_KEY, String(query.data.expiresAtMs));
+    } else {
+      localStorage.removeItem(VIP_ACTIVE_KEY);
+      localStorage.removeItem(VIP_EXPIRES_KEY);
+    }
+  }, [query.data?.active, query.data?.expiresAtMs]);
+
+  return {
+    isVipCustomer,
+    membershipActive,
+    expiresAt,
+    daysLeft: query.data?.daysLeft ?? (membershipActive && expiresAt ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 86400000)) : 0),
+    status: query.data?.status ?? (membershipActive ? "active" : "none"),
+    isLoading: query.isLoading,
+    refetch: query.refetch,
+  };
+}
+'''
+          Path('client/src/hooks/useVipMembership.ts').write_text(hook, encoding='utf-8')
+
+          admin_vip = r'''import { useMemo, useState } from "react";
+import { CalendarDays, CheckCircle2, Clock3, Crown, ExternalLink, History, RefreshCw, Save, Search, Settings2, ShieldCheck, UserCheck, UserX, X } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import AdminHeader from "@/components/AdminHeader";
+
+function money(value: string | number | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "—";
+  const normalized = raw.includes(",") ? Number(raw.replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, "")) : Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(normalized) ? normalized.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : raw;
+}
+
+function formatDate(value: number | null | undefined, withTime = false) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("pt-BR", withTime ? { dateStyle: "short", timeStyle: "short" } : { dateStyle: "short" });
+}
+
+function actionLabel(action: string) {
+  if (action === "activate") return "VIP ativado";
+  if (action === "renew") return "VIP renovado";
+  if (action === "set_expiry") return "Validade alterada";
+  if (action === "cancel") return "VIP cancelado";
+  return action;
+}
+
+type ActionMode = "activate" | "renew" | "expiry" | "cancel";
+
+export default function AdminVip() {
+  const { data: settings, isLoading } = trpc.settings.getAll.useQuery();
+  const { data: activePix } = trpc.pix.getActive.useQuery();
+  const utils = trpc.useUtils();
+  const initialSearch = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("phone") || "" : "";
+  const [search, setSearch] = useState(initialSearch);
+  const [filter, setFilter] = useState<"all" | "active" | "expired" | "none" | "cancelled">("all");
+  const [historyCustomerId, setHistoryCustomerId] = useState<number | null>(null);
+  const [actionModal, setActionModal] = useState<{ mode: ActionMode; customer: any } | null>(null);
+  const [daysInput, setDaysInput] = useState("30");
+  const [amountInput, setAmountInput] = useState("");
+  const [expiryInput, setExpiryInput] = useState("");
+  const [notesInput, setNotesInput] = useState("");
+  const [form, setForm] = useState({ enabled: true, price: "", days: "30", title: "H2 VIP", subtitle: "Pague menos nos modelos e categorias com benefício VIP.", benefit1: "Preços especiais em modelos e categorias selecionados", benefit2: "Acesso a opções exclusivas marcadas como SOMENTE VIP", benefit3: "O valor VIP aparece antes da compra para você comparar" });
+  const [formInitialized, setFormInitialized] = useState(false);
+
+  if (settings && !formInitialized) {
+    setFormInitialized(true);
+    setForm({
+      enabled: settings.vip_membership_enabled !== "0",
+      price: settings.vip_membership_price || "",
+      days: settings.vip_membership_days || "30",
+      title: settings.vip_membership_title || "H2 VIP",
+      subtitle: settings.vip_membership_subtitle || "Pague menos nos modelos e categorias com benefício VIP.",
+      benefit1: settings.vip_membership_benefit_1 || "Preços especiais em modelos e categorias selecionados",
+      benefit2: settings.vip_membership_benefit_2 || "Acesso a opções exclusivas marcadas como SOMENTE VIP",
+      benefit3: settings.vip_membership_benefit_3 || "O valor VIP aparece antes da compra para você comparar",
+    });
+  }
+
+  const directoryQuery = trpc.vipMemberships.adminDirectory.useQuery(undefined, { staleTime: 10_000, refetchOnWindowFocus: true });
+  const historyQuery = trpc.vipMemberships.history.useQuery({ customerId: historyCustomerId || 1 }, { enabled: !!historyCustomerId, staleTime: 0 });
+  const directory = (directoryQuery.data || []) as any[];
+  const planDays = Math.max(1, Number(form.days || 30) || 30);
+
+  const refreshAll = async () => {
+    await Promise.all([directoryQuery.refetch(), utils.customers.list.invalidate()]);
+  };
+
+  const update = trpc.settings.update.useMutation({
+    onSuccess: () => { toast.success("Configuração VIP salva!"); utils.settings.getAll.invalidate(); },
+    onError: (error) => toast.error(error.message || "Erro ao salvar VIP"),
+  });
+  const activateMut = trpc.vipMemberships.activate.useMutation({ onSuccess: () => { toast.success("VIP ativado com sucesso!"); setActionModal(null); refreshAll(); }, onError: (e) => toast.error(e.message) });
+  const renewMut = trpc.vipMemberships.renew.useMutation({ onSuccess: () => { toast.success("VIP renovado com sucesso!"); setActionModal(null); refreshAll(); }, onError: (e) => toast.error(e.message) });
+  const expiryMut = trpc.vipMemberships.setExpiry.useMutation({ onSuccess: () => { toast.success("Validade alterada!"); setActionModal(null); refreshAll(); }, onError: (e) => toast.error(e.message) });
+  const cancelMut = trpc.vipMemberships.cancel.useMutation({ onSuccess: () => { toast.success("VIP cancelado."); setActionModal(null); refreshAll(); }, onError: (e) => toast.error(e.message) });
+  const actionPending = activateMut.isPending || renewMut.isPending || expiryMut.isPending || cancelMut.isPending;
+
+  const saveConfig = () => {
+    update.mutate({ settings: {
+      vip_membership_enabled: form.enabled ? "1" : "0",
+      vip_membership_price: form.price.trim(),
+      vip_membership_days: String(Math.max(1, Number(form.days || 30) || 30)),
+      vip_membership_title: form.title.trim() || "H2 VIP",
+      vip_membership_subtitle: form.subtitle.trim(),
+      vip_membership_benefit_1: form.benefit1.trim(),
+      vip_membership_benefit_2: form.benefit2.trim(),
+      vip_membership_benefit_3: form.benefit3.trim(),
+    }});
+  };
+
+  const stats = useMemo(() => ({
+    active: directory.filter((c) => c.active).length,
+    expiring: directory.filter((c) => c.active && Number(c.daysLeft || 0) <= 7).length,
+    expired: directory.filter((c) => c.status === "expired").length,
+    total: directory.length,
+  }), [directory]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase().replace(/\D/g, "");
+    const raw = search.trim().toLowerCase();
+    return directory.filter((c) => {
+      const matchesFilter = filter === "all" || c.status === filter;
+      if (!matchesFilter) return false;
+      if (!raw) return true;
+      return String(c.name || "").toLowerCase().includes(raw) || String(c.phone || "").replace(/\D/g, "").includes(q) || String(c.customerNumber || "").includes(raw.replace("*", ""));
+    });
+  }, [directory, filter, search]);
+
+  const openAction = (mode: ActionMode, customer: any) => {
+    setDaysInput(String(planDays));
+    setAmountInput(form.price || customer.lastPaymentAmount || "");
+    setNotesInput("");
+    const date = customer.expiresAtMs && customer.expiresAtMs > Date.now() ? new Date(customer.expiresAtMs) : new Date(Date.now() + planDays * 86400000);
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    setExpiryInput(local);
+    setActionModal({ mode, customer });
+  };
+
+  const submitAction = async () => {
+    if (!actionModal) return;
+    const customerId = Number(actionModal.customer.customerId);
+    const notes = notesInput.trim() || undefined;
+    if (actionModal.mode === "activate") return activateMut.mutateAsync({ customerId, days: Math.max(1, Number(daysInput) || planDays), amount: amountInput.trim() || undefined, notes });
+    if (actionModal.mode === "renew") return renewMut.mutateAsync({ customerId, days: Math.max(1, Number(daysInput) || planDays), amount: amountInput.trim() || undefined, notes });
+    if (actionModal.mode === "expiry") {
+      const expiresAtMs = expiryInput ? new Date(`${expiryInput}T23:59:59`).getTime() : 0;
+      if (!expiresAtMs) return toast.error("Escolha uma data de validade.");
+      return expiryMut.mutateAsync({ customerId, expiresAtMs, notes });
+    }
+    return cancelMut.mutateAsync({ customerId, notes });
+  };
+
+  const inputClass = "mt-2 w-full rounded-xl border border-white/15 bg-slate-950/70 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-amber-300/70";
+
+  return (
+    <div className="min-h-screen bg-slate-950 pb-16 text-white">
+      <AdminHeader title="H2 VIP" />
+      <main className="mx-auto w-full max-w-6xl px-4 py-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><div className="flex items-center gap-2 text-amber-300"><Crown className="h-6 w-6 fill-amber-300/30" /><span className="text-xs font-black uppercase tracking-[0.16em]">H2 VIP</span></div><h1 className="mt-2 text-3xl font-black">Configuração e Clientes VIP</h1><p className="mt-2 text-sm text-slate-400">Plano, pagamento, ativação, validade, renovação e histórico no mesmo lugar.</p></div>
+          <a href="/vip" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-violet-400/45 bg-violet-500/10 px-4 py-3 text-sm font-black text-violet-200"><ExternalLink className="h-4 w-4" /> Ver página VIP</a>
+        </div>
+
+        {isLoading ? <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-slate-300">Carregando...</div> : <div className="mt-6 grid gap-5">
+          <section className="rounded-2xl border border-amber-300/25 bg-amber-400/[0.05] p-5"><label className="flex cursor-pointer items-center justify-between gap-4"><div><p className="font-black">VIP disponível para contratação</p><p className="mt-1 text-xs text-slate-400">Desative para esconder o fluxo de pagamento.</p></div><input type="checkbox" checked={form.enabled} onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))} className="h-5 w-5 accent-amber-400" /></label></section>
+          <section className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:grid-cols-2">
+            <label className="text-xs font-black uppercase tracking-wide text-slate-300">Valor do VIP<input value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="Ex.: 29,90" className={inputClass} /></label>
+            <label className="text-xs font-black uppercase tracking-wide text-slate-300">Duração em dias<input type="number" min="1" value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} className={inputClass} /></label>
+            <label className="sm:col-span-2 text-xs font-black uppercase tracking-wide text-slate-300">Título<input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} className={inputClass} /></label>
+            <label className="sm:col-span-2 text-xs font-black uppercase tracking-wide text-slate-300">Descrição<textarea value={form.subtitle} onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))} rows={3} className={inputClass} /></label>
+          </section>
+          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"><div className="mb-4 flex items-center gap-2"><Settings2 className="h-5 w-5 text-violet-300" /><h2 className="font-black">Benefícios exibidos ao cliente</h2></div>{(["benefit1", "benefit2", "benefit3"] as const).map((key, index) => <label key={key} className="mb-4 block text-xs font-black uppercase tracking-wide text-slate-300">Benefício {index + 1}<input value={form[key]} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} className={inputClass} /></label>)}</section>
+          <section className="rounded-2xl border border-cyan-400/25 bg-cyan-500/[0.05] p-5"><p className="text-sm font-black text-cyan-100">PIX usado na página VIP</p>{activePix ? <p className="mt-2 text-sm text-slate-300">{activePix.pixKey} {activePix.pixName ? `• ${activePix.pixName}` : ""}</p> : <p className="mt-2 text-sm text-rose-300">Nenhuma conta PIX ativa. Ative uma em Configurações.</p>}<a href="/admin/settings" className="mt-3 inline-flex text-xs font-black uppercase text-cyan-300 underline underline-offset-4">Abrir configurações de PIX</a></section>
+          <button type="button" onClick={saveConfig} disabled={update.isPending} className="inline-flex min-h-[56px] items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-amber-300 to-yellow-400 px-5 text-sm font-black uppercase text-[#251600] disabled:opacity-50"><Save className="h-5 w-5" /> {update.isPending ? "Salvando..." : "Salvar configuração VIP"}</button>
+        </div>}
+
+        <section className="mt-10 overflow-hidden rounded-[28px] border border-amber-300/40 bg-[radial-gradient(circle_at_15%_0%,rgba(251,191,36,.10),transparent_28%),linear-gradient(180deg,#11101d,#080a16)] shadow-[0_25px_70px_rgba(0,0,0,.35)]">
+          <div className="border-b border-amber-300/20 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex items-center gap-2 text-amber-300"><Crown className="h-7 w-7 fill-amber-300/25" /><h2 className="text-2xl font-black">Clientes VIP</h2></div><p className="mt-2 text-sm text-slate-400">Ative depois do pagamento, acompanhe vencimento, renove ou cancele.</p></div><button onClick={() => refreshAll()} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200"><RefreshCw className={`h-4 w-4 ${directoryQuery.isFetching ? "animate-spin" : ""}`} /> Atualizar</button></div></div>
+          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 sm:p-6">
+            <div className="rounded-2xl border border-amber-300/35 bg-amber-400/10 p-4"><p className="text-[10px] font-black uppercase tracking-wide text-amber-200">VIP ativos</p><p className="mt-1 text-3xl font-black text-amber-300">{stats.active}</p></div>
+            <div className="rounded-2xl border border-orange-300/25 bg-orange-400/10 p-4"><p className="text-[10px] font-black uppercase tracking-wide text-orange-200">Vencem em 7 dias</p><p className="mt-1 text-3xl font-black text-orange-300">{stats.expiring}</p></div>
+            <div className="rounded-2xl border border-rose-300/25 bg-rose-400/10 p-4"><p className="text-[10px] font-black uppercase tracking-wide text-rose-200">Expirados</p><p className="mt-1 text-3xl font-black text-rose-300">{stats.expired}</p></div>
+            <div className="rounded-2xl border border-violet-300/25 bg-violet-400/10 p-4"><p className="text-[10px] font-black uppercase tracking-wide text-violet-200">Cadastros</p><p className="mt-1 text-3xl font-black text-violet-300">{stats.total}</p></div>
+          </div>
+          <div className="border-y border-white/10 bg-black/20 p-4 sm:p-5"><div className="relative"><Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente por nome, telefone ou número de cadastro" className="w-full rounded-2xl border border-white/10 bg-slate-950/75 py-3 pl-12 pr-4 text-sm font-semibold text-white outline-none focus:border-amber-300/60" /></div><div className="mt-3 flex flex-wrap gap-2">{([['all','Todos'],['active','VIP ativos'],['expired','Expirados'],['none','Sem VIP'],['cancelled','Cancelados']] as const).map(([key,label]) => <button key={key} onClick={() => setFilter(key)} className={`rounded-full border px-3 py-2 text-[10px] font-black uppercase ${filter === key ? 'border-amber-300 bg-amber-300 text-[#271700]' : 'border-white/10 bg-white/5 text-slate-300'}`}>{label}</button>)}</div></div>
+          <div className="grid gap-3 p-4 sm:p-6">
+            {directoryQuery.isLoading ? <div className="p-6 text-center text-slate-400">Carregando clientes...</div> : filtered.length === 0 ? <div className="p-6 text-center text-slate-500">Nenhum cliente encontrado.</div> : filtered.map((c) => (
+              <article key={c.customerId} className={`rounded-2xl border p-4 ${c.active ? 'border-amber-300/55 bg-[linear-gradient(135deg,rgba(120,53,15,.32),rgba(49,25,88,.32))] shadow-[0_0_28px_rgba(251,191,36,.10)]' : c.status === 'expired' ? 'border-rose-400/25 bg-rose-500/[0.04]' : 'border-white/10 bg-white/[0.025]'}`}>
+                <div className="flex flex-wrap items-center gap-4"><div className={`grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border ${c.active ? 'border-amber-300/70 bg-amber-400/10' : 'border-white/10 bg-white/5'}`}>{c.profilePhotoUrl ? <img src={c.profilePhotoUrl} alt="" className="h-full w-full object-cover" /> : c.active ? <Crown className="h-7 w-7 fill-amber-300/20 text-amber-300" /> : <UserCheck className="h-6 w-6 text-slate-400" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-black text-white">{c.customerNumber ? `*${c.customerNumber} • ` : ''}{c.name}</p>{c.active && <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-400/15 px-2 py-1 text-[9px] font-black uppercase text-amber-200"><Crown className="h-3 w-3 fill-amber-300/30" /> VIP ATIVO</span>}{c.status === 'expired' && <span className="rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-1 text-[9px] font-black uppercase text-rose-300">EXPIRADO</span>}{c.status === 'cancelled' && <span className="rounded-full border border-slate-400/30 bg-slate-500/10 px-2 py-1 text-[9px] font-black uppercase text-slate-400">CANCELADO</span>}</div><p className="mt-1 text-xs font-mono text-slate-400">{c.phone}</p>{c.active ? <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold"><span className="text-amber-200"><Clock3 className="mr-1 inline h-3.5 w-3.5" />{c.daysLeft} dia(s) restantes</span><span className="text-slate-400">Vence: {formatDate(c.expiresAtMs)}</span></div> : c.membershipId ? <p className="mt-2 text-[11px] text-slate-500">Última validade: {formatDate(c.expiresAtMs)}</p> : <p className="mt-2 text-[11px] text-slate-500">Ainda não possui assinatura VIP.</p>}</div>
+                  <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">{c.active ? <><button onClick={() => openAction('renew', c)} className="rounded-xl bg-emerald-500 px-3 py-2 text-[10px] font-black uppercase text-emerald-950">Renovar</button><button onClick={() => openAction('expiry', c)} className="rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-3 py-2 text-[10px] font-black uppercase text-cyan-200">Alterar validade</button><button onClick={() => openAction('cancel', c)} className="rounded-xl border border-rose-400/35 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase text-rose-300">Cancelar</button></> : <button onClick={() => openAction('activate', c)} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-300 to-yellow-400 px-4 py-2 text-[10px] font-black uppercase text-[#251600]"><Crown className="h-4 w-4" /> {c.membershipId ? 'Reativar VIP' : 'Ativar VIP'}</button>}{c.membershipId && <button onClick={() => setHistoryCustomerId(c.customerId)} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase text-slate-300"><History className="h-4 w-4" /> Histórico</button>}</div></div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
+
+      {actionModal && <div className="fixed inset-0 z-[100] grid place-items-center bg-black/75 p-4"><div className="w-full max-w-md rounded-[24px] border border-amber-300/40 bg-[#0c0d1b] p-5 shadow-2xl"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.15em] text-amber-300">Gestão VIP</p><h3 className="mt-1 text-xl font-black">{actionModal.customer.name}</h3><p className="mt-1 text-xs text-slate-400">{actionModal.customer.phone}</p></div><button onClick={() => setActionModal(null)} disabled={actionPending} className="rounded-lg bg-white/5 p-2 text-slate-400"><X className="h-5 w-5" /></button></div><div className="mt-5 grid gap-4">{(actionModal.mode === 'activate' || actionModal.mode === 'renew') && <><label className="text-xs font-black uppercase text-slate-300">Quantidade de dias<input type="number" min="1" value={daysInput} onChange={(e) => setDaysInput(e.target.value)} className={inputClass} /></label><label className="text-xs font-black uppercase text-slate-300">Valor pago<input value={amountInput} onChange={(e) => setAmountInput(e.target.value)} placeholder={form.price || '29,90'} className={inputClass} /></label></>}{actionModal.mode === 'expiry' && <label className="text-xs font-black uppercase text-slate-300">Nova data de vencimento<input type="date" value={expiryInput} onChange={(e) => setExpiryInput(e.target.value)} className={inputClass} /></label>}{actionModal.mode === 'cancel' && <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm font-semibold text-rose-100">O cliente perderá imediatamente os preços e opções exclusivas VIP.</div>}<label className="text-xs font-black uppercase text-slate-300">Observação (opcional)<textarea value={notesInput} onChange={(e) => setNotesInput(e.target.value)} rows={2} className={inputClass} /></label><button onClick={submitAction} disabled={actionPending} className={`min-h-[52px] rounded-2xl px-4 text-sm font-black uppercase ${actionModal.mode === 'cancel' ? 'bg-rose-600 text-white' : 'bg-gradient-to-r from-amber-300 to-yellow-400 text-[#251600]'}`}>{actionPending ? 'Salvando...' : actionModal.mode === 'activate' ? 'Confirmar ativação VIP' : actionModal.mode === 'renew' ? 'Confirmar renovação' : actionModal.mode === 'expiry' ? 'Salvar nova validade' : 'Confirmar cancelamento'}</button></div></div></div>}
+
+      {historyCustomerId && <div className="fixed inset-0 z-[100] grid place-items-center bg-black/75 p-4"><div className="max-h-[82vh] w-full max-w-lg overflow-y-auto rounded-[24px] border border-violet-400/35 bg-[#0c0d1b] p-5"><div className="flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.15em] text-violet-300">Histórico VIP</p><h3 className="mt-1 text-xl font-black">Movimentações</h3></div><button onClick={() => setHistoryCustomerId(null)} className="rounded-lg bg-white/5 p-2 text-slate-400"><X className="h-5 w-5" /></button></div><div className="mt-5 grid gap-3">{historyQuery.isLoading ? <p className="text-sm text-slate-400">Carregando...</p> : (historyQuery.data || []).length === 0 ? <p className="text-sm text-slate-500">Sem histórico.</p> : (historyQuery.data || []).map((h: any) => <div key={h.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-black text-white">{actionLabel(h.action)}</p><p className="mt-1 text-xs text-slate-500">{formatDate(h.createdAt, true)}</p></div>{h.days && <span className="rounded-full bg-amber-400/10 px-2 py-1 text-[9px] font-black text-amber-300">+{h.days} dias</span>}</div>{h.newExpiresAtMs && <p className="mt-2 text-xs text-slate-300">Validade: <b>{formatDate(h.newExpiresAtMs)}</b></p>}{h.amount && <p className="mt-1 text-xs text-emerald-300">Valor: {money(h.amount)}</p>}{h.notes && <p className="mt-2 text-xs leading-5 text-slate-400">{h.notes}</p>}</div>)}</div></div></div>}
+    </div>
+  );
+}
+'''
+          Path('client/src/pages/AdminVip.tsx').write_text(admin_vip, encoding='utf-8')
+
+          # Wire backend router + secure checkout + customer card metadata.
+          p = Path('server/routers.ts')
+          s = p.read_text(encoding='utf-8')
+          s = replace_once(s,
+            'import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess } from "./routers/optionPriceModels";',
+            'import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess } from "./routers/optionPriceModels";\nimport { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";',
+            'routers VIP import')
+          s = replace_once(s,
+            '  optionPriceModels: optionPriceModelsRouter,',
+            '  optionPriceModels: optionPriceModelsRouter,\n  vipMemberships: vipMembershipsRouter,',
+            'mount VIP router')
+          s = replace_once(s,
+            '''          if (input.accessCode) {
+            try {
+              const vipProbe = await checkAccessCodeCanSubmit(input.accessCode, input.phone);
+              isVipModelAccess = vipProbe.canSubmit && vipProbe.type === 'vip';
+            } catch { /* sessão principal já foi validada acima */ }
+          }
+          if (input.priceModelId) {''',
+            '''          if (input.accessCode) {
+            try {
+              const vipProbe = await checkAccessCodeCanSubmit(input.accessCode, input.phone);
+              isVipModelAccess = vipProbe.canSubmit && vipProbe.type === 'vip';
+            } catch { /* sessão principal já foi validada acima */ }
+          }
+          if (!isVipModelAccess && input.phone) {
+            isVipModelAccess = await isVipMemberByPhone(input.phone);
+          }
+          if (input.priceModelId) {''',
+            'secure checkout membership')
+          s = replace_once(s,
+            '''      const db = await (await import('./db')).getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível ao carregar clientes. A lista existente foi preservada.' });
+      // Buscar clientes com flag indicando se têm pedido finalizado''',
+            '''      const db = await (await import('./db')).getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível ao carregar clientes. A lista existente foi preservada.' });
+      let vipMembershipMap = new Map<number, any>();
+      try {
+        vipMembershipMap = await getVipMembershipSnapshotMap();
+      } catch (error: any) {
+        console.warn('[customers.list] VIP indisponível sem afetar lista principal:', error?.message);
+      }
+      // Buscar clientes com flag indicando se têm pedido finalizado''',
+            'customer VIP map')
+          s = replace_once(s,
+            '''        const openOrders = openOrdersByPhone[cleanPhone] || [];
+        const profileUpdatePolicy = await getCustomerProfileUpdateState(r);
+        return {
+          ...r,
+          hasOrder: Number(r.hasOrder) === 1,''',
+            '''        const openOrders = openOrdersByPhone[cleanPhone] || [];
+        const profileUpdatePolicy = await getCustomerProfileUpdateState(r);
+        const vipMembership = vipMembershipMap.get(Number(r.id)) || null;
+        return {
+          ...r,
+          hasOrder: Number(r.hasOrder) === 1,
+          vipActive: Boolean(vipMembership?.active),
+          vipStatus: vipMembership?.status || 'none',
+          vipStartedAt: vipMembership?.startsAtMs || null,
+          vipExpiresAt: vipMembership?.expiresAtMs || null,
+          vipDaysLeft: vipMembership?.daysLeft || 0,''',
+            'customer VIP fields')
+          p.write_text(s, encoding='utf-8')
+
+          # Client uses real membership in addition to legacy temporary VIP access.
+          patches = [
+            ('client/src/components/StorefrontProductCard.tsx',
+             'import { requestProductManifest } from "@/lib/productManifest";',
+             'import { requestProductManifest } from "@/lib/productManifest";\nimport { useVipMembership } from "@/hooks/useVipMembership";',
+             "  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';",
+             '  const { isVipCustomer } = useVipMembership();'),
+            ('client/src/pages/Home.tsx',
+             'import { trpc } from "@/lib/trpc";',
+             'import { trpc } from "@/lib/trpc";\nimport { useVipMembership } from "@/hooks/useVipMembership";',
+             "  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';",
+             '  const { isVipCustomer } = useVipMembership();'),
+            ('client/src/components/ColombiaBot.tsx',
+             'import { trpc } from "@/lib/trpc";',
+             'import { trpc } from "@/lib/trpc";\nimport { useVipMembership } from "@/hooks/useVipMembership";',
+             "  const isVipCustomer = typeof window !== 'undefined' && localStorage.getItem('walk_access_type') === 'vip';",
+             '  const { isVipCustomer } = useVipMembership();'),
+          ]
+          for file, old_import, new_import, old_check, new_check in patches:
+              q = Path(file)
+              text = q.read_text(encoding='utf-8')
+              text = replace_once(text, old_import, new_import, f'{file} hook import')
+              text = replace_once(text, old_check, new_check, f'{file} membership state')
+              q.write_text(text, encoding='utf-8')
+
+          p = Path('client/src/pages/VipPage.tsx')
+          s = p.read_text(encoding='utf-8')
+          s = replace_once(s, 'import { toast } from "sonner";', 'import { toast } from "sonner";\nimport { useVipMembership } from "@/hooks/useVipMembership";', 'VipPage hook import')
+          s = replace_once(s,
+            '''  const isVip = typeof window !== "undefined" && localStorage.getItem("walk_access_type") === "vip";
+  const expiresAt = typeof window !== "undefined" ? localStorage.getItem("walk_access_expires") : null;''',
+            '''  const { isVipCustomer: isVip, expiresAt } = useVipMembership();''',
+            'VipPage real membership')
+          p.write_text(s, encoding='utf-8')
+
+          # Principal customer cards: gold crown, distinctive VIP color and VIP filter.
+          p = Path('client/src/pages/AdminCustomers.tsx')
+          s = p.read_text(encoding='utf-8')
+          s = replace_once(s,
+            'FileJson, Music, Video, Upload, Image as ImageIcon } from "lucide-react";',
+            'FileJson, Music, Video, Upload, Crown, Image as ImageIcon } from "lucide-react";',
+            'AdminCustomers crown import')
+          s = replace_once(s,
+            '''  blockedAt?: number | Date | null;
+};''',
+            '''  blockedAt?: number | Date | null;
+  vipActive?: boolean;
+  vipStatus?: 'active' | 'expired' | 'cancelled' | 'none';
+  vipStartedAt?: number | null;
+  vipExpiresAt?: number | null;
+  vipDaysLeft?: number;
+};''',
+            'AdminCustomers VIP type')
+          s = replace_once(s,
+            '''  const [showOnlyOrders, setShowOnlyOrders] = useState(false);
+  const [showOnlyBlocked, setShowOnlyBlocked] = useState(false);''',
+            '''  const [showOnlyOrders, setShowOnlyOrders] = useState(false);
+  const [showOnlyBlocked, setShowOnlyBlocked] = useState(false);
+  const [showOnlyVip, setShowOnlyVip] = useState(false);''',
+            'AdminCustomers VIP filter state')
+          s = replace_once(s,
+            '''    if (showOnlyOrders) return matchSearch && !!c.hasOrder;
+    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
+    return matchSearch;''',
+            '''    if (showOnlyVip) return matchSearch && !!c.vipActive;
+    if (showOnlyOrders) return matchSearch && !!c.hasOrder;
+    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
+    return matchSearch;''',
+            'AdminCustomers VIP filter logic')
+
+          # Insert visible VIP filter immediately before blocked filter controls.
+          marker = '''          {!showOnlyBlocked && customers.some(c => c.blocked === 1) && (
+          <button'''
+          vip_button = '''          <button
+            onClick={() => {
+              const next = !showOnlyVip;
+              setShowOnlyVip(next);
+              if (next) { setShowOnlyOrders(false); setShowOnlyBlocked(false); setSelectedIds(new Set()); }
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-colors border ${showOnlyVip ? 'bg-amber-400 text-amber-950 border-amber-300 shadow-[0_0_16px_rgba(251,191,36,.28)]' : 'bg-amber-500/15 border-amber-400/35 text-amber-300 hover:bg-amber-500/25'}`}
+            title="Filtrar somente clientes com VIP ativo"
+          >
+            <Crown className="w-3.5 h-3.5 fill-current" />
+            {showOnlyVip ? `Mostrando VIP (${filtered.length})` : `Clientes VIP (${customers.filter(c => c.vipActive).length})`}
+          </button>
+          {!showOnlyBlocked && customers.some(c => c.blocked === 1) && (
+          <button'''
+          s = replace_once(s, marker, vip_button, 'AdminCustomers VIP filter button')
+
+          # VIP color takes priority over normal order/loan colors, but blocked stays red for safety.
+          s = replace_once(s,
+            '''                background: c.blocked === 1
+                  ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'
+                  : c.hasOrder && hasLoanForCustomer(c)''',
+            '''                background: c.blocked === 1
+                  ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'
+                  : c.vipActive
+                  ? 'linear-gradient(135deg, #4a2d00 0%, #2a1749 52%, #6b4300 100%)'
+                  : c.hasOrder && hasLoanForCustomer(c)''',
+            'AdminCustomers VIP background')
+          s = replace_once(s,
+            '''                border: c.blocked === 1
+                  ? '2px solid rgba(239,68,68,0.8)'
+                  : c.hasOrder && hasLoanForCustomer(c)''',
+            '''                border: c.blocked === 1
+                  ? '2px solid rgba(239,68,68,0.8)'
+                  : c.vipActive
+                  ? '2px solid rgba(250,204,21,0.95)'
+                  : c.hasOrder && hasLoanForCustomer(c)''',
+            'AdminCustomers VIP border')
+          s = replace_once(s,
+            '''                boxShadow: c.blocked === 1
+                  ? '0 4px 20px rgba(239,68,68,0.35)'
+                  : c.hasOrder && hasLoanForCustomer(c)''',
+            '''                boxShadow: c.blocked === 1
+                  ? '0 4px 20px rgba(239,68,68,0.35)'
+                  : c.vipActive
+                  ? '0 0 0 1px rgba(253,224,71,0.18), 0 8px 30px rgba(250,204,21,0.30), inset 0 0 34px rgba(168,85,247,0.10)'
+                  : c.hasOrder && hasLoanForCustomer(c)''',
+            'AdminCustomers VIP shadow')
+          s = replace_once(s,
+            '''className={`w-16 h-16 rounded-full object-cover shadow cursor-pointer hover:opacity-90 transition-opacity ${c.isBlocked ? 'border-2 border-red-500/60' : 'border-2 border-primary/30'}`}''',
+            '''className={`w-16 h-16 rounded-full object-cover shadow cursor-pointer hover:opacity-90 transition-opacity ${c.isBlocked ? 'border-2 border-red-500/60' : c.vipActive ? 'border-[3px] border-amber-300 shadow-[0_0_18px_rgba(250,204,21,.38)]' : 'border-2 border-primary/30'}`}''',
+            'AdminCustomers VIP photo border')
+          s = replace_once(s,
+            '''                      <span className="truncate">{c.name}</span>
+                      {c.fixedPwdActive && <Lock className="w-3 h-3 text-yellow-400 flex-shrink-0" aria-label="Senha fixa ativa" />}
+                    </p>
+                    {/* Badge bloqueado */}''',
+            '''                      <span className="truncate">{c.name}</span>
+                      {c.fixedPwdActive && <Lock className="w-3 h-3 text-yellow-400 flex-shrink-0" aria-label="Senha fixa ativa" />}
+                    </p>
+                    {c.vipActive && (
+                      <a href={`/admin/vip?phone=${encodeURIComponent(c.phone.replace(/\\D/g, ''))}`} onClick={(event) => event.stopPropagation()} className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-amber-200/70 bg-gradient-to-r from-amber-300 to-yellow-400 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-950 shadow-[0_0_18px_rgba(250,204,21,.35)]" title="Abrir gestão deste cliente VIP">
+                        <Crown className="h-3.5 w-3.5 fill-current" /> VIP ATIVO • {c.vipDaysLeft || 0} DIAS
+                      </a>
+                    )}
+                    {/* Badge bloqueado */}''',
+            'AdminCustomers VIP crown badge')
+          p.write_text(s, encoding='utf-8')
+
+          # Static audit for critical integration points.
+          audit = r'''import fs from "node:fs";
+const checks = [
+  ["backend membership", "server/routers/vipMemberships.ts", ["vipMemberships", "adminDirectory", "activate:", "renew:", "setExpiry:", "cancel:", "vipMembershipHistory"]],
+  ["secure checkout", "server/routers.ts", ["isVipMemberByPhone(input.phone)", "vipMemberships: vipMembershipsRouter", "vipActive: Boolean(vipMembership?.active)"]],
+  ["client membership hook", "client/src/hooks/useVipMembership.ts", ["vipMemberships.status", "walk_vip_active", "legacyVipState"]],
+  ["VIP admin manager", "client/src/pages/AdminVip.tsx", ["Clientes VIP", "Ativar VIP", "Renovar", "Alterar validade", "Histórico VIP"]],
+  ["customer VIP filter", "client/src/pages/AdminCustomers.tsx", ["showOnlyVip", "Clientes VIP (", "VIP ATIVO", "c.vipActive", "border-amber-300"]],
+  ["storefront membership", "client/src/components/StorefrontProductCard.tsx", ["useVipMembership", "const { isVipCustomer } = useVipMembership()"]],
+  ["checkout membership pricing", "client/src/pages/Home.tsx", ["useVipMembership", "const { isVipCustomer } = useVipMembership()"]],
+  ["bot membership pricing", "client/src/components/ColombiaBot.tsx", ["useVipMembership", "const { isVipCustomer } = useVipMembership()"]],
+  ["VIP public status", "client/src/pages/VipPage.tsx", ["useVipMembership", "isVipCustomer: isVip"]],
+];
+let ok=0;
+for (const [label,file,needles] of checks) {
+  const text=fs.readFileSync(file,"utf8");
+  const missing=needles.filter((needle)=>!text.includes(needle));
+  if (missing.length) { console.error(`FAIL ${label}: ${missing.join(", ")}`); process.exitCode=1; }
+  else { console.log(`OK ${label}`); ok++; }
+}
+console.log(`${ok}/${checks.length} checks OK`);
+'''
+          Path('audit/check_vip_membership_admin.mjs').write_text(audit, encoding='utf-8')
+          PY
+
+      - name: Audit integration
+        run: node audit/check_vip_membership_admin.mjs
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Existing VIP pricing tests
+        run: pnpm vitest run server/vipPricing.test.ts
+
+      - name: Build production
+        run: pnpm build
+
+      - name: Commit complete VIP management
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/vipMemberships.ts server/routers.ts client/src/hooks/useVipMembership.ts client/src/pages/AdminVip.tsx client/src/pages/AdminVip.tsx client/src/pages/VipPage.tsx client/src/pages/Home.tsx client/src/components/StorefrontProductCard.tsx client/src/components/ColombiaBot.tsx client/src/pages/AdminCustomers.tsx audit/check_vip_membership_admin.mjs
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "feat(vip): gerenciar clientes validade e destaque no cadastro"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
