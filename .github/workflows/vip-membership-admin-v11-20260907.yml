@@ -1,4 +1,4 @@
-name: VIP membership admin v11 2026-09-07
+name: Category sync storefront 2026-09-07
 
 on:
   push:
@@ -18,28 +18,24 @@ jobs:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
       - name: Backup production
-        run: git push origin HEAD:refs/heads/backup/pre-vip-membership-admin-v11-20260907 || true
-      - name: Apply VIP management
+        run: git push origin HEAD:refs/heads/backup/pre-category-sync-v11-20260907 || true
+      - name: Apply category synchronization
         run: |
-          curl -fsSL https://raw.githubusercontent.com/csatransportes3095-dev/walk-ajuda/main/.github/workflows/vip-membership-admin-20260907.yml -o /tmp/vip-source.yml
-          curl -fsSL https://raw.githubusercontent.com/csatransportes3095-dev/walk-ajuda/main/scripts/apply_vip_membership_admin_20260907.py -o /tmp/apply_vip.py
-          python /tmp/apply_vip.py /tmp/vip-source.yml
-      - name: Audit
-        run: node audit/check_vip_membership_admin.mjs
+          curl -fsSL https://raw.githubusercontent.com/csatransportes3095-dev/walk-ajuda/main/scripts/apply_category_sync_20260907.py -o /tmp/apply_category_sync.py
+          python /tmp/apply_category_sync.py
+          git diff --check
       - name: Install
         run: |
           corepack enable
           pnpm install --frozen-lockfile
-      - name: Test VIP pricing
-        run: pnpm vitest run server/vipPricing.test.ts
       - name: Build
         run: pnpm build
       - name: Commit production
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/routers/vipMemberships.ts server/routers.ts client/src/hooks/useVipMembership.ts client/src/pages/AdminVip.tsx client/src/pages/VipPage.tsx client/src/pages/Home.tsx client/src/components/StorefrontProductCard.tsx client/src/components/ColombiaBot.tsx client/src/pages/AdminCustomers.tsx audit/check_vip_membership_admin.mjs
-          git commit -m "feat(vip): gerenciar clientes validade e destaque no cadastro"
+          git add client/src/pages/AdminProducts.tsx client/src/pages/Home.tsx
+          git commit -m "fix(produtos): sincronizar categoria editada com cliente"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
-
-# trigger v11
