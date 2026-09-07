@@ -67,20 +67,47 @@ async function ensureInfrastructure() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    const vipColumns = [
-      ["vipAccessMode", "VARCHAR(16) NOT NULL DEFAULT 'all'"],
-      ["vipDiscountType", "VARCHAR(16) NOT NULL DEFAULT 'percentage'"],
-      ["vipDiscountValue", "DECIMAL(10,2) NOT NULL DEFAULT 0.00"],
-      ["vipHighlight", "TINYINT(1) NOT NULL DEFAULT 0"],
-      ["vipHighlightText", "VARCHAR(96) NULL"],
-    ] as const;
-    for (const [column, definition] of vipColumns) {
-      try {
-        await db.execute(sql.raw(`ALTER TABLE optionPriceModels ADD COLUMN ${column} ${definition}`));
-      } catch (error: any) {
-        if (!/duplicate column|exists/i.test(String(error?.message || ''))) throw error;
-      }
-    }
+    await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS optionPriceModelVipSettings (
+      priceModelId INT NOT NULL PRIMARY KEY,
+      vipAccessMode VARCHAR(16) NOT NULL DEFAULT 'all',
+      vipDiscountType VARCHAR(16) NOT NULL DEFAULT 'percentage',
+      vipDiscountValue DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+      vipHighlight TINYINT(1) NOT NULL DEFAULT 0,
+      vipHighlightText VARCHAR(96) NULL,
+      updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      KEY idx_optionPriceModelVipSettings_access (vipAccessMode)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Se a tentativa anterior chegou a criar colunas VIP na tabela antiga,
+  // copia somente configuracoes VIP para a tabela separada. Falha aqui nao
+  // interrompe a listagem das categorias antigas.
+  try {
+    await db.execute(sql`
+      INSERT INTO optionPriceModelVipSettings
+        (priceModelId, vipAccessMode, vipDiscountType, vipDiscountValue, vipHighlight, vipHighlightText)
+      SELECT id,
+             COALESCE(vipAccessMode, 'all'),
+             COALESCE(vipDiscountType, 'percentage'),
+             COALESCE(vipDiscountValue, 0),
+             COALESCE(vipHighlight, 0),
+             vipHighlightText
+      FROM optionPriceModels
+      WHERE COALESCE(vipAccessMode, 'all') <> 'all'
+         OR COALESCE(vipDiscountValue, 0) <> 0
+         OR COALESCE(vipHighlight, 0) <> 0
+         OR vipHighlightText IS NOT NULL
+      ON DUPLICATE KEY UPDATE
+        vipAccessMode=VALUES(vipAccessMode),
+        vipDiscountType=VALUES(vipDiscountType),
+        vipDiscountValue=VALUES(vipDiscountValue),
+        vipHighlight=VALUES(vipHighlight),
+        vipHighlightText=VALUES(vipHighlightText)
+    `);
+  } catch {
+    // Banco antigo sem colunas VIP: comportamento esperado.
+  }
 
     // Preset solicitado para o produto atual. É idempotente por causa da chave única.
     // Fica DENTRO da opção "PARA UBER E 99", não cria produto nem opção nova.
@@ -128,13 +155,14 @@ async function listModels(optionIds: number[], onlyActive: boolean): Promise<Opt
     SELECT m.id, m.optionId, m.label, m.price, m.originalPrice,
            CASE WHEN COALESCE(TRIM(m.originalPrice), '') <> '' THEN UNIX_TIMESTAMP(m.updatedAt) * 1000 ELSE NULL END AS promoStartsAt,
            m.promoEndsAt, m.sortOrder, m.isActive,
-           COALESCE(m.vipAccessMode, 'all') AS vipAccessMode,
-           COALESCE(m.vipDiscountType, 'percentage') AS vipDiscountType,
-           COALESCE(m.vipDiscountValue, 0) AS vipDiscountValue,
-           COALESCE(m.vipHighlight, 0) AS vipHighlight,
-           m.vipHighlightText,
+           COALESCE(v.vipAccessMode, 'all') AS vipAccessMode,
+           COALESCE(v.vipDiscountType, 'percentage') AS vipDiscountType,
+           COALESCE(v.vipDiscountValue, 0) AS vipDiscountValue,
+           COALESCE(v.vipHighlight, 0) AS vipHighlight,
+           v.vipHighlightText,
            m.createdAt, m.updatedAt, COALESCE(s.selectorLabel, 'Modelo / categoria') AS selectorLabel
     FROM optionPriceModels m
+    LEFT JOIN optionPriceModelVipSettings v ON v.priceModelId = m.id
     LEFT JOIN optionPriceModelSettings s ON s.optionId = m.optionId
     WHERE m.optionId IN (${idList})${activeSql}
     ORDER BY m.optionId ASC, m.sortOrder ASC, m.id ASC
@@ -191,16 +219,33 @@ export async function checkOptionPriceModelCheckoutAccess(priceModelId: number, 
   const db = await getDb();
   if (!db) return { allowed: false, reason: "Banco de dados indisponível." };
   const result = await db.execute(sql`
-    SELECT id, optionId, label, price, originalPrice, promoEndsAt, sortOrder, isActive,
-           COALESCE(vipAccessMode, 'all') AS vipAccessMode,
-           COALESCE(vipDiscountType, 'percentage') AS vipDiscountType,
-           COALESCE(vipDiscountValue, 0) AS vipDiscountValue,
-           COALESCE(vipHighlight, 0) AS vipHighlight,
-           vipHighlightText
-    FROM optionPriceModels WHERE id=${priceModelId} LIMIT 1
+    SELECT m.id, m.optionId, m.label, m.price, m.originalPrice, m.promoEndsAt, m.sortOrder, m.isActive,
+           COALESCE(v.vipAccessMode, 'all') AS vipAccessMode,
+           COALESCE(v.vipDiscountType, 'percentage') AS vipDiscountType,
+           COALESCE(v.vipDiscountValue, 0) AS vipDiscountValue,
+           COALESCE(v.vipHighlight, 0) AS vipHighlight,
+           v.vipHighlightText
+    FROM optionPriceModels m
+    LEFT JOIN optionPriceModelVipSettings v ON v.priceModelId = m.id
+    WHERE m.id=${priceModelId}
+    LIMIT 1
   `);
-  const row = asRows<OptionPriceModel>(result)[0];
-  if (!row || Number(row.isActive) !== 1) return { allowed: false, reason: "Este modelo/categoria não está disponível." };
+  const raw = asRows<OptionPriceModel>(result)[0];
+  if (!raw || Number(raw.isActive) !== 1) return { allowed: false, reason: "Este modelo/categoria não está disponível." };
+  const row: OptionPriceModel = {
+    ...raw,
+    id: Number(raw.id),
+    optionId: Number(raw.optionId),
+    sortOrder: Number(raw.sortOrder || 0),
+    isActive: Number(raw.isActive || 0),
+    vipAccessMode: raw.vipAccessMode === 'benefit' || raw.vipAccessMode === 'vip_only' ? raw.vipAccessMode : 'all',
+    vipDiscountType: raw.vipDiscountType === 'fixed' ? 'fixed' : 'percentage',
+    vipDiscountValue: Number(raw.vipDiscountValue || 0),
+    vipHighlight: Number(raw.vipHighlight || 0),
+    vipHighlightText: raw.vipHighlightText ? String(raw.vipHighlightText) : null,
+    promoStartsAt: null,
+    promoEndsAt: raw.promoEndsAt == null ? null : Number(raw.promoEndsAt),
+  };
   if (row.vipAccessMode === "vip_only" && !isVipCustomer) {
     return { allowed: false, reason: "Este modelo/categoria é exclusivo para clientes VIP." };
   }
@@ -245,52 +290,79 @@ export const optionPriceModelsRouter = router({
     }),
 
   create: adminProcedure
-    .input(modelInput)
-    .mutation(async ({ input }) => {
-      await ensureInfrastructure();
-      const db = await getDb();
-      if (!db) throw new Error("Banco de dados indisponível.");
-      const result: any = await db.execute(sql`
-        INSERT INTO optionPriceModels
-          (optionId, label, price, originalPrice, promoEndsAt, sortOrder, isActive, vipAccessMode, vipDiscountType, vipDiscountValue, vipHighlight, vipHighlightText)
-        VALUES
-          (${input.optionId}, ${input.label}, ${input.price}, ${input.originalPrice || ''}, ${input.promoEndsAt ?? null}, ${input.sortOrder}, ${input.isActive ? 1 : 0}, ${input.vipAccessMode}, ${input.vipDiscountType}, ${input.vipDiscountValue}, ${input.vipHighlight ? 1 : 0}, ${input.vipHighlightText || null})
-      `);
-      const insertId = Number(result?.[0]?.insertId || result?.insertId || 0);
-      const rows = await listModels([input.optionId], false);
-      return rows.find(row => row.id === insertId) || rows[rows.length - 1];
-    }),
+  .input(modelInput)
+  .mutation(async ({ input }) => {
+    await ensureInfrastructure();
+    const db = await getDb();
+    if (!db) throw new Error("Banco de dados indisponível.");
+    const result: any = await db.execute(sql`
+      INSERT INTO optionPriceModels
+        (optionId, label, price, originalPrice, promoEndsAt, sortOrder, isActive)
+      VALUES
+        (${input.optionId}, ${input.label}, ${input.price}, ${input.originalPrice || ''}, ${input.promoEndsAt ?? null}, ${input.sortOrder}, ${input.isActive ? 1 : 0})
+    `);
+    const insertId = Number(result?.[0]?.insertId || result?.insertId || 0);
+    let rows = await listModels([input.optionId], false);
+    const created = rows.find(row => row.id === insertId)
+      || [...rows].reverse().find(row => row.label === input.label)
+      || rows[rows.length - 1];
+    if (!created) throw new Error("Categoria criada, mas não foi possível localizá-la para configurar o VIP.");
+    await db.execute(sql`
+      INSERT INTO optionPriceModelVipSettings
+        (priceModelId, vipAccessMode, vipDiscountType, vipDiscountValue, vipHighlight, vipHighlightText)
+      VALUES
+        (${created.id}, ${input.vipAccessMode}, ${input.vipDiscountType}, ${input.vipDiscountValue}, ${input.vipHighlight ? 1 : 0}, ${input.vipHighlightText || null})
+      ON DUPLICATE KEY UPDATE
+        vipAccessMode=VALUES(vipAccessMode),
+        vipDiscountType=VALUES(vipDiscountType),
+        vipDiscountValue=VALUES(vipDiscountValue),
+        vipHighlight=VALUES(vipHighlight),
+        vipHighlightText=VALUES(vipHighlightText)
+    `);
+    rows = await listModels([input.optionId], false);
+    return rows.find(row => row.id === created.id) || created;
+  }),
 
   update: adminProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      optionId: z.number().int().positive(),
-      label: z.string().trim().min(1).max(128),
-      price: z.string().trim().min(1).max(64),
-      originalPrice: z.string().max(64).optional().default(""),
-      promoEndsAt: z.number().nullable().optional(),
-      sortOrder: z.number().int().min(0).optional().default(0),
-      isActive: z.boolean().optional().default(true),
-      vipAccessMode: z.enum(["all", "benefit", "vip_only"]).optional().default("all"),
-      vipDiscountType: z.enum(["percentage", "fixed"]).optional().default("percentage"),
-      vipDiscountValue: z.number().min(0).max(100000).optional().default(0),
-      vipHighlight: z.boolean().optional().default(false),
-      vipHighlightText: z.string().trim().max(96).nullable().optional(),
-    }))
-    .mutation(async ({ input }) => {
-      await ensureInfrastructure();
-      const db = await getDb();
-      if (!db) throw new Error("Banco de dados indisponível.");
-      await db.execute(sql`
-        UPDATE optionPriceModels
-        SET label=${input.label}, price=${input.price}, originalPrice=${input.originalPrice || ''},
-            promoEndsAt=${input.promoEndsAt ?? null}, sortOrder=${input.sortOrder}, isActive=${input.isActive ? 1 : 0},
-            vipAccessMode=${input.vipAccessMode}, vipDiscountType=${input.vipDiscountType}, vipDiscountValue=${input.vipDiscountValue},
-            vipHighlight=${input.vipHighlight ? 1 : 0}, vipHighlightText=${input.vipHighlightText || null}
-        WHERE id=${input.id} AND optionId=${input.optionId}
-      `);
-      return { success: true };
-    }),
+  .input(z.object({
+    id: z.number().int().positive(),
+    optionId: z.number().int().positive(),
+    label: z.string().trim().min(1).max(128),
+    price: z.string().trim().min(1).max(64),
+    originalPrice: z.string().max(64).optional().default(""),
+    promoEndsAt: z.number().nullable().optional(),
+    sortOrder: z.number().int().min(0).optional().default(0),
+    isActive: z.boolean().optional().default(true),
+    vipAccessMode: z.enum(["all", "benefit", "vip_only"]).optional().default("all"),
+    vipDiscountType: z.enum(["percentage", "fixed"]).optional().default("percentage"),
+    vipDiscountValue: z.number().min(0).max(100000).optional().default(0),
+    vipHighlight: z.boolean().optional().default(false),
+    vipHighlightText: z.string().trim().max(96).nullable().optional(),
+  }))
+  .mutation(async ({ input }) => {
+    await ensureInfrastructure();
+    const db = await getDb();
+    if (!db) throw new Error("Banco de dados indisponível.");
+    await db.execute(sql`
+      UPDATE optionPriceModels
+      SET label=${input.label}, price=${input.price}, originalPrice=${input.originalPrice || ''},
+          promoEndsAt=${input.promoEndsAt ?? null}, sortOrder=${input.sortOrder}, isActive=${input.isActive ? 1 : 0}
+      WHERE id=${input.id} AND optionId=${input.optionId}
+    `);
+    await db.execute(sql`
+      INSERT INTO optionPriceModelVipSettings
+        (priceModelId, vipAccessMode, vipDiscountType, vipDiscountValue, vipHighlight, vipHighlightText)
+      VALUES
+        (${input.id}, ${input.vipAccessMode}, ${input.vipDiscountType}, ${input.vipDiscountValue}, ${input.vipHighlight ? 1 : 0}, ${input.vipHighlightText || null})
+      ON DUPLICATE KEY UPDATE
+        vipAccessMode=VALUES(vipAccessMode),
+        vipDiscountType=VALUES(vipDiscountType),
+        vipDiscountValue=VALUES(vipDiscountValue),
+        vipHighlight=VALUES(vipHighlight),
+        vipHighlightText=VALUES(vipHighlightText)
+    `);
+    return { success: true };
+  }),
 
   move: adminProcedure
     .input(z.object({ id: z.number().int().positive(), direction: z.enum(["up", "down"]) }))
@@ -338,6 +410,7 @@ export const optionPriceModelsRouter = router({
       await ensureInfrastructure();
       const db = await getDb();
       if (!db) throw new Error("Banco de dados indisponível.");
+      await db.execute(sql`DELETE FROM optionPriceModelVipSettings WHERE priceModelId=${input.id}`);
       await db.execute(sql`DELETE FROM optionPriceModels WHERE id=${input.id}`);
       return { success: true };
     }),
