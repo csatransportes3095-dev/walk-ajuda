@@ -25,6 +25,7 @@ import "./index.css";
 import "./welcome-neon-refresh.css";
 import "./admin-loans-mobile-fix.css";
 import "./h2-welcome-reference-top.css";
+import "./h2-welcome-mobile-car-fix.css";
 
 // Consultas de tela não podem ficar em loop por vários minutos quando o servidor
 // responde lentamente ou ocorre algum erro. Mutations continuam com prazo maior
