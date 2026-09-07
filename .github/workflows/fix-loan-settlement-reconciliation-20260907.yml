@@ -1,0 +1,137 @@
+name: Fix loan settlement reconciliation 2026-09-07
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/fix-loan-settlement-reconciliation-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Apply audited loan settlement fix
+        shell: python
+        run: |
+          from pathlib import Path
+
+          loans_path = Path('server/routers/loans.ts')
+          admin_path = Path('client/src/pages/AdminLoans.tsx')
+          loans = loans_path.read_text(encoding='utf-8')
+          admin = admin_path.read_text(encoding='utf-8')
+
+          # 1) pago_juros is a historical interest-only installment. The principal is
+          # rolled into a new installment, so pago_juros must not keep the parent loan
+          # artificially open after the rolled installment is finally paid.
+          old_pending = "WHERE loanId=${loanId} AND status != 'pago'"
+          new_pending = "WHERE loanId=${loanId} AND status NOT IN ('pago','pago_juros')"
+          pending_count = loans.count(old_pending)
+          if pending_count != 2:
+              raise SystemExit(f'Expected exactly 2 settlement counters, found {pending_count}')
+          loans = loans.replace(old_pending, new_pending)
+
+          # 2) Repair legacy loans already stuck in an active status even though no
+          # principal installment remains unpaid. Requires at least one normal paid
+          # installment to avoid closing malformed interest-only records.
+          helper_anchor = "function getBrazilHour(): number {\n  return getBrazilClock().hour;\n}\n"
+          helper = r'''
+
+// Reconciliacao defensiva: corrige emprestimos legados que ficaram ativos
+// depois da quitacao. "pago_juros" e historico de juros; o principal rolado
+// permanece representado por outra parcela. Portanto ele nao pode impedir a
+// baixa final quando todas as parcelas de principal ja foram pagas.
+async function reconcileSettledLoanStatuses(db: any): Promise<void> {
+  await db.execute(drizzleSql`
+    UPDATE loans l
+    SET l.status='pago',
+        l.paidAt=COALESCE(l.paidAt, NOW()),
+        l.paidBy=COALESCE(NULLIF(l.paidBy, ''), 'reconciliacao_automatica')
+    WHERE l.status NOT IN ('pago','cancelado','reprovado','pendente')
+      AND EXISTS (
+        SELECT 1 FROM loanInstallments liPaid
+        WHERE liPaid.loanId=l.id AND liPaid.status='pago'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM loanInstallments liOpen
+        WHERE liOpen.loanId=l.id
+          AND liOpen.status NOT IN ('pago','pago_juros')
+      )
+  `);
+}
+'''
+          if 'async function reconcileSettledLoanStatuses' not in loans:
+              if loans.count(helper_anchor) != 1:
+                  raise SystemExit('Could not find getBrazilHour helper anchor')
+              loans = loans.replace(helper_anchor, helper_anchor + helper, 1)
+
+          list_anchor = "  }).optional()).query(async ({ input }) => {\n    const db = await getDb() as any;"
+          if loans.count(list_anchor) < 1:
+              raise SystemExit('Could not find listLoans query anchor')
+          list_replacement = list_anchor + "\n    await reconcileSettledLoanStatuses(db);"
+          # Only first optional admin list query at the loans section is intended.
+          loans = loans.replace(list_anchor, list_replacement, 1)
+
+          client_anchor = "  getClientLoanInfo: publicProcedure.input(z.object({ token: z.string() })).query(async ({ input }) => {\n    const db = await getDb() as any;"
+          if loans.count(client_anchor) != 1:
+              raise SystemExit(f'Expected one getClientLoanInfo anchor, found {loans.count(client_anchor)}')
+          client_replacement = client_anchor + "\n    await reconcileSettledLoanStatuses(db);"
+          loans = loans.replace(client_anchor, client_replacement, 1)
+
+          # 3) ADM search must search all statuses. Previously the default "Ativos"
+          # tab could hide a paid/stuck loan while the admin was trying to locate it.
+          old_admin = "  const tabStatusFilter = loanTab;"
+          new_admin = "  const tabStatusFilter = search.trim() ? 'todos' : loanTab;"
+          if admin.count(old_admin) != 1:
+              raise SystemExit(f'Expected one AdminLoans tab filter, found {admin.count(old_admin)}')
+          admin = admin.replace(old_admin, new_admin, 1)
+
+          loans_path.write_text(loans, encoding='utf-8')
+          admin_path.write_text(admin, encoding='utf-8')
+
+          audit = Path('audit/check_loan_settlement_reconciliation.mjs')
+          audit.write_text(r'''import fs from "node:fs";
+
+const loans = fs.readFileSync("server/routers/loans.ts", "utf8");
+const admin = fs.readFileSync("client/src/pages/AdminLoans.tsx", "utf8");
+
+const checks = [
+  ["closure ignores pago_juros", (loans.match(/status NOT IN \('pago','pago_juros'\)/g) || []).length >= 2],
+  ["legacy reconciliation exists", loans.includes("async function reconcileSettledLoanStatuses")],
+  ["client reconciliation", loans.includes("getClientLoanInfo") && loans.includes("await reconcileSettledLoanStatuses(db);")],
+  ["admin search crosses statuses", admin.includes("search.trim() ? 'todos' : loanTab")],
+];
+
+const failed = checks.filter(([, ok]) => !ok);
+for (const [name, ok] of checks) console.log(`${ok ? "OK" : "FAIL"} - ${name}`);
+if (failed.length) process.exit(1);
+''', encoding='utf-8')
+
+      - name: Run settlement audit
+        run: node audit/check_loan_settlement_reconciliation.mjs
+
+      - name: Typecheck/build smoke test
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Commit fix
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/loans.ts client/src/pages/AdminLoans.tsx audit/check_loan_settlement_reconciliation.mjs
+          git commit -m "fix(loans): reconciliar baixa de emprestimos quitados"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
