@@ -1,0 +1,107 @@
+name: VIP membership admin v7 2026-09-07
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/vip-membership-admin-v7-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Backup production branch
+        run: git push origin HEAD:refs/heads/backup/pre-vip-membership-admin-v7-20260907 || true
+
+      - name: Apply complete VIP patch
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/csatransportes3095-dev/walk-ajuda/main/.github/workflows/vip-membership-admin-20260907.yml -o /tmp/vip-source.yml
+          python - <<'PY'
+          from pathlib import Path
+
+          src = Path('/tmp/vip-source.yml').read_text(encoding='utf-8').splitlines()
+          start = next(i for i, line in enumerate(src) if "python - <<'PY'" in line) + 1
+          end = next(i for i in range(start, len(src)) if src[i].strip() == 'PY')
+          prefix = '          '
+          lines = [line[len(prefix):] if line.startswith(prefix) else line for line in src[start:end]]
+
+          def remove_replace_block(label: str):
+              marker = next(i for i, line in enumerate(lines) if f"'{label}')" in line)
+              block_start = marker
+              while block_start >= 0 and 's = replace_once(s,' not in lines[block_start]:
+                  block_start -= 1
+              if block_start < 0: raise SystemExit(f'No replace start for {label}')
+              del lines[block_start:marker + 1]
+
+          for label in ['secure checkout membership', 'customer VIP fields', 'AdminCustomers VIP filter button']:
+              remove_replace_block(label)
+          Path('/tmp/vip_patch.py').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+          routers = Path('server/routers.ts')
+          text = routers.read_text(encoding='utf-8')
+          checkout_target = "          if (input.priceModelId) {\n            const modelAccess = await checkOptionPriceModelCheckoutAccess(input.priceModelId, isVipModelAccess);"
+          checkout_insert = "          if (!isVipModelAccess && input.phone) {\n            isVipModelAccess = await isVipMemberByPhone(input.phone);\n          }\n"
+          if checkout_insert.strip() not in text:
+              if checkout_target not in text: raise SystemExit('checkout target missing')
+              text = text.replace(checkout_target, checkout_insert + checkout_target, 1)
+          customer_target = "          hasOrder: Number(r.hasOrder) === 1,\n          fixedPwdActive: Number(r.fixedPwdActive) === 1,"
+          customer_insert = "          hasOrder: Number(r.hasOrder) === 1,\n          vipActive: Boolean(vipMembership?.active),\n          vipStatus: vipMembership?.status || 'none',\n          vipStartedAt: vipMembership?.startsAtMs || null,\n          vipExpiresAt: vipMembership?.expiresAtMs || null,\n          vipDaysLeft: vipMembership?.daysLeft || 0,\n          fixedPwdActive: Number(r.fixedPwdActive) === 1,"
+          if 'vipActive: Boolean(vipMembership?.active)' not in text:
+              if customer_target not in text: raise SystemExit('customer return target missing')
+              text = text.replace(customer_target, customer_insert, 1)
+          routers.write_text(text, encoding='utf-8')
+
+          customers = Path('client/src/pages/AdminCustomers.tsx')
+          c = customers.read_text(encoding='utf-8')
+          needle = "{!showOnlyBlocked && customers.some(c => c.blocked === 1) && ("
+          vip = '''<button
+            onClick={() => {
+              const next = !showOnlyVip;
+              setShowOnlyVip(next);
+              if (next) { setShowOnlyOrders(false); setShowOnlyBlocked(false); setSelectedIds(new Set()); }
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-colors border ${showOnlyVip ? 'bg-amber-400 text-amber-950 border-amber-300 shadow-[0_0_16px_rgba(251,191,36,.28)]' : 'bg-amber-500/15 border-amber-400/35 text-amber-300 hover:bg-amber-500/25'}`}
+            title="Filtrar somente clientes com VIP ativo"
+          >
+            <Crown className="w-3.5 h-3.5 fill-current" />
+            {showOnlyVip ? `Mostrando VIP (${filtered.length})` : `Clientes VIP (${customers.filter(c => c.vipActive).length})`}
+          </button>
+          '''
+          if 'Clientes VIP (${customers.filter(c => c.vipActive).length})' not in c:
+              pos = c.find(needle)
+              if pos < 0: raise SystemExit('blocked JSX marker missing')
+              c = c[:pos] + vip + c[pos:]
+          customers.write_text(c, encoding='utf-8')
+          PY
+          python /tmp/vip_patch.py
+
+      - name: Audit integration
+        run: node audit/check_vip_membership_admin.mjs
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Existing VIP pricing tests
+        run: pnpm vitest run server/vipPricing.test.ts
+
+      - name: Build production
+        run: pnpm build
+
+      - name: Commit complete VIP management
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers/vipMemberships.ts server/routers.ts client/src/hooks/useVipMembership.ts client/src/pages/AdminVip.tsx client/src/pages/VipPage.tsx client/src/pages/Home.tsx client/src/components/StorefrontProductCard.tsx client/src/components/ColombiaBot.tsx client/src/pages/AdminCustomers.tsx audit/check_vip_membership_admin.mjs
+          git commit -m "feat(vip): gerenciar clientes validade e destaque no cadastro"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
