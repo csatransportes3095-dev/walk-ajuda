@@ -133,6 +133,77 @@ function CardIcon({ kind }: { kind: CanonicalKind }) {
   return <Zap className={className} />;
 }
 
+function PremiumExecutiveCar() {
+  return (
+    <svg
+      viewBox="0 0 420 190"
+      role="img"
+      aria-label="Carro executivo azul"
+      style={{ width: "100%", height: "100%", overflow: "visible" }}
+    >
+      <defs>
+        <linearGradient id="h2-car-body" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#4bc5ff" />
+          <stop offset="0.24" stopColor="#147bf0" />
+          <stop offset="0.58" stopColor="#0646a5" />
+          <stop offset="1" stopColor="#03142f" />
+        </linearGradient>
+        <linearGradient id="h2-car-glass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#74d8ff" stopOpacity=".72" />
+          <stop offset=".42" stopColor="#09234d" stopOpacity=".96" />
+          <stop offset="1" stopColor="#020914" />
+        </linearGradient>
+        <linearGradient id="h2-car-chrome" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset=".38" stopColor="#9fc6e7" />
+          <stop offset="1" stopColor="#264968" />
+        </linearGradient>
+        <radialGradient id="h2-car-wheel" cx="50%" cy="50%" r="50%">
+          <stop offset="0" stopColor="#b8d8f5" />
+          <stop offset=".18" stopColor="#26394b" />
+          <stop offset=".48" stopColor="#111923" />
+          <stop offset=".72" stopColor="#768ca4" />
+          <stop offset=".79" stopColor="#080b10" />
+          <stop offset="1" stopColor="#010205" />
+        </radialGradient>
+        <filter id="h2-car-glow" x="-30%" y="-40%" width="170%" height="200%">
+          <feGaussianBlur stdDeviation="8" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      <ellipse cx="220" cy="163" rx="182" ry="16" fill="#009cff" opacity=".18" filter="url(#h2-car-glow)" />
+      <path
+        d="M40 120 C66 112 83 101 99 85 C117 64 141 53 184 49 L272 47 C307 47 331 58 353 79 L382 105 C399 110 407 120 407 134 L407 143 C407 151 398 157 387 157 L47 157 C31 157 21 149 22 138 C23 130 29 124 40 120Z"
+        fill="url(#h2-car-body)"
+        stroke="#43bfff"
+        strokeWidth="2.5"
+        filter="url(#h2-car-glow)"
+      />
+      <path d="M117 84 C135 65 157 58 188 56 L268 55 C296 55 315 64 336 84 L349 96 L101 96Z" fill="url(#h2-car-glass)" stroke="#4bbdff" strokeWidth="1.3" />
+      <path d="M209 56 L209 96" stroke="#8ddcff" strokeOpacity=".55" strokeWidth="2" />
+      <path d="M105 99 C161 104 300 103 363 97" stroke="#87dcff" strokeOpacity=".52" strokeWidth="2" fill="none" />
+      <path d="M55 121 C128 112 310 111 385 118" stroke="#63ceff" strokeOpacity=".46" strokeWidth="2" fill="none" />
+      <path d="M75 142 C159 149 312 149 380 140" stroke="#00152c" strokeWidth="5" fill="none" opacity=".75" />
+      <path d="M357 108 L397 116 L390 127 L347 123Z" fill="#c8fbff" filter="url(#h2-car-glow)" />
+      <path d="M30 130 L58 125 L61 136 L33 140Z" fill="#ff3c54" opacity=".82" />
+      <path d="M308 129 C330 127 351 129 371 135" stroke="url(#h2-car-chrome)" strokeWidth="3" fill="none" />
+      <path d="M272 48 C300 52 322 63 343 83" stroke="#b8ecff" strokeOpacity=".6" strokeWidth="2" fill="none" />
+      <circle cx="111" cy="151" r="31" fill="#060a10" stroke="#1a2b3b" strokeWidth="3" />
+      <circle cx="111" cy="151" r="22" fill="url(#h2-car-wheel)" />
+      <circle cx="111" cy="151" r="7" fill="#9eb9d2" />
+      <circle cx="326" cy="151" r="31" fill="#060a10" stroke="#1a2b3b" strokeWidth="3" />
+      <circle cx="326" cy="151" r="22" fill="url(#h2-car-wheel)" />
+      <circle cx="326" cy="151" r="7" fill="#9eb9d2" />
+      <path d="M151 112 H184" stroke="#b6eaff" strokeOpacity=".55" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M229 112 H261" stroke="#b6eaff" strokeOpacity=".55" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function markWelcomeChoice() {
   try {
     sessionStorage.setItem(WELCOME_CHOICE_KEY, "premium");
@@ -344,13 +415,8 @@ export default function H2WelcomePremium() {
             <p>SEMPRE COM VOCÊ</p>
           </div>
 
-          <div className="h2p-car" aria-hidden="true">
-            <span className="h2p-car-roof" />
-            <span className="h2p-car-body" />
-            <span className="h2p-car-window" />
-            <span className="h2p-car-light" />
-            <span className="h2p-car-wheel h2p-car-wheel-a" />
-            <span className="h2p-car-wheel h2p-car-wheel-b" />
+          <div className="h2p-car" aria-hidden="true" style={{ transform: "translateY(4px) scale(1.06)", filter: "drop-shadow(0 0 26px rgba(25,134,255,.65))" }}>
+            <PremiumExecutiveCar />
           </div>
         </section>
 
