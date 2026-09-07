@@ -1,0 +1,401 @@
+name: VIP sales page 2026-09-07
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/vip-sales-page-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-production:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Preserve production checkpoint
+        run: git push origin HEAD:refs/heads/backup/pre-vip-sales-page-20260907 || true
+
+      - name: Implement VIP sales experience
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f'Falha no patch: {label}')
+              return text.replace(old, new, 1)
+
+          vip_page = r'''import { ArrowLeft, CheckCircle2, Copy, Crown, LockKeyhole, MessageCircle, ShieldCheck, Sparkles, Timer } from "lucide-react";
+          import { trpc } from "@/lib/trpc";
+          import { toast } from "sonner";
+
+          function parsePrice(value: string | undefined) {
+            const raw = String(value || "").trim().replace(/R\$/gi, "").replace(/\s/g, "");
+            if (!raw) return 0;
+            if (raw.includes(",")) return Number(raw.replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, "")) || 0;
+            return Number(raw.replace(/[^0-9.-]/g, "")) || 0;
+          }
+
+          function money(value: number) {
+            return `R$ ${value.toFixed(2).replace(".", ",")}`;
+          }
+
+          export default function VipPage() {
+            const { data: settings, isLoading } = trpc.settings.getAll.useQuery();
+            const { data: activePix } = trpc.pix.getActive.useQuery();
+
+            const enabled = settings?.vip_membership_enabled !== "0";
+            const title = settings?.vip_membership_title || "H2 VIP";
+            const subtitle = settings?.vip_membership_subtitle || "Pague menos nos modelos e categorias com benefício VIP.";
+            const priceValue = parsePrice(settings?.vip_membership_price);
+            const durationDays = Math.max(1, Number(settings?.vip_membership_days || 30) || 30);
+            const benefit1 = settings?.vip_membership_benefit_1 || "Preços especiais em modelos e categorias selecionados";
+            const benefit2 = settings?.vip_membership_benefit_2 || "Acesso a opções exclusivas marcadas como SOMENTE VIP";
+            const benefit3 = settings?.vip_membership_benefit_3 || "O valor VIP aparece antes da compra para você comparar";
+            const isVip = typeof window !== "undefined" && localStorage.getItem("walk_access_type") === "vip";
+            const expiresAt = typeof window !== "undefined" ? localStorage.getItem("walk_access_expires") : null;
+            const phone = typeof window !== "undefined" ? localStorage.getItem("walk_client_phone") || "" : "";
+            const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+            const requestedReturn = params.get("returnTo") || "/";
+            const returnTo = requestedReturn.startsWith("/") && !requestedReturn.startsWith("//") ? requestedReturn : "/";
+            const whatsapp = String(settings?.whatsapp_number || "5511978307371").replace(/\D/g, "");
+            const priceLabel = priceValue > 0 ? money(priceValue) : "VALOR EM CONFIGURAÇÃO";
+            const pixKey = String(activePix?.pixKey || "").trim();
+            const canPay = enabled && priceValue > 0 && Boolean(pixKey);
+            const message = encodeURIComponent(
+              `Olá! Quero ativar o H2 VIP.\nPlano: ${durationDays} dias\nValor: ${priceLabel}${phone ? `\nMeu telefone: ${phone}` : ""}\nJá fiz o PIX e vou enviar o comprovante.`
+            );
+            const whatsappHref = `https://wa.me/${whatsapp}?text=${message}`;
+
+            const copyPix = async () => {
+              if (!pixKey) return;
+              try {
+                await navigator.clipboard.writeText(pixKey);
+                toast.success("Chave PIX copiada!");
+              } catch {
+                toast.error("Não foi possível copiar. Selecione a chave manualmente.");
+              }
+            };
+
+            if (isLoading) {
+              return <div className="min-h-screen bg-[#050715] grid place-items-center text-white">Carregando VIP...</div>;
+            }
+
+            return (
+              <main className="min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(124,58,237,.30),transparent_30%),radial-gradient(circle_at_100%_20%,rgba(34,211,238,.16),transparent_28%),linear-gradient(180deg,#050715_0%,#090827_48%,#050715_100%)] px-4 py-6 text-white sm:py-10">
+                <div className="mx-auto w-full max-w-xl">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <a href={returnTo} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.05] px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-200">
+                      <ArrowLeft className="h-4 w-4" /> Voltar
+                    </a>
+                    <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/45 bg-amber-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-amber-200">
+                      <Crown className="h-4 w-4" /> Clube H2
+                    </span>
+                  </div>
+
+                  <section className="overflow-hidden rounded-[30px] border border-violet-400/60 bg-[#080a20]/90 shadow-[0_24px_80px_rgba(0,0,0,.55),0_0_50px_rgba(124,58,237,.20)]">
+                    <div className="relative overflow-hidden border-b border-violet-400/30 bg-[linear-gradient(135deg,rgba(76,29,149,.55),rgba(8,10,32,.92))] px-6 py-7 text-center">
+                      <div className="pointer-events-none absolute -right-5 -top-8 text-[110px] font-black text-violet-300/[0.04]">VIP</div>
+                      <img src="/h2-brand-180.png" alt="H2" className="relative mx-auto mb-4 h-20 w-20 object-contain drop-shadow-[0_0_18px_rgba(167,139,250,.45)]" />
+                      <div className="relative mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-amber-300/50 bg-amber-400/10 text-amber-300 shadow-[0_0_25px_rgba(251,191,36,.18)]">
+                        <Crown className="h-7 w-7" />
+                      </div>
+                      <h1 className="relative mt-4 text-4xl font-black uppercase tracking-tight">{title}</h1>
+                      <p className="relative mx-auto mt-3 max-w-md text-sm font-semibold leading-6 text-slate-300">{subtitle}</p>
+                    </div>
+
+                    <div className="p-5 sm:p-7">
+                      {isVip && (
+                        <div className="mb-5 rounded-2xl border border-emerald-400/45 bg-emerald-500/10 p-4 text-center">
+                          <p className="text-sm font-black uppercase text-emerald-300">Seu VIP está ativo</p>
+                          {expiresAt && <p className="mt-1 text-xs text-emerald-100/75">Validade atual: {new Date(expiresAt).toLocaleString("pt-BR")}</p>}
+                        </div>
+                      )}
+
+                      {!enabled ? (
+                        <div className="rounded-2xl border border-rose-400/35 bg-rose-500/10 p-5 text-center">
+                          <LockKeyhole className="mx-auto h-8 w-8 text-rose-300" />
+                          <p className="mt-3 font-black uppercase">VIP temporariamente indisponível</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="rounded-[24px] border border-amber-300/45 bg-[linear-gradient(135deg,rgba(120,53,15,.22),rgba(17,24,39,.78))] p-5 text-center shadow-[0_0_28px_rgba(251,191,36,.10)]">
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-200">Assinatura H2 VIP</p>
+                            <p className={`mt-2 font-black tracking-tight ${priceValue > 0 ? "text-5xl text-amber-300" : "text-2xl text-slate-200"}`}>{priceLabel}</p>
+                            <p className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-slate-300"><Timer className="h-4 w-4 text-violet-300" /> {durationDays} dias de acesso VIP</p>
+                          </div>
+
+                          <div className="mt-5 grid gap-3">
+                            {[benefit1, benefit2, benefit3].filter(Boolean).map((benefit, index) => (
+                              <div key={index} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+                                <p className="text-sm font-semibold leading-5 text-slate-200">{benefit}</p>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="mt-5 rounded-[24px] border border-cyan-400/35 bg-cyan-500/[0.07] p-5">
+                            <div className="flex items-center gap-3">
+                              <ShieldCheck className="h-7 w-7 text-cyan-300" />
+                              <div>
+                                <p className="text-sm font-black uppercase text-cyan-100">Contrate aqui</p>
+                                <p className="text-xs text-cyan-100/65">Pagamento via PIX e ativação pela equipe H2.</p>
+                              </div>
+                            </div>
+
+                            {canPay ? (
+                              <>
+                                <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
+                                  <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Chave PIX</p>
+                                  <p className="mt-1 break-all text-sm font-black text-white">{pixKey}</p>
+                                  {activePix?.pixName && <p className="mt-1 text-xs text-slate-400">{activePix.pixName}{activePix.pixBank ? ` • ${activePix.pixBank}` : ""}</p>}
+                                </div>
+                                <button type="button" onClick={copyPix} className="mt-3 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-cyan-300/60 bg-cyan-400/10 px-4 text-sm font-black uppercase text-cyan-100">
+                                  <Copy className="h-5 w-5" /> Copiar chave PIX
+                                </button>
+                                <a href={whatsappHref} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-[58px] w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 px-4 text-center text-sm font-black uppercase text-[#251600] shadow-[0_0_28px_rgba(251,191,36,.25)]">
+                                  <MessageCircle className="h-6 w-6" /> Já paguei — ativar VIP
+                                </a>
+                                <p className="mt-3 text-center text-[11px] leading-4 text-slate-400">Depois do PIX, envie o comprovante no WhatsApp. A equipe H2 libera o acesso VIP.</p>
+                              </>
+                            ) : (
+                              <a href={whatsappHref} target="_blank" rel="noreferrer" className="mt-4 inline-flex min-h-[58px] w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 text-center text-sm font-black uppercase text-white">
+                                <MessageCircle className="h-6 w-6" /> Falar com a H2 para contratar
+                              </a>
+                            )}
+                          </div>
+
+                          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-violet-300/25 bg-violet-500/[0.06] p-4 text-xs leading-5 text-slate-400">
+                            <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-violet-300" />
+                            <p>Nos produtos, você verá o preço normal e o preço VIP lado a lado. Assim fica claro quanto economiza antes de contratar.</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              </main>
+            );
+          }
+          '''.replace('\n          ', '\n').lstrip()
+          Path('client/src/pages/VipPage.tsx').write_text(vip_page, encoding='utf-8')
+
+          admin_vip = r'''import { useEffect, useState } from "react";
+          import { Crown, ExternalLink, Save, Settings2 } from "lucide-react";
+          import { trpc } from "@/lib/trpc";
+          import { toast } from "sonner";
+          import AdminHeader from "@/components/AdminHeader";
+
+          export default function AdminVip() {
+            const { data: settings, isLoading } = trpc.settings.getAll.useQuery();
+            const { data: activePix } = trpc.pix.getActive.useQuery();
+            const utils = trpc.useUtils();
+            const update = trpc.settings.update.useMutation({
+              onSuccess: () => {
+                toast.success("Configuração VIP salva!");
+                utils.settings.getAll.invalidate();
+              },
+              onError: (error) => toast.error(error.message || "Erro ao salvar VIP"),
+            });
+            const [form, setForm] = useState({
+              enabled: true,
+              price: "",
+              days: "30",
+              title: "H2 VIP",
+              subtitle: "Pague menos nos modelos e categorias com benefício VIP.",
+              benefit1: "Preços especiais em modelos e categorias selecionados",
+              benefit2: "Acesso a opções exclusivas marcadas como SOMENTE VIP",
+              benefit3: "O valor VIP aparece antes da compra para você comparar",
+            });
+
+            useEffect(() => {
+              if (!settings) return;
+              setForm({
+                enabled: settings.vip_membership_enabled !== "0",
+                price: settings.vip_membership_price || "",
+                days: settings.vip_membership_days || "30",
+                title: settings.vip_membership_title || "H2 VIP",
+                subtitle: settings.vip_membership_subtitle || "Pague menos nos modelos e categorias com benefício VIP.",
+                benefit1: settings.vip_membership_benefit_1 || "Preços especiais em modelos e categorias selecionados",
+                benefit2: settings.vip_membership_benefit_2 || "Acesso a opções exclusivas marcadas como SOMENTE VIP",
+                benefit3: settings.vip_membership_benefit_3 || "O valor VIP aparece antes da compra para você comparar",
+              });
+            }, [settings]);
+
+            const save = () => {
+              const normalizedDays = String(Math.max(1, Number(form.days || 30) || 30));
+              update.mutate({
+                settings: {
+                  vip_membership_enabled: form.enabled ? "1" : "0",
+                  vip_membership_price: form.price.trim(),
+                  vip_membership_days: normalizedDays,
+                  vip_membership_title: form.title.trim() || "H2 VIP",
+                  vip_membership_subtitle: form.subtitle.trim(),
+                  vip_membership_benefit_1: form.benefit1.trim(),
+                  vip_membership_benefit_2: form.benefit2.trim(),
+                  vip_membership_benefit_3: form.benefit3.trim(),
+                },
+              });
+            };
+
+            const inputClass = "mt-2 w-full rounded-xl border border-white/15 bg-slate-950/70 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-amber-300/70";
+
+            return (
+              <div className="min-h-screen bg-slate-950 pb-12 text-white">
+                <AdminHeader />
+                <main className="mx-auto w-full max-w-3xl px-4 py-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 text-amber-300"><Crown className="h-6 w-6" /><span className="text-xs font-black uppercase tracking-[0.16em]">H2 VIP</span></div>
+                      <h1 className="mt-2 text-3xl font-black">Configuração do VIP</h1>
+                      <p className="mt-2 text-sm text-slate-400">Defina o valor da assinatura, duração e argumentos que o cliente verá em /vip.</p>
+                    </div>
+                    <a href="/vip" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-violet-400/45 bg-violet-500/10 px-4 py-3 text-sm font-black text-violet-200"><ExternalLink className="h-4 w-4" /> Ver página VIP</a>
+                  </div>
+
+                  {isLoading ? <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-slate-300">Carregando...</div> : (
+                    <div className="mt-6 grid gap-5">
+                      <section className="rounded-2xl border border-amber-300/25 bg-amber-400/[0.05] p-5">
+                        <label className="flex cursor-pointer items-center justify-between gap-4">
+                          <div><p className="font-black">VIP disponível para contratação</p><p className="mt-1 text-xs text-slate-400">Desative para esconder o fluxo de pagamento.</p></div>
+                          <input type="checkbox" checked={form.enabled} onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))} className="h-5 w-5 accent-amber-400" />
+                        </label>
+                      </section>
+
+                      <section className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:grid-cols-2">
+                        <label className="text-xs font-black uppercase tracking-wide text-slate-300">Valor do VIP
+                          <input value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="Ex.: 29,90" className={inputClass} />
+                        </label>
+                        <label className="text-xs font-black uppercase tracking-wide text-slate-300">Duração em dias
+                          <input type="number" min="1" value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} className={inputClass} />
+                        </label>
+                        <label className="sm:col-span-2 text-xs font-black uppercase tracking-wide text-slate-300">Título
+                          <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} className={inputClass} />
+                        </label>
+                        <label className="sm:col-span-2 text-xs font-black uppercase tracking-wide text-slate-300">Descrição
+                          <textarea value={form.subtitle} onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))} rows={3} className={inputClass} />
+                        </label>
+                      </section>
+
+                      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                        <div className="mb-4 flex items-center gap-2"><Settings2 className="h-5 w-5 text-violet-300" /><h2 className="font-black">Benefícios exibidos ao cliente</h2></div>
+                        {["benefit1", "benefit2", "benefit3"].map((key, index) => (
+                          <label key={key} className="mb-4 block text-xs font-black uppercase tracking-wide text-slate-300">Benefício {index + 1}
+                            <input value={form[key as "benefit1" | "benefit2" | "benefit3"]} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} className={inputClass} />
+                          </label>
+                        ))}
+                      </section>
+
+                      <section className="rounded-2xl border border-cyan-400/25 bg-cyan-500/[0.05] p-5">
+                        <p className="text-sm font-black text-cyan-100">PIX usado na página VIP</p>
+                        {activePix ? <p className="mt-2 text-sm text-slate-300">{activePix.pixKey} {activePix.pixName ? `• ${activePix.pixName}` : ""}</p> : <p className="mt-2 text-sm text-rose-300">Nenhuma conta PIX ativa. Ative uma em Configurações.</p>}
+                        <a href="/admin/settings" className="mt-3 inline-flex text-xs font-black uppercase text-cyan-300 underline underline-offset-4">Abrir configurações de PIX</a>
+                      </section>
+
+                      <button type="button" onClick={save} disabled={update.isPending} className="inline-flex min-h-[56px] items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-amber-300 to-yellow-400 px-5 text-sm font-black uppercase text-[#251600] disabled:opacity-50">
+                        <Save className="h-5 w-5" /> {update.isPending ? "Salvando..." : "Salvar configuração VIP"}
+                      </button>
+                    </div>
+                  )}
+                </main>
+              </div>
+            );
+          }
+          '''.replace('\n          ', '\n').lstrip()
+          Path('client/src/pages/AdminVip.tsx').write_text(admin_vip, encoding='utf-8')
+
+          app = Path('client/src/App.tsx').read_text(encoding='utf-8')
+          app = replace_once(app, 'import AdminSettings from "./pages/AdminSettings";', 'import AdminSettings from "./pages/AdminSettings";\nimport AdminVip from "./pages/AdminVip";', 'import AdminVip')
+          app = replace_once(app, 'import AppProDownloadPage from "./pages/AppProDownloadPage";', 'import AppProDownloadPage from "./pages/AppProDownloadPage";\nimport VipPage from "./pages/VipPage";', 'import VipPage')
+          app = replace_once(app, '''      <Route path={"/admin/settings"}>\n        <AdminGuard><AdminSettings /></AdminGuard>\n      </Route>''', '''      <Route path={"/admin/settings"}>\n        <AdminGuard><AdminSettings /></AdminGuard>\n      </Route>\n      <Route path={"/admin/vip"}>\n        <AdminGuard><AdminVip /></AdminGuard>\n      </Route>''', 'rota admin vip')
+          app = replace_once(app, '      <Route path={"/app-pro"} component={AppProDownloadPage} />', '      <Route path={"/app-pro"} component={AppProDownloadPage} />\n      <Route path={"/vip"} component={VipPage} />', 'rota publica vip')
+          app = replace_once(app, '  const isAppDownloadRoute = location === "/app" || location === "/app-pro";', '  const isAppDownloadRoute = location === "/app" || location === "/app-pro";\n  const isVipRoute = location.toLowerCase() === "/vip";', 'flag vip')
+          app = replace_once(app, '  // Rota /gastos é pública — sem senha\n  if (isGastosRoute) {', '  // Rota /vip é pública — vitrine e contratação do plano H2 VIP\n  if (isVipRoute) {\n    return <Router />;\n  }\n\n  // Rota /gastos é pública — sem senha\n  if (isGastosRoute) {', 'bypass publico vip')
+          Path('client/src/App.tsx').write_text(app, encoding='utf-8')
+
+          admin_codes = Path('client/src/pages/AdminCodes.tsx').read_text(encoding='utf-8')
+          product_shortcut = "  { id: 'products', href: '/admin/products', label: 'Cards', icon: Package, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },"
+          admin_codes = replace_once(admin_codes, product_shortcut, product_shortcut + "\n  { id: 'vip', href: '/admin/vip', label: 'VIP', emoji: '👑', tone: 'bg-amber-600/20 border-amber-500/35 hover:bg-amber-600/30' },", 'atalho admin vip')
+          Path('client/src/pages/AdminCodes.tsx').write_text(admin_codes, encoding='utf-8')
+
+          card_path = Path('client/src/components/StorefrontProductCard.tsx')
+          card = card_path.read_text(encoding='utf-8')
+          old_import = 'import { applyVipBenefitToPrice, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";'
+          new_import = 'import { applyVipBenefitToPrice, formatBrazilMoney, hasVipBenefit, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, parseBrazilMoney, vipBenefitText } from "@shared/vipPricing";'
+          card = replace_once(card, old_import, new_import, 'imports vip card')
+          card = replace_once(card, '  const productPill = item.product.name.toUpperCase();', '  const productPill = item.product.name.toUpperCase();\n  const vipHref = typeof window !== "undefined" ? `/vip?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}` : "/vip";\n  const vipSavingsValues = priceModels.map((model) => Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(applyVipBenefitToPrice(model.price, model, true))));\n  const maxVipSavings = Math.max(0, ...vipSavingsValues);', 'helpers vip card')
+          card = replace_once(card, '                const modelVipHighlighted = isVipHighlighted(model);', '                const modelVipHighlighted = isVipHighlighted(model);\n                const modelHasVipBenefit = hasVipBenefit(model);\n                const vipPreviewPrice = applyVipBenefitToPrice(model.price, model, true);\n                const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));', 'preview vip por modelo')
+          card = card.replace('className={`relative min-h-[150px]', 'className={`relative min-h-[205px]', 1)
+          card = card.replace('${modelLocked ? "cursor-not-allowed opacity-55 saturate-50" : ""}', '${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}', 1)
+          old_model_body = '''                    <span className="mt-3 block text-[12px] font-black leading-4 text-white sm:text-base">{parts.title}</span>\n                    <span className={`mt-1.5 block text-[13px] font-black sm:text-base ${palette.text}`}>{parts.subtitle}</span>\n                    {isSelected ? <span className={`mx-auto mt-4 grid h-8 w-8 place-items-center rounded-full ${palette.badge} text-slate-950`}><Check className="h-4 w-4 stroke-[3]" /></span> : <span className="mx-auto mt-4 block h-8 w-8 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />}'''
+          new_model_body = '''                    <span className="mt-3 block text-[12px] font-black leading-4 text-white sm:text-base">{parts.title}</span>\n                    <span className={`mt-1.5 block text-[13px] font-black sm:text-base ${palette.text}`}>{parts.subtitle}</span>\n                    <div className="mt-3 min-h-[50px] border-t border-white/10 pt-2">\n                      {modelVipMode === 'all' ? (\n                        <span className="block text-[11px] font-black text-white sm:text-sm">{asMoney(model.price)}</span>\n                      ) : modelHasVipBenefit ? (\n                        <>\n                          <span className="block text-[8px] font-bold uppercase text-slate-400 line-through">Normal {asMoney(model.price)}</span>\n                          <span className="mt-0.5 block text-[11px] font-black text-amber-300 sm:text-sm">VIP {asMoney(vipPreviewPrice)}</span>\n                          {vipSavings > 0 && <span className="mt-1 block text-[8px] font-black uppercase text-emerald-300">Poupe {formatBrazilMoney(vipSavings)}</span>}\n                        </>\n                      ) : (\n                        <>\n                          <span className="block text-[8px] font-bold uppercase text-slate-400">Preço exclusivo</span>\n                          <span className="mt-0.5 block text-[11px] font-black text-amber-300 sm:text-sm">VIP {asMoney(model.price)}</span>\n                        </>\n                      )}\n                    </div>\n                    {isSelected ? <span className={`mx-auto mt-3 grid h-8 w-8 place-items-center rounded-full ${palette.badge} text-slate-950`}><Check className="h-4 w-4 stroke-[3]" /></span> : <span className="mx-auto mt-3 block h-8 w-8 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />}'''
+          card = replace_once(card, old_model_body, new_model_body, 'preco dentro do modelo')
+          old_after_grid = '''            </div>\n          </div>\n        )}\n\n        {tiers.length > 0 && priceModels.length === 0 && ('''
+          new_after_grid = '''            </div>\n            {!isVipCustomer && priceModels.some((model) => normalizeVipAccessMode(model.vipAccessMode) !== 'all') && (\n              <a href={vipHref} className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-300/45 bg-[linear-gradient(135deg,rgba(120,53,15,.22),rgba(76,29,149,.20))] p-4 shadow-[0_0_24px_rgba(251,191,36,.10)] transition-all hover:border-amber-200/70 hover:brightness-110">\n                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-300"><Crown className="h-6 w-6" /></div>\n                <div className="min-w-0 flex-1">\n                  <p className="text-xs font-black uppercase tracking-wide text-amber-200">Seja VIP e pague menos</p>\n                  <p className="mt-1 text-[11px] font-semibold text-slate-300">{maxVipSavings > 0 ? `Economize até ${formatBrazilMoney(maxVipSavings)} neste produto.` : 'Libere opções exclusivas e benefícios VIP.'}</p>\n                </div>\n                <span className="shrink-0 rounded-full bg-amber-300 px-3 py-2 text-[9px] font-black uppercase text-[#251600]">Quero VIP</span>\n              </a>\n            )}\n          </div>\n        )}\n\n        {tiers.length > 0 && priceModels.length === 0 && ('''
+          card = replace_once(card, old_after_grid, new_after_grid, 'cta vip abaixo modelos')
+          old_vip_badge = '''            {selectedPriceModel && normalizeVipAccessMode(selectedPriceModel.vipAccessMode) !== 'all' && <p className="ml-2 mt-2 inline-flex rounded-full border border-amber-300/45 bg-amber-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-200">{isVipCustomer ? `👑 ${vipBenefitText(selectedPriceModel) || 'ACESSO VIP'}` : '👑 BENEFÍCIO VIP DISPONÍVEL'}</p>}'''
+          new_vip_badge = '''            {selectedPriceModel && !isVipCustomer && hasVipBenefit(selectedPriceModel) && (() => {\n              const vipPrice = applyVipBenefitToPrice(selectedPriceModel.price, selectedPriceModel, true);\n              const saving = Math.max(0, parseBrazilMoney(selectedPriceModel.price) - parseBrazilMoney(vipPrice));\n              return (\n                <div className="mt-3 rounded-2xl border border-amber-300/45 bg-amber-400/[0.08] p-3">\n                  <p className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-200">👑 Cliente VIP paga</p>\n                  <div className="mt-1 flex flex-wrap items-end justify-between gap-2">\n                    <p className="text-2xl font-black text-amber-300">{asMoney(vipPrice)}</p>\n                    {saving > 0 && <p className="text-[10px] font-black uppercase text-emerald-300">Você economiza {formatBrazilMoney(saving)}</p>}\n                  </div>\n                  <a href={vipHref} className="mt-3 inline-flex min-h-[40px] w-full items-center justify-center rounded-xl bg-amber-300 px-3 text-[11px] font-black uppercase text-[#251600]">Quero ser VIP</a>\n                </div>\n              );\n            })()}\n            {selectedPriceModel && normalizeVipAccessMode(selectedPriceModel.vipAccessMode) !== 'all' && <p className="ml-2 mt-2 inline-flex rounded-full border border-amber-300/45 bg-amber-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-200">{isVipCustomer ? `👑 ${vipBenefitText(selectedPriceModel) || 'ACESSO VIP'}` : '👑 BENEFÍCIO VIP DISPONÍVEL'}</p>}'''
+          card = replace_once(card, old_vip_badge, new_vip_badge, 'comparativo vip na escolha')
+          card_path.write_text(card, encoding='utf-8')
+
+          audit = r'''import fs from "node:fs";
+          const checks = [
+            ["pagina publica VIP", "client/src/pages/VipPage.tsx", ["Assinatura H2 VIP", "Já paguei — ativar VIP", "trpc.pix.getActive"]],
+            ["configuracao admin VIP", "client/src/pages/AdminVip.tsx", ["vip_membership_price", "vip_membership_days", "Salvar configuração VIP"]],
+            ["rotas VIP", "client/src/App.tsx", ["/admin/vip", "/vip", "isVipRoute"]],
+            ["atalho admin", "client/src/pages/AdminCodes.tsx", ["href: '/admin/vip'", "label: 'VIP'"]],
+            ["preco VIP visivel", "client/src/components/StorefrontProductCard.tsx", ["Cliente VIP paga", "Quero ser VIP", "Economize até", "vipPreviewPrice"]],
+          ];
+          let ok = 0;
+          for (const [label, file, needles] of checks) {
+            const text = fs.readFileSync(file, "utf8");
+            const missing = needles.filter((needle) => !text.includes(needle));
+            if (missing.length) {
+              console.error(`FAIL ${label}: ${missing.join(", ")}`);
+              process.exitCode = 1;
+            } else {
+              console.log(`OK ${label}`);
+              ok++;
+            }
+          }
+          console.log(`${ok}/${checks.length} checks OK`);
+          '''.replace('\n          ', '\n').lstrip()
+          Path('audit/check_vip_sales_page.mjs').write_text(audit, encoding='utf-8')
+          PY
+
+      - name: Audit VIP sales experience
+        run: node audit/check_vip_sales_page.mjs
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Test VIP pricing rules
+        run: pnpm vitest run server/vipPricing.test.ts
+
+      - name: Type check
+        run: pnpm check
+
+      - name: Build production client/server
+        run: pnpm build
+
+      - name: Commit production implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/VipPage.tsx client/src/pages/AdminVip.tsx client/src/App.tsx client/src/pages/AdminCodes.tsx client/src/components/StorefrontProductCard.tsx audit/check_vip_sales_page.mjs
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "feat(vip): exibir economia e pagina de assinatura"
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
