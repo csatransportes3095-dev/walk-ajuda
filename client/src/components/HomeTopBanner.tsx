@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import "../home-top-banner.css";
 
 type SettingsMap = Record<string, string | undefined>;
 
