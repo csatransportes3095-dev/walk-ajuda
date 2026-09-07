@@ -14,6 +14,7 @@ import AdminOrderLoginQuickEnhancer from "./components/AdminOrderLoginQuickEnhan
 import AdminOrderH2EmailQuickFix from "./components/AdminOrderH2EmailQuickFix";
 import AdminOrderLoginCopyEnhancer from "./components/AdminOrderLoginCopyEnhancer";
 import AdminOrderAuthenticatorSyncEnhancer from "./components/AdminOrderAuthenticatorSyncEnhancer";
+import AdminOrderTrackingPinRetirement from "./components/AdminOrderTrackingPinRetirement";
 import AdminCustomerPhoneEditorEnhancer from "./components/AdminCustomerPhoneEditorEnhancer";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
 import AdminQuestionEditOptionsEnhancer from "./components/AdminQuestionEditOptionsEnhancer";
@@ -48,7 +49,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <GlobalDevToolsProtection /><AdminDevToolsTargetSelector /><AdminHomeTopSettingsEnhancer />
       <SpreadsheetModulesEnhancer /><SpreadsheetLegacyModulesCleanup />
-      <AdminOrderLoginQuickEnhancer /><AdminOrderH2EmailQuickFix /><AdminOrderLoginCopyEnhancer /><AdminOrderAuthenticatorSyncEnhancer />
+      <AdminOrderLoginQuickEnhancer /><AdminOrderH2EmailQuickFix /><AdminOrderLoginCopyEnhancer /><AdminOrderAuthenticatorSyncEnhancer /><AdminOrderTrackingPinRetirement />
       <AdminCustomerPhoneEditorEnhancer /><RafflePhotoIntegrityEnhancer /><AdminProductsQuestionUXEnhancer /><AdminQuestionEditOptionsEnhancer /><AdminQuestionTreeOrderEnhancer />
       <QuestionBlockingRulesManager /><QuestionBlockingManifestGuard /><ProductManifestGuard /><OrderWhatsappQuestionTreeEnhancer /><PublicQuestionFlowEnhancer /><RegistrationReferralFirstGate />
       <H2WelcomePremium /><HomeTopRuntimeEnhancer />
