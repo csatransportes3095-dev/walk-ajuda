@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import H2WelcomePremium from "./components/H2WelcomePremium";
+import HomeTopRuntimeEnhancer from "./components/HomeTopRuntimeEnhancer";
 import AdminHomeTopSettingsEnhancer from "./components/AdminHomeTopSettingsEnhancer";
 import AdminCustomerPhoneEditorEnhancer from "./components/AdminCustomerPhoneEditorEnhancer";
 import AdminProductsQuestionUXEnhancer from "./components/AdminProductsQuestionUXEnhancer";
@@ -43,7 +44,6 @@ const queryClient = new QueryClient({
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
-
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
   if (!isUnauthorized) return;
   window.location.href = "/admin/login";
@@ -115,6 +115,7 @@ createRoot(document.getElementById("root")!).render(
       <PublicQuestionFlowEnhancer />
       <RegistrationReferralFirstGate />
       <H2WelcomePremium />
+      <HomeTopRuntimeEnhancer />
       <UnifiedCustomerAccessGate>
         <UnifiedCustomerModuleBootstrap>
           <App />
