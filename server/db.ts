@@ -2625,7 +2625,7 @@ export async function listScheduleSlots(): Promise<ScheduleSlot[]> {
 // Slots realmente disponíveis para o cliente escolher:
 // status available, ainda não lotados (bookedCount < capacity) e a partir de hoje.
 // Se templateId for informado, retorna apenas os horários daquele modelo + os gerais (templateId null).
-export async function listAvailableScheduleSlots(templateId?: number | null): Promise<ScheduleSlot[]> {
+export async function listAvailableScheduleSlots(templateId?: number | null, futureDaysOnly = false): Promise<ScheduleSlot[]> {
   const db = await getDb();
   if (!db) return [];
   const now = new Date();
@@ -2649,6 +2649,8 @@ export async function listAvailableScheduleSlots(templateId?: number | null): Pr
     if (r.bookedCount >= r.capacity) return false;
     // Excluir datas passadas que escaparam da query
     if (r.slotDate < today) return false;
+    // Reagendamento: nunca permite escolher novamente no mesmo dia.
+    if (futureDaysOnly && r.slotDate <= today) return false;
     // Para hoje: excluir horários que já passaram (sem grace period)
     if (r.slotDate === today) {
       const timeParts = r.slotTime.split(':').map(Number);
@@ -2817,35 +2819,116 @@ export async function deleteAppointment(id: number): Promise<void> {
   await db.delete(scheduleAppointments).where(eq(scheduleAppointments.id, id));
 }
 
-// Permite reabrir um agendamento para o cliente reescolher (reagendar):
-// libera o slot atual e volta status para 'pending'.
+// Permite reabrir um agendamento para o cliente reescolher (reagendar).
+// REGRA: o horário abandonado é consumido definitivamente e não volta para a grade.
+// confirmedAt é preservado (ou criado para legado) como marcador de REAGENDAMENTO,
+// fazendo a nova escolha começar somente no dia seguinte.
 export async function reopenAppointment(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  const rows = await db.select().from(scheduleAppointments).where(eq(scheduleAppointments.id, id)).limit(1);
-  if (rows.length === 0) return;
-  const appt = rows[0];
-  if (appt.slotId) {
-    await db.update(scheduleSlots)
-      .set({ bookedCount: sql`GREATEST(${scheduleSlots.bookedCount} - 1, 0)` })
-      .where(eq(scheduleSlots.id, appt.slotId));
+
+  let audit: { slotId: number | null; slotDate: string | null; slotTime: string | null; registrationId: number; subOrderIndex: number } | null = null;
+
+  await db.transaction(async (tx) => {
+    const rows = await tx.select().from(scheduleAppointments).where(eq(scheduleAppointments.id, id)).limit(1);
+    if (rows.length === 0) return;
+    const appt = rows[0];
+    const oldSlotId = appt.slotId;
+    const wasPreviouslyScheduled = appt.status === 'confirmed' || Boolean(appt.confirmedAt) || Boolean(appt.slotId);
+
+    audit = {
+      slotId: oldSlotId,
+      slotDate: appt.slotDate,
+      slotTime: appt.slotTime,
+      registrationId: appt.registrationId,
+      subOrderIndex: appt.subOrderIndex,
+    };
+
+    await tx.update(scheduleAppointments)
+      .set({
+        status: 'pending',
+        slotId: null,
+        slotDate: null,
+        slotTime: null,
+        confirmedAt: wasPreviouslyScheduled ? (appt.confirmedAt ?? new Date()) : null,
+      })
+      .where(eq(scheduleAppointments.id, id));
+
+    if (oldSlotId) {
+      // Se o admin configurou capacidade > 1, não apagamos um slot que ainda possua
+      // outro cliente confirmado. Neste caso congelamos o slot como lotado, sem
+      // devolver a vaga abandonada. Quando o último confirmado sair, o slot é apagado.
+      const otherConfirmed = await tx.select({ id: scheduleAppointments.id })
+        .from(scheduleAppointments)
+        .where(and(
+          eq(scheduleAppointments.slotId, oldSlotId),
+          eq(scheduleAppointments.status, 'confirmed'),
+        ));
+
+      if (otherConfirmed.length === 0) {
+        await tx.delete(scheduleSlots).where(eq(scheduleSlots.id, oldSlotId));
+      } else {
+        await tx.update(scheduleSlots)
+          .set({ capacity: otherConfirmed.length, bookedCount: otherConfirmed.length })
+          .where(eq(scheduleSlots.id, oldSlotId));
+      }
+    }
+  });
+
+  if (audit?.slotId) {
+    console.info(`[Schedule][consume] reason=reschedule appointmentId=${id} slotId=${audit.slotId} date=${audit.slotDate ?? '-'} time=${audit.slotTime ?? '-'} order=${audit.registrationId}/${audit.subOrderIndex}`);
   }
-  await db.update(scheduleAppointments).set({ status: 'pending', slotId: null, slotDate: null, slotTime: null, confirmedAt: null }).where(eq(scheduleAppointments.id, id));
 }
 
 export async function completeAppointment(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  const rows = await db.select().from(scheduleAppointments).where(eq(scheduleAppointments.id, id)).limit(1);
-  if (rows.length === 0) return;
-  const appt = rows[0];
-  // liberar o slot se estava confirmado
-  if (appt.status === 'confirmed' && appt.slotId) {
-    await db.update(scheduleSlots)
-      .set({ bookedCount: sql`GREATEST(${scheduleSlots.bookedCount} - 1, 0)` })
-      .where(eq(scheduleSlots.id, appt.slotId));
+
+  let audit: { slotId: number | null; slotDate: string | null; slotTime: string | null; registrationId: number; subOrderIndex: number } | null = null;
+
+  await db.transaction(async (tx) => {
+    const rows = await tx.select().from(scheduleAppointments).where(eq(scheduleAppointments.id, id)).limit(1);
+    if (rows.length === 0) return;
+    const appt = rows[0];
+    const consumedSlotId = appt.status === 'confirmed' ? appt.slotId : null;
+
+    audit = {
+      slotId: consumedSlotId,
+      slotDate: appt.slotDate,
+      slotTime: appt.slotTime,
+      registrationId: appt.registrationId,
+      subOrderIndex: appt.subOrderIndex,
+    };
+
+    // Preserva data/hora/confirmedAt no histórico. Só rompe a ligação com o slot.
+    await tx.update(scheduleAppointments)
+      .set({ status: 'completed', slotId: null })
+      .where(eq(scheduleAppointments.id, id));
+
+    if (consumedSlotId) {
+      // REGRA: atendimento finalizado consome a vaga; nunca decrementa bookedCount.
+      // Se há outro cliente confirmado no mesmo slot (capacidade > 1), o horário
+      // continua visível apenas para representar esse cliente e fica lotado.
+      const otherConfirmed = await tx.select({ id: scheduleAppointments.id })
+        .from(scheduleAppointments)
+        .where(and(
+          eq(scheduleAppointments.slotId, consumedSlotId),
+          eq(scheduleAppointments.status, 'confirmed'),
+        ));
+
+      if (otherConfirmed.length === 0) {
+        await tx.delete(scheduleSlots).where(eq(scheduleSlots.id, consumedSlotId));
+      } else {
+        await tx.update(scheduleSlots)
+          .set({ capacity: otherConfirmed.length, bookedCount: otherConfirmed.length })
+          .where(eq(scheduleSlots.id, consumedSlotId));
+      }
+    }
+  });
+
+  if (audit?.slotId) {
+    console.info(`[Schedule][consume] reason=completed appointmentId=${id} slotId=${audit.slotId} date=${audit.slotDate ?? '-'} time=${audit.slotTime ?? '-'} order=${audit.registrationId}/${audit.subOrderIndex}`);
   }
-  await db.update(scheduleAppointments).set({ status: 'completed', slotId: null, slotDate: null, slotTime: null }).where(eq(scheduleAppointments.id, id));
 }
 
 /**
@@ -2946,6 +3029,20 @@ export async function confirmAppointment(token: string, slotId: number): Promise
   if (slotRows.length === 0) return { ok: false, reason: 'Horário não encontrado' };
   const slot = slotRows[0];
   if (slot.status !== 'available') return { ok: false, reason: 'Este horário não está mais disponível' };
+
+  // Se este pedido já teve um horário e voltou para pending, é reagendamento:
+  // a nova escolha deve ser obrigatoriamente em um dia posterior ao dia atual (São Paulo).
+  if (appt.confirmedAt) {
+    const now = new Date();
+    const localDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const year = localDate.getUTCFullYear();
+    const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(localDate.getUTCDate()).padStart(2, '0');
+    const today = `${year}-${month}-${day}`;
+    if (slot.slotDate <= today) {
+      return { ok: false, reason: 'Para trocar o horário, escolha uma data a partir de amanhã.' };
+    }
+  }
 
   // Reserva atômica: só incrementa se ainda houver vaga
   const result: any = await db.update(scheduleSlots)

@@ -191,7 +191,7 @@ async function buildAuthenticatedScheduleData(appt: any, customer: any) {
   const cfg = await getScheduleConfig();
   const missing = getMissingCustomerProfileFields(customer);
   const updateRequired = missing.length > 0;
-  const slots = updateRequired ? [] : await listAvailableScheduleSlots(appt.templateId ?? null);
+  const slots = updateRequired ? [] : await listAvailableScheduleSlots(appt.templateId ?? null, appt.status === 'pending' && Boolean(appt.confirmedAt));
   const orderStatus = await getPublicOrderContext(Number(appt.registrationId));
   return {
     found: true as const,
