@@ -1,0 +1,72 @@
+name: Full width storefront desktop 2026-09-07
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fullwidth-storefront-desktop-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Backup production
+        run: git push origin HEAD:refs/heads/backup/pre-fullwidth-storefront-20260907 || true
+
+      - name: Expand storefront on desktop
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('client/src/pages/Home.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          old_section = '''      {/* Seção de Serviços */}
+      <section className="py-16 md:py-24 bg-black/10">
+        <div className="container">'''
+          new_section = '''      {/* Seção de Serviços */}
+      <section className="py-16 md:py-24 bg-black/10">
+        <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">'''
+
+          old_grid = '''                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">'''
+          new_grid = '''                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">'''
+
+          if text.count(old_section) != 1:
+              raise SystemExit(f'ABORT: storefront section target count={text.count(old_section)}')
+          if text.count(old_grid) != 1:
+              raise SystemExit(f'ABORT: storefront grid target count={text.count(old_grid)}')
+
+          text = text.replace(old_section, new_section, 1)
+          text = text.replace(old_grid, new_grid, 1)
+          path.write_text(text, encoding='utf-8')
+          print('OK: storefront now uses full desktop width with exactly 4 columns at xl and above.')
+          PY
+
+          git diff --check
+          git diff -- client/src/pages/Home.tsx
+
+      - name: Install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Commit production
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/Home.tsx
+          git commit -m "feat(storefront): ocupar largura do desktop com quatro cards"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
