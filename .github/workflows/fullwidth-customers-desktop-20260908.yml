@@ -1,0 +1,68 @@
+name: Full width customers desktop 2026-09-08
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fullwidth-customers-desktop-20260908.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Backup production
+        run: git push origin HEAD:refs/heads/backup/pre-fullwidth-customers-20260908 || true
+
+      - name: Expand customer cards on desktop
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('client/src/pages/AdminCustomers.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          old_wrapper = '<div className="container py-4 space-y-4">'
+          new_wrapper = '<div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 space-y-4">'
+
+          old_grid = '<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">'
+          new_grid = '<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">'
+
+          if text.count(old_wrapper) != 1:
+              raise SystemExit(f'ABORT: expected 1 customers wrapper, found {text.count(old_wrapper)}')
+          if text.count(old_grid) != 1:
+              raise SystemExit(f'ABORT: expected 1 customers grid, found {text.count(old_grid)}')
+
+          text = text.replace(old_wrapper, new_wrapper, 1)
+          text = text.replace(old_grid, new_grid, 1)
+          path.write_text(text, encoding='utf-8')
+          print('OK: customers page uses full desktop width with 4 cards per row.')
+          PY
+
+          git diff --check
+          git diff -- client/src/pages/AdminCustomers.tsx
+
+      - name: Install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Commit production
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminCustomers.tsx
+          git commit -m "feat(customers): ampliar cards no desktop em quatro colunas"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
