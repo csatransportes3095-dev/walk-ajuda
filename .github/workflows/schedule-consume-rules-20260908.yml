@@ -6,6 +6,9 @@ on:
       - .github/workflows/schedule-consume-rules-20260908.yml
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   apply:
     runs-on: ubuntu-latest
