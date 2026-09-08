@@ -1,0 +1,64 @@
+name: Fix customers VIP list 2026-09-07
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-customers-vip-list-20260907.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Backup production
+        run: git push origin HEAD:refs/heads/backup/pre-fix-customers-vip-list-20260907 || true
+
+      - name: Apply surgical fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('server/routers.ts')
+          text = path.read_text(encoding='utf-8')
+          old = """        const openOrders = openOrdersByPhone[cleanPhone] || [];
+                  const profileUpdatePolicy = await getCustomerProfileUpdateState(r);"""
+          new = """        const openOrders = openOrdersByPhone[cleanPhone] || [];
+                  const vipMembership = vipMembershipMap.get(Number(r.id));
+                  const profileUpdatePolicy = await getCustomerProfileUpdateState(r);"""
+
+          matches = text.count(old)
+          if matches != 1:
+              raise SystemExit(f'ABORT: expected exactly 1 target block, found {matches}. No file written.')
+
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          print('OK: vipMembership is now resolved per customer before use.')
+          PY
+
+          git diff --check
+          grep -F "const vipMembership = vipMembershipMap.get(Number(r.id));" server/routers.ts
+
+      - name: Install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Commit production
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/routers.ts
+          git commit -m "fix(customers): restaurar listagem com status VIP"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
