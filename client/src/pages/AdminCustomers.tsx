@@ -1080,7 +1080,7 @@ export default function AdminCustomers() {
         </div>
       )}
 
-      <div className="container py-4 space-y-4">
+      <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 space-y-4">
         {/* Busca + Ordenação */}
         <div className="flex gap-2">
         <div className="relative flex-1">
@@ -1187,7 +1187,7 @@ export default function AdminCustomers() {
         )}
 
         {/* Grid de Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {filtered.map((c) => (
             <div key={c.id} className={`rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5 ${selectedIds.has(c.id) ? 'ring-2 ring-green-400' : editingId === c.id ? 'ring-2 ring-blue-400' : ''}`} style={{
                 background: c.blocked === 1
