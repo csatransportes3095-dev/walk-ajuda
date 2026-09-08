@@ -2450,6 +2450,7 @@ export const appRouter = router({
       return await Promise.all((rows[0] as unknown as Array<Record<string, unknown>>).map(async r => {
         const cleanPhone = String(r.phone || '').replace(/[^0-9]/g, '');
         const openOrders = openOrdersByPhone[cleanPhone] || [];
+        const vipMembership = vipMembershipMap.get(Number(r.id));
         const profileUpdatePolicy = await getCustomerProfileUpdateState(r);
         return {
           ...r,
