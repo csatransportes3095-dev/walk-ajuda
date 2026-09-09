@@ -47,5 +47,5 @@ RUN npm install -g pnpm@10.4.1 \
 
 ENV NODE_ENV=production
 ENV BACKUP_DUMPLING_BINARY=/usr/local/bin/dumpling
-ENV BACKUP_R2_CONCURRENCY=16
+ENV BACKUP_R2_CONCURRENCY=1
 CMD ["/app/scripts/render-start.sh"]
