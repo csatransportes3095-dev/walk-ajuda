@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { CalendarCheck, CalendarClock, CalendarX } from "lucide-react";
+import { CalendarCheck, CalendarClock } from "lucide-react";
 
 interface Props {
   registrationId: number;
@@ -19,11 +19,10 @@ function formatDate(d: string): string {
 }
 
 /**
- * Selo grande e destacado que mostra o estado do agendamento do pedido.
- * Três estados:
- *  - CONFIRMADO: cliente escolheu dia e hora (verde)
- *  - AGUARDANDO AGENDAMENTO: link criado, cliente notificado mas ainda não agendou (amarelo)
- *  - SEM AGENDAMENTO: nenhum link/notificação criado (cinza/vermelho)
+ * Selo grande e destacado que mostra o estado de um agendamento existente.
+ * - CONFIRMADO: cliente escolheu dia e hora (verde)
+ * - AGUARDANDO: link criado, cliente notificado mas ainda não agendou (amarelo)
+ * - SEM AGENDAMENTO: não exibe aviso; o card fica somente com o status real do pedido.
  */
 export default function ScheduleStatusBadge({ registrationId, subOrderIndex, customerPhone, orderStatus }: Props) {
   const utils = trpc.useUtils();
@@ -40,18 +39,10 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
   const appt = apptQuery.data;
   const showConfirmedAlert = appt && appt.status === "confirmed" && appt.slotDate && !appt.adminSeenConfirmedAt;
 
-  if (apptQuery.isLoading) {
-    return (
-      <div className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 animate-pulse">
-        <div className="h-3 w-28 bg-white/10 rounded mb-2.5" />
-        <div className="h-4 w-44 bg-white/10 rounded mb-2" />
-        <div className="h-2.5 w-40 bg-white/10 rounded" />
-      </div>
-    );
-  }
+  // Não desenha placeholder grande: se não houver agendamento, o pedido deve ficar limpo.
+  if (apptQuery.isLoading) return null;
 
   // Quando o agendamento ou o pedido já foi concluído, o card mostra somente o status atual do pedido.
-  // O histórico de agendamento continua preservado, mas não é trabalho operacional aberto.
   const finalOrder = ['entregue', 'pedido_entregue', 'cancelado'].includes(String(orderStatus || ''));
   if (appt?.status === "completed" || finalOrder) return null;
 
@@ -62,27 +53,20 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
         <div className="w-full rounded-2xl border-2 border-green-500/60 bg-green-500/12 px-5 py-4 shadow-[0_0_14px_rgba(34,197,94,0.25)]">
           <div className="flex items-center gap-2 mb-1.5">
             <CalendarCheck className="w-[18px] h-[18px] text-green-400 shrink-0" />
-            <span className="text-xs font-extrabold tracking-[0.12em] text-green-400 uppercase">
-              Confirmado
-            </span>
+            <span className="text-xs font-extrabold tracking-[0.12em] text-green-400 uppercase">Confirmado</span>
           </div>
           <p className="text-xl font-extrabold leading-tight text-green-300">
             {formatDate(appt.slotDate)}
             {appt.slotTime && <span className="text-green-200/90"> às {appt.slotTime}</span>}
           </p>
-          <p className="text-sm text-green-300/70 leading-tight mt-1">
-            Agendamento confirmado pelo cliente
-          </p>
+          <p className="text-sm text-green-300/70 leading-tight mt-1">Agendamento confirmado pelo cliente</p>
         </div>
-        {/* Alerta pulsante: cliente confirmou, admin ainda não finalizou */}
         {showConfirmedAlert && (
           <div className="w-full rounded-xl border-2 border-emerald-400/70 bg-emerald-500/15 px-4 py-3 flex items-center justify-between gap-3 shadow-[0_0_18px_rgba(52,211,153,0.35)] animate-pulse">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-lg leading-none shrink-0">📅</span>
               <div className="min-w-0">
-                <p className="text-xs font-extrabold text-emerald-300 uppercase tracking-wide leading-tight">
-                  Cliente confirmou agendamento!
-                </p>
+                <p className="text-xs font-extrabold text-emerald-300 uppercase tracking-wide leading-tight">Cliente confirmou agendamento!</p>
                 <p className="text-[11px] text-emerald-300/70 leading-tight mt-0.5 truncate">
                   {formatDate(appt.slotDate)}{appt.slotTime ? ` às ${appt.slotTime}` : ""}
                 </p>
@@ -105,7 +89,7 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
   }
 
   // AGUARDANDO — link criado/notificado, mas cliente ainda não escolheu
-  if (appt && (appt.status === "pending")) {
+  if (appt && appt.status === "pending") {
     const notifiedAt = appt.createdAt
       ? new Date(appt.createdAt).toLocaleString("pt-BR", {
           day: "2-digit", month: "2-digit", year: "numeric",
@@ -116,16 +100,10 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
       <div className="w-full rounded-2xl border-2 border-yellow-500/60 bg-yellow-500/[0.08] px-5 py-4 shadow-[0_0_14px_rgba(234,179,8,0.2)]">
         <div className="flex items-center gap-2 mb-1.5">
           <CalendarClock className="w-[18px] h-[18px] text-yellow-400 shrink-0" />
-          <span className="text-xs font-extrabold tracking-[0.12em] text-yellow-400 uppercase">
-            Aguardando
-          </span>
+          <span className="text-xs font-extrabold tracking-[0.12em] text-yellow-400 uppercase">Aguardando</span>
         </div>
-        <p className="text-xl font-extrabold leading-tight text-yellow-300">
-          Aguardando agendamento
-        </p>
-        <p className="text-sm text-yellow-300/70 leading-tight mt-1">
-          Cliente notificado, ainda não escolheu
-        </p>
+        <p className="text-xl font-extrabold leading-tight text-yellow-300">Aguardando agendamento</p>
+        <p className="text-sm text-yellow-300/70 leading-tight mt-1">Cliente notificado, ainda não escolheu</p>
         {notifiedAt && (
           <p className="text-xs text-yellow-400/60 leading-tight mt-2 flex items-center gap-1">
             <span>📨</span>
@@ -136,21 +114,6 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
     );
   }
 
-  // SEM AGENDAMENTO — nada criado ou cancelado
-  return (
-    <div className="w-full rounded-2xl border-2 border-zinc-500/40 bg-zinc-500/[0.08] px-5 py-4">
-      <div className="flex items-center gap-2 mb-1.5">
-        <CalendarX className="w-[18px] h-[18px] text-zinc-400 shrink-0" />
-        <span className="text-xs font-extrabold tracking-[0.12em] text-zinc-400 uppercase">
-          Sem agendamento
-        </span>
-      </div>
-      <p className="text-xl font-extrabold leading-tight text-zinc-300">
-        Sem agendamento
-      </p>
-      <p className="text-sm text-zinc-400/70 leading-tight mt-1">
-        Nenhuma notificação enviada
-      </p>
-    </div>
-  );
+  // Sem agendamento: não há nada para avisar no card.
+  return null;
 }
