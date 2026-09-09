@@ -43,6 +43,7 @@ RUN npm install -g pnpm@10.4.1 \
     && node scripts/patch-loans-due-today-filter.mjs \
     && node scripts/patch-backup-resilience-20260909.mjs \
     && node scripts/patch-backup-direct-stream-20260909.mjs \
+    && node scripts/patch-media-backup-recovery-tool-20260909.mjs \
     && node scripts/patch-admin-backup-media-panel-20260909.mjs \
     && pnpm run build
 
