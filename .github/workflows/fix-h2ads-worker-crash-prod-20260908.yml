@@ -1,0 +1,122 @@
+name: Fix H2ADS worker crash prod 2026-09-08
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/fix-h2ads-worker-crash-prod-20260908.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Backup production
+        run: git push origin HEAD:refs/heads/backup/pre-fix-h2ads-worker-crash-prod-20260908 || true
+
+      - name: Patch worker error isolation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('server/h2adsWorkerRoute.ts')
+          text = path.read_text(encoding='utf-8')
+
+          old_auth = '''async function authenticateRequest(req: Request, res: Response) {
+  const authorization = req.header("authorization");
+  const workerToken = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : null;
+  const workerKey = workerString(req.header("x-h2ads-worker-key"), 64);
+  if (!workerToken || !workerKey) {
+    res.status(401).json({ error: "Worker não autorizado." });
+    return null;
+  }
+  const worker = await authenticateH2AdsWorker(workerKey, workerToken);
+  if (!worker) {
+    res.status(401).json({ error: "Worker não autorizado." });
+    return null;
+  }
+  return worker;
+}
+'''
+          new_auth = '''async function authenticateRequest(req: Request, res: Response) {
+  const authorization = req.header("authorization");
+  const workerToken = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : null;
+  const workerKey = workerString(req.header("x-h2ads-worker-key"), 64);
+  if (!workerToken || !workerKey) {
+    res.status(401).json({ error: "Worker não autorizado." });
+    return null;
+  }
+  try {
+    const worker = await authenticateH2AdsWorker(workerKey, workerToken);
+    if (!worker) {
+      res.status(401).json({ error: "Worker não autorizado." });
+      return null;
+    }
+    return worker;
+  } catch (error) {
+    console.error("[H2ADS Worker] falha temporária ao autenticar worker:", error instanceof Error ? error.message : String(error));
+    if (!res.headersSent) res.status(503).json({ error: "Worker temporariamente indisponível. Tente novamente." });
+    return null;
+  }
+}
+'''
+          if text.count(old_auth) != 1:
+              raise SystemExit(f'ABORT: authenticateRequest block count={text.count(old_auth)}')
+          text = text.replace(old_auth, new_auth, 1)
+
+          old_heartbeat = '''    const accepted = await recordH2AdsWorkerHeartbeat({ workerKey, workerToken, computerName, agentVersion });
+    if (!accepted) {
+      res.status(401).json({ error: "Worker não autorizado." });
+      return;
+    }
+    res.status(204).end();
+'''
+          new_heartbeat = '''    try {
+      const accepted = await recordH2AdsWorkerHeartbeat({ workerKey, workerToken, computerName, agentVersion });
+      if (!accepted) {
+        res.status(401).json({ error: "Worker não autorizado." });
+        return;
+      }
+      res.status(204).end();
+    } catch (error) {
+      console.error("[H2ADS Worker] heartbeat indisponível:", error instanceof Error ? error.message : String(error));
+      if (!res.headersSent) res.status(503).json({ error: "Worker temporariamente indisponível. Tente novamente." });
+    }
+'''
+          if text.count(old_heartbeat) != 1:
+              raise SystemExit(f'ABORT: heartbeat block count={text.count(old_heartbeat)}')
+          text = text.replace(old_heartbeat, new_heartbeat, 1)
+
+          path.write_text(text, encoding='utf-8')
+          print('OK: falhas do H2ADS Worker deixam de escapar como unhandled rejection.')
+          PY
+
+          git diff --check
+          grep -F '[H2ADS Worker] falha temporária ao autenticar worker:' server/h2adsWorkerRoute.ts
+          grep -F '[H2ADS Worker] heartbeat indisponível:' server/h2adsWorkerRoute.ts
+
+      - name: Install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Commit production fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/h2adsWorkerRoute.ts
+          git commit -m "fix(h2ads): impedir worker de derrubar servidor"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
