@@ -1,0 +1,57 @@
+name: Remove unused order filters 2026-09-09
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/remove-unused-order-filters-20260909.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Remove only unused quick filters
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('client/src/pages/AdminOrders.tsx')
+          s = p.read_text(encoding='utf-8')
+          targets = [
+            '                        { id: "sem_status",            label: "Sem Agendamento",  desc: "Não agendados",          icon: Calendar,     glow: "#ef4444", ab: "linear-gradient(135deg,#7f1d1d,#991b1b)", ac: "#ef4444", at: "#fca5a5" },\n',
+            '                        { id: "aguardando_ativa",       label: "Ag. Ficar Ativa",   desc: "Aguardando ficar ativa", icon: Zap,          glow: "#84cc16", ab: "linear-gradient(135deg,#1a2e05,#365314)", ac: "#84cc16", at: "#bef264" },\n',
+          ]
+          for t in targets:
+            if s.count(t) != 1:
+              raise SystemExit(f'ABORT: filtro esperado nao encontrado exatamente uma vez: {t.strip()} count={s.count(t)}')
+            s = s.replace(t, '', 1)
+          p.write_text(s, encoding='utf-8')
+          print('OK: filtros Sem Agendamento e Ag. Ficar Ativa removidos apenas da barra visual.')
+          PY
+          git diff --check
+          ! grep -F 'label: "Sem Agendamento"' client/src/pages/AdminOrders.tsx
+          ! grep -F 'label: "Ag. Ficar Ativa"' client/src/pages/AdminOrders.tsx
+
+      - name: Install and build
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Commit production
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminOrders.tsx
+          git commit -m "chore(orders): remover filtros sem agendamento e ficar ativa"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
