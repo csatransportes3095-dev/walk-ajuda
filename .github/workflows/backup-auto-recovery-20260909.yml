@@ -1,0 +1,196 @@
+name: Backup auto recovery 2026-09-09
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/backup-auto-recovery-20260909.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Backup branch snapshot
+        run: git push origin HEAD:refs/heads/backup/pre-backup-auto-recovery-20260909 || true
+
+      - name: Patch backup restart recovery
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('server/backupService.ts')
+          s = p.read_text(encoding='utf-8')
+
+          old_reconcile = '''export async function reconcileBackupsAfterRestart(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const activeRows = await db
+    .select({ id: systemBackups.id, stage: systemBackups.stage, progress: systemBackups.progress })
+    .from(systemBackups)
+    .where(inArray(systemBackups.status, ["queued", "running"]));
+  for (const row of activeRows) {
+    await db.update(systemBackups).set({
+      status: "failed",
+      stage: "failed",
+      progress: 0,
+      errorMessage: `Execução interrompida após reinício do serviço. Último estágio persistido: ${row.stage}. Último progresso persistido: ${row.progress}%. Causa do encerramento da instância não determinada pelo processo recuperado; nenhum artefato foi validado.`,
+    }).where(eq(systemBackups.id, row.id));
+  }
+  const completedRows = await db
+    .select({ id: systemBackups.id, manifestJson: systemBackups.manifestJson })
+    .from(systemBackups)
+    .where(eq(systemBackups.status, "completed"));
+  let interruptedVerifications = 0;
+  for (const row of completedRows) {
+    if (getBackupRemoteVerification(row.manifestJson).status !== "verifying") continue;
+    interruptedVerifications += 1;
+    await updateStoredBackupVerification(row.id, {
+      status: "failed",
+      verifiedAt: null,
+      bytes: null,
+      sha256: null,
+      error: "Verificação profunda interrompida após reinício do serviço. Execute a verificação novamente.",
+    });
+  }
+  return activeRows.length + interruptedVerifications;
+}
+'''
+
+          new_reconcile = '''export async function reconcileBackupsAfterRestart(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const activeRows = await db
+    .select({ id: systemBackups.id, status: systemBackups.status, stage: systemBackups.stage, progress: systemBackups.progress, createdAt: systemBackups.createdAt })
+    .from(systemBackups)
+    .where(inArray(systemBackups.status, ["queued", "running"]))
+    .orderBy(desc(systemBackups.createdAt));
+
+  // Se o processo caiu durante um backup, o workspace em /tmp não é confiável.
+  // Em vez de marcar definitivamente como falha, reiniciamos O MESMO backup do zero,
+  // com o mesmo ID, e deixamos a validação remota decidir quando ele chegou a 100%.
+  let retryId: string | null = activeRows[0]?.id ?? null;
+
+  // Compatibilidade com a versão anterior: se ela já marcou o último backup como
+  // "Falhou após reinício", recupera somente o backup mais recente. Depois que ele
+  // concluir, futuros boots não voltam a executar backups antigos.
+  if (!retryId) {
+    const [latest] = await db
+      .select({ id: systemBackups.id, status: systemBackups.status, errorMessage: systemBackups.errorMessage })
+      .from(systemBackups)
+      .orderBy(desc(systemBackups.createdAt))
+      .limit(1);
+    if (
+      latest?.status === "failed" &&
+      typeof latest.errorMessage === "string" &&
+      latest.errorMessage.startsWith("Execução interrompida após reinício do serviço.")
+    ) {
+      retryId = latest.id;
+    }
+  }
+
+  // Não deixa mais de uma execução abandonada competir pelo mesmo servidor.
+  for (const row of activeRows) {
+    if (row.id === retryId) continue;
+    await db.update(systemBackups).set({
+      status: "failed",
+      stage: "failed",
+      progress: 0,
+      errorMessage: `Execução substituída pela recuperação automática do backup ${retryId ?? "mais recente"}. Último estágio: ${row.stage}; progresso: ${row.progress}%.`,
+    }).where(eq(systemBackups.id, row.id));
+  }
+
+  let restartedBackups = 0;
+  if (retryId) {
+    restartedBackups = 1;
+    await db.update(systemBackups).set({
+      status: "queued",
+      stage: "queued",
+      progress: 0,
+      errorMessage: null,
+      startedAt: null,
+      completedAt: null,
+      updatedAt: new Date(),
+    }).where(eq(systemBackups.id, retryId));
+
+    const controller = new AbortController();
+    activeBackupControllers.set(retryId, controller);
+    const timer = setTimeout(() => {
+      console.warn(`[Backup] retomando automaticamente ${retryId} após reinício do serviço.`);
+      void executeBackup(retryId!, controller.signal);
+    }, 15_000);
+    timer.unref?.();
+  }
+
+  const completedRows = await db
+    .select({ id: systemBackups.id, manifestJson: systemBackups.manifestJson })
+    .from(systemBackups)
+    .where(eq(systemBackups.status, "completed"));
+  let interruptedVerifications = 0;
+  for (const row of completedRows) {
+    if (getBackupRemoteVerification(row.manifestJson).status !== "verifying") continue;
+    interruptedVerifications += 1;
+    await updateStoredBackupVerification(row.id, {
+      status: "failed",
+      verifiedAt: null,
+      bytes: null,
+      sha256: null,
+      error: "Verificação profunda interrompida após reinício do serviço. Execute a verificação novamente.",
+    });
+  }
+  return restartedBackups + interruptedVerifications;
+}
+'''
+
+          if s.count(old_reconcile) != 1:
+            raise SystemExit(f'ABORT: reconcile block count={s.count(old_reconcile)}')
+          s = s.replace(old_reconcile, new_reconcile, 1)
+
+          old_workspace = '''    getEncryptionKey();
+    throwIfBackupAborted(signal);
+    await mkdir(filesDirectory, { recursive: true });
+'''
+          new_workspace = '''    getEncryptionKey();
+    throwIfBackupAborted(signal);
+    // O mesmo backup pode ser reiniciado automaticamente após um deploy.
+    // Remove qualquer workspace parcial antes de recomeçar para evitar arquivos
+    // truncados ou EEXIST do uso de flags "wx".
+    await rm(workDirectory, { recursive: true, force: true }).catch(() => undefined);
+    await mkdir(filesDirectory, { recursive: true });
+'''
+          if s.count(old_workspace) != 1:
+            raise SystemExit(f'ABORT: workspace block count={s.count(old_workspace)}')
+          s = s.replace(old_workspace, new_workspace, 1)
+
+          p.write_text(s, encoding='utf-8')
+          print('OK: backup auto-recovery patched.')
+          PY
+
+          git diff --check
+          grep -F 'retomando automaticamente' server/backupService.ts
+          grep -F 'await rm(workDirectory' server/backupService.ts
+
+      - name: Install and build
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Commit production
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/backupService.ts
+          git commit -m "fix(backup): recuperar execucao automaticamente apos reinicio"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
