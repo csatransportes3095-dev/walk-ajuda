@@ -31,7 +31,6 @@ run_boot_step "db-migrate-online-support" pnpm run db:migrate:online-support
 run_boot_step "db-migrate-cartoes" pnpm run db:migrate:cartoes
 run_boot_step "db-migrate-loans-compat" pnpm run db:migrate:loans-compat
 run_boot_step "db-migrate-system-backups" pnpm run db:migrate:system-backups
-run_boot_step "reset-system-backups-20260909" pnpm exec tsx scripts/reset-system-backups-20260909.ts
 run_boot_step "db-migrate-whatsapp-templates" pnpm run db:migrate:whatsapp-templates
 run_boot_step "db-migrate-h2ads" pnpm run db:migrate:h2ads
 run_boot_step "db-migrate-h2ads-network" pnpm run db:migrate:h2ads-network
