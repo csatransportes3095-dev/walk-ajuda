@@ -1,0 +1,49 @@
+name: Orders foto aprovada filter 2026-09-09
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/orders-foto-aprovada-filter-20260909.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+      - name: Add Foto Aprovada quick filter
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('client/src/pages/AdminOrders.tsx')
+          s = p.read_text(encoding='utf-8')
+          anchor = '                        { id: "em_analise",             label: "Em Análise",        desc: "Foto em análise",        icon: Search,       glow: "#38bdf8", ab: "linear-gradient(135deg,#0c4a6e,#075985)", ac: "#38bdf8", at: "#bae6fd" },\n'
+          addition = anchor + '                        { id: "foto_aprovada",          label: "Foto Aprovada",      desc: "Foto de perfil aprovada", icon: FileCheck,    glow: "#f97316", ab: "linear-gradient(135deg,#7c2d12,#9a3412)", ac: "#f97316", at: "#fed7aa" },\n'
+          if s.count(anchor) != 1:
+              raise SystemExit(f'ABORT: quick filter anchor count={s.count(anchor)}')
+          s = s.replace(anchor, addition, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          git diff --check
+          grep -F 'id: "foto_aprovada"' client/src/pages/AdminOrders.tsx
+      - name: Install and build
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Commit production
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminOrders.tsx
+          git commit -m "feat(orders): adicionar filtro automatico foto aprovada"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
