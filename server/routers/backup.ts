@@ -19,6 +19,12 @@ import {
   uploadSystemBackupToGoogleDrive,
 } from "../backupService";
 import {
+  cancelMediaBackup,
+  getMediaBackupStatus,
+  isMediaBackupConfigured,
+  startMediaBackup,
+} from "../mediaBackupService";
+import {
   getSystemBackupRestoreStatus,
   isBackupRestoreEnabled,
   isSystemRestoreLocked,
@@ -50,7 +56,20 @@ export const backupRouter = router({
   config: adminProcedure.query(() => ({
     encryptionConfigured: isBackupEncryptionConfigured(),
     driveConfigured: isGoogleDriveBackupConfigured(),
+    mediaConfigured: isMediaBackupConfigured(),
   })),
+
+  mediaStatus: adminProcedure.query(() => getMediaBackupStatus()),
+
+  mediaStart: adminProcedure.mutation(async () => {
+    const result = await startMediaBackup();
+    if (!result.accepted) {
+      throw new TRPCError({ code: "CONFLICT", message: "O backup incremental de mídia já está em processamento." });
+    }
+    return result;
+  }),
+
+  mediaCancel: adminProcedure.mutation(() => cancelMediaBackup()),
 
   reconcileStale: adminProcedure.mutation(async () => ({
     reconciled: await reconcileStaleSystemBackups(),
