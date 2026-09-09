@@ -19,6 +19,11 @@ export function getOperationalBucket(order: OperationalOrderLike): string {
   if (order.scheduleStatus === "confirmed") return "agendamento_confirmado";
   if (order.scheduleStatus === "pending") return "agendamento";
 
+  // Foto de perfil aprovada: status automático já existente no pedido.
+  if (["documentos_aprovados", "foto_aprovada", "foto_perfil_aprovada"].includes(status)) {
+    return "foto_aprovada";
+  }
+
   // Chaves canônicas atuais, com aliases legados apenas como compatibilidade.
   if (["conta_ativa", "p"].includes(status)) return "conta_ativa";
   if (["aguardando_ativa", "aguardando_ficar_ativa"].includes(status)) {
