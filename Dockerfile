@@ -41,8 +41,10 @@ RUN npm install -g pnpm@10.4.1 \
     && pnpm install --frozen-lockfile \
     && node scripts/patch-admin-login-data-reload.mjs \
     && node scripts/patch-loans-due-today-filter.mjs \
+    && node scripts/patch-backup-resilience-20260909.mjs \
     && pnpm run build
 
 ENV NODE_ENV=production
 ENV BACKUP_DUMPLING_BINARY=/usr/local/bin/dumpling
+ENV BACKUP_R2_CONCURRENCY=16
 CMD ["/app/scripts/render-start.sh"]
