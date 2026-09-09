@@ -1,0 +1,130 @@
+name: H2ADS master search customer number 2026-09-08
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/h2ads-master-search-customer-number-20260908.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+          fetch-depth: 0
+
+      - name: Backup production branch
+        run: git push origin HEAD:refs/heads/backup/pre-h2ads-master-search-20260908 || true
+
+      - name: Patch H2ADS master search
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('client/src/pages/H2Ads.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          import_anchor = 'import { parseH2AdsProxyInput, type H2AdsProxyProtocol } from "@shared/h2adsProxyInput";\n'
+          import_new = import_anchor + 'import { getExactH2AdsCustomerNumberSearch, matchesH2AdsOrderSearch } from "@shared/h2adsOrderSearch";\n'
+          if import_anchor not in text:
+              raise SystemExit('ABORT: import anchor not found')
+          text = text.replace(import_anchor, import_new, 1)
+
+          query_anchor = '  const proxySecurityStatus = trpc.h2Ads.proxySecurityStatus.useQuery(undefined, { retry: false });\n'
+          query_new = query_anchor + '''  const masterOrderLinksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
+  const masterOrdersQuery = trpc.orderStatus.listOrders.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 15_000, refetchIntervalInBackground: false });
+'''
+          if query_anchor not in text:
+              raise SystemExit('ABORT: query anchor not found')
+          text = text.replace(query_anchor, query_new, 1)
+
+          data_anchor = '  const browserRuns = (dashboard.data?.instanceBrowserRuns ?? []) as BrowserRun[];\n'
+          data_new = data_anchor + '''  const masterOrderLinks = masterOrderLinksQuery.data ?? [];
+  const masterOrders = (masterOrdersQuery.data ?? []) as unknown as Array<{
+    id: number;
+    subOrderIndex?: number | null;
+    customerNumber?: number | null;
+    phone?: string | null;
+    orderNumber?: number | null;
+    customerName?: string | null;
+    serviceName?: string | null;
+    serviceOption?: string | null;
+    latestStatus?: string | null;
+  }>;
+'''
+          if data_anchor not in text:
+              raise SystemExit('ABORT: data anchor not found')
+          text = text.replace(data_anchor, data_new, 1)
+
+          old_block = '''  const instanceSearchKey = useMemo(() => normalizeH2AdsSearch(instanceSearch), [instanceSearch]);
+  const masterSearchResults = useMemo(() => {
+    if (!instanceSearchKey) return [];
+    return groups.map(group => ({
+      group,
+      instances: (instancesByGroup.get(group.id) ?? []).filter(instance => normalizeH2AdsSearch(instance.name).includes(instanceSearchKey)),
+    })).filter(result => result.instances.length > 0);
+  }, [groups, instancesByGroup, instanceSearchKey]);
+'''
+          new_block = '''  const instanceSearchKey = useMemo(() => normalizeH2AdsSearch(instanceSearch), [instanceSearch]);
+  const exactInstanceCustomerNumber = useMemo(() => getExactH2AdsCustomerNumberSearch(instanceSearch), [instanceSearch]);
+  const masterOrderByInstance = useMemo(() => {
+    const orderByKey = new Map(masterOrders.map(order => [`${order.id}:${Number(order.subOrderIndex ?? 0)}`, order]));
+    const result = new Map<number, (typeof masterOrders)[number]>();
+    for (const link of masterOrderLinks) {
+      const order = orderByKey.get(`${link.registrationId}:${Number(link.subOrderIndex ?? 0)}`);
+      if (order) result.set(Number(link.instanceId), order);
+    }
+    return result;
+  }, [masterOrderLinks, masterOrders]);
+  const masterSearchResults = useMemo(() => {
+    if (!instanceSearchKey) return [];
+    return groups.map(group => ({
+      group,
+      instances: (instancesByGroup.get(group.id) ?? []).filter(instance => {
+        const instanceNameMatches = normalizeH2AdsSearch(instance.name).includes(instanceSearchKey);
+        const linkedOrder = masterOrderByInstance.get(Number(instance.id));
+        if (exactInstanceCustomerNumber !== null) {
+          return Number(linkedOrder?.customerNumber) === exactInstanceCustomerNumber;
+        }
+        return instanceNameMatches || Boolean(linkedOrder && matchesH2AdsOrderSearch(linkedOrder, instanceSearch));
+      }),
+    })).filter(result => result.instances.length > 0);
+  }, [groups, instancesByGroup, instanceSearchKey, instanceSearch, exactInstanceCustomerNumber, masterOrderByInstance]);
+'''
+          if text.count(old_block) != 1:
+              raise SystemExit(f'ABORT: master search block count={text.count(old_block)}')
+          text = text.replace(old_block, new_block, 1)
+
+          path.write_text(text, encoding='utf-8')
+          print('OK: H2ADS master search now resolves exact *customerNumber and linked order metadata.')
+          PY
+
+          git diff --check
+          grep -F 'getExactH2AdsCustomerNumberSearch(instanceSearch)' client/src/pages/H2Ads.tsx
+          grep -F 'masterOrderByInstance' client/src/pages/H2Ads.tsx
+
+      - name: Install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Focused tests
+        run: pnpm vitest run server/h2adsOrderSearch.test.ts
+
+      - name: Build
+        run: pnpm build
+
+      - name: Commit to production
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/H2Ads.tsx
+          git commit -m "fix(h2ads): buscar instancia por cadastro vinculado"
+          git fetch origin recovery/organizar-salvos-2026-08-24
+          git rebase origin/recovery/organizar-salvos-2026-08-24
+          git push origin HEAD:recovery/organizar-salvos-2026-08-24
