@@ -27,6 +27,8 @@ const LEGACY_TEXT_TO_HEX: Record<string, string> = {
   "text-zinc-300": "#d4d4d8",
 };
 
+type Rgb = { r: number; g: number; b: number };
+
 export function normalizeHex(value: string | null | undefined, fallback = "#3b82f6"): string {
   const raw = String(value || "").trim();
   if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toLowerCase();
@@ -34,6 +36,45 @@ export function normalizeHex(value: string | null | undefined, fallback = "#3b82
     return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`.toLowerCase();
   }
   return fallback.toLowerCase();
+}
+
+function hexToRgb(value: string): Rgb {
+  const hex = normalizeHex(value).slice(1);
+  const number = Number.parseInt(hex, 16);
+  return {
+    r: (number >> 16) & 255,
+    g: (number >> 8) & 255,
+    b: number & 255,
+  };
+}
+
+function rgba(value: string, alpha: number): string {
+  const { r, g, b } = hexToRgb(value);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function perceivedBrightness(rgb: Rgb): number {
+  return (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+}
+
+export function getReadableStatusTextColor(primaryValue: string, secondaryValue?: string): "#111111" | "#ffffff" {
+  const primary = hexToRgb(primaryValue);
+  const secondary = secondaryValue ? hexToRgb(secondaryValue) : primary;
+  const average: Rgb = {
+    r: Math.round((primary.r + secondary.r) / 2),
+    g: Math.round((primary.g + secondary.g) / 2),
+    b: Math.round((primary.b + secondary.b) / 2),
+  };
+
+  return perceivedBrightness(average) >= 158 ? "#111111" : "#ffffff";
+}
+
+function buildGlassBackground(primary: string, secondary: string | undefined): string {
+  const end = secondary || primary;
+  return [
+    "linear-gradient(120deg, rgba(255,255,255,.28) 0%, rgba(255,255,255,.10) 18%, rgba(255,255,255,0) 43%, rgba(255,255,255,.08) 72%, rgba(255,255,255,0) 100%)",
+    `linear-gradient(135deg, ${rgba(primary, 0.92)} 0%, ${rgba(end, 0.92)} 100%)`,
+  ].join(", ");
 }
 
 export function isCustomStatusBackground(bgColor: string | null | undefined): boolean {
@@ -69,13 +110,20 @@ export function serializeStatusBackground(selection: StatusColorSelection): stri
 export function statusSelectionStyle(selection: StatusColorSelection): CSSProperties {
   const primary = normalizeHex(selection.primary);
   const secondary = normalizeHex(selection.secondary, "#ef4444");
-  const background = selection.split
-    ? `linear-gradient(90deg, ${primary} 0%, ${primary} 50%, ${secondary} 50%, ${secondary} 100%)`
-    : primary;
+  const activeSecondary = selection.split ? secondary : undefined;
+  const textColor = getReadableStatusTextColor(primary, activeSecondary);
+
   return {
-    background,
-    borderColor: primary,
-    color: "#ffffff",
+    background: buildGlassBackground(primary, activeSecondary),
+    backgroundColor: primary,
+    borderColor: rgba(primary, 0.92),
+    color: textColor,
+    textShadow: textColor === "#ffffff"
+      ? "0 1px 2px rgba(0,0,0,.72), 0 0 8px rgba(0,0,0,.24)"
+      : "0 1px 1px rgba(255,255,255,.58), 0 0 8px rgba(255,255,255,.18)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,.30), inset 0 -1px 0 rgba(255,255,255,.08), 0 10px 28px rgba(0,0,0,.24)",
+    backdropFilter: "blur(12px) saturate(130%)",
+    WebkitBackdropFilter: "blur(12px) saturate(130%)",
   };
 }
 
@@ -124,13 +172,18 @@ export function buildStatusRuntimeCss(
       const selection = parseStatusColorSelection(status.bgColor);
       const primary = normalizeHex(selection.primary);
       const secondary = normalizeHex(selection.secondary, "#ef4444");
-      const background = selection.split
-        ? `linear-gradient(90deg, ${primary} 0%, ${primary} 50%, ${secondary} 50%, ${secondary} 100%)`
-        : primary;
+      const activeSecondary = selection.split ? secondary : undefined;
+      const textColor = getReadableStatusTextColor(primary, activeSecondary);
+      const background = buildGlassBackground(primary, activeSecondary);
+      const textShadow = textColor === "#ffffff"
+        ? "0 1px 2px rgba(0,0,0,.72),0 0 8px rgba(0,0,0,.24)"
+        : "0 1px 1px rgba(255,255,255,.58),0 0 8px rgba(255,255,255,.18)";
+
       return [
-        `.h2-status-bg-${suffix}{background:${background}!important;background-color:${primary}!important;border-color:${primary}!important;}`,
-        `.h2-status-color-${suffix}{color:#fff!important;}`,
-        `.h2-status-border-${suffix}{border-color:${primary}!important;}`,
+        `.h2-status-bg-${suffix}{background:${background}!important;background-color:${primary}!important;border-color:${rgba(primary, 0.92)}!important;color:${textColor}!important;text-shadow:${textShadow}!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.30),inset 0 -1px 0 rgba(255,255,255,.08),0 10px 28px rgba(0,0,0,.24)!important;-webkit-backdrop-filter:blur(12px) saturate(130%);backdrop-filter:blur(12px) saturate(130%);}`,
+        `.h2-status-bg-${suffix} *{color:inherit;}`,
+        `.h2-status-color-${suffix}{color:${textColor}!important;text-shadow:${textShadow}!important;}`,
+        `.h2-status-border-${suffix}{border-color:${rgba(primary, 0.92)}!important;}`,
       ].join("");
     })
     .join("\n");
