@@ -25,7 +25,7 @@ run_boot_step "db-migrate-admin-authenticator-order-links" pnpm run db:migrate:a
 run_boot_step "db-migrate-option-card-appearance" pnpm run db:migrate:option-card-appearance
 run_boot_step "db-migrate-customer-address" pnpm exec tsx scripts/apply-customer-address-migration.ts
 run_boot_step "db-migrate-locadora" pnpm run db:migrate:locadora
-run_boot_step "db-migrate-spreadsheet-referral-declaration" pnpm run db:migrate:spreadsheet-referral-declaration
+run_boot_step "db-migrate-spreadsheet-referral-declaration" pnpm run db:migrate-spreadsheet-referral-declaration
 run_boot_step "db-migrate-referral-commission-attribution" pnpm run db:migrate:referral-commission-attribution
 run_boot_step "db-migrate-online-support" pnpm run db:migrate:online-support
 run_boot_step "db-migrate-cartoes" pnpm run db:migrate:cartoes
@@ -47,6 +47,7 @@ run_boot_step "loans-recovery-20260822-fix" pnpm exec tsx scripts/apply-loans-re
 run_boot_step "ensure-diamond-loan-profile" pnpm exec tsx scripts/ensure-diamond-loan-profile.ts
 run_boot_step "normalize-product-manifests-portuguese" pnpm exec tsx scripts/normalize-product-manifests-portuguese.ts
 run_boot_step "bulk-activate-all-main-customers" pnpm exec tsx scripts/activate-all-main-customers-20260905.ts
+run_boot_step "audit-customer-profile-integrity" pnpm exec tsx scripts/audit-customer-profile-integrity.ts
 
 echo "[BOOT-DIAG] START server timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Iniciando servidor..."
