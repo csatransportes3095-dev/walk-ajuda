@@ -12,17 +12,16 @@ function replaceOnce(oldText, newText, label) {
 }
 
 // REGRA FINAL DO GRUPO:
-// - o CABECALHO do grupo usa somente a cor SOLIDA escolhida para o grupo;
-// - a borda/moldura continua usando a cor do grupo;
-// - o fundo dos CARDS continua sendo controlado exclusivamente pelo STATUS;
-// - gradiente de status nunca vaza para o cabecalho do grupo;
-// - nome, contador e telefone permanecem neutros para boa leitura.
+// - a cor escolhida do grupo aparece SOMENTE nas bordas/molduras;
+// - fundo do cabecalho permanece neutro;
+// - fundo dos cards continua sendo controlado pelo STATUS;
+// - nome, contador e telefone ficam neutros e nao herdam a cor do grupo.
 // Este patch roda por ultimo justamente para impedir que outro patch visual
-// volte a misturar a cor/gradiente do status com o cabecalho do grupo.
+// volte a aplicar a cor do grupo no fundo/textos.
 replaceOnce(
   '                  <div className={`flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4 ${colorCfg.header} border-b`}>',
-  '                  <div className={`flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4 ${colorCfg.border} border-b`} style={{ backgroundColor: colorCfg.hex }}>',
-  'cabecalho do grupo com cor solida exclusiva do grupo',
+  '                  <div className={`flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4 bg-card ${colorCfg.border} border-b`}>',
+  'cabecalho do grupo com fundo neutro e borda colorida',
 );
 
 replaceOnce(
@@ -33,8 +32,8 @@ replaceOnce(
 
 replaceOnce(
   '                      <span className={`${colorCfg.badge} shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-white`}>{groupOrders.length}</span>',
-  '                      <span className="shrink-0 rounded-full border border-white/30 bg-black/20 px-2 py-0.5 text-[11px] font-bold text-white">{groupOrders.length}</span>',
-  'contador legivel sobre a cor solida do grupo',
+  '                      <span className="shrink-0 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white/80">{groupOrders.length}</span>',
+  'contador do grupo neutro',
 );
 
 replaceOnce(
@@ -52,4 +51,4 @@ if (!source.includes(expectedCardRule)) {
 }
 
 fs.writeFileSync(file, source, 'utf8');
-console.log('[order-group-border-only] OK: cabecalho usa cor solida do grupo; cards usam somente fundo do status; gradiente nao vaza para o topo.');
+console.log('[order-group-border-only] OK: cor do grupo somente nas bordas; fundo, nome, contador e telefone neutros; card usa fundo do status.');
