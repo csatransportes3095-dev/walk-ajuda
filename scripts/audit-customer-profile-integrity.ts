@@ -9,10 +9,13 @@ type PhotoAudit = {
   status: PhotoStatus;
   source: "r2" | "external" | "invalid" | "relative";
   reason: string;
+  host?: string;
+  legacy?: boolean;
 };
 
 const CONCURRENCY = 8;
-const EXTERNAL_TIMEOUT_MS = 6000;
+const EXTERNAL_TIMEOUT_MS = 8000;
+const LEGACY_PHOTO_HOSTS = new Set(["d2xsxph8kpxj0f.cloudfront.net"]);
 
 function safeStatus(error: any): number | null {
   const raw = Number(error?.$metadata?.httpStatusCode || error?.status || 0);
@@ -53,7 +56,7 @@ async function probeR2(id: number, customerNumber: number | null, key: string): 
   }
 }
 
-async function fetchWithTimeout(url: string, method: "HEAD" | "GET") {
+async function fetchWithTimeout(url: string, method: "HEAD" | "GET", browserImage = false) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), EXTERNAL_TIMEOUT_MS);
   try {
@@ -61,11 +64,23 @@ async function fetchWithTimeout(url: string, method: "HEAD" | "GET") {
       method,
       redirect: "follow",
       signal: controller.signal,
-      ...(method === "GET" ? { headers: { Range: "bytes=0-0" } } : {}),
+      headers: browserImage ? {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/147 Safari/537.36",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Referer": "https://h2colombiano.com/",
+      } : undefined,
     });
   } finally {
     clearTimeout(timer);
   }
+}
+
+function classifySuccessfulExternal(id: number, customerNumber: number | null, response: Response, host: string, legacy: boolean): PhotoAudit {
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+  if (contentType && !contentType.startsWith("image/") && contentType !== "application/octet-stream") {
+    return { id, customerNumber, status: "broken", source: "external", reason: `not_image_${contentType.split(";")[0]}`, host, legacy };
+  }
+  return { id, customerNumber, status: "valid", source: "external", reason: `http_${response.status}`, host, legacy };
 }
 
 async function probeExternal(id: number, customerNumber: number | null, rawUrl: string): Promise<PhotoAudit> {
@@ -79,36 +94,42 @@ async function probeExternal(id: number, customerNumber: number | null, rawUrl: 
     return { id, customerNumber, status: "broken", source: "invalid", reason: "malformed_url" };
   }
 
+  const host = parsed.hostname.toLowerCase();
+  const legacy = LEGACY_PHOTO_HOSTS.has(host);
+
   if (!/^https?:$/.test(parsed.protocol)) {
-    return { id, customerNumber, status: "broken", source: "invalid", reason: "unsupported_protocol" };
+    return { id, customerNumber, status: "broken", source: "invalid", reason: "unsupported_protocol", host, legacy };
   }
 
   try {
     let response = await fetchWithTimeout(rawUrl, "HEAD");
-    if (response.status === 405 || response.status === 501 || (response.ok && !response.headers.get("content-type"))) {
-      response.body?.cancel().catch(() => {});
-      response = await fetchWithTimeout(rawUrl, "GET");
-    }
-    const status = response.status;
-    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+    let status = response.status;
     response.body?.cancel().catch(() => {});
 
+    if (status === 403 || status === 405 || status === 501) {
+      response = await fetchWithTimeout(rawUrl, "GET", true);
+      status = response.status;
+    }
+
     if (status === 404 || status === 410) {
-      return { id, customerNumber, status: "broken", source: "external", reason: `http_${status}` };
+      response.body?.cancel().catch(() => {});
+      return { id, customerNumber, status: "broken", source: "external", reason: `http_${status}`, host, legacy };
     }
+
     if (status >= 200 && status < 300) {
-      if (contentType && !contentType.startsWith("image/") && contentType !== "application/octet-stream") {
-        return { id, customerNumber, status: "broken", source: "external", reason: `not_image_${contentType.split(";")[0]}` };
-      }
-      return { id, customerNumber, status: "valid", source: "external", reason: `http_${status}` };
+      const result = classifySuccessfulExternal(id, customerNumber, response, host, legacy);
+      response.body?.cancel().catch(() => {});
+      return result;
     }
+
+    response.body?.cancel().catch(() => {});
     if (status >= 300 && status < 400) {
-      return { id, customerNumber, status: "uncertain", source: "external", reason: `redirect_${status}` };
+      return { id, customerNumber, status: "uncertain", source: "external", reason: `redirect_${status}`, host, legacy };
     }
-    return { id, customerNumber, status: "uncertain", source: "external", reason: `http_${status}` };
+    return { id, customerNumber, status: "uncertain", source: "external", reason: `browser_get_http_${status}`, host, legacy };
   } catch (error: any) {
     const name = String(error?.name || "network_error");
-    return { id, customerNumber, status: "uncertain", source: "external", reason: name === "AbortError" ? "timeout" : "network_error" };
+    return { id, customerNumber, status: "uncertain", source: "external", reason: name === "AbortError" ? "timeout" : "network_error", host, legacy };
   }
 }
 
@@ -157,6 +178,13 @@ async function main() {
     const broken = results.filter((item) => item.status === "broken");
     const uncertain = results.filter((item) => item.status === "uncertain");
     const blankPhoto = customers.length - withPhoto.length;
+    const hostCounts = results
+      .filter((item) => item.host)
+      .reduce<Record<string, number>>((acc, item) => {
+        const host = item.host!;
+        acc[host] = (acc[host] || 0) + 1;
+        return acc;
+      }, {});
 
     console.log(`[PROFILE-AUDIT] SUMMARY ${JSON.stringify({
       customers: customers.length,
@@ -166,6 +194,7 @@ async function main() {
       broken: broken.length,
       uncertain: uncertain.length,
       recoveredNames: recovered.length,
+      hostCounts,
     })}`);
 
     logChunks("BROKEN", broken);
