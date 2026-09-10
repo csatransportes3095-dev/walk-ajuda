@@ -49,7 +49,7 @@ async function probeR2(id: number, customerNumber: number | null, key: string): 
     if (status === 404 || /NoSuchKey|NotFound/i.test(name)) {
       return { id, customerNumber, status: "broken", source: "r2", reason: "object_not_found" };
     }
-    return { id, customerNumber, status: "uncertain", source: "r2", reason: `head_error_${status ?? name || "unknown"}` };
+    return { id, customerNumber, status: "uncertain", source: "r2", reason: `head_error_${status ?? (name || "unknown")}` };
   }
 }
 
