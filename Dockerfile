@@ -48,6 +48,7 @@ RUN npm install -g pnpm@10.4.1 \
     && node scripts/patch-backup-core-no-r2-20260909.mjs \
     && node scripts/patch-media-drive-auth-diagnostics-20260909.mjs \
     && node scripts/patch-admin-customers-mobile-performance-20260909.mjs \
+    && node scripts/patch-admin-customers-referrer-photo-20260909.mjs \
     && pnpm run build
 
 ENV NODE_ENV=production
