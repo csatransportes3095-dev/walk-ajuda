@@ -553,7 +553,7 @@ async function preserveSafetyBackupRow(row: Awaited<ReturnType<typeof captureSaf
 }
 
 async function waitForSafetyBackup() {
-  updateRestore({ stage: "safety-backup", progress: 1, message: "Criando automaticamente um backup de segurança do estado atual antes de substituir qualquer dado." });
+  updateRestore({ stage: "safety-backup", progress: 1, message: "Sistema bloqueado para alterações. Criando automaticamente um backup de segurança do estado atual antes de substituir qualquer dado." });
   const started = await startSystemBackup("restore-safety");
   if (!started.accepted) throw new Error("Já existe um backup em processamento. Aguarde a conclusão antes de restaurar.");
   updateRestore({ safetyBackupId: started.id });
@@ -561,7 +561,7 @@ async function waitForSafetyBackup() {
   while (Date.now() < deadline) {
     const status = await getSystemBackup(started.id);
     if (!status) throw new Error("O backup de segurança desapareceu do histórico durante a preparação.");
-    updateRestore({ progress: 1 + Math.floor(Math.max(0, Math.min(100, status.progress)) * 0.18), message: `Backup de segurança: ${status.progress}% · ${status.stage}.` });
+    updateRestore({ progress: 1 + Math.floor(Math.max(0, Math.min(100, status.progress)) * 0.18), message: `Backup de segurança: ${status.progress}% · ${status.stage}. Sistema permanece bloqueado para alterações.` });
     if (status.status === "failed") throw new Error(`Backup de segurança falhou: ${status.errorMessage || "sem detalhe"}`);
     if (status.status === "completed") {
       if (status.integrityStatus !== "verified") throw new Error("Backup de segurança terminou sem Integridade OK.");
@@ -586,12 +586,13 @@ async function executeRestore(row: Awaited<ReturnType<typeof getRestoreCandidate
   const extractedRoot = path.join(tempRoot, "snapshot");
   let safetyRow: Awaited<ReturnType<typeof captureSafetyBackupRow>> = null;
   try {
+    restoreLocked = true;
+    updateRestore({ stage: "safety-backup", progress: 0, message: "Sistema bloqueado para alterações. Preparando o backup de segurança antes da restauração." });
     await mkdir(tempRoot, { recursive: true });
     const safetyBackupId = await waitForSafetyBackup();
     safetyRow = await captureSafetyBackupRow(safetyBackupId);
 
-    restoreLocked = true;
-    updateRestore({ stage: "validating", progress: 20, message: "Sistema bloqueado para alterações. Revalidando e abrindo o backup selecionado." });
+    updateRestore({ stage: "validating", progress: 20, message: "Backup de segurança validado. Revalidando e abrindo o backup selecionado com o sistema ainda bloqueado." });
     await writeRestoreAudit(restoreId, { status: "validating", backupId: row.id, safetyBackupId });
     await downloadAndValidateOuterArchive(row, encryptedFile);
     await extractAuthenticatedArchive(encryptedFile, extractedRoot);
