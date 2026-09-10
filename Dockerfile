@@ -54,6 +54,7 @@ RUN npm install -g pnpm@10.4.1 \
     && node scripts/patch-admin-orders-status-background-20260909.mjs \
     && node scripts/patch-status-custom-colors-20260909.mjs \
     && node scripts/patch-admin-order-group-border-only-20260910.mjs \
+    && node scripts/patch-raffle-profile-update-gate-20260910.mjs \
     && pnpm run build
 
 ENV NODE_ENV=production
