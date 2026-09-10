@@ -88,15 +88,15 @@ export default function StatusColorEditor({ value, onChange }: Props) {
           onClick={() => update({ split: true })}
           className={`rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${value.split ? "border-primary bg-primary/20 text-white" : "border-white/10 bg-white/5 text-white/45"}`}
         >
-          2 CORES 50/50
+          2 CORES EM GRADIENTE
         </button>
       </div>
 
       <div
-        className="flex h-14 items-center justify-center rounded-xl border-2 px-3 text-xs font-black tracking-wider text-white shadow-inner"
+        className="flex h-14 items-center justify-center rounded-xl border-2 px-3 text-xs font-black tracking-wider shadow-inner transition-all"
         style={statusSelectionStyle(value)}
       >
-        {value.split ? "PREVIEW • METADE / METADE" : "PREVIEW • COR ÚNICA"}
+        {value.split ? "PREVIEW • GRADIENTE / VIDRO" : "PREVIEW • COR ÚNICA / VIDRO"}
       </div>
     </div>
   );
