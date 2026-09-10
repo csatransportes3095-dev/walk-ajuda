@@ -51,6 +51,7 @@ RUN npm install -g pnpm@10.4.1 \
     && node scripts/patch-admin-customers-referrer-photo-20260909.mjs \
     && node scripts/patch-admin-customers-referral-filter-20260909.mjs \
     && node scripts/patch-admin-customers-referral-photo-stack-20260909.mjs \
+    && node scripts/patch-admin-orders-status-background-20260909.mjs \
     && pnpm run build
 
 ENV NODE_ENV=production
