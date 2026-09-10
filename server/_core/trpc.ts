@@ -56,21 +56,33 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(blockDuringSystemRestore).use(requireUser);
 
-export const adminProcedure = t.procedure.use(
-  t.middleware(async opts => {
-    const { ctx, next } = opts;
+const requireAdmin = t.middleware(async opts => {
+  const { ctx, next } = opts;
 
-    const isJwtAdmin = isAdminJwtValid(ctx.req);
+  const isJwtAdmin = isAdminJwtValid(ctx.req);
 
-    if (!isJwtAdmin) {
-      throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
-    }
+  if (!isJwtAdmin) {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
 
-    return next({
-      ctx: {
-        ...ctx,
-        user: ctx.user,
-      },
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+    },
+  });
+});
+
+const blockAdminMutationsDuringSystemRestore = t.middleware(async ({ next, type }) => {
+  if (isSystemRestoreLocked() && type === "mutation") {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "Sistema temporariamente bloqueado para alterações administrativas enquanto uma restauração protegida está em andamento.",
     });
-  }),
-);
+  }
+  return next();
+});
+
+export const adminProcedure = t.procedure
+  .use(requireAdmin)
+  .use(blockAdminMutationsDuringSystemRestore);
