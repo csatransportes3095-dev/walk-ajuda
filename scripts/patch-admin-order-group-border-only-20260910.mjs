@@ -11,17 +11,17 @@ function replaceOnce(oldText, newText, label) {
   source = source.replace(oldText, newText);
 }
 
-// REGRA FINAL DO GRUPO:
-// - a cor escolhida do grupo aparece SOMENTE nas bordas/molduras;
-// - fundo do cabecalho permanece neutro;
-// - fundo dos cards continua sendo controlado pelo STATUS;
+// REGRA FINAL DOS GRUPOS:
+// - somente o grupo chamado AGENDAMENTO usa fundo solido com a cor escolhida do grupo;
+// - os demais grupos continuam com fundo neutro e cor somente nas bordas/molduras;
+// - o fundo dos cards continua sendo controlado exclusivamente pelo STATUS;
 // - nome, contador e telefone ficam neutros e nao herdam a cor do grupo.
 // Este patch roda por ultimo justamente para impedir que outro patch visual
-// volte a aplicar a cor do grupo no fundo/textos.
+// volte a misturar fundo do grupo com fundo/gradiente do status.
 replaceOnce(
   '                  <div className={`flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4 ${colorCfg.header} border-b`}>',
-  '                  <div className={`flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4 bg-card ${colorCfg.border} border-b`}>',
-  'cabecalho do grupo com fundo neutro e borda colorida',
+  '                  <div className={`flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4 ${group.name.trim().toLocaleLowerCase(\'pt-BR\') === \'agendamento\' ? \'\' : \'bg-card\'} ${colorCfg.border} border-b`} style={group.name.trim().toLocaleLowerCase(\'pt-BR\') === \'agendamento\' ? { backgroundColor: colorCfg.hex } : undefined}>',
+  'cabecalho solido somente no grupo agendamento',
 );
 
 replaceOnce(
@@ -32,7 +32,7 @@ replaceOnce(
 
 replaceOnce(
   '                      <span className={`${colorCfg.badge} shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-white`}>{groupOrders.length}</span>',
-  '                      <span className="shrink-0 rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white/80">{groupOrders.length}</span>',
+  '                      <span className="shrink-0 rounded-full border border-white/15 bg-black/20 px-2 py-0.5 text-[11px] font-bold text-white/90">{groupOrders.length}</span>',
   'contador do grupo neutro',
 );
 
@@ -51,4 +51,4 @@ if (!source.includes(expectedCardRule)) {
 }
 
 fs.writeFileSync(file, source, 'utf8');
-console.log('[order-group-border-only] OK: cor do grupo somente nas bordas; fundo, nome, contador e telefone neutros; card usa fundo do status.');
+console.log('[order-group-border-only] OK: somente AGENDAMENTO usa fundo solido do grupo; demais grupos neutros; cards usam fundo do status.');
