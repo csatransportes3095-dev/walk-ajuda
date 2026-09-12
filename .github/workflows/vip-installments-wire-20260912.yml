@@ -1,5 +1,6 @@
 name: VIP Installments Guarded Wiring
 
+# storefront checkout validation v2
 on:
   push:
     branches:
