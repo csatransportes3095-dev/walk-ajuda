@@ -1,0 +1,100 @@
+name: VIP Finance Hardening
+
+on:
+  push:
+    branches:
+      - feat/vip-parcelamento-seguro-2026-09-12
+    paths:
+      - .github/workflows/vip-finance-hardening-20260912.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/vip-parcelamento-seguro-2026-09-12
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply finance safety patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          contracts = Path('server/vipInstallmentContracts.ts')
+          text = contracts.read_text(encoding='utf-8')
+          old = "         ${amountCents}, 0, 'pix', 'recebido', ${now}, ${now},"
+          new = "         ${amountCents}, 0, 'pix', 'pago', ${now}, ${now},"
+          if text.count(old) != 1:
+              raise SystemExit('Expected exactly one VIP finance status insertion to patch')
+          contracts.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          router = Path('server/routers/vipInstallments.ts')
+          text = router.read_text(encoding='utf-8')
+          anchor = "} as const;\n\nexport type VipInstallmentConfig"
+          replacement = "} as const;\n\nconst MAX_FINANCIAL_SALE_CENTS = 2_000_000_000;\n\nexport type VipInstallmentConfig"
+          if text.count(anchor) != 1:
+              raise SystemExit('Config anchor changed unexpectedly')
+          text = text.replace(anchor, replacement, 1)
+
+          pricing_anchor = "  const productRule = await getVipInstallmentProductRule(pricing.items[0].productId);"
+          pricing_guard = """  if (!Number.isSafeInteger(pricing.totalCents) || pricing.totalCents <= 0 || pricing.totalCents > MAX_FINANCIAL_SALE_CENTS) {\n    throw new TRPCError({ code: \"BAD_REQUEST\", message: \"Valor da compra acima do limite suportado pelo Financeiro atual.\" });\n  }\n\n  const productRule = await getVipInstallmentProductRule(pricing.items[0].productId);"""
+          if text.count(pricing_anchor) != 1:
+              raise SystemExit('Pricing guard anchor changed unexpectedly')
+          text = text.replace(pricing_anchor, pricing_guard, 1)
+
+          return_anchor = "  return { eligibility, pricing, quote, productRule, maxInstallments, interestBps };"
+          return_guard = """  if (quote.installments.some((installment) => !Number.isSafeInteger(installment.amountCents) || installment.amountCents <= 0 || installment.amountCents > MAX_FINANCIAL_SALE_CENTS)) {\n    throw new TRPCError({ code: \"BAD_REQUEST\", message: \"Uma ou mais parcelas ultrapassam o limite suportado pelo Financeiro atual.\" });\n  }\n\n  return { eligibility, pricing, quote, productRule, maxInstallments, interestBps };"""
+          if text.count(return_anchor) != 1:
+              raise SystemExit('Quote guard anchor changed unexpectedly')
+          router.write_text(text.replace(return_anchor, return_guard, 1), encoding='utf-8')
+          PY
+      - name: Assert finance invariants
+        shell: bash
+        run: |
+          if grep -n "'recebido'" server/vipInstallmentContracts.ts; then
+            echo "Invalid VIP financialSales status remains"
+            exit 1
+          fi
+          grep -n "'pago'" server/vipInstallmentContracts.ts
+          grep -n "MAX_FINANCIAL_SALE_CENTS" server/routers/vipInstallments.ts
+          grep -n "status='pago'\|r.status === 'pago'" server/db.ts | head -20 || true
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run focused VIP tests
+        run: pnpm exec vitest run server/vipInstallments.newlogic.test.ts shared/vipCheckoutPricing.test.ts shared/vipInstallments.test.ts
+      - name: Check new VIP TypeScript regressions
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          grep -E "(server/routers/vipInstallments\.ts|server/vipInstallmentContracts\.ts|server/vipInstallmentPricing\.ts|server/vipInstallmentProductRules\.ts|shared/vipInstallments\.ts|shared/vipCheckoutPricing\.ts|client/src/pages/Home\.tsx|client/src/components/VipInstallmentCheckoutBox\.tsx|client/src/components/AdminVipReceivablesPanel\.tsx|client/src/pages/VipInstallmentPayments\.tsx)" /tmp/tsc.log > /tmp/vip-errors.log || true
+          if [ -s /tmp/vip-errors.log ]; then
+            cat /tmp/vip-errors.log
+            exit 1
+          fi
+          echo "No new VIP finance TypeScript errors."
+      - name: Check diff formatting
+        run: git diff --check
+      - name: Commit validated finance hardening and remove temporary guard
+        shell: bash
+        run: |
+          git config user.name "h2-vip-guard"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/vip-finance-hardening-20260912.yml
+          git add server/vipInstallmentContracts.ts server/routers/vipInstallments.ts
+          git commit -m "fix(vip): harden installment finance posting"
+          git push origin HEAD:feat/vip-parcelamento-seguro-2026-09-12
