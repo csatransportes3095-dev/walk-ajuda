@@ -1,0 +1,177 @@
+name: VIP Checkout Recovery Hardening
+
+on:
+  push:
+    branches:
+      - feat/vip-parcelamento-seguro-2026-09-12
+    paths:
+      - .github/workflows/vip-checkout-recovery-hardening-20260912.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/vip-parcelamento-seguro-2026-09-12
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Apply recovery hardening
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 anchor, found {count}')
+              return text.replace(old, new, 1)
+
+          # Shared pure recovery rule.
+          shared = Path('shared/vipInstallments.ts')
+          text = shared.read_text(encoding='utf-8')
+          anchor = 'const MAX_SAFE_MONEY_CENTS = 100_000_000_000;\n'
+          addition = '''const MAX_SAFE_MONEY_CENTS = 100_000_000_000;\n\nexport const VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS = 15 * 60 * 1000;\nexport const VIP_INSTALLMENT_CHECKOUT_CLOCK_GRACE_MS = 30 * 1000;\n\nexport function isVipInstallmentOrderInsideReservation(input: {\n  expiresAtMs: number;\n  orderCreatedAtMs: number;\n  graceMs?: number;\n}): boolean {\n  const graceMs = input.graceMs ?? VIP_INSTALLMENT_CHECKOUT_CLOCK_GRACE_MS;\n  if (\n    !Number.isSafeInteger(input.expiresAtMs) || input.expiresAtMs <= 0 ||\n    !Number.isSafeInteger(input.orderCreatedAtMs) || input.orderCreatedAtMs <= 0 ||\n    !Number.isSafeInteger(graceMs) || graceMs < 0 || graceMs > 5 * 60 * 1000\n  ) return false;\n  const preparedAtMs = input.expiresAtMs - VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS;\n  return input.orderCreatedAtMs >= preparedAtMs - graceMs && input.orderCreatedAtMs <= input.expiresAtMs + graceMs;\n}\n'''
+          text = replace_once(text, anchor, addition, 'shared recovery helper')
+          shared.write_text(text, encoding='utf-8')
+
+          # Backend: bind a registration to its reservation window and permit safe retry after expiry.
+          contracts = Path('server/vipInstallmentContracts.ts')
+          text = contracts.read_text(encoding='utf-8')
+          text = replace_once(
+              text,
+              'import type { VipInstallmentQuote } from "../shared/vipInstallments";',
+              'import { VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS, isVipInstallmentOrderInsideReservation, type VipInstallmentQuote } from "../shared/vipInstallments";',
+              'contract import',
+          )
+          text = replace_once(text, '  const expiresAtMs = now + 15 * 60 * 1000;', '  const expiresAtMs = now + VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS;', 'reservation duration')
+          text = replace_once(
+              text,
+              '        SELECT id, customerId, status, expiresAtMs, pricingJson, quoteJson\n',
+              '        SELECT id, customerId, status, expiresAtMs, pricingJson, quoteJson, finalizedRegistrationId\n',
+              'same token select',
+          )
+          text = replace_once(
+              text,
+              '''        if (Number(sameToken.customerId) !== input.customerId) {\n          throw new TRPCError({ code: "FORBIDDEN", message: "Checkout não pertence a este cliente." });\n        }\n        if (String(sameToken.status) === 'prepared' && Number(sameToken.expiresAtMs) > now) {''',
+              '''        if (Number(sameToken.customerId) !== input.customerId) {\n          throw new TRPCError({ code: "FORBIDDEN", message: "Checkout não pertence a este cliente." });\n        }\n        if (sameToken.finalizedRegistrationId && String(sameToken.status) !== 'finalized') {\n          throw new TRPCError({ code: "CONFLICT", message: "Este checkout já possui um pedido criado. Retome a finalização do mesmo pedido." });\n        }\n        if (String(sameToken.status) === 'prepared' && Number(sameToken.expiresAtMs) > now) {''',
+              'same token bound order guard',
+          )
+          text = replace_once(
+              text,
+              '''      SELECT id, customerId, status, finalizedPlanId\n      FROM vipInstallmentCheckoutIntents''',
+              '''      SELECT id, customerId, status, finalizedPlanId, finalizedRegistrationId\n      FROM vipInstallmentCheckoutIntents''',
+              'cancel select',
+          )
+          text = replace_once(
+              text,
+              '''    if (String(row.status) === 'finalized' || row.finalizedPlanId) {\n      return { success: true, cancelled: false, finalized: true };\n    }\n    await tx.execute(sql`''',
+              '''    if (String(row.status) === 'finalized' || row.finalizedPlanId) {\n      return { success: true, cancelled: false, finalized: true };\n    }\n    if (row.finalizedRegistrationId) {\n      return { success: true, cancelled: false, orderCreated: true, registrationId: Number(row.finalizedRegistrationId) };\n    }\n    await tx.execute(sql`''',
+              'cancel bound order guard',
+          )
+
+          old_finalize = '''  if (String(intent.status) !== 'prepared') {\n    throw new TRPCError({ code: "CONFLICT", message: "Esta reserva de parcelamento não está disponível para finalização." });\n  }\n  if (Number(intent.expiresAtMs || 0) <= now) {\n    await db.execute(sql`UPDATE vipInstallmentCheckoutIntents SET status='expired', activeCustomerId=NULL WHERE id=${Number(intent.id)} AND status='prepared'`);\n    throw new TRPCError({ code: "CONFLICT", message: "A reserva do parcelamento expirou. Refaça a simulação antes de finalizar." });\n  }\n\n  const orderResult = await db.execute(sql`\n    SELECT orderNumber, customerPhone\n    FROM orderStatusHistory\n    WHERE registrationId=${input.registrationId}\n    ORDER BY id DESC LIMIT 1\n  `);\n  const order = rowsOf<any>(orderResult)[0];\n  if (!order || normalizePhone(order.customerPhone) !== normalizePhone(input.customerPhone)) {\n    throw new TRPCError({ code: "FORBIDDEN", message: "Não foi possível confirmar que este pedido pertence à reserva do Parcelamento VIP." });\n  }\n  const orderNumber = order.orderNumber == null ? String(input.registrationId) : String(order.orderNumber);\n'''
+          new_finalize = '''  const intentStatus = String(intent.status || '');\n  if (intentStatus !== 'prepared' && intentStatus !== 'expired') {\n    throw new TRPCError({ code: "CONFLICT", message: "Esta reserva de parcelamento não está disponível para finalização." });\n  }\n\n  const orderResult = await db.execute(sql`\n    SELECT orderNumber, customerPhone, UNIX_TIMESTAMP(createdAt) * 1000 AS orderCreatedAtMs\n    FROM orderStatusHistory\n    WHERE registrationId=${input.registrationId}\n    ORDER BY id ASC LIMIT 1\n  `);\n  const order = rowsOf<any>(orderResult)[0];\n  if (!order || normalizePhone(order.customerPhone) !== normalizePhone(input.customerPhone)) {\n    throw new TRPCError({ code: "FORBIDDEN", message: "Não foi possível confirmar que este pedido pertence à reserva do Parcelamento VIP." });\n  }\n  const expiresAtMs = Number(intent.expiresAtMs || 0);\n  const orderCreatedAtMs = Math.trunc(Number(order.orderCreatedAtMs || 0));\n  if (!isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs })) {\n    if (intentStatus === 'prepared' && expiresAtMs <= now) {\n      await db.execute(sql`UPDATE vipInstallmentCheckoutIntents SET status='expired', activeCustomerId=NULL WHERE id=${Number(intent.id)} AND status='prepared'`);\n    }\n    throw new TRPCError({ code: "CONFLICT", message: "Este pedido não foi criado dentro da reserva válida do Parcelamento VIP." });\n  }\n  if (intentStatus === 'prepared' && expiresAtMs <= now) {\n    await db.execute(sql`UPDATE vipInstallmentCheckoutIntents SET status='expired', activeCustomerId=NULL WHERE id=${Number(intent.id)} AND status='prepared'`);\n  }\n\n  await db.execute(sql`\n    UPDATE vipInstallmentCheckoutIntents\n    SET finalizedRegistrationId=${input.registrationId}\n    WHERE id=${Number(intent.id)}\n      AND (finalizedRegistrationId IS NULL OR finalizedRegistrationId=${input.registrationId})\n  `);\n  const boundResult = await db.execute(sql`SELECT finalizedRegistrationId FROM vipInstallmentCheckoutIntents WHERE id=${Number(intent.id)} LIMIT 1`);\n  const bound = rowsOf<any>(boundResult)[0];\n  if (!bound || Number(bound.finalizedRegistrationId) !== input.registrationId) {\n    throw new TRPCError({ code: "CONFLICT", message: "Esta reserva já está vinculada a outro pedido." });\n  }\n\n  const orderNumber = order.orderNumber == null ? String(input.registrationId) : String(order.orderNumber);\n'''
+          text = replace_once(text, old_finalize, new_finalize, 'finalize recovery block')
+          contracts.write_text(text, encoding='utf-8')
+
+          # Frontend: persist reservation + pending registration inside existing 24h order draft.
+          home = Path('client/src/pages/Home.tsx')
+          text = home.read_text(encoding='utf-8')
+
+          helper_anchor = '''  const getUploadedFiles = (): Record<string, { url: string; mimeType: string }> => {\n    try {\n      const raw = localStorage.getItem(UPLOADED_FILES_KEY);\n      return raw ? JSON.parse(raw) : {};\n    } catch { return {}; }\n  };\n'''
+          helper_new = helper_anchor + '''\n  const persistVipInstallmentRecovery = (registrationId: number | null, checkoutToken?: string) => {\n    if (checkoutToken) vipCheckoutTokenRef.current = checkoutToken;\n    vipPendingRegistrationIdRef.current = registrationId;\n    try {\n      const raw = localStorage.getItem(PROGRESS_KEY);\n      if (!raw) return;\n      const saved = JSON.parse(raw);\n      saved.vipInstallment = {\n        mode: 'vip_installment',\n        installmentCount: vipInstallmentSelection.installmentCount,\n        frequency: vipInstallmentSelection.frequency,\n        checkoutToken: vipCheckoutTokenRef.current || null,\n        pendingRegistrationId: registrationId,\n      };\n      saved.savedAt = Date.now();\n      localStorage.setItem(PROGRESS_KEY, JSON.stringify(saved));\n    } catch {}\n  };\n'''
+          text = replace_once(text, helper_anchor, helper_new, 'home persistence helper')
+
+          progress_anchor = '''      cadastroSubStep,\n      flowOrigin,\n      storefrontScrollY: storefrontScrollRef.current,\n      savedAt: Date.now(),\n'''
+          progress_new = '''      cadastroSubStep,\n      flowOrigin,\n      vipInstallment: vipInstallmentSelection.mode === 'vip_installment' ? {\n        mode: 'vip_installment',\n        installmentCount: vipInstallmentSelection.installmentCount,\n        frequency: vipInstallmentSelection.frequency,\n        checkoutToken: vipCheckoutTokenRef.current || null,\n        pendingRegistrationId: vipPendingRegistrationIdRef.current,\n      } : null,\n      storefrontScrollY: storefrontScrollRef.current,\n      savedAt: Date.now(),\n'''
+          text = replace_once(text, progress_anchor, progress_new, 'home progress fields')
+          dep_old = '''  }, [step, selectedProduct, selectedOption, selectedPriceModel, questionAnswers, questionAudioAnswers, questionAudioFlowId, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin]);'''
+          dep_new = '''  }, [step, selectedProduct, selectedOption, selectedPriceModel, questionAnswers, questionAudioAnswers, questionAudioFlowId, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin, vipInstallmentSelection.mode, vipInstallmentSelection.installmentCount, vipInstallmentSelection.frequency]);'''
+          text = replace_once(text, dep_old, dep_new, 'home progress dependencies')
+
+          restore_anchor = '''      if (saved.cadastroSubStep) setCadastroSubStep(saved.cadastroSubStep);\n      if (saved.flowOrigin === 'storefront' || saved.flowOrigin === 'cart' || saved.flowOrigin === 'legacy') setFlowOrigin(saved.flowOrigin);'''
+          restore_new = '''      if (saved.cadastroSubStep) setCadastroSubStep(saved.cadastroSubStep);\n      const savedVip = saved.vipInstallment;\n      if (savedVip?.mode === 'vip_installment') {\n        const savedCount = Number(savedVip.installmentCount);\n        const savedFrequency = savedVip.frequency === 'daily' || savedVip.frequency === 'weekly' || savedVip.frequency === 'monthly' ? savedVip.frequency : 'monthly';\n        const pendingRegistrationId = Number(savedVip.pendingRegistrationId || 0);\n        const savedToken = typeof savedVip.checkoutToken === 'string' ? savedVip.checkoutToken : '';\n        setVipInstallmentSelection(prev => ({\n          ...prev,\n          mode: 'vip_installment',\n          installmentCount: Number.isInteger(savedCount) && savedCount >= 2 && savedCount <= 120 ? savedCount : 2,\n          frequency: savedFrequency,\n          quote: null,\n        }));\n        if (pendingRegistrationId > 0 && savedToken.length >= 16 && savedToken.length <= 80) {\n          vipPendingRegistrationIdRef.current = pendingRegistrationId;\n          vipCheckoutTokenRef.current = savedToken;\n        } else {\n          vipPendingRegistrationIdRef.current = null;\n          vipCheckoutTokenRef.current = '';\n          if (saved.cadastroSubStep === 'pagamento') setCadastroSubStep('resumo');\n        }\n      }\n      if (saved.flowOrigin === 'storefront' || saved.flowOrigin === 'cart' || saved.flowOrigin === 'legacy') setFlowOrigin(saved.flowOrigin);'''
+          text = replace_once(text, restore_anchor, restore_new, 'home restore VIP')
+
+          fresh_anchor = '''  const handleStartFresh = () => {\n    localStorage.removeItem(PROGRESS_KEY);\n    localStorage.removeItem(UPLOADED_FILES_KEY);\n    setShowResumeModal(false);\n  };'''
+          fresh_new = '''  const handleStartFresh = () => {\n    try {\n      const raw = localStorage.getItem(PROGRESS_KEY);\n      const saved = raw ? JSON.parse(raw) : null;\n      if (Number(saved?.vipInstallment?.pendingRegistrationId || 0) > 0) {\n        toast.error('Existe um pedido Parcelamento VIP já criado. Retome o pedido para concluir o contrato.');\n        void restoreProgress();\n        return;\n      }\n    } catch {}\n    localStorage.removeItem(PROGRESS_KEY);\n    localStorage.removeItem(UPLOADED_FILES_KEY);\n    setShowResumeModal(false);\n  };'''
+          text = replace_once(text, fresh_anchor, fresh_new, 'home start fresh guard')
+
+          release_anchor = '''  const releaseVipCheckoutReservation = useCallback(() => {\n    const checkoutToken = vipCheckoutTokenRef.current;\n    if (!checkoutToken) return;'''
+          release_new = '''  const releaseVipCheckoutReservation = useCallback(() => {\n    if (vipPendingRegistrationIdRef.current) return;\n    const checkoutToken = vipCheckoutTokenRef.current;\n    if (!checkoutToken) return;'''
+          text = replace_once(text, release_anchor, release_new, 'home release guard')
+
+          prepare_anchor = '''                    setVipInstallmentSelection(prev => ({ ...prev, quote: { pricing: prepared.pricing, quote: prepared.quote } }));\n                    setCadastroSubStep('pagamento');'''
+          prepare_new = '''                    setVipInstallmentSelection(prev => ({ ...prev, quote: { pricing: prepared.pricing, quote: prepared.quote } }));\n                    persistVipInstallmentRecovery(null, checkoutToken);\n                    setCadastroSubStep('pagamento');'''
+          text = replace_once(text, prepare_anchor, prepare_new, 'home prepared persistence')
+
+          pending_anchor = '''        if (vipInstallmentActive) {\n          vipPendingRegistrationIdRef.current = result.registrationId;\n          setSubmitProgress('Finalizando Parcelamento VIP...');'''
+          pending_new = '''        if (vipInstallmentActive) {\n          persistVipInstallmentRecovery(result.registrationId, vipCheckoutTokenRef.current);\n          setSubmitProgress('Finalizando Parcelamento VIP...');'''
+          text = replace_once(text, pending_anchor, pending_new, 'home pending order persistence')
+
+          home.write_text(text, encoding='utf-8')
+
+          # Tests for the pure reservation-window rule.
+          test = Path('server/vipInstallments.newlogic.test.ts')
+          text = test.read_text(encoding='utf-8')
+          text = replace_once(
+              text,
+              '''  calculateVipInstallmentQuote,\n  splitInstallmentAmounts,\n} from "../shared/vipInstallments";''',
+              '''  calculateVipInstallmentQuote,\n  isVipInstallmentOrderInsideReservation,\n  splitInstallmentAmounts,\n  VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS,\n} from "../shared/vipInstallments";''',
+              'test imports',
+          )
+          text += '''\n\ndescribe("VIP checkout recovery window", () => {\n  it("accepts only an order created inside the frozen checkout reservation", () => {\n    const expiresAtMs = 2_000_000_000_000;\n    const preparedAtMs = expiresAtMs - VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS;\n    expect(isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs: preparedAtMs })).toBe(true);\n    expect(isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs: expiresAtMs })).toBe(true);\n    expect(isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs: preparedAtMs - 31_000 })).toBe(false);\n    expect(isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs: expiresAtMs + 31_000 })).toBe(false);\n  });\n});\n'''
+          test.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Assert recovery invariants
+        shell: bash
+        run: |
+          grep -n "isVipInstallmentOrderInsideReservation" server/vipInstallmentContracts.ts shared/vipInstallments.ts
+          grep -n "finalizedRegistrationId" server/vipInstallmentContracts.ts | head -20
+          grep -n "vipInstallment:" client/src/pages/Home.tsx
+          grep -n "pendingRegistrationId" client/src/pages/Home.tsx | head -20
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run focused VIP tests
+        run: pnpm exec vitest run server/vipInstallments.newlogic.test.ts shared/vipCheckoutPricing.test.ts shared/vipInstallments.test.ts
+
+      - name: Check new VIP TypeScript regressions
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then exit 0; fi
+          grep -E "(server/routers/vipInstallments\.ts|server/vipInstallmentContracts\.ts|server/vipInstallmentPricing\.ts|server/vipInstallmentProductRules\.ts|shared/vipInstallments\.ts|shared/vipCheckoutPricing\.ts|server/vipInstallments\.newlogic\.test\.ts|client/src/pages/Home\.tsx|client/src/components/VipInstallmentCheckoutBox\.tsx|client/src/components/AdminVipReceivablesPanel\.tsx|client/src/pages/VipInstallmentPayments\.tsx)" /tmp/tsc.log > /tmp/vip-errors.log || true
+          if [ -s /tmp/vip-errors.log ]; then
+            cat /tmp/vip-errors.log
+            exit 1
+          fi
+          echo "No new VIP checkout recovery TypeScript errors."
+
+      - name: Check diff formatting
+        run: git diff --check
+
+      - name: Commit validated recovery hardening and remove temporary guard
+        shell: bash
+        run: |
+          git config user.name "h2-vip-guard"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/vip-checkout-recovery-hardening-20260912.yml
+          git add shared/vipInstallments.ts server/vipInstallmentContracts.ts server/vipInstallments.newlogic.test.ts client/src/pages/Home.tsx
+          git commit -m "fix(vip): recover interrupted installment checkout safely"
+          git push origin HEAD:feat/vip-parcelamento-seguro-2026-09-12
