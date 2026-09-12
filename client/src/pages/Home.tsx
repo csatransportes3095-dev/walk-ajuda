@@ -4517,15 +4517,6 @@ export default function Home() {
                 Meus Dados
               </button>
             )}
-  <button
-    onClick={() => { window.location.href = '/acompanhar'; }}
-    className="flex items-center gap-1.5 px-2 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/35 text-cyan-100 rounded-lg text-[10px] font-bold transition-colors sm:px-3 sm:text-xs"
-    aria-label="Acompanhar seu pedido"
-    title="Acompanhar seu pedido"
-  >
-    <Clock className="w-4 h-4 flex-shrink-0" />
-    <span className="leading-tight text-left sm:whitespace-nowrap">Acompanhar seu<br className="sm:hidden" /> pedido</span>
-  </button>
             <button
               onClick={() => {
                 localStorage.removeItem('walk_access_granted');
@@ -4547,6 +4538,23 @@ export default function Home() {
             >
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Sair</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="container pb-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <button onClick={() => { window.location.href = '/acompanhar'; }} className="group flex min-h-[78px] items-center gap-2 rounded-2xl border border-cyan-400/35 bg-gradient-to-br from-cyan-500/15 to-blue-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(34,211,238,0.08)] transition-all hover:border-cyan-300/60 hover:bg-cyan-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label="Acompanhar pedido" title="Acompanhar pedido">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25 sm:h-10 sm:w-10"><Clock className="h-5 w-5" /></span>
+              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">Acompanhar pedido</span><span className="mt-1 hidden text-[10px] leading-tight text-cyan-100/60 sm:block">Ver andamento</span></span>
+            </button>
+            <button onClick={() => { window.location.href = '/emprestimo'; }} className="group flex min-h-[78px] items-center gap-2 rounded-2xl border border-amber-400/35 bg-gradient-to-br from-amber-500/15 to-orange-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(251,191,36,0.08)] transition-all hover:border-amber-300/60 hover:bg-amber-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label="Empréstimo" title="Empréstimo">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25 sm:h-10 sm:w-10"><Ticket className="h-5 w-5" /></span>
+              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">Empréstimo</span><span className="mt-1 hidden text-[10px] leading-tight text-amber-100/60 sm:block">Consultar e solicitar</span></span>
+            </button>
+            <button onClick={() => { window.location.href = '/gastos'; }} className="group flex min-h-[78px] items-center gap-2 rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-emerald-500/15 to-green-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(52,211,153,0.08)] transition-all hover:border-emerald-300/60 hover:bg-emerald-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label="Planilha de gastos" title="Planilha de gastos">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/25 sm:h-10 sm:w-10"><FileUp className="h-5 w-5" /></span>
+              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">Planilha de gastos</span><span className="mt-1 hidden text-[10px] leading-tight text-emerald-100/60 sm:block">Controle diário</span></span>
             </button>
           </div>
         </div>
