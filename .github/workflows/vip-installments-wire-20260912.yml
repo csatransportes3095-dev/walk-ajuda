@@ -18,19 +18,15 @@ jobs:
         with:
           ref: feat/vip-parcelamento-seguro-2026-09-12
           fetch-depth: 0
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-
       - name: Apply guarded VIP wiring
         shell: python
         run: |
           from pathlib import Path
-
           routers = Path('server/routers.ts')
           s = routers.read_text(encoding='utf-8')
           import_anchor = 'import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";'
@@ -38,15 +34,12 @@ jobs:
           route_anchor = '  vipMemberships: vipMembershipsRouter,'
           route_line = '  vipInstallments: vipInstallmentsRouter,'
           if import_line not in s:
-              if s.count(import_anchor) != 1:
-                  raise SystemExit(f'unexpected import anchor count: {s.count(import_anchor)}')
+              if s.count(import_anchor) != 1: raise SystemExit('VIP import anchor mismatch')
               s = s.replace(import_anchor, import_anchor + '\n' + import_line, 1)
           if route_line not in s:
-              if s.count(route_anchor) != 1:
-                  raise SystemExit(f'unexpected route anchor count: {s.count(route_anchor)}')
+              if s.count(route_anchor) != 1: raise SystemExit('VIP route anchor mismatch')
               s = s.replace(route_anchor, route_anchor + '\n' + route_line, 1)
-          if s.count(import_line) != 1 or s.count(route_line) != 1:
-              raise SystemExit('router wiring must be unique')
+          if s.count(import_line) != 1 or s.count(route_line) != 1: raise SystemExit('VIP router wiring not unique')
           routers.write_text(s, encoding='utf-8')
 
           vip = Path('server/routers/vipInstallments.ts')
@@ -57,47 +50,42 @@ jobs:
               mutation = v.index('    .mutation(async ({ input }) => {', start)
               db_line = '      const db = (await getDb()) as any;\n'
               db_pos = v.index(db_line, mutation) + len(db_line)
-              guard = '''      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
-      const customerResult = await db.execute(sql`
-        SELECT phone FROM customers
-        WHERE id=${input.customerId} AND deletedAt IS NULL
-        LIMIT 1
-      `);
-      const customerRow = rowsOf<any>(customerResult)[0];
-      if (!customerRow) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
-      if (input.enabled && !(await isVipMemberByPhone(normalizePhone(customerRow.phone)))) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Ative o VIP do cliente antes de liberar o parcelamento." });
-      }
-'''
+              guard = '\n'.join([
+                  '      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });',
+                  '      const customerResult = await db.execute(sql`',
+                  '        SELECT phone FROM customers',
+                  '        WHERE id=${input.customerId} AND deletedAt IS NULL',
+                  '        LIMIT 1',
+                  '      `);',
+                  '      const customerRow = rowsOf<any>(customerResult)[0];',
+                  '      if (!customerRow) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });',
+                  '      if (input.enabled && !(await isVipMemberByPhone(normalizePhone(customerRow.phone)))) {',
+                  '        throw new TRPCError({ code: "FORBIDDEN", message: "Ative o VIP do cliente antes de liberar o parcelamento." });',
+                  '      }',
+                  ''
+              ])
               v = v[:db_pos] + guard + v[db_pos:]
-          if v.count(guard_marker) != 1:
-              raise SystemExit('active VIP permission guard must be unique')
+          if v.count(guard_marker) != 1: raise SystemExit('VIP active guard not unique')
           vip.write_text(v, encoding='utf-8')
 
           admin = Path('client/src/pages/AdminVip.tsx')
           a = admin.read_text(encoding='utf-8')
-          admin_import_anchor = 'import AdminHeader from "@/components/AdminHeader";'
-          admin_import_line = 'import AdminVipInstallmentsPanel from "@/components/AdminVipInstallmentsPanel";'
-          if admin_import_line not in a:
-              if a.count(admin_import_anchor) != 1:
-                  raise SystemExit(f'unexpected AdminVip import anchor count: {a.count(admin_import_anchor)}')
-              a = a.replace(admin_import_anchor, admin_import_anchor + '\n' + admin_import_line, 1)
+          import_anchor2 = 'import AdminHeader from "@/components/AdminHeader";'
+          import_line2 = 'import AdminVipInstallmentsPanel from "@/components/AdminVipInstallmentsPanel";'
+          if import_line2 not in a:
+              if a.count(import_anchor2) != 1: raise SystemExit('AdminVip import anchor mismatch')
+              a = a.replace(import_anchor2, import_anchor2 + '\n' + import_line2, 1)
           panel_line = '        <AdminVipInstallmentsPanel />'
           if panel_line not in a:
               close_anchor = '        </section>\n      </main>\n\n      {actionModal &&'
-              if a.count(close_anchor) != 1:
-                  raise SystemExit(f'unexpected AdminVip close anchor count: {a.count(close_anchor)}')
+              if a.count(close_anchor) != 1: raise SystemExit('AdminVip close anchor mismatch')
               a = a.replace(close_anchor, '        </section>\n' + panel_line + '\n      </main>\n\n      {actionModal &&', 1)
-          if a.count(admin_import_line) != 1 or a.count(panel_line) != 1:
-              raise SystemExit('AdminVip installment panel integration must be unique')
+          if a.count(import_line2) != 1 or a.count(panel_line) != 1: raise SystemExit('AdminVip panel wiring not unique')
           admin.write_text(a, encoding='utf-8')
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: Run focused VIP tests
         run: pnpm exec vitest run server/vipInstallments.newlogic.test.ts
-
       - name: Check only new VIP TypeScript regressions
         shell: bash
         run: |
@@ -105,29 +93,17 @@ jobs:
           pnpm check > /tmp/tsc.log 2>&1
           status=$?
           set -e
-          if [ "$status" -eq 0 ]; then
-            echo "TypeScript project check passed."
-            exit 0
-          fi
+          if [ "$status" -eq 0 ]; then exit 0; fi
           grep -E "(server/routers/vipInstallments\.ts|server/vipInstallmentPricing\.ts|shared/vipInstallments\.ts|shared/vipCheckoutPricing\.ts|client/src/components/AdminVipInstallmentsPanel\.tsx|client/src/pages/AdminVip\.tsx)" /tmp/tsc.log > /tmp/vip-errors.log || true
-          if [ -s /tmp/vip-errors.log ]; then
-            cat /tmp/vip-errors.log
-            exit 1
-          fi
-          if grep -E "server/routers\.ts.*(vipInstallments|Duplicate identifier|Cannot find name 'vipInstallmentsRouter')" /tmp/tsc.log; then
-            exit 1
-          fi
-          echo "No TypeScript errors were introduced in VIP installment-owned files."
-
+          if [ -s /tmp/vip-errors.log ]; then cat /tmp/vip-errors.log; exit 1; fi
+          if grep -E "server/routers\.ts.*(vipInstallments|Duplicate identifier|Cannot find name 'vipInstallmentsRouter')" /tmp/tsc.log; then exit 1; fi
+          echo "No new VIP installment TypeScript errors."
       - name: Commit only after focused validations pass
         shell: bash
         run: |
           git config user.name "h2-vip-guard"
           git config user.email "actions@users.noreply.github.com"
           git add server/routers.ts server/routers/vipInstallments.ts client/src/pages/AdminVip.tsx
-          if git diff --cached --quiet; then
-            echo "VIP installment integration already applied"
-            exit 0
-          fi
+          if git diff --cached --quiet; then exit 0; fi
           git commit -m "feat(vip): wire installment backend and admin panel"
           git push origin HEAD:feat/vip-parcelamento-seguro-2026-09-12
