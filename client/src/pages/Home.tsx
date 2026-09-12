@@ -4486,14 +4486,14 @@ export default function Home() {
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-black/40 backdrop-blur-md shadow-sm border-b border-primary/30">
-        <div className="container flex items-center justify-between py-4">
+        <div className="container flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-gradient-to-br from-primary to-purple-600 rounded-lg flex items-center justify-center">
               <Zap className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-xl font-bold text-white">{SITE_NAME}</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-3">
             <p className="hidden md:block text-sm text-white/70">Atendimento Rápido no WhatsApp</p>
             {/* Botão do Carrinho */}
             <button
@@ -4517,6 +4517,15 @@ export default function Home() {
                 Meus Dados
               </button>
             )}
+  <button
+    onClick={() => { window.location.href = '/acompanhar'; }}
+    className="flex items-center gap-1.5 px-2 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/35 text-cyan-100 rounded-lg text-[10px] font-bold transition-colors sm:px-3 sm:text-xs"
+    aria-label="Acompanhar seu pedido"
+    title="Acompanhar seu pedido"
+  >
+    <Clock className="w-4 h-4 flex-shrink-0" />
+    <span className="leading-tight text-left sm:whitespace-nowrap">Acompanhar seu<br className="sm:hidden" /> pedido</span>
+  </button>
             <button
               onClick={() => {
                 localStorage.removeItem('walk_access_granted');
