@@ -1,5 +1,5 @@
 /* H2 — atalhos principais da home (mobile-first)
-   Corrige os 3 cards apertados no celular sem alterar a lógica das rotas. */
+   Mantém os atalhos organizados sem deixar o cabeçalho cobrir o conteúdo da página. */
 
 header button[aria-label="Acompanhar pedido"],
 header button[aria-label="Empréstimo"],
@@ -17,39 +17,46 @@ header button[aria-label="Planilha de gastos"] > span {
 }
 
 @media (max-width: 639px) {
+  /* O menu ficou grande demais para permanecer sticky no celular.
+     Deixa o cabeçalho rolar normalmente para não cobrir os cards do conteúdo. */
+  header:has(button[aria-label="Acompanhar pedido"]) {
+    position: relative !important;
+    top: auto !important;
+  }
+
   header .container > .grid:has(> button[aria-label="Acompanhar pedido"]) {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 12px !important;
+    gap: 10px !important;
   }
 
   header button[aria-label="Acompanhar pedido"],
   header button[aria-label="Empréstimo"] {
-    min-height: 112px !important;
-    padding: 14px 10px !important;
+    min-height: 94px !important;
+    padding: 11px 8px !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 9px !important;
+    gap: 7px !important;
     text-align: center !important;
   }
 
   header button[aria-label="Planilha de gastos"] {
     grid-column: 1 / -1 !important;
-    min-height: 92px !important;
-    padding: 14px 18px !important;
+    min-height: 76px !important;
+    padding: 11px 16px !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 14px !important;
+    gap: 12px !important;
     text-align: left !important;
   }
 
   header button[aria-label="Acompanhar pedido"] > span:first-child,
   header button[aria-label="Empréstimo"] > span:first-child,
   header button[aria-label="Planilha de gastos"] > span:first-child {
-    width: 46px !important;
-    height: 46px !important;
-    flex: 0 0 46px !important;
-    border-radius: 15px !important;
+    width: 40px !important;
+    height: 40px !important;
+    flex: 0 0 40px !important;
+    border-radius: 13px !important;
   }
 
   header button[aria-label="Acompanhar pedido"] > span:last-child,
@@ -73,11 +80,10 @@ header button[aria-label="Planilha de gastos"] > span {
   header button[aria-label="Empréstimo"] > span:last-child > span:first-child,
   header button[aria-label="Planilha de gastos"] > span:last-child > span:first-child {
     display: block !important;
-    font-size: 12px !important;
-    line-height: 1.18 !important;
-    letter-spacing: .02em !important;
+    font-size: 11px !important;
+    line-height: 1.15 !important;
+    letter-spacing: .01em !important;
     white-space: normal !important;
-    overflow-wrap: normal !important;
     word-break: normal !important;
   }
 
@@ -85,10 +91,10 @@ header button[aria-label="Planilha de gastos"] > span {
   header button[aria-label="Empréstimo"] > span:last-child > span:last-child,
   header button[aria-label="Planilha de gastos"] > span:last-child > span:last-child {
     display: block !important;
-    margin-top: 5px !important;
-    font-size: 10px !important;
-    line-height: 1.15 !important;
-    opacity: .72;
+    margin-top: 4px !important;
+    font-size: 9px !important;
+    line-height: 1.1 !important;
+    opacity: .68;
   }
 
   header button[aria-label="Acompanhar pedido"]::before,
@@ -100,7 +106,7 @@ header button[aria-label="Planilha de gastos"] > span {
     left: 20%;
     right: 20%;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
     pointer-events: none;
   }
 }
