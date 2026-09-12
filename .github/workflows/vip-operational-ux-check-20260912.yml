@@ -49,7 +49,7 @@ jobs:
         run: |
           git config user.name h2-vip-guard
           git config user.email actions@users.noreply.github.com
-          git rm .github/workflows/vip-operational-ux-check-20260912.yml scripts/apply_vip_operational_ux_20260912.py
+          git rm -f .github/workflows/vip-operational-ux-check-20260912.yml scripts/apply_vip_operational_ux_20260912.py
           git add client/src/components/VipInstallmentCheckoutBox.tsx client/src/components/AdminVipReceivablesPanel.tsx
           git commit -m "feat(vip): complete receivables dashboard and customer access"
           git push origin HEAD:feat/vip-parcelamento-seguro-2026-09-12
