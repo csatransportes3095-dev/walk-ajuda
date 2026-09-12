@@ -52,3 +52,5 @@ jobs:
           git add shared/vipInstallments.ts shared/vipInstallments.test.ts server/vipInstallmentContracts.ts client/src/components/VipInstallmentCheckoutBox.tsx client/src/pages/VipInstallmentPayments.tsx client/src/components/AdminVipReceivablesPanel.tsx .github/workflows/product-manifest-acceptance.yml
           git commit -m "fix(vip): separate entry from installment count"
           git push origin HEAD:fix/vip-entrada-mais-parcelas-2026-09-12
+
+# run validation
