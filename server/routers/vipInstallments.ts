@@ -6,6 +6,8 @@ import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { requireCustomerSession } from "../customerSession";
 import { getDb, getSetting, upsertSetting } from "../db";
 import { isVipMemberByPhone } from "./vipMemberships";
+import { resolveVipInstallmentCheckoutPricing } from "../vipInstallmentPricing";
+import { getVipInstallmentProductRule, listVipInstallmentProductRules, saveVipInstallmentProductRule } from "../vipInstallmentProductRules";
 
 const SETTING_KEYS = {
   enabled: "vip_installments_enabled",
@@ -306,8 +308,62 @@ function effectiveMaxInstallments(config: VipInstallmentConfig, permission: Awai
   return Math.max(config.minInstallments, Math.min(config.maxInstallments, customerMax));
 }
 
+function getBrazilTodayForVipInstallments() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function productFrequencyAllowed(
+  rule: Awaited<ReturnType<typeof getVipInstallmentProductRule>>,
+  frequency: VipInstallmentFrequency,
+) {
+  if (frequency === "daily") return rule.allowDaily ?? true;
+  if (frequency === "weekly") return rule.allowWeekly ?? true;
+  return rule.allowMonthly ?? true;
+}
+
+
 export const vipInstallmentsRouter = router({
   adminConfig: adminProcedure.query(async () => getVipInstallmentConfig()),
+
+
+  adminProductRules: adminProcedure.query(async () => listVipInstallmentProductRules()),
+
+  setProductRule: adminProcedure
+    .input(z.object({
+      productId: z.number().int().positive(),
+      enabled: z.boolean(),
+      minOrderCents: z.number().int().positive().max(100_000_000_000).nullable().optional(),
+      maxInstallments: z.number().int().min(2).max(120).nullable().optional(),
+      interestBps: z.number().int().min(0).max(100_000).nullable().optional(),
+      allowDaily: z.boolean().nullable().optional(),
+      allowWeekly: z.boolean().nullable().optional(),
+      allowMonthly: z.boolean().nullable().optional(),
+      notes: z.string().max(255).nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      try {
+        return await saveVipInstallmentProductRule({
+          productId: input.productId,
+          enabled: input.enabled,
+          minOrderCents: input.minOrderCents ?? null,
+          maxInstallments: input.maxInstallments ?? null,
+          interestBps: input.interestBps ?? null,
+          allowDaily: input.allowDaily ?? null,
+          allowWeekly: input.allowWeekly ?? null,
+          allowMonthly: input.allowMonthly ?? null,
+          notes: input.notes ?? null,
+        });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: (error as Error).message || "Não foi possível salvar a regra do produto." });
+      }
+    }),
 
   setAdminConfig: adminProcedure
     .input(z.object({
@@ -421,10 +477,15 @@ export const vipInstallmentsRouter = router({
     .input(z.object({
       cpToken: z.string().min(32),
       phone: z.string().min(8).max(32).optional(),
-      baseAmountCents: z.number().int().positive().max(100_000_000_000),
+      items: z.array(z.object({
+        productId: z.number().int().positive(),
+        optionId: z.number().int().positive(),
+        priceModelId: z.number().int().positive().nullable().optional(),
+        warrantyTierId: z.number().int().positive().nullable().optional(),
+      })).length(1, "Nesta primeira versão, parcele um produto por vez."),
+      couponCode: z.string().trim().max(64).optional(),
       installmentCount: z.number().int().min(2).max(120),
       frequency: z.enum(["daily", "weekly", "monthly"]),
-      firstDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     }))
     .query(async ({ input }) => {
       const session = await requireCustomerSession(input.cpToken, input.phone);
@@ -433,27 +494,59 @@ export const vipInstallmentsRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: eligibility.reason || "Parcelamento VIP indisponível." });
       }
 
-      const maxInstallments = effectiveMaxInstallments(eligibility.config, eligibility.permission);
+      let pricing: Awaited<ReturnType<typeof resolveVipInstallmentCheckoutPricing>>;
+      try {
+        pricing = await resolveVipInstallmentCheckoutPricing({
+          items: input.items,
+          isVipCustomer: true,
+          couponCode: input.couponCode,
+        });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: (error as Error).message || "Não foi possível validar o valor da compra." });
+      }
+
+      const productRule = await getVipInstallmentProductRule(pricing.items[0].productId);
+      if (!productRule.enabled) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Este produto não está liberado para Parcelamento VIP." });
+      }
+      if (productRule.minOrderCents != null && pricing.totalCents < productRule.minOrderCents) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Valor abaixo do mínimo liberado para parcelamento deste produto." });
+      }
+
+      const customerMax = effectiveMaxInstallments(eligibility.config, eligibility.permission);
+      const maxInstallments = Math.min(customerMax, productRule.maxInstallments ?? customerMax);
+      if (maxInstallments < eligibility.config.minInstallments) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Este produto não possui uma quantidade de parcelas compatível com as regras atuais." });
+      }
       if (input.installmentCount < eligibility.config.minInstallments || input.installmentCount > maxInstallments) {
         throw new TRPCError({ code: "BAD_REQUEST", message: `Escolha entre ${eligibility.config.minInstallments} e ${maxInstallments} parcelas.` });
       }
-      if (!effectiveFrequencyAllowed(eligibility.config, eligibility.permission, input.frequency)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Periodicidade não permitida para este parcelamento." });
+      if (!effectiveFrequencyAllowed(eligibility.config, eligibility.permission, input.frequency) || !productFrequencyAllowed(productRule, input.frequency)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Periodicidade não permitida para este produto ou cliente." });
       }
-      if (eligibility.permission.creditLimitCents != null && input.baseAmountCents > eligibility.permission.creditLimitCents) {
+      if (eligibility.permission.creditLimitCents != null && pricing.totalCents > eligibility.permission.creditLimitCents) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Valor da compra acima do limite de parcelamento liberado pelo ADM." });
       }
 
-      const interestBps = eligibility.permission.interestBps ?? eligibility.config.defaultInterestBps;
+      const interestBps = eligibility.permission.interestBps ?? productRule.interestBps ?? eligibility.config.defaultInterestBps;
       try {
-        return calculateVipInstallmentQuote({
-          baseAmountCents: input.baseAmountCents,
+        const quote = calculateVipInstallmentQuote({
+          baseAmountCents: pricing.totalCents,
           installmentCount: input.installmentCount,
           interestBps,
-          firstDueDate: input.firstDueDate,
+          firstDueDate: getBrazilTodayForVipInstallments(),
           frequency: input.frequency,
           dailyMode: eligibility.config.dailyMode,
         });
+        return {
+          pricing,
+          quote,
+          appliedRule: {
+            productId: productRule.productId,
+            maxInstallments,
+            interestBps,
+          },
+        };
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: (error as Error).message || "Não foi possível calcular o parcelamento." });
       }
