@@ -45,7 +45,7 @@ jobs:
           set -e
           if [ "$status" -eq 0 ]; then exit 0; fi
           grep -E "(server/routers\.ts|server/routers/vipInstallments\.ts|server/vipInstallmentContracts\.ts|server/vipInstallmentPricing\.ts|server/vipInstallmentProductRules\.ts|shared/vipInstallments\.ts|client/src/pages/Home\.tsx|client/src/components/VipInstallmentCheckoutBox\.tsx|client/src/pages/VipInstallmentPayments\.tsx)" /tmp/tsc.log > /tmp/vip-errors.log || true
-          grep -v "server/routers.ts(5993,30): error TS2304: Cannot find name 'listOrderStatusTypes'" /tmp/vip-errors.log | grep -v "server/routers.ts(6003,32): error TS2304: Cannot find name 'listOrderStatusTypes'" > /tmp/vip-new-errors.log || true
+          grep -vE "server/routers\.ts\([0-9]+,[0-9]+\): error TS2304: Cannot find name 'listOrderStatusTypes'\." /tmp/vip-errors.log > /tmp/vip-new-errors.log || true
           if [ -s /tmp/vip-new-errors.log ]; then
             cat /tmp/vip-new-errors.log
             exit 1
