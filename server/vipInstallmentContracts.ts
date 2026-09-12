@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS, isVipInstallmentOrderInsideReservation, type VipInstallmentQuote } from "../shared/vipInstallments";
+import { parseBrazilMoneyToCents } from "../shared/vipCheckoutPricing";
 import type { VipResolvedCheckoutPricing } from "./vipInstallmentPricing";
 
 function rowsOf<T>(result: any): T[] {
@@ -208,6 +209,11 @@ export async function bindVipInstallmentCheckoutOrder(input: {
     if (!item || String(order.serviceName || '').trim().toLowerCase() !== String(item.productName || '').trim().toLowerCase()) {
       throw new TRPCError({ code: "CONFLICT", message: "Produto do pedido não corresponde à reserva do Parcelamento VIP." });
     }
+    let orderPriceCents = 0;
+    try { orderPriceCents = parseBrazilMoneyToCents(String(order.pricePaid || '')); } catch { orderPriceCents = 0; }
+    if (orderPriceCents !== Number(pricing.totalCents || 0)) {
+      throw new TRPCError({ code: "CONFLICT", message: "Valor do pedido não corresponde ao valor congelado na reserva VIP." });
+    }
 
     await tx.execute(sql`
       UPDATE vipInstallmentCheckoutIntents
@@ -290,6 +296,9 @@ export async function recoverVipInstallmentCheckoutOrder(input: {
       const optionText = String(row.serviceOption || '').trim().toLowerCase();
       const optionName = String(item.optionName || '').trim().toLowerCase();
       if (optionName && !optionText.includes(optionName)) return false;
+      let candidatePriceCents = 0;
+      try { candidatePriceCents = parseBrazilMoneyToCents(String(row.pricePaid || '')); } catch { candidatePriceCents = 0; }
+      if (candidatePriceCents !== Number(pricing.totalCents || 0)) return false;
       return true;
     });
     const uniqueRegistrationIds = [...new Set(candidates.map((row) => Number(row.registrationId)).filter((id) => Number.isSafeInteger(id) && id > 0))];
