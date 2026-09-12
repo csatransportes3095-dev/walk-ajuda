@@ -25,6 +25,8 @@ jobs:
           cache: pnpm
       - name: Apply storefront checkout patch
         run: python scripts/apply_vip_installment_home_checkout_20260912.py
+      - name: Repair existing Home checkout type defects
+        run: python scripts/fix_vip_checkout_home_types_20260912.py
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run focused VIP tests
