@@ -1,0 +1,48 @@
+name: VIP Admin Actions Check
+on:
+  push:
+    branches: [feat/vip-parcelamento-seguro-2026-09-12]
+    paths: [.github/workflows/vip-admin-actions-check-20260912.yml]
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/vip-parcelamento-seguro-2026-09-12
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply patch
+        run: python scripts/apply_vip_admin_receivable_actions_20260912.py
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Tests
+        run: pnpm exec vitest run server/vipInstallments.newlogic.test.ts shared/vipCheckoutPricing.test.ts shared/vipInstallments.test.ts
+      - name: TypeScript check
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then exit 0; fi
+          grep -E "(server/routers\.ts|server/routers/vipInstallments\.ts|server/vipInstallmentContracts\.ts|client/src/components/AdminVipReceivablesPanel\.tsx)" /tmp/tsc.log > /tmp/vip-errors.log || true
+          grep -vE "server/routers\.ts\([0-9]+,[0-9]+\): error TS2304: Cannot find name 'listOrderStatusTypes'\." /tmp/vip-errors.log > /tmp/new-errors.log || true
+          if [ -s /tmp/new-errors.log ]; then cat /tmp/new-errors.log; exit 1; fi
+      - name: Diff check
+        run: git diff --check
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name h2-vip-guard
+          git config user.email actions@users.noreply.github.com
+          git rm .github/workflows/vip-admin-actions-check-20260912.yml scripts/apply_vip_admin_receivable_actions_20260912.py
+          git add server/vipInstallmentContracts.ts server/routers/vipInstallments.ts client/src/components/AdminVipReceivablesPanel.tsx
+          git commit -m "feat(vip): complete admin receivable controls"
+          git push origin HEAD:feat/vip-parcelamento-seguro-2026-09-12
