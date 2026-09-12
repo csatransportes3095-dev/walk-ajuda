@@ -354,6 +354,17 @@ export const vipInstallmentsRouter = router({
     .mutation(async ({ input }) => {
       await ensureVipInstallmentInfrastructure();
       const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      const customerResult = await db.execute(sql`
+        SELECT phone FROM customers
+        WHERE id=${input.customerId} AND deletedAt IS NULL
+        LIMIT 1
+      `);
+      const customerRow = rowsOf<any>(customerResult)[0];
+      if (!customerRow) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+      if (input.enabled && !(await isVipMemberByPhone(normalizePhone(customerRow.phone)))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Ative o VIP do cliente antes de liberar o parcelamento." });
+      }
       await db.execute(sql`
         INSERT INTO vipInstallmentPermissions
           (customerId, enabled, maxInstallments, interestBps, creditLimitCents, allowDaily, allowWeekly, allowMonthly, notes)

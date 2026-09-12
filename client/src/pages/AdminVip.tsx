@@ -3,6 +3,7 @@ import { CalendarDays, CheckCircle2, Clock3, Crown, ExternalLink, History, Refre
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
+import AdminVipInstallmentsPanel from "@/components/AdminVipInstallmentsPanel";
 
 function money(value: string | number | null | undefined) {
   const raw = String(value ?? "").trim();
@@ -172,6 +173,7 @@ export default function AdminVip() {
   ))}
 </div>
         </section>
+        <AdminVipInstallmentsPanel />
       </main>
 
       {actionModal && <div className="fixed inset-0 z-[100] grid place-items-center bg-black/75 p-4"><div className="w-full max-w-md rounded-[24px] border border-amber-300/40 bg-[#0c0d1b] p-5 shadow-2xl"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.15em] text-amber-300">Gestão VIP</p><h3 className="mt-1 text-xl font-black">{actionModal.customer.name}</h3><p className="mt-1 text-xs text-slate-400">{actionModal.customer.phone}</p></div><button onClick={() => setActionModal(null)} disabled={actionPending} className="rounded-lg bg-white/5 p-2 text-slate-400"><X className="h-5 w-5" /></button></div><div className="mt-5 grid gap-4">{(actionModal.mode === 'activate' || actionModal.mode === 'renew') && <><label className="text-xs font-black uppercase text-slate-300">Quantidade de dias<input type="number" min="1" value={daysInput} onChange={(e) => setDaysInput(e.target.value)} className={inputClass} /></label><label className="text-xs font-black uppercase text-slate-300">Valor pago<input value={amountInput} onChange={(e) => setAmountInput(e.target.value)} placeholder={form.price || '29,90'} className={inputClass} /></label></>}{actionModal.mode === 'expiry' && <label className="text-xs font-black uppercase text-slate-300">Nova data de vencimento<input type="date" value={expiryInput} onChange={(e) => setExpiryInput(e.target.value)} className={inputClass} /></label>}{actionModal.mode === 'cancel' && <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm font-semibold text-rose-100">O cliente perderá imediatamente os preços e opções exclusivas VIP.</div>}<label className="text-xs font-black uppercase text-slate-300">Observação (opcional)<textarea value={notesInput} onChange={(e) => setNotesInput(e.target.value)} rows={2} className={inputClass} /></label><button onClick={submitAction} disabled={actionPending} className={`min-h-[52px] rounded-2xl px-4 text-sm font-black uppercase ${actionModal.mode === 'cancel' ? 'bg-rose-600 text-white' : 'bg-gradient-to-r from-amber-300 to-yellow-400 text-[#251600]'}`}>{actionPending ? 'Salvando...' : actionModal.mode === 'activate' ? 'Confirmar ativação VIP' : actionModal.mode === 'renew' ? 'Confirmar renovação' : actionModal.mode === 'expiry' ? 'Salvar nova validade' : 'Confirmar cancelamento'}</button></div></div></div>}

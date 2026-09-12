@@ -34,6 +34,7 @@ import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomer
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess } from "./routers/optionPriceModels";
 import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";
+import { vipInstallmentsRouter } from "./routers/vipInstallments";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -330,6 +331,7 @@ export const appRouter = router({
   system: systemRouter,
   optionPriceModels: optionPriceModelsRouter,
   vipMemberships: vipMembershipsRouter,
+  vipInstallments: vipInstallmentsRouter,
   resellers: resellersRouter,
   schedule: scheduleRouter,
   spreadsheet: spreadsheetRouter,
