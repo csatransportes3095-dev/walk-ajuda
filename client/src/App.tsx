@@ -103,6 +103,7 @@ import CartaoHistoricoPage from "./pages/CartaoHistoricoPage";
 import AppDownloadPage from "./pages/AppDownloadPage";
 import AppProDownloadPage from "./pages/AppProDownloadPage";
 import VipPage from "./pages/VipPage";
+import VipInstallmentPayments from "./pages/VipInstallmentPayments";
 import Ajuda from "./pages/Ajuda";
 import GeradorChassiPublico from "./pages/GeradorChassiPublico";
 import ProtectedPhotoPage from "./pages/ProtectedPhotoPage";
@@ -246,6 +247,7 @@ function Router() {
       <Route path={"/foto"} component={ProtectedPhotoPage} />
       <Route path={"/sorteio"} component={Raffle} />
       <Route path={"/acompanhar"} component={OrderTracking} />
+      <Route path={"/parcelas-vip"} component={VipInstallmentPayments} />
       <Route path={"/login"} component={Home} />
       <Route path={"/revendedor"} component={ResellerLogin} />
       <Route path={"/revendedor/dashboard"} component={ResellerDashboard} />
