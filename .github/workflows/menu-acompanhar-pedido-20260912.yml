@@ -29,6 +29,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path('client/src/pages/Home.tsx')
           s = p.read_text(encoding='utf-8')
@@ -45,14 +46,11 @@ jobs:
               raise SystemExit(f'actions anchor count={s.count(old)}')
           s = s.replace(old, new, 1)
 
-          old = '''                Meus Dados
-              </button>
-            )}
-            <button
-              onClick={() => {'''
-          new = '''                Meus Dados
-              </button>
-            )}
+          pattern = re.compile(r'(\s*<UserCircle className="w-4 h-4" />\s*\n\s*Meus Dados\s*\n\s*</button>\s*\n\s*\)\})', re.M)
+          match = pattern.search(s)
+          if not match:
+              raise SystemExit('Meus Dados block not found')
+          block = '''
             <button
               onClick={() => { window.location.href = '/acompanhar'; }}
               className="flex items-center gap-1.5 px-2 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/35 text-cyan-100 rounded-lg text-[10px] font-bold transition-colors sm:px-3 sm:text-xs"
@@ -61,12 +59,8 @@ jobs:
             >
               <Clock className="w-4 h-4 flex-shrink-0" />
               <span className="leading-tight text-left sm:whitespace-nowrap">Acompanhar seu<br className="sm:hidden" /> pedido</span>
-            </button>
-            <button
-              onClick={() => {'''
-          if s.count(old) != 1:
-              raise SystemExit(f'my data anchor count={s.count(old)}')
-          s = s.replace(old, new, 1)
+            </button>'''
+          s = s[:match.end()] + block + s[match.end():]
 
           p.write_text(s, encoding='utf-8')
           PY
