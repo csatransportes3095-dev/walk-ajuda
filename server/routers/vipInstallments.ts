@@ -296,13 +296,14 @@ async function openPlanForCustomer(customerId: number) {
   };
 }
 
-async function resolveEligibility(phone: string) {
+async function resolveEligibility(phone: string, productId?: number | null) {
   const customer = await customerByPhone(phone);
-  const [config, permission, vipActive, openPlan] = await Promise.all([
+  const [config, permission, vipActive, openPlan, productRule] = await Promise.all([
     getVipInstallmentConfig(),
     permissionForCustomer(customer.id),
     isVipMemberByPhone(customer.phone),
     openPlanForCustomer(customer.id),
+    productId ? getVipInstallmentProductRule(productId) : Promise.resolve(null),
   ]);
 
   let reason: string | null = null;
@@ -311,21 +312,49 @@ async function resolveEligibility(phone: string) {
   else if (!permission.enabled) reason = "Parcelamento VIP ainda não foi liberado para este cadastro.";
   else if (openPlan && openPlan.balanceCents > 0) reason = "Você já possui uma compra parcelada em andamento. Quite o saldo para liberar um novo parcelamento.";
 
+  const customerMax = effectiveMaxInstallments(config, permission);
+  const productMax = productRule?.maxInstallments == null ? null : Number(productRule.maxInstallments);
+  const maxInstallments = Math.max(config.minInstallments, Math.min(customerMax, productMax ?? customerMax));
+  const caps = [
+    { source: "global" as const, value: config.maxInstallments },
+    ...(permission.maxInstallments == null ? [] : [{ source: "customer" as const, value: Number(permission.maxInstallments) }]),
+    ...(productMax == null ? [] : [{ source: "product" as const, value: productMax }]),
+  ];
+  const limiting = caps.reduce((best, current) => current.value < best.value ? current : best);
+  const interestBps = permission.interestBps ?? productRule?.interestBps ?? config.defaultInterestBps;
+  const interestSource = permission.interestBps != null ? "customer" : productRule?.interestBps != null ? "product" : "global";
+  const allowedFrequencies = {
+    daily: effectiveFrequencyAllowed(config, permission, "daily") && (productRule ? productFrequencyAllowed(productRule, "daily") : true),
+    weekly: effectiveFrequencyAllowed(config, permission, "weekly") && (productRule ? productFrequencyAllowed(productRule, "weekly") : true),
+    monthly: effectiveFrequencyAllowed(config, permission, "monthly") && (productRule ? productFrequencyAllowed(productRule, "monthly") : true),
+  };
+
   return {
     customer,
     config,
     permission,
     vipActive,
     openPlan,
+    effectiveRules: {
+      minInstallments: config.minInstallments,
+      maxInstallments,
+      globalMaxInstallments: config.maxInstallments,
+      customerMaxInstallments: permission.maxInstallments,
+      productMaxInstallments: productMax,
+      limitingSource: limiting.source,
+      interestBps,
+      interestSource,
+      allowedFrequencies,
+    },
     eligible: !reason,
     reason,
   };
 }
 
 function effectiveFrequencyAllowed(config: VipInstallmentConfig, permission: Awaited<ReturnType<typeof permissionForCustomer>>, frequency: VipInstallmentFrequency) {
-  if (frequency === "daily") return permission.allowDaily ?? config.allowDaily;
-  if (frequency === "weekly") return permission.allowWeekly ?? config.allowWeekly;
-  return permission.allowMonthly ?? config.allowMonthly;
+  if (frequency === "daily") return config.allowDaily && permission.allowDaily !== false;
+  if (frequency === "weekly") return config.allowWeekly && permission.allowWeekly !== false;
+  return config.allowMonthly && permission.allowMonthly !== false;
 }
 
 function effectiveMaxInstallments(config: VipInstallmentConfig, permission: Awaited<ReturnType<typeof permissionForCustomer>>) {
@@ -606,10 +635,10 @@ export const vipInstallmentsRouter = router({
   }),
 
   eligibility: publicProcedure
-    .input(z.object({ cpToken: z.string().min(32), phone: z.string().min(8).max(32).optional() }))
+    .input(z.object({ cpToken: z.string().min(32), phone: z.string().min(8).max(32).optional(), productId: z.number().int().positive().optional() }))
     .query(async ({ input }) => {
       const session = await requireCustomerSession(input.cpToken, input.phone);
-      return resolveEligibility(session.phone);
+      return resolveEligibility(session.phone, input.productId);
     }),
 
   quote: publicProcedure

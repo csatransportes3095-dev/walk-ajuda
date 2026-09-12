@@ -33,7 +33,7 @@ export default function VipInstallmentCheckoutBox(props: {
   const sessionReady = props.cpToken.length >= 32;
   const itemReady = Number(props.productId || 0) > 0 && Number(props.optionId || 0) > 0;
   const eligibility = trpc.vipInstallments.eligibility.useQuery(
-    { cpToken: props.cpToken, phone: props.phone },
+    { cpToken: props.cpToken, phone: props.phone, productId: itemReady ? Number(props.productId) : undefined },
     { enabled: sessionReady && !props.disabledReason, staleTime: 5_000, retry: false },
   );
 
@@ -74,8 +74,11 @@ export default function VipInstallmentCheckoutBox(props: {
 
   const config = eligibility.data?.config;
   const permission = eligibility.data?.permission;
-  const minCount = Number(config?.minInstallments || 2);
-  const effectiveMax = Math.max(minCount, Math.min(Number(config?.maxInstallments || 2), Number(permission?.maxInstallments || config?.maxInstallments || 2)));
+  const effectiveRules = eligibility.data?.effectiveRules;
+  const minCount = Number(effectiveRules?.minInstallments ?? config?.minInstallments ?? 2);
+  const effectiveMax = Math.max(minCount, Number(effectiveRules?.maxInstallments ?? config?.maxInstallments ?? minCount));
+  const globalMax = Number(effectiveRules?.globalMaxInstallments ?? config?.maxInstallments ?? effectiveMax);
+  const limitSourceLabel = effectiveRules?.limitingSource === "customer" ? "CLIENTE" : effectiveRules?.limitingSource === "product" ? "PRODUTO" : "GLOBAL";
 
   useEffect(() => {
     if (count < minCount) setCount(minCount);
@@ -83,9 +86,9 @@ export default function VipInstallmentCheckoutBox(props: {
   }, [count, minCount, effectiveMax]);
 
   const frequencyOptions = [
-    { value: "daily" as const, label: "Diário", allowed: (permission?.allowDaily ?? config?.allowDaily) !== false },
-    { value: "weekly" as const, label: "Semanal", allowed: (permission?.allowWeekly ?? config?.allowWeekly) !== false },
-    { value: "monthly" as const, label: "Mensal", allowed: (permission?.allowMonthly ?? config?.allowMonthly) !== false },
+    { value: "daily" as const, label: "Diário", allowed: effectiveRules?.allowedFrequencies.daily ?? ((permission?.allowDaily ?? config?.allowDaily) !== false) },
+    { value: "weekly" as const, label: "Semanal", allowed: effectiveRules?.allowedFrequencies.weekly ?? ((permission?.allowWeekly ?? config?.allowWeekly) !== false) },
+    { value: "monthly" as const, label: "Mensal", allowed: effectiveRules?.allowedFrequencies.monthly ?? ((permission?.allowMonthly ?? config?.allowMonthly) !== false) },
   ].filter((item) => item.allowed);
 
   useEffect(() => {
@@ -120,6 +123,7 @@ export default function VipInstallmentCheckoutBox(props: {
             <label className="text-[10px] font-black uppercase text-slate-400">Parcelas<select value={count} onChange={(event) => setCount(Number(event.target.value))} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white">{Array.from({ length: Math.max(0, effectiveMax - minCount + 1) }, (_, index) => minCount + index).map((value) => <option key={value} value={value}>{value}x</option>)}</select></label>
             <label className="text-[10px] font-black uppercase text-slate-400">Periodicidade<select value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white">{frequencyOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           </div>
+          {effectiveRules && <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/[0.06] p-3 text-[11px] leading-relaxed text-slate-300"><p><strong className="text-cyan-200">Faixa global:</strong> {minCount}x a {globalMax}x. <strong className="text-cyan-200">Limite aplicado:</strong> até {effectiveMax}x ({limitSourceLabel}).</p>{effectiveMax === minCount && globalMax > minCount ? <p className="mt-1 text-amber-200">Por isso aparece somente {minCount}x. Para liberar mais parcelas, remova/reduza o limite específico em Cliente ou Produto.</p> : null}</div>}
 
           {quote.isFetching && <div className="flex items-center justify-center gap-2 rounded-xl border border-white/10 p-4 text-sm text-slate-400"><Loader2 className="h-4 w-4 animate-spin" /> Calculando no servidor...</div>}
           {quote.error && <div className="rounded-xl border border-red-400/25 bg-red-500/10 p-3 text-xs font-bold text-red-200">{quote.error.message}</div>}

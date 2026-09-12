@@ -193,14 +193,14 @@ export default function AdminVipInstallmentProductsPanel() {
                 <input type="checkbox" checked={form.enabled} onChange={(event) => setForm((value) => ({ ...value, enabled: event.target.checked }))} className="h-5 w-5 accent-cyan-400" />
               </label>
               <label className="text-[11px] font-black uppercase text-slate-300">Valor mínimo da compra<input value={form.minOrder} onChange={(event) => setForm((value) => ({ ...value, minOrder: event.target.value }))} placeholder="Vazio = sem mínimo" className={inputClass} /></label>
-              <label className="text-[11px] font-black uppercase text-slate-300">Máximo de parcelas<input type="number" min={2} max={120} value={form.maxInstallments} onChange={(event) => setForm((value) => ({ ...value, maxInstallments: event.target.value }))} placeholder="Herdar regra global/cliente" className={inputClass} /></label>
+              <label className="text-[11px] font-black uppercase text-slate-300">Máximo de parcelas<input type="number" min={2} max={120} value={form.maxInstallments} onChange={(event) => setForm((value) => ({ ...value, maxInstallments: event.target.value }))} placeholder="Vazio = herdar; preenchido = limitar" className={inputClass} /></label>
               <label className="sm:col-span-2 text-[11px] font-black uppercase text-slate-300">Juros deste produto (%)<input inputMode="decimal" value={form.interestPercent} onChange={(event) => setForm((value) => ({ ...value, interestPercent: event.target.value }))} placeholder="Vazio = herdar" className={inputClass} /></label>
               {([['allowDaily','Diário'],['allowWeekly','Semanal'],['allowMonthly','Mensal']] as const).map(([key, label]) => (
                 <label key={key} className="text-[11px] font-black uppercase text-slate-300">{label}<select value={form[key]} onChange={(event) => setForm((value) => ({ ...value, [key]: event.target.value as TriState }))} className={inputClass}><option value="inherit">Herdar</option><option value="yes">Permitir</option><option value="no">Bloquear</option></select></label>
               ))}
               <label className="sm:col-span-2 text-[11px] font-black uppercase text-slate-300">Observação<textarea rows={2} value={form.notes} onChange={(event) => setForm((value) => ({ ...value, notes: event.target.value }))} className={inputClass} /></label>
               <div className="sm:col-span-2 rounded-xl border border-amber-400/20 bg-amber-500/[0.06] p-3 text-xs text-amber-100">
-                Ativar este produto não libera ninguém sozinho. Ainda será obrigatório: VIP ativo + permissão individual do ADM + sistema global ON + nenhuma dívida aberta.
+                Ativar este produto não libera ninguém sozinho. Parcelas usam o menor máximo entre Global, Produto e Cliente. Juros específicos do Cliente têm prioridade sobre Produto; Produto tem prioridade sobre Global. Qualquer bloqueio de periodicidade prevalece.
               </div>
               <button type="button" onClick={save} disabled={mutation.isPending} className="sm:col-span-2 inline-flex min-h-[50px] items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 text-sm font-black uppercase text-cyan-950 disabled:opacity-50">
                 <Save className="h-4 w-4" /> {mutation.isPending ? "Salvando..." : "Salvar regra do produto"}
