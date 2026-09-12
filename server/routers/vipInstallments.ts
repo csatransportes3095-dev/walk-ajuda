@@ -417,6 +417,47 @@ async function buildValidatedVipCheckout(input: {
 }
 
 
+async function refreshVipInstallmentOverdueStatuses() {
+  await ensureVipInstallmentInfrastructure();
+  const db = (await getDb()) as any;
+  if (!db) return 0;
+  const today = getBrazilTodayForVipInstallments();
+
+  return db.transaction(async (tx: any) => {
+    const result = await tx.execute(sql`
+      SELECT id, planId, dueDate
+      FROM vipInstallments
+      WHERE status='pending' AND dueDate < ${today}
+      ORDER BY id ASC
+      FOR UPDATE
+    `);
+    const rows = rowsOf<any>(result);
+    if (rows.length === 0) return 0;
+
+    const ids = rows.map((row) => Number(row.id)).filter((id) => Number.isSafeInteger(id) && id > 0);
+    if (ids.length === 0) return 0;
+    await tx.execute(sql`
+      UPDATE vipInstallments
+      SET status='overdue'
+      WHERE status='pending' AND id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+    `);
+
+    for (const row of rows) {
+      await tx.execute(sql`
+        INSERT INTO vipInstallmentHistory
+          (planId, installmentId, action, actorType, actorId, previousValue, newValue, notes)
+        VALUES
+          (${Number(row.planId)}, ${Number(row.id)}, 'installment_overdue', 'system', 'system',
+           ${JSON.stringify({ status: 'pending' })},
+           ${JSON.stringify({ status: 'overdue', checkedAtDate: today })},
+           'Parcela marcada automaticamente como vencida após a data de vencimento.')
+      `);
+    }
+    return ids.length;
+  });
+}
+
+
 export const vipInstallmentsRouter = router({
   adminConfig: adminProcedure.query(async () => getVipInstallmentConfig()),
 
@@ -701,6 +742,7 @@ export const vipInstallmentsRouter = router({
     })),
 
   adminReceivables: adminProcedure.query(async () => {
+    await refreshVipInstallmentOverdueStatuses();
     await ensureVipInstallmentInfrastructure();
     const db = (await getDb()) as any;
     const result = await db.execute(sql`
@@ -747,6 +789,7 @@ export const vipInstallmentsRouter = router({
     .query(async ({ input }) => {
       const session = await requireCustomerSession(input.cpToken, input.phone);
       const customer = await customerByPhone(session.phone);
+      await refreshVipInstallmentOverdueStatuses();
       await ensureVipInstallmentInfrastructure();
       const db = (await getDb()) as any;
       const plansResult = await db.execute(sql`
