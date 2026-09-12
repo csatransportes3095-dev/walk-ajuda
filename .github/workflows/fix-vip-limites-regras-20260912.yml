@@ -1,0 +1,115 @@
+name: Fix VIP Limits And Rules
+
+on:
+  push:
+    branches:
+      - fix/vip-limites-regras-2026-09-12
+    paths:
+      - .github/workflows/fix-vip-limites-regras-20260912.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/vip-limites-regras-2026-09-12
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply focused patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              c = text.count(old)
+              if c != 1:
+                  raise SystemExit(f'{label}: expected 1 anchor, found {c}')
+              return text.replace(old, new, 1)
+
+          router = Path('server/routers/vipInstallments.ts')
+          text = router.read_text(encoding='utf-8')
+          old = '''async function resolveEligibility(phone: string) {\n  const customer = await customerByPhone(phone);\n  const [config, permission, vipActive, openPlan] = await Promise.all([\n    getVipInstallmentConfig(),\n    permissionForCustomer(customer.id),\n    isVipMemberByPhone(customer.phone),\n    openPlanForCustomer(customer.id),\n  ]);\n\n  let reason: string | null = null;\n  if (!config.enabled) reason = "Parcelamento VIP indisponível no momento.";\n  else if (!vipActive) reason = "Seu VIP precisa estar ativo para usar o parcelamento.";\n  else if (!permission.enabled) reason = "Parcelamento VIP ainda não foi liberado para este cadastro.";\n  else if (openPlan && openPlan.balanceCents > 0) reason = "Você já possui uma compra parcelada em andamento. Quite o saldo para liberar um novo parcelamento.";\n\n  return {\n    customer,\n    config,\n    permission,\n    vipActive,\n    openPlan,\n    eligible: !reason,\n    reason,\n  };\n}\n'''
+          new = '''async function resolveEligibility(phone: string, productId?: number | null) {\n  const customer = await customerByPhone(phone);\n  const [config, permission, vipActive, openPlan, productRule] = await Promise.all([\n    getVipInstallmentConfig(),\n    permissionForCustomer(customer.id),\n    isVipMemberByPhone(customer.phone),\n    openPlanForCustomer(customer.id),\n    productId ? getVipInstallmentProductRule(productId) : Promise.resolve(null),\n  ]);\n\n  let reason: string | null = null;\n  if (!config.enabled) reason = "Parcelamento VIP indisponível no momento.";\n  else if (!vipActive) reason = "Seu VIP precisa estar ativo para usar o parcelamento.";\n  else if (!permission.enabled) reason = "Parcelamento VIP ainda não foi liberado para este cadastro.";\n  else if (openPlan && openPlan.balanceCents > 0) reason = "Você já possui uma compra parcelada em andamento. Quite o saldo para liberar um novo parcelamento.";\n\n  const customerMax = effectiveMaxInstallments(config, permission);\n  const productMax = productRule?.maxInstallments == null ? null : Number(productRule.maxInstallments);\n  const maxInstallments = Math.max(config.minInstallments, Math.min(customerMax, productMax ?? customerMax));\n  const caps = [\n    { source: "global" as const, value: config.maxInstallments },\n    ...(permission.maxInstallments == null ? [] : [{ source: "customer" as const, value: Number(permission.maxInstallments) }]),\n    ...(productMax == null ? [] : [{ source: "product" as const, value: productMax }]),\n  ];\n  const limiting = caps.reduce((best, current) => current.value < best.value ? current : best);\n  const interestBps = permission.interestBps ?? productRule?.interestBps ?? config.defaultInterestBps;\n  const interestSource = permission.interestBps != null ? "customer" : productRule?.interestBps != null ? "product" : "global";\n  const allowedFrequencies = {\n    daily: effectiveFrequencyAllowed(config, permission, "daily") && (productRule ? productFrequencyAllowed(productRule, "daily") : true),\n    weekly: effectiveFrequencyAllowed(config, permission, "weekly") && (productRule ? productFrequencyAllowed(productRule, "weekly") : true),\n    monthly: effectiveFrequencyAllowed(config, permission, "monthly") && (productRule ? productFrequencyAllowed(productRule, "monthly") : true),\n  };\n\n  return {\n    customer,\n    config,\n    permission,\n    vipActive,\n    openPlan,\n    effectiveRules: {\n      minInstallments: config.minInstallments,\n      maxInstallments,\n      globalMaxInstallments: config.maxInstallments,\n      customerMaxInstallments: permission.maxInstallments,\n      productMaxInstallments: productMax,\n      limitingSource: limiting.source,\n      interestBps,\n      interestSource,\n      allowedFrequencies,\n    },\n    eligible: !reason,\n    reason,\n  };\n}\n'''
+          text = replace_once(text, old, new, 'resolveEligibility')
+
+          old = '''function effectiveFrequencyAllowed(config: VipInstallmentConfig, permission: Awaited<ReturnType<typeof permissionForCustomer>>, frequency: VipInstallmentFrequency) {\n  if (frequency === "daily") return permission.allowDaily ?? config.allowDaily;\n  if (frequency === "weekly") return permission.allowWeekly ?? config.allowWeekly;\n  return permission.allowMonthly ?? config.allowMonthly;\n}\n'''
+          new = '''function effectiveFrequencyAllowed(config: VipInstallmentConfig, permission: Awaited<ReturnType<typeof permissionForCustomer>>, frequency: VipInstallmentFrequency) {\n  if (frequency === "daily") return config.allowDaily && permission.allowDaily !== false;\n  if (frequency === "weekly") return config.allowWeekly && permission.allowWeekly !== false;\n  return config.allowMonthly && permission.allowMonthly !== false;\n}\n'''
+          text = replace_once(text, old, new, 'frequency precedence')
+
+          old = '''  eligibility: publicProcedure\n    .input(z.object({ cpToken: z.string().min(32), phone: z.string().min(8).max(32).optional() }))\n    .query(async ({ input }) => {\n      const session = await requireCustomerSession(input.cpToken, input.phone);\n      return resolveEligibility(session.phone);\n    }),\n'''
+          new = '''  eligibility: publicProcedure\n    .input(z.object({ cpToken: z.string().min(32), phone: z.string().min(8).max(32).optional(), productId: z.number().int().positive().optional() }))\n    .query(async ({ input }) => {\n      const session = await requireCustomerSession(input.cpToken, input.phone);\n      return resolveEligibility(session.phone, input.productId);\n    }),\n'''
+          text = replace_once(text, old, new, 'eligibility product context')
+          router.write_text(text, encoding='utf-8')
+
+          checkout = Path('client/src/components/VipInstallmentCheckoutBox.tsx')
+          text = checkout.read_text(encoding='utf-8')
+          old = '''  const eligibility = trpc.vipInstallments.eligibility.useQuery(\n    { cpToken: props.cpToken, phone: props.phone },\n    { enabled: sessionReady && !props.disabledReason, staleTime: 5_000, retry: false },\n  );'''
+          new = '''  const eligibility = trpc.vipInstallments.eligibility.useQuery(\n    { cpToken: props.cpToken, phone: props.phone, productId: itemReady ? Number(props.productId) : undefined },\n    { enabled: sessionReady && !props.disabledReason, staleTime: 5_000, retry: false },\n  );'''
+          text = replace_once(text, old, new, 'checkout eligibility input')
+
+          old = '''  const config = eligibility.data?.config;\n  const permission = eligibility.data?.permission;\n  const minCount = Number(config?.minInstallments || 2);\n  const effectiveMax = Math.max(minCount, Math.min(Number(config?.maxInstallments || 2), Number(permission?.maxInstallments || config?.maxInstallments || 2)));'''
+          new = '''  const config = eligibility.data?.config;\n  const permission = eligibility.data?.permission;\n  const effectiveRules = eligibility.data?.effectiveRules;\n  const minCount = Number(effectiveRules?.minInstallments ?? config?.minInstallments ?? 2);\n  const effectiveMax = Math.max(minCount, Number(effectiveRules?.maxInstallments ?? config?.maxInstallments ?? minCount));\n  const globalMax = Number(effectiveRules?.globalMaxInstallments ?? config?.maxInstallments ?? effectiveMax);\n  const limitSourceLabel = effectiveRules?.limitingSource === "customer" ? "CLIENTE" : effectiveRules?.limitingSource === "product" ? "PRODUTO" : "GLOBAL";'''
+          text = replace_once(text, old, new, 'checkout effective limits')
+
+          old = '''  const frequencyOptions = [\n    { value: "daily" as const, label: "Diário", allowed: (permission?.allowDaily ?? config?.allowDaily) !== false },\n    { value: "weekly" as const, label: "Semanal", allowed: (permission?.allowWeekly ?? config?.allowWeekly) !== false },\n    { value: "monthly" as const, label: "Mensal", allowed: (permission?.allowMonthly ?? config?.allowMonthly) !== false },\n  ].filter((item) => item.allowed);'''
+          new = '''  const frequencyOptions = [\n    { value: "daily" as const, label: "Diário", allowed: effectiveRules?.allowedFrequencies.daily ?? ((permission?.allowDaily ?? config?.allowDaily) !== false) },\n    { value: "weekly" as const, label: "Semanal", allowed: effectiveRules?.allowedFrequencies.weekly ?? ((permission?.allowWeekly ?? config?.allowWeekly) !== false) },\n    { value: "monthly" as const, label: "Mensal", allowed: effectiveRules?.allowedFrequencies.monthly ?? ((permission?.allowMonthly ?? config?.allowMonthly) !== false) },\n  ].filter((item) => item.allowed);'''
+          text = replace_once(text, old, new, 'checkout frequencies')
+
+          old = '''          <div className="grid grid-cols-2 gap-3">\n            <label className="text-[10px] font-black uppercase text-slate-400">Parcelas<select value={count} onChange={(event) => setCount(Number(event.target.value))} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white">{Array.from({ length: Math.max(0, effectiveMax - minCount + 1) }, (_, index) => minCount + index).map((value) => <option key={value} value={value}>{value}x</option>)}</select></label>\n            <label className="text-[10px] font-black uppercase text-slate-400">Periodicidade<select value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white">{frequencyOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>\n          </div>'''
+          new = '''          <div className="grid grid-cols-2 gap-3">\n            <label className="text-[10px] font-black uppercase text-slate-400">Parcelas<select value={count} onChange={(event) => setCount(Number(event.target.value))} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white">{Array.from({ length: Math.max(0, effectiveMax - minCount + 1) }, (_, index) => minCount + index).map((value) => <option key={value} value={value}>{value}x</option>)}</select></label>\n            <label className="text-[10px] font-black uppercase text-slate-400">Periodicidade<select value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white">{frequencyOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>\n          </div>\n          {effectiveRules && <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/[0.06] p-3 text-[11px] leading-relaxed text-slate-300"><p><strong className="text-cyan-200">Faixa global:</strong> {minCount}x a {globalMax}x. <strong className="text-cyan-200">Limite aplicado:</strong> até {effectiveMax}x ({limitSourceLabel}).</p>{effectiveMax === minCount && globalMax > minCount ? <p className="mt-1 text-amber-200">Por isso aparece somente {minCount}x. Para liberar mais parcelas, remova/reduza o limite específico em Cliente ou Produto.</p> : null}</div>}'''
+          text = replace_once(text, old, new, 'checkout explanation')
+          checkout.write_text(text, encoding='utf-8')
+
+          admin = Path('client/src/components/AdminVipInstallmentsPanel.tsx')
+          text = admin.read_text(encoding='utf-8')
+          old = '''        <AdminVipInstallmentProductsPanel />'''
+          new = '''        <div className="rounded-2xl border border-amber-400/25 bg-amber-500/[0.07] p-4 text-xs leading-relaxed text-slate-300"><p className="font-black uppercase text-amber-200">Qual configuração vale?</p><p className="mt-2"><strong>Parcelas:</strong> o Global define a faixa base. Produto e Cliente podem limitar o máximo. Vale sempre o <strong>menor máximo</strong> entre os três. Campo vazio = herdar, sem criar limite próprio.</p><p className="mt-1"><strong>Juros:</strong> Cliente específico tem prioridade; se estiver vazio, usa Produto; se Produto estiver vazio, usa Global.</p><p className="mt-1"><strong>Periodicidade:</strong> qualquer bloqueio no Global, Produto ou Cliente bloqueia aquela opção.</p><p className="mt-2 text-amber-100">Exemplo: Global 5–20x, Produto até 12x e Cliente até 8x → cliente verá 5x até 8x.</p></div>\n\n        <AdminVipInstallmentProductsPanel />'''
+          text = replace_once(text, old, new, 'admin precedence box')
+          old = '''          <label className="text-[11px] font-black uppercase text-slate-300">Máximo de parcelas<input type="number" min={2} max={120} value={permissionForm.maxInstallments} onChange={(event) => setPermissionForm((value) => ({ ...value, maxInstallments: event.target.value }))} placeholder={`Padrão: ${config.maxInstallments}`} className={inputClass} /></label>'''
+          new = '''          <label className="text-[11px] font-black uppercase text-slate-300">Máximo do cliente<input type="number" min={2} max={120} value={permissionForm.maxInstallments} onChange={(event) => setPermissionForm((value) => ({ ...value, maxInstallments: event.target.value }))} placeholder={`Vazio = herdar até ${config.maxInstallments}x`} className={inputClass} /><span className="mt-1 block normal-case font-medium text-slate-500">Se preencher um número menor, ele reduz o máximo disponível para este cliente.</span></label>'''
+          text = replace_once(text, old, new, 'customer max help')
+          admin.write_text(text, encoding='utf-8')
+
+          product = Path('client/src/components/AdminVipInstallmentProductsPanel.tsx')
+          text = product.read_text(encoding='utf-8')
+          text = replace_once(text, 'placeholder="Herdar regra global/cliente"', 'placeholder="Vazio = herdar; preenchido = limitar"', 'product max placeholder')
+          old = '''                Ativar este produto não libera ninguém sozinho. Ainda será obrigatório: VIP ativo + permissão individual do ADM + sistema global ON + nenhuma dívida aberta.'''
+          new = '''                Ativar este produto não libera ninguém sozinho. Parcelas usam o menor máximo entre Global, Produto e Cliente. Juros específicos do Cliente têm prioridade sobre Produto; Produto tem prioridade sobre Global. Qualquer bloqueio de periodicidade prevalece.'''
+          text = replace_once(text, old, new, 'product explanation')
+          product.write_text(text, encoding='utf-8')
+          PY
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run focused VIP tests
+        run: pnpm exec vitest run server/vipInstallments.newlogic.test.ts shared/vipCheckoutPricing.test.ts shared/vipInstallments.test.ts
+      - name: Check VIP TypeScript regressions
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then exit 0; fi
+          grep -E "(server/routers/vipInstallments\.ts|client/src/components/VipInstallmentCheckoutBox\.tsx|client/src/components/AdminVipInstallmentsPanel\.tsx|client/src/components/AdminVipInstallmentProductsPanel\.tsx)" /tmp/tsc.log > /tmp/vip-errors.log || true
+          if [ -s /tmp/vip-errors.log ]; then cat /tmp/vip-errors.log; exit 1; fi
+          echo "No new VIP TypeScript errors."
+      - name: Check diff
+        run: git diff --check
+      - name: Commit validated fix
+        shell: bash
+        run: |
+          git config user.name "h2-vip-fix"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/fix-vip-limites-regras-20260912.yml
+          git add server/routers/vipInstallments.ts client/src/components/VipInstallmentCheckoutBox.tsx client/src/components/AdminVipInstallmentsPanel.tsx client/src/components/AdminVipInstallmentProductsPanel.tsx
+          git commit -m "fix(vip): clarify effective installment rules"
+          git push origin HEAD:fix/vip-limites-regras-2026-09-12
