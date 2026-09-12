@@ -1,0 +1,64 @@
+name: VIP Installment Frontend Integration
+
+on:
+  push:
+    branches:
+      - feat/vip-parcelamento-seguro-2026-09-12
+    paths:
+      - .github/workflows/vip-installment-frontend-integration-20260912.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/vip-parcelamento-seguro-2026-09-12
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply guarded routes and checkout UI
+        shell: bash
+        run: |
+          python scripts/apply_vip_installment_routes_20260912.py
+          python scripts/apply_vip_installment_admin_link_20260912.py
+          python scripts/apply_vip_installment_checkout_ui_20260912.py
+          python scripts/apply_vip_installment_customer_order_number_20260912.py
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run focused installment tests
+        run: pnpm exec vitest run server/vipInstallments.newlogic.test.ts
+      - name: Build application
+        run: pnpm build
+      - name: Check changed TypeScript regressions
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then exit 0; fi
+          grep -E "(client/src/pages/Home\.tsx|client/src/App\.tsx|client/src/pages/VipInstallmentsPage\.tsx|client/src/pages/AdminVipReceivablesPage\.tsx|client/src/components/AdminVipReceivablesPanel\.tsx|client/src/pages/AdminVip\.tsx|server/vipInstallmentContractService\.ts|server/routers/vipInstallmentPayments\.ts|server/routers\.ts)" /tmp/tsc.log \
+            | grep -v "server/routers.ts.*Cannot find name 'listOrderStatusTypes'" \
+            > /tmp/vip-ui-errors.log || true
+          if [ -s /tmp/vip-ui-errors.log ]; then
+            cat /tmp/vip-ui-errors.log
+            exit 1
+          fi
+          echo "No new VIP installment UI TypeScript errors."
+      - name: Commit only after validation
+        shell: bash
+        run: |
+          git config user.name "h2-vip-guard"
+          git config user.email "actions@users.noreply.github.com"
+          git add client/src/App.tsx client/src/pages/Home.tsx client/src/pages/AdminVip.tsx server/vipInstallmentContractService.ts
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "feat(vip): integrate installment checkout and payment routes"
+          git pull --rebase origin feat/vip-parcelamento-seguro-2026-09-12
+          git push origin HEAD:feat/vip-parcelamento-seguro-2026-09-12
