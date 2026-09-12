@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Banknote, CheckCircle2, CreditCard, RefreshCw, Save, Search, ShieldCheck, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import AdminVipInstallmentProductsPanel from "@/components/AdminVipInstallmentProductsPanel";
 
 type TriState = "inherit" | "yes" | "no";
 
@@ -234,6 +235,8 @@ export default function AdminVipInstallmentsPanel() {
           </div>
           <button type="button" onClick={saveGlobal} disabled={setConfigMutation.isPending} className="sm:col-span-2 lg:col-span-4 inline-flex min-h-[50px] items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-black uppercase text-emerald-950 disabled:opacity-50"><Save className="h-4 w-4" /> {setConfigMutation.isPending ? "Salvando..." : "Salvar regras do parcelamento"}</button>
         </div>
+
+        <AdminVipInstallmentProductsPanel />
 
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] p-4"><p className="text-[10px] font-black uppercase text-emerald-200">Liberados</p><p className="mt-1 text-2xl font-black text-emerald-300">{stats.enabled}</p></div>
