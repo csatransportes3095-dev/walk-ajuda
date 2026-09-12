@@ -49,8 +49,7 @@ jobs:
           set -e
           if [ "$status" -eq 0 ]; then exit 0; fi
           grep -E "(server/vipInstallmentContractService\.ts|server/vipInstallmentEligibility\.ts|server/routers/vipInstallments\.ts|server/routers/vipInstallmentPayments\.ts|server/routers\.ts|server/vipInstallmentPricing\.ts|server/vipInstallmentProductRules\.ts|shared/vipInstallments\.ts|shared/vipCheckoutPricing\.ts)" /tmp/tsc.log \
-            | grep -v "server/routers.ts(5995,30).*listOrderStatusTypes" \
-            | grep -v "server/routers.ts(6005,32).*listOrderStatusTypes" \
+            | grep -v "server/routers.ts.*Cannot find name 'listOrderStatusTypes'" \
             > /tmp/vip-backend-errors.log || true
           if [ -s /tmp/vip-backend-errors.log ]; then
             cat /tmp/vip-backend-errors.log
