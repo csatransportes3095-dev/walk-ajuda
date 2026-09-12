@@ -370,6 +370,7 @@ export default function Home() {
   const [paymentProofUploadState, setPaymentProofUploadState] = useState<'idle' | 'preparing' | 'uploading' | 'uploaded' | 'failed'>('idle');
   const [paymentProofUploadError, setPaymentProofUploadError] = useState('');
   const paymentProofUploadRequestRef = useRef(0);
+  const paymentProofUploadBusyRef = useRef(false);
   const [pixCopied, setPixCopied] = useState(false);
   const [showExamplePhoto, setShowExamplePhoto] = useState(false);
   const [questionAnswers, setQuestionAnswers] = useState<Record<number, string>>({});
@@ -1192,48 +1193,54 @@ export default function Home() {
   }, [PIX_KEY]);
 
   const uploadPaymentProof = async (selectedFile: File) => {
+    if (paymentProofUploadBusyRef.current) return;
+    paymentProofUploadBusyRef.current = true;
     const requestId = ++paymentProofUploadRequestRef.current;
     setPaymentProofUploadError('');
-    setPaymentProofUploadState('preparing');
+    // "uploading" is shown immediately. The shared reliable uploader handles the single compression pass.
+    setPaymentProofUploadState('uploading');
     setRestoredFileUrls(prev => ({ ...prev, paymentProof: undefined }));
     removeUploadedFileUrl('paymentProof');
+    setPaymentProof(selectedFile);
 
     const isPdf = selectedFile.type === 'application/pdf' || /\.pdf$/i.test(selectedFile.name);
-    let fileToUpload = selectedFile;
-    let preview: string = isPdf ? 'pdf' : '';
-    if (!isPdf) {
+    if (isPdf) {
+      setPaymentProofPreview('pdf');
+    } else {
       try {
-        const compressed = await compressImageFile(selectedFile);
-        fileToUpload = compressed.file;
-        preview = compressed.previewUrl;
+        setPaymentProofPreview(prev => {
+          if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(selectedFile);
+        });
       } catch {
-        try {
-          preview = await fileToBase64(selectedFile).then(data => `data:${selectedFile.type || 'image/jpeg'};base64,${data}`);
-        } catch {
-          preview = 'pdf';
-        }
+        setPaymentProofPreview('');
       }
     }
-    if (requestId !== paymentProofUploadRequestRef.current) return;
 
-    setPaymentProof(fileToUpload);
-    setPaymentProofPreview(preview);
-    setPaymentProofUploadState('uploading');
-    const phone = clientPhone.trim() || 'temp';
-    const result = await uploadFileToServer(fileToUpload, 'comprovante-pix', phone);
-    if (requestId !== paymentProofUploadRequestRef.current) return;
+    try {
+      const phone = clientPhone.trim() || 'temp';
+      const result = await uploadFileToServer(selectedFile, 'comprovante-pix', phone);
+      if (requestId !== paymentProofUploadRequestRef.current) return;
 
-    if (!result) {
+      if (!result) {
+        setPaymentProofUploadState('failed');
+        setPaymentProofUploadError('O arquivo foi selecionado, mas ainda não foi enviado. Toque em “Tentar enviar novamente”.');
+        return;
+      }
+      saveUploadedFileUrl('paymentProof', result.url, result.mimeType);
+      setRestoredFileUrls(prev => ({ ...prev, paymentProof: result.url }));
+      setPaymentProofUploadState('uploaded');
+    } catch {
+      if (requestId !== paymentProofUploadRequestRef.current) return;
       setPaymentProofUploadState('failed');
-      setPaymentProofUploadError('O arquivo foi selecionado, mas ainda não foi enviado. Toque em “Tentar enviar novamente”.');
-      return;
+      setPaymentProofUploadError('Não foi possível concluir o envio. Tente novamente.');
+    } finally {
+      if (requestId === paymentProofUploadRequestRef.current) paymentProofUploadBusyRef.current = false;
     }
-    saveUploadedFileUrl('paymentProof', result.url, result.mimeType);
-    setRestoredFileUrls(prev => ({ ...prev, paymentProof: result.url }));
-    setPaymentProofUploadState('uploaded');
   };
 
   const handlePaymentProofSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (paymentProofUploadBusyRef.current) { e.target.value = ''; return; }
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
@@ -1247,7 +1254,7 @@ export default function Home() {
   };
 
   const retryPaymentProofUpload = () => {
-    if (paymentProof) void uploadPaymentProof(paymentProof);
+    if (!paymentProofUploadBusyRef.current && paymentProof) void uploadPaymentProof(paymentProof);
   };
 
   // Comprime uma imagem no navegador via canvas: redimensiona p/ máx 1600px, exporta JPEG ~0.8.
@@ -3998,7 +4005,7 @@ export default function Home() {
                     ) : (
                       <img src={paymentProofPreview} alt="Comprovante" className="w-full max-h-40 object-contain rounded-xl border border-yellow-500/40" />
                     )}
-                    <button onClick={() => { paymentProofUploadRequestRef.current++; setPaymentProof(null); setPaymentProofPreview(null); setPaymentProofUploadState('idle'); setPaymentProofUploadError(''); removeUploadedFileUrl('paymentProof'); setRestoredFileUrls(prev => ({ ...prev, paymentProof: undefined })); }} type="button"
+                    <button onClick={() => { paymentProofUploadRequestRef.current++; paymentProofUploadBusyRef.current = false; if (paymentProofPreview?.startsWith('blob:')) URL.revokeObjectURL(paymentProofPreview); setPaymentProof(null); setPaymentProofPreview(null); setPaymentProofUploadState('idle'); setPaymentProofUploadError(''); removeUploadedFileUrl('paymentProof'); setRestoredFileUrls(prev => ({ ...prev, paymentProof: undefined })); }} type="button"
                       className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-500">✕</button>
                     {restoredFileUrls.paymentProof ? (
                       <p className="text-green-400 text-xs mt-2 font-black text-center">✓ Comprovante enviado com sucesso!</p>
