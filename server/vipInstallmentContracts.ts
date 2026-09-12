@@ -50,6 +50,206 @@ export async function assertOrderOwnership(input: {
   return { registrationId: Number(row.id), phone: normalizePhone(row.phone) };
 }
 
+
+export async function prepareVipInstallmentCheckoutIntent(input: {
+  checkoutToken: string;
+  customerId: number;
+  membershipId: number;
+  pricing: VipResolvedCheckoutPricing;
+  quote: VipInstallmentQuote;
+}) {
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  const checkoutToken = String(input.checkoutToken || "").trim();
+  if (!/^[A-Za-z0-9_-]{16,80}$/.test(checkoutToken)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Identificador do checkout inválido." });
+  }
+  const now = Date.now();
+  const expiresAtMs = now + 15 * 60 * 1000;
+
+  try {
+    return await db.transaction(async (tx: any) => {
+      const customerLock = await tx.execute(sql`SELECT id FROM customers WHERE id=${input.customerId} AND deletedAt IS NULL LIMIT 1 FOR UPDATE`);
+      if (!rowsOf<any>(customerLock)[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+
+      await tx.execute(sql`
+        UPDATE vipInstallmentCheckoutIntents
+        SET status='expired', activeCustomerId=NULL
+        WHERE customerId=${input.customerId} AND status='prepared' AND expiresAtMs<=${now}
+      `);
+
+      const sameTokenResult = await tx.execute(sql`
+        SELECT id, customerId, status, expiresAtMs, pricingJson, quoteJson
+        FROM vipInstallmentCheckoutIntents
+        WHERE checkoutToken=${checkoutToken}
+        LIMIT 1
+        FOR UPDATE
+      `);
+      const sameToken = rowsOf<any>(sameTokenResult)[0];
+      if (sameToken) {
+        if (Number(sameToken.customerId) !== input.customerId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Checkout não pertence a este cliente." });
+        }
+        if (String(sameToken.status) === 'prepared' && Number(sameToken.expiresAtMs) > now) {
+          return {
+            checkoutToken,
+            expiresAtMs: Number(sameToken.expiresAtMs),
+            pricing: JSON.parse(String(sameToken.pricingJson)),
+            quote: JSON.parse(String(sameToken.quoteJson)),
+            reused: true,
+          };
+        }
+        if (String(sameToken.status) === 'finalized') {
+          throw new TRPCError({ code: "CONFLICT", message: "Este checkout já foi finalizado." });
+        }
+      }
+
+      const activeResult = await tx.execute(sql`
+        SELECT id, checkoutToken, expiresAtMs
+        FROM vipInstallmentCheckoutIntents
+        WHERE activeCustomerId=${input.customerId} AND status='prepared'
+        LIMIT 1
+        FOR UPDATE
+      `);
+      const active = rowsOf<any>(activeResult)[0];
+      if (active) {
+        throw new TRPCError({ code: "CONFLICT", message: "Já existe uma compra parcelada sendo finalizada neste cadastro. Conclua ou aguarde alguns minutos." });
+      }
+
+      const openPlanResult = await tx.execute(sql`
+        SELECT id, balanceCents FROM vipInstallmentPlans
+        WHERE openSlotCustomerId=${input.customerId}
+        LIMIT 1 FOR UPDATE
+      `);
+      const openPlan = rowsOf<any>(openPlanResult)[0];
+      if (openPlan && Number(openPlan.balanceCents || 0) > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "Você já possui uma compra parcelada em andamento." });
+      }
+
+      if (sameToken) {
+        await tx.execute(sql`
+          UPDATE vipInstallmentCheckoutIntents
+          SET membershipId=${input.membershipId}, pricingJson=${JSON.stringify(input.pricing)}, quoteJson=${JSON.stringify(input.quote)},
+              status='prepared', activeCustomerId=${input.customerId}, expiresAtMs=${expiresAtMs}, finalizedPlanId=NULL, finalizedRegistrationId=NULL
+          WHERE id=${Number(sameToken.id)}
+        `);
+      } else {
+        await tx.execute(sql`
+          INSERT INTO vipInstallmentCheckoutIntents
+            (checkoutToken, customerId, activeCustomerId, membershipId, pricingJson, quoteJson, status, expiresAtMs)
+          VALUES
+            (${checkoutToken}, ${input.customerId}, ${input.customerId}, ${input.membershipId},
+             ${JSON.stringify(input.pricing)}, ${JSON.stringify(input.quote)}, 'prepared', ${expiresAtMs})
+        `);
+      }
+      return { checkoutToken, expiresAtMs, pricing: input.pricing, quote: input.quote, reused: false };
+    });
+  } catch (error: any) {
+    if (error instanceof TRPCError) throw error;
+    if (String(error?.code || '') === 'ER_DUP_ENTRY' || String(error?.message || '').includes('Duplicate entry')) {
+      throw new TRPCError({ code: "CONFLICT", message: "Já existe uma finalização de Parcelamento VIP em andamento neste cadastro." });
+    }
+    throw error;
+  }
+}
+
+export async function finalizeVipInstallmentCheckoutIntent(input: {
+  checkoutToken: string;
+  customerId: number;
+  customerPhone: string;
+  registrationId: number;
+  proofUrl: string;
+  proofMimeType?: string | null;
+}) {
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  const now = Date.now();
+  const checkoutToken = String(input.checkoutToken || '').trim();
+
+  const intentResult = await db.execute(sql`
+    SELECT id, customerId, membershipId, pricingJson, quoteJson, status, expiresAtMs, finalizedPlanId, finalizedRegistrationId
+    FROM vipInstallmentCheckoutIntents
+    WHERE checkoutToken=${checkoutToken}
+    LIMIT 1
+  `);
+  const intent = rowsOf<any>(intentResult)[0];
+  if (!intent || Number(intent.customerId) !== input.customerId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Reserva de Parcelamento VIP não encontrada." });
+  }
+  if (String(intent.status) === 'finalized' && intent.finalizedPlanId) {
+    return { success: true, planId: Number(intent.finalizedPlanId), registrationId: Number(intent.finalizedRegistrationId || input.registrationId), alreadyFinalized: true };
+  }
+  if (String(intent.status) !== 'prepared') {
+    throw new TRPCError({ code: "CONFLICT", message: "Esta reserva de parcelamento não está disponível para finalização." });
+  }
+  if (Number(intent.expiresAtMs || 0) <= now) {
+    await db.execute(sql`UPDATE vipInstallmentCheckoutIntents SET status='expired', activeCustomerId=NULL WHERE id=${Number(intent.id)} AND status='prepared'`);
+    throw new TRPCError({ code: "CONFLICT", message: "A reserva do parcelamento expirou. Refaça a simulação antes de finalizar." });
+  }
+
+  const orderResult = await db.execute(sql`
+    SELECT orderNumber, customerPhone
+    FROM orderStatusHistory
+    WHERE registrationId=${input.registrationId}
+    ORDER BY id DESC LIMIT 1
+  `);
+  const order = rowsOf<any>(orderResult)[0];
+  if (!order || normalizePhone(order.customerPhone) !== normalizePhone(input.customerPhone)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Não foi possível confirmar que este pedido pertence à reserva do Parcelamento VIP." });
+  }
+  const orderNumber = order.orderNumber == null ? String(input.registrationId) : String(order.orderNumber);
+
+  const existingResult = await db.execute(sql`
+    SELECT id FROM vipInstallmentPlans WHERE orderNumber=${orderNumber} LIMIT 1
+  `);
+  const existing = rowsOf<any>(existingResult)[0];
+  if (existing) {
+    await db.execute(sql`
+      UPDATE vipInstallmentCheckoutIntents
+      SET status='finalized', activeCustomerId=NULL, finalizedPlanId=${Number(existing.id)}, finalizedRegistrationId=${input.registrationId}
+      WHERE id=${Number(intent.id)}
+    `);
+    return { success: true, planId: Number(existing.id), registrationId: input.registrationId, alreadyFinalized: true };
+  }
+
+  let pricing: VipResolvedCheckoutPricing;
+  let quote: VipInstallmentQuote;
+  try {
+    pricing = JSON.parse(String(intent.pricingJson));
+    quote = JSON.parse(String(intent.quoteJson));
+  } catch {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Reserva de parcelamento corrompida." });
+  }
+  if (!pricing?.items?.length || !quote?.installments?.length || Number(quote.totalAmountCents || 0) <= 0) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Reserva de parcelamento inválida." });
+  }
+
+  const customerResult = await db.execute(sql`SELECT name, phone FROM customers WHERE id=${input.customerId} AND deletedAt IS NULL LIMIT 1`);
+  const customer = rowsOf<any>(customerResult)[0];
+  if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+
+  const created = await createVipInstallmentContract({
+    customerId: input.customerId,
+    membershipId: Number(intent.membershipId),
+    customerName: String(customer.name || ''),
+    customerPhone: input.customerPhone,
+    registrationId: input.registrationId,
+    orderNumber,
+    pricing,
+    quote,
+    proofUrl: input.proofUrl,
+    proofMimeType: input.proofMimeType,
+    createdBy: `checkout:${checkoutToken}`,
+  });
+
+  await db.execute(sql`
+    UPDATE vipInstallmentCheckoutIntents
+    SET status='finalized', activeCustomerId=NULL, finalizedPlanId=${created.planId}, finalizedRegistrationId=${input.registrationId}
+    WHERE id=${Number(intent.id)}
+  `);
+  return { ...created, registrationId: input.registrationId, alreadyFinalized: false };
+}
+
 export async function createVipInstallmentContract(input: {
   customerId: number;
   membershipId: number | null;

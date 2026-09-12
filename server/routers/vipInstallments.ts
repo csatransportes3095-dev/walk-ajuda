@@ -8,7 +8,7 @@ import { getDb, getSetting, upsertSetting } from "../db";
 import { isVipMemberByPhone } from "./vipMemberships";
 import { resolveVipInstallmentCheckoutPricing } from "../vipInstallmentPricing";
 import { getVipInstallmentProductRule, listVipInstallmentProductRules, saveVipInstallmentProductRule } from "../vipInstallmentProductRules";
-import { createVipInstallmentContract, submitVipInstallmentProof, confirmVipInstallmentPayment } from "../vipInstallmentContracts";
+import { prepareVipInstallmentCheckoutIntent, finalizeVipInstallmentCheckoutIntent, submitVipInstallmentProof, confirmVipInstallmentPayment } from "../vipInstallmentContracts";
 
 const SETTING_KEYS = {
   enabled: "vip_installments_enabled",
@@ -79,6 +79,28 @@ export async function ensureVipInstallmentInfrastructure() {
           updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           UNIQUE KEY uq_vipInstallmentPermissions_customer (customerId),
           KEY idx_vipInstallmentPermissions_enabled (enabled)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS vipInstallmentCheckoutIntents (
+          id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          checkoutToken VARCHAR(80) NOT NULL,
+          customerId INT NOT NULL,
+          activeCustomerId INT NULL,
+          membershipId INT NOT NULL,
+          pricingJson LONGTEXT NOT NULL,
+          quoteJson LONGTEXT NOT NULL,
+          status VARCHAR(24) NOT NULL DEFAULT 'prepared',
+          expiresAtMs BIGINT NOT NULL,
+          finalizedPlanId INT NULL,
+          finalizedRegistrationId INT NULL,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_vipInstallmentCheckoutIntents_token (checkoutToken),
+          UNIQUE KEY uq_vipInstallmentCheckoutIntents_active_customer (activeCustomerId),
+          KEY idx_vipInstallmentCheckoutIntents_customer_status (customerId, status),
+          KEY idx_vipInstallmentCheckoutIntents_expiry (expiresAtMs)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `);
 
@@ -573,11 +595,11 @@ export const vipInstallmentsRouter = router({
       };
     }),
 
-  createContract: publicProcedure
+  prepareCheckout: publicProcedure
     .input(z.object({
       cpToken: z.string().min(32),
       phone: z.string().min(8).max(32).optional(),
-      registrationId: z.number().int().positive(),
+      checkoutToken: z.string().min(16).max(80),
       items: z.array(z.object({
         productId: z.number().int().positive(),
         optionId: z.number().int().positive(),
@@ -587,8 +609,6 @@ export const vipInstallmentsRouter = router({
       couponCode: z.string().trim().max(64).optional(),
       installmentCount: z.number().int().min(2).max(120),
       frequency: z.enum(["daily", "weekly", "monthly"]),
-      paymentProofUrl: z.string().min(1).max(4096),
-      paymentProofMime: z.string().max(128).nullable().optional(),
     }))
     .mutation(async ({ input }) => {
       const session = await requireCustomerSession(input.cpToken, input.phone);
@@ -602,39 +622,42 @@ export const vipInstallmentsRouter = router({
       await ensureVipInstallmentInfrastructure();
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
-
-      const orderResult = await db.execute(sql`
-        SELECT orderNumber, customerPhone
-        FROM orderStatusHistory
-        WHERE registrationId=${input.registrationId}
-        ORDER BY id DESC
-        LIMIT 1
-      `);
-      const orderRow = rowsOf<any>(orderResult)[0];
-      if (!orderRow) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido não encontrado para criar o Parcelamento VIP." });
-      if (normalizePhone(orderRow.customerPhone) !== normalizePhone(session.phone)) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Este pedido não pertence à sua sessão." });
-      }
       const membershipResult = await db.execute(sql`
         SELECT id FROM vipMemberships
         WHERE customerId=${validated.eligibility.customer.id} AND status='active' AND expiresAtMs>${Date.now()}
         ORDER BY id DESC LIMIT 1
       `);
       const membership = rowsOf<any>(membershipResult)[0];
-      if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: "VIP ativo não encontrado para este contrato." });
+      if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: "VIP ativo não encontrado para esta compra." });
 
-      return createVipInstallmentContract({
+      return prepareVipInstallmentCheckoutIntent({
+        checkoutToken: input.checkoutToken,
         customerId: validated.eligibility.customer.id,
         membershipId: Number(membership.id),
-        customerName: validated.eligibility.customer.name,
-        customerPhone: session.phone,
-        registrationId: input.registrationId,
-        orderNumber: orderRow.orderNumber == null ? String(input.registrationId) : String(orderRow.orderNumber),
         pricing: validated.pricing,
         quote: validated.quote,
+      });
+    }),
+
+  finalizeCheckout: publicProcedure
+    .input(z.object({
+      cpToken: z.string().min(32),
+      phone: z.string().min(8).max(32).optional(),
+      checkoutToken: z.string().min(16).max(80),
+      registrationId: z.number().int().positive(),
+      paymentProofUrl: z.string().min(1).max(4096),
+      paymentProofMime: z.string().max(128).nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const session = await requireCustomerSession(input.cpToken, input.phone);
+      const customer = await customerByPhone(session.phone);
+      return finalizeVipInstallmentCheckoutIntent({
+        checkoutToken: input.checkoutToken,
+        customerId: customer.id,
+        customerPhone: session.phone,
+        registrationId: input.registrationId,
         proofUrl: input.paymentProofUrl,
         proofMimeType: input.paymentProofMime,
-        createdBy: `customer:${validated.eligibility.customer.id}`,
       });
     }),
 
