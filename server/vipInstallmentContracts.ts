@@ -204,6 +204,16 @@ export async function submitVipInstallmentProof(input: {
     if (!row || Number(row.customerId) !== input.customerId) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Parcela não encontrada." });
     }
+    const previousOpenResult = await tx.execute(sql`
+      SELECT id, installmentNumber
+      FROM vipInstallments
+      WHERE planId=${Number(row.planId)} AND installmentNumber < ${Number(row.installmentNumber)} AND status <> 'paid'
+      ORDER BY installmentNumber ASC
+      LIMIT 1
+    `);
+    if (rowsOf<any>(previousOpenResult)[0]) {
+      throw new TRPCError({ code: "CONFLICT", message: "Pague as parcelas anteriores antes de enviar o comprovante desta parcela." });
+    }
     const status = String(row.status || "");
     if (status === "paid") throw new TRPCError({ code: "CONFLICT", message: "Esta parcela já está paga." });
     if (status === "awaiting_confirmation") {
