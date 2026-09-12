@@ -8,7 +8,7 @@ import { getDb, getSetting, upsertSetting } from "../db";
 import { isVipMemberByPhone } from "./vipMemberships";
 import { resolveVipInstallmentCheckoutPricing } from "../vipInstallmentPricing";
 import { getVipInstallmentProductRule, listVipInstallmentProductRules, saveVipInstallmentProductRule } from "../vipInstallmentProductRules";
-import { prepareVipInstallmentCheckoutIntent, cancelVipInstallmentCheckoutIntent, finalizeVipInstallmentCheckoutIntent, submitVipInstallmentProof, confirmVipInstallmentPayment, recoverVipInstallmentCheckoutOrder } from "../vipInstallmentContracts";
+import { prepareVipInstallmentCheckoutIntent, cancelVipInstallmentCheckoutIntent, finalizeVipInstallmentCheckoutIntent, submitVipInstallmentProof, confirmVipInstallmentPayment, recoverVipInstallmentCheckoutOrder, changeVipInstallmentDueDate, addVipInstallmentAdminNote, cancelVipInstallmentPlan, payoffVipInstallmentPlan } from "../vipInstallmentContracts";
 
 const SETTING_KEYS = {
   enabled: "vip_installments_enabled",
@@ -766,6 +766,52 @@ export const vipInstallmentsRouter = router({
       actorId: 'admin',
       notes: input.notes,
     })),
+
+  adminChangeDueDate: adminProcedure
+    .input(z.object({
+      installmentId: z.number().int().positive(),
+      newDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      notes: z.string().max(500).nullable().optional(),
+    }))
+    .mutation(async ({ input }) => changeVipInstallmentDueDate({ ...input, actorId: 'admin' })),
+
+  adminAddNote: adminProcedure
+    .input(z.object({ planId: z.number().int().positive(), notes: z.string().trim().min(1).max(500) }))
+    .mutation(async ({ input }) => addVipInstallmentAdminNote({ ...input, actorId: 'admin' })),
+
+  adminCancelPlan: adminProcedure
+    .input(z.object({ planId: z.number().int().positive(), notes: z.string().trim().min(1).max(500) }))
+    .mutation(async ({ input }) => cancelVipInstallmentPlan({ ...input, actorId: 'admin' })),
+
+  adminPayoffPlan: adminProcedure
+    .input(z.object({ planId: z.number().int().positive(), notes: z.string().max(500).nullable().optional() }))
+    .mutation(async ({ input }) => payoffVipInstallmentPlan({ ...input, actorId: 'admin' })),
+
+  adminPlanHistory: adminProcedure
+    .input(z.object({ planId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      await ensureVipInstallmentInfrastructure();
+      const db = (await getDb()) as any;
+      const result = await db.execute(sql`
+        SELECT id, planId, installmentId, action, actorType, actorId, previousValue, newValue, notes, createdAt
+        FROM vipInstallmentHistory
+        WHERE planId=${input.planId}
+        ORDER BY id DESC
+        LIMIT 200
+      `);
+      return rowsOf<any>(result).map((row) => ({
+        id: Number(row.id),
+        planId: Number(row.planId),
+        installmentId: row.installmentId == null ? null : Number(row.installmentId),
+        action: String(row.action || ''),
+        actorType: String(row.actorType || ''),
+        actorId: row.actorId == null ? null : String(row.actorId),
+        previousValue: row.previousValue == null ? null : String(row.previousValue),
+        newValue: row.newValue == null ? null : String(row.newValue),
+        notes: row.notes == null ? null : String(row.notes),
+        createdAt: row.createdAt ? new Date(row.createdAt).getTime() : null,
+      }));
+    }),
 
   adminReceivables: adminProcedure.query(async () => {
     await refreshVipInstallmentOverdueStatuses();

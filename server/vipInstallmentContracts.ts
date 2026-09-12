@@ -750,3 +750,199 @@ export async function confirmVipInstallmentPayment(input: {
     };
   });
 }
+
+
+function brazilTodayForAdminAction() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function assertIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new TRPCError({ code: "BAD_REQUEST", message: "Data inválida." });
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Data inválida." });
+  }
+}
+
+export async function changeVipInstallmentDueDate(input: {
+  installmentId: number;
+  newDueDate: string;
+  actorId?: string | null;
+  notes?: string | null;
+}) {
+  assertIsoDate(input.newDueDate);
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  const today = brazilTodayForAdminAction();
+  return db.transaction(async (tx: any) => {
+    const result = await tx.execute(sql`
+      SELECT i.id, i.planId, i.installmentNumber, i.dueDate, i.status, p.status AS planStatus
+      FROM vipInstallments i
+      INNER JOIN vipInstallmentPlans p ON p.id=i.planId
+      WHERE i.id=${input.installmentId}
+      LIMIT 1 FOR UPDATE
+    `);
+    const row = rowsOf<any>(result)[0];
+    if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Parcela não encontrada." });
+    const status = String(row.status || "");
+    if (status === "paid" || status === "cancelled") throw new TRPCError({ code: "CONFLICT", message: "Não é possível alterar o vencimento de uma parcela encerrada." });
+    if (status === "awaiting_confirmation") throw new TRPCError({ code: "CONFLICT", message: "Confirme ou rejeite o comprovante antes de alterar o vencimento." });
+    if (String(row.planStatus || "") === "cancelled" || String(row.planStatus || "") === "paid") {
+      throw new TRPCError({ code: "CONFLICT", message: "Este plano já está encerrado." });
+    }
+    const oldDueDate = row.dueDate instanceof Date ? row.dueDate.toISOString().slice(0, 10) : String(row.dueDate).slice(0, 10);
+    const newStatus = input.newDueDate < today ? "overdue" : "pending";
+    await tx.execute(sql`
+      UPDATE vipInstallments SET dueDate=${input.newDueDate}, status=${newStatus}
+      WHERE id=${input.installmentId}
+    `);
+    await tx.execute(sql`
+      INSERT INTO vipInstallmentHistory
+        (planId, installmentId, action, actorType, actorId, previousValue, newValue, notes)
+      VALUES
+        (${Number(row.planId)}, ${input.installmentId}, 'due_date_changed', 'admin', ${input.actorId || "admin"},
+         ${JSON.stringify({ dueDate: oldDueDate, status })},
+         ${JSON.stringify({ dueDate: input.newDueDate, status: newStatus })}, ${input.notes || null})
+    `);
+    return { success: true, dueDate: input.newDueDate, status: newStatus };
+  });
+}
+
+export async function addVipInstallmentAdminNote(input: {
+  planId: number;
+  notes: string;
+  actorId?: string | null;
+}) {
+  const notes = String(input.notes || "").trim();
+  if (!notes) throw new TRPCError({ code: "BAD_REQUEST", message: "Digite uma observação." });
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  const result = await db.execute(sql`SELECT id FROM vipInstallmentPlans WHERE id=${input.planId} LIMIT 1`);
+  if (!rowsOf<any>(result)[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Plano não encontrado." });
+  await db.execute(sql`
+    INSERT INTO vipInstallmentHistory (planId, installmentId, action, actorType, actorId, notes)
+    VALUES (${input.planId}, NULL, 'admin_note', 'admin', ${input.actorId || "admin"}, ${notes})
+  `);
+  return { success: true };
+}
+
+export async function cancelVipInstallmentPlan(input: {
+  planId: number;
+  actorId?: string | null;
+  notes: string;
+}) {
+  const notes = String(input.notes || "").trim();
+  if (!notes) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o motivo do cancelamento." });
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  return db.transaction(async (tx: any) => {
+    const result = await tx.execute(sql`
+      SELECT id, customerId, status, totalAmountCents, paidAmountCents, balanceCents
+      FROM vipInstallmentPlans WHERE id=${input.planId} LIMIT 1 FOR UPDATE
+    `);
+    const plan = rowsOf<any>(result)[0];
+    if (!plan) throw new TRPCError({ code: "NOT_FOUND", message: "Plano não encontrado." });
+    if (String(plan.status) === "cancelled") return { success: true, alreadyCancelled: true };
+    if (String(plan.status) === "paid" || Number(plan.balanceCents || 0) <= 0) {
+      throw new TRPCError({ code: "CONFLICT", message: "Plano quitado não pode ser cancelado." });
+    }
+    const pendingProof = await tx.execute(sql`
+      SELECT id FROM vipInstallments WHERE planId=${input.planId} AND status='awaiting_confirmation' LIMIT 1 FOR UPDATE
+    `);
+    if (rowsOf<any>(pendingProof)[0]) {
+      throw new TRPCError({ code: "CONFLICT", message: "Existe comprovante aguardando confirmação. Resolva esse pagamento antes de cancelar o plano." });
+    }
+    const previousBalance = Number(plan.balanceCents || 0);
+    await tx.execute(sql`
+      UPDATE vipInstallments SET status='cancelled'
+      WHERE planId=${input.planId} AND status IN ('pending','overdue')
+    `);
+    await tx.execute(sql`
+      UPDATE vipInstallmentPlans SET status='cancelled', balanceCents=0, openSlotCustomerId=NULL
+      WHERE id=${input.planId}
+    `);
+    await tx.execute(sql`
+      INSERT INTO vipInstallmentHistory
+        (planId, installmentId, action, actorType, actorId, previousValue, newValue, notes)
+      VALUES
+        (${input.planId}, NULL, 'plan_cancelled', 'admin', ${input.actorId || "admin"},
+         ${JSON.stringify({ status: String(plan.status), balanceCents: previousBalance })},
+         ${JSON.stringify({ status: "cancelled", balanceCents: 0 })}, ${notes})
+    `);
+    return { success: true, alreadyCancelled: false, cancelledBalanceCents: previousBalance };
+  });
+}
+
+export async function payoffVipInstallmentPlan(input: {
+  planId: number;
+  actorId?: string | null;
+  notes?: string | null;
+}) {
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  const now = Date.now();
+  return db.transaction(async (tx: any) => {
+    const result = await tx.execute(sql`
+      SELECT p.id, p.customerId, p.status, p.productName, p.orderNumber, p.totalAmountCents,
+             p.paidAmountCents, p.balanceCents, c.name AS customerName, c.phone AS customerPhone
+      FROM vipInstallmentPlans p
+      INNER JOIN customers c ON c.id=p.customerId
+      WHERE p.id=${input.planId}
+      LIMIT 1 FOR UPDATE
+    `);
+    const plan = rowsOf<any>(result)[0];
+    if (!plan) throw new TRPCError({ code: "NOT_FOUND", message: "Plano não encontrado." });
+    if (String(plan.status) === "paid" || Number(plan.balanceCents || 0) <= 0) {
+      return { success: true, alreadyPaid: true, balanceCents: 0 };
+    }
+    if (String(plan.status) === "cancelled") throw new TRPCError({ code: "CONFLICT", message: "Plano cancelado não pode ser quitado." });
+    const pendingProof = await tx.execute(sql`
+      SELECT id FROM vipInstallments WHERE planId=${input.planId} AND status='awaiting_confirmation' LIMIT 1 FOR UPDATE
+    `);
+    if (rowsOf<any>(pendingProof)[0]) {
+      throw new TRPCError({ code: "CONFLICT", message: "Existe comprovante aguardando confirmação. Resolva esse pagamento antes da quitação antecipada." });
+    }
+    const balanceCents = Number(plan.balanceCents || 0);
+    if (!Number.isSafeInteger(balanceCents) || balanceCents <= 0 || balanceCents > 2_000_000_000) {
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Saldo inválido para lançamento no Financeiro." });
+    }
+    const financeInsert = await tx.execute(sql`
+      INSERT INTO financialSales
+        (registrationId, customerName, customerPhone, productName, productOption,
+         saleValue, costValue, paymentMethod, status, saleDate, receivedDate, notes)
+      VALUES
+        (NULL, ${String(plan.customerName || "")}, ${normalizePhone(plan.customerPhone)},
+         ${String(plan.productName || "Parcelamento VIP")}, 'Quitação antecipada',
+         ${balanceCents}, 0, 'pix', 'pago', ${now}, ${now},
+         ${`[Parcelamento VIP] Quitação antecipada do plano #${input.planId} | Pedido ${String(plan.orderNumber || "-")}`})
+    `);
+    const financeSaleId = insertIdOf(financeInsert);
+    await tx.execute(sql`
+      UPDATE vipInstallments
+      SET paidAmountCents=amountCents, status='paid', paidAtMs=${now}, financeSaleId=${financeSaleId}
+      WHERE planId=${input.planId} AND status IN ('pending','overdue')
+    `);
+    await tx.execute(sql`
+      UPDATE vipInstallmentPlans
+      SET paidAmountCents=totalAmountCents, balanceCents=0, status='paid', openSlotCustomerId=NULL
+      WHERE id=${input.planId}
+    `);
+    await tx.execute(sql`
+      INSERT INTO vipInstallmentHistory
+        (planId, installmentId, action, actorType, actorId, previousValue, newValue, notes)
+      VALUES
+        (${input.planId}, NULL, 'plan_payoff', 'admin', ${input.actorId || "admin"},
+         ${JSON.stringify({ balanceCents, paidAmountCents: Number(plan.paidAmountCents || 0) })},
+         ${JSON.stringify({ balanceCents: 0, paidAmountCents: Number(plan.totalAmountCents || 0), financeSaleId })}, ${input.notes || null})
+    `);
+    return { success: true, alreadyPaid: false, paidCents: balanceCents, balanceCents: 0, financeSaleId };
+  });
+}
