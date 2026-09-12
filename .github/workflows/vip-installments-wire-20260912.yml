@@ -23,8 +23,8 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - name: Apply contract lifecycle patch
-        run: python scripts/apply_vip_installment_contract_router_20260912.py
+      - name: Apply customer and receivables UI patch
+        run: python scripts/apply_vip_installment_customer_admin_ui_20260912.py
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run focused VIP tests
@@ -39,20 +39,20 @@ jobs:
           if [ "$status" -eq 0 ]; then
             exit 0
           fi
-          grep -E "(server/routers/vipInstallments\.ts|server/vipInstallmentContracts\.ts|server/vipInstallmentPricing\.ts|server/vipInstallmentProductRules\.ts|shared/vipInstallments\.ts|shared/vipCheckoutPricing\.ts|client/src/components/AdminVipInstallmentsPanel\.tsx|client/src/components/AdminVipInstallmentProductsPanel\.tsx|client/src/pages/AdminVip\.tsx)" /tmp/tsc.log > /tmp/vip-errors.log || true
+          grep -E "(server/routers/vipInstallments\.ts|server/vipInstallmentContracts\.ts|server/vipInstallmentPricing\.ts|server/vipInstallmentProductRules\.ts|shared/vipInstallments\.ts|shared/vipCheckoutPricing\.ts|client/src/components/AdminVipInstallmentsPanel\.tsx|client/src/components/AdminVipInstallmentProductsPanel\.tsx|client/src/components/AdminVipReceivablesPanel\.tsx|client/src/pages/AdminVip\.tsx|client/src/pages/VipInstallmentPayments\.tsx|client/src/App\.tsx)" /tmp/tsc.log > /tmp/vip-errors.log || true
           if [ -s /tmp/vip-errors.log ]; then
             cat /tmp/vip-errors.log
             exit 1
           fi
-          echo "No new VIP installment contract TypeScript errors."
+          echo "No new VIP installment UI TypeScript errors."
       - name: Commit only after focused validations pass
         shell: bash
         run: |
           git config user.name "h2-vip-guard"
           git config user.email "actions@users.noreply.github.com"
-          git add server/routers/vipInstallments.ts server/vipInstallmentContracts.ts
+          git add client/src/App.tsx client/src/pages/AdminVip.tsx client/src/pages/VipInstallmentPayments.tsx client/src/components/AdminVipReceivablesPanel.tsx
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "feat(vip): add installment contract and payment lifecycle"
+          git commit -m "feat(vip): add customer installments and admin receivables UI"
           git push origin HEAD:feat/vip-parcelamento-seguro-2026-09-12
