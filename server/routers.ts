@@ -35,6 +35,7 @@ import { adCampaignsRouter } from "./routers/adCampaigns";
 import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess } from "./routers/optionPriceModels";
 import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";
 import { vipInstallmentsRouter } from "./routers/vipInstallments";
+import { vipInstallmentPaymentsRouter } from "./routers/vipInstallmentPayments";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -55,6 +56,7 @@ import { h2AssistantRouter } from "./routers/h2Assistant";
 import { h2AdsRouter } from "./routers/h2ads";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
+import { linkVipInstallmentReservationToOrder, prepareVipInstallmentOrder, releaseVipInstallmentReservation, reserveVipInstallmentPlan } from "./vipInstallmentContractService";
 import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
 import { getConfiguredGlobalProgressKeys, sanitizeGlobalProgressKeys } from "../shared/orderProgressSequence";
@@ -332,6 +334,7 @@ export const appRouter = router({
   optionPriceModels: optionPriceModelsRouter,
   vipMemberships: vipMembershipsRouter,
   vipInstallments: vipInstallmentsRouter,
+  vipInstallmentPayments: vipInstallmentPaymentsRouter,
   resellers: resellersRouter,
   schedule: scheduleRouter,
   spreadsheet: spreadsheetRouter,
@@ -1268,6 +1271,12 @@ export const appRouter = router({
         docCustomName: z.string().optional(),
         price: z.string().optional(), // valor pago pelo cliente (ex: "R$ 350,00")
         priceModelId: z.number().int().positive().optional(), // modelo/categoria de preço escolhido
+        warrantyTierId: z.number().int().positive().optional(), // garantia selecionada para validação server-side
+        vipInstallment: z.object({
+          checkoutKey: z.string().min(16).max(64).regex(/^[A-Za-z0-9_-]+$/),
+          installmentCount: z.number().int().min(2).max(120),
+          frequency: z.enum(['daily', 'weekly', 'monthly']),
+        }).optional(),
         thirdPartyName: z.string().optional(), // nome do cliente final (revendedor)
         thirdPartyPhone: z.string().optional(), // telefone do cliente final (revendedor)
         resellerDiscountApplied: z.number().optional(), // valor do desconto aplicado em R$
@@ -1473,6 +1482,60 @@ export const appRouter = router({
           // Garantir que temos o phone: usar input.phone ou extrair do cpToken
           const effectivePhone = (input.phone || cpTokenPhone || '').replace(/\D/g, '');
 
+          // Parcelamento VIP: validar preço/regras e reservar o único slot aberto ANTES
+          // de persistir o pedido. A chave do checkout torna retry e duas abas idempotentes.
+          let preparedVipInstallment: Awaited<ReturnType<typeof prepareVipInstallmentOrder>> | null = null;
+          let vipInstallmentReservation: Awaited<ReturnType<typeof reserveVipInstallmentPlan>> | null = null;
+          if (input.vipInstallment) {
+            if (!cpTokenValid || !input.cpToken) {
+              return { success: false, message: 'Entre na sua conta para usar o Parcelamento VIP.' };
+            }
+            if ((input.cartItemCount || 1) > 1 || input.cartGroupId) {
+              return { success: false, message: 'Nesta versão, o Parcelamento VIP aceita um produto por compra.' };
+            }
+            if (!input.productId || !input.optionId) {
+              return { success: false, message: 'Produto ou opção não identificados para o Parcelamento VIP.' };
+            }
+            try {
+              preparedVipInstallment = await prepareVipInstallmentOrder({
+                cpToken: input.cpToken,
+                phone: effectivePhone,
+                item: {
+                  productId: input.productId,
+                  optionId: input.optionId,
+                  priceModelId: input.priceModelId || null,
+                  warrantyTierId: input.warrantyTierId || null,
+                },
+                couponCode: input.couponCode || undefined,
+                installmentCount: input.vipInstallment.installmentCount,
+                frequency: input.vipInstallment.frequency,
+                paymentProofUrl,
+                paymentProofMime: input.paymentProofMime || null,
+              });
+              vipInstallmentReservation = await reserveVipInstallmentPlan({
+                prepared: preparedVipInstallment,
+                checkoutKey: input.vipInstallment.checkoutKey,
+                createdBy: 'customer_checkout',
+              });
+              if (vipInstallmentReservation.linked && vipInstallmentReservation.registrationId) {
+                return {
+                  success: true,
+                  message: 'Pedido parcelado já registrado.',
+                  registrationId: vipInstallmentReservation.registrationId,
+                  orderStatusId: vipInstallmentReservation.orderStatusId,
+                  orderNumber: vipInstallmentReservation.orderNumber,
+                  vipInstallmentPlanId: vipInstallmentReservation.planId,
+                  duplicate: true,
+                };
+              }
+              // O preço mostrado no pedido é reconstruído pelo servidor e representa o
+              // principal da compra; recebimentos entram no Financeiro somente por parcela.
+              input.price = `R$ ${(preparedVipInstallment.pricing.totalCents / 100).toFixed(2).replace('.', ',')}`;
+            } catch (error: any) {
+              return { success: false, message: error?.message || 'Não foi possível reservar o Parcelamento VIP.' };
+            }
+          }
+
           let persistedOrder: Awaited<ReturnType<typeof persistPublicOrder>> | undefined;
           let persistenceDb: any;
           let outerRegId: number | undefined;
@@ -1502,7 +1565,38 @@ export const appRouter = router({
           }
           if (!isPersistedPublicOrder(persistedOrder)) {
             console.error('[OrderStatus] Pedido rejeitado: registrationId/status inicial não foram persistidos.');
+            if (input.vipInstallment && preparedVipInstallment) {
+              await releaseVipInstallmentReservation({
+                checkoutKey: input.vipInstallment.checkoutKey,
+                customerId: preparedVipInstallment.customerId,
+                reason: 'order_persistence_failed',
+              }).catch(() => {});
+            }
             return { success: false, message: 'Não foi possível registrar o pedido. Tente novamente; nenhum pedido foi confirmado.' };
+          }
+
+          if (input.vipInstallment && preparedVipInstallment) {
+            let linked = false;
+            let lastLinkError: any = null;
+            for (let attempt = 1; attempt <= 3 && !linked; attempt += 1) {
+              try {
+                await linkVipInstallmentReservationToOrder({
+                  checkoutKey: input.vipInstallment.checkoutKey,
+                  customerId: preparedVipInstallment.customerId,
+                  registrationId: persistedOrder.registrationId,
+                  orderStatusId: persistedOrder.orderStatusId,
+                  orderNumber: persistedOrder.orderNumber || null,
+                });
+                linked = true;
+              } catch (error) {
+                lastLinkError = error;
+                if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 150 * attempt));
+              }
+            }
+            if (!linked) {
+              console.error('[VIP Installments] Pedido persistido, mas vínculo do contrato falhou:', lastLinkError);
+              return { success: false, message: 'Pedido registrado, mas o parcelamento precisa ser reconciliado pelo suporte. Não tente uma nova compra.' };
+            }
           }
           try {
             if (!cpTokenValid) await consumeAccessCode(input.accessCode || '', input.phone);
@@ -1837,8 +1931,9 @@ export const appRouter = router({
             } catch (e) { console.error('[PIN] Erro ao gerar senha:', e); }
           }
 
-          // Lançar automaticamente no Controle Financeiro como Pendente
-          if (outerRegId) {
+          // Compra parcelada não lança o valor total como receita pendente. Cada parcela entra apenas após confirmação do ADM.
+          // Compra normal preserva exatamente o fluxo financeiro atual.
+          if (outerRegId && !preparedVipInstallment) {
             try {
               // Extrair preço do nameOption (que pode conter tier de garantia)
               // Formato: "Nome Opção - Garantia: X corridas" ou apenas "Nome Opção"
