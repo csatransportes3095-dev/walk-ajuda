@@ -1,0 +1,114 @@
+/* H2 — atalhos principais da home (mobile-first)
+   Corrige os 3 cards apertados no celular sem alterar a lógica das rotas. */
+
+header button[aria-label="Acompanhar pedido"],
+header button[aria-label="Empréstimo"],
+header button[aria-label="Planilha de gastos"] {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+header button[aria-label="Acompanhar pedido"] > span,
+header button[aria-label="Empréstimo"] > span,
+header button[aria-label="Planilha de gastos"] > span {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  header .container > .grid:has(> button[aria-label="Acompanhar pedido"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+
+  header button[aria-label="Acompanhar pedido"],
+  header button[aria-label="Empréstimo"] {
+    min-height: 112px !important;
+    padding: 14px 10px !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 9px !important;
+    text-align: center !important;
+  }
+
+  header button[aria-label="Planilha de gastos"] {
+    grid-column: 1 / -1 !important;
+    min-height: 92px !important;
+    padding: 14px 18px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 14px !important;
+    text-align: left !important;
+  }
+
+  header button[aria-label="Acompanhar pedido"] > span:first-child,
+  header button[aria-label="Empréstimo"] > span:first-child,
+  header button[aria-label="Planilha de gastos"] > span:first-child {
+    width: 46px !important;
+    height: 46px !important;
+    flex: 0 0 46px !important;
+    border-radius: 15px !important;
+  }
+
+  header button[aria-label="Acompanhar pedido"] > span:last-child,
+  header button[aria-label="Empréstimo"] > span:last-child {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+  }
+
+  header button[aria-label="Planilha de gastos"] > span:last-child {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    text-align: left !important;
+  }
+
+  header button[aria-label="Acompanhar pedido"] > span:last-child > span:first-child,
+  header button[aria-label="Empréstimo"] > span:last-child > span:first-child,
+  header button[aria-label="Planilha de gastos"] > span:last-child > span:first-child {
+    display: block !important;
+    font-size: 12px !important;
+    line-height: 1.18 !important;
+    letter-spacing: .02em !important;
+    white-space: normal !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+  }
+
+  header button[aria-label="Acompanhar pedido"] > span:last-child > span:last-child,
+  header button[aria-label="Empréstimo"] > span:last-child > span:last-child,
+  header button[aria-label="Planilha de gastos"] > span:last-child > span:last-child {
+    display: block !important;
+    margin-top: 5px !important;
+    font-size: 10px !important;
+    line-height: 1.15 !important;
+    opacity: .72;
+  }
+
+  header button[aria-label="Acompanhar pedido"]::before,
+  header button[aria-label="Empréstimo"]::before,
+  header button[aria-label="Planilha de gastos"]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 20%;
+    right: 20%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent);
+    pointer-events: none;
+  }
+}
+
+@media (min-width: 640px) {
+  header button[aria-label="Acompanhar pedido"],
+  header button[aria-label="Empréstimo"],
+  header button[aria-label="Planilha de gastos"] {
+    min-height: 88px !important;
+  }
+}
