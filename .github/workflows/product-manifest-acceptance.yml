@@ -1,5 +1,6 @@
 name: VIP PIX Entry Display
 
+# validation trigger
 on:
   push:
     branches:
