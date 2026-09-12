@@ -74,6 +74,24 @@ jobs:
               raise SystemExit('active VIP permission guard must be unique')
           vip.write_text(v, encoding='utf-8')
 
+          admin = Path('client/src/pages/AdminVip.tsx')
+          a = admin.read_text(encoding='utf-8')
+          admin_import_anchor = 'import AdminHeader from "@/components/AdminHeader";'
+          admin_import_line = 'import AdminVipInstallmentsPanel from "@/components/AdminVipInstallmentsPanel";'
+          if admin_import_line not in a:
+              if a.count(admin_import_anchor) != 1:
+                  raise SystemExit(f'unexpected AdminVip import anchor count: {a.count(admin_import_anchor)}')
+              a = a.replace(admin_import_anchor, admin_import_anchor + '\n' + admin_import_line, 1)
+          panel_line = '        <AdminVipInstallmentsPanel />'
+          if panel_line not in a:
+              close_anchor = '        </section>\n      </main>\n\n      {actionModal &&'
+              if a.count(close_anchor) != 1:
+                  raise SystemExit(f'unexpected AdminVip close anchor count: {a.count(close_anchor)}')
+              a = a.replace(close_anchor, '        </section>\n' + panel_line + '\n      </main>\n\n      {actionModal &&', 1)
+          if a.count(admin_import_line) != 1 or a.count(panel_line) != 1:
+              raise SystemExit('AdminVip installment panel integration must be unique')
+          admin.write_text(a, encoding='utf-8')
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -91,8 +109,7 @@ jobs:
             echo "TypeScript project check passed."
             exit 0
           fi
-          echo "Project has pre-existing TypeScript errors; checking VIP-owned files only."
-          grep -E "(server/routers/vipInstallments\.ts|server/vipInstallmentPricing\.ts|shared/vipInstallments\.ts|shared/vipCheckoutPricing\.ts|client/src/components/AdminVipInstallmentsPanel\.tsx)" /tmp/tsc.log > /tmp/vip-errors.log || true
+          grep -E "(server/routers/vipInstallments\.ts|server/vipInstallmentPricing\.ts|shared/vipInstallments\.ts|shared/vipCheckoutPricing\.ts|client/src/components/AdminVipInstallmentsPanel\.tsx|client/src/pages/AdminVip\.tsx)" /tmp/tsc.log > /tmp/vip-errors.log || true
           if [ -s /tmp/vip-errors.log ]; then
             cat /tmp/vip-errors.log
             exit 1
@@ -107,10 +124,10 @@ jobs:
         run: |
           git config user.name "h2-vip-guard"
           git config user.email "actions@users.noreply.github.com"
-          git add server/routers.ts server/routers/vipInstallments.ts
+          git add server/routers.ts server/routers/vipInstallments.ts client/src/pages/AdminVip.tsx
           if git diff --cached --quiet; then
-            echo "VIP backend already wired"
+            echo "VIP installment integration already applied"
             exit 0
           fi
-          git commit -m "feat(vip): wire installments with active VIP guard"
+          git commit -m "feat(vip): wire installment backend and admin panel"
           git push origin HEAD:feat/vip-parcelamento-seguro-2026-09-12
