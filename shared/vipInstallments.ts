@@ -27,6 +27,24 @@ export type VipInstallmentQuote = {
 
 const MAX_SAFE_MONEY_CENTS = 100_000_000_000;
 
+export const VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS = 15 * 60 * 1000;
+export const VIP_INSTALLMENT_CHECKOUT_CLOCK_GRACE_MS = 30 * 1000;
+
+export function isVipInstallmentOrderInsideReservation(input: {
+  expiresAtMs: number;
+  orderCreatedAtMs: number;
+  graceMs?: number;
+}): boolean {
+  const graceMs = input.graceMs ?? VIP_INSTALLMENT_CHECKOUT_CLOCK_GRACE_MS;
+  if (
+    !Number.isSafeInteger(input.expiresAtMs) || input.expiresAtMs <= 0 ||
+    !Number.isSafeInteger(input.orderCreatedAtMs) || input.orderCreatedAtMs <= 0 ||
+    !Number.isSafeInteger(graceMs) || graceMs < 0 || graceMs > 5 * 60 * 1000
+  ) return false;
+  const preparedAtMs = input.expiresAtMs - VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS;
+  return input.orderCreatedAtMs >= preparedAtMs - graceMs && input.orderCreatedAtMs <= input.expiresAtMs + graceMs;
+}
+
 function assertInteger(name: string, value: number, min: number, max: number) {
   if (!Number.isSafeInteger(value) || value < min || value > max) {
     throw new Error(`${name} inválido.`);

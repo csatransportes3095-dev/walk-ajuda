@@ -495,6 +495,25 @@ export default function Home() {
     } catch { return {}; }
   };
 
+  const persistVipInstallmentRecovery = (registrationId: number | null, checkoutToken?: string) => {
+    if (checkoutToken) vipCheckoutTokenRef.current = checkoutToken;
+    vipPendingRegistrationIdRef.current = registrationId;
+    try {
+      const raw = localStorage.getItem(PROGRESS_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      saved.vipInstallment = {
+        mode: 'vip_installment',
+        installmentCount: vipInstallmentSelection.installmentCount,
+        frequency: vipInstallmentSelection.frequency,
+        checkoutToken: vipCheckoutTokenRef.current || null,
+        pendingRegistrationId: registrationId,
+      };
+      saved.savedAt = Date.now();
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify(saved));
+    } catch {}
+  };
+
   // Quando o step vai para 'success' e o cliente NÃO é novo, pular o formulário de indicação
   useEffect(() => {
     // A indicação válida pertence ao cadastro, antes do primeiro pedido. Depois de
@@ -526,11 +545,18 @@ export default function Home() {
       carDocumentYear,
       cadastroSubStep,
       flowOrigin,
+      vipInstallment: vipInstallmentSelection.mode === 'vip_installment' ? {
+        mode: 'vip_installment',
+        installmentCount: vipInstallmentSelection.installmentCount,
+        frequency: vipInstallmentSelection.frequency,
+        checkoutToken: vipCheckoutTokenRef.current || null,
+        pendingRegistrationId: vipPendingRegistrationIdRef.current,
+      } : null,
       storefrontScrollY: storefrontScrollRef.current,
       savedAt: Date.now(),
     };
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch {}
-  }, [step, selectedProduct, selectedOption, selectedPriceModel, questionAnswers, questionAudioAnswers, questionAudioFlowId, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin]);
+  }, [step, selectedProduct, selectedOption, selectedPriceModel, questionAnswers, questionAudioAnswers, questionAudioFlowId, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin, vipInstallmentSelection.mode, vipInstallmentSelection.installmentCount, vipInstallmentSelection.frequency]);
 
   // Cada rascunho é retomado somente no canal onde foi iniciado.
   useEffect(() => {
@@ -617,6 +643,28 @@ export default function Home() {
       if (saved.couponCode) setCouponCode(saved.couponCode);
       if (saved.carDocumentYear) setCarDocumentYear(saved.carDocumentYear);
       if (saved.cadastroSubStep) setCadastroSubStep(saved.cadastroSubStep);
+      const savedVip = saved.vipInstallment;
+      if (savedVip?.mode === 'vip_installment') {
+        const savedCount = Number(savedVip.installmentCount);
+        const savedFrequency = savedVip.frequency === 'daily' || savedVip.frequency === 'weekly' || savedVip.frequency === 'monthly' ? savedVip.frequency : 'monthly';
+        const pendingRegistrationId = Number(savedVip.pendingRegistrationId || 0);
+        const savedToken = typeof savedVip.checkoutToken === 'string' ? savedVip.checkoutToken : '';
+        setVipInstallmentSelection(prev => ({
+          ...prev,
+          mode: 'vip_installment',
+          installmentCount: Number.isInteger(savedCount) && savedCount >= 2 && savedCount <= 120 ? savedCount : 2,
+          frequency: savedFrequency,
+          quote: null,
+        }));
+        if (pendingRegistrationId > 0 && savedToken.length >= 16 && savedToken.length <= 80) {
+          vipPendingRegistrationIdRef.current = pendingRegistrationId;
+          vipCheckoutTokenRef.current = savedToken;
+        } else {
+          vipPendingRegistrationIdRef.current = null;
+          vipCheckoutTokenRef.current = '';
+          if (saved.cadastroSubStep === 'pagamento') setCadastroSubStep('resumo');
+        }
+      }
       if (saved.flowOrigin === 'storefront' || saved.flowOrigin === 'cart' || saved.flowOrigin === 'legacy') setFlowOrigin(saved.flowOrigin);
       if (typeof saved.storefrontScrollY === 'number') storefrontScrollRef.current = saved.storefrontScrollY;
       setStep(saved.step || 'home');
@@ -749,6 +797,15 @@ export default function Home() {
   };
 
   const handleStartFresh = () => {
+    try {
+      const raw = localStorage.getItem(PROGRESS_KEY);
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Number(saved?.vipInstallment?.pendingRegistrationId || 0) > 0) {
+        toast.error('Existe um pedido Parcelamento VIP já criado. Retome o pedido para concluir o contrato.');
+        void restoreProgress();
+        return;
+      }
+    } catch {}
     localStorage.removeItem(PROGRESS_KEY);
     localStorage.removeItem(UPLOADED_FILES_KEY);
     setShowResumeModal(false);
@@ -989,6 +1046,7 @@ export default function Home() {
   };
 
   const releaseVipCheckoutReservation = useCallback(() => {
+    if (vipPendingRegistrationIdRef.current) return;
     const checkoutToken = vipCheckoutTokenRef.current;
     if (!checkoutToken) return;
     const cpToken = localStorage.getItem('cp_token') || '';
@@ -1723,7 +1781,7 @@ export default function Home() {
 
       if (isPersistedOrderResult(result)) {
         if (vipInstallmentActive) {
-          vipPendingRegistrationIdRef.current = result.registrationId;
+          persistVipInstallmentRecovery(result.registrationId, vipCheckoutTokenRef.current);
           setSubmitProgress('Finalizando Parcelamento VIP...');
           const cpToken = localStorage.getItem('cp_token') || '';
           const finalized = await finalizeVipInstallmentCheckoutMutation.mutateAsync({
@@ -3824,6 +3882,7 @@ export default function Home() {
                       frequency: vipInstallmentSelection.frequency,
                     });
                     setVipInstallmentSelection(prev => ({ ...prev, quote: { pricing: prepared.pricing, quote: prepared.quote } }));
+                    persistVipInstallmentRecovery(null, checkoutToken);
                     setCadastroSubStep('pagamento');
                   } catch (error: any) {
                     vipCheckoutTokenRef.current = '';

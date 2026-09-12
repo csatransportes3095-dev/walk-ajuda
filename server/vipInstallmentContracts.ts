@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
-import type { VipInstallmentQuote } from "../shared/vipInstallments";
+import { VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS, isVipInstallmentOrderInsideReservation, type VipInstallmentQuote } from "../shared/vipInstallments";
 import type { VipResolvedCheckoutPricing } from "./vipInstallmentPricing";
 
 function rowsOf<T>(result: any): T[] {
@@ -65,7 +65,7 @@ export async function prepareVipInstallmentCheckoutIntent(input: {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Identificador do checkout inválido." });
   }
   const now = Date.now();
-  const expiresAtMs = now + 15 * 60 * 1000;
+  const expiresAtMs = now + VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS;
 
   try {
     return await db.transaction(async (tx: any) => {
@@ -79,7 +79,7 @@ export async function prepareVipInstallmentCheckoutIntent(input: {
       `);
 
       const sameTokenResult = await tx.execute(sql`
-        SELECT id, customerId, status, expiresAtMs, pricingJson, quoteJson
+        SELECT id, customerId, status, expiresAtMs, pricingJson, quoteJson, finalizedRegistrationId
         FROM vipInstallmentCheckoutIntents
         WHERE checkoutToken=${checkoutToken}
         LIMIT 1
@@ -89,6 +89,9 @@ export async function prepareVipInstallmentCheckoutIntent(input: {
       if (sameToken) {
         if (Number(sameToken.customerId) !== input.customerId) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Checkout não pertence a este cliente." });
+        }
+        if (sameToken.finalizedRegistrationId && String(sameToken.status) !== 'finalized') {
+          throw new TRPCError({ code: "CONFLICT", message: "Este checkout já possui um pedido criado. Retome a finalização do mesmo pedido." });
         }
         if (String(sameToken.status) === 'prepared' && Number(sameToken.expiresAtMs) > now) {
           return {
@@ -163,7 +166,7 @@ export async function cancelVipInstallmentCheckoutIntent(input: {
   const checkoutToken = String(input.checkoutToken || '').trim();
   return db.transaction(async (tx: any) => {
     const result = await tx.execute(sql`
-      SELECT id, customerId, status, finalizedPlanId
+      SELECT id, customerId, status, finalizedPlanId, finalizedRegistrationId
       FROM vipInstallmentCheckoutIntents
       WHERE checkoutToken=${checkoutToken}
       LIMIT 1
@@ -176,6 +179,9 @@ export async function cancelVipInstallmentCheckoutIntent(input: {
     }
     if (String(row.status) === 'finalized' || row.finalizedPlanId) {
       return { success: true, cancelled: false, finalized: true };
+    }
+    if (row.finalizedRegistrationId) {
+      return { success: true, cancelled: false, orderCreated: true, registrationId: Number(row.finalizedRegistrationId) };
     }
     await tx.execute(sql`
       UPDATE vipInstallmentCheckoutIntents
@@ -212,24 +218,45 @@ export async function finalizeVipInstallmentCheckoutIntent(input: {
   if (String(intent.status) === 'finalized' && intent.finalizedPlanId) {
     return { success: true, planId: Number(intent.finalizedPlanId), registrationId: Number(intent.finalizedRegistrationId || input.registrationId), alreadyFinalized: true };
   }
-  if (String(intent.status) !== 'prepared') {
+  const intentStatus = String(intent.status || '');
+  if (intentStatus !== 'prepared' && intentStatus !== 'expired') {
     throw new TRPCError({ code: "CONFLICT", message: "Esta reserva de parcelamento não está disponível para finalização." });
-  }
-  if (Number(intent.expiresAtMs || 0) <= now) {
-    await db.execute(sql`UPDATE vipInstallmentCheckoutIntents SET status='expired', activeCustomerId=NULL WHERE id=${Number(intent.id)} AND status='prepared'`);
-    throw new TRPCError({ code: "CONFLICT", message: "A reserva do parcelamento expirou. Refaça a simulação antes de finalizar." });
   }
 
   const orderResult = await db.execute(sql`
-    SELECT orderNumber, customerPhone
+    SELECT orderNumber, customerPhone, UNIX_TIMESTAMP(createdAt) * 1000 AS orderCreatedAtMs
     FROM orderStatusHistory
     WHERE registrationId=${input.registrationId}
-    ORDER BY id DESC LIMIT 1
+    ORDER BY id ASC LIMIT 1
   `);
   const order = rowsOf<any>(orderResult)[0];
   if (!order || normalizePhone(order.customerPhone) !== normalizePhone(input.customerPhone)) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Não foi possível confirmar que este pedido pertence à reserva do Parcelamento VIP." });
   }
+  const expiresAtMs = Number(intent.expiresAtMs || 0);
+  const orderCreatedAtMs = Math.trunc(Number(order.orderCreatedAtMs || 0));
+  if (!isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs })) {
+    if (intentStatus === 'prepared' && expiresAtMs <= now) {
+      await db.execute(sql`UPDATE vipInstallmentCheckoutIntents SET status='expired', activeCustomerId=NULL WHERE id=${Number(intent.id)} AND status='prepared'`);
+    }
+    throw new TRPCError({ code: "CONFLICT", message: "Este pedido não foi criado dentro da reserva válida do Parcelamento VIP." });
+  }
+  if (intentStatus === 'prepared' && expiresAtMs <= now) {
+    await db.execute(sql`UPDATE vipInstallmentCheckoutIntents SET status='expired', activeCustomerId=NULL WHERE id=${Number(intent.id)} AND status='prepared'`);
+  }
+
+  await db.execute(sql`
+    UPDATE vipInstallmentCheckoutIntents
+    SET finalizedRegistrationId=${input.registrationId}
+    WHERE id=${Number(intent.id)}
+      AND (finalizedRegistrationId IS NULL OR finalizedRegistrationId=${input.registrationId})
+  `);
+  const boundResult = await db.execute(sql`SELECT finalizedRegistrationId FROM vipInstallmentCheckoutIntents WHERE id=${Number(intent.id)} LIMIT 1`);
+  const bound = rowsOf<any>(boundResult)[0];
+  if (!bound || Number(bound.finalizedRegistrationId) !== input.registrationId) {
+    throw new TRPCError({ code: "CONFLICT", message: "Esta reserva já está vinculada a outro pedido." });
+  }
+
   const orderNumber = order.orderNumber == null ? String(input.registrationId) : String(order.orderNumber);
 
   const existingResult = await db.execute(sql`

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildVipInstallmentDueDates,
   calculateVipInstallmentQuote,
+  isVipInstallmentOrderInsideReservation,
   splitInstallmentAmounts,
+  VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS,
 } from "../shared/vipInstallments";
 import { applyCouponDiscountToCents, parseBrazilMoneyToCents } from "../shared/vipCheckoutPricing";
 
@@ -60,5 +62,17 @@ describe("VIP checkout pricing", () => {
     expect(applyCouponDiscountToCents(30000, { type: "fixed", value: 50 })).toEqual({ subtotalCents: 30000, discountCents: 5000, totalCents: 25000 });
     expect(applyCouponDiscountToCents(3000, { type: "fixed", value: 50 }).totalCents).toBe(0);
     expect(() => applyCouponDiscountToCents(10000, { type: "percentage", value: 101 })).toThrow();
+  });
+});
+
+
+describe("VIP checkout recovery window", () => {
+  it("accepts only an order created inside the frozen checkout reservation", () => {
+    const expiresAtMs = 2_000_000_000_000;
+    const preparedAtMs = expiresAtMs - VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS;
+    expect(isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs: preparedAtMs })).toBe(true);
+    expect(isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs: expiresAtMs })).toBe(true);
+    expect(isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs: preparedAtMs - 31_000 })).toBe(false);
+    expect(isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs: expiresAtMs + 31_000 })).toBe(false);
   });
 });
