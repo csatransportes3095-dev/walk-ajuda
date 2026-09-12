@@ -35,6 +35,7 @@ import { adCampaignsRouter } from "./routers/adCampaigns";
 import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess } from "./routers/optionPriceModels";
 import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";
 import { vipInstallmentsRouter } from "./routers/vipInstallments";
+import { bindVipInstallmentCheckoutOrder } from "./vipInstallmentContracts";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -1258,6 +1259,7 @@ export const appRouter = router({
         paymentProof: z.string().optional(),       // base64 (legado)
         paymentProofUrl: z.string().optional(),    // URL já enviada via /api/upload/client-file
         paymentProofMime: z.string().optional(),
+        vipInstallmentCheckoutToken: z.string().min(16).max(80).optional(),
         answers: z.string().optional(),
         // Referências aditivas de respostas em áudio: usadas somente pelo novo tipo de pergunta.
         productId: z.number().int().positive().optional(),
@@ -1495,6 +1497,17 @@ export const appRouter = router({
                 generateOrderNumber,
               });
               outerRegId = persistedOrder.registrationId;
+              if (input.vipInstallmentCheckoutToken && outerRegId) {
+                try {
+                  await bindVipInstallmentCheckoutOrder({
+                    checkoutToken: input.vipInstallmentCheckoutToken,
+                    registrationId: outerRegId,
+                    customerPhone: effectivePhone,
+                  });
+                } catch (vipBindError) {
+                  console.error('[VIP Installments] Pedido persistido, mas vínculo imediato da reserva falhou:', vipBindError);
+                }
+              }
               console.log('[OrderStatus] Pedido persistido antes das notificações - regId:', outerRegId, 'status:', persistedOrder.initialStatus, 'orderStatusId:', persistedOrder.orderStatusId);
             }
           } catch (e) {

@@ -157,6 +157,156 @@ export async function prepareVipInstallmentCheckoutIntent(input: {
 }
 
 
+export async function bindVipInstallmentCheckoutOrder(input: {
+  checkoutToken: string;
+  registrationId: number;
+  customerPhone: string;
+}) {
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  const checkoutToken = String(input.checkoutToken || '').trim();
+  if (!/^[A-Za-z0-9_-]{16,80}$/.test(checkoutToken)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Identificador do checkout inválido." });
+  }
+
+  return db.transaction(async (tx: any) => {
+    const intentResult = await tx.execute(sql`
+      SELECT id, customerId, pricingJson, status, expiresAtMs, finalizedPlanId, finalizedRegistrationId
+      FROM vipInstallmentCheckoutIntents
+      WHERE checkoutToken=${checkoutToken}
+      LIMIT 1
+      FOR UPDATE
+    `);
+    const intent = rowsOf<any>(intentResult)[0];
+    if (!intent) throw new TRPCError({ code: "NOT_FOUND", message: "Reserva de Parcelamento VIP não encontrada." });
+    if (intent.finalizedRegistrationId && Number(intent.finalizedRegistrationId) !== input.registrationId) {
+      throw new TRPCError({ code: "CONFLICT", message: "Esta reserva já está vinculada a outro pedido." });
+    }
+
+    const orderResult = await tx.execute(sql`
+      SELECT orderNumber, customerPhone, serviceName, serviceOption, pricePaid,
+             UNIX_TIMESTAMP(createdAt) * 1000 AS orderCreatedAtMs
+      FROM orderStatusHistory
+      WHERE registrationId=${input.registrationId}
+      ORDER BY id ASC
+      LIMIT 1
+      FOR UPDATE
+    `);
+    const order = rowsOf<any>(orderResult)[0];
+    if (!order || normalizePhone(order.customerPhone) !== normalizePhone(input.customerPhone)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Pedido não pertence ao checkout autenticado." });
+    }
+    const orderCreatedAtMs = Math.trunc(Number(order.orderCreatedAtMs || 0));
+    if (!isVipInstallmentOrderInsideReservation({ expiresAtMs: Number(intent.expiresAtMs || 0), orderCreatedAtMs })) {
+      throw new TRPCError({ code: "CONFLICT", message: "Pedido criado fora da janela da reserva do Parcelamento VIP." });
+    }
+
+    let pricing: VipResolvedCheckoutPricing;
+    try { pricing = JSON.parse(String(intent.pricingJson)); }
+    catch { throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Reserva de parcelamento corrompida." }); }
+    const item = pricing?.items?.[0];
+    if (!item || String(order.serviceName || '').trim().toLowerCase() !== String(item.productName || '').trim().toLowerCase()) {
+      throw new TRPCError({ code: "CONFLICT", message: "Produto do pedido não corresponde à reserva do Parcelamento VIP." });
+    }
+
+    await tx.execute(sql`
+      UPDATE vipInstallmentCheckoutIntents
+      SET finalizedRegistrationId=${input.registrationId}
+      WHERE id=${Number(intent.id)}
+        AND (finalizedRegistrationId IS NULL OR finalizedRegistrationId=${input.registrationId})
+    `);
+    const verifyResult = await tx.execute(sql`
+      SELECT finalizedRegistrationId FROM vipInstallmentCheckoutIntents WHERE id=${Number(intent.id)} LIMIT 1
+    `);
+    const verify = rowsOf<any>(verifyResult)[0];
+    if (!verify || Number(verify.finalizedRegistrationId) !== input.registrationId) {
+      throw new TRPCError({ code: "CONFLICT", message: "Não foi possível vincular o pedido à reserva VIP." });
+    }
+    return { success: true, registrationId: input.registrationId, status: String(intent.status || 'prepared') };
+  });
+}
+
+export async function recoverVipInstallmentCheckoutOrder(input: {
+  checkoutToken: string;
+  customerId: number;
+  customerPhone: string;
+}) {
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  const checkoutToken = String(input.checkoutToken || '').trim();
+  if (!/^[A-Za-z0-9_-]{16,80}$/.test(checkoutToken)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Identificador do checkout inválido." });
+  }
+
+  return db.transaction(async (tx: any) => {
+    const intentResult = await tx.execute(sql`
+      SELECT id, customerId, pricingJson, status, expiresAtMs, finalizedPlanId, finalizedRegistrationId
+      FROM vipInstallmentCheckoutIntents
+      WHERE checkoutToken=${checkoutToken}
+      LIMIT 1
+      FOR UPDATE
+    `);
+    const intent = rowsOf<any>(intentResult)[0];
+    if (!intent || Number(intent.customerId) !== input.customerId) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Reserva de Parcelamento VIP não encontrada." });
+    }
+    if (intent.finalizedRegistrationId) {
+      return {
+        found: true,
+        registrationId: Number(intent.finalizedRegistrationId),
+        planId: intent.finalizedPlanId == null ? null : Number(intent.finalizedPlanId),
+        status: String(intent.status || ''),
+      };
+    }
+    const status = String(intent.status || '');
+    if (!['prepared', 'expired', 'cancelled'].includes(status)) {
+      return { found: false, registrationId: null, planId: null, status };
+    }
+
+    let pricing: VipResolvedCheckoutPricing;
+    try { pricing = JSON.parse(String(intent.pricingJson)); }
+    catch { throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Reserva de parcelamento corrompida." }); }
+    const item = pricing?.items?.[0];
+    if (!item) return { found: false, registrationId: null, planId: null, status };
+
+    const expiresAtMs = Number(intent.expiresAtMs || 0);
+    const startMs = expiresAtMs - VIP_INSTALLMENT_CHECKOUT_RESERVATION_MS - 30_000;
+    const endMs = expiresAtMs + 30_000;
+    const phone = normalizePhone(input.customerPhone);
+    const candidatesResult = await tx.execute(sql`
+      SELECT registrationId, orderNumber, customerPhone, serviceName, serviceOption, pricePaid,
+             MIN(UNIX_TIMESTAMP(createdAt) * 1000) AS orderCreatedAtMs
+      FROM orderStatusHistory
+      WHERE REGEXP_REPLACE(COALESCE(customerPhone, ''), '[^0-9]', '')=${phone}
+        AND UNIX_TIMESTAMP(createdAt) * 1000 BETWEEN ${startMs} AND ${endMs}
+      GROUP BY registrationId, orderNumber, customerPhone, serviceName, serviceOption, pricePaid
+      ORDER BY orderCreatedAtMs ASC
+      LIMIT 10
+    `);
+    const candidates = rowsOf<any>(candidatesResult).filter((row) => {
+      const createdAtMs = Math.trunc(Number(row.orderCreatedAtMs || 0));
+      if (!isVipInstallmentOrderInsideReservation({ expiresAtMs, orderCreatedAtMs: createdAtMs })) return false;
+      if (String(row.serviceName || '').trim().toLowerCase() !== String(item.productName || '').trim().toLowerCase()) return false;
+      const optionText = String(row.serviceOption || '').trim().toLowerCase();
+      const optionName = String(item.optionName || '').trim().toLowerCase();
+      if (optionName && !optionText.includes(optionName)) return false;
+      return true;
+    });
+    const uniqueRegistrationIds = [...new Set(candidates.map((row) => Number(row.registrationId)).filter((id) => Number.isSafeInteger(id) && id > 0))];
+    if (uniqueRegistrationIds.length != 1) {
+      return { found: false, registrationId: null, planId: null, status, ambiguous: uniqueRegistrationIds.length > 1 };
+    }
+    const registrationId = uniqueRegistrationIds[0];
+    await tx.execute(sql`
+      UPDATE vipInstallmentCheckoutIntents
+      SET finalizedRegistrationId=${registrationId}
+      WHERE id=${Number(intent.id)} AND finalizedRegistrationId IS NULL
+    `);
+    return { found: true, registrationId, planId: null, status, recovered: true };
+  });
+}
+
+
 export async function cancelVipInstallmentCheckoutIntent(input: {
   checkoutToken: string;
   customerId: number;

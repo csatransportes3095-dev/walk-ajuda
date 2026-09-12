@@ -8,7 +8,7 @@ import { getDb, getSetting, upsertSetting } from "../db";
 import { isVipMemberByPhone } from "./vipMemberships";
 import { resolveVipInstallmentCheckoutPricing } from "../vipInstallmentPricing";
 import { getVipInstallmentProductRule, listVipInstallmentProductRules, saveVipInstallmentProductRule } from "../vipInstallmentProductRules";
-import { prepareVipInstallmentCheckoutIntent, cancelVipInstallmentCheckoutIntent, finalizeVipInstallmentCheckoutIntent, submitVipInstallmentProof, confirmVipInstallmentPayment } from "../vipInstallmentContracts";
+import { prepareVipInstallmentCheckoutIntent, cancelVipInstallmentCheckoutIntent, finalizeVipInstallmentCheckoutIntent, submitVipInstallmentProof, confirmVipInstallmentPayment, recoverVipInstallmentCheckoutOrder } from "../vipInstallmentContracts";
 
 const SETTING_KEYS = {
   enabled: "vip_installments_enabled",
@@ -687,6 +687,22 @@ export const vipInstallmentsRouter = router({
         membershipId: Number(membership.id),
         pricing: validated.pricing,
         quote: validated.quote,
+      });
+    }),
+
+  recoverCheckout: publicProcedure
+    .input(z.object({
+      cpToken: z.string().min(32),
+      phone: z.string().min(8).max(32).optional(),
+      checkoutToken: z.string().min(16).max(80),
+    }))
+    .mutation(async ({ input }) => {
+      const session = await requireCustomerSession(input.cpToken, input.phone);
+      const customer = await customerByPhone(session.phone);
+      return recoverVipInstallmentCheckoutOrder({
+        checkoutToken: input.checkoutToken,
+        customerId: customer.id,
+        customerPhone: session.phone,
       });
     }),
 

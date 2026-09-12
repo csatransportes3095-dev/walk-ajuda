@@ -656,9 +656,32 @@ export default function Home() {
           frequency: savedFrequency,
           quote: null,
         }));
-        if (pendingRegistrationId > 0 && savedToken.length >= 16 && savedToken.length <= 80) {
-          vipPendingRegistrationIdRef.current = pendingRegistrationId;
+        if (savedToken.length >= 16 && savedToken.length <= 80) {
           vipCheckoutTokenRef.current = savedToken;
+          if (pendingRegistrationId > 0) {
+            vipPendingRegistrationIdRef.current = pendingRegistrationId;
+          } else {
+            try {
+              const cpToken = localStorage.getItem('cp_token') || '';
+              const recovered = cpToken.length >= 32
+                ? await recoverVipInstallmentCheckoutMutation.mutateAsync({ cpToken, phone: saved.clientPhone || undefined, checkoutToken: savedToken })
+                : null;
+              const recoveredId = Number(recovered?.registrationId || 0);
+              if (recoveredId > 0) {
+                vipPendingRegistrationIdRef.current = recoveredId;
+                saved.vipInstallment.pendingRegistrationId = recoveredId;
+                localStorage.setItem(PROGRESS_KEY, JSON.stringify(saved));
+              } else {
+                vipPendingRegistrationIdRef.current = null;
+                vipCheckoutTokenRef.current = '';
+                if (saved.cadastroSubStep === 'pagamento') setCadastroSubStep('resumo');
+              }
+            } catch {
+              vipPendingRegistrationIdRef.current = null;
+              vipCheckoutTokenRef.current = '';
+              if (saved.cadastroSubStep === 'pagamento') setCadastroSubStep('resumo');
+            }
+          }
         } else {
           vipPendingRegistrationIdRef.current = null;
           vipCheckoutTokenRef.current = '';
@@ -1036,6 +1059,7 @@ export default function Home() {
   const addBlockingNoteMutation = trpc.customers.addBlockingNote.useMutation();
   const prepareVipInstallmentCheckoutMutation = trpc.vipInstallments.prepareCheckout.useMutation();
   const finalizeVipInstallmentCheckoutMutation = trpc.vipInstallments.finalizeCheckout.useMutation();
+  const recoverVipInstallmentCheckoutMutation = trpc.vipInstallments.recoverCheckout.useMutation();
   const cancelVipInstallmentCheckoutMutation = trpc.vipInstallments.cancelCheckout.useMutation();
 
 
@@ -1731,6 +1755,20 @@ export default function Home() {
           ? `${optionNameWithModel} - Garantia: ${selectedTier.warrantyValue > 0 ? `${selectedTier.warrantyValue} ${selectedTier.warrantyType}` : (selectedTier.warrantyLabel || selectedTier.warrantyType)}${selectedTier.warrantyLabel && selectedTier.warrantyValue > 0 ? ` ${selectedTier.warrantyLabel}` : ''}`
           : optionNameWithModel)
         : 'N/A';
+      if (vipInstallmentActive && !vipPendingRegistrationIdRef.current && vipCheckoutTokenRef.current) {
+        try {
+          const recovered = await recoverVipInstallmentCheckoutMutation.mutateAsync({
+            cpToken: cpTokenForSubmit,
+            phone: phone || undefined,
+            checkoutToken: vipCheckoutTokenRef.current,
+          });
+          const recoveredId = Number(recovered?.registrationId || 0);
+          if (recoveredId > 0) persistVipInstallmentRecovery(recoveredId, vipCheckoutTokenRef.current);
+        } catch (recoverError) {
+          console.warn('[VIP Installments] Nenhum pedido anterior seguro para recuperar antes do envio:', recoverError);
+        }
+      }
+
       const result = vipInstallmentActive && vipPendingRegistrationIdRef.current
         ? ({ success: true, persisted: true, registrationId: vipPendingRegistrationIdRef.current } as any)
         : await submitMutation.mutateAsync({
@@ -1755,6 +1793,7 @@ export default function Home() {
         accessCode: accessCode || undefined,
         cpToken: cpTokenForSubmit || undefined,
         couponCode: couponValid ? couponCode : undefined,
+        vipInstallmentCheckoutToken: vipInstallmentActive ? vipCheckoutTokenRef.current : undefined,
         paymentProof: undefined,
         paymentProofUrl: paymentProofUploadedUrl,
         paymentProofMime: getProofMime(paymentProof),
