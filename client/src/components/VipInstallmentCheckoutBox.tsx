@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CreditCard, Loader2, LockKeyhole, WalletCards } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { useLocation } from "wouter";
 
 export type VipInstallmentCheckoutSelection = {
   mode: "cash" | "vip_installment";
@@ -24,6 +25,7 @@ export default function VipInstallmentCheckoutBox(props: {
   disabledReason?: string | null;
   onSelectionChange: (selection: VipInstallmentCheckoutSelection) => void;
 }) {
+  const [, navigate] = useLocation();
   const [mode, setMode] = useState<"cash" | "vip_installment">("cash");
   const [count, setCount] = useState(2);
   const [frequency, setFrequency] = useState<"daily" | "weekly" | "monthly">("monthly");
@@ -110,7 +112,7 @@ export default function VipInstallmentCheckoutBox(props: {
         </button>
       </div>
 
-      {blockReason && <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs font-bold text-amber-200"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" /><span>{blockReason}{eligibility.data?.openPlan?.balanceCents ? ` Saldo pendente: ${money(eligibility.data.openPlan.balanceCents)}.` : ""}</span></div>}
+      {blockReason && <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs font-bold text-amber-200"><div className="flex items-start gap-2"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" /><span>{blockReason}{eligibility.data?.openPlan?.balanceCents ? ` Saldo pendente: ${money(eligibility.data.openPlan.balanceCents)}.` : ""}</span></div>{Number(eligibility.data?.openPlan?.balanceCents || 0) > 0 ? <button type="button" onClick={() => navigate("/parcelas-vip")} className="mt-3 w-full rounded-lg bg-amber-300 px-3 py-2 text-[11px] font-black text-amber-950">VER MINHAS PARCELAS VIP</button> : null}</div>}
 
       {mode === "vip_installment" && !blockReason && (
         <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
@@ -130,6 +132,7 @@ export default function VipInstallmentCheckoutBox(props: {
           <div className="flex items-start gap-2 text-[11px] text-slate-400"><CreditCard className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Após a compra, as próximas parcelas ficam disponíveis em <strong className="text-violet-200">Minhas Parcelas VIP</strong>.</span></div>
         </div>
       )}
+      {sessionReady ? <button type="button" onClick={() => navigate("/parcelas-vip")} className="mt-3 w-full rounded-xl border border-violet-300/20 bg-violet-500/10 px-3 py-2.5 text-xs font-black text-violet-200">MINHAS PARCELAS VIP</button> : null}
     </div>
   );
 }

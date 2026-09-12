@@ -93,15 +93,27 @@ export default function AdminVipReceivablesPanel() {
 
   const stats = useMemo(() => {
     const all = (query.data || []) as any[];
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const dayOf = (ms: number | null | undefined) => ms ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Number(ms))) : "";
     const awaiting = all.filter((row) => row.status === "awaiting_confirmation");
     const overdue = all.filter((row) => row.status === "overdue");
-    const activePlans = new Map<number, number>();
-    for (const row of all) if (Number(row.balanceCents || 0) > 0) activePlans.set(Number(row.planId), Number(row.balanceCents || 0));
+    const dueToday = all.filter((row) => ["pending", "overdue", "awaiting_confirmation"].includes(row.status) && String(row.dueDate).slice(0, 10) === today);
+    const receivedToday = all.filter((row) => row.status === "paid" && dayOf(row.paidAtMs) === today).reduce((sum, row) => sum + Number(row.amountCents || 0), 0);
+    const openPlans = new Map<number, number>();
+    const planStates = new Map<number, string>();
+    for (const row of all) {
+      planStates.set(Number(row.planId), String(row.planStatus || ""));
+      if (Number(row.balanceCents || 0) > 0) openPlans.set(Number(row.planId), Number(row.balanceCents || 0));
+    }
     return {
       awaiting: awaiting.length,
       overdue: overdue.length,
-      receivable: Array.from(activePlans.values()).reduce((sum, value) => sum + value, 0),
+      dueToday: dueToday.length,
+      receivedToday,
+      receivable: Array.from(openPlans.values()).reduce((sum, value) => sum + value, 0),
       debtors: new Set(all.filter((row) => Number(row.balanceCents || 0) > 0).map((row) => row.customerId)).size,
+      activePlans: Array.from(planStates.values()).filter((status) => status === "active" || status === "pending").length,
+      paidPlans: Array.from(planStates.values()).filter((status) => status === "paid").length,
     };
   }, [query.data]);
 
@@ -128,9 +140,13 @@ export default function AdminVipReceivablesPanel() {
       <div className="space-y-4 p-4 sm:p-6">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-2xl border border-cyan-400/15 bg-cyan-500/[0.06] p-4"><p className="text-[10px] font-black uppercase text-cyan-300">A receber</p><p className="mt-1 text-xl font-black">{money(stats.receivable)}</p></div>
-          <div className="rounded-2xl border border-amber-400/15 bg-amber-500/[0.06] p-4"><p className="text-[10px] font-black uppercase text-amber-300">Aguardando confirmação</p><p className="mt-1 text-xl font-black">{stats.awaiting}</p></div>
+          <div className="rounded-2xl border border-yellow-400/15 bg-yellow-500/[0.06] p-4"><p className="text-[10px] font-black uppercase text-yellow-300">Vence hoje</p><p className="mt-1 text-xl font-black">{stats.dueToday}</p></div>
           <div className="rounded-2xl border border-red-400/15 bg-red-500/[0.06] p-4"><p className="text-[10px] font-black uppercase text-red-300">Vencidas</p><p className="mt-1 text-xl font-black">{stats.overdue}</p></div>
+          <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/[0.06] p-4"><p className="text-[10px] font-black uppercase text-emerald-300">Recebido hoje</p><p className="mt-1 text-xl font-black">{money(stats.receivedToday)}</p></div>
+          <div className="rounded-2xl border border-amber-400/15 bg-amber-500/[0.06] p-4"><p className="text-[10px] font-black uppercase text-amber-300">Aguardando confirmação</p><p className="mt-1 text-xl font-black">{stats.awaiting}</p></div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"><p className="text-[10px] font-black uppercase text-slate-400">Clientes com saldo</p><p className="mt-1 text-xl font-black">{stats.debtors}</p></div>
+          <div className="rounded-2xl border border-violet-400/15 bg-violet-500/[0.06] p-4"><p className="text-[10px] font-black uppercase text-violet-300">Planos ativos</p><p className="mt-1 text-xl font-black">{stats.activePlans}</p></div>
+          <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/[0.06] p-4"><p className="text-[10px] font-black uppercase text-emerald-300">Planos quitados</p><p className="mt-1 text-xl font-black">{stats.paidPlans}</p></div>
         </div>
 
         <div className="flex flex-wrap gap-2">{([['open','Em aberto'],['awaiting','Confirmar'],['overdue','Vencidas'],['paid','Pagas'],['all','Todas']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-xl px-3 py-2 text-xs font-black ${filter === value ? "bg-cyan-300 text-slate-950" : "border border-white/10 bg-white/5 text-slate-300"}`}>{label}</button>)}</div>
