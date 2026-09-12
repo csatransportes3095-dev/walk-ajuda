@@ -1,0 +1,73 @@
+name: VIP Installments Guarded Wiring
+
+on:
+  push:
+    branches:
+      - feat/vip-parcelamento-seguro-2026-09-12
+    paths:
+      - .github/workflows/vip-installments-wire-20260912.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/vip-parcelamento-seguro-2026-09-12
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Wire router using exact anchors
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('server/routers.ts')
+          s = p.read_text(encoding='utf-8')
+          import_anchor = 'import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";'
+          import_line = 'import { vipInstallmentsRouter } from "./routers/vipInstallments";'
+          route_anchor = '  vipMemberships: vipMembershipsRouter,'
+          route_line = '  vipInstallments: vipInstallmentsRouter,'
+          if import_line not in s:
+              if s.count(import_anchor) != 1:
+                  raise SystemExit(f'unexpected import anchor count: {s.count(import_anchor)}')
+              s = s.replace(import_anchor, import_anchor + '\n' + import_line, 1)
+          if route_line not in s:
+              if s.count(route_anchor) != 1:
+                  raise SystemExit(f'unexpected route anchor count: {s.count(route_anchor)}')
+              s = s.replace(route_anchor, route_anchor + '\n' + route_line, 1)
+          if s.count(import_line) != 1 or s.count(route_line) != 1:
+              raise SystemExit('router wiring must be unique')
+          p.write_text(s, encoding='utf-8')
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run focused VIP tests
+        run: pnpm exec vitest run shared/vipInstallments.test.ts shared/vipCheckoutPricing.test.ts
+
+      - name: TypeScript check
+        run: pnpm check
+
+      - name: Commit only after all validations pass
+        shell: bash
+        run: |
+          git config user.name "h2-vip-guard"
+          git config user.email "actions@users.noreply.github.com"
+          git add server/routers.ts
+          if git diff --cached --quiet; then
+            echo "Already wired"
+            exit 0
+          fi
+          git commit -m "feat(vip): register installment router after validation"
+          git push origin HEAD:feat/vip-parcelamento-seguro-2026-09-12
