@@ -52,23 +52,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run focused VIP tests
-        shell: bash
-        run: |
-          cat > /tmp/vitest.vip.config.ts <<'EOF'
-          import { defineConfig } from 'vitest/config';
-          export default defineConfig({
-            test: {
-              include: [
-                'shared/vipInstallments.test.ts',
-                'shared/vipCheckoutPricing.test.ts',
-              ],
-              environment: 'node',
-            },
-          });
-          EOF
-          cp /tmp/vitest.vip.config.ts ./vitest.vip.temp.config.ts
-          pnpm exec vitest run --config vitest.vip.temp.config.ts
-          rm -f vitest.vip.temp.config.ts
+        run: pnpm exec vitest run server/vipInstallments.newlogic.test.ts
 
       - name: TypeScript check
         run: pnpm check
