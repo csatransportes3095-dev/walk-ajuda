@@ -5,6 +5,7 @@ export type VipInstallmentQuoteInput = {
   baseAmountCents: number;
   installmentCount: number;
   interestBps: number;
+  firstInstallmentAmountCents?: number | null;
   firstDueDate: string;
   frequency: VipInstallmentFrequency;
   dailyMode?: VipInstallmentDailyMode;
@@ -14,6 +15,8 @@ export type VipInstallmentQuote = {
   baseAmountCents: number;
   interestBps: number;
   interestAmountCents: number;
+  financedBaseAmountCents: number;
+  firstInstallmentAmountCents: number | null;
   totalAmountCents: number;
   installmentCount: number;
   frequency: VipInstallmentFrequency;
@@ -150,13 +153,21 @@ export function calculateVipInstallmentQuote(input: VipInstallmentQuoteInput): V
   assertInteger("Quantidade de parcelas", input.installmentCount, 2, 120);
   assertInteger("Juros", input.interestBps, 0, 100_000);
 
-  const interestAmountCents = Math.round((input.baseAmountCents * input.interestBps) / 10_000);
+  const specialFirst = input.firstInstallmentAmountCents == null ? null : input.firstInstallmentAmountCents;
+  if (specialFirst != null) {
+    assertInteger("Valor da entrada", specialFirst, 1, MAX_SAFE_MONEY_CENTS);
+    if (specialFirst >= input.baseAmountCents) throw new Error("A entrada deve ser menor que o valor da compra.");
+  }
+  const financedBaseAmountCents = specialFirst == null ? input.baseAmountCents : input.baseAmountCents - specialFirst;
+  const interestAmountCents = Math.round((financedBaseAmountCents * input.interestBps) / 10_000);
   const totalAmountCents = input.baseAmountCents + interestAmountCents;
   if (!Number.isSafeInteger(totalAmountCents) || totalAmountCents > MAX_SAFE_MONEY_CENTS) {
     throw new Error("Valor total fora do limite permitido.");
   }
 
-  const amounts = splitInstallmentAmounts(totalAmountCents, input.installmentCount);
+  const amounts = specialFirst == null
+    ? splitInstallmentAmounts(totalAmountCents, input.installmentCount)
+    : [specialFirst, ...splitInstallmentAmounts(totalAmountCents - specialFirst, input.installmentCount - 1)];
   const dailyMode = input.dailyMode || "all_days";
   const dueDates = buildVipInstallmentDueDates({
     firstDueDate: input.firstDueDate,
@@ -169,6 +180,8 @@ export function calculateVipInstallmentQuote(input: VipInstallmentQuoteInput): V
     baseAmountCents: input.baseAmountCents,
     interestBps: input.interestBps,
     interestAmountCents,
+    financedBaseAmountCents,
+    firstInstallmentAmountCents: specialFirst,
     totalAmountCents,
     installmentCount: input.installmentCount,
     frequency: input.frequency,

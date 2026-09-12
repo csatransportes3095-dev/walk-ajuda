@@ -103,3 +103,20 @@ describe("VIP installment calculation", () => {
     expect(quote.installments.reduce((sum, item) => sum + item.amountCents, 0)).toBe(quote.totalAmountCents);
   });
 });
+
+
+it("uses a configured entry as installment 1 and charges interest only on remaining balance", () => {
+  const quote = calculateVipInstallmentQuote({
+    baseAmountCents: 45000,
+    installmentCount: 5,
+    interestBps: 1500,
+    firstInstallmentAmountCents: 15000,
+    firstDueDate: "2026-09-12",
+    frequency: "daily",
+    dailyMode: "all_days",
+  });
+  expect(quote.financedBaseAmountCents).toBe(30000);
+  expect(quote.interestAmountCents).toBe(4500);
+  expect(quote.totalAmountCents).toBe(49500);
+  expect(quote.installments.map((item) => item.amountCents)).toEqual([15000, 8625, 8625, 8625, 8625]);
+});

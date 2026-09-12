@@ -49,6 +49,8 @@ export default function AdminVipInstallmentsPanel() {
     minInstallments: 2,
     maxInstallments: 3,
     defaultInterestPercent: "0",
+    entryMode: "none" as "none" | "fixed" | "percent",
+    entryValue: "",
     allowDaily: true,
     allowWeekly: true,
     allowMonthly: true,
@@ -75,6 +77,8 @@ export default function AdminVipInstallmentsPanel() {
       minInstallments: data.minInstallments,
       maxInstallments: data.maxInstallments,
       defaultInterestPercent: (data.defaultInterestBps / 100).toString().replace(".", ","),
+      entryMode: data.entryMode,
+      entryValue: data.entryMode === "fixed" ? centsToMoney(data.entryFixedCents) : data.entryMode === "percent" ? (data.entryPercentBps / 100).toString().replace(".", ",") : "",
       allowDaily: data.allowDaily,
       allowWeekly: data.allowWeekly,
       allowMonthly: data.allowMonthly,
@@ -140,6 +144,9 @@ export default function AdminVipInstallmentsPanel() {
       toast.error("Informe uma taxa de juros válida.");
       return;
     }
+    const entryNumeric = config.entryMode === "none" ? 0 : Number(config.entryValue.replace(",", "."));
+    if (config.entryMode !== "none" && (!Number.isFinite(entryNumeric) || entryNumeric <= 0)) { toast.error("Informe uma entrada válida."); return; }
+    if (config.entryMode === "percent" && entryNumeric >= 100) { toast.error("A entrada percentual deve ser menor que 100%."); return; }
     if (config.maxInstallments < config.minInstallments) {
       toast.error("O máximo de parcelas não pode ser menor que o mínimo.");
       return;
@@ -153,6 +160,9 @@ export default function AdminVipInstallmentsPanel() {
       minInstallments: config.minInstallments,
       maxInstallments: config.maxInstallments,
       defaultInterestBps: Math.round(interest * 100),
+      entryMode: config.entryMode,
+      entryFixedCents: config.entryMode === "fixed" ? Math.round(entryNumeric * 100) : 0,
+      entryPercentBps: config.entryMode === "percent" ? Math.round(entryNumeric * 100) : 0,
       allowDaily: config.allowDaily,
       allowWeekly: config.allowWeekly,
       allowMonthly: config.allowMonthly,
@@ -224,6 +234,8 @@ export default function AdminVipInstallmentsPanel() {
           <label className="text-[11px] font-black uppercase text-slate-300">Mínimo de parcelas<input type="number" min={2} max={120} value={config.minInstallments} onChange={(event) => setConfig((value) => ({ ...value, minInstallments: Number(event.target.value) || 2 }))} className={inputClass} /></label>
           <label className="text-[11px] font-black uppercase text-slate-300">Máximo de parcelas<input type="number" min={2} max={120} value={config.maxInstallments} onChange={(event) => setConfig((value) => ({ ...value, maxInstallments: Number(event.target.value) || 2 }))} className={inputClass} /></label>
           <label className="text-[11px] font-black uppercase text-slate-300">Juros padrão (%)<input inputMode="decimal" value={config.defaultInterestPercent} onChange={(event) => setConfig((value) => ({ ...value, defaultInterestPercent: event.target.value }))} className={inputClass} /></label>
+          <label className="text-[11px] font-black uppercase text-slate-300">Entrada / primeira parcela<select value={config.entryMode} onChange={(event) => setConfig((value) => ({ ...value, entryMode: event.target.value as "none" | "fixed" | "percent", entryValue: "" }))} className={inputClass}><option value="none">Sem entrada especial</option><option value="fixed">Valor fixo (R$)</option><option value="percent">Percentual (%)</option></select></label>
+          {config.entryMode !== "none" && <label className="text-[11px] font-black uppercase text-slate-300">{config.entryMode === "fixed" ? "Valor da entrada (R$)" : "Entrada (%)"}<input inputMode="decimal" value={config.entryValue} onChange={(event) => setConfig((value) => ({ ...value, entryValue: event.target.value }))} placeholder={config.entryMode === "fixed" ? "Ex.: 150,00" : "Ex.: 30"} className={inputClass} /><span className="mt-1 block normal-case font-medium text-slate-500">A entrada é a parcela 1. Os juros são aplicados somente no saldo restante.</span></label>}
           <label className="text-[11px] font-black uppercase text-slate-300">Regra diária<select value={config.dailyMode} onChange={(event) => setConfig((value) => ({ ...value, dailyMode: event.target.value as "all_days" | "mon_sat" }))} className={inputClass}><option value="all_days">Todos os dias</option><option value="mon_sat">Segunda a sábado</option></select></label>
           <div className="sm:col-span-2 lg:col-span-4 flex flex-wrap gap-3">
             {([['allowDaily','Diário'],['allowWeekly','Semanal'],['allowMonthly','Mensal']] as const).map(([key, label]) => <label key={key} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-bold"><input type="checkbox" checked={config[key]} onChange={(event) => setConfig((value) => ({ ...value, [key]: event.target.checked }))} className="accent-emerald-400" /> {label}</label>)}

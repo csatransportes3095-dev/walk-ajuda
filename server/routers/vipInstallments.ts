@@ -15,6 +15,9 @@ const SETTING_KEYS = {
   minCount: "vip_installments_min_count",
   maxCount: "vip_installments_max_count",
   defaultInterestBps: "vip_installments_interest_bps",
+  entryMode: "vip_installments_entry_mode",
+  entryFixedCents: "vip_installments_entry_fixed_cents",
+  entryPercentBps: "vip_installments_entry_percent_bps",
   allowDaily: "vip_installments_allow_daily",
   allowWeekly: "vip_installments_allow_weekly",
   allowMonthly: "vip_installments_allow_monthly",
@@ -28,6 +31,9 @@ export type VipInstallmentConfig = {
   minInstallments: number;
   maxInstallments: number;
   defaultInterestBps: number;
+  entryMode: "none" | "fixed" | "percent";
+  entryFixedCents: number;
+  entryPercentBps: number;
   allowDaily: boolean;
   allowWeekly: boolean;
   allowMonthly: boolean;
@@ -185,11 +191,14 @@ export async function ensureVipInstallmentInfrastructure() {
 }
 
 export async function getVipInstallmentConfig(): Promise<VipInstallmentConfig> {
-  const [enabled, minCount, maxCount, interestBps, allowDaily, allowWeekly, allowMonthly, dailyMode] = await Promise.all([
+  const [enabled, minCount, maxCount, interestBps, entryMode, entryFixedCents, entryPercentBps, allowDaily, allowWeekly, allowMonthly, dailyMode] = await Promise.all([
     getSetting(SETTING_KEYS.enabled),
     getSetting(SETTING_KEYS.minCount),
     getSetting(SETTING_KEYS.maxCount),
     getSetting(SETTING_KEYS.defaultInterestBps),
+    getSetting(SETTING_KEYS.entryMode),
+    getSetting(SETTING_KEYS.entryFixedCents),
+    getSetting(SETTING_KEYS.entryPercentBps),
     getSetting(SETTING_KEYS.allowDaily),
     getSetting(SETTING_KEYS.allowWeekly),
     getSetting(SETTING_KEYS.allowMonthly),
@@ -203,6 +212,9 @@ export async function getVipInstallmentConfig(): Promise<VipInstallmentConfig> {
     minInstallments,
     maxInstallments,
     defaultInterestBps: intSetting(interestBps, 0, 0, 100_000),
+    entryMode: entryMode === "fixed" || entryMode === "percent" ? entryMode : "none",
+    entryFixedCents: intSetting(entryFixedCents, 0, 0, MAX_FINANCIAL_SALE_CENTS),
+    entryPercentBps: intSetting(entryPercentBps, 0, 0, 9_999),
     allowDaily: boolSetting(allowDaily, true),
     allowWeekly: boolSetting(allowWeekly, true),
     allowMonthly: boolSetting(allowMonthly, true),
@@ -417,12 +429,21 @@ async function buildValidatedVipCheckout(input: {
   }
 
   const interestBps = eligibility.permission.interestBps ?? productRule.interestBps ?? eligibility.config.defaultInterestBps;
+  let firstInstallmentAmountCents: number | null = null;
+  if (eligibility.config.entryMode === "fixed") firstInstallmentAmountCents = eligibility.config.entryFixedCents;
+  if (eligibility.config.entryMode === "percent") firstInstallmentAmountCents = Math.round((pricing.totalCents * eligibility.config.entryPercentBps) / 10_000);
+  if (firstInstallmentAmountCents != null) {
+    if (!Number.isSafeInteger(firstInstallmentAmountCents) || firstInstallmentAmountCents <= 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Configure uma entrada válida no Parcelamento VIP." });
+    if (firstInstallmentAmountCents >= pricing.totalCents) throw new TRPCError({ code: "BAD_REQUEST", message: "A entrada deve ser menor que o valor da compra." });
+    if (pricing.totalCents - firstInstallmentAmountCents < input.installmentCount - 1) throw new TRPCError({ code: "BAD_REQUEST", message: "A entrada deixa saldo insuficiente para a quantidade de parcelas escolhida." });
+  }
   let quote;
   try {
     quote = calculateVipInstallmentQuote({
       baseAmountCents: pricing.totalCents,
       installmentCount: input.installmentCount,
       interestBps,
+      firstInstallmentAmountCents,
       firstDueDate: getBrazilTodayForVipInstallments(),
       frequency: input.frequency,
       dailyMode: eligibility.config.dailyMode,
@@ -522,6 +543,9 @@ export const vipInstallmentsRouter = router({
       minInstallments: z.number().int().min(2).max(120),
       maxInstallments: z.number().int().min(2).max(120),
       defaultInterestBps: z.number().int().min(0).max(100_000),
+      entryMode: z.enum(["none", "fixed", "percent"]),
+      entryFixedCents: z.number().int().min(0).max(2_000_000_000),
+      entryPercentBps: z.number().int().min(0).max(9_999),
       allowDaily: z.boolean(),
       allowWeekly: z.boolean(),
       allowMonthly: z.boolean(),
@@ -538,6 +562,9 @@ export const vipInstallmentsRouter = router({
         upsertSetting(SETTING_KEYS.minCount, String(input.minInstallments)),
         upsertSetting(SETTING_KEYS.maxCount, String(input.maxInstallments)),
         upsertSetting(SETTING_KEYS.defaultInterestBps, String(input.defaultInterestBps)),
+        upsertSetting(SETTING_KEYS.entryMode, input.entryMode),
+        upsertSetting(SETTING_KEYS.entryFixedCents, String(input.entryFixedCents)),
+        upsertSetting(SETTING_KEYS.entryPercentBps, String(input.entryPercentBps)),
         upsertSetting(SETTING_KEYS.allowDaily, input.allowDaily ? "1" : "0"),
         upsertSetting(SETTING_KEYS.allowWeekly, input.allowWeekly ? "1" : "0"),
         upsertSetting(SETTING_KEYS.allowMonthly, input.allowMonthly ? "1" : "0"),
