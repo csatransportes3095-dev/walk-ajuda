@@ -99,14 +99,9 @@ export default function AdminVipInstallmentProductsPanel() {
 
   const save = () => {
     if (!selected) return;
-    const maxInstallments = form.maxInstallments.trim() ? Number(form.maxInstallments) : null;
     const interest = form.interestPercent.trim() ? Number(form.interestPercent.replace(",", ".")) : null;
     const minOrderCents = inputToCents(form.minOrder);
 
-    if (maxInstallments != null && (!Number.isInteger(maxInstallments) || maxInstallments < 2 || maxInstallments > 120)) {
-      toast.error("Máximo de parcelas inválido.");
-      return;
-    }
     if (interest != null && (!Number.isFinite(interest) || interest < 0 || interest > 1000)) {
       toast.error("Juros do produto inválido.");
       return;
@@ -120,7 +115,7 @@ export default function AdminVipInstallmentProductsPanel() {
       productId: Number(selected.productId),
       enabled: form.enabled,
       minOrderCents,
-      maxInstallments,
+      maxInstallments: null,
       interestBps: interest == null ? null : Math.round(interest * 100),
       allowDaily: triTo(form.allowDaily),
       allowWeekly: triTo(form.allowWeekly),
@@ -166,7 +161,7 @@ export default function AdminVipInstallmentProductsPanel() {
                   Parcelamento {row.enabled ? "ON" : "OFF"}
                 </span>
               </div>
-              <p className="mt-1 text-[11px] text-slate-500">ID {row.productId}{row.maxInstallments ? ` • até ${row.maxInstallments}x` : " • parcelas herdadas"}{row.interestBps != null ? ` • ${Number(row.interestBps) / 100}%` : " • juros herdados"}</p>
+              <p className="mt-1 text-[11px] text-slate-500">ID {row.productId} • parcelas pela regra GLOBAL{row.interestBps != null ? ` • ${Number(row.interestBps) / 100}%` : " • juros herdados"}</p>
             </div>
             <button type="button" onClick={() => open(row)} className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-[10px] font-black uppercase text-cyan-200">
               <Settings2 className="h-3.5 w-3.5" /> Configurar
@@ -193,14 +188,14 @@ export default function AdminVipInstallmentProductsPanel() {
                 <input type="checkbox" checked={form.enabled} onChange={(event) => setForm((value) => ({ ...value, enabled: event.target.checked }))} className="h-5 w-5 accent-cyan-400" />
               </label>
               <label className="text-[11px] font-black uppercase text-slate-300">Valor mínimo da compra<input value={form.minOrder} onChange={(event) => setForm((value) => ({ ...value, minOrder: event.target.value }))} placeholder="Vazio = sem mínimo" className={inputClass} /></label>
-              <label className="text-[11px] font-black uppercase text-slate-300">Máximo de parcelas<input type="number" min={2} max={120} value={form.maxInstallments} onChange={(event) => setForm((value) => ({ ...value, maxInstallments: event.target.value }))} placeholder="Vazio = herdar; preenchido = limitar" className={inputClass} /></label>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-400"><span className="font-black uppercase text-slate-300">Quantidade de parcelas</span><p className="mt-1">Definida somente na configuração GLOBAL.</p></div>
               <label className="sm:col-span-2 text-[11px] font-black uppercase text-slate-300">Juros deste produto (%)<input inputMode="decimal" value={form.interestPercent} onChange={(event) => setForm((value) => ({ ...value, interestPercent: event.target.value }))} placeholder="Vazio = herdar" className={inputClass} /></label>
               {([['allowDaily','Diário'],['allowWeekly','Semanal'],['allowMonthly','Mensal']] as const).map(([key, label]) => (
                 <label key={key} className="text-[11px] font-black uppercase text-slate-300">{label}<select value={form[key]} onChange={(event) => setForm((value) => ({ ...value, [key]: event.target.value as TriState }))} className={inputClass}><option value="inherit">Herdar</option><option value="yes">Permitir</option><option value="no">Bloquear</option></select></label>
               ))}
               <label className="sm:col-span-2 text-[11px] font-black uppercase text-slate-300">Observação<textarea rows={2} value={form.notes} onChange={(event) => setForm((value) => ({ ...value, notes: event.target.value }))} className={inputClass} /></label>
               <div className="sm:col-span-2 rounded-xl border border-amber-400/20 bg-amber-500/[0.06] p-3 text-xs text-amber-100">
-                Ativar este produto não libera ninguém sozinho. Parcelas usam o menor máximo entre Global, Produto e Cliente. Juros específicos do Cliente têm prioridade sobre Produto; Produto tem prioridade sobre Global. Qualquer bloqueio de periodicidade prevalece.
+                Ativar este produto não libera ninguém sozinho. A quantidade de parcelas vem somente do GLOBAL. Juros específicos do Cliente têm prioridade sobre Produto; Produto tem prioridade sobre Global. Qualquer bloqueio de periodicidade prevalece.
               </div>
               <button type="button" onClick={save} disabled={mutation.isPending} className="sm:col-span-2 inline-flex min-h-[50px] items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 text-sm font-black uppercase text-cyan-950 disabled:opacity-50">
                 <Save className="h-4 w-4" /> {mutation.isPending ? "Salvando..." : "Salvar regra do produto"}

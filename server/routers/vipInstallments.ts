@@ -312,15 +312,7 @@ async function resolveEligibility(phone: string, productId?: number | null) {
   else if (!permission.enabled) reason = "Parcelamento VIP ainda não foi liberado para este cadastro.";
   else if (openPlan && openPlan.balanceCents > 0) reason = "Você já possui uma compra parcelada em andamento. Quite o saldo para liberar um novo parcelamento.";
 
-  const customerMax = effectiveMaxInstallments(config, permission);
-  const productMax = productRule?.maxInstallments == null ? null : Number(productRule.maxInstallments);
-  const maxInstallments = Math.max(config.minInstallments, Math.min(customerMax, productMax ?? customerMax));
-  const caps = [
-    { source: "global" as const, value: config.maxInstallments },
-    ...(permission.maxInstallments == null ? [] : [{ source: "customer" as const, value: Number(permission.maxInstallments) }]),
-    ...(productMax == null ? [] : [{ source: "product" as const, value: productMax }]),
-  ];
-  const limiting = caps.reduce((best, current) => current.value < best.value ? current : best);
+  const maxInstallments = config.maxInstallments;
   const interestBps = permission.interestBps ?? productRule?.interestBps ?? config.defaultInterestBps;
   const interestSource = permission.interestBps != null ? "customer" : productRule?.interestBps != null ? "product" : "global";
   const allowedFrequencies = {
@@ -339,9 +331,9 @@ async function resolveEligibility(phone: string, productId?: number | null) {
       minInstallments: config.minInstallments,
       maxInstallments,
       globalMaxInstallments: config.maxInstallments,
-      customerMaxInstallments: permission.maxInstallments,
-      productMaxInstallments: productMax,
-      limitingSource: limiting.source,
+      customerMaxInstallments: null,
+      productMaxInstallments: null,
+      limitingSource: "global" as const,
       interestBps,
       interestSource,
       allowedFrequencies,
@@ -355,11 +347,6 @@ function effectiveFrequencyAllowed(config: VipInstallmentConfig, permission: Awa
   if (frequency === "daily") return config.allowDaily && permission.allowDaily !== false;
   if (frequency === "weekly") return config.allowWeekly && permission.allowWeekly !== false;
   return config.allowMonthly && permission.allowMonthly !== false;
-}
-
-function effectiveMaxInstallments(config: VipInstallmentConfig, permission: Awaited<ReturnType<typeof permissionForCustomer>>) {
-  const customerMax = permission.maxInstallments == null ? config.maxInstallments : permission.maxInstallments;
-  return Math.max(config.minInstallments, Math.min(config.maxInstallments, customerMax));
 }
 
 function getBrazilTodayForVipInstallments() {
@@ -418,11 +405,7 @@ async function buildValidatedVipCheckout(input: {
     throw new TRPCError({ code: "FORBIDDEN", message: "Valor abaixo do mínimo liberado para parcelamento deste produto." });
   }
 
-  const customerMax = effectiveMaxInstallments(eligibility.config, eligibility.permission);
-  const maxInstallments = Math.min(customerMax, productRule.maxInstallments ?? customerMax);
-  if (maxInstallments < eligibility.config.minInstallments) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Este produto não possui uma quantidade de parcelas compatível com as regras atuais." });
-  }
+  const maxInstallments = eligibility.config.maxInstallments;
   if (input.installmentCount < eligibility.config.minInstallments || input.installmentCount > maxInstallments) {
     throw new TRPCError({ code: "BAD_REQUEST", message: `Escolha entre ${eligibility.config.minInstallments} e ${maxInstallments} parcelas.` });
   }
@@ -521,7 +504,7 @@ export const vipInstallmentsRouter = router({
           productId: input.productId,
           enabled: input.enabled,
           minOrderCents: input.minOrderCents ?? null,
-          maxInstallments: input.maxInstallments ?? null,
+          maxInstallments: null,
           interestBps: input.interestBps ?? null,
           allowDaily: input.allowDaily ?? null,
           allowWeekly: input.allowWeekly ?? null,
@@ -593,7 +576,7 @@ export const vipInstallmentsRouter = router({
         INSERT INTO vipInstallmentPermissions
           (customerId, enabled, maxInstallments, interestBps, creditLimitCents, allowDaily, allowWeekly, allowMonthly, notes)
         VALUES
-          (${input.customerId}, ${input.enabled ? 1 : 0}, ${input.maxInstallments ?? null}, ${input.interestBps ?? null}, ${input.creditLimitCents ?? null},
+          (${input.customerId}, ${input.enabled ? 1 : 0}, ${null}, ${input.interestBps ?? null}, ${input.creditLimitCents ?? null},
            ${input.allowDaily == null ? null : input.allowDaily ? 1 : 0}, ${input.allowWeekly == null ? null : input.allowWeekly ? 1 : 0},
            ${input.allowMonthly == null ? null : input.allowMonthly ? 1 : 0}, ${input.notes ?? null})
         ON DUPLICATE KEY UPDATE

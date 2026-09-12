@@ -78,7 +78,6 @@ export default function VipInstallmentCheckoutBox(props: {
   const minCount = Number(effectiveRules?.minInstallments ?? config?.minInstallments ?? 2);
   const effectiveMax = Math.max(minCount, Number(effectiveRules?.maxInstallments ?? config?.maxInstallments ?? minCount));
   const globalMax = Number(effectiveRules?.globalMaxInstallments ?? config?.maxInstallments ?? effectiveMax);
-  const limitSourceLabel = effectiveRules?.limitingSource === "customer" ? "CLIENTE" : effectiveRules?.limitingSource === "product" ? "PRODUTO" : "GLOBAL";
 
   useEffect(() => {
     if (count < minCount) setCount(minCount);
@@ -123,7 +122,7 @@ export default function VipInstallmentCheckoutBox(props: {
             <label className="text-[10px] font-black uppercase text-slate-400">Parcelas<select value={count} onChange={(event) => setCount(Number(event.target.value))} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white">{Array.from({ length: Math.max(0, effectiveMax - minCount + 1) }, (_, index) => minCount + index).map((value) => <option key={value} value={value}>{value}x</option>)}</select></label>
             <label className="text-[10px] font-black uppercase text-slate-400">Periodicidade<select value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white">{frequencyOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           </div>
-          {effectiveRules && <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/[0.06] p-3 text-[11px] leading-relaxed text-slate-300"><p><strong className="text-cyan-200">Faixa global:</strong> {minCount}x a {globalMax}x. <strong className="text-cyan-200">Limite aplicado:</strong> até {effectiveMax}x ({limitSourceLabel}).</p>{effectiveMax === minCount && globalMax > minCount ? <p className="mt-1 text-amber-200">Por isso aparece somente {minCount}x. Para liberar mais parcelas, remova/reduza o limite específico em Cliente ou Produto.</p> : null}</div>}
+          {effectiveRules && <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/[0.06] p-3 text-[11px] leading-relaxed text-slate-300"><p><strong className="text-cyan-200">Parcelas permitidas:</strong> {minCount}x até {globalMax}x. A quantidade é definida somente na configuração GLOBAL.</p></div>}
 
           {quote.isFetching && <div className="flex items-center justify-center gap-2 rounded-xl border border-white/10 p-4 text-sm text-slate-400"><Loader2 className="h-4 w-4 animate-spin" /> Calculando no servidor...</div>}
           {quote.error && <div className="rounded-xl border border-red-400/25 bg-red-500/10 p-3 text-xs font-bold text-red-200">{quote.error.message}</div>}
