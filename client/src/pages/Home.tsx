@@ -2066,11 +2066,13 @@ export default function Home() {
 
   const cartTotalFormatted = cartTotal !== null ? `R$ ${cartTotal.toFixed(2).replace('.', ',')}` : null;
   const cartTotalWithDiscount = (cartTotal !== null && (couponDiscount || hasResellerDiscount)) ? calculateDiscountedValue(cartTotalFormatted!) : cartTotalFormatted;
-  // Valor a exibir no PIX: à vista mantém o cálculo atual; Parcelamento VIP cobra somente a parcela 1 congelada pelo servidor.
+  // Valor a exibir no PIX: à vista mantém o cálculo atual; Parcelamento VIP cobra a entrada quando configurada.
   const cashPixValue = cart.length > 1 ? ((couponDiscount || hasResellerDiscount) ? cartTotalWithDiscount : cartTotalFormatted) : ((couponDiscount || hasResellerDiscount) ? finalValue : originalValue);
-  const vipFirstInstallmentCents = Number(vipInstallmentSelection.quote?.quote?.installments?.[0]?.amountCents || 0);
-  const pixValue = vipInstallmentSelection.mode === "vip_installment" && vipFirstInstallmentCents > 0
-    ? (vipFirstInstallmentCents / 100).toFixed(2).replace('.', ',')
+  const vipEntryCents = Number(vipInstallmentSelection.quote?.quote?.firstInstallmentAmountCents || 0);
+  const vipFirstParcelCents = Number(vipInstallmentSelection.quote?.quote?.installments?.[0]?.amountCents || 0);
+  const vipCurrentPixCents = vipEntryCents > 0 ? vipEntryCents : vipFirstParcelCents;
+  const pixValue = vipInstallmentSelection.mode === "vip_installment" && vipCurrentPixCents > 0
+    ? (vipCurrentPixCents / 100).toFixed(2).replace('.', ',')
     : cashPixValue;
 
   useEffect(() => {
@@ -3944,12 +3946,12 @@ export default function Home() {
                 <div className="flex items-center justify-center gap-2 mb-3">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                   <p className="text-blue-400 font-black text-base tracking-widest">PAGAMENTO VIA PIX</p>
-                  {vipInstallmentSelection.mode === 'vip_installment' && <p className="text-violet-300 text-xs font-black">PARCELA 1 DE {vipInstallmentSelection.installmentCount}</p>}
+                  {vipInstallmentSelection.mode === 'vip_installment' && <p className="text-violet-300 text-xs font-black">{vipEntryCents > 0 ? 'ENTRADA' : `PARCELA 1 DE ${vipInstallmentSelection.installmentCount}`}</p>}
                 </div>
                 {/* Valor + logo PIX */}
                 <div className="bg-black/60 border border-blue-500/30 rounded-xl p-4 mb-3 flex items-center justify-between">
                   <div>
-                    <p className="text-white/60 text-xs tracking-widest mb-1">VALOR A PAGAR</p>
+                    <p className="text-white/60 text-xs tracking-widest mb-1">{vipInstallmentSelection.mode === 'vip_installment' && vipEntryCents > 0 ? 'VALOR DA ENTRADA' : 'VALOR A PAGAR'}</p>
                     <p className="text-blue-300 font-black text-3xl drop-shadow-[0_0_10px_#3b82f6]">R$ {pixValue}</p>
                   </div>
                   <div className="pix-logo">
