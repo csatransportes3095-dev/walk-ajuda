@@ -881,11 +881,23 @@ export const vipInstallmentsRouter = router({
       if (plans.length === 0) return [];
       const planIds = plans.map((row) => Number(row.id));
       const installmentsResult = await db.execute(sql`
-        SELECT id, planId, installmentNumber, amountCents, dueDate, paidAmountCents, status,
-               proofSubmittedAtMs, paidAtMs
-        FROM vipInstallments
-        WHERE planId IN (${sql.join(planIds.map((id) => sql`${id}`), sql`, `)})
-        ORDER BY planId DESC, installmentNumber ASC
+        SELECT i.id, i.planId, i.installmentNumber, i.amountCents, i.dueDate, i.paidAmountCents, i.status,
+               i.proofSubmittedAtMs, i.paidAtMs,
+               (
+                 SELECT h.notes
+                 FROM vipInstallmentHistory h
+                 WHERE h.installmentId=i.id AND h.action='proof_rejected'
+                 ORDER BY h.id DESC LIMIT 1
+               ) AS lastRejectionReason,
+               (
+                 SELECT UNIX_TIMESTAMP(h.createdAt) * 1000
+                 FROM vipInstallmentHistory h
+                 WHERE h.installmentId=i.id AND h.action='proof_rejected'
+                 ORDER BY h.id DESC LIMIT 1
+               ) AS lastRejectionAtMs
+        FROM vipInstallments i
+        WHERE i.planId IN (${sql.join(planIds.map((id) => sql`${id}`), sql`, `)})
+        ORDER BY i.planId DESC, i.installmentNumber ASC
       `);
       const installments = rowsOf<any>(installmentsResult);
       const byPlan = new Map<number, any[]>();
@@ -901,6 +913,8 @@ export const vipInstallmentsRouter = router({
           status: String(row.status || "pending"),
           proofSubmittedAtMs: row.proofSubmittedAtMs == null ? null : Number(row.proofSubmittedAtMs),
           paidAtMs: row.paidAtMs == null ? null : Number(row.paidAtMs),
+          lastRejectionReason: row.lastRejectionReason == null ? null : String(row.lastRejectionReason),
+          lastRejectionAtMs: row.lastRejectionAtMs == null ? null : Number(row.lastRejectionAtMs),
         });
         byPlan.set(planId, list);
       }

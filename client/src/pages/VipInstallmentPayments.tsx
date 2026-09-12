@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, Clock3, Copy, CreditCard, FileUp, Loader2, LockKeyhole, ReceiptText } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Copy, CreditCard, FileUp, Loader2, LockKeyhole, ReceiptText } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -158,6 +158,7 @@ export default function VipInstallmentPayments() {
 
                           {isCurrent && !paid && (
                             <div className="mt-3 border-t border-white/10 pt-3">
+                              {installment.lastRejectionReason && !awaiting ? <div className="mb-3 flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-300" /><div><p className="font-black">Comprovante anterior rejeitado</p><p className="mt-1 text-xs text-red-200">Motivo: {installment.lastRejectionReason}</p><p className="mt-1 text-[11px] text-red-300/80">Envie um novo comprovante para esta parcela.</p></div></div> : null}
                               {awaiting ? (
                                 <div className="flex items-center gap-2 rounded-xl border border-yellow-400/25 bg-yellow-500/10 p-3 text-sm font-bold text-yellow-200"><Clock3 className="h-4 w-4" /> Comprovante enviado. Aguarde a confirmação do ADM.</div>
                               ) : (
