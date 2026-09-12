@@ -165,16 +165,18 @@ export function calculateVipInstallmentQuote(input: VipInstallmentQuoteInput): V
     throw new Error("Valor total fora do limite permitido.");
   }
 
+  const financedTotalCents = financedBaseAmountCents + interestAmountCents;
   const amounts = specialFirst == null
     ? splitInstallmentAmounts(totalAmountCents, input.installmentCount)
-    : [specialFirst, ...splitInstallmentAmounts(totalAmountCents - specialFirst, input.installmentCount - 1)];
+    : splitInstallmentAmounts(financedTotalCents, input.installmentCount);
   const dailyMode = input.dailyMode || "all_days";
-  const dueDates = buildVipInstallmentDueDates({
+  const dueDatesWithEntry = buildVipInstallmentDueDates({
     firstDueDate: input.firstDueDate,
-    installmentCount: input.installmentCount,
+    installmentCount: specialFirst == null ? input.installmentCount : input.installmentCount + 1,
     frequency: input.frequency,
     dailyMode,
   });
+  const dueDates = specialFirst == null ? dueDatesWithEntry : dueDatesWithEntry.slice(1);
 
   return {
     baseAmountCents: input.baseAmountCents,

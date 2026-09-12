@@ -547,8 +547,21 @@ export async function createVipInstallmentContract(input: {
       const planId = insertIdOf(planInsert);
 
       let firstInstallmentId = 0;
+      if (input.quote.firstInstallmentAmountCents != null) {
+        const entryKey = `VIP-PLAN-${planId}-ENTRADA`;
+        const entryDueDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+        const entryResult = await tx.execute(sql`
+          INSERT INTO vipInstallments
+            (planId, installmentNumber, amountCents, dueDate, paidAmountCents, status,
+             proofUrl, proofMimeType, proofSubmittedAtMs, paymentIdempotencyKey)
+          VALUES
+            (${planId}, 0, ${input.quote.firstInstallmentAmountCents}, ${entryDueDate}, 0,
+             'awaiting_confirmation', ${proofUrl}, ${proofMimeType}, ${now}, ${entryKey})
+        `);
+        firstInstallmentId = insertIdOf(entryResult);
+      }
       for (const installment of input.quote.installments) {
-        const isFirst = installment.installmentNumber === 1;
+        const isFirst = input.quote.firstInstallmentAmountCents == null && installment.installmentNumber === 1;
         const key = `VIP-PLAN-${planId}-PARCELA-${installment.installmentNumber}`;
         const result = await tx.execute(sql`
           INSERT INTO vipInstallments

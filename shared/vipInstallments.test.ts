@@ -120,3 +120,22 @@ it("uses a configured entry as installment 1 and charges interest only on remain
   expect(quote.totalAmountCents).toBe(49500);
   expect(quote.installments.map((item) => item.amountCents)).toEqual([15000, 8625, 8625, 8625, 8625]);
 });
+
+
+it("treats entry separately from the selected installment count", () => {
+  const quote = calculateVipInstallmentQuote({
+    baseAmountCents: 45000,
+    installmentCount: 20,
+    interestBps: 1500,
+    firstInstallmentAmountCents: 22500,
+    firstDueDate: "2026-09-12",
+    frequency: "daily",
+    dailyMode: "all_days",
+  });
+  expect(quote.firstInstallmentAmountCents).toBe(22500);
+  expect(quote.installments).toHaveLength(20);
+  expect(quote.installments[0].installmentNumber).toBe(1);
+  expect(quote.installments[0].dueDate).toBe("2026-09-13");
+  expect(quote.installments.reduce((sum, item) => sum + item.amountCents, 0)).toBe(25875);
+  expect(quote.totalAmountCents).toBe(48375);
+});

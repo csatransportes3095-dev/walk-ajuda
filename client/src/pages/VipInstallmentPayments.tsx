@@ -147,7 +147,7 @@ export default function VipInstallmentPayments() {
                         <div key={installment.id} className={`rounded-xl border p-3 ${isCurrent ? "border-emerald-400/35 bg-emerald-500/[0.06]" : "border-white/10 bg-black/20"}`}>
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <p className="font-black">Parcela {installment.installmentNumber} de {plan.installmentCount}</p>
+                              <p className="font-black">{installment.installmentNumber === 0 ? "Entrada" : <>Parcela {installment.installmentNumber}</>} de {plan.installmentCount}</p>
                               <p className="mt-1 text-xs text-slate-400">Vencimento: {dateLabel(installment.dueDate)}</p>
                             </div>
                             <div className="text-right">
