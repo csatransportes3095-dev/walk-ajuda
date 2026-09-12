@@ -153,6 +153,39 @@ export async function prepareVipInstallmentCheckoutIntent(input: {
   }
 }
 
+
+export async function cancelVipInstallmentCheckoutIntent(input: {
+  checkoutToken: string;
+  customerId: number;
+}) {
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  const checkoutToken = String(input.checkoutToken || '').trim();
+  return db.transaction(async (tx: any) => {
+    const result = await tx.execute(sql`
+      SELECT id, customerId, status, finalizedPlanId
+      FROM vipInstallmentCheckoutIntents
+      WHERE checkoutToken=${checkoutToken}
+      LIMIT 1
+      FOR UPDATE
+    `);
+    const row = rowsOf<any>(result)[0];
+    if (!row) return { success: true, cancelled: false };
+    if (Number(row.customerId) !== input.customerId) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Esta reserva não pertence ao cliente autenticado." });
+    }
+    if (String(row.status) === 'finalized' || row.finalizedPlanId) {
+      return { success: true, cancelled: false, finalized: true };
+    }
+    await tx.execute(sql`
+      UPDATE vipInstallmentCheckoutIntents
+      SET status='cancelled', activeCustomerId=NULL
+      WHERE id=${Number(row.id)} AND status='prepared'
+    `);
+    return { success: true, cancelled: String(row.status) === 'prepared' };
+  });
+}
+
 export async function finalizeVipInstallmentCheckoutIntent(input: {
   checkoutToken: string;
   customerId: number;

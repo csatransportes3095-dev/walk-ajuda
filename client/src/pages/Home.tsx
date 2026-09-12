@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useVipMembership } from "@/hooks/useVipMembership";
 import PaymentTutorial from "@/components/PaymentTutorial";
+import VipInstallmentCheckoutBox, { type VipInstallmentCheckoutSelection } from "@/components/VipInstallmentCheckoutBox";
 import { ColombiaBot } from "@/components/ColombiaBot";
 import { StorefrontProductCard, type StorefrontCatalogItem, type StorefrontWarrantyTier } from "@/components/StorefrontProductCard";
 import { StorefrontFilters } from "@/components/StorefrontFilters";
@@ -327,6 +328,10 @@ export default function Home() {
   const [selectedPriceModel, setSelectedPriceModel] = useState<OptionPriceModel | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedTier, setSelectedTier] = useState<WarrantyTier | null>(null);
+  const [vipInstallmentSelection, setVipInstallmentSelection] = useState<VipInstallmentCheckoutSelection>({ mode: "cash", installmentCount: 2, frequency: "monthly", quote: null });
+  const vipCheckoutTokenRef = useRef("");
+  const vipPendingRegistrationIdRef = useRef<number | null>(null);
+
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogCategory, setCatalogCategory] = useState<string>("Todos");
   const [flowOrigin, setFlowOrigin] = useState<FlowOrigin>("legacy");
@@ -972,7 +977,27 @@ export default function Home() {
   const validateCouponMutation = trpc.coupons.validate.useMutation();
   const registerResellerOrderMutation = trpc.resellers.registerOrder.useMutation();
   const addBlockingNoteMutation = trpc.customers.addBlockingNote.useMutation();
+  const prepareVipInstallmentCheckoutMutation = trpc.vipInstallments.prepareCheckout.useMutation();
+  const finalizeVipInstallmentCheckoutMutation = trpc.vipInstallments.finalizeCheckout.useMutation();
+  const cancelVipInstallmentCheckoutMutation = trpc.vipInstallments.cancelCheckout.useMutation();
 
+
+
+  const createVipCheckoutToken = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '');
+    return `vip_${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+  };
+
+  const releaseVipCheckoutReservation = useCallback(() => {
+    const checkoutToken = vipCheckoutTokenRef.current;
+    if (!checkoutToken) return;
+    const cpToken = localStorage.getItem('cp_token') || '';
+    if (cpToken.length >= 32) {
+      cancelVipInstallmentCheckoutMutation.mutate({ cpToken, phone: clientPhone.trim() || undefined, checkoutToken });
+    }
+    vipCheckoutTokenRef.current = '';
+    vipPendingRegistrationIdRef.current = null;
+  }, [cancelVipInstallmentCheckoutMutation, clientPhone]);
 
   // Determinar se é fluxo PDF-only - agora vem da opção selecionada
   const isPDFOnly = selectedOption?.isPdfOnly === 1 || selectedProduct?.isPdfOnly === 1;
@@ -984,6 +1009,12 @@ export default function Home() {
 
   const { isVipCustomer } = useVipMembership();
   const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
+
+  // vip-checkout-reset: troca de produto/preço/cupom invalida qualquer reserva antiga.
+  useEffect(() => {
+    if (vipCheckoutTokenRef.current) releaseVipCheckoutReservation();
+    setVipInstallmentSelection({ mode: "cash", installmentCount: 2, frequency: "monthly", quote: null });
+  }, [selectedProduct?.id, selectedOption?.id, selectedPriceModel?.id, selectedTier?.id, couponValid, couponCode]);
 
   // Obter valor atual (usa benefício VIP do Modelo/Categoria quando configurado)
   const getCurrentServiceValue = (): string => {
@@ -1507,6 +1538,15 @@ export default function Home() {
       const optionHasAudioQuestions = allQs.some(q => q.fieldType === 'audio');
       const audioDraftIdsForSubmit = Object.values(questionAudioAnswers).map(audio => audio.id);
 
+      // Parcelamento VIP é exclusivo do fluxo direto de um único produto nesta primeira versão.
+      const vipInstallmentActive = vipInstallmentSelection.mode === 'vip_installment';
+      if (vipInstallmentActive && (cart.length > 0 || activeResellerSlug || !selectedProduct || !selectedOption)) {
+        throw new Error('Parcelamento VIP disponível somente para compra direta de um produto por vez.');
+      }
+      if (vipInstallmentActive && !vipCheckoutTokenRef.current) {
+        throw new Error('Reserva do Parcelamento VIP ausente. Volte ao resumo e faça a simulação novamente.');
+      }
+
       // Se carrinho tem múltiplos itens, criar um pedido para cada item
       const cartItems = cart.length > 1 ? cart : null;
 
@@ -1574,7 +1614,6 @@ export default function Home() {
               docCustomName: item.option?.docCustomName || '',
               price: itemRawPrice,
               priceModelId: item.priceModel?.id || undefined,
-              priceModelId: selectedPriceModel?.id || undefined,
         thirdPartyName: thirdPartyName.trim() || undefined,
               thirdPartyPhone: thirdPartyPhone.trim() || undefined,
               resellerDiscountApplied: (() => { const d = getResellerDiscountAmount(); return d > 0 ? d : undefined; })(),
@@ -1634,7 +1673,9 @@ export default function Home() {
           ? `${optionNameWithModel} - Garantia: ${selectedTier.warrantyValue > 0 ? `${selectedTier.warrantyValue} ${selectedTier.warrantyType}` : (selectedTier.warrantyLabel || selectedTier.warrantyType)}${selectedTier.warrantyLabel && selectedTier.warrantyValue > 0 ? ` ${selectedTier.warrantyLabel}` : ''}`
           : optionNameWithModel)
         : 'N/A';
-      const result = await submitMutation.mutateAsync({
+      const result = vipInstallmentActive && vipPendingRegistrationIdRef.current
+        ? ({ success: true, persisted: true, registrationId: vipPendingRegistrationIdRef.current } as any)
+        : await submitMutation.mutateAsync({
         clientName: clientName.trim() || 'Cliente',
         service: selectedProduct?.name || 'Não especificado',
         nameOption: nameOptionWithTier,
@@ -1681,6 +1722,22 @@ export default function Home() {
       });
 
       if (isPersistedOrderResult(result)) {
+        if (vipInstallmentActive) {
+          vipPendingRegistrationIdRef.current = result.registrationId;
+          setSubmitProgress('Finalizando Parcelamento VIP...');
+          const cpToken = localStorage.getItem('cp_token') || '';
+          const finalized = await finalizeVipInstallmentCheckoutMutation.mutateAsync({
+            cpToken,
+            phone: phone || undefined,
+            checkoutToken: vipCheckoutTokenRef.current,
+            registrationId: result.registrationId,
+            paymentProofUrl: paymentProofUploadedUrl,
+            paymentProofMime: getProofMime(paymentProof),
+          });
+          if (!finalized?.planId) throw new Error('O pedido foi salvo, mas o contrato parcelado não foi confirmado. Tente finalizar novamente.');
+          vipPendingRegistrationIdRef.current = null;
+          vipCheckoutTokenRef.current = '';
+        }
         // Registrar pedido do revendedor se houver slug ativo
         if (activeResellerSlug && result.registrationId && selectedOption) {
           try {
@@ -1846,6 +1903,9 @@ export default function Home() {
   };
 
   const resetAllStates = useCallback(() => {
+    vipCheckoutTokenRef.current = '';
+    vipPendingRegistrationIdRef.current = null;
+    setVipInstallmentSelection({ mode: 'cash', installmentCount: 2, frequency: 'monthly', quote: null });
     localStorage.removeItem(PROGRESS_KEY);
     localStorage.removeItem(UPLOADED_FILES_KEY);
     setStep("home"); setSelectedProduct(null); setSelectedOption(null);
@@ -1909,8 +1969,12 @@ export default function Home() {
 
   const cartTotalFormatted = cartTotal !== null ? `R$ ${cartTotal.toFixed(2).replace('.', ',')}` : null;
   const cartTotalWithDiscount = (cartTotal !== null && (couponDiscount || hasResellerDiscount)) ? calculateDiscountedValue(cartTotalFormatted!) : cartTotalFormatted;
-  // Valor a exibir no PIX: total do carrinho ou valor do produto individual
-  const pixValue = cart.length > 1 ? ((couponDiscount || hasResellerDiscount) ? cartTotalWithDiscount : cartTotalFormatted) : ((couponDiscount || hasResellerDiscount) ? finalValue : originalValue);
+  // Valor a exibir no PIX: à vista mantém o cálculo atual; Parcelamento VIP cobra somente a parcela 1 congelada pelo servidor.
+  const cashPixValue = cart.length > 1 ? ((couponDiscount || hasResellerDiscount) ? cartTotalWithDiscount : cartTotalFormatted) : ((couponDiscount || hasResellerDiscount) ? finalValue : originalValue);
+  const vipFirstInstallmentCents = Number(vipInstallmentSelection.quote?.quote?.installments?.[0]?.amountCents || 0);
+  const pixValue = vipInstallmentSelection.mode === "vip_installment" && vipFirstInstallmentCents > 0
+    ? (vipFirstInstallmentCents / 100).toFixed(2).replace('.', ',')
+    : cashPixValue;
 
   useEffect(() => {
     if (profilePhoto) {
@@ -3724,11 +3788,49 @@ export default function Home() {
                   </div>
                 )}
               </div>}
+              {cadastroSubStep === 'resumo' && (
+                <VipInstallmentCheckoutBox
+                  key={`vip-checkout-${selectedProduct?.id || 0}-${selectedOption?.id || 0}-${selectedPriceModel?.id || 0}-${selectedTier?.id || 0}-${couponValid ? couponCode : ''}`}
+                  cpToken={localStorage.getItem('cp_token') || ''}
+                  phone={clientPhone.trim() || undefined}
+                  productId={selectedProduct?.id || null}
+                  optionId={selectedOption?.id || null}
+                  priceModelId={selectedPriceModel?.id || null}
+                  warrantyTierId={selectedTier?.id || null}
+                  couponCode={couponValid ? couponCode : null}
+                  disabledReason={cart.length > 0 ? 'Nesta primeira versão, o Parcelamento VIP está disponível somente na compra direta de um produto por vez.' : activeResellerSlug ? 'Parcelamento VIP não está disponível no fluxo de revendedor.' : !selectedProduct || !selectedOption ? 'Selecione um produto e uma opção para consultar o parcelamento.' : null}
+                  onSelectionChange={setVipInstallmentSelection}
+                />
+              )}
+
               {/* BOTÃO AVANÇAR PARA PAGAMENTO - só aparece no resumo */}
               {cadastroSubStep === 'resumo' && (
                 <>
-                <button onClick={() => setCadastroSubStep('pagamento')}
-                  className="w-full px-4 py-4 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white font-black rounded-xl transition-all duration-300 transform hover:scale-105 text-lg tracking-wider shadow-[0_0_20px_rgba(34,197,94,0.4)]">
+                <button onClick={async () => {
+                  if (vipInstallmentSelection.mode !== 'vip_installment') { setCadastroSubStep('pagamento'); return; }
+                  if (!vipInstallmentSelection.quote || !selectedProduct || !selectedOption) { toast.error('Aguarde a simulação do Parcelamento VIP.'); return; }
+                  const cpToken = localStorage.getItem('cp_token') || '';
+                  if (cpToken.length < 32) { toast.error('Sua sessão expirou. Entre novamente para parcelar.'); return; }
+                  const checkoutToken = vipCheckoutTokenRef.current || createVipCheckoutToken();
+                  vipCheckoutTokenRef.current = checkoutToken;
+                  try {
+                    const prepared = await prepareVipInstallmentCheckoutMutation.mutateAsync({
+                      cpToken,
+                      phone: clientPhone.trim() || undefined,
+                      checkoutToken,
+                      items: [{ productId: selectedProduct.id, optionId: selectedOption.id, priceModelId: selectedPriceModel?.id || null, warrantyTierId: selectedTier?.id || null }],
+                      couponCode: couponValid ? couponCode : undefined,
+                      installmentCount: vipInstallmentSelection.installmentCount,
+                      frequency: vipInstallmentSelection.frequency,
+                    });
+                    setVipInstallmentSelection(prev => ({ ...prev, quote: { pricing: prepared.pricing, quote: prepared.quote } }));
+                    setCadastroSubStep('pagamento');
+                  } catch (error: any) {
+                    vipCheckoutTokenRef.current = '';
+                    toast.error(error?.message || 'Não foi possível reservar o Parcelamento VIP.');
+                  }
+                }} disabled={prepareVipInstallmentCheckoutMutation.isPending}
+                  className="w-full px-4 py-4 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white font-black rounded-xl transition-all duration-300 transform hover:scale-105 text-lg tracking-wider shadow-[0_0_20px_rgba(34,197,94,0.4)] disabled:opacity-50">
                   AVANÇAR PARA PAGAMENTO
                 </button>
                 <button onClick={() => setCadastroSubStep('dados')}
@@ -3744,6 +3846,7 @@ export default function Home() {
                 <div className="flex items-center justify-center gap-2 mb-3">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                   <p className="text-blue-400 font-black text-base tracking-widest">PAGAMENTO VIA PIX</p>
+                  {vipInstallmentSelection.mode === 'vip_installment' && <p className="text-violet-300 text-xs font-black">PARCELA 1 DE {vipInstallmentSelection.installmentCount}</p>}
                 </div>
                 {/* Valor + logo PIX */}
                 <div className="bg-black/60 border border-blue-500/30 rounded-xl p-4 mb-3 flex items-center justify-between">
@@ -3846,7 +3949,7 @@ export default function Home() {
                   <><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0"><svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6 2l.01 6L10 12l-3.99 4.01L6 22h12v-6l-4-4 4-3.99V2H6zm10 14.5V20H8v-3.5l4-4 4 4z"/></svg></div><div className="text-left"><p className="text-white font-black text-base">CLIQUE AQUI PARA FINALIZAR</p><p className="text-green-200 text-xs font-normal">Seu pedido será liberado após a confirmação do pagamento.</p></div><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polyline points="9 18 15 12 9 6"/></svg></>
                 ) : paymentProofUploadState === 'preparing' || paymentProofUploadState === 'uploading' ? 'AGUARDE O ENVIO DO COMPROVANTE' : 'ENVIE O COMPROVANTE PARA FINALIZAR'}
               </button>
-              <button onClick={() => setCadastroSubStep('resumo')} disabled={isSubmitting}
+              <button onClick={() => { if (vipInstallmentSelection.mode === 'vip_installment') releaseVipCheckoutReservation(); setCadastroSubStep('resumo'); }} disabled={isSubmitting}
                 className="w-full px-4 py-3 bg-white/5 hover:bg-white/10 text-white/70 font-semibold rounded-xl transition-all duration-300 disabled:opacity-50 border border-white/10 flex items-center justify-center gap-2">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
                 <span className="text-red-400">VOLTAR</span>
@@ -4225,7 +4328,7 @@ export default function Home() {
                             {(item.priceModel?.originalPrice || item.option?.originalPrice) && (
                               <span className="text-gray-500 text-xs line-through">{item.priceModel?.originalPrice || item.option?.originalPrice}</span>
                             )}
-                            <p className="text-green-400 font-bold text-sm">{item.priceModel?.price || resellerPriceMap[item.option.id] || item.option.price}</p>
+                            <p className="text-green-400 font-bold text-sm">{item.priceModel?.price || (item.option ? (resellerPriceMap[item.option.id] || item.option.price) : '')}</p>
                           </div>
                         )}
                       </div>
