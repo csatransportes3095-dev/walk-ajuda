@@ -521,7 +521,7 @@ export async function confirmVipInstallmentPayment(input: {
       VALUES
         (NULL, ${String(row.customerName || "")}, ${normalizePhone(row.customerPhone)},
          ${String(row.productName || "Parcelamento VIP")}, ${`Parcela ${Number(row.installmentNumber)}`},
-         ${amountCents}, 0, 'pix', 'recebido', ${now}, ${now},
+         ${amountCents}, 0, 'pix', 'pago', ${now}, ${now},
          ${`[Parcelamento VIP] Plano #${Number(row.planId)} | Pedido ${String(row.orderNumber || "-")} | ${String(row.paymentIdempotencyKey)}`})
     `);
     const financeSaleId = insertIdOf(financeInsert);

@@ -21,6 +21,8 @@ const SETTING_KEYS = {
   dailyMode: "vip_installments_daily_mode",
 } as const;
 
+const MAX_FINANCIAL_SALE_CENTS = 2_000_000_000;
+
 export type VipInstallmentConfig = {
   enabled: boolean;
   minInstallments: number;
@@ -375,6 +377,10 @@ async function buildValidatedVipCheckout(input: {
     throw new TRPCError({ code: "BAD_REQUEST", message: (error as Error).message || "Não foi possível validar o valor da compra." });
   }
 
+  if (!Number.isSafeInteger(pricing.totalCents) || pricing.totalCents <= 0 || pricing.totalCents > MAX_FINANCIAL_SALE_CENTS) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Valor da compra acima do limite suportado pelo Financeiro atual." });
+  }
+
   const productRule = await getVipInstallmentProductRule(pricing.items[0].productId);
   if (!productRule.enabled) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Este produto não está liberado para Parcelamento VIP." });
@@ -411,6 +417,10 @@ async function buildValidatedVipCheckout(input: {
     });
   } catch (error) {
     throw new TRPCError({ code: "BAD_REQUEST", message: (error as Error).message || "Não foi possível calcular o parcelamento." });
+  }
+
+  if (quote.installments.some((installment) => !Number.isSafeInteger(installment.amountCents) || installment.amountCents <= 0 || installment.amountCents > MAX_FINANCIAL_SALE_CENTS)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Uma ou mais parcelas ultrapassam o limite suportado pelo Financeiro atual." });
   }
 
   return { eligibility, pricing, quote, productRule, maxInstallments, interestBps };
