@@ -772,6 +772,53 @@ function assertIsoDate(value: string) {
   }
 }
 
+
+export async function rejectVipInstallmentProof(input: {
+  installmentId: number;
+  actorId?: string | null;
+  notes: string;
+}) {
+  const notes = String(input.notes || "").trim();
+  if (!notes) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o motivo da rejeição." });
+  const db = (await getDb()) as any;
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  const today = brazilTodayForAdminAction();
+  return db.transaction(async (tx: any) => {
+    const result = await tx.execute(sql`
+      SELECT i.id, i.planId, i.installmentNumber, i.dueDate, i.status, i.proofUrl,
+             i.proofMimeType, i.proofSubmittedAtMs, p.status AS planStatus
+      FROM vipInstallments i
+      INNER JOIN vipInstallmentPlans p ON p.id=i.planId
+      WHERE i.id=${input.installmentId}
+      LIMIT 1 FOR UPDATE
+    `);
+    const row = rowsOf<any>(result)[0];
+    if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Parcela não encontrada." });
+    if (String(row.status) !== "awaiting_confirmation") {
+      throw new TRPCError({ code: "CONFLICT", message: "Esta parcela não possui comprovante aguardando confirmação." });
+    }
+    if (String(row.planStatus) === "paid" || String(row.planStatus) === "cancelled") {
+      throw new TRPCError({ code: "CONFLICT", message: "Este plano já está encerrado." });
+    }
+    const dueDate = row.dueDate instanceof Date ? row.dueDate.toISOString().slice(0, 10) : String(row.dueDate).slice(0, 10);
+    const newStatus = dueDate < today ? "overdue" : "pending";
+    await tx.execute(sql`
+      UPDATE vipInstallments
+      SET status=${newStatus}, proofUrl=NULL, proofMimeType=NULL, proofSubmittedAtMs=NULL
+      WHERE id=${input.installmentId} AND status='awaiting_confirmation'
+    `);
+    await tx.execute(sql`
+      INSERT INTO vipInstallmentHistory
+        (planId, installmentId, action, actorType, actorId, previousValue, newValue, notes)
+      VALUES
+        (${Number(row.planId)}, ${input.installmentId}, 'proof_rejected', 'admin', ${input.actorId || "admin"},
+         ${JSON.stringify({ status: "awaiting_confirmation", proofUrl: row.proofUrl == null ? null : String(row.proofUrl), proofSubmittedAtMs: row.proofSubmittedAtMs == null ? null : Number(row.proofSubmittedAtMs) })},
+         ${JSON.stringify({ status: newStatus, proofUrl: null })}, ${notes})
+    `);
+    return { success: true, status: newStatus };
+  });
+}
+
 export async function changeVipInstallmentDueDate(input: {
   installmentId: number;
   newDueDate: string;

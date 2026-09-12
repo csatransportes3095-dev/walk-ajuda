@@ -8,7 +8,7 @@ import { getDb, getSetting, upsertSetting } from "../db";
 import { isVipMemberByPhone } from "./vipMemberships";
 import { resolveVipInstallmentCheckoutPricing } from "../vipInstallmentPricing";
 import { getVipInstallmentProductRule, listVipInstallmentProductRules, saveVipInstallmentProductRule } from "../vipInstallmentProductRules";
-import { prepareVipInstallmentCheckoutIntent, cancelVipInstallmentCheckoutIntent, finalizeVipInstallmentCheckoutIntent, submitVipInstallmentProof, confirmVipInstallmentPayment, recoverVipInstallmentCheckoutOrder, changeVipInstallmentDueDate, addVipInstallmentAdminNote, cancelVipInstallmentPlan, payoffVipInstallmentPlan } from "../vipInstallmentContracts";
+import { prepareVipInstallmentCheckoutIntent, cancelVipInstallmentCheckoutIntent, finalizeVipInstallmentCheckoutIntent, submitVipInstallmentProof, confirmVipInstallmentPayment, recoverVipInstallmentCheckoutOrder, changeVipInstallmentDueDate, addVipInstallmentAdminNote, cancelVipInstallmentPlan, payoffVipInstallmentPlan, rejectVipInstallmentProof } from "../vipInstallmentContracts";
 
 const SETTING_KEYS = {
   enabled: "vip_installments_enabled",
@@ -766,6 +766,10 @@ export const vipInstallmentsRouter = router({
       actorId: 'admin',
       notes: input.notes,
     })),
+
+  adminRejectProof: adminProcedure
+    .input(z.object({ installmentId: z.number().int().positive(), notes: z.string().trim().min(1).max(500) }))
+    .mutation(async ({ input }) => rejectVipInstallmentProof({ ...input, actorId: 'admin' })),
 
   adminChangeDueDate: adminProcedure
     .input(z.object({
