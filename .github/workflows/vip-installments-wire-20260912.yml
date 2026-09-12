@@ -26,12 +26,13 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Wire router using exact anchors
+      - name: Apply guarded VIP wiring
         shell: python
         run: |
           from pathlib import Path
-          p = Path('server/routers.ts')
-          s = p.read_text(encoding='utf-8')
+
+          routers = Path('server/routers.ts')
+          s = routers.read_text(encoding='utf-8')
           import_anchor = 'import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";'
           import_line = 'import { vipInstallmentsRouter } from "./routers/vipInstallments";'
           route_anchor = '  vipMemberships: vipMembershipsRouter,'
@@ -46,7 +47,32 @@ jobs:
               s = s.replace(route_anchor, route_anchor + '\n' + route_line, 1)
           if s.count(import_line) != 1 or s.count(route_line) != 1:
               raise SystemExit('router wiring must be unique')
-          p.write_text(s, encoding='utf-8')
+          routers.write_text(s, encoding='utf-8')
+
+          vip = Path('server/routers/vipInstallments.ts')
+          v = vip.read_text(encoding='utf-8')
+          guard_marker = 'Ative o VIP do cliente antes de liberar o parcelamento.'
+          if guard_marker not in v:
+              start = v.index('  setCustomerPermission: adminProcedure')
+              mutation = v.index('    .mutation(async ({ input }) => {', start)
+              db_line = '      const db = (await getDb()) as any;\n'
+              db_pos = v.index(db_line, mutation) + len(db_line)
+              guard = '''      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      const customerResult = await db.execute(sql`
+        SELECT phone FROM customers
+        WHERE id=${input.customerId} AND deletedAt IS NULL
+        LIMIT 1
+      `);
+      const customerRow = rowsOf<any>(customerResult)[0];
+      if (!customerRow) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+      if (input.enabled && !(await isVipMemberByPhone(normalizePhone(customerRow.phone)))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Ative o VIP do cliente antes de liberar o parcelamento." });
+      }
+'''
+              v = v[:db_pos] + guard + v[db_pos:]
+          if v.count(guard_marker) != 1:
+              raise SystemExit('active VIP permission guard must be unique')
+          vip.write_text(v, encoding='utf-8')
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -62,10 +88,10 @@ jobs:
         run: |
           git config user.name "h2-vip-guard"
           git config user.email "actions@users.noreply.github.com"
-          git add server/routers.ts
+          git add server/routers.ts server/routers/vipInstallments.ts
           if git diff --cached --quiet; then
-            echo "Already wired"
+            echo "VIP backend already wired"
             exit 0
           fi
-          git commit -m "feat(vip): register installment router after validation"
+          git commit -m "feat(vip): wire installments with active VIP guard"
           git push origin HEAD:feat/vip-parcelamento-seguro-2026-09-12
