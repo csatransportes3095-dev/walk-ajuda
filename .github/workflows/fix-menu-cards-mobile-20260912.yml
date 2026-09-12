@@ -1,0 +1,129 @@
+name: Fix Menu Cards Mobile
+
+on:
+  push:
+    branches:
+      - fix/menu-cards-mobile-2026-09-12
+    paths:
+      - .github/workflows/fix-menu-cards-mobile-20260912.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/menu-cards-mobile-2026-09-12
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Apply mobile menu card layout
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('client/src/pages/Home.tsx')
+          s = p.read_text(encoding='utf-8')
+
+          pattern = re.compile(r'''\n        <div className="container pb-4">\n          <div className="grid grid-cols-3 gap-2 sm:gap-3">.*?\n        </div>\n      </header>''', re.S)
+          replacement = '''
+        <div className="container pb-4 pt-1">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <button
+              onClick={() => { window.location.href = '/acompanhar'; }}
+              className="group relative flex min-h-[108px] flex-col items-center justify-center overflow-hidden rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-500/20 via-cyan-500/10 to-blue-500/10 p-4 text-center shadow-[0_10px_30px_rgba(8,145,178,0.12)] transition-all active:scale-[0.98] hover:border-cyan-300/70 hover:bg-cyan-500/25 sm:min-h-[112px]"
+              aria-label="Acompanhar pedido"
+              title="Acompanhar pedido"
+            >
+              <span className="absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/80 to-transparent" />
+              <span className="mb-2 flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/30 shadow-[0_0_18px_rgba(34,211,238,0.14)]">
+                <Clock className="h-5 w-5" />
+              </span>
+              <span className="text-[11px] font-black uppercase leading-tight tracking-wide text-white sm:text-sm">Acompanhar pedido</span>
+              <span className="mt-1 text-[10px] leading-tight text-cyan-100/60">Ver andamento</span>
+            </button>
+
+            <button
+              onClick={() => { window.location.href = '/emprestimo'; }}
+              className="group relative flex min-h-[108px] flex-col items-center justify-center overflow-hidden rounded-2xl border border-amber-400/40 bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-orange-500/10 p-4 text-center shadow-[0_10px_30px_rgba(245,158,11,0.12)] transition-all active:scale-[0.98] hover:border-amber-300/70 hover:bg-amber-500/25 sm:min-h-[112px]"
+              aria-label="Empréstimo"
+              title="Empréstimo"
+            >
+              <span className="absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/80 to-transparent" />
+              <span className="mb-2 flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/30 shadow-[0_0_18px_rgba(251,191,36,0.14)]">
+                <Ticket className="h-5 w-5" />
+              </span>
+              <span className="text-[11px] font-black uppercase leading-tight tracking-wide text-white sm:text-sm">Empréstimo</span>
+              <span className="mt-1 text-[10px] leading-tight text-amber-100/60">Consultar e solicitar</span>
+            </button>
+
+            <button
+              onClick={() => { window.location.href = '/gastos'; }}
+              className="group relative col-span-2 flex min-h-[92px] items-center justify-center gap-4 overflow-hidden rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/20 via-emerald-500/10 to-green-500/10 p-4 text-left shadow-[0_10px_30px_rgba(16,185,129,0.12)] transition-all active:scale-[0.98] hover:border-emerald-300/70 hover:bg-emerald-500/25 sm:col-span-1 sm:min-h-[112px] sm:flex-col sm:gap-2 sm:text-center"
+              aria-label="Planilha de gastos"
+              title="Planilha de gastos"
+            >
+              <span className="absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/80 to-transparent" />
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/30 shadow-[0_0_18px_rgba(52,211,153,0.14)]">
+                <FileUp className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[11px] font-black uppercase leading-tight tracking-wide text-white sm:text-sm">Planilha de gastos</span>
+                <span className="mt-1 block text-[10px] leading-tight text-emerald-100/60">Controle diário</span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </header>'''
+
+          new_s, count = pattern.subn(replacement, s, count=1)
+          if count != 1:
+              raise SystemExit(f'menu block replacement count={count}')
+          p.write_text(new_s, encoding='utf-8')
+          PY
+
+      - name: Validate menu structure
+        shell: bash
+        run: |
+          grep -n "grid grid-cols-2 gap-3 sm:grid-cols-3" client/src/pages/Home.tsx
+          grep -n "col-span-2" client/src/pages/Home.tsx
+          test "$(grep -c "window.location.href = '/acompanhar'" client/src/pages/Home.tsx)" -eq 1
+          test "$(grep -c "window.location.href = '/emprestimo'" client/src/pages/Home.tsx)" -eq 1
+          test "$(grep -c "window.location.href = '/gastos'" client/src/pages/Home.tsx)" -eq 1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Home TypeScript regressions
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/tsc.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then exit 0; fi
+          grep "client/src/pages/Home.tsx" /tmp/tsc.log > /tmp/home-errors.log || true
+          if [ -s /tmp/home-errors.log ]; then cat /tmp/home-errors.log; exit 1; fi
+          echo "No new Home.tsx TypeScript errors."
+
+      - name: Check diff
+        run: git diff --check
+
+      - name: Commit validated Home change only
+        shell: bash
+        run: |
+          git config user.name "h2-menu-guard"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/fix-menu-cards-mobile-20260912.yml
+          git add client/src/pages/Home.tsx
+          git commit -m "fix(menu): improve mobile route cards"
+          git push origin HEAD:fix/menu-cards-mobile-2026-09-12
