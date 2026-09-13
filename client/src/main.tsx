@@ -76,7 +76,13 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
-function fetchWithTimeout(timeoutMs: number) { return (input: RequestInfo | URL, init?: RequestInit) => { const controller = new AbortController(); const timeoutId = setTimeout(() => controller.abort(), timeoutMs); return globalThis.fetch(input, { ...(init ?? {}), credentials: "include", signal: controller.signal }).finally(() => clearTimeout(timeoutId)); }; }
+function fetchWithTimeout(timeoutMs: number) {
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    return globalThis.fetch(input, { ...(init ?? {}), credentials: "include", signal: controller.signal }).finally(() => clearTimeout(timeoutId));
+  };
+}
 const trpcClient = trpc.createClient({ links: [splitLink({ condition(op) { return op.type === "mutation"; }, true: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: fetchWithTimeout(150000) }), false: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: fetchWithTimeout(30000) }) })] });
 
 createRoot(document.getElementById("root")!).render(

@@ -11,8 +11,6 @@ import { getAdminJwtSecret } from "../adminJwt";
 import { isSystemRestoreLocked } from "../backupRestoreService";
 import { notifyCustomerEntry } from "./customerEntryNotification";
 
-const ENTRY_ACTIVITY_GAP_MS = 30 * 60 * 1000;
-
 // Verifica se o request tem um cookie JWT admin válido (login independente).
 // Exportada para rotas Express administrativas que precisam da mesma garantia.
 export function isAdminJwtValid(req: TrpcContext["req"]): boolean {
@@ -72,8 +70,7 @@ async function sendCustomerEntryNotification(phone: string, enteredAt: Date) {
 
 const customerEntryNotification = t.middleware(async ({ next, path, getRawInput }) => {
   let rawInput: any = null;
-  let sessionToken = '';
-  let previousLastAccessAt: Date | null = null;
+  let sessionToken = "";
 
   try {
     if (path === 'customerPassword.login' || path === 'customerPassword.checkSession') {
@@ -82,18 +79,6 @@ const customerEntryNotification = t.middleware(async ({ next, path, getRawInput 
 
     if (path === 'customerPassword.checkSession') {
       sessionToken = String(rawInput?.token || '').trim();
-      if (sessionToken) {
-        const db = (await getDb()) as any;
-        if (db) {
-          const rows = await db
-            .select({ lastAccessAt: customerPasswordSessions.lastAccessAt })
-            .from(customerPasswordSessions)
-            .where(eq(customerPasswordSessions.token, sessionToken))
-            .limit(1);
-          const value = rows?.[0]?.lastAccessAt;
-          previousLastAccessAt = value ? new Date(value) : null;
-        }
-      }
     }
   } catch {}
 
@@ -117,15 +102,6 @@ const customerEntryNotification = t.middleware(async ({ next, path, getRawInput 
     data?.source === 'customer' &&
     sessionToken
   ) {
-    const phone = String(data?.phone || '').replace(/\D/g, '');
-    const inactiveForMs = previousLastAccessAt
-      ? enteredAt.getTime() - previousLastAccessAt.getTime()
-      : 0;
-
-    if (phone && previousLastAccessAt && inactiveForMs >= ENTRY_ACTIVITY_GAP_MS) {
-      void sendCustomerEntryNotification(phone, enteredAt);
-    }
-
     try {
       const db = (await getDb()) as any;
       if (db) {
