@@ -12,25 +12,37 @@ export default function CustomerRouteSecurityMonitor() {
   const lastRouteKeyRef = useRef<string | null>(null);
   const sendInFlightRef = useRef(false);
   const lastSendRef = useRef<{ key: string; sentAt: number } | null>(null);
+  const queueRef = useRef<Array<{ sessionToken: string; pathname: string; trigger: "route_change" | "heartbeat" | "tab_visible" }>>([]);
   const trackedRoute = useMemo(() => getCustomerRouteAuditTarget(location), [location]);
+
+  const drainQueue = () => {
+    sendInFlightRef.current = true;
+    const next = queueRef.current.shift();
+    if (!next) {
+      sendInFlightRef.current = false;
+      return;
+    }
+    void mutation.mutateAsync({
+      sessionToken: next.sessionToken,
+      pathname: next.pathname,
+      trigger: next.trigger,
+    }).catch(() => undefined).finally(() => {
+      sendInFlightRef.current = false;
+      if (queueRef.current.length > 0) drainQueue();
+    });
+  };
 
   const send = (trigger: "route_change" | "heartbeat" | "tab_visible") => {
     if (typeof window === "undefined") return;
     const sessionToken = localStorage.getItem(CP_TOKEN_KEY) || "";
     if (!sessionToken || !trackedRoute.tracked) return;
+    const pathname = `${window.location.pathname || location || "/"}${window.location.search || ""}${window.location.hash || ""}`;
     const dedupeKey = `${trackedRoute.routeKey}:${trigger}`;
     const now = Date.now();
     if (lastSendRef.current?.key === dedupeKey && now - lastSendRef.current.sentAt < 2_000) return;
-    if (sendInFlightRef.current) return;
-    sendInFlightRef.current = true;
     lastSendRef.current = { key: dedupeKey, sentAt: now };
-    void mutation.mutateAsync({
-      sessionToken,
-      pathname: `${window.location.pathname || location || "/"}${window.location.search || ""}${window.location.hash || ""}`,
-      trigger,
-    }).catch(() => undefined).finally(() => {
-      sendInFlightRef.current = false;
-    });
+    queueRef.current.push({ sessionToken, pathname, trigger });
+    if (!sendInFlightRef.current) drainQueue();
   };
 
   useEffect(() => {

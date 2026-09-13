@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getCustomerRouteAuditTarget } from "../shared/customerRouteAudit";
+import { getCustomerRouteAuditTarget, shouldNotifyForRouteAudit } from "../shared/customerRouteAudit";
 
 describe("getCustomerRouteAuditTarget", () => {
   it("monitora rotas principais com nomes obrigatórios", () => {
@@ -34,7 +34,7 @@ describe("getCustomerRouteAuditTarget", () => {
   it("normaliza maiúsculas, barra final, query e hash", () => {
     expect(getCustomerRouteAuditTarget("/Cartoes/123?token=secreto#section")).toEqual({
       tracked: true,
-      routeKey: "/cartoes/*",
+      routeKey: "/cartoes/123",
       areaName: "Cartões",
     });
     expect(getCustomerRouteAuditTarget("/ADMIN/LOGIN/").tracked).toBe(false);
@@ -43,7 +43,7 @@ describe("getCustomerRouteAuditTarget", () => {
   it("usa fallback seguro por primeiro segmento em rotas públicas não mapeadas", () => {
     expect(getCustomerRouteAuditTarget("/area-cliente/token-interno")).toEqual({
       tracked: true,
-      routeKey: "/area-cliente",
+      routeKey: "/area-cliente/token-interno",
       areaName: "Area cliente",
     });
   });
@@ -56,5 +56,56 @@ describe("getCustomerRouteAuditTarget", () => {
     expect(middle.routeKey).toBe("/acompanhar");
     expect(back.routeKey).toBe("/emprestimo");
     expect(back.routeKey).toBe(first.routeKey);
+  });
+
+  it("diferencia rotas reais que antes eram agrupadas", () => {
+    expect(getCustomerRouteAuditTarget("/cartoes").routeKey).toBe("/cartoes");
+    expect(getCustomerRouteAuditTarget("/cartoes/cartao/1").routeKey).toBe("/cartoes/cartao/1");
+    expect(getCustomerRouteAuditTarget("/app").routeKey).toBe("/app");
+    expect(getCustomerRouteAuditTarget("/app-pro").routeKey).toBe("/app-pro");
+  });
+
+  it("regra de 30 minutos na mesma rota", () => {
+    const base = new Date("2026-09-13T10:00:00.000Z");
+    expect(shouldNotifyForRouteAudit({
+      previousRouteKey: "/emprestimo",
+      nextRouteKey: "/emprestimo",
+      lastNotifiedAt: new Date(base),
+      now: new Date(base.getTime() + (29 * 60 * 1000)),
+    }).shouldNotify).toBe(false);
+
+    expect(shouldNotifyForRouteAudit({
+      previousRouteKey: "/emprestimo",
+      nextRouteKey: "/emprestimo",
+      lastNotifiedAt: new Date(base),
+      now: new Date(base.getTime() + (30 * 60 * 1000)),
+    }).shouldNotify).toBe(true);
+  });
+
+  it("A->B->A em sequência rápida continua sendo mudança de rota", () => {
+    const base = new Date("2026-09-13T10:00:00.000Z");
+    const first = shouldNotifyForRouteAudit({
+      previousRouteKey: "",
+      nextRouteKey: "/emprestimo",
+      lastNotifiedAt: null,
+      now: base,
+    });
+    expect(first.shouldNotify).toBe(true);
+
+    const second = shouldNotifyForRouteAudit({
+      previousRouteKey: "/emprestimo",
+      nextRouteKey: "/acompanhar",
+      lastNotifiedAt: base,
+      now: new Date(base.getTime() + 5_000),
+    });
+    expect(second.shouldNotify).toBe(true);
+
+    const third = shouldNotifyForRouteAudit({
+      previousRouteKey: "/acompanhar",
+      nextRouteKey: "/emprestimo",
+      lastNotifiedAt: new Date(base.getTime() + 5_000),
+      now: new Date(base.getTime() + 8_000),
+    });
+    expect(third.shouldNotify).toBe(true);
   });
 });

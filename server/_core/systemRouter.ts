@@ -7,10 +7,9 @@ import { getDb } from "../db";
 import { customerPasswordSessions, customers } from "../../drizzle/schema";
 import { requireCustomerSession } from "../customerSession";
 import { notifyCustomerRouteActivity } from "./customerEntryNotification";
-import { getCustomerRouteAuditTarget } from "../../shared/customerRouteAudit";
+import { getCustomerRouteAuditTarget, shouldNotifyForRouteAudit } from "../../shared/customerRouteAudit";
 
 const ADMIN_EMAIL = 'h2@h2colombiano.com';
-const SAME_ROUTE_NOTIFICATION_INTERVAL_MS = 30 * 60 * 1000;
 let ensureCustomerRouteAuditColumnsPromise: Promise<void> | null = null;
 const routeAuditInFlight = new Map<string, Promise<void>>();
 
@@ -135,10 +134,12 @@ export const systemRouter = router({
         const lastNotifiedAt = parsedLastNotifiedAt && !Number.isNaN(parsedLastNotifiedAt.getTime())
           ? parsedLastNotifiedAt
           : null;
-        const routeChanged = currentKey !== target.routeKey;
-        const isFirstTrackedRoute = !currentKey;
-        const shouldNotifyByInterval = !routeChanged && !!lastNotifiedAt && now.getTime() - lastNotifiedAt.getTime() >= SAME_ROUTE_NOTIFICATION_INTERVAL_MS;
-        const shouldNotify = routeChanged || isFirstTrackedRoute || shouldNotifyByInterval;
+        const { routeChanged, shouldNotify } = shouldNotifyForRouteAudit({
+          previousRouteKey: currentKey,
+          nextRouteKey: target.routeKey,
+          lastNotifiedAt,
+          now,
+        });
 
         await db.execute(
           drizzleSql`
