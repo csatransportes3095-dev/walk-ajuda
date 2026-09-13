@@ -1,8 +1,62 @@
 import { z } from "zod";
+import { eq, sql as drizzleSql } from "drizzle-orm";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { sendMail } from "./mailer";
+import { getDb } from "../db";
+import { customerPasswordSessions, customers } from "../../drizzle/schema";
+import { getCustomerSessionTokenFromRequest, requireCustomerSession } from "../customerSession";
+import { notifyCustomerRouteActivity } from "./customerEntryNotification";
+import { getCustomerRouteAuditTarget } from "../../shared/customerRouteAudit";
 
 const ADMIN_EMAIL = 'h2@h2colombiano.com';
+const SAME_ROUTE_NOTIFICATION_INTERVAL_MS = 30 * 60 * 1000;
+let ensureCustomerRouteAuditColumnsPromise: Promise<void> | null = null;
+const routeAuditInFlight = new Map<string, Promise<void>>();
+
+async function ensureCustomerRouteAuditColumns() {
+  if (ensureCustomerRouteAuditColumnsPromise) return ensureCustomerRouteAuditColumnsPromise;
+  ensureCustomerRouteAuditColumnsPromise = (async () => {
+    const db = (await getDb()) as any;
+    if (!db) return;
+    const statements = [
+      "ALTER TABLE customerPasswordSessions ADD COLUMN IF NOT EXISTS routeAuditKey VARCHAR(255) NULL",
+      "ALTER TABLE customerPasswordSessions ADD COLUMN IF NOT EXISTS routeAuditAreaName VARCHAR(255) NULL",
+      "ALTER TABLE customerPasswordSessions ADD COLUMN IF NOT EXISTS routeAuditLastNotifiedAt DATETIME NULL",
+      "ALTER TABLE customerPasswordSessions ADD COLUMN IF NOT EXISTS routeAuditLastSeenAt DATETIME NULL",
+    ];
+    for (const statement of statements) {
+      try {
+        await db.execute(drizzleSql.raw(statement));
+      } catch {
+        const fallback = statement.replace(" IF NOT EXISTS", "");
+        try {
+          await db.execute(drizzleSql.raw(fallback));
+        } catch {}
+      }
+    }
+  })().catch((error) => {
+    ensureCustomerRouteAuditColumnsPromise = null;
+    console.warn("[customer-route-audit] Falha ao garantir colunas:", error);
+  });
+  return ensureCustomerRouteAuditColumnsPromise;
+}
+
+async function runWithRouteAuditLock<T>(sessionToken: string, task: () => Promise<T>): Promise<T> {
+  while (routeAuditInFlight.has(sessionToken)) {
+    await routeAuditInFlight.get(sessionToken);
+  }
+  let release = () => {};
+  const lock = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  routeAuditInFlight.set(sessionToken, lock);
+  try {
+    return await task();
+  } finally {
+    routeAuditInFlight.delete(sessionToken);
+    release();
+  }
+}
 
 async function sendOwnerEmail(subject: string, html: string) {
   try {
@@ -39,6 +93,89 @@ export const systemRouter = router({
       const htmlBody = `<h2>${title}</h2><pre style="font-family:monospace;white-space:pre-wrap">${content}</pre>`;
       await sendOwnerEmail(title, htmlBody);
       return { received: true };
+    }),
+
+  customerRouteHeartbeat: publicProcedure
+    .input(
+      z.object({
+        pathname: z.string().min(1),
+        trigger: z.enum(["route_change", "heartbeat", "tab_visible"]).default("heartbeat"),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const sessionToken = getCustomerSessionTokenFromRequest(ctx.req);
+      if (!sessionToken || sessionToken.length < 32) return { tracked: false, notified: false } as const;
+      return runWithRouteAuditLock(sessionToken, async () => {
+        await ensureCustomerRouteAuditColumns();
+        const target = getCustomerRouteAuditTarget(input.pathname);
+        if (!target.tracked) return { tracked: false, notified: false } as const;
+
+        const identity = await requireCustomerSession(sessionToken);
+        const db = (await getDb()) as any;
+        if (!db) throw new Error("Banco indisponível");
+
+        const rows = await db
+          .select({
+            token: customerPasswordSessions.token,
+            routeAuditKey: drizzleSql<string | null>`routeAuditKey`.as("routeAuditKey"),
+            routeAuditAreaName: drizzleSql<string | null>`routeAuditAreaName`.as("routeAuditAreaName"),
+            routeAuditLastNotifiedAt: drizzleSql<Date | string | null>`routeAuditLastNotifiedAt`.as("routeAuditLastNotifiedAt"),
+          })
+          .from(customerPasswordSessions)
+          .where(eq(customerPasswordSessions.token, sessionToken))
+          .limit(1);
+
+        const session = rows?.[0];
+        if (!session) return { tracked: true, notified: false } as const;
+
+        const now = new Date();
+        const currentKey = String(session.routeAuditKey || "");
+        const lastNotifiedAt = session.routeAuditLastNotifiedAt ? new Date(session.routeAuditLastNotifiedAt) : null;
+        const routeChanged = currentKey !== target.routeKey;
+        const isFirstTrackedRoute = !currentKey;
+        const shouldNotifyByInterval = !routeChanged && !!lastNotifiedAt && now.getTime() - lastNotifiedAt.getTime() >= SAME_ROUTE_NOTIFICATION_INTERVAL_MS;
+        const shouldNotify = routeChanged || isFirstTrackedRoute || shouldNotifyByInterval;
+
+        await db.execute(
+          drizzleSql`
+            UPDATE customerPasswordSessions
+            SET
+              routeAuditKey = ${target.routeKey},
+              routeAuditAreaName = ${target.areaName},
+              routeAuditLastSeenAt = ${now},
+              routeAuditLastNotifiedAt = ${shouldNotify ? now : (lastNotifiedAt || null)}
+            WHERE token = ${sessionToken}
+          `
+        );
+
+        if (!shouldNotify) return { tracked: true, notified: false } as const;
+
+        try {
+          const customerRows = await db
+            .select({
+              name: customers.name,
+              phone: customers.phone,
+              profilePhotoUrl: customers.profilePhotoUrl,
+            })
+            .from(customers)
+            .where(eq(customers.phone, identity.phone))
+            .limit(1);
+
+          const customer = customerRows?.[0];
+          await notifyCustomerRouteActivity({
+            name: customer?.name ?? null,
+            phone: customer?.phone || identity.phone,
+            profilePhotoUrl: customer?.profilePhotoUrl ?? null,
+            areaName: target.areaName,
+            changedArea: routeChanged,
+            happenedAt: now,
+          });
+        } catch (error) {
+          console.warn("[customer-route-audit] Falha ao enviar e-mail:", error);
+        }
+
+        return { tracked: true, notified: true, routeChanged } as const;
+      });
     }),
 
   health: publicProcedure

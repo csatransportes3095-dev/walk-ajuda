@@ -117,6 +117,7 @@ import PasswordGate from "./components/PasswordGate";
 import WelcomeScreen from "./components/WelcomeScreen";
 import AdminPWABanner from "./components/AdminPWABanner";
 import InstallWall from "./components/InstallWall";
+import CustomerRouteSecurityMonitor from "./components/CustomerRouteSecurityMonitor";
 import { usePWA } from "./hooks/usePWA";
 import WhatsAppFloat from "./components/WhatsAppFloat";
 import { useAdminAuth } from "./hooks/useAdminAuth";
@@ -599,6 +600,7 @@ function App() {
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
+          <CustomerRouteSecurityMonitor />
           <AppContent />
         </TooltipProvider>
       </ThemeProvider>
