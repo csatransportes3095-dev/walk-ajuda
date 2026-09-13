@@ -5,7 +5,7 @@ import { randomBytes } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
-import { getDb } from "../db";
+import { getDb, getSetting } from "../db";
 import { formatCPF, isValidCPF, normalizeCpf } from "@shared/cpf";
 import {
   customerPasswords,
@@ -17,10 +17,102 @@ import {
 import { eq, and, sql, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { ensureCustomerIdentityInfrastructure, getRouteAccess, setCustomerRoutePermissions, type CustomerRoute } from "../customerAccess";
+import { sendMailDirect } from "../_core/sendMailDirect";
+import { emailLoginClienteAdmin } from "../emailTemplates";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 
 // â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function normalizeDomainValue(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let value = String(raw).trim().toLowerCase();
+  if (!value) return "";
+  value = value.replace(/^https?:\/\//i, "");
+  value = value.split("/")[0] || value;
+  if (value.includes("@")) value = value.split("@")[1] || value;
+  return value.trim();
+}
+
+function normalizeBaseUrlValue(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let value = String(raw).trim();
+  if (!value) return "";
+  if (!/^https?:\/\//i.test(value)) value = `https://${value}`;
+  try {
+    const parsed = new URL(value);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return "";
+  }
+}
+
+async function getEmailBranding(): Promise<{ siteTitle: string; siteDomain: string; siteBaseUrl: string }> {
+  const [siteTitleRaw, siteDomainRaw, siteUrlRaw, siteBaseUrlRaw] = await Promise.all([
+    getSetting("site_title"),
+    getSetting("site_domain"),
+    getSetting("site_url"),
+    getSetting("site_base_url"),
+  ]);
+
+  const siteTitle = (siteTitleRaw || "H2 COLOMBIANO").toString().trim() || "H2 COLOMBIANO";
+  const siteBaseUrl =
+    normalizeBaseUrlValue(siteBaseUrlRaw) ||
+    normalizeBaseUrlValue(siteUrlRaw) ||
+    normalizeBaseUrlValue(process.env.APP_URL) ||
+    "";
+  const domainFromBaseUrl = siteBaseUrl ? normalizeDomainValue(siteBaseUrl) : "";
+  const domainFromSmtp = normalizeDomainValue(process.env.SMTP_USER || process.env.SMTP_FROM || "");
+  const siteDomain =
+    normalizeDomainValue(siteDomainRaw) ||
+    domainFromBaseUrl ||
+    domainFromSmtp ||
+    "h2colombiano.com";
+
+  return {
+    siteTitle,
+    siteDomain,
+    siteBaseUrl: siteBaseUrl || `https://${siteDomain}`,
+  };
+}
+
+async function getNotificationEmailTo(): Promise<string> {
+  const [emailToRaw, contactEmailRaw] = await Promise.all([
+    getSetting("email_to"),
+    getSetting("contact_email"),
+  ]);
+  return emailToRaw || contactEmailRaw || "h2@h2colombiano.com";
+}
+
+function hasMailChannel(): boolean {
+  return !!(process.env.RESEND_API_KEY || process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD);
+}
+
+function notifyCustomerLogin(customer: { name?: string | null; phone: string; email?: string | null; cpf?: string | null }) {
+  if (!hasMailChannel()) return;
+  void (async () => {
+    try {
+      const [emailTo, branding] = await Promise.all([
+        getNotificationEmailTo(),
+        getEmailBranding(),
+      ]);
+      await sendMailDirect({
+        from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
+        to: emailTo,
+        subject: `Cliente entrou no sistema - ${customer.name || customer.phone}`,
+        html: emailLoginClienteAdmin({
+          ...branding,
+          name: customer.name || customer.phone,
+          phone: customer.phone,
+          email: customer.email || undefined,
+          cpf: customer.cpf || undefined,
+        }),
+      });
+    } catch (error) {
+      console.error("Email login cliente:", error);
+    }
+  })();
+}
 
 async function getPasswordMode(): Promise<"auto" | "manual"> {
   const db = (await getDb()) as any;
@@ -295,13 +387,13 @@ export const customerPasswordRouter = router({
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanPhone = input.phone.replace(/\D/g, "");
+      let customer: Awaited<ReturnType<typeof getCustomerByCleanPhone>> = null;
 
       // Verificar bloqueio de cadastro antes de autenticar
       try {
-        const custRows = await db.select().from(customers).where(eq(customers.phone, cleanPhone)).limit(1);
-        const custForBlock = custRows?.[0];
-        if (custForBlock && (custForBlock as any).blocked === 1) {
-          return { success: false, error: "blocked" as const, blockReason: (custForBlock as any).blockReason || 'Acesso bloqueado' };
+        customer = await getCustomerByCleanPhone(cleanPhone);
+        if (customer && (customer as any).blocked === 1) {
+          return { success: false, error: "blocked" as const, blockReason: (customer as any).blockReason || 'Acesso bloqueado' };
         }
       } catch {}
 
@@ -330,6 +422,13 @@ export const customerPasswordRouter = router({
           loginAt: new Date(),
         });
       } catch {}
+
+      notifyCustomerLogin({
+        name: customer?.name ?? null,
+        phone: cleanPhone,
+        email: customer?.email ?? null,
+        cpf: customer?.cpf ?? null,
+      });
 
       return { success: true, token };
     }),

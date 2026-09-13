@@ -452,6 +452,41 @@ export function emailInicioCadastroAdmin(opts: {
   return baseLayout(content, branding);
 }
 
+/** E-mail de LOGIN DE CLIENTE para o admin */
+export function emailLoginClienteAdmin(opts: {
+  siteTitle?: string;
+  siteDomain?: string;
+  siteBaseUrl?: string;
+  name: string;
+  phone: string;
+  email?: string;
+  cpf?: string;
+}): string {
+  const { siteTitle, siteDomain, siteBaseUrl, name, phone, email, cpf } = opts;
+  const branding = resolveBranding({ siteTitle, siteDomain, siteBaseUrl });
+
+  const rows = [
+    infoRow('Nome:', `<strong>${name}</strong>`),
+    infoRow('Telefone:', phone),
+    ...(email ? [infoRow('E-mail:', email)] : []),
+    ...(cpf ? [infoRow('CPF:', cpf)] : []),
+  ];
+
+  const content = `
+    <div style="background:#0a1020;border:1px solid #22c55e40;border-radius:8px;padding:10px 16px;margin-bottom:20px;text-align:center;">
+      <span style="color:#22c55e;font-size:13px;font-weight:700;"> CLIENTE ENTROU NO SISTEMA</span>
+    </div>
+
+    <table cellpadding="0" cellspacing="0" style="width:100%;background:#0a0a18;border:1px solid #1e1e3a;border-radius:8px;margin-bottom:16px;">
+      ${rows.join('')}
+    </table>
+
+    ${ctaButton('Ver cliente no painel', withBaseUrl(branding.siteBaseUrl, '/admin/customers'))}
+  `;
+
+  return baseLayout(content, branding);
+}
+
 /** E-mail de INDICAÇÍO para o indicador */
 export function emailIndicacaoSucesso(opts: {
   siteTitle?: string;
