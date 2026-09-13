@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { eq, sql as drizzleSql } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 import { sendMail } from "./mailer";
 import { getDb } from "../db";
@@ -108,6 +109,7 @@ export const systemRouter = router({
         await ensureCustomerRouteAuditColumns();
         const target = getCustomerRouteAuditTarget(input.pathname);
         if (!target.tracked) return { tracked: false, notified: false } as const;
+        const identity = await requireCustomerSession(input.sessionToken);
         const db = (await getDb()) as any;
         if (!db) throw new Error("Banco indisponível");
 
@@ -123,8 +125,9 @@ export const systemRouter = router({
           .limit(1);
 
         const session = rows?.[0];
-        if (!session) return { tracked: true, notified: false } as const;
-        const identity = await requireCustomerSession(input.sessionToken);
+        if (!session) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão expirada. Faça login novamente." });
+        }
 
         const now = new Date();
         const currentKey = String(session.routeAuditKey || "");

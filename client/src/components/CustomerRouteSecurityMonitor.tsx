@@ -21,12 +21,12 @@ export default function CustomerRouteSecurityMonitor() {
     const dedupeKey = `${trackedRoute.routeKey}:${trigger}`;
     const now = Date.now();
     if (lastSendRef.current?.key === dedupeKey && now - lastSendRef.current.sentAt < 2_000) return;
-    if (sendInFlightRef.current && trigger === "tab_visible") return;
+    if (sendInFlightRef.current) return;
     sendInFlightRef.current = true;
     lastSendRef.current = { key: dedupeKey, sentAt: now };
     void mutation.mutateAsync({
       sessionToken,
-      pathname: window.location.pathname || location || "/",
+      pathname: `${window.location.pathname || location || "/"}${window.location.search || ""}${window.location.hash || ""}`,
       trigger,
     }).catch(() => undefined).finally(() => {
       sendInFlightRef.current = false;

@@ -47,4 +47,14 @@ describe("getCustomerRouteAuditTarget", () => {
       areaName: "Area cliente",
     });
   });
+
+  it("mantém routeKey consistente ao sair e voltar para rota anterior", () => {
+    const first = getCustomerRouteAuditTarget("/emprestimo");
+    const middle = getCustomerRouteAuditTarget("/acompanhar");
+    const back = getCustomerRouteAuditTarget("/emprestimo");
+    expect(first.routeKey).toBe("/emprestimo");
+    expect(middle.routeKey).toBe("/acompanhar");
+    expect(back.routeKey).toBe("/emprestimo");
+    expect(back.routeKey).toBe(first.routeKey);
+  });
 });
