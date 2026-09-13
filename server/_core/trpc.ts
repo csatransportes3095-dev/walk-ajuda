@@ -4,8 +4,14 @@ import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import { parse as parseCookieHeader } from "cookie";
 import jwt from "jsonwebtoken";
+import { eq } from "drizzle-orm";
+import { customerPasswordSessions, customers } from "../../drizzle/schema";
+import { getDb } from "../db";
 import { getAdminJwtSecret } from "../adminJwt";
 import { isSystemRestoreLocked } from "../backupRestoreService";
+import { notifyCustomerEntry } from "./customerEntryNotification";
+
+const ENTRY_ACTIVITY_GAP_MS = 30 * 60 * 1000;
 
 // Verifica se o request tem um cookie JWT admin válido (login independente).
 // Exportada para rotas Express administrativas que precisam da mesma garantia.
@@ -37,7 +43,106 @@ const blockDuringSystemRestore = t.middleware(async ({ next }) => {
   return next();
 });
 
-export const publicProcedure = t.procedure.use(blockDuringSystemRestore);
+async function sendCustomerEntryNotification(phone: string, enteredAt: Date) {
+  try {
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (!cleanPhone) return;
+    const db = (await getDb()) as any;
+    if (!db) return;
+    const rows = await db
+      .select({
+        name: customers.name,
+        phone: customers.phone,
+        profilePhotoUrl: customers.profilePhotoUrl,
+      })
+      .from(customers)
+      .where(eq(customers.phone, cleanPhone))
+      .limit(1);
+    const customer = rows?.[0];
+    await notifyCustomerEntry({
+      name: customer?.name ?? null,
+      phone: customer?.phone || cleanPhone,
+      profilePhotoUrl: customer?.profilePhotoUrl ?? null,
+      enteredAt,
+    });
+  } catch (error) {
+    console.warn('[customer-entry] Falha ao preparar notificação:', error);
+  }
+}
+
+const customerEntryNotification = t.middleware(async ({ next, path, getRawInput }) => {
+  let rawInput: any = null;
+  let sessionToken = '';
+  let previousLastAccessAt: Date | null = null;
+
+  try {
+    if (path === 'customerPassword.login' || path === 'customerPassword.checkSession') {
+      rawInput = await getRawInput();
+    }
+
+    if (path === 'customerPassword.checkSession') {
+      sessionToken = String(rawInput?.token || '').trim();
+      if (sessionToken) {
+        const db = (await getDb()) as any;
+        if (db) {
+          const rows = await db
+            .select({ lastAccessAt: customerPasswordSessions.lastAccessAt })
+            .from(customerPasswordSessions)
+            .where(eq(customerPasswordSessions.token, sessionToken))
+            .limit(1);
+          const value = rows?.[0]?.lastAccessAt;
+          previousLastAccessAt = value ? new Date(value) : null;
+        }
+      }
+    }
+  } catch {}
+
+  const result = await next();
+  const resultAny = result as any;
+  if (!resultAny?.ok) return result;
+
+  const data = resultAny.data as any;
+  const enteredAt = new Date();
+
+  if (path === 'customerPassword.login' && data?.success === true) {
+    const phone = String(rawInput?.phone || '').replace(/\D/g, '');
+    if (phone) {
+      void sendCustomerEntryNotification(phone, enteredAt);
+    }
+  }
+
+  if (
+    path === 'customerPassword.checkSession' &&
+    data?.valid === true &&
+    data?.source === 'customer' &&
+    sessionToken
+  ) {
+    const phone = String(data?.phone || '').replace(/\D/g, '');
+    const inactiveForMs = previousLastAccessAt
+      ? enteredAt.getTime() - previousLastAccessAt.getTime()
+      : 0;
+
+    if (phone && previousLastAccessAt && inactiveForMs >= ENTRY_ACTIVITY_GAP_MS) {
+      void sendCustomerEntryNotification(phone, enteredAt);
+    }
+
+    try {
+      const db = (await getDb()) as any;
+      if (db) {
+        await db
+          .update(customerPasswordSessions)
+          .set({ lastAccessAt: enteredAt })
+          .where(eq(customerPasswordSessions.token, sessionToken));
+      }
+    } catch {}
+  }
+
+  return result;
+});
+
+export const publicProcedure = t.procedure
+  .use(blockDuringSystemRestore)
+  .use(customerEntryNotification);
 
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
