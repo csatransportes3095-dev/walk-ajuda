@@ -25,6 +25,7 @@ export default function CustomerRouteSecurityMonitor() {
     sendInFlightRef.current = true;
     lastSendRef.current = { key: dedupeKey, sentAt: now };
     void mutation.mutateAsync({
+      sessionToken,
       pathname: window.location.pathname || location || "/",
       trigger,
     }).catch(() => undefined).finally(() => {

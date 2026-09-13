@@ -80,11 +80,7 @@ function fetchWithTimeout(timeoutMs: number) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    const sessionToken = typeof window !== "undefined" ? (localStorage.getItem("cp_token") || "").trim() : "";
-    const headers = new Headers(init?.headers ?? undefined);
-    if (sessionToken) headers.set("x-customer-session", sessionToken);
-    else headers.delete("x-customer-session");
-    return globalThis.fetch(input, { ...(init ?? {}), headers, credentials: "include", signal: controller.signal }).finally(() => clearTimeout(timeoutId));
+    return globalThis.fetch(input, { ...(init ?? {}), credentials: "include", signal: controller.signal }).finally(() => clearTimeout(timeoutId));
   };
 }
 const trpcClient = trpc.createClient({ links: [splitLink({ condition(op) { return op.type === "mutation"; }, true: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: fetchWithTimeout(150000) }), false: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: fetchWithTimeout(30000) }) })] });

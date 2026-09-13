@@ -4,7 +4,7 @@ import { adminProcedure, publicProcedure, router } from "./trpc";
 import { sendMail } from "./mailer";
 import { getDb } from "../db";
 import { customerPasswordSessions, customers } from "../../drizzle/schema";
-import { getCustomerSessionTokenFromRequest, requireCustomerSession } from "../customerSession";
+import { requireCustomerSession } from "../customerSession";
 import { notifyCustomerRouteActivity } from "./customerEntryNotification";
 import { getCustomerRouteAuditTarget } from "../../shared/customerRouteAudit";
 
@@ -98,19 +98,16 @@ export const systemRouter = router({
   customerRouteHeartbeat: publicProcedure
     .input(
       z.object({
+        sessionToken: z.string().min(32),
         pathname: z.string().min(1),
         trigger: z.enum(["route_change", "heartbeat", "tab_visible"]).default("heartbeat"),
       })
     )
-    .mutation(async ({ input, ctx }) => {
-      const sessionToken = getCustomerSessionTokenFromRequest(ctx.req);
-      if (!sessionToken || sessionToken.length < 32) return { tracked: false, notified: false } as const;
-      return runWithRouteAuditLock(sessionToken, async () => {
+    .mutation(async ({ input }) => {
+      return runWithRouteAuditLock(input.sessionToken, async () => {
         await ensureCustomerRouteAuditColumns();
         const target = getCustomerRouteAuditTarget(input.pathname);
         if (!target.tracked) return { tracked: false, notified: false } as const;
-
-        const identity = await requireCustomerSession(sessionToken);
         const db = (await getDb()) as any;
         if (!db) throw new Error("Banco indisponível");
 
@@ -122,15 +119,19 @@ export const systemRouter = router({
             routeAuditLastNotifiedAt: drizzleSql<Date | string | null>`routeAuditLastNotifiedAt`.as("routeAuditLastNotifiedAt"),
           })
           .from(customerPasswordSessions)
-          .where(eq(customerPasswordSessions.token, sessionToken))
+          .where(eq(customerPasswordSessions.token, input.sessionToken))
           .limit(1);
 
         const session = rows?.[0];
         if (!session) return { tracked: true, notified: false } as const;
+        const identity = await requireCustomerSession(input.sessionToken);
 
         const now = new Date();
         const currentKey = String(session.routeAuditKey || "");
-        const lastNotifiedAt = session.routeAuditLastNotifiedAt ? new Date(session.routeAuditLastNotifiedAt) : null;
+        const parsedLastNotifiedAt = session.routeAuditLastNotifiedAt ? new Date(session.routeAuditLastNotifiedAt) : null;
+        const lastNotifiedAt = parsedLastNotifiedAt && !Number.isNaN(parsedLastNotifiedAt.getTime())
+          ? parsedLastNotifiedAt
+          : null;
         const routeChanged = currentKey !== target.routeKey;
         const isFirstTrackedRoute = !currentKey;
         const shouldNotifyByInterval = !routeChanged && !!lastNotifiedAt && now.getTime() - lastNotifiedAt.getTime() >= SAME_ROUTE_NOTIFICATION_INTERVAL_MS;
@@ -144,12 +145,13 @@ export const systemRouter = router({
               routeAuditAreaName = ${target.areaName},
               routeAuditLastSeenAt = ${now},
               routeAuditLastNotifiedAt = ${shouldNotify ? now : (lastNotifiedAt || null)}
-            WHERE token = ${sessionToken}
+            WHERE token = ${input.sessionToken}
           `
         );
 
         if (!shouldNotify) return { tracked: true, notified: false } as const;
 
+        let emailSent = false;
         try {
           const customerRows = await db
             .select({
@@ -170,11 +172,12 @@ export const systemRouter = router({
             changedArea: routeChanged,
             happenedAt: now,
           });
+          emailSent = true;
         } catch (error) {
           console.warn("[customer-route-audit] Falha ao enviar e-mail:", error);
         }
 
-        return { tracked: true, notified: true, routeChanged } as const;
+        return { tracked: true, notified: emailSent, routeChanged } as const;
       });
     }),
 
