@@ -11,15 +11,20 @@ function replaceOnce(oldText, newText, label) {
   source = source.replace(oldText, newText);
 }
 
-// Layout responsivo: 1 coluna no celular, 2 em telas medias, 3 em desktop comum
-// e 4 em telas grandes (2xl). Assim monitores grandes aproveitam o espaco sem
-// forcar quatro cards em notebooks/desktops com viewport menor.
-const oldGrid = 'grid grid-cols-1 gap-4 p-3 md:grid-cols-2 xl:grid-cols-4';
-const gridCount = source.split(oldGrid).length - 1;
-if (gridCount !== 2) {
-  throw new Error(`[h2ads-desktop-layout] grids responsivos: esperado 2 blocos, encontrado ${gridCount}`);
-}
-source = source.split(oldGrid).join('grid grid-cols-1 gap-4 p-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4');
+// Desktop: o usuario trabalha em tela 4K com escala do Windows em 175% e quer
+// quatro cards por linha. Usamos 4 colunas a partir de lg para nao depender do
+// breakpoint 2xl, que pode variar conforme a largura CSS efetiva/zoom do navegador.
+replaceOnce(
+  'grid grid-cols-1 gap-4 p-3 md:grid-cols-2 xl:grid-cols-4',
+  'grid grid-cols-1 gap-4 p-3 md:grid-cols-2 lg:grid-cols-4',
+  'grid da visualizacao de agenda',
+);
+
+replaceOnce(
+  'grid grid-cols-1 gap-4 overflow-hidden rounded-b-2xl p-3 md:grid-cols-2 xl:grid-cols-4',
+  'grid grid-cols-1 gap-4 overflow-hidden rounded-b-2xl p-3 md:grid-cols-2 lg:grid-cols-4',
+  'grid das instancias do grupo expandido',
+);
 
 // O painel legado pode ser recriado por re-render/refetch. O hotfix anterior parava de
 // observar o DOM depois da primeira remocao; por isso ele podia reaparecer no desktop.
@@ -41,13 +46,11 @@ replaceOnce(
     return () => observer?.disconnect();`,
   `      const target = floatingAncestor ?? node;
       // Este bloco e exclusivamente o painel legado duplicado. Remover do DOM evita
-      // que ele continue ocupando espaco ou volte a ser escolhido em mutacoes futuras.
+      // que ele continue ocupando espaco ou reapareca sobre a tela no desktop.
       target.remove();
       return true;
     };
 
-    // Executa agora e continua vigiando durante toda a vida da pagina, porque o painel
-    // legado pode ser recriado por refetch/re-render no desktop.
     hideLegacySchedule();
     observer = new MutationObserver(() => {
       hideLegacySchedule();
@@ -58,12 +61,12 @@ replaceOnce(
   'observador persistente do painel legado',
 );
 
-// Protecao adicional contra quebra vertical em nomes longos nos cards do desktop.
+// Mantem o titulo legivel sem forcar quebra caractere por caractere.
 replaceOnce(
   '<h5 className="max-w-full break-words rounded-lg border px-2.5 py-1 text-base font-black tracking-tight text-white"',
-  '<h5 className="max-w-full break-words [overflow-wrap:anywhere] rounded-lg border px-2.5 py-1 text-base font-black tracking-tight text-white"',
+  '<h5 className="max-w-full break-words rounded-lg border px-2.5 py-1 text-base font-black tracking-tight text-white"',
   'titulo da instancia',
 );
 
 fs.writeFileSync(file, source, 'utf8');
-console.log('[h2ads-desktop-layout] OK: 1/2/3/4 colunas responsivas e painel legado removido de forma persistente.');
+console.log('[h2ads-desktop-layout] OK: 4 cards no desktop, painel legado removido de forma persistente.');
