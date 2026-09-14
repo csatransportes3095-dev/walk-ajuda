@@ -3,6 +3,10 @@ import fs from 'node:fs';
 function patchFile(filePath, patches) {
   let source = fs.readFileSync(filePath, 'utf8');
   for (const patch of patches) {
+    if (patch.alreadyAppliedMarker && source.includes(patch.alreadyAppliedMarker)) {
+      console.log(`[schedule-stage-close] ${filePath}: ${patch.name} ja atendido por ${patch.alreadyAppliedMarker}`);
+      continue;
+    }
     if (source.includes(patch.after)) {
       console.log(`[schedule-stage-close] ${filePath}: ${patch.name} ja aplicado`);
       continue;
@@ -37,6 +41,7 @@ patchFile('shared/orderBuckets.ts', [{
 
 patchFile('client/src/components/ScheduleStatusBadge.tsx', [{
   name: 'ocultar selo de agenda depois da etapa de foto',
+  alreadyAppliedMarker: 'const scheduleClosedByOrder = [',
   before: `  // Quando o agendamento ou o pedido já foi concluído, o card mostra somente o status atual do pedido.\n  const finalOrder = ['entregue', 'pedido_entregue', 'cancelado'].includes(String(orderStatus || ''));\n  if (appt?.status === "completed" || finalOrder) return null;`,
   after: `  // Depois de Foto em Análise, o card deve mostrar somente o status real do pedido.\n  // Isto impede que um agendamento legado/re-cadastro reapareça em Foto Aprovada ou Conta Ativa.\n  const status = String(orderStatus || '');\n  const scheduleClosedByOrder = [\n    'foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise',\n    'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',\n    'aguardando_ativa', 'aguardando_ficar_ativa', 'conta_ativa', 'p',\n    'entregue', 'pedido_entregue', 'cancelado',\n  ].includes(status);\n  if (appt?.status === "completed" || scheduleClosedByOrder) return null;`,
 }]);
