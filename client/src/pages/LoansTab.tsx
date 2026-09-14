@@ -205,8 +205,8 @@ function ProgressPanel({ paidCount, totalCount, totalAmount }: { paidCount: numb
 
 // ─── LateFeePanel ───────────────────────────────────────────────────────────
 
-function LateFeePanel({ config, installmentAmount }: { config: any; installmentAmount?: number }) {
-  if (!config?.enabled) return null;
+function LateFeePanel({ config, installmentAmount, paymentType }: { config: any; installmentAmount?: number; paymentType?: string }) {
+  if (!config?.enabled || paymentType !== "diario") return null;
   const amt = installmentAmount || 0;
   const fee18 = parseFloat(config.fee_after_18h || 0);
   const fixedFeeAfter20 = fee18 + parseFloat(config.fee_after_20h || 0);
@@ -228,7 +228,7 @@ function LateFeePanel({ config, installmentAmount }: { config: any; installmentA
               <div className="flex items-center gap-2 bg-red-500/10 rounded-lg px-3 py-2">
                 <span className="text-lg">🕕</span>
                 <div>
-                  <span className="text-xs font-bold text-red-300">Das 18h até 19:59:</span>
+                  <span className="text-xs font-bold text-red-300">Das 18:01 até 20:00:</span>
                   <span className="text-xs text-red-200 ml-1">taxa fixa de R$ {fee18.toFixed(2)}</span>
                   {ex18 && <span className="text-xs text-muted-foreground ml-1">(parcela vira {fmt(ex18)})</span>}
                 </div>
@@ -238,7 +238,7 @@ function LateFeePanel({ config, installmentAmount }: { config: any; installmentA
               <div className="flex items-center gap-2 bg-red-500/10 rounded-lg px-3 py-2">
                 <span className="text-lg">🕗</span>
                 <div>
-                  <span className="text-xs font-bold text-red-300">A partir das 20h:</span>
+                  <span className="text-xs font-bold text-red-300">Das 20:01 até 23:58:</span>
                   <span className="text-xs text-red-200 ml-1">taxa fixa acumulada de R$ {fixedFeeAfter20.toFixed(2)}</span>
                   {ex20 && <span className="text-xs text-muted-foreground ml-1">(parcela vira {fmt(ex20)})</span>}
                 </div>
@@ -247,7 +247,7 @@ function LateFeePanel({ config, installmentAmount }: { config: any; installmentA
             <div className="flex items-center gap-2 bg-red-700/20 rounded-lg px-3 py-2 border border-red-600/30">
               <span className="text-lg">🌙</span>
               <div>
-                <span className="text-xs font-black text-red-300">Após 23:59:</span>
+                <span className="text-xs font-black text-red-300">Às 23:59 e depois:</span>
                 <span className="text-xs text-red-200 ml-1">será cobrado somente o maior valor entre R$ {fixedFeeAfter20.toFixed(2)} e o valor da parcela</span>
                 {exMid && <span className="text-xs text-red-300 font-bold ml-1">(parcela vira {fmt(exMid)})</span>}
               </div>
@@ -879,7 +879,7 @@ export function LoansTab({ token }: LoansTabProps) {
 
       {/* Regras de atraso — destaque */}
       {lateFeeConfig?.enabled && !hasActive && (
-        <LateFeePanel config={lateFeeConfig} />
+        <LateFeePanel config={lateFeeConfig} paymentType="diario" />
       )}
 
       {/* Lista de empréstimos */}
@@ -1021,7 +1021,7 @@ export function LoansTab({ token }: LoansTabProps) {
 
                   {/* Regras de atraso dentro do empréstimo ativo */}
                   {lateFeeConfig?.enabled && !["pago", "cancelado", "reprovado"].includes(loan.status) && (
-                    <LateFeePanel config={lateFeeConfig} installmentAmount={totalAmt / Math.max(totalCount, 1)} />
+                    <LateFeePanel config={lateFeeConfig} installmentAmount={totalAmt / Math.max(totalCount, 1)} paymentType={loan.paymentType} />
                   )}
 
                   {/* Botão ver parcelas */}
