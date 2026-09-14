@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-cffi \
     poppler-utils \
     libpango-1.0-0 \
-    libpangocairo-1.0-0 \
     libcairo2 \
     libgdk-pixbuf2.0-0 \
     libffi-dev \
@@ -51,6 +50,7 @@ RUN npm install -g pnpm@10.4.1 \
     && node scripts/patch-admin-customers-referrer-photo-20260909.mjs \
     && node scripts/patch-admin-customers-referral-filter-20260909.mjs \
     && node scripts/patch-admin-customers-referral-photo-stack-20260909.mjs \
+    && node scripts/patch-admin-customers-filter-conflict-20260914.mjs \
     && node scripts/patch-admin-orders-status-background-20260909.mjs \
     && node scripts/patch-status-custom-colors-20260909.mjs \
     && node scripts/patch-admin-order-group-border-only-20260910.mjs \
