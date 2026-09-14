@@ -1,0 +1,1 @@
+H2ADS desktop hotfix marker. This file does not modify customer data.
