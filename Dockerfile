@@ -60,6 +60,7 @@ RUN npm install -g pnpm@10.4.1 \
     && node scripts/patch-h2ads-schedule-topbar-sticky-groups-20260914.mjs \
     && node scripts/patch-h2ads-layout-hotfix-20260914.mjs \
     && node scripts/patch-h2ads-desktop-layout-20260914.mjs \
+    && node scripts/patch-desktop-refresh-flicker-20260914.mjs \
     && pnpm run build
 
 ENV NODE_ENV=production
