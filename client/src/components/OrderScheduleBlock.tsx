@@ -3,6 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { CalendarClock, Link2, Copy, Mail, Send, RefreshCw, X, CheckCircle2, PlusCircle } from "lucide-react";
 import { PUBLIC_SITE_ORIGIN, publicSiteUrl } from "@shared/publicLinks";
+import { selectEffectiveScheduleAppointment } from "@shared/scheduleAppointmentResolution";
 
 interface Props {
   registrationId: number;
@@ -27,7 +28,9 @@ function formatDate(d: string): string {
 
 export default function OrderScheduleBlock({ registrationId, subOrderIndex, customerPhone, customerName, customerEmail, customerPhotoUrl }: Props) {
   const utils = trpc.useUtils();
-  const apptQuery = trpc.schedule.getForOrder.useQuery({ registrationId, subOrderIndex });
+  const scheduleQueryInput = { registrationId, subOrderIndex, customerPhone: customerPhone || undefined };
+  const apptQuery = trpc.schedule.getForOrder.useQuery(scheduleQueryInput);
+  const allAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, { staleTime: 10000 });
   const templatesQuery = trpc.schedule.listTemplates.useQuery();
   const cfgQuery = trpc.schedule.getConfig.useQuery();
 
@@ -36,16 +39,27 @@ export default function OrderScheduleBlock({ registrationId, subOrderIndex, cust
   const [templateId, setTemplateId] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
 
-  const appt = apptQuery.data;
+  // Resolve também por telefone para cobrir recadastros e vínculos antigos.
+  // Um cancelamento/conclusão mais recente não ressuscita confirmação antiga.
+  const appt = selectEffectiveScheduleAppointment(
+    apptQuery.data as any,
+    (allAppointmentsQuery.data || []) as any[],
+    customerPhone,
+  ) as any;
   const origin = PUBLIC_SITE_ORIGIN;
   const link = appt ? publicSiteUrl(`/agendar/${appt.token}`) : "";
 
+  const refreshSchedule = () => {
+    utils.schedule.getForOrder.invalidate(scheduleQueryInput);
+    utils.schedule.listAppointments.invalidate();
+  };
+
   const createMut = trpc.schedule.createForOrder.useMutation({
-    onSuccess: () => { toast.success("Link de agendamento gerado"); utils.schedule.getForOrder.invalidate({ registrationId, subOrderIndex }); setOpen(false); },
+    onSuccess: () => { toast.success("Link de agendamento gerado"); refreshSchedule(); setOpen(false); },
     onError: (e) => toast.error(e.message),
   });
   const sendEmailMut = trpc.schedule.sendEmail.useMutation({
-    onSuccess: (r) => { r.success ? toast.success("E-mail enviado") : toast.error("Falha ao enviar e-mail"); utils.schedule.getForOrder.invalidate({ registrationId, subOrderIndex }); },
+    onSuccess: (r) => { r.success ? toast.success("E-mail enviado") : toast.error("Falha ao enviar e-mail"); refreshSchedule(); },
     onError: (e) => toast.error(e.message),
   });
   const reopenAndNotifyMut = trpc.schedule.reopenAndNotify.useMutation({
@@ -54,12 +68,12 @@ export default function OrderScheduleBlock({ registrationId, subOrderIndex, cust
       if (data.emailSent) toast.success("E-mail enviado ao cliente");
       else if (!data.emailSent && data.waLink) toast.info("Cliente não possui e-mail cadastrado");
       if (data.waLink) window.open(data.waLink, "_blank");
-      utils.schedule.getForOrder.invalidate({ registrationId, subOrderIndex });
+      refreshSchedule();
     },
     onError: (e) => toast.error(e.message),
   });
   const cancelMut = trpc.schedule.cancel.useMutation({
-    onSuccess: () => { toast.success("Agendamento cancelado"); utils.schedule.getForOrder.invalidate({ registrationId, subOrderIndex }); },
+    onSuccess: () => { toast.success("Agendamento cancelado"); refreshSchedule(); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -87,41 +101,34 @@ export default function OrderScheduleBlock({ registrationId, subOrderIndex, cust
     navigator.clipboard.writeText(link).then(() => toast.success("Link copiado")).catch(() => toast.error("Não foi possível copiar"));
   }
 
-  // Usa o texto do modelo selecionado se disponível; senão usa o texto global
-  const waTextBase = (appt && (appt as any).templateWhatsappMessage)
-    ? (appt as any).templateWhatsappMessage
+  const waTextBase = (appt && appt.templateWhatsappMessage)
+    ? appt.templateWhatsappMessage
     : (selectedTemplate?.whatsappMessage || cfgQuery.data?.whatsappMessage || "Agende seu atendimento:");
-  // Substitui todas as variáveis suportadas
   const now = new Date();
   const dia = String(now.getDate()).padStart(2, '0');
   const mes = String(now.getMonth() + 1).padStart(2, '0');
   const ano = String(now.getFullYear());
   const horaAtual = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  // Status do pedido (vem do agendamento enriquecido ou do appt)
-  const orderStatusLabel = ((appt as any)?.orderStatusLabel || (appt as any)?.orderStatusKey || '').trim();
+  const orderStatusLabel = (appt?.orderStatusLabel || appt?.orderStatusKey || '').trim();
   let waMsgRaw = waTextBase;
-  // Variáveis de cliente
   waMsgRaw = waMsgRaw.replace(/\{nome\}/gi, customerName || '');
   waMsgRaw = waMsgRaw.replace(/\{telefone\}/gi, customerPhone || '');
-  // Variáveis de agendamento
   waMsgRaw = waMsgRaw.replace(/\{data\}/gi, appt?.slotDate || '');
   waMsgRaw = waMsgRaw.replace(/\{hora\}/gi, appt?.slotTime || '');
   waMsgRaw = waMsgRaw.replace(/\{servico\}/gi, appt?.serviceName || '');
-  // Variáveis de link
   waMsgRaw = waMsgRaw.replace(/\{link\}/gi, link);
   waMsgRaw = waMsgRaw.replace(/\[LINK DE AGENDAMENTO\]/gi, link);
   waMsgRaw = waMsgRaw.replace(/\[LINK\]/gi, link);
-  // Status do pedido
   waMsgRaw = waMsgRaw.replace(/\{status\}/gi, orderStatusLabel);
-  // Data e hora atuais (momento do envio)
   waMsgRaw = waMsgRaw.replace(/\{DIA\}/g, dia);
   waMsgRaw = waMsgRaw.replace(/\{MES\}/g, mes);
   waMsgRaw = waMsgRaw.replace(/\{ANO\}/g, ano);
   waMsgRaw = waMsgRaw.replace(/\{hora_atual\}/gi, horaAtual);
-  // Se o texto já contém o link, não adiciona de novo; senão adiciona no final
   const waMsg = waMsgRaw.includes(link)
     ? `${waMsgRaw}\n\n${cfgQuery.data?.noShowWarning || ''}`.trim()
     : `${waMsgRaw}\n${link}\n\n${cfgQuery.data?.noShowWarning || ''}`.trim();
+
+  const isLoading = apptQuery.isLoading && allAppointmentsQuery.isLoading;
 
   return (
     <div className="bg-fuchsia-500/5 border border-fuchsia-500/20 rounded-lg p-3 space-y-3">
@@ -129,7 +136,7 @@ export default function OrderScheduleBlock({ registrationId, subOrderIndex, cust
         <CalendarClock className="w-3.5 h-3.5" /> Agendamento de atendimento
       </p>
 
-      {apptQuery.isLoading ? (
+      {isLoading ? (
         <p className="text-xs text-muted-foreground">Carregando...</p>
       ) : !appt || appt.status === "cancelled" ? (
         <>
@@ -204,19 +211,17 @@ export default function OrderScheduleBlock({ registrationId, subOrderIndex, cust
           {appt.status === "confirmed" ? (
             <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-2 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-              <p className="text-xs text-green-300">Cliente agendou: <strong>{appt.slotDate ? formatDate(appt.slotDate) : ""} às {appt.slotTime}</strong></p>
+              <p className="text-xs text-green-300">Cliente agendou: <strong>{appt.slotDate ? formatDate(appt.slotDate) : "Data não informada"}{appt.slotTime ? ` às ${appt.slotTime}` : ""}</strong></p>
             </div>
           ) : (
             <p className="text-xs text-yellow-300">Aguardando o cliente escolher o horário.</p>
           )}
 
-          {/* Link */}
           <div className="flex gap-1.5">
             <input readOnly value={link} className="flex-1 px-2 py-1.5 bg-background border border-white/10 rounded-lg text-[11px] text-muted-foreground" />
             <button onClick={copyLink} title="Copiar link" className="px-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white/70 hover:bg-white/10"><Copy className="w-3.5 h-3.5" /></button>
           </div>
 
-          {/* Envio */}
           <div className="grid grid-cols-2 gap-1.5">
             {customerEmail ? (
               <button onClick={() => sendEmailMut.mutate({ token: appt.token, origin })} disabled={sendEmailMut.isPending}
@@ -234,7 +239,6 @@ export default function OrderScheduleBlock({ registrationId, subOrderIndex, cust
             </a>
           </div>
 
-          {/* Ações */}
           <div className="grid grid-cols-2 gap-1.5">
             {appt.status === "confirmed" && (
               <button onClick={() => reopenAndNotifyMut.mutate({ id: appt.id, origin })} disabled={reopenAndNotifyMut.isPending} className="py-1.5 px-2 bg-yellow-500/15 border border-yellow-500/30 text-yellow-300 rounded-lg text-xs font-semibold hover:bg-yellow-500/25 disabled:opacity-50 flex items-center justify-center gap-1.5">
