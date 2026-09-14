@@ -11,15 +11,15 @@ function replaceOnce(oldText, newText, label) {
   source = source.replace(oldText, newText);
 }
 
-// Desktop: quatro cards completos por linha deixa os cards estreitos demais e faz
-// nomes/textos quebrarem letra por letra. Mantemos 1 coluna no celular, 2 no desktop
-// medio e no maximo 3 em telas muito largas.
+// Layout responsivo: 1 coluna no celular, 2 em telas medias, 3 em desktop comum
+// e 4 em telas grandes (2xl). Assim monitores grandes aproveitam o espaco sem
+// forcar quatro cards em notebooks/desktops com viewport menor.
 const oldGrid = 'grid grid-cols-1 gap-4 p-3 md:grid-cols-2 xl:grid-cols-4';
 const gridCount = source.split(oldGrid).length - 1;
 if (gridCount !== 2) {
   throw new Error(`[h2ads-desktop-layout] grids responsivos: esperado 2 blocos, encontrado ${gridCount}`);
 }
-source = source.split(oldGrid).join('grid grid-cols-1 gap-4 p-3 md:grid-cols-2 2xl:grid-cols-3');
+source = source.split(oldGrid).join('grid grid-cols-1 gap-4 p-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4');
 
 // O painel legado pode ser recriado por re-render/refetch. O hotfix anterior parava de
 // observar o DOM depois da primeira remocao; por isso ele podia reaparecer no desktop.
@@ -66,4 +66,4 @@ replaceOnce(
 );
 
 fs.writeFileSync(file, source, 'utf8');
-console.log('[h2ads-desktop-layout] OK: grids desktop limitados a 3 colunas e painel legado removido de forma persistente.');
+console.log('[h2ads-desktop-layout] OK: 1/2/3/4 colunas responsivas e painel legado removido de forma persistente.');
