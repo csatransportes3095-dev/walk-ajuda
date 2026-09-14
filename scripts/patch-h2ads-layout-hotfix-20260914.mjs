@@ -21,37 +21,51 @@ replaceOnce(
   '  const [scheduleFilter, setScheduleFilter] = useState<H2AdsScheduleFilter>("all");\n',
   `  const [scheduleFilter, setScheduleFilter] = useState<H2AdsScheduleFilter>("all");
 
-  // Remove somente o painel legado que aparece como camada flutuante sobre os grupos.
+  // Remove somente o painel legado de agendamentos H2ADS.
   // A barra oficial permanece no fluxo normal da pagina e possui data-h2ads-schedule-topbar.
   useEffect(() => {
     let observer: MutationObserver | null = null;
 
-    const hideLegacyFloatingSchedule = () => {
-      const candidates = Array.from(document.body.querySelectorAll<HTMLElement>('div, aside, section, header'));
-      for (const node of candidates) {
-        if (node.closest('[data-h2ads-schedule-topbar]')) continue;
+    const hideLegacySchedule = () => {
+      const candidates = Array.from(document.body.querySelectorAll<HTMLElement>('div, aside, section, header'))
+        .filter(node => {
+          if (node.closest('[data-h2ads-schedule-topbar]')) return false;
+          if (node.querySelector('[data-h2ads-schedule-topbar]')) return false;
 
-        const text = (node.textContent || '').replace(/\\s+/g, ' ').trim().toUpperCase();
-        if (!text.includes('AGENDAMENTOS H2ADS') || !text.includes('SEPARADO DOS GRUPOS')) continue;
+          const text = (node.textContent || '').replace(/\\s+/g, ' ').trim().toUpperCase();
+          return text.includes('AGENDAMENTOS H2ADS')
+            && text.includes('SEPARADO DOS GRUPOS')
+            && text.includes('TODOS')
+            && text.includes('CONFIRMADOS')
+            && text.includes('AGUARDANDO');
+        })
+        .sort((a, b) => (a.textContent || '').length - (b.textContent || '').length);
 
-        let current: HTMLElement | null = node;
-        while (current && current !== document.body) {
-          const position = window.getComputedStyle(current).position;
-          if (position === 'fixed' || position === 'absolute' || position === 'sticky') {
-            current.style.setProperty('display', 'none', 'important');
-            current.setAttribute('data-h2ads-legacy-schedule-hidden', 'true');
-            observer?.disconnect();
-            return true;
-          }
-          current = current.parentElement;
+      const node = candidates[0];
+      if (!node) return false;
+
+      let floatingAncestor: HTMLElement | null = null;
+      let current: HTMLElement | null = node;
+      while (current && current !== document.body) {
+        if (current.matches('[data-h2ads-schedule-topbar]') || current.querySelector('[data-h2ads-schedule-topbar]')) break;
+        const position = window.getComputedStyle(current).position;
+        if (position === 'fixed' || position === 'absolute' || position === 'sticky') {
+          floatingAncestor = current;
+          break;
         }
+        current = current.parentElement;
       }
-      return false;
+
+      const target = floatingAncestor ?? node;
+      target.style.setProperty('display', 'none', 'important');
+      target.setAttribute('data-h2ads-legacy-schedule-hidden', 'true');
+      observer?.disconnect();
+      return true;
     };
 
-    if (!hideLegacyFloatingSchedule()) {
+    if (!hideLegacySchedule()) {
       observer = new MutationObserver(() => {
-        hideLegacyFloatingSchedule();
+        hideLegacySchedule();
       });
       observer.observe(document.body, { childList: true, subtree: true });
     }
@@ -94,4 +108,4 @@ if (source.includes('sticky top-0 border-b border-white/8 bg-[#0D1016]/95')) {
 }
 
 fs.writeFileSync(file, source, 'utf8');
-console.log('[h2ads-layout-hotfix] OK: filtro flutuante legado oculto; grupo abre sem saltar para o topo.');
+console.log('[h2ads-layout-hotfix] OK: filtro legado oculto; grupo abre sem saltar para o topo.');
