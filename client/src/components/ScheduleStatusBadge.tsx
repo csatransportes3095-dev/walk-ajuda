@@ -19,6 +19,11 @@ function formatDate(d: string): string {
   });
 }
 
+// Mantém na tela o último estado operacional conhecido durante refetch/re-render.
+// O cache só é substituído por um novo pending/confirmed e só é removido quando
+// houver encerramento real (completed/cancelled ou avanço do pedido para etapa final).
+const stableAppointmentByOrder = new Map<string, any>();
+
 /**
  * Selo grande e destacado que mostra o estado de um agendamento existente.
  * Usa a chave do pedido e, quando necessário, o telefone para recuperar
@@ -29,11 +34,16 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
   const scheduleQueryInput = { registrationId, subOrderIndex, customerPhone: customerPhone ?? undefined };
   const apptQuery = trpc.schedule.getForOrder.useQuery(
     scheduleQueryInput,
-    { refetchInterval: 30000, staleTime: 10000 }
+    {
+      staleTime: 10000,
+      refetchOnWindowFocus: false,
+      placeholderData: (previous: any) => previous,
+    }
   );
   const allAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, {
-    refetchInterval: 30000,
     staleTime: 10000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previous: any) => previous,
   });
   const dismissMut = trpc.schedule.dismissConfirmedAlert.useMutation({
     onSuccess: () => {
@@ -42,18 +52,12 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
     },
   });
 
-  const appt = selectEffectiveScheduleAppointment(
+  const resolvedAppointment = selectEffectiveScheduleAppointment(
     apptQuery.data as any,
     (allAppointmentsQuery.data || []) as any[],
     customerPhone,
   ) as any;
-  const showConfirmedAlert = appt && appt.status === "confirmed" && appt.slotDate && !appt.adminSeenConfirmedAt;
 
-  // Não mostra estado falso enquanto qualquer uma das duas fontes ainda carrega.
-  if (apptQuery.isLoading || allAppointmentsQuery.isLoading) return null;
-
-  // Depois de Foto em Análise, o card deve mostrar somente o status real do pedido.
-  // Isto impede que um agendamento legado/re-cadastro reapareça em Foto Aprovada ou Conta Ativa.
   const status = String(orderStatus || '');
   const scheduleClosedByOrder = [
     'foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise',
@@ -61,7 +65,25 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
     'aguardando_ativa', 'aguardando_ficar_ativa', 'conta_ativa', 'p',
     'entregue', 'pedido_entregue', 'cancelado',
   ].includes(status);
-  if (appt?.status === "completed" || scheduleClosedByOrder) return null;
+
+  const cacheKey = `${registrationId}:${subOrderIndex}:${String(customerPhone || '').replace(/\D/g, '')}`;
+  const resolvedIsActive = resolvedAppointment?.status === "confirmed" || resolvedAppointment?.status === "pending";
+  const resolvedIsClosed = resolvedAppointment?.status === "completed" || resolvedAppointment?.status === "cancelled";
+
+  if (scheduleClosedByOrder || resolvedIsClosed) {
+    stableAppointmentByOrder.delete(cacheKey);
+    return null;
+  }
+
+  if (resolvedIsActive) stableAppointmentByOrder.set(cacheKey, resolvedAppointment);
+
+  // Nunca troca um agendamento confirmado por vazio só porque uma consulta está atualizando.
+  // Assim data/hora permanecem fixas até existir alteração real do agendamento.
+  const appt = resolvedIsActive
+    ? resolvedAppointment
+    : stableAppointmentByOrder.get(cacheKey) ?? null;
+
+  const showConfirmedAlert = appt && appt.status === "confirmed" && appt.slotDate && !appt.adminSeenConfirmedAt;
 
   if (appt && appt.status === "confirmed") {
     return (
@@ -82,7 +104,7 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
           </p>
         </div>
         {showConfirmedAlert && (
-          <div className="w-full rounded-xl border-2 border-emerald-400/70 bg-emerald-500/15 px-4 py-3 flex items-center justify-between gap-3 shadow-[0_0_18px_rgba(52,211,153,0.35)] animate-pulse">
+          <div className="w-full rounded-xl border-2 border-emerald-400/70 bg-emerald-500/15 px-4 py-3 flex items-center justify-between gap-3 shadow-[0_0_18px_rgba(52,211,153,0.35)]">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-lg leading-none shrink-0">📅</span>
               <div className="min-w-0">
@@ -133,6 +155,6 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
     );
   }
 
-  // Sem agendamento: não polui o card com um aviso que não exige ação.
+  // Sem agendamento: não polui o card com aviso e não cria pisca-pisca durante atualização.
   return null;
 }
