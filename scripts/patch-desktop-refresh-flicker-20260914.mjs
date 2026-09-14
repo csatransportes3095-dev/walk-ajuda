@@ -67,28 +67,18 @@ function replaceOnce(source, oldText, newText, label) {
   fs.writeFileSync(file, source, 'utf8');
 }
 
-// Selos de agenda: removemos os dois timers independentes de 30s por card. Eles passam a
-// atualizar por foco, invalidação do marcador global ou ações do próprio agendamento.
+// O ScheduleStatusBadge agora já nasce estável no código-fonte: mantém o último
+// pending/confirmed visível durante refetch e só muda quando chega estado novo real.
+// Este patch não deve mais reescrever o componente durante o build.
 {
   const file = 'client/src/components/ScheduleStatusBadge.tsx';
-  let source = fs.readFileSync(file, 'utf8');
-  source = replaceOnce(
-    source,
-    `{ refetchInterval: 30000, staleTime: 10000 }
-  );
-  const allAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, {
-    refetchInterval: 30000,
-    staleTime: 10000,
-  });`,
-    `{ staleTime: 10000, refetchOnWindowFocus: true }
-  );
-  const allAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, {
-    staleTime: 10000,
-    refetchOnWindowFocus: true,
-  });`,
-    'polling redundante dos selos de agenda',
-  );
-  fs.writeFileSync(file, source, 'utf8');
+  const source = fs.readFileSync(file, 'utf8');
+  if (!source.includes('const stableAppointmentByOrder = new Map<string, any>();')) {
+    throw new Error('[desktop-refresh-flicker] ScheduleStatusBadge sem cache visual estavel');
+  }
+  if (!source.includes('placeholderData: (previous: any) => previous')) {
+    throw new Error('[desktop-refresh-flicker] ScheduleStatusBadge sem preservacao de dados durante refetch');
+  }
 }
 
 console.log('[desktop-refresh-flicker] OK: H2ADS e Pedidos deixam de repintar grades inteiras sem mudanca real.');
