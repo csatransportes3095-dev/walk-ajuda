@@ -63,6 +63,7 @@ RUN npm install -g pnpm@10.4.1 \
     && node scripts/patch-desktop-refresh-flicker-20260914.mjs \
     && node scripts/fix-patch-loans-client-filters-syntax-20260914.mjs \
     && node scripts/patch-loans-client-filters-20260914.mjs \
+    && node scripts/patch-admin-customer-photo-download-20260914.mjs \
     && pnpm run build
 
 ENV NODE_ENV=production
