@@ -52,8 +52,16 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
   // Não mostra estado falso enquanto qualquer uma das duas fontes ainda carrega.
   if (apptQuery.isLoading || allAppointmentsQuery.isLoading) return null;
 
-  const finalOrder = ['entregue', 'pedido_entregue', 'cancelado'].includes(String(orderStatus || ''));
-  if (appt?.status === "completed" || finalOrder) return null;
+  // Depois de Foto em Análise, o card deve mostrar somente o status real do pedido.
+  // Isto impede que um agendamento legado/re-cadastro reapareça em Foto Aprovada ou Conta Ativa.
+  const status = String(orderStatus || '');
+  const scheduleClosedByOrder = [
+    'foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise',
+    'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',
+    'aguardando_ativa', 'aguardando_ficar_ativa', 'conta_ativa', 'p',
+    'entregue', 'pedido_entregue', 'cancelado',
+  ].includes(status);
+  if (appt?.status === "completed" || scheduleClosedByOrder) return null;
 
   if (appt && appt.status === "confirmed") {
     return (
