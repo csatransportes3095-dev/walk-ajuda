@@ -94,6 +94,8 @@ export async function persistPublicOrder(
   const phone = normalizePhone(input.effectivePhone);
   if (!phone) throw new Error("Telefone efetivo ausente para persistir o pedido");
 
+  // O adaptador SQL de produção aplica a trava financeira. Stores usados em
+  // testes podem omitir este método sem criar dependência real de banco.
   await deps.store.assertNoOpenVipInstallmentDebt?.(phone);
 
   let registrationId: number | undefined;
@@ -300,7 +302,6 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
         INNER JOIN accessCodes ac ON ac.id = acp.codeId
         WHERE REGEXP_REPLACE(acp.phone, '[^0-9]', '') = ${phone}
           AND ac.code = ${code}
-          AND acp.deletedAt IS NULL
         ORDER BY acp.accessedAt DESC, acp.id DESC LIMIT 1
       `));
     },
@@ -309,7 +310,6 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
         SELECT id FROM accessCodePhones
         WHERE codeId = ${codeId}
           AND REGEXP_REPLACE(phone, '[^0-9]', '') = ${phone}
-          AND deletedAt IS NULL
         ORDER BY accessedAt DESC, id DESC LIMIT 1
       `));
     },
@@ -317,7 +317,6 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
       return firstId(await db.execute(sql`
         SELECT id FROM accessCodePhones
         WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${phone}
-          AND deletedAt IS NULL
         ORDER BY accessedAt DESC, id DESC LIMIT 1
       `));
     },
@@ -330,15 +329,8 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
     },
     async countOrderHistoryByPhone(phone) {
       const rows = rowsFrom(await db.execute(sql`
-        SELECT COUNT(*) AS total
-        FROM orderStatusHistory osh
-        INNER JOIN accessCodePhones acp ON acp.id=osh.registrationId
-        WHERE REGEXP_REPLACE(osh.customerPhone, '[^0-9]', '') = ${phone}
-          AND acp.deletedAt IS NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM hiddenSubOrders h
-            WHERE h.registrationId=osh.registrationId
-          )
+        SELECT COUNT(*) AS total FROM orderStatusHistory
+        WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${phone}
       `));
       return Number(rows[0]?.total || 0);
     },
