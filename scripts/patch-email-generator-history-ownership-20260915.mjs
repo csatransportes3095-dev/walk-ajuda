@@ -32,7 +32,7 @@ router = replaceOnce(
           SELECT
             LOWER(TRIM(old.loginEmail)) AS email,
             old.registrationId,
-            COALESCE(NULLIF(TRIM(c.name), ''), NULLIF(TRIM(acp.clientName), ''), 'Cliente') AS customerName,
+            COALESCE(NULLIF(TRIM(c.name), ''), 'Cliente') AS customerName,
             c.customerNumber,
             (
               SELECT osh.orderNumber
