@@ -31,7 +31,11 @@ server = replaceOnce(
         );
         const loginEmailRows = (loginEmailResult as any)[0] as Array<{ registrationId: number; loginEmail: string | null }>;
         for (const loginRow of (loginEmailRows || [])) {
-          loginEmailByRegId.set(Number(loginRow.registrationId), normalizeNull(loginRow.loginEmail));
+          const rawLoginEmail = loginRow.loginEmail;
+          const cleanLoginEmail = rawLoginEmail === null || rawLoginEmail === undefined || rawLoginEmail === 'NULL' || rawLoginEmail === 'null'
+            ? null
+            : String(rawLoginEmail).trim();
+          loginEmailByRegId.set(Number(loginRow.registrationId), cleanLoginEmail || null);
         }
       } catch (e) {
         console.error('[listOrders] Erro ao buscar e-mail de login dos pedidos:', e);
@@ -43,22 +47,14 @@ server = replaceOnce(
 
 server = replaceOnce(
   server,
-`            customerEmail: row.customerEmail,
-            customerName: row.customerName,`,
-`            customerEmail: row.customerEmail,
-            loginEmail: loginEmailByRegId.get(Number(row.id)) ?? null,
-            customerName: row.customerName,`,
-  'backend empty order loginEmail'
-);
-
-server = replaceOnce(
-  server,
-`            customerEmail: row.customerEmail,
-            customerName: row.customerName,`,
-`            customerEmail: row.customerEmail,
-            loginEmail: loginEmailByRegId.get(Number(row.id)) ?? null,
-            customerName: row.customerName,`,
-  'backend suborder loginEmail'
+`        return {
+          ...o,
+          hasNewDocResponse: answeredDocReqIds.has(Number(o.id)),`,
+`        return {
+          ...o,
+          loginEmail: loginEmailByRegId.get(Number(o.id)) ?? null,
+          hasNewDocResponse: answeredDocReqIds.has(Number(o.id)),`,
+  'backend expose loginEmail'
 );
 
 fs.writeFileSync(serverPath, server);
@@ -135,20 +131,9 @@ client = replaceOnce(
 
 client = replaceOnce(
   client,
-`          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />`,
-`          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />`,
-  'anchor main search'
-);
-
-client = replaceOnce(
-  client,
 `          </div>
 
-          {/* Filtros colápsáveis */}`, 
+          {/* Filtros colápsáveis */}`,
 `          </div>
 
           {/* Filtro independente pelo e-mail/login criado e entregue ao cliente */}
@@ -168,6 +153,7 @@ client = replaceOnce(
                 type="button"
                 onClick={() => setActiveLoginEmailFilter('')}
                 className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/20"
+                title="Limpar filtro de login"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -204,7 +190,7 @@ client = replaceOnce(
                         className="flex-1 h-8 px-3 rounded-lg bg-black/30 border border-teal-500/30 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-teal-400/60"
                       />
                       {deliveredPhoneFilter && (
-                        <button onClick={() => setDeliveredPhoneFilter('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30">✕</button>
+                        <button onClick={() => setDeliveredPhoneFilter('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30" title="Limpar telefone">✕</button>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -216,7 +202,7 @@ client = replaceOnce(
                         className="flex-1 h-8 px-3 rounded-lg bg-black/30 border border-cyan-500/30 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-cyan-400/60"
                       />
                       {deliveredLoginEmailFilter && (
-                        <button onClick={() => setDeliveredLoginEmailFilter('')} className="h-8 px-2 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs hover:bg-cyan-500/30">✕</button>
+                        <button onClick={() => setDeliveredLoginEmailFilter('')} className="h-8 px-2 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs hover:bg-cyan-500/30" title="Limpar login">✕</button>
                       )}
                     </div>
                   </div>`,
