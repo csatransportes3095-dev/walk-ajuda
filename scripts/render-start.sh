@@ -24,6 +24,7 @@ run_boot_step "db-migrate-admin-authenticator-vault" pnpm run db:migrate:admin-a
 run_boot_step "db-migrate-admin-authenticator-order-links" pnpm run db:migrate:admin-authenticator-order-links
 run_boot_step "db-migrate-option-card-appearance" pnpm run db:migrate:option-card-appearance
 run_boot_step "db-migrate-customer-address" pnpm exec tsx scripts/apply-customer-address-migration.ts
+run_boot_step "db-migrate-email-generator-history" pnpm exec tsx scripts/apply-email-generator-history-global-20260915.ts
 run_boot_step "db-migrate-locadora" pnpm run db:migrate:locadora
 run_boot_step "db-migrate-spreadsheet-referral-declaration" pnpm run db:migrate:spreadsheet-referral-declaration
 run_boot_step "db-migrate-referral-commission-attribution" pnpm run db:migrate:referral-commission-attribution
