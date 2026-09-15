@@ -114,6 +114,14 @@ async function reconcileOrphanVipInstallmentPlans(db: any, customerId?: number) 
   }
 }
 
+async function tryReconcileOrphanVipInstallmentPlans(db: any, customerId?: number) {
+  try {
+    await reconcileOrphanVipInstallmentPlans(db, customerId);
+  } catch (error) {
+    console.warn("[vip-installments] Falha ao reconciliar plano órfão; consulta seguirá apenas com pedidos válidos.", error);
+  }
+}
+
 async function ensureCustomerRouteAuditColumns() {
   if (ensureCustomerRouteAuditColumnsPromise) return ensureCustomerRouteAuditColumnsPromise;
   ensureCustomerRouteAuditColumnsPromise = (async () => {
@@ -207,7 +215,7 @@ export const systemRouter = router({
       const customer = rowsOf<any>(customerResult)[0];
       if (!customer) return { plan: null } as const;
 
-      await reconcileOrphanVipInstallmentPlans(db, Number(customer.id));
+      await tryReconcileOrphanVipInstallmentPlans(db, Number(customer.id));
 
       const planResult = await db.execute(drizzleSql`
         SELECT p.id, p.orderNumber, p.productName, p.totalAmountCents, p.paidAmountCents,
@@ -216,6 +224,43 @@ export const systemRouter = router({
         WHERE p.customerId=${Number(customer.id)}
           AND p.balanceCents > 0
           AND p.status NOT IN ('paid', 'cancelled')
+          AND p.orderNumber IS NOT NULL
+          AND (
+            EXISTS (
+              SELECT 1
+              FROM vipInstallmentCheckoutIntents ci
+              INNER JOIN accessCodePhones acp ON acp.id=ci.finalizedRegistrationId
+              WHERE ci.finalizedPlanId=p.id
+                AND ci.finalizedRegistrationId IS NOT NULL
+                AND acp.deletedAt IS NULL
+                AND EXISTS (
+                  SELECT 1 FROM orderStatusHistory osh0
+                  WHERE osh0.registrationId=ci.finalizedRegistrationId
+                    AND CAST(osh0.orderNumber AS CHAR)=p.orderNumber
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM hiddenSubOrders h
+                  WHERE h.registrationId=ci.finalizedRegistrationId
+                )
+            )
+            OR (
+              NOT EXISTS (
+                SELECT 1 FROM vipInstallmentCheckoutIntents ci2
+                WHERE ci2.finalizedPlanId=p.id
+              )
+              AND EXISTS (
+                SELECT 1
+                FROM orderStatusHistory osh
+                INNER JOIN accessCodePhones acp2 ON acp2.id=osh.registrationId
+                WHERE CAST(osh.orderNumber AS CHAR)=p.orderNumber
+                  AND acp2.deletedAt IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM hiddenSubOrders h2
+                    WHERE h2.registrationId=osh.registrationId
+                  )
+              )
+            )
+          )
         ORDER BY p.id DESC
         LIMIT 1
       `);
@@ -285,7 +330,7 @@ export const systemRouter = router({
   adminInstallmentReceivables: adminProcedure.query(async () => {
     const db = (await getDb()) as any;
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
-    await reconcileOrphanVipInstallmentPlans(db);
+    await tryReconcileOrphanVipInstallmentPlans(db);
 
     const today = brazilToday();
     await db.execute(drizzleSql`
