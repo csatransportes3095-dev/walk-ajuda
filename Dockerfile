@@ -64,6 +64,7 @@ RUN npm install -g pnpm@10.4.1 \
     && node scripts/fix-patch-loans-client-filters-syntax-20260914.mjs \
     && node scripts/patch-loans-client-filters-20260914.mjs \
     && node scripts/patch-loans-client-filter-safety-20260915.mjs \
+    && node scripts/patch-loans-manual-limit-priority-20260915.mjs \
     && node scripts/patch-admin-customer-photo-download-20260914.mjs \
     && node scripts/patch-admin-orders-login-email-filter-20260915.mjs \
     && node scripts/fix-email-history-patch-runtime-escape-20260915.mjs \
