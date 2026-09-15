@@ -11,6 +11,7 @@ import { isValidCPF } from "@shared/cpf";
 import { isRecoveredCustomerName } from "../../shared/customerProfile";
 import { findMainCustomerByIdentity, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone } from "../customerAccess";
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
+import { requireCustomerSession } from "../customerSession";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -626,6 +627,27 @@ export const scheduleRouter = router({
           slotDate: a.slotDate,
           slotTime: a.slotTime,
         }));
+    }),
+
+  // Estado mínimo do agendamento exibido no menu central após o login do cliente.
+  // A sessão autenticada é a fonte de verdade; o telefone não concede acesso sozinho.
+  getMyActive: publicProcedure
+    .input(z.object({ cpToken: z.string().min(32).max(512), phone: z.string().min(8).max(32) }))
+    .query(async ({ input }) => {
+      const session = await requireCustomerSession(input.cpToken, input.phone);
+      const list = await listAppointmentsByPhone(session.phone);
+      const appointment = list.find(a => a.status === "confirmed")
+        ?? list.find(a => a.status === "pending");
+
+      if (!appointment) return { active: false as const };
+      return {
+        active: true as const,
+        token: appointment.token,
+        status: appointment.status as "pending" | "confirmed",
+        serviceName: appointment.serviceName,
+        slotDate: appointment.slotDate,
+        slotTime: appointment.slotTime,
+      };
     }),
 
   // ââ€â‚¬ââ€â‚¬ââ€â‚¬ PÚBLICO (PÁGINA DO CLIENTE) ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
