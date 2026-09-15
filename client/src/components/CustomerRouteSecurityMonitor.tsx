@@ -30,6 +30,11 @@ export default function CustomerRouteSecurityMonitor() {
   const queueRef = useRef<Array<{ sessionToken: string; pathname: string; trigger: "route_change" | "heartbeat" | "tab_visible" }>>([]);
   const trackedRoute = useMemo(() => getCustomerRouteAuditTarget(location), [location]);
 
+  const orderEntryRoute = useMemo(() => {
+    const path = location.toLowerCase();
+    return path === "/" || path === "/login" || path === "/bot" || path.startsWith("/r/");
+  }, [location]);
+
   const [customerSession, setCustomerSession] = useState(() => ({
     cpToken: typeof window !== "undefined" ? localStorage.getItem(CP_TOKEN_KEY) || "" : "",
     phone: typeof window !== "undefined" ? localStorage.getItem(PHONE_KEY) || "" : "",
@@ -57,9 +62,9 @@ export default function CustomerRouteSecurityMonitor() {
   const plansQuery = trpc.vipInstallments.myPlans.useQuery(
     { cpToken: customerSession.cpToken, phone: customerSession.phone || undefined },
     {
-      enabled: customerSession.cpToken.length >= 32,
+      enabled: orderEntryRoute && customerSession.cpToken.length >= 32,
       staleTime: 3_000,
-      refetchInterval: customerSession.cpToken.length >= 32 ? 10_000 : false,
+      refetchInterval: orderEntryRoute && customerSession.cpToken.length >= 32 ? 10_000 : false,
       refetchIntervalInBackground: false,
       refetchOnWindowFocus: true,
       retry: 1,
@@ -83,11 +88,6 @@ export default function CustomerRouteSecurityMonitor() {
       installments,
     };
   }, [openPlan]);
-
-  const orderEntryRoute = useMemo(() => {
-    const path = location.toLowerCase();
-    return path === "/" || path === "/login" || path === "/bot" || path.startsWith("/r/");
-  }, [location]);
 
   const drainQueue = () => {
     sendInFlightRef.current = true;
