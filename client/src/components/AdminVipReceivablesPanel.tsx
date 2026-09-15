@@ -19,11 +19,15 @@ function isPayoffProof(row: any) {
   return String(row?.proofMimeType || "").startsWith(PAYOFF_PROOF_PREFIX);
 }
 
+function installmentLabel(row: any) {
+  return Number(row?.installmentNumber) === 0 ? "Entrada" : `Parcela ${row.installmentNumber}/${row.installmentCount}`;
+}
+
 export default function AdminVipReceivablesPanel() {
   const utils = trpc.useUtils();
-  const query = trpc.vipInstallments.adminReceivables.useQuery(undefined, { staleTime: 5_000, refetchOnWindowFocus: true });
+  const query = trpc.system.adminInstallmentReceivables.useQuery(undefined, { staleTime: 3_000, refetchOnWindowFocus: true, refetchInterval: 15_000 });
   const refreshAdmin = async () => Promise.all([
-    utils.vipInstallments.adminReceivables.invalidate(),
+    utils.system.adminInstallmentReceivables.invalidate(),
     utils.vipInstallments.adminDirectory.invalidate(),
   ]);
 
@@ -52,7 +56,7 @@ export default function AdminVipReceivablesPanel() {
     const payoffProof = isPayoffProof(row);
     const reason = window.prompt(payoffProof
       ? `Rejeitar comprovante de QUITAÇÃO do plano #${row.planId}. Informe o motivo:`
-      : `Rejeitar comprovante da parcela ${row.installmentNumber}/${row.installmentCount}. Informe o motivo:`);
+      : `Rejeitar comprovante de ${installmentLabel(row)}. Informe o motivo:`);
     if (!reason?.trim()) return;
     if (!window.confirm(payoffProof ? "Confirma a rejeição da quitação? O cliente poderá enviar outro comprovante." : "Confirma a rejeição? O cliente poderá enviar um novo comprovante.")) return;
     rejectProof.mutate({ installmentId: Number(row.installmentId), notes: reason.trim() });
@@ -93,9 +97,6 @@ export default function AdminVipReceivablesPanel() {
 
     setConfirmingPayoffPlanId(Number(row.planId));
     try {
-      // O comprovante de quitação usa a próxima parcela como registro de conferência.
-      // Primeiro confirmamos essa parcela para remover o estado aguardando; em seguida
-      // o saldo restante é quitado pelo mecanismo financeiro já existente.
       const first = await confirmPayoffCarrier.mutateAsync({ installmentId: Number(row.installmentId), notes: "Comprovante de quitação total conferido pelo ADM." });
       if (Number((first as any)?.balanceCents || 0) > 0) {
         await confirmPayoffBalance.mutateAsync({ planId: Number(row.planId), notes: "Quitação total solicitada pelo cliente e comprovante conferido pelo ADM." });
@@ -130,7 +131,7 @@ export default function AdminVipReceivablesPanel() {
     const all = (query.data || []) as any[];
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
     const dayOf = (ms: number | null | undefined) => ms ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Number(ms))) : "";
-    const awaiting = all.filter((row) => row.status === "awaiting_confirmation");
+    const awaiting = all.filter((row) => row.status === "awaiting_confirmation" && Boolean(row.proofUrl));
     const overdue = all.filter((row) => row.status === "overdue");
     const dueToday = all.filter((row) => ["pending", "overdue", "awaiting_confirmation"].includes(row.status) && String(row.dueDate).slice(0, 10) === today);
     const receivedToday = all.filter((row) => row.status === "paid" && dayOf(row.paidAtMs) === today).reduce((sum, row) => sum + Number(row.amountCents || 0), 0);
@@ -163,21 +164,22 @@ export default function AdminVipReceivablesPanel() {
       toast.error("Esta parcela não possui comprovante anexado.");
       return;
     }
-    const accepted = window.confirm(`Confirmar pagamento da parcela ${row.installmentNumber}/${row.installmentCount} de ${row.customerName} no valor de ${money(row.amountCents)}?`);
+    const accepted = window.confirm(`Confirmar pagamento de ${installmentLabel(row)} de ${row.customerName} no valor de ${money(row.amountCents)}?`);
     if (!accepted) return;
     confirm.mutate({ installmentId: Number(row.installmentId) });
   };
 
   return (
-    <section className="mt-10 overflow-hidden rounded-[28px] border border-cyan-400/25 bg-[linear-gradient(180deg,rgba(8,145,178,.10),rgba(2,6,23,.94))]">
+    <section id="controle-parcelas" className="mt-10 overflow-hidden rounded-[28px] border border-cyan-400/25 bg-[linear-gradient(180deg,rgba(8,145,178,.10),rgba(2,6,23,.94))]">
       <div className="border-b border-white/10 p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h2 className="text-2xl font-black text-cyan-200">Recebíveis VIP</h2><p className="mt-1 text-sm text-slate-400">Parcelas, comprovantes e saldo das compras parceladas. Confirme somente depois de conferir o comprovante.</p></div>
+          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-400">Financeiro do parcelamento</p><h2 className="mt-1 text-2xl font-black text-cyan-200">CONTROLE DE PARCELAS E COMPROVANTES</h2><p className="mt-1 text-sm text-slate-400">Aqui o ADM confere comprovantes, aprova ou rejeita pagamentos, altera vencimento e acompanha parcelas pagas e pendentes.</p></div>
           <button type="button" onClick={() => query.refetch()} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200"><RefreshCw className={`h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} /> Atualizar</button>
         </div>
       </div>
 
       <div className="space-y-4 p-4 sm:p-6">
+        {stats.awaiting > 0 ? <button type="button" onClick={() => setFilter("awaiting")} className="w-full rounded-2xl border border-yellow-400/35 bg-yellow-500/10 p-4 text-left text-sm font-black text-yellow-100"><Clock3 className="mr-2 inline h-5 w-5 text-yellow-300" />{stats.awaiting} COMPROVANTE(S) PARA CONFERIR — TOQUE AQUI</button> : null}
         {stats.payoffAwaiting > 0 ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm font-bold text-emerald-100"><WalletCards className="mr-2 inline h-5 w-5" />{stats.payoffAwaiting} quitação(ões) total(is) aguardando conferência do ADM.</div> : null}
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -191,7 +193,7 @@ export default function AdminVipReceivablesPanel() {
           <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/[0.06] p-4"><p className="text-[10px] font-black uppercase text-emerald-300">Planos quitados</p><p className="mt-1 text-xl font-black">{stats.paidPlans}</p></div>
         </div>
 
-        <div className="flex flex-wrap gap-2">{([['open','Em aberto'],['awaiting','Confirmar'],['overdue','Vencidas'],['paid','Pagas'],['all','Todas']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-xl px-3 py-2 text-xs font-black ${filter === value ? "bg-cyan-300 text-slate-950" : "border border-white/10 bg-white/5 text-slate-300"}`}>{label}</button>)}</div>
+        <div className="flex flex-wrap gap-2">{([['open','Em aberto'],['awaiting','COMPROVANTES'],['overdue','Vencidas'],['paid','Pagas'],['all','Todas']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-xl px-3 py-2 text-xs font-black ${filter === value ? "bg-cyan-300 text-slate-950" : "border border-white/10 bg-white/5 text-slate-300"}`}>{label}</button>)}</div>
         <div className="relative"><Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar cliente, telefone, produto ou pedido" className="w-full rounded-2xl border border-white/10 bg-slate-950/80 py-3 pl-11 pr-4 text-sm font-semibold text-white outline-none focus:border-cyan-300/50" /></div>
 
         {query.isLoading ? <div className="flex justify-center py-10"><Loader2 className="h-7 w-7 animate-spin text-cyan-300" /></div> : null}
@@ -202,16 +204,16 @@ export default function AdminVipReceivablesPanel() {
           {rows.map((row) => {
             const payoffProof = isPayoffProof(row);
             const confirmingThisPayoff = confirmingPayoffPlanId === Number(row.planId);
-            return <article key={row.installmentId} className={`rounded-2xl border p-4 ${payoffProof && row.status === 'awaiting_confirmation' ? 'border-emerald-400/35 bg-emerald-500/[0.07]' : 'border-white/10 bg-black/20'}`}>
-              <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-black text-white">{row.customerName}</p><p className="text-xs text-slate-500">{row.customerPhone} • Pedido #{row.orderNumber || "—"} • {row.productName}</p></div><div className="text-right">{payoffProof && row.status === 'awaiting_confirmation' ? <><p className="text-[10px] font-black uppercase text-emerald-300">QUITAR SALDO</p><p className="font-black text-emerald-200">{money(row.balanceCents)}</p></> : <><p className="font-black text-cyan-200">{money(row.amountCents)}</p><p className="text-xs text-slate-500">Parcela {row.installmentNumber}/{row.installmentCount}</p></>}</div></div>
+            return <article key={row.installmentId} className={`rounded-2xl border p-4 ${row.status === 'awaiting_confirmation' ? 'border-yellow-400/35 bg-yellow-500/[0.06]' : 'border-white/10 bg-black/20'}`}>
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-black text-white">{row.customerName}</p><p className="text-xs text-slate-500">{row.customerPhone} • Pedido #{row.orderNumber || "—"} • {row.productName}</p></div><div className="text-right">{payoffProof && row.status === 'awaiting_confirmation' ? <><p className="text-[10px] font-black uppercase text-emerald-300">QUITAR SALDO</p><p className="font-black text-emerald-200">{money(row.balanceCents)}</p></> : <><p className="font-black text-cyan-200">{money(row.amountCents)}</p><p className="text-xs font-bold text-slate-400">{installmentLabel(row)}</p></>}</div></div>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                {payoffProof && row.status === 'awaiting_confirmation' ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 font-black text-emerald-300"><WalletCards className="h-3.5 w-3.5" /> QUITAÇÃO TOTAL — CONFERIR COMPROVANTE</span> : <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-black ${row.status === 'paid' ? 'bg-emerald-500/15 text-emerald-300' : row.status === 'awaiting_confirmation' ? 'bg-cyan-500/15 text-cyan-300' : row.status === 'overdue' ? 'bg-red-500/15 text-red-300' : 'bg-amber-500/15 text-amber-300'}`}>{row.status === 'paid' ? <CheckCircle2 className="h-3.5 w-3.5" /> : row.status === 'overdue' ? <TriangleAlert className="h-3.5 w-3.5" /> : <Clock3 className="h-3.5 w-3.5" />}{row.status === 'paid' ? 'PAGA' : row.status === 'awaiting_confirmation' ? 'AGUARDANDO CONFIRMAÇÃO' : row.status === 'overdue' ? 'VENCIDA' : 'PENDENTE'}</span>}
+                {payoffProof && row.status === 'awaiting_confirmation' ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 font-black text-emerald-300"><WalletCards className="h-3.5 w-3.5" /> QUITAÇÃO TOTAL — CONFERIR COMPROVANTE</span> : <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-black ${row.status === 'paid' ? 'bg-emerald-500/15 text-emerald-300' : row.status === 'awaiting_confirmation' ? 'bg-yellow-500/15 text-yellow-300' : row.status === 'overdue' ? 'bg-red-500/15 text-red-300' : 'bg-amber-500/15 text-amber-300'}`}>{row.status === 'paid' ? <CheckCircle2 className="h-3.5 w-3.5" /> : row.status === 'overdue' ? <TriangleAlert className="h-3.5 w-3.5" /> : <Clock3 className="h-3.5 w-3.5" />}{row.status === 'paid' ? 'PAGA' : row.status === 'awaiting_confirmation' ? 'COMPROVANTE PARA CONFERIR' : row.status === 'overdue' ? 'VENCIDA' : 'PENDENTE'}</span>}
                 <span className="text-slate-400">Vence {dateLabel(row.dueDate)}</span><span className="text-slate-400">Saldo {money(row.balanceCents)}</span>
               </div>
 
-              {row.status === 'awaiting_confirmation' ? <div className={`mt-4 grid gap-2 ${payoffProof ? 'sm:grid-cols-3' : 'sm:grid-cols-3'}`}>
+              {row.status === 'awaiting_confirmation' ? <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 {row.proofUrl ? <a href={row.proofUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-xs font-black text-slate-200"><Eye className="h-4 w-4" /> VER COMPROVANTE</a> : <div className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-3 text-center text-xs font-black text-red-200">SEM COMPROVANTE</div>}
-                <button type="button" disabled={rejectProof.isPending || confirmingThisPayoff} onClick={() => rejectPaymentProof(row)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-3 text-xs font-black text-red-300 disabled:opacity-50"><Ban className="h-4 w-4" /> REJEITAR COMPROVANTE</button>
+                <button type="button" disabled={rejectProof.isPending || confirmingThisPayoff} onClick={() => rejectPaymentProof(row)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-3 text-xs font-black text-red-300 disabled:opacity-50"><Ban className="h-4 w-4" /> REJEITAR</button>
                 {payoffProof ? <button type="button" disabled={confirmingThisPayoff || !row.proofUrl} onClick={() => void confirmCustomerPayoff(row)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-3 py-3 text-xs font-black text-emerald-950 disabled:opacity-50">{confirmingThisPayoff ? <Loader2 className="h-4 w-4 animate-spin" /> : <WalletCards className="h-4 w-4" />} CONFIRMAR QUITAÇÃO</button> : <button type="button" disabled={confirm.isPending || !row.proofUrl} onClick={() => confirmPayment(row)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-3 py-3 text-xs font-black text-emerald-950 disabled:opacity-50">{confirm.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} CONFIRMAR PAGAMENTO</button>}
               </div> : null}
 

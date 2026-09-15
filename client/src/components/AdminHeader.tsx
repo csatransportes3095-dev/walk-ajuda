@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { LogOut } from "lucide-react";
+import { CreditCard, LogOut } from "lucide-react";
 import { toast } from "sonner";
 
 interface AdminHeaderProps {
@@ -41,6 +41,14 @@ export default function AdminHeader({ icon, title, backTo = "/admin/codes", righ
           <h1 className="text-lg font-bold text-white">{title}</h1>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href="/admin/vip#controle-parcelas"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/35 text-cyan-300 rounded-lg text-xs font-black transition-all"
+            title="Abrir controle de parcelas e comprovantes"
+          >
+            <CreditCard className="w-3.5 h-3.5" />
+            <span>Parcelas</span>
+          </a>
           {rightContent}
           <button
             onClick={() => logoutMut.mutate()}

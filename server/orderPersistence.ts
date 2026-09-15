@@ -228,8 +228,15 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
               EXISTS (
                 SELECT 1
                 FROM vipInstallmentCheckoutIntents ci
+                INNER JOIN accessCodePhones acp ON acp.id=ci.finalizedRegistrationId
                 WHERE ci.finalizedPlanId = p.id
                   AND ci.finalizedRegistrationId IS NOT NULL
+                  AND acp.deletedAt IS NULL
+                  AND EXISTS (
+                    SELECT 1 FROM orderStatusHistory osh0
+                    WHERE osh0.registrationId=ci.finalizedRegistrationId
+                      AND CAST(osh0.orderNumber AS CHAR)=p.orderNumber
+                  )
                   AND NOT EXISTS (
                     SELECT 1 FROM hiddenSubOrders h
                     WHERE h.registrationId = ci.finalizedRegistrationId
@@ -243,7 +250,9 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
                 AND EXISTS (
                   SELECT 1
                   FROM orderStatusHistory osh
+                  INNER JOIN accessCodePhones acp2 ON acp2.id=osh.registrationId
                   WHERE CAST(osh.orderNumber AS CHAR) = p.orderNumber
+                    AND acp2.deletedAt IS NULL
                     AND NOT EXISTS (
                       SELECT 1 FROM hiddenSubOrders h2
                       WHERE h2.registrationId = osh.registrationId
