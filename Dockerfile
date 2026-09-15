@@ -21,14 +21,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Dumpling oficial para exportação lógica compatível com TiDB/MySQL.
+# Diagnóstico temporário: imprime o SHA-256 real e interrompe o build antes de publicar.
 RUN curl --proto '=https' --tlsv1.2 -fsSL \
       "https://tiup-mirrors.pingcap.com/dumpling-${DUMPLING_VERSION}-linux-amd64.tar.gz" \
       -o /tmp/dumpling.tar.gz \
-    && echo "${DUMPLING_SHA256}  /tmp/dumpling.tar.gz" | sha256sum -c - \
-    && tar -xzf /tmp/dumpling.tar.gz -C /usr/local/bin dumpling \
-    && chmod 0755 /usr/local/bin/dumpling \
-    && rm -f /tmp/dumpling.tar.gz
+    && echo "DUMPLING_ACTUAL_SHA256" \
+    && sha256sum /tmp/dumpling.tar.gz \
+    && false
 
 # Instalar weasyprint via pip (mesma forma que no sandbox)
 RUN pip3 install weasyprint --break-system-packages
