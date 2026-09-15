@@ -1,7 +1,7 @@
 FROM node:22-slim
 
 ARG DUMPLING_VERSION=v8.5.7
-ARG DUMPLING_SHA256=535cb9775849c4cf1c1d25b00c59342c41b006ca1a673a288da2118047d874c9
+ARG DUMPLING_SHA256=535cb9775849c4cf1c1d25b0c59342c41b006ca1a673a288da2118047d874c9
 
 # Instalar Python3, pip, poppler-utils e dependências para weasyprint
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -65,8 +65,7 @@ RUN npm install -g pnpm@10.4.1 \
     && node scripts/patch-loans-client-filters-20260914.mjs \
     && node scripts/patch-admin-customer-photo-download-20260914.mjs \
     && node scripts/patch-admin-orders-login-email-filter-20260915.mjs \
-    && node scripts/patch-order-email-generator-link-20260915.mjs \
-    && node scripts/patch-admin-email-order-banner-20260915.mjs \
+    && node scripts/patch-email-generator-history-ownership-20260915.mjs \
     && pnpm run build
 
 ENV NODE_ENV=production
