@@ -17,6 +17,7 @@ export type PublicOrderPersistenceInput = {
 };
 
 export type OrderPersistenceStore = {
+  assertNoOpenVipInstallmentDebt?(phone: string): Promise<void>;
   findAccessCodeId(code: string): Promise<number | undefined>;
   createAccessCode(input: {
     code: string;
@@ -92,6 +93,10 @@ export async function persistPublicOrder(
 ): Promise<PersistedPublicOrder> {
   const phone = normalizePhone(input.effectivePhone);
   if (!phone) throw new Error("Telefone efetivo ausente para persistir o pedido");
+
+  // O adaptador SQL de produção aplica a trava financeira. Stores usados em
+  // testes podem omitir este método sem criar dependência real de banco.
+  await deps.store.assertNoOpenVipInstallmentDebt?.(phone);
 
   let registrationId: number | undefined;
   const isGeneralCode = Boolean(input.generalPassword && input.accessCode === input.generalPassword);
@@ -208,6 +213,30 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
   const firstId = (result: unknown): number | undefined => positiveId(rowsFrom(result)[0]?.id);
 
   return {
+    async assertNoOpenVipInstallmentDebt(phone) {
+      try {
+        const rows = rowsFrom(await db.execute(sql`
+          SELECT p.id, p.balanceCents
+          FROM vipInstallmentPlans p
+          INNER JOIN customers c ON c.id = p.customerId
+          WHERE c.deletedAt IS NULL
+            AND REGEXP_REPLACE(COALESCE(c.phone, ''), '[^0-9]', '') = ${phone}
+            AND p.balanceCents > 0
+            AND p.status NOT IN ('paid', 'cancelled')
+          ORDER BY p.id DESC
+          LIMIT 1
+        `));
+        if (rows[0]) {
+          throw new Error("Você possui parcelas pendentes. Quite seu débito para realizar um novo pedido.");
+        }
+      } catch (error: any) {
+        if (String(error?.message || "").startsWith("Você possui parcelas pendentes.")) throw error;
+        const code = String(error?.code || error?.cause?.code || "");
+        const message = String(error?.message || "");
+        if (code === "ER_NO_SUCH_TABLE" || message.includes("vipInstallmentPlans") && message.toLowerCase().includes("doesn't exist")) return;
+        throw error;
+      }
+    },
     async findAccessCodeId(code) {
       return firstId(await db.execute(sql`SELECT id FROM accessCodes WHERE code = ${code} LIMIT 1`));
     },
