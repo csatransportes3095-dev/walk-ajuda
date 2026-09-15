@@ -31,6 +31,7 @@ run_boot_step "db-migrate-referral-commission-attribution" pnpm run db:migrate:r
 run_boot_step "db-migrate-online-support" pnpm run db:migrate:online-support
 run_boot_step "db-migrate-cartoes" pnpm run db:migrate:cartoes
 run_boot_step "db-migrate-loans-compat" pnpm run db:migrate:loans-compat
+run_boot_step "db-migrate-loans-manual-limit" pnpm exec tsx scripts/apply-loans-manual-limit-priority-20260915.ts
 run_boot_step "db-migrate-system-backups" pnpm run db:migrate:system-backups
 run_boot_step "db-migrate-whatsapp-templates" pnpm run db:migrate:whatsapp-templates
 run_boot_step "db-migrate-h2ads" pnpm run db:migrate:h2ads
