@@ -22,27 +22,35 @@ server = replaceOnce(
 `      const hiddenRows = (hiddenResult as any)[0] as Array<{ registrationId: number; subOrderIndex: number }>;
       const hiddenSet = new Set(hiddenRows.map((h: any) => \`${'${h.registrationId}_${h.subOrderIndex}'}\`));
 
-      // E-mail/login criado para o pedido (diferente do e-mail cadastral do cliente).
-      // Usado apenas para consulta/filtro no ADM de pedidos.
-      const loginEmailByRegId = new Map<number, string | null>();
+      // Texto de busca com TODOS os e-mails/logins já salvos para o registrationId.
+      // A tabela orderLoginData não possui unicidade por registrationId, então registros
+      // históricos/duplicados também precisam ser pesquisáveis no ADM.
+      const loginSearchTextByRegId = new Map<number, string>();
       try {
         const loginEmailResult = await db.execute(
-          sql.raw(\`SELECT registrationId, loginEmail FROM orderLoginData WHERE registrationId IN (${'${idsList}'})\`)
+          sql.raw(\`SELECT registrationId, loginEmail FROM orderLoginData WHERE registrationId IN (${'${idsList}'}) AND loginEmail IS NOT NULL AND TRIM(loginEmail) <> '' ORDER BY id ASC\`)
         );
         const loginEmailRows = (loginEmailResult as any)[0] as Array<{ registrationId: number; loginEmail: string | null }>;
         for (const loginRow of (loginEmailRows || [])) {
+          const registrationId = Number(loginRow.registrationId);
           const rawLoginEmail = loginRow.loginEmail;
           const cleanLoginEmail = rawLoginEmail === null || rawLoginEmail === undefined || rawLoginEmail === 'NULL' || rawLoginEmail === 'null'
-            ? null
+            ? ''
             : String(rawLoginEmail).trim();
-          loginEmailByRegId.set(Number(loginRow.registrationId), cleanLoginEmail || null);
+          if (!cleanLoginEmail) continue;
+          const existing = loginSearchTextByRegId.get(registrationId) || '';
+          const emails = existing ? existing.split('\\n').filter(Boolean) : [];
+          if (!emails.some(email => email.toLowerCase() === cleanLoginEmail.toLowerCase())) {
+            emails.push(cleanLoginEmail);
+          }
+          loginSearchTextByRegId.set(registrationId, emails.join('\\n'));
         }
       } catch (e) {
-        console.error('[listOrders] Erro ao buscar e-mail de login dos pedidos:', e);
+        console.error('[listOrders] Erro ao buscar e-mails de login dos pedidos:', e);
       }
 
       // Agrupar histórico por registrationId`,
-  'backend map loginEmail'
+  'backend map all login emails'
 );
 
 server = replaceOnce(
@@ -52,9 +60,9 @@ server = replaceOnce(
           hasNewDocResponse: answeredDocReqIds.has(Number(o.id)),`,
 `        return {
           ...o,
-          loginEmail: loginEmailByRegId.get(Number(o.id)) ?? null,
+          loginSearchText: loginSearchTextByRegId.get(Number(o.id)) ?? null,
           hasNewDocResponse: answeredDocReqIds.has(Number(o.id)),`,
-  'backend expose loginEmail'
+  'backend expose login search text'
 );
 
 fs.writeFileSync(serverPath, server);
@@ -66,9 +74,9 @@ client = replaceOnce(
 `  customerEmail: string | null;
   customerName: string | null;`,
 `  customerEmail: string | null;
-  loginEmail: string | null;
+  loginSearchText: string | null;
   customerName: string | null;`,
-  'Order type loginEmail'
+  'Order type loginSearchText'
 );
 
 client = replaceOnce(
@@ -89,9 +97,9 @@ client = replaceOnce(
 `    const email = (o.customerEmail || "").toLowerCase();
     const numericPrefix = (o.customerName || o.codeClientName || "").trim().match(/^(\\d+)/)?.[1] || "";`,
 `    const email = (o.customerEmail || "").toLowerCase();
-    const loginEmail = (o.loginEmail || "").toLowerCase();
+    const loginSearchText = (o.loginSearchText || "").toLowerCase();
     const loginEmailTerm = activeLoginEmailFilter.trim().toLowerCase();
-    const matchLoginEmail = !loginEmailTerm || loginEmail.includes(loginEmailTerm);
+    const matchLoginEmail = !loginEmailTerm || loginSearchText.includes(loginEmailTerm);
     const numericPrefix = (o.customerName || o.codeClientName || "").trim().match(/^(\\d+)/)?.[1] || "";`,
   'active login filter variables'
 );
@@ -121,9 +129,9 @@ client = replaceOnce(
     orders.filter(o => {
       if (!isDeliveredStatus(o.latestStatus)) return false;
       const orderPhone = (o.phone || '').replace(/\\D/g, '');
-      const loginEmail = (o.loginEmail || '').toLowerCase();
+      const loginSearchText = (o.loginSearchText || '').toLowerCase();
       const matchPhone = !deliveredPhoneClean || orderPhone.includes(deliveredPhoneClean);
-      const matchLoginEmail = !deliveredLoginEmailClean || loginEmail.includes(deliveredLoginEmailClean);
+      const matchLoginEmail = !deliveredLoginEmailClean || loginSearchText.includes(deliveredLoginEmailClean);
       return matchPhone && matchLoginEmail;
     }),`,
   'delivered filter application'
@@ -209,5 +217,12 @@ client = replaceOnce(
   'delivered login email input'
 );
 
+client = replaceOnce(
+  client,
+`            ...(deliveredOrders.length > 0 && !(fixedFolderConfig['entregues']?.hidden === 1) ? [{ key: "__entregue__", label: getFixedName('__entregue__', '📦 Entregues'), orders: deliveredOrders, colorIdx: -1, isDelivered: true, isAll: false, _order: fixedTabOrder['__entregue__'] }] : []),`,
+`            ...(fixedFolderConfig['entregues']?.hidden === 1 ? [] : [{ key: "__entregue__", label: getFixedName('__entregue__', '📦 Entregues'), orders: deliveredOrders, colorIdx: -1, isDelivered: true, isAll: false, _order: fixedTabOrder['__entregue__'] }]),`,
+  'keep delivered folder visible when filter returns zero'
+);
+
 fs.writeFileSync(clientPath, client);
-console.log('[login-email-filter] Filtros por e-mail/login aplicados ao painel de pedidos.');
+console.log('[login-email-filter] Filtros por todos os e-mails/login aplicados; pasta Entregues estabilizada.');
