@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { addOrderStatus, generateOrderNumber } from "./db";
+import { assertNoOpenVipInstallmentDebt } from "./vipInstallmentOrderGuard";
 
 export type OrderStatusRow = { id: number };
 
@@ -92,6 +93,12 @@ export async function persistPublicOrder(
 ): Promise<PersistedPublicOrder> {
   const phone = normalizePhone(input.effectivePhone);
   if (!phone) throw new Error("Telefone efetivo ausente para persistir o pedido");
+
+  // Regra financeira central: cliente com saldo parcelado em aberto não cria
+  // outro pedido, independentemente de entrar pela vitrine, carrinho ou Bot.
+  // O primeiro pedido que origina o parcelamento não é afetado porque o plano
+  // só passa a existir depois da finalização desse próprio pedido.
+  await assertNoOpenVipInstallmentDebt(phone);
 
   let registrationId: number | undefined;
   const isGeneralCode = Boolean(input.generalPassword && input.accessCode === input.generalPassword);
