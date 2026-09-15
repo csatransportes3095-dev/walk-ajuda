@@ -4562,6 +4562,10 @@ export default function Home() {
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25 sm:h-10 sm:w-10"><Ticket className="h-5 w-5" /></span>
               <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">Empréstimo</span><span className="mt-1 hidden text-[10px] leading-tight text-amber-100/60 sm:block">Consultar e solicitar</span></span>
             </button>
+            <button onClick={() => { window.location.href = '/gastos'; }} className="group col-span-2 flex min-h-[78px] items-center gap-2 rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-emerald-500/15 to-green-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(52,211,153,0.08)] transition-all hover:border-emerald-300/60 hover:bg-emerald-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label="Planilha de gastos" title="Planilha de gastos">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/25 sm:h-10 sm:w-10"><FileUp className="h-5 w-5" /></span>
+              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">Planilha de gastos</span><span className="mt-1 hidden text-[10px] leading-tight text-emerald-100/60 sm:block">Controle diário</span></span>
+            </button>
             {(() => {
               const schedule = myActiveScheduleQuery.data;
               const isActive = schedule?.active === true;
@@ -4569,10 +4573,10 @@ export default function Home() {
               const confirmedDate = isConfirmed && schedule.slotDate
                 ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${schedule.slotDate}T12:00:00Z`))
                 : '';
-              const title = isConfirmed ? 'Agendamento confirmado' : isActive ? 'Aguardando agendamento para foto' : 'Agendamento';
+              const title = 'Agendamento para foto';
               const subtitle = isConfirmed
-                ? `${confirmedDate}${schedule.slotTime ? ` às ${schedule.slotTime}` : ''}`
-                : isActive ? 'Escolha o dia e o horário' : 'Aguardando liberação do ADM';
+                ? `Confirmado: ${confirmedDate}${schedule.slotTime ? ` às ${schedule.slotTime}` : ''}`
+                : isActive ? 'Aguardando agendamento para foto' : 'Aguardando liberação do ADM';
 
               return (
                 <button
@@ -4583,17 +4587,17 @@ export default function Home() {
                     ? 'border-green-400/45 bg-gradient-to-br from-green-500/20 to-emerald-500/10 shadow-[0_0_20px_rgba(74,222,128,0.10)] hover:border-green-300/70 hover:bg-green-500/25 active:scale-[0.99]'
                     : isActive
                       ? 'border-violet-400/45 bg-gradient-to-br from-violet-500/20 to-fuchsia-500/10 shadow-[0_0_20px_rgba(167,139,250,0.10)] hover:border-violet-300/70 hover:bg-violet-500/25 active:scale-[0.99]'
-                      : 'cursor-not-allowed border-white/10 bg-white/[0.035] opacity-70'
+                      : 'cursor-not-allowed border-violet-400/40 bg-gradient-to-br from-violet-500/16 to-fuchsia-500/8 shadow-[0_0_20px_rgba(167,139,250,0.09)]'
                   }`}
                   aria-label={title}
                   title={title}
                 >
-                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ${isConfirmed ? 'bg-green-400/15 text-green-200 ring-green-300/30' : isActive ? 'bg-violet-400/15 text-violet-200 ring-violet-300/30' : 'bg-white/5 text-white/45 ring-white/10'}`}>
+                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ${isConfirmed ? 'bg-green-400/15 text-green-200 ring-green-300/30' : 'bg-violet-400/15 text-violet-200 ring-violet-300/30'}`}>
                     <CalendarDays className="h-6 w-6" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-xs font-black uppercase leading-tight tracking-wide text-white sm:text-sm">{title}</span>
-                    <span className={`mt-1 block text-[11px] leading-tight sm:text-xs ${isConfirmed ? 'text-green-100/75' : isActive ? 'text-violet-100/75' : 'text-white/45'}`}>{subtitle}</span>
+                    <span className={`mt-1 block text-[11px] leading-tight sm:text-xs ${isConfirmed ? 'text-green-100/75' : 'text-violet-100/75'}`}>{subtitle}</span>
                   </span>
                   {isActive && (
                     <span className={`shrink-0 rounded-lg border px-2.5 py-2 text-[9px] font-black uppercase tracking-wide sm:px-3 sm:text-[10px] ${isConfirmed ? 'border-green-300/30 bg-green-400/10 text-green-100' : 'border-violet-300/30 bg-violet-400/10 text-violet-100'}`}>
@@ -4603,10 +4607,6 @@ export default function Home() {
                 </button>
               );
             })()}
-            <button onClick={() => { window.location.href = '/gastos'; }} className="group col-span-2 flex min-h-[78px] items-center gap-2 rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-emerald-500/15 to-green-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(52,211,153,0.08)] transition-all hover:border-emerald-300/60 hover:bg-emerald-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label="Planilha de gastos" title="Planilha de gastos">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/25 sm:h-10 sm:w-10"><FileUp className="h-5 w-5" /></span>
-              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">Planilha de gastos</span><span className="mt-1 hidden text-[10px] leading-tight text-emerald-100/60 sm:block">Controle diário</span></span>
-            </button>
           </div>
         </div>
       </header>
