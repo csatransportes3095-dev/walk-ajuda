@@ -223,6 +223,34 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
             AND REGEXP_REPLACE(COALESCE(c.phone, ''), '[^0-9]', '') = ${phone}
             AND p.balanceCents > 0
             AND p.status NOT IN ('paid', 'cancelled')
+            AND p.orderNumber IS NOT NULL
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM vipInstallmentCheckoutIntents ci
+                WHERE ci.finalizedPlanId = p.id
+                  AND ci.finalizedRegistrationId IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM hiddenSubOrders h
+                    WHERE h.registrationId = ci.finalizedRegistrationId
+                  )
+              )
+              OR (
+                NOT EXISTS (
+                  SELECT 1 FROM vipInstallmentCheckoutIntents ci2
+                  WHERE ci2.finalizedPlanId = p.id
+                )
+                AND EXISTS (
+                  SELECT 1
+                  FROM orderStatusHistory osh
+                  WHERE CAST(osh.orderNumber AS CHAR) = p.orderNumber
+                    AND NOT EXISTS (
+                      SELECT 1 FROM hiddenSubOrders h2
+                      WHERE h2.registrationId = osh.registrationId
+                    )
+                )
+              )
+            )
           ORDER BY p.id DESC
           LIMIT 1
         `));
