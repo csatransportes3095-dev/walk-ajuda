@@ -285,17 +285,87 @@ async function permissionForCustomer(customerId: number) {
 async function openPlanForCustomer(customerId: number) {
   await ensureVipInstallmentInfrastructure();
   const db = (await getDb()) as any;
-  const result = await db.execute(sql`
+  const candidateResult = await db.execute(sql`
     SELECT id, orderNumber, productName, totalAmountCents, paidAmountCents, balanceCents,
            installmentCount, frequency, status, createdAt
     FROM vipInstallmentPlans
     WHERE openSlotCustomerId=${customerId}
+      AND balanceCents > 0
+      AND status NOT IN ('paid','cancelled')
     LIMIT 1
   `);
-  const row = rowsOf<any>(result)[0];
+  const row = rowsOf<any>(candidateResult)[0];
   if (!row) return null;
+
+  const planId = Number(row.id);
+  const orderNumber = Number(String(row.orderNumber || '').trim());
+  const validationResult = await db.execute(sql`
+    SELECT
+      EXISTS(
+        SELECT 1
+        FROM vipInstallmentCheckoutIntents ci
+        INNER JOIN accessCodePhones acp ON acp.id=ci.finalizedRegistrationId
+        WHERE ci.finalizedPlanId=${planId}
+          AND ci.finalizedRegistrationId IS NOT NULL
+          AND acp.deletedAt IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM hiddenSubOrders h
+            WHERE h.registrationId=ci.finalizedRegistrationId
+          )
+      ) AS activeLinkedOrder,
+      EXISTS(
+        SELECT 1 FROM vipInstallmentCheckoutIntents ci2
+        WHERE ci2.finalizedPlanId=${planId}
+      ) AS hasLinkedIntent,
+      EXISTS(
+        SELECT 1
+        FROM orderStatusHistory osh
+        INNER JOIN accessCodePhones acp2 ON acp2.id=osh.registrationId
+        WHERE osh.orderNumber=${Number.isSafeInteger(orderNumber) ? orderNumber : -1}
+          AND acp2.deletedAt IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM hiddenSubOrders h2
+            WHERE h2.registrationId=osh.registrationId
+          )
+      ) AS activeLegacyOrder
+  `);
+  const validation = rowsOf<any>(validationResult)[0] || {};
+  const validOrder = Number(validation.activeLinkedOrder) === 1
+    || (Number(validation.hasLinkedIntent) !== 1 && Number(validation.activeLegacyOrder) === 1);
+
+  if (!validOrder) {
+    const previousBalance = Number(row.balanceCents || 0);
+    await db.transaction(async (tx: any) => {
+      await tx.execute(sql`
+        UPDATE vipInstallments
+        SET status='cancelled'
+        WHERE planId=${planId}
+          AND status IN ('pending','overdue','awaiting_confirmation')
+      `);
+      await tx.execute(sql`
+        UPDATE vipInstallmentPlans
+        SET status='cancelled', balanceCents=0, openSlotCustomerId=NULL
+        WHERE id=${planId}
+          AND status NOT IN ('paid','cancelled')
+      `);
+      await tx.execute(sql`
+        INSERT INTO vipInstallmentHistory
+          (planId, installmentId, action, actorType, actorId, previousValue, newValue, notes)
+        SELECT ${planId}, NULL, 'order_deleted_plan_cancelled', 'system', 'system',
+               ${JSON.stringify({ status: String(row.status || ''), balanceCents: previousBalance })},
+               ${JSON.stringify({ status: 'cancelled', balanceCents: 0 })},
+               'Pedido de origem excluído; saldo restante cancelado automaticamente.'
+        WHERE NOT EXISTS (
+          SELECT 1 FROM vipInstallmentHistory
+          WHERE planId=${planId} AND action='order_deleted_plan_cancelled'
+        )
+      `);
+    });
+    return null;
+  }
+
   return {
-    id: Number(row.id),
+    id: planId,
     orderNumber: row.orderNumber == null ? null : String(row.orderNumber),
     productName: String(row.productName || ""),
     totalAmountCents: Number(row.totalAmountCents || 0),
@@ -381,7 +451,6 @@ function productFrequencyAllowed(
   return rule.allowMonthly ?? true;
 }
 
-
 async function buildValidatedVipCheckout(input: {
   phone: string;
   items: Array<{ productId: number; optionId: number; priceModelId?: number | null; warrantyTierId?: number | null }>;
@@ -459,7 +528,6 @@ async function buildValidatedVipCheckout(input: {
   return { eligibility, pricing, quote, productRule, maxInstallments, interestBps };
 }
 
-
 async function refreshVipInstallmentOverdueStatuses() {
   await ensureVipInstallmentInfrastructure();
   const db = (await getDb()) as any;
@@ -500,10 +568,8 @@ async function refreshVipInstallmentOverdueStatuses() {
   });
 }
 
-
 export const vipInstallmentsRouter = router({
   adminConfig: adminProcedure.query(async () => getVipInstallmentConfig()),
-
 
   adminProductRules: adminProcedure.query(async () => listVipInstallmentProductRules()),
 
@@ -624,7 +690,41 @@ export const vipInstallmentsRouter = router({
              op.id AS openPlanId, op.balanceCents, op.totalAmountCents, op.status AS openPlanStatus
       FROM customers c
       LEFT JOIN vipInstallmentPermissions p ON p.customerId=c.id
-      LEFT JOIN vipInstallmentPlans op ON op.openSlotCustomerId=c.id
+      LEFT JOIN vipInstallmentPlans op
+        ON op.openSlotCustomerId=c.id
+       AND op.balanceCents > 0
+       AND op.status NOT IN ('paid','cancelled')
+       AND (
+         EXISTS (
+           SELECT 1
+           FROM vipInstallmentCheckoutIntents ci
+           INNER JOIN accessCodePhones acp ON acp.id=ci.finalizedRegistrationId
+           WHERE ci.finalizedPlanId=op.id
+             AND ci.finalizedRegistrationId IS NOT NULL
+             AND acp.deletedAt IS NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM hiddenSubOrders h
+               WHERE h.registrationId=ci.finalizedRegistrationId
+             )
+         )
+         OR (
+           NOT EXISTS (
+             SELECT 1 FROM vipInstallmentCheckoutIntents ci2
+             WHERE ci2.finalizedPlanId=op.id
+           )
+           AND EXISTS (
+             SELECT 1
+             FROM orderStatusHistory osh
+             INNER JOIN accessCodePhones acp2 ON acp2.id=osh.registrationId
+             WHERE osh.orderNumber=CAST(op.orderNumber AS UNSIGNED)
+               AND acp2.deletedAt IS NULL
+               AND NOT EXISTS (
+                 SELECT 1 FROM hiddenSubOrders h2
+                 WHERE h2.registrationId=osh.registrationId
+               )
+           )
+         )
+       )
       WHERE c.deletedAt IS NULL
       ORDER BY c.name ASC
     `);

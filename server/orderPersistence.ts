@@ -235,7 +235,7 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
                   AND EXISTS (
                     SELECT 1 FROM orderStatusHistory osh0
                     WHERE osh0.registrationId=ci.finalizedRegistrationId
-                      AND CAST(osh0.orderNumber AS CHAR)=p.orderNumber
+                      AND osh0.orderNumber=CAST(p.orderNumber AS UNSIGNED)
                   )
                   AND NOT EXISTS (
                     SELECT 1 FROM hiddenSubOrders h
@@ -251,7 +251,7 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
                   SELECT 1
                   FROM orderStatusHistory osh
                   INNER JOIN accessCodePhones acp2 ON acp2.id=osh.registrationId
-                  WHERE CAST(osh.orderNumber AS CHAR) = p.orderNumber
+                  WHERE osh.orderNumber=CAST(p.orderNumber AS UNSIGNED)
                     AND acp2.deletedAt IS NULL
                     AND NOT EXISTS (
                       SELECT 1 FROM hiddenSubOrders h2
