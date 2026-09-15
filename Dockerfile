@@ -1,7 +1,7 @@
 FROM node:22-slim
 
 ARG DUMPLING_VERSION=v8.5.7
-ARG DUMPLING_SHA256=535cb9775849c4cf1c1d25b0c59342c41b006ca1a673a288da2118047d874c9
+ARG DUMPLING_SHA256=535cb9775849c4cf1c1d25b00c59342c41b006ca1a673a288da2118047d874c9
 
 # Instalar Python3, pip, poppler-utils e dependências para weasyprint
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -21,13 +21,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Diagnóstico temporário: imprime o SHA-256 real e interrompe o build antes de publicar.
+# Dumpling oficial para exportação lógica compatível com TiDB/MySQL.
 RUN curl --proto '=https' --tlsv1.2 -fsSL \
       "https://tiup-mirrors.pingcap.com/dumpling-${DUMPLING_VERSION}-linux-amd64.tar.gz" \
       -o /tmp/dumpling.tar.gz \
-    && echo "DUMPLING_ACTUAL_SHA256" \
-    && sha256sum /tmp/dumpling.tar.gz \
-    && false
+    && echo "${DUMPLING_SHA256}  /tmp/dumpling.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/dumpling.tar.gz -C /usr/local/bin dumpling \
+    && chmod 0755 /usr/local/bin/dumpling \
+    && rm -f /tmp/dumpling.tar.gz
 
 # Instalar weasyprint via pip (mesma forma que no sandbox)
 RUN pip3 install weasyprint --break-system-packages
