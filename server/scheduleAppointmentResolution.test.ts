@@ -17,11 +17,25 @@ describe("resolução do agendamento efetivo do pedido", () => {
     expect(normalizeSchedulePhone("55 (11) 91892-9480")).toBe("11918929480");
   });
 
-  it("mantém vínculo direto quando ele está ativo", () => {
+  it("mantém vínculo direto quando ele está confirmado", () => {
     const direct: Appt = { id: 20, status: "confirmed", customerPhone: "11918929480", token: "direto" };
     const newer: Appt = { id: 21, status: "pending", customerPhone: "11918929480", token: "outro" };
 
     expect(selectEffectiveScheduleAppointment(direct, [newer, direct], direct.customerPhone)?.token).toBe("direto");
+  });
+
+  it("troca pending antigo por confirmação mais nova do mesmo telefone", () => {
+    const directPending: Appt = { id: 20, status: "pending", customerPhone: "11918929480", token: "pendente-antigo" };
+    const newerConfirmed: Appt = { id: 21, status: "confirmed", customerPhone: "5511918929480", token: "confirmado-novo" };
+
+    expect(selectEffectiveScheduleAppointment(directPending, [newerConfirmed, directPending], "(11) 91892-9480")?.token).toBe("confirmado-novo");
+  });
+
+  it("não troca pending atual por outro pending mais novo", () => {
+    const directPending: Appt = { id: 20, status: "pending", customerPhone: "11918929480", token: "pendente-atual" };
+    const newerPending: Appt = { id: 21, status: "pending", customerPhone: "5511918929480", token: "outro-pendente" };
+
+    expect(selectEffectiveScheduleAppointment(directPending, [newerPending, directPending], directPending.customerPhone)?.token).toBe("pendente-atual");
   });
 
   it("recupera agendamento ativo mais novo pelo telefone após recadastro", () => {
