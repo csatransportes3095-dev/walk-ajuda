@@ -112,7 +112,11 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(session).toContain('directBrowserEgress: "blocked_by_windows_firewall"');
     expect(session).toContain('const browserExecutable = process.env.H2ADS_BROWSER_EXECUTABLE');
     expect(session).toContain("KILL_SWITCH_CHECK_INTERVAL_MS = 5_000");
-    expect(session).toContain("triggerKillSwitch");
+    expect(session).toContain("PROXY_FAILURE_GRACE_MS = 20_000");
+    expect(session).toContain("suspendProxyPath");
+    expect(session).toContain("recoverProxyPath");
+    expect(session).toContain('networkState: "suspended"');
+    expect(session).not.toContain("async function triggerKillSwitch");
     expect(session).toContain("taskkill.exe");
     expect(session).toContain("--disable-quic");
     expect(session).toContain("--dns-prefetch-disable");

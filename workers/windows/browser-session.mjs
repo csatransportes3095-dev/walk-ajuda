@@ -10,6 +10,7 @@ import { Server } from "proxy-chain";
 const execFileAsync = promisify(execFile);
 const IP_CHECK_INTERVAL_MS = 15_000;
 const KILL_SWITCH_CHECK_INTERVAL_MS = 5_000;
+const PROXY_FAILURE_GRACE_MS = 20_000;
 const ROTATION_DRAIN_MS = 500;
 const CHROME_PROBE_TIMEOUT_MS = 35_000;
 const required = ["H2ADS_PANEL_URL", "H2ADS_WORKER_KEY", "H2ADS_WORKER_TOKEN", "H2ADS_INSTANCE_ID", "H2ADS_COMMAND_ID", "H2ADS_PROXY_JSON", "H2ADS_PROFILE_DIRECTORY", "H2ADS_BROWSER_EXECUTABLE"];
@@ -43,7 +44,10 @@ let rotationInProgress = false;
 let lastReportedIp = null;
 let ipCheckInProgress = false;
 let killSwitchCheckInProgress = false;
-let killSwitchTriggered = false;
+let proxyFailureStartedAt = null;
+let proxyFailureReason = null;
+let networkSuspended = false;
+let networkRecoveryInProgress = false;
 let browserProbeInProgress = false;
 
 function upstreamUrl() {
@@ -233,45 +237,133 @@ async function closeRelay(server) {
   await server.close(true).catch(() => undefined);
 }
 
-async function triggerKillSwitch(reason = "proxy_path_unverified") {
-  if (killSwitchTriggered) return;
-  killSwitchTriggered = true;
-  if (rotationTimer) clearInterval(rotationTimer);
-  if (ipTimer) clearInterval(ipTimer);
-  if (killSwitchTimer) clearInterval(killSwitchTimer);
-  writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: reason, killSwitchTriggeredAt: new Date().toISOString() });
-  await closeRelay(frontRelay);
+function clearProxyFailureState() {
+  const recovered = Boolean(proxyFailureStartedAt || networkSuspended);
+  proxyFailureStartedAt = null;
+  proxyFailureReason = null;
+  networkSuspended = false;
+  return recovered;
+}
+
+async function suspendProxyPath(reason = "proxy_path_unverified") {
+  if (networkSuspended) {
+    writeSession({ networkState: "suspended", proxyPathFailure: reason, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
+    return;
+  }
+  networkSuspended = true;
+  proxyFailureReason = reason;
   await closeRelay(backendRelay);
+  backendRelay = undefined;
   activeBackendPort = undefined;
-  await terminateBrowserProcess();
+  writeSession({
+    networkState: "suspended", networkSuspendedAt: new Date().toISOString(), proxyPathFailure: reason,
+    privacyGuard: "protected", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+  });
+}
+
+async function noteProxyPathFailure(reason = "proxy_path_unverified") {
+  const now = Date.now();
+  if (!proxyFailureStartedAt) proxyFailureStartedAt = now;
+  proxyFailureReason = reason;
+  const elapsedMs = now - proxyFailureStartedAt;
+  writeSession({
+    networkState: elapsedMs >= PROXY_FAILURE_GRACE_MS ? "suspending" : "degraded",
+    proxyPathFailure: reason, proxyFailureSince: new Date(proxyFailureStartedAt).toISOString(),
+    proxyFailureElapsedMs: elapsedMs, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+  });
+  if (elapsedMs >= PROXY_FAILURE_GRACE_MS) await suspendProxyPath(reason);
+}
+
+async function recoverProxyPath() {
+  if (!networkSuspended || networkRecoveryInProgress || !frontRelay || !relayPort || !browser || browser.exitCode !== null) return;
+  networkRecoveryInProgress = true;
+  let candidateBackend;
+  try {
+    candidateBackend = createBackendRelay();
+    await candidateBackend.listen();
+    const candidateIp = await checkIpThroughPort(candidateBackend.port);
+    backendRelay = candidateBackend;
+    activeBackendPort = candidateBackend.port;
+    const observedIp = await checkIp();
+    if (normalizeIp(observedIp) !== normalizeIp(candidateIp)) throw new Error("exit_ip_mismatch");
+    const executable = chromeExecutable();
+    if (!executable) throw new Error("browser_not_found");
+    const browserObservedIp = await verifyChromeProxyPath(executable, relayPort, observedIp);
+    const recovered = clearProxyFailureState();
+    const recoveredAt = new Date().toISOString();
+    writeSession({
+      networkState: "healthy", networkRecoveredAt: recovered ? recoveredAt : undefined,
+      observedIp, browserObservedIp, browserProxyVerified: true, privacyGuard: "protected", killSwitch: "armed",
+      directBrowserEgress: "blocked_by_windows_firewall",
+    });
+    if (normalizeIp(observedIp) !== normalizeIp(lastReportedIp)) {
+      try {
+        await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp });
+        lastReportedIp = observedIp;
+        writeSession({ observedIp, lastIpReportedAt: recoveredAt, panelSyncState: "synced" });
+      } catch {
+        writeSession({ panelSyncState: "pending", panelSyncFailureAt: recoveredAt });
+      }
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "proxy_recovery_failed";
+    if (candidateBackend) await closeRelay(candidateBackend);
+    if (backendRelay === candidateBackend) backendRelay = undefined;
+    activeBackendPort = undefined;
+    networkSuspended = true;
+    proxyFailureReason = reason;
+    writeSession({
+      networkState: "suspended", recoveryFailure: reason, recoveryFailureAt: new Date().toISOString(),
+      killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+    });
+  } finally {
+    networkRecoveryInProgress = false;
+  }
 }
 
 async function reportObservedIp() {
-  if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || ipCheckInProgress || killSwitchTriggered) return;
+  if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || ipCheckInProgress || killSwitchCheckInProgress || networkSuspended) return;
   ipCheckInProgress = true;
   try {
     const observedIp = await checkIp();
     const checkedAt = new Date().toISOString();
-    writeSession({ observedIp, lastIpCheckedAt: checkedAt, killSwitch: "armed" });
-    if (observedIp === lastReportedIp) return;
-    await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp });
-    lastReportedIp = observedIp;
-    writeSession({ observedIp, lastIpReportedAt: checkedAt });
+    const recovered = clearProxyFailureState();
+    writeSession({
+      observedIp, lastIpCheckedAt: checkedAt, networkState: "healthy", killSwitch: "armed",
+      networkRecoveredAt: recovered ? checkedAt : undefined,
+    });
+    if (normalizeIp(observedIp) === normalizeIp(lastReportedIp)) return;
+    try {
+      await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp });
+      lastReportedIp = observedIp;
+      writeSession({ observedIp, lastIpReportedAt: checkedAt, panelSyncState: "synced" });
+    } catch {
+      writeSession({ panelSyncState: "pending", panelSyncFailureAt: checkedAt });
+    }
   } catch (error) {
-    await triggerKillSwitch(error instanceof Error ? error.message : "proxy_path_unverified");
+    await noteProxyPathFailure(error instanceof Error ? error.message : "proxy_path_unverified");
   } finally {
     ipCheckInProgress = false;
   }
 }
 
 async function enforceKillSwitch() {
-  if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || killSwitchTriggered || killSwitchCheckInProgress || ipCheckInProgress) return;
+  if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || killSwitchCheckInProgress || ipCheckInProgress) return;
   killSwitchCheckInProgress = true;
   try {
+    if (networkSuspended) {
+      await recoverProxyPath();
+      return;
+    }
     await checkIp();
-    writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString() });
+    const checkedAt = new Date().toISOString();
+    const recovered = clearProxyFailureState();
+    writeSession({
+      networkState: "healthy", killSwitch: "armed", killSwitchLastVerifiedAt: checkedAt,
+      networkRecoveredAt: recovered ? checkedAt : undefined,
+    });
   } catch (error) {
-    await triggerKillSwitch(error instanceof Error ? error.message : "proxy_path_unverified");
+    await noteProxyPathFailure(error instanceof Error ? error.message : "proxy_path_unverified");
   } finally {
     killSwitchCheckInProgress = false;
   }
@@ -310,7 +402,7 @@ function createGoogleSorryPrivacyGuard() {
 }
 
 async function rotateRelay() {
-  if (!frontRelay || !backendRelay || !relayPort || !activeBackendPort || rotationInProgress || killSwitchTriggered) return;
+  if (!frontRelay || !backendRelay || !relayPort || !activeBackendPort || rotationInProgress || networkSuspended || networkRecoveryInProgress) return;
   rotationInProgress = true;
   const previousBackend = backendRelay;
   const previousBackendPort = activeBackendPort;
@@ -331,8 +423,9 @@ async function rotateRelay() {
     writeSession({
       lastRotationAt: new Date().toISOString(), observedIp, browserObservedIp,
       rotationChangedExitIp: lastReportedIp ? normalizeIp(observedIp) !== normalizeIp(lastReportedIp) : null,
-      privacyGuard: "protected", killSwitch: "armed", rotationState: "verified",
+      privacyGuard: "protected", killSwitch: "armed", networkState: "healthy", rotationState: "verified",
     });
+    clearProxyFailureState();
     await new Promise((resolve) => setTimeout(resolve, ROTATION_DRAIN_MS));
     await closeRelay(previousBackend);
   } catch (error) {
@@ -346,12 +439,12 @@ async function rotateRelay() {
       const fallbackIp = await checkIp();
       writeSession({ rotationState: "rolled_back", rotationFailure: reason, rotationFailureAt: new Date().toISOString(), observedIp: fallbackIp, privacyGuard: "protected", killSwitch: "armed" });
     } catch (fallbackError) {
-      await triggerKillSwitch(fallbackError instanceof Error ? fallbackError.message : "proxy_rotation_unverified");
+      await suspendProxyPath(fallbackError instanceof Error ? fallbackError.message : "proxy_rotation_unverified");
     }
   } finally {
     rotationInProgress = false;
   }
-  if (!killSwitchTriggered) void reportObservedIp();
+  if (!networkSuspended) void reportObservedIp();
 }
 
 async function run() {
@@ -375,7 +468,7 @@ async function run() {
     ], { detached: false, stdio: "ignore", windowsHide: false });
     writeSession({
       startedAt: new Date().toISOString(), instanceLabelState: "static_tab", observedIp: initial.observedIp, browserObservedIp: initial.browserObservedIp,
-      browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+      browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3", killSwitch: "armed", networkState: "healthy", directBrowserEgress: "blocked_by_windows_firewall",
     });
     if (rotationMinutes) {
       rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
