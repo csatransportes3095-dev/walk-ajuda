@@ -36,7 +36,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
     const session = read("workers/windows/browser-session.mjs");
-    expect(script).toContain('$AgentVersion = "1.3.8"');
+    expect(script).toContain('$AgentVersion = "1.3.9"');
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
@@ -53,6 +53,10 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(script).toContain("wscript.exe");
     expect(script).toContain("Get-Process -Id $nodePid -ErrorAction SilentlyContinue");
     expect(script).toContain("taskkill.exe /PID $nodePid /T /F 1>$null 2>$null");
+    expect(script).toContain("CloseMainWindow()");
+    expect(script).toContain("$pendingItems = @(");
+    expect(script).toContain("$saved = [bool](Send-H2AdsProfileSnapshot $config $instanceId)");
+    expect(script).toContain("nao usa break aqui");
     expect(script).toContain("/api/h2ads/worker/heartbeat");
     expect(script).toContain("/api/h2ads/worker/commands/next");
     expect(script).toContain("/api/h2ads/worker/profiles/");
