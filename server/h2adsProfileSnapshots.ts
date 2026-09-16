@@ -4,7 +4,7 @@ import { pipeline } from "node:stream/promises";
 import { and, eq } from "drizzle-orm";
 import { h2AdsInstanceBrowserRuns, h2AdsInstanceWorkerAssignments } from "../drizzle/schema";
 import { getDb } from "./db";
-import { r2DeleteObjects, r2GetObjectStream, r2PutObjectStream } from "./r2Storage";
+import { r2DeleteObjects, r2GetObjectStream, r2ListObjects, r2PutObjectStream } from "./r2Storage";
 
 const SNAPSHOT_PREFIX = "h2ads-profile-snapshots/";
 const SNAPSHOT_MAGIC = Buffer.from("H2P1\n", "utf8");
@@ -12,6 +12,7 @@ const SNAPSHOT_IV_BYTES = 12;
 const SNAPSHOT_TAG_BYTES = 16;
 const SNAPSHOT_HEADER_BYTES = SNAPSHOT_MAGIC.length + SNAPSHOT_IV_BYTES;
 const MAX_SNAPSHOT_BYTES = 1_500_000_000;
+const SNAPSHOT_RETENTION = 3;
 
 function getSnapshotEncryptionKey() {
   const raw = process.env.BACKUP_ENCRYPTION_KEY?.trim() || "";
@@ -70,6 +71,23 @@ async function requireAssignment(workerId: number, instanceId: number) {
   return { db, assignment: rows[0] };
 }
 
+function snapshotVersionFromKey(key: string): number {
+  const match = key.match(/\/v(\d+)-[a-f0-9]+\.h2p\.enc$/i);
+  return match ? Number(match[1]) : -1;
+}
+
+async function pruneOldH2AdsSnapshots(instanceId: number, currentKey: string) {
+  const prefix = `${SNAPSHOT_PREFIX}instance-${instanceId}/`;
+  const keys = await r2ListObjects(prefix);
+  const versioned = keys
+    .filter((candidate) => snapshotVersionFromKey(candidate) >= 0)
+    .sort((a, b) => snapshotVersionFromKey(b) - snapshotVersionFromKey(a));
+  const keep = new Set(versioned.slice(0, SNAPSHOT_RETENTION));
+  keep.add(currentKey);
+  const stale = versioned.filter((candidate) => !keep.has(candidate));
+  if (stale.length) await r2DeleteObjects(stale);
+}
+
 export async function storeH2AdsProfileSnapshot(input: {
   workerId: number;
   instanceId: number;
@@ -85,7 +103,6 @@ export async function storeH2AdsProfileSnapshot(input: {
   if (run[0]?.state === "browser_open") throw new Error("Snapshot bloqueado enquanto o browser está aberto.");
 
   const nextVersion = Math.max(assignment.profileVersion || 0, 0) + 1;
-  const previousKey = assignment.snapshotKey;
   const key = `${SNAPSHOT_PREFIX}instance-${input.instanceId}/v${nextVersion}-${randomBytes(6).toString("hex")}.h2p.enc`;
   const iv = randomBytes(SNAPSHOT_IV_BYTES);
   const encryptor = new EncryptAndHashTransform(getSnapshotEncryptionKey(), iv);
@@ -112,7 +129,7 @@ export async function storeH2AdsProfileSnapshot(input: {
       updatedAt: new Date(),
     }).where(eq(h2AdsInstanceWorkerAssignments.id, assignment.id));
 
-    if (previousKey && previousKey !== key) await r2DeleteObjects([previousKey]).catch(() => undefined);
+    await pruneOldH2AdsSnapshots(input.instanceId, key).catch(() => undefined);
     return { key, bytes: input.plainBytes, sha256: actualHash };
   } catch (error) {
     encrypted.destroy(error as Error);
