@@ -6,6 +6,7 @@ on:
       - fix/h2ads-profile-save-v2-2026-09-16
     paths:
       - ".github/scripts/h2ads-profile-save-v2.py"
+      - ".github/scripts/h2ads-profile-save-v2-run.py"
       - ".github/workflows/h2ads-profile-save-v2.yml"
 
 permissions:
@@ -23,7 +24,7 @@ jobs:
           fetch-depth: 0
 
       - name: Apply isolated H2ADS hotfix
-        run: python .github/scripts/h2ads-profile-save-v2.py
+        run: python .github/scripts/h2ads-profile-save-v2-run.py
 
       - name: Validate PowerShell syntax
         shell: pwsh
