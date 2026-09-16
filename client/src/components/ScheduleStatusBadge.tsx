@@ -26,37 +26,87 @@ const stableAppointmentByOrder = new Map<string, any>();
 
 /**
  * Selo grande e destacado que mostra o estado de um agendamento existente.
- * Usa a chave do pedido e, quando necessário, o telefone para recuperar
- * agendamentos vinculados a um cadastro anterior do mesmo cliente.
+ *
+ * A fonte principal continua sendo getForOrder/listAppointments, mas há uma
+ * segunda leitura pelo registrationId usando listForTracking. Essa segunda fonte
+ * é importante porque listAppointments é deduplicada e pode esconder uma linha
+ * CONFIRMED quando existe um PENDING duplicado mais novo para o mesmo pedido.
+ * Nesse caso o confirmado real do mesmo registrationId + subOrderIndex vence.
  */
 export default function ScheduleStatusBadge({ registrationId, subOrderIndex, customerPhone, orderStatus }: Props) {
   const utils = trpc.useUtils();
   const scheduleQueryInput = { registrationId, subOrderIndex, customerPhone: customerPhone ?? undefined };
+
   const apptQuery = trpc.schedule.getForOrder.useQuery(
     scheduleQueryInput,
     {
       staleTime: 10000,
+      retry: false,
       refetchOnWindowFocus: false,
       placeholderData: (previous: any) => previous,
     }
   );
+
   const allAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, {
     staleTime: 10000,
     refetchOnWindowFocus: false,
     placeholderData: (previous: any) => previous,
   });
+
+  // Fonte sem deduplicação por pedido: retorna todas as linhas do registrationId.
+  // Ela permite recuperar um CONFIRMED real que tenha ficado encoberto por um
+  // PENDING duplicado na listagem resumida do ADM.
+  const registrationAppointmentsQuery = trpc.schedule.listForTracking.useQuery(
+    { registrationId },
+    {
+      staleTime: 5000,
+      refetchInterval: 15000,
+      refetchOnWindowFocus: true,
+      placeholderData: (previous: any) => previous,
+    }
+  );
+
   const dismissMut = trpc.schedule.dismissConfirmedAlert.useMutation({
     onSuccess: () => {
       utils.schedule.getForOrder.invalidate(scheduleQueryInput);
       utils.schedule.listAppointments.invalidate();
+      utils.schedule.listForTracking.invalidate({ registrationId });
     },
   });
 
-  const resolvedAppointment = selectEffectiveScheduleAppointment(
+  const baseResolvedAppointment = selectEffectiveScheduleAppointment(
     apptQuery.data as any,
     (allAppointmentsQuery.data || []) as any[],
     customerPhone,
   ) as any;
+
+  const exactSummary = ((allAppointmentsQuery.data || []) as any[])
+    .filter((a: any) =>
+      Number(a?.registrationId) === Number(registrationId) &&
+      Number(a?.subOrderIndex ?? 0) === Number(subOrderIndex)
+    )
+    .sort((a: any, b: any) => Number(b?.id || 0) - Number(a?.id || 0))[0] ?? null;
+
+  const exactRegistrationRows = ((registrationAppointmentsQuery.data || []) as any[])
+    .filter((a: any) => Number(a?.subOrderIndex ?? 0) === Number(subOrderIndex))
+    .sort((a: any, b: any) => Number(b?.id || 0) - Number(a?.id || 0));
+
+  const newestRegistrationRow = exactRegistrationRows[0] ?? null;
+  const confirmedRegistrationRow = exactRegistrationRows.find(
+    (a: any) => a?.status === "confirmed" && (a?.slotDate || a?.slotTime)
+  ) ?? exactRegistrationRows.find((a: any) => a?.status === "confirmed") ?? null;
+
+  // Se a fonte resumida informa encerramento explícito, ela vence para não
+  // ressuscitar confirmação antiga. Fora disso, qualquer confirmação real do
+  // MESMO pedido/subpedido vence um pending duplicado.
+  const summaryIsClosed = exactSummary?.status === "completed" || exactSummary?.status === "cancelled";
+  const registrationIsClosed = newestRegistrationRow?.status === "completed";
+
+  const resolvedAppointment = summaryIsClosed
+    ? exactSummary
+    : registrationIsClosed
+      ? newestRegistrationRow
+      : confirmedRegistrationRow ?? baseResolvedAppointment ?? newestRegistrationRow;
 
   const status = String(orderStatus || '');
   const scheduleClosedByOrder = [
@@ -83,7 +133,13 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
     ? resolvedAppointment
     : stableAppointmentByOrder.get(cacheKey) ?? null;
 
-  const showConfirmedAlert = appt && appt.status === "confirmed" && appt.slotDate && !appt.adminSeenConfirmedAt;
+  // A fonte listForTracking não expõe adminSeenConfirmedAt. Para não criar um
+  // alerta impossível de dispensar, o alerta adicional só aparece quando o
+  // campo veio explicitamente da fonte administrativa completa.
+  const showConfirmedAlert = appt &&
+    appt.status === "confirmed" &&
+    appt.slotDate &&
+    appt.adminSeenConfirmedAt === null;
 
   if (appt && appt.status === "confirmed") {
     return (
