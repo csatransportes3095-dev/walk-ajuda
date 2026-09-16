@@ -145,3 +145,5 @@ jobs:
           fi
           git commit -m "fix(orders): gerar QR do autenticador no painel de login"
           git push origin HEAD:fix/orders-login-qr-2026-09-16
+
+# retrigger: 2026-09-16
