@@ -49,6 +49,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate Windows H2ADS component syntax
+        run: |
+          node --check workers/windows/browser-runner.mjs
+          node --check workers/windows/browser-session.mjs
+
       - name: Run H2 Ads tests
         run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts
 

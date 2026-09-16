@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
-import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,6 +10,8 @@ import { Server } from "proxy-chain";
 const execFileAsync = promisify(execFile);
 const IP_CHECK_INTERVAL_MS = 15_000;
 const KILL_SWITCH_CHECK_INTERVAL_MS = 5_000;
+const ROTATION_DRAIN_MS = 500;
+const CHROME_PROBE_TIMEOUT_MS = 35_000;
 const required = ["H2ADS_PANEL_URL", "H2ADS_WORKER_KEY", "H2ADS_WORKER_TOKEN", "H2ADS_INSTANCE_ID", "H2ADS_COMMAND_ID", "H2ADS_PROXY_JSON", "H2ADS_PROFILE_DIRECTORY", "H2ADS_BROWSER_EXECUTABLE"];
 if (required.some((key) => !process.env[key])) process.exit(2);
 
@@ -29,8 +31,10 @@ const instanceWindowTitle = `H2ADS | ${instanceName}`;
 const parsedRotationMinutes = Number(proxy.rotationMinutes);
 const rotationMinutes = Number.isInteger(parsedRotationMinutes) && parsedRotationMinutes >= 1 && parsedRotationMinutes <= 1_440 ? parsedRotationMinutes : null;
 
-let relay;
+let frontRelay;
+let backendRelay;
 let relayPort;
+let activeBackendPort;
 let browser;
 let rotationTimer;
 let ipTimer;
@@ -40,14 +44,27 @@ let lastReportedIp = null;
 let ipCheckInProgress = false;
 let killSwitchCheckInProgress = false;
 let killSwitchTriggered = false;
+let browserProbeInProgress = false;
 
 function upstreamUrl() {
   const protocol = proxy.protocol === "socks5" ? "socks5" : proxy.protocol === "https" ? "https" : "http";
   return `${protocol}://${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@${proxy.host}:${proxy.port}`;
 }
 
-function createRelay(port = 0) {
+function createBackendRelay(port = 0) {
   return new Server({ host: "127.0.0.1", port, verbose: false, prepareRequestFunction: () => ({ upstreamProxyUrl: upstreamUrl() }) });
+}
+
+function createFrontRelay(port = 0) {
+  return new Server({
+    host: "127.0.0.1",
+    port,
+    verbose: false,
+    prepareRequestFunction: () => {
+      if (!activeBackendPort) throw new Error("backend_relay_unavailable");
+      return { upstreamProxyUrl: `http://127.0.0.1:${activeBackendPort}` };
+    },
+  });
 }
 
 function chromeExecutable() {
@@ -104,12 +121,72 @@ async function uploadProfileSnapshot() {
   }
 }
 
+function normalizeIp(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function classifyNetworkError(error, fallback = "proxy_path_unverified") {
+  const message = `${error?.message || ""}\n${error?.stderr || ""}`.toLowerCase();
+  if (message.includes("407") || message.includes("proxy authentication") || message.includes("authentication required")) return "proxy_auth_407";
+  if (message.includes("could not resolve proxy") || message.includes("could not resolve host") || message.includes("name or service not known")) return "proxy_dns_failed";
+  if (message.includes("connection refused") || message.includes("econnrefused")) return "proxy_connection_refused";
+  if (message.includes("timed out") || message.includes("timeout") || message.includes("etimedout")) return "proxy_tcp_timeout";
+  if (message.includes("tunnel connection failed") || message.includes("connect tunnel failed") || message.includes("proxy connect aborted")) return "proxy_connect_denied";
+  if (message.includes("certificate") || message.includes("ssl") || message.includes("tls")) return "proxy_tls_failed";
+  if (message.includes("127.0.0.1") || message.includes("local relay") || message.includes("backend_relay")) return "local_relay_down";
+  return fallback;
+}
+
+async function checkIpThroughPort(localPort) {
+  if (!localPort) throw new Error("relay_unavailable");
+  try {
+    const { stdout } = await execFileAsync("curl.exe", [
+      "--silent", "--show-error", "--fail", "--connect-timeout", "10", "--max-time", "20",
+      "--proxy", `http://127.0.0.1:${localPort}`, "https://api.ipify.org?format=json",
+    ], { windowsHide: true, timeout: 25_000, maxBuffer: 8_192 });
+    const data = JSON.parse(stdout);
+    if (typeof data.ip !== "string" || data.ip.length < 3 || data.ip.length > 64) throw new Error("invalid_ip_response");
+    return data.ip.trim();
+  } catch (error) {
+    const category = classifyNetworkError(error);
+    const wrapped = new Error(category);
+    wrapped.cause = error;
+    throw wrapped;
+  }
+}
+
 async function checkIp() {
-  if (!relayPort) throw new Error("relay_unavailable");
-  const { stdout } = await execFileAsync("curl.exe", ["--silent", "--show-error", "--fail", "--max-time", "20", "--proxy", `http://127.0.0.1:${relayPort}`, "https://api.ipify.org?format=json"], { windowsHide: true, timeout: 25_000, maxBuffer: 8_192 });
-  const data = JSON.parse(stdout);
-  if (typeof data.ip !== "string" || data.ip.length < 3 || data.ip.length > 64) throw new Error("invalid_ip_response");
-  return data.ip.trim();
+  if (!relayPort) throw new Error("local_relay_down");
+  return checkIpThroughPort(relayPort);
+}
+
+async function verifyChromeProxyPath(executable, localPort, expectedIp) {
+  if (browserProbeInProgress) throw new Error("browser_probe_busy");
+  browserProbeInProgress = true;
+  const probeProfile = mkdtempSync(join(tmpdir(), `h2ads-chrome-probe-${instanceId}-`));
+  try {
+    const { stdout } = await execFileAsync(executable, [
+      "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only",
+      `--user-data-dir=${probeProfile}`, `--proxy-server=http://127.0.0.1:${localPort}`, "--proxy-bypass-list=<-loopback>",
+      "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--no-first-run", "--no-default-browser-check",
+      "--dump-dom", "https://api.ipify.org?format=json",
+    ], { windowsHide: true, timeout: CHROME_PROBE_TIMEOUT_MS, maxBuffer: 128_000 });
+    const match = stdout.match(/"ip"\s*:\s*"([^"<>]+)"/i);
+    if (!match) throw new Error("browser_probe_invalid_response");
+    const browserIp = match[1].trim();
+    if (expectedIp && normalizeIp(browserIp) !== normalizeIp(expectedIp)) throw new Error("exit_ip_mismatch");
+    return browserIp;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === "exit_ip_mismatch" || message === "browser_probe_invalid_response") throw error;
+    const category = classifyNetworkError(error, "browser_proxy_probe_failed");
+    const wrapped = new Error(category);
+    wrapped.cause = error;
+    throw wrapped;
+  } finally {
+    browserProbeInProgress = false;
+    try { rmSync(probeProfile, { recursive: true, force: true }); } catch { }
+  }
 }
 
 function writeSession(extra = {}) {
@@ -125,24 +202,20 @@ function writeSession(extra = {}) {
     nodePid: process.pid,
     browserPid: browser?.pid ?? current.browserPid,
     rotationMinutes,
+    relayArchitecture: "stable_front_dual_backend_v2",
     ...extra,
   }), { encoding: "utf8", mode: 0o600 });
 }
 
-async function privacyGuardPreflight() {
+async function privacyGuardPreflight(executable) {
   const observedIp = await checkIp();
   if (!observedIp) throw new Error("privacy_guard_proxy_unavailable");
+  const browserObservedIp = await verifyChromeProxyPath(executable, relayPort, observedIp);
   writeSession({
-    privacyGuard: "protected",
-    privacyGuardCheckedAt: new Date().toISOString(),
-    observedIp,
-    quicDisabled: true,
-    dnsPrefetchDisabled: true,
-    webrtcNonProxiedUdpDisabled: true,
-    killSwitch: "armed",
-    directBrowserEgress: "blocked_by_windows_firewall",
+    privacyGuard: "protected", privacyGuardCheckedAt: new Date().toISOString(), observedIp, browserObservedIp, browserProxyVerified: true,
+    quicDisabled: true, dnsPrefetchDisabled: true, webrtcNonProxiedUdpDisabled: true, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
   });
-  return observedIp;
+  return { observedIp, browserObservedIp };
 }
 
 async function terminateBrowserProcess() {
@@ -155,6 +228,11 @@ async function terminateBrowserProcess() {
   }
 }
 
+async function closeRelay(server) {
+  if (!server) return;
+  await server.close(true).catch(() => undefined);
+}
+
 async function triggerKillSwitch(reason = "proxy_path_unverified") {
   if (killSwitchTriggered) return;
   killSwitchTriggered = true;
@@ -162,7 +240,9 @@ async function triggerKillSwitch(reason = "proxy_path_unverified") {
   if (ipTimer) clearInterval(ipTimer);
   if (killSwitchTimer) clearInterval(killSwitchTimer);
   writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: reason, killSwitchTriggeredAt: new Date().toISOString() });
-  if (relay) await relay.close(true).catch(() => undefined);
+  await closeRelay(frontRelay);
+  await closeRelay(backendRelay);
+  activeBackendPort = undefined;
   await terminateBrowserProcess();
 }
 
@@ -177,8 +257,8 @@ async function reportObservedIp() {
     await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp });
     lastReportedIp = observedIp;
     writeSession({ observedIp, lastIpReportedAt: checkedAt });
-  } catch {
-    await triggerKillSwitch("proxy_path_unverified");
+  } catch (error) {
+    await triggerKillSwitch(error instanceof Error ? error.message : "proxy_path_unverified");
   } finally {
     ipCheckInProgress = false;
   }
@@ -190,8 +270,8 @@ async function enforceKillSwitch() {
   try {
     await checkIp();
     writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString() });
-  } catch {
-    await triggerKillSwitch("proxy_path_unverified");
+  } catch (error) {
+    await triggerKillSwitch(error instanceof Error ? error.message : "proxy_path_unverified");
   } finally {
     killSwitchCheckInProgress = false;
   }
@@ -212,10 +292,7 @@ function createInstanceLabelPage() {
 function createGoogleSorryPrivacyGuard() {
   mkdirSync(privacyExtensionDirectory, { recursive: true });
   const manifest = {
-    manifest_version: 3,
-    name: "H2ADS Privacy Guard",
-    version: "1.2.0",
-    description: "Oculta paginas de bloqueio que exibem informacoes de rede.",
+    manifest_version: 3, name: "H2ADS Privacy Guard", version: "1.2.0", description: "Oculta paginas de bloqueio que exibem informacoes de rede.",
     permissions: ["declarativeNetRequest"],
     host_permissions: ["*://google.com/*", "*://*.google.com/*", "*://google.com.br/*", "*://*.google.com.br/*"],
     web_accessible_resources: [{ resources: ["blocked.html"], matches: ["*://google.com/*", "*://*.google.com/*", "*://google.com.br/*", "*://*.google.com.br/*"] }],
@@ -233,19 +310,44 @@ function createGoogleSorryPrivacyGuard() {
 }
 
 async function rotateRelay() {
-  if (!relay || !relayPort || rotationInProgress || killSwitchTriggered) return;
+  if (!frontRelay || !backendRelay || !relayPort || !activeBackendPort || rotationInProgress || killSwitchTriggered) return;
   rotationInProgress = true;
+  const previousBackend = backendRelay;
+  const previousBackendPort = activeBackendPort;
+  let candidateBackend;
+  let candidateActivated = false;
   try {
-    const previousRelay = relay;
-    await previousRelay.close(true);
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    const nextRelay = createRelay(relayPort);
-    await nextRelay.listen();
-    relay = nextRelay;
+    candidateBackend = createBackendRelay();
+    await candidateBackend.listen();
+    const candidateIp = await checkIpThroughPort(candidateBackend.port);
+    backendRelay = candidateBackend;
+    activeBackendPort = candidateBackend.port;
+    candidateActivated = true;
     const observedIp = await checkIp();
-    writeSession({ lastRotationAt: new Date().toISOString(), observedIp, privacyGuard: "protected", killSwitch: "armed" });
-  } catch {
-    await triggerKillSwitch("proxy_rotation_unverified");
+    if (normalizeIp(observedIp) !== normalizeIp(candidateIp)) throw new Error("exit_ip_mismatch");
+    const executable = chromeExecutable();
+    if (!executable) throw new Error("browser_not_found");
+    const browserObservedIp = await verifyChromeProxyPath(executable, relayPort, observedIp);
+    writeSession({
+      lastRotationAt: new Date().toISOString(), observedIp, browserObservedIp,
+      rotationChangedExitIp: lastReportedIp ? normalizeIp(observedIp) !== normalizeIp(lastReportedIp) : null,
+      privacyGuard: "protected", killSwitch: "armed", rotationState: "verified",
+    });
+    await new Promise((resolve) => setTimeout(resolve, ROTATION_DRAIN_MS));
+    await closeRelay(previousBackend);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "proxy_rotation_unverified";
+    if (candidateActivated) {
+      backendRelay = previousBackend;
+      activeBackendPort = previousBackendPort;
+    }
+    if (candidateBackend && candidateBackend !== previousBackend) await closeRelay(candidateBackend);
+    try {
+      const fallbackIp = await checkIp();
+      writeSession({ rotationState: "rolled_back", rotationFailure: reason, rotationFailureAt: new Date().toISOString(), observedIp: fallbackIp, privacyGuard: "protected", killSwitch: "armed" });
+    } catch (fallbackError) {
+      await triggerKillSwitch(fallbackError instanceof Error ? fallbackError.message : "proxy_rotation_unverified");
+    }
   } finally {
     rotationInProgress = false;
   }
@@ -256,32 +358,31 @@ async function run() {
   try {
     const executable = chromeExecutable();
     if (!executable) throw new Error("browser_not_found");
-    relay = createRelay();
-    await relay.listen();
-    relayPort = relay.port;
-    const initialIp = await privacyGuardPreflight();
-    lastReportedIp = initialIp;
+    backendRelay = createBackendRelay();
+    await backendRelay.listen();
+    activeBackendPort = backendRelay.port;
+    frontRelay = createFrontRelay();
+    await frontRelay.listen();
+    relayPort = frontRelay.port;
+    const initial = await privacyGuardPreflight(executable);
+    lastReportedIp = initial.observedIp;
     const labelPageUrl = createInstanceLabelPage();
     const privacyGuardExtension = createGoogleSorryPrivacyGuard();
     browser = spawn(executable, [
-      `--user-data-dir=${profileDirectory}`,
-      `--proxy-server=http://127.0.0.1:${relayPort}`,
-      "--proxy-bypass-list=<-loopback>",
-      "--disable-quic",
-      "--dns-prefetch-disable",
-      "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-      `--load-extension=${privacyGuardExtension}`,
-      "--no-first-run",
-      "--no-default-browser-check",
-      labelPageUrl,
+      `--user-data-dir=${profileDirectory}`, `--proxy-server=http://127.0.0.1:${relayPort}`, "--proxy-bypass-list=<-loopback>",
+      "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      `--load-extension=${privacyGuardExtension}`, "--no-first-run", "--no-default-browser-check", labelPageUrl,
     ], { detached: false, stdio: "ignore", windowsHide: false });
-    writeSession({ startedAt: new Date().toISOString(), instanceLabelState: "static_tab", observedIp: initialIp, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
+    writeSession({
+      startedAt: new Date().toISOString(), instanceLabelState: "static_tab", observedIp: initial.observedIp, browserObservedIp: initial.browserObservedIp,
+      browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+    });
     if (rotationMinutes) {
       rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
       rotationTimer.unref?.();
     }
     await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "browser_open" });
-    await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp: initialIp });
+    await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp: initial.observedIp });
     ipTimer = setInterval(() => { void reportObservedIp(); }, IP_CHECK_INTERVAL_MS);
     ipTimer.unref?.();
     killSwitchTimer = setInterval(() => { void enforceKillSwitch(); }, KILL_SWITCH_CHECK_INTERVAL_MS);
@@ -297,17 +398,27 @@ async function run() {
         await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "closed" });
         await uploadProfileSnapshot().catch(() => undefined);
       } finally {
-        if (relay) await relay.close(true).catch(() => undefined);
+        await closeRelay(frontRelay);
+        await closeRelay(backendRelay);
+        activeBackendPort = undefined;
       }
     });
   } catch (error) {
     if (rotationTimer) clearInterval(rotationTimer);
     if (ipTimer) clearInterval(ipTimer);
     if (killSwitchTimer) clearInterval(killSwitchTimer);
-    writeSession({ privacyGuard: "blocked", killSwitch: "triggered", privacyGuardFailureAt: new Date().toISOString() });
-    const category = error instanceof Error && error.message === "browser_not_found" ? "browser_not_found" : error instanceof Error && error.message.startsWith("privacy_guard_") ? "privacy_guard_blocked" : "browser_launch_failed";
+    const reason = error instanceof Error ? error.message : "browser_launch_failed";
+    writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: reason, privacyGuardFailureAt: new Date().toISOString() });
+    const category = reason === "browser_not_found" ? "browser_not_found"
+      : reason === "exit_ip_mismatch" ? "exit_ip_mismatch"
+        : reason === "browser_probe_invalid_response" || reason === "browser_proxy_probe_failed" ? "browser_proxy_unverified"
+          : reason.startsWith("privacy_guard_") ? "privacy_guard_blocked"
+            : reason.startsWith("proxy_") || reason === "local_relay_down" ? reason
+              : "browser_launch_failed";
     await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "blocked", errorCategory: category }).catch(() => undefined);
-    if (relay) await relay.close(true).catch(() => undefined);
+    await closeRelay(frontRelay);
+    await closeRelay(backendRelay);
+    activeBackendPort = undefined;
     await terminateBrowserProcess();
   }
 }

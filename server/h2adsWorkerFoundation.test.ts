@@ -69,7 +69,13 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(script).toContain("Start-H2AdsSnapshotQueueWorker");
     expect(script).toContain('$ProgressPreference = "SilentlyContinue"');
     expect(session).toContain("rotationMinutes");
-    expect(session).toContain("relay.close(true)");
+    expect(session).toContain("createFrontRelay");
+    expect(session).toContain("createBackendRelay");
+    expect(session).toContain("activeBackendPort");
+    expect(session).toContain("verifyChromeProxyPath");
+    expect(session).toContain("browserProxyVerified");
+    expect(session).toContain("server.close(true)");
+    expect(session).not.toContain("await previousRelay.close(true)");
     expect(session).toContain("uploadProfileSnapshot");
     expect(runner).toContain('host: "127.0.0.1"');
     expect(runner).toContain("https://api.ipify.org?format=json");
@@ -107,6 +113,16 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(session).toContain("--disable-quic");
     expect(session).toContain("--dns-prefetch-disable");
     expect(session).toContain("--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
+  });
+
+  it("mantém versões anteriores do perfil somente após validar o snapshot novo", () => {
+    const snapshots = read("server/h2adsProfileSnapshots.ts");
+    expect(snapshots).toContain("SNAPSHOT_RETENTION = 3");
+    expect(snapshots).toContain("pruneOldH2AdsSnapshots");
+    expect(snapshots).toContain("actualHash.toLowerCase() !== input.plainSha256.toLowerCase()");
+    expect(snapshots).toContain("snapshotKey: key");
+    expect(snapshots).toContain("await pruneOldH2AdsSnapshots(input.instanceId, key).catch(() => undefined)");
+    expect(snapshots).not.toContain("if (previousKey && previousKey !== key) await r2DeleteObjects([previousKey])");
   });
 
   it("mantém a fila de preparação em tabelas H2 Ads idempotentes e isoladas", () => {
