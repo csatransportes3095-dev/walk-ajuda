@@ -69,7 +69,13 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(script).toContain("Start-H2AdsSnapshotQueueWorker");
     expect(script).toContain('$ProgressPreference = "SilentlyContinue"');
     expect(session).toContain("rotationMinutes");
-    expect(session).toContain("relay.close(true)");
+    expect(session).toContain("createFrontRelay");
+    expect(session).toContain("createBackendRelay");
+    expect(session).toContain("activeBackendPort");
+    expect(session).toContain("verifyChromeProxyPath");
+    expect(session).toContain("browserProxyVerified");
+    expect(session).toContain("server.close(true)");
+    expect(session).not.toContain("await previousRelay.close(true)");
     expect(session).toContain("uploadProfileSnapshot");
     expect(runner).toContain('host: "127.0.0.1"');
     expect(runner).toContain("https://api.ipify.org?format=json");
