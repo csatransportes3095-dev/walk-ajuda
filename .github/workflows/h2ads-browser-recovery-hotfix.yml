@@ -1,0 +1,298 @@
+name: H2ADS browser recovery hotfix
+
+on:
+  push:
+    branches:
+      - fix/h2ads-browser-recovery-2026-09-16
+    paths:
+      - ".github/workflows/h2ads-browser-recovery-hotfix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/h2ads-browser-recovery-2026-09-16
+          fetch-depth: 0
+
+      - name: Apply browser recovery hardening
+        shell: python
+        run: |
+          from pathlib import Path
+
+          session_path = Path("workers/windows/browser-session.mjs")
+          test_path = Path("server/h2adsWorkerFoundation.test.ts")
+          text = session_path.read_text(encoding="utf-8")
+
+          def replace_once(old: str, new: str):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one match, found {count}: {old[:100]!r}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'const KILL_SWITCH_CHECK_INTERVAL_MS = 5_000;\nconst ROTATION_DRAIN_MS = 500;',
+              'const KILL_SWITCH_CHECK_INTERVAL_MS = 5_000;\nconst PROXY_FAILURE_GRACE_MS = 20_000;\nconst ROTATION_DRAIN_MS = 500;',
+          )
+
+          replace_once(
+              'let killSwitchCheckInProgress = false;\nlet killSwitchTriggered = false;\nlet browserProbeInProgress = false;',
+              'let killSwitchCheckInProgress = false;\nlet proxyFailureStartedAt = null;\nlet proxyFailureReason = null;\nlet networkSuspended = false;\nlet networkRecoveryInProgress = false;\nlet browserProbeInProgress = false;',
+          )
+
+          old_block = '''async function triggerKillSwitch(reason = "proxy_path_unverified") {
+            if (killSwitchTriggered) return;
+            killSwitchTriggered = true;
+            if (rotationTimer) clearInterval(rotationTimer);
+            if (ipTimer) clearInterval(ipTimer);
+            if (killSwitchTimer) clearInterval(killSwitchTimer);
+            writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: reason, killSwitchTriggeredAt: new Date().toISOString() });
+            await closeRelay(frontRelay);
+            await closeRelay(backendRelay);
+            activeBackendPort = undefined;
+            await terminateBrowserProcess();
+          }
+
+          async function reportObservedIp() {
+            if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || ipCheckInProgress || killSwitchTriggered) return;
+            ipCheckInProgress = true;
+            try {
+              const observedIp = await checkIp();
+              const checkedAt = new Date().toISOString();
+              writeSession({ observedIp, lastIpCheckedAt: checkedAt, killSwitch: "armed" });
+              if (observedIp === lastReportedIp) return;
+              await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp });
+              lastReportedIp = observedIp;
+              writeSession({ observedIp, lastIpReportedAt: checkedAt });
+            } catch (error) {
+              await triggerKillSwitch(error instanceof Error ? error.message : "proxy_path_unverified");
+            } finally {
+              ipCheckInProgress = false;
+            }
+          }
+
+          async function enforceKillSwitch() {
+            if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || killSwitchTriggered || killSwitchCheckInProgress || ipCheckInProgress) return;
+            killSwitchCheckInProgress = true;
+            try {
+              await checkIp();
+              writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString() });
+            } catch (error) {
+              await triggerKillSwitch(error instanceof Error ? error.message : "proxy_path_unverified");
+            } finally {
+              killSwitchCheckInProgress = false;
+            }
+          }
+          '''
+
+          new_block = '''function clearProxyFailureState() {
+            const recovered = Boolean(proxyFailureStartedAt || networkSuspended);
+            proxyFailureStartedAt = null;
+            proxyFailureReason = null;
+            networkSuspended = false;
+            return recovered;
+          }
+
+          async function suspendProxyPath(reason = "proxy_path_unverified") {
+            if (networkSuspended) {
+              writeSession({ networkState: "suspended", proxyPathFailure: reason, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall" });
+              return;
+            }
+            networkSuspended = true;
+            proxyFailureReason = reason;
+            await closeRelay(backendRelay);
+            backendRelay = undefined;
+            activeBackendPort = undefined;
+            writeSession({
+              networkState: "suspended", networkSuspendedAt: new Date().toISOString(), proxyPathFailure: reason,
+              privacyGuard: "protected", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+            });
+          }
+
+          async function noteProxyPathFailure(reason = "proxy_path_unverified") {
+            const now = Date.now();
+            if (!proxyFailureStartedAt) proxyFailureStartedAt = now;
+            proxyFailureReason = reason;
+            const elapsedMs = now - proxyFailureStartedAt;
+            writeSession({
+              networkState: elapsedMs >= PROXY_FAILURE_GRACE_MS ? "suspending" : "degraded",
+              proxyPathFailure: reason, proxyFailureSince: new Date(proxyFailureStartedAt).toISOString(),
+              proxyFailureElapsedMs: elapsedMs, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+            });
+            if (elapsedMs >= PROXY_FAILURE_GRACE_MS) await suspendProxyPath(reason);
+          }
+
+          async function recoverProxyPath() {
+            if (!networkSuspended || networkRecoveryInProgress || !frontRelay || !relayPort || !browser || browser.exitCode !== null) return;
+            networkRecoveryInProgress = true;
+            let candidateBackend;
+            try {
+              candidateBackend = createBackendRelay();
+              await candidateBackend.listen();
+              const candidateIp = await checkIpThroughPort(candidateBackend.port);
+              backendRelay = candidateBackend;
+              activeBackendPort = candidateBackend.port;
+              const observedIp = await checkIp();
+              if (normalizeIp(observedIp) !== normalizeIp(candidateIp)) throw new Error("exit_ip_mismatch");
+              const executable = chromeExecutable();
+              if (!executable) throw new Error("browser_not_found");
+              const browserObservedIp = await verifyChromeProxyPath(executable, relayPort, observedIp);
+              const recovered = clearProxyFailureState();
+              const recoveredAt = new Date().toISOString();
+              writeSession({
+                networkState: "healthy", networkRecoveredAt: recovered ? recoveredAt : undefined,
+                observedIp, browserObservedIp, browserProxyVerified: true, privacyGuard: "protected", killSwitch: "armed",
+                directBrowserEgress: "blocked_by_windows_firewall",
+              });
+              if (normalizeIp(observedIp) !== normalizeIp(lastReportedIp)) {
+                try {
+                  await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp });
+                  lastReportedIp = observedIp;
+                  writeSession({ observedIp, lastIpReportedAt: recoveredAt, panelSyncState: "synced" });
+                } catch {
+                  writeSession({ panelSyncState: "pending", panelSyncFailureAt: recoveredAt });
+                }
+              }
+            } catch (error) {
+              const reason = error instanceof Error ? error.message : "proxy_recovery_failed";
+              if (candidateBackend) await closeRelay(candidateBackend);
+              if (backendRelay === candidateBackend) backendRelay = undefined;
+              activeBackendPort = undefined;
+              networkSuspended = true;
+              proxyFailureReason = reason;
+              writeSession({
+                networkState: "suspended", recoveryFailure: reason, recoveryFailureAt: new Date().toISOString(),
+                killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+              });
+            } finally {
+              networkRecoveryInProgress = false;
+            }
+          }
+
+          async function reportObservedIp() {
+            if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || ipCheckInProgress || killSwitchCheckInProgress || networkSuspended) return;
+            ipCheckInProgress = true;
+            try {
+              const observedIp = await checkIp();
+              const checkedAt = new Date().toISOString();
+              const recovered = clearProxyFailureState();
+              writeSession({
+                observedIp, lastIpCheckedAt: checkedAt, networkState: "healthy", killSwitch: "armed",
+                networkRecoveredAt: recovered ? checkedAt : undefined,
+              });
+              if (normalizeIp(observedIp) === normalizeIp(lastReportedIp)) return;
+              try {
+                await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp });
+                lastReportedIp = observedIp;
+                writeSession({ observedIp, lastIpReportedAt: checkedAt, panelSyncState: "synced" });
+              } catch {
+                writeSession({ panelSyncState: "pending", panelSyncFailureAt: checkedAt });
+              }
+            } catch (error) {
+              await noteProxyPathFailure(error instanceof Error ? error.message : "proxy_path_unverified");
+            } finally {
+              ipCheckInProgress = false;
+            }
+          }
+
+          async function enforceKillSwitch() {
+            if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || killSwitchCheckInProgress || ipCheckInProgress) return;
+            killSwitchCheckInProgress = true;
+            try {
+              if (networkSuspended) {
+                await recoverProxyPath();
+                return;
+              }
+              await checkIp();
+              const checkedAt = new Date().toISOString();
+              const recovered = clearProxyFailureState();
+              writeSession({
+                networkState: "healthy", killSwitch: "armed", killSwitchLastVerifiedAt: checkedAt,
+                networkRecoveredAt: recovered ? checkedAt : undefined,
+              });
+            } catch (error) {
+              await noteProxyPathFailure(error instanceof Error ? error.message : "proxy_path_unverified");
+            } finally {
+              killSwitchCheckInProgress = false;
+            }
+          }
+          '''
+
+          # Normalize indentation introduced by the Python heredoc before matching/replacing.
+          old_block = "\n".join(line[10:] if line.startswith("          ") else line for line in old_block.splitlines()) + "\n"
+          new_block = "\n".join(line[10:] if line.startswith("          ") else line for line in new_block.splitlines()) + "\n"
+          replace_once(old_block, new_block)
+
+          replace_once(
+              'if (!frontRelay || !backendRelay || !relayPort || !activeBackendPort || rotationInProgress || killSwitchTriggered) return;',
+              'if (!frontRelay || !backendRelay || !relayPort || !activeBackendPort || rotationInProgress || networkSuspended || networkRecoveryInProgress) return;',
+          )
+
+          replace_once(
+              '      privacyGuard: "protected", killSwitch: "armed", rotationState: "verified",\n    });',
+              '      privacyGuard: "protected", killSwitch: "armed", networkState: "healthy", rotationState: "verified",\n    });\n    clearProxyFailureState();',
+          )
+
+          replace_once(
+              '      await triggerKillSwitch(fallbackError instanceof Error ? fallbackError.message : "proxy_rotation_unverified");',
+              '      await suspendProxyPath(fallbackError instanceof Error ? fallbackError.message : "proxy_rotation_unverified");',
+          )
+
+          replace_once(
+              '  if (!killSwitchTriggered) void reportObservedIp();',
+              '  if (!networkSuspended) void reportObservedIp();',
+          )
+
+          replace_once(
+              '      browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",',
+              '      browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3", killSwitch: "armed", networkState: "healthy", directBrowserEgress: "blocked_by_windows_firewall",',
+          )
+
+          session_path.write_text(text, encoding="utf-8")
+
+          test = test_path.read_text(encoding="utf-8")
+          old_test = '    expect(session).toContain("KILL_SWITCH_CHECK_INTERVAL_MS = 5_000");\n    expect(session).toContain("triggerKillSwitch");\n    expect(session).toContain("taskkill.exe");'
+          new_test = '    expect(session).toContain("KILL_SWITCH_CHECK_INTERVAL_MS = 5_000");\n    expect(session).toContain("PROXY_FAILURE_GRACE_MS = 20_000");\n    expect(session).toContain("suspendProxyPath");\n    expect(session).toContain("recoverProxyPath");\n    expect(session).toContain(\'networkState: "suspended"\');\n    expect(session).not.toContain("async function triggerKillSwitch");\n    expect(session).toContain("taskkill.exe");'
+          if test.count(old_test) != 1:
+              raise SystemExit("foundation test marker not found exactly once")
+          test_path.write_text(test.replace(old_test, new_test, 1), encoding="utf-8")
+
+      - name: Validate JavaScript syntax
+        run: node --check workers/windows/browser-session.mjs
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run H2ADS tests
+        run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts
+
+      - name: Build production bundle
+        run: pnpm build
+
+      - name: Commit validated hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add workers/windows/browser-session.mjs server/h2adsWorkerFoundation.test.ts
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git commit -m "h2ads: recuperar proxy sem fechar o navegador"
+          git push origin HEAD:fix/h2ads-browser-recovery-2026-09-16
