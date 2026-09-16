@@ -1,0 +1,147 @@
+name: Orders login authenticator QR hotfix
+
+on:
+  push:
+    branches:
+      - fix/orders-login-qr-2026-09-16
+    paths:
+      - ".github/workflows/orders-login-qr-hotfix-20260916.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/orders-login-qr-2026-09-16
+          fetch-depth: 0
+
+      - name: Apply QR generation fix
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          component_path = Path("client/src/components/AuthenticatorQrAdminField.tsx")
+          orders_path = Path("client/src/pages/AdminOrders.tsx")
+          test_path = Path("server/orderLoginAuthenticatorQr.test.ts")
+
+          component = component_path.read_text(encoding="utf-8")
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              return text.replace(old, new, 1)
+
+          component = replace_once(
+              component,
+              "import { ClipboardPaste, ImagePlus, Maximize2, Trash2, Upload } from 'lucide-react';\nimport { trpc } from '@/lib/trpc';",
+              "import { ClipboardPaste, ImagePlus, Maximize2, Trash2, Upload } from 'lucide-react';\nimport { QRCodeSVG } from 'qrcode.react';\nimport { trpc } from '@/lib/trpc';",
+              "qrcode import",
+          )
+
+          component = replace_once(
+              component,
+              "  registrationId: number;\n  hasExistingQr: boolean;",
+              "  registrationId: number;\n  authenticatorSecret?: string;\n  hasExistingQr: boolean;",
+              "props secret",
+          )
+
+          component = replace_once(
+              component,
+              "export function AuthenticatorQrAdminField({ registrationId, hasExistingQr, pendingValue, onPendingValueChange, disabled }: Props) {",
+              "export function AuthenticatorQrAdminField({ registrationId, authenticatorSecret, hasExistingQr, pendingValue, onPendingValueChange, disabled }: Props) {",
+              "component signature",
+          )
+
+          preview_block = """  const previewData = pendingValue && typeof pendingValue === 'object'
+    ? pendingValue.data
+    : pendingValue === undefined
+      ? (existingQuery.data ? `data:${existingQuery.data.mimeType};base64,${existingQuery.data.data}` : null)
+      : null;
+"""
+          generated_block = preview_block + """
+  // Gera o QR localmente a partir da chave Base32 já exibida neste painel.
+  // Nenhum segredo é enviado para serviço externo de QR Code.
+  const normalizedSecret = String(authenticatorSecret || '')
+    .toUpperCase()
+    .replace(/[\\s-]+/g, '')
+    .replace(/=+$/g, '');
+  const validBase32Secret = /^[A-Z2-7]{16,}$/.test(normalizedSecret) ? normalizedSecret : '';
+  const generatedOtpAuth = validBase32Secret
+    ? `otpauth://totp/${encodeURIComponent(`Pedido ${registrationId}`)}?secret=${encodeURIComponent(validBase32Secret)}&digits=6&period=30`
+    : null;
+"""
+          component = replace_once(component, preview_block, generated_block, "generated QR state")
+
+          empty_marker = """      ) : (
+        <div
+          tabIndex={0}
+"""
+          generated_ui = """      ) : generatedOtpAuth ? (
+        <div className="rounded-lg border border-cyan-400/30 bg-black/20 p-3 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-bold text-cyan-200">QR CODE GERADO AUTOMATICAMENTE</p>
+            <span className="text-[10px] text-cyan-200/70">Base32 válido</span>
+          </div>
+          <div className="flex justify-center rounded-md bg-white p-3">
+            <QRCodeSVG value={generatedOtpAuth} size={184} level="M" includeMargin aria-label="QR Code do autenticador gerado automaticamente" />
+          </div>
+          <p className="text-[10px] text-muted-foreground text-center">Gerado neste navegador a partir do Código Autenticador. Não usa API externa e não precisa enviar print.</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <button type="button" onClick={handlePasteButton} disabled={disabled} className="rounded-lg border border-violet-300/50 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 py-1.5 text-[11px] font-bold text-white hover:brightness-110 disabled:opacity-50"><ClipboardPaste className="inline w-3.5 h-3.5 mr-1" />Usar outro print</button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={disabled} className="rounded-lg border border-lime-400/35 bg-lime-500/10 px-3 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"><Upload className="inline w-3.5 h-3.5 mr-1" />Selecionar imagem</button>
+          </div>
+        </div>
+      ) : (
+        <div
+          tabIndex={0}
+"""
+          component = replace_once(component, empty_marker, generated_ui, "generated QR UI")
+          component_path.write_text(component, encoding="utf-8")
+
+          orders = orders_path.read_text(encoding="utf-8")
+          pattern = re.compile(r'(<AuthenticatorQrAdminField\n(?P<indent>\s+)registrationId=\{[^}]+\}\n)(?P=indent)hasExistingQr=')
+          matches = list(pattern.finditer(orders))
+          if len(matches) != 3:
+              raise SystemExit(f"AdminOrders: expected 3 QR field usages, found {len(matches)}")
+          orders = pattern.sub(lambda m: m.group(1) + m.group('indent') + 'authenticatorSecret={fields.authCode}\n' + m.group('indent') + 'hasExistingQr=', orders)
+          orders_path.write_text(orders, encoding="utf-8")
+
+          test_path.write_text('''import fs from "node:fs";\nimport path from "node:path";\nimport { describe, expect, it } from "vitest";\n\nconst root = process.cwd();\nconst component = fs.readFileSync(path.resolve(root, "client/src/components/AuthenticatorQrAdminField.tsx"), "utf8");\nconst orders = fs.readFileSync(path.resolve(root, "client/src/pages/AdminOrders.tsx"), "utf8");\n\ndescribe("QR automático do autenticador nos Dados de Login", () => {\n  it("gera o QR localmente a partir da chave Base32 sem API externa", () => {\n    expect(component).toContain("QRCodeSVG");\n    expect(component).toContain("otpauth://totp/");\n    expect(component).toContain("validBase32Secret");\n    expect(component).toContain("QR CODE GERADO AUTOMATICAMENTE");\n    expect(component).not.toMatch(/api\\.qrserver|chart\\.googleapis|quickchart/i);\n  });\n\n  it("passa o Código Autenticador para os três blocos de login do ADM", () => {\n    expect((orders.match(/authenticatorSecret=\\{fields\\.authCode\\}/g) || [])).toHaveLength(3);\n  });\n});\n''', encoding="utf-8")
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run targeted QR tests
+        run: pnpm vitest run server/orderLoginAuthenticatorQr.test.ts server/adminAuthenticatorIntegration.test.ts
+
+      - name: Build production bundle
+        run: pnpm build
+
+      - name: Commit validated fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/components/AuthenticatorQrAdminField.tsx client/src/pages/AdminOrders.tsx server/orderLoginAuthenticatorQr.test.ts
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git commit -m "fix(orders): gerar QR do autenticador no painel de login"
+          git push origin HEAD:fix/orders-login-qr-2026-09-16
