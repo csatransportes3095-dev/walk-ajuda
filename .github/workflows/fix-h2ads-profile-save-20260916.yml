@@ -6,6 +6,8 @@ on:
       - fix/h2ads-profile-save-2026-09-16
     paths:
       - ".github/workflows/fix-h2ads-profile-save-20260916.yml"
+      - ".github/scripts/h2ads-profile-save-hotfix.py"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,210 +24,7 @@ jobs:
           fetch-depth: 0
 
       - name: Apply H2ADS profile persistence hardening
-        shell: python
-        run: |
-          from pathlib import Path
-
-          def replace_once(path: str, old: str, new: str):
-              p = Path(path)
-              text = p.read_text(encoding="utf-8")
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected exactly one match, found {count}")
-              p.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-          worker = "workers/windows/H2AdsWorker.ps1"
-          session = "workers/windows/browser-session.mjs"
-          test = "server/h2adsWorkerFoundation.test.ts"
-          validate = ".github/workflows/h2ads-validate.yml"
-
-          replace_once(worker, '$AgentVersion = "1.3.8"', '$AgentVersion = "1.3.9"')
-
-          replace_once(worker, '''    Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/profiles/$InstanceId/snapshot" -Headers $headers -ContentType "application/octet-stream" -InFile $archivePath | Out-Null
-    return $true
-''', '''    Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/profiles/$InstanceId/snapshot" -Headers $headers -ContentType "application/octet-stream" -InFile $archivePath | Out-Null
-    $manifestPath = Join-Path $profileDirectory "h2ads-profile.json"
-    $manifest = if (Test-Path $manifestPath) { Get-Content -Raw -Path $manifestPath | ConvertFrom-Json } else { [pscustomobject]@{ instanceId = $InstanceId; profileVersion = 1 } }
-    $manifest | Add-Member -NotePropertyName lastSnapshotAt -NotePropertyValue ((Get-Date).ToUniversalTime().ToString("o")) -Force
-    $manifest | ConvertTo-Json -Compress | Set-Content -Path $manifestPath -Encoding UTF8 -NoNewline
-    Remove-Item -Force (Join-Path $SnapshotQueueDirectory "instance-$InstanceId.last-error.txt") -ErrorAction SilentlyContinue
-    return $true
-''')
-
-          old_close = '''function Close-BrowserSession([object]$Config, [object]$Payload) {
-  $instanceId = [int]$Payload.command.instanceId
-  $profileDirectory = Join-Path $ProfilesDirectory "instance-$instanceId"
-  $sessionPath = Join-Path $profileDirectory "h2ads-browser-session.json"
-  if (Test-Path $sessionPath) {
-    $session = Get-Content -Raw -Path $sessionPath | ConvertFrom-Json
-    if ($session.nodePid) {
-      $nodePid = [int]$session.nodePid
-      if (Get-Process -Id $nodePid -ErrorAction SilentlyContinue) {
-        & taskkill.exe /PID $nodePid /T /F 1>$null 2>$null
-      }
-    }
-    Remove-Item -Force $sessionPath -ErrorAction SilentlyContinue
-  }
-  $body = @{ command = "close_browser"; state = "closed" } | ConvertTo-Json -Compress
-  Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($Payload.command.id)/result" -Headers (Get-WorkerHeaders $Config) -ContentType "application/json" -Body $body | Out-Null
-  Queue-H2AdsProfileSnapshot $instanceId
-}
-'''
-          new_close = '''function Close-BrowserSession([object]$Config, [object]$Payload) {
-  $instanceId = [int]$Payload.command.instanceId
-  $profileDirectory = Join-Path $ProfilesDirectory "instance-$instanceId"
-  $sessionPath = Join-Path $profileDirectory "h2ads-browser-session.json"
-  $nodePid = $null
-  $browserPid = $null
-
-  if (Test-Path $sessionPath) {
-    try {
-      $session = Get-Content -Raw -Path $sessionPath | ConvertFrom-Json
-      if ($session.nodePid) { $nodePid = [int]$session.nodePid }
-      if ($session.browserPid) { $browserPid = [int]$session.browserPid }
-    } catch { }
-  }
-
-  if ($browserPid -and (Get-Process -Id $browserPid -ErrorAction SilentlyContinue)) {
-    & taskkill.exe /PID $browserPid /T 1>$null 2>$null
-    $graceDeadline = (Get-Date).AddSeconds(15)
-    while ((Get-Date) -lt $graceDeadline -and (Get-Process -Id $browserPid -ErrorAction SilentlyContinue)) {
-      Start-Sleep -Milliseconds 250
-    }
-    if (Get-Process -Id $browserPid -ErrorAction SilentlyContinue) {
-      & taskkill.exe /PID $browserPid /T /F 1>$null 2>$null
-    }
-  } elseif ($nodePid -and (Get-Process -Id $nodePid -ErrorAction SilentlyContinue)) {
-    # Compatibilidade com sessões antigas sem browserPid. O snapshot de fallback é mantido abaixo.
-    & taskkill.exe /PID $nodePid /T /F 1>$null 2>$null
-  }
-
-  # Marca a execução como fechada antes do upload. O servidor bloqueia snapshots enquanto o browser está aberto.
-  $body = @{ command = "close_browser"; state = "closed" } | ConvertTo-Json -Compress
-  Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($Payload.command.id)/result" -Headers (Get-WorkerHeaders $Config) -ContentType "application/json" -Body $body | Out-Null
-
-  $snapshotSaved = $false
-  if ($nodePid) {
-    $snapshotDeadline = (Get-Date).AddSeconds(90)
-    while ((Get-Date) -lt $snapshotDeadline) {
-      if (Test-Path $sessionPath) {
-        try {
-          $latestSession = Get-Content -Raw -Path $sessionPath | ConvertFrom-Json
-          if ($latestSession.snapshotState -eq "saved") {
-            $snapshotSaved = $true
-            break
-          }
-          if ($latestSession.snapshotState -eq "failed") { break }
-        } catch { }
-      }
-      if (!(Get-Process -Id $nodePid -ErrorAction SilentlyContinue)) { break }
-      Start-Sleep -Milliseconds 500
-    }
-  }
-
-  # Segunda camada: se a sessão não confirmou o snapshot, a fila independente tenta novamente.
-  if (!$snapshotSaved) { Queue-H2AdsProfileSnapshot $instanceId }
-}
-'''
-          replace_once(worker, old_close, new_close)
-
-          old_queue = '''      try {
-        Start-Sleep -Milliseconds 750
-        Send-H2AdsProfileSnapshot $config $instanceId | Out-Null
-        Remove-Item -Force $workingPath -ErrorAction SilentlyContinue
-      } catch {
-        $retryPath = $workingPath -replace '\\.working$', ''
-        if (!(Test-Path $retryPath)) {
-          Move-Item -Path $workingPath -Destination $retryPath -Force -ErrorAction SilentlyContinue
-        }
-        break
-      }
-'''
-          new_queue = '''      $saved = $false
-      $lastError = $null
-      $delays = @(1, 3, 8)
-      for ($attempt = 1; $attempt -le 3; $attempt++) {
-        try {
-          Start-Sleep -Seconds $delays[$attempt - 1]
-          $saved = [bool](Send-H2AdsProfileSnapshot $config $instanceId)
-          if ($saved) { break }
-          throw "O perfil local ainda não possui dados de navegador para snapshot H2ADS."
-        } catch {
-          $lastError = [string]$_.Exception.Message
-        }
-      }
-      if ($saved) {
-        Remove-Item -Force $workingPath -ErrorAction SilentlyContinue
-        continue
-      }
-      $retryPath = $workingPath -replace '\\.working$', ''
-      if (!(Test-Path $retryPath)) {
-        Move-Item -Path $workingPath -Destination $retryPath -Force -ErrorAction SilentlyContinue
-      }
-      $safeError = if ([string]::IsNullOrWhiteSpace($lastError)) { "profile_snapshot_failed" } else { $lastError }
-      if ($safeError.Length -gt 300) { $safeError = $safeError.Substring(0, 300) }
-      $safeError | Set-Content -Path (Join-Path $SnapshotQueueDirectory "instance-$instanceId.last-error.txt") -Encoding UTF8 -NoNewline
-      break
-'''
-          replace_once(worker, old_queue, new_queue)
-          replace_once(worker, '$nextSnapshotQueueCheckAt = $now.AddMinutes(2)', '$nextSnapshotQueueCheckAt = $now.AddSeconds(30)')
-
-          old_upload_end = '''    if (!response.ok) throw new Error(`profile_snapshot_http_${response.status}`);
-    const manifestPath = join(profileDirectory, "h2ads-profile.json");
-    const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
-    writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastSnapshotAt: new Date().toISOString() }), "utf8");
-  } finally {
-'''
-          new_upload_end = '''    if (!response.ok) throw new Error(`profile_snapshot_http_${response.status}`);
-    const manifestPath = join(profileDirectory, "h2ads-profile.json");
-    const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
-    const savedAt = new Date().toISOString();
-    writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastSnapshotAt: savedAt }), "utf8");
-    writeSession({ snapshotState: "saved", snapshotSavedAt: savedAt, snapshotLastError: null });
-    return true;
-  } finally {
-'''
-          replace_once(session, old_upload_end, new_upload_end)
-
-          insert_after_upload = '''async function uploadProfileSnapshot() {'''
-          text = Path(session).read_text(encoding="utf-8")
-          marker = '''function normalizeIp(value) {'''
-          if text.count(marker) != 1:
-              raise SystemExit("browser-session: normalizeIp marker missing")
-          retry_helper = '''function safeSnapshotError(error) {
-  const message = error instanceof Error ? error.message : String(error || "");
-  if (/^profile_snapshot_http_\\d+$/.test(message)) return message;
-  if (message.startsWith("profile_snapshot_")) return message.slice(0, 96);
-  return "profile_snapshot_failed";
-}
-
-async function uploadProfileSnapshotWithRetry() {
-  const delays = [0, 2_000, 5_000];
-  let lastError;
-  for (let index = 0; index < delays.length; index += 1) {
-    if (delays[index]) await new Promise((resolve) => setTimeout(resolve, delays[index]));
-    writeSession({ snapshotState: index === 0 ? "saving" : "retrying", snapshotAttempt: index + 1 });
-    try {
-      return await uploadProfileSnapshot();
-    } catch (error) {
-      lastError = error;
-      writeSession({ snapshotState: "retrying", snapshotAttempt: index + 1, snapshotLastError: safeSnapshotError(error), snapshotFailureAt: new Date().toISOString() });
-    }
-  }
-  writeSession({ snapshotState: "failed", snapshotLastError: safeSnapshotError(lastError), snapshotFailureAt: new Date().toISOString() });
-  throw lastError instanceof Error ? lastError : new Error("profile_snapshot_failed");
-}
-
-'''
-          Path(session).write_text(text.replace(marker, retry_helper + marker, 1), encoding="utf-8")
-          replace_once(session, '        await uploadProfileSnapshot().catch(() => undefined);', '        try { await uploadProfileSnapshotWithRetry(); } catch { }')
-
-          replace_once(test, '$AgentVersion = "1.3.8"', '$AgentVersion = "1.3.9"')
-          replace_once(test, '    expect(script).toContain("taskkill.exe /PID $nodePid /T /F 1>$null 2>$null");', '    expect(script).toContain("taskkill.exe /PID $browserPid /T 1>$null 2>$null");\n    expect(script).toContain("snapshotState -eq \\\"saved\\\"");\n    expect(script).toContain("Queue-H2AdsProfileSnapshot $instanceId");\n    expect(session).toContain("uploadProfileSnapshotWithRetry");\n    expect(session).toContain(\'snapshotState: "saved"\');')
-
-          replace_once(validate, "AgentVersion = \\\"1.3.8\\\"", "AgentVersion = \\\"1.3.9\\\"")
-          replace_once(validate, "Packaged worker is not 1.3.8", "Packaged worker is not 1.3.9")
-          replace_once(validate, "Packaged worker 1.3.8 confirmed", "Packaged worker 1.3.9 confirmed")
+        run: python .github/scripts/h2ads-profile-save-hotfix.py
 
       - name: Validate PowerShell syntax
         shell: pwsh
@@ -261,11 +60,11 @@ async function uploadProfileSnapshotWithRetry() {
       - name: Build production bundle
         run: pnpm build
 
-      - name: Commit hotfix
+      - name: Commit validated hotfix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add workers/windows/H2AdsWorker.ps1 workers/windows/browser-session.mjs server/h2adsWorkerFoundation.test.ts .github/workflows/h2ads-validate.yml
+          git add workers/windows/H2AdsWorker.ps1 workers/windows/browser-session.mjs server/h2adsWorkerRoute.ts server/h2adsWorkerFoundation.test.ts .github/workflows/h2ads-validate.yml
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
