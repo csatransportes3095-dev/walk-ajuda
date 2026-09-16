@@ -1,0 +1,72 @@
+name: H2ADS profile save v2
+
+on:
+  push:
+    branches:
+      - fix/h2ads-profile-save-v2-2026-09-16
+    paths:
+      - ".github/scripts/h2ads-profile-save-v2.py"
+      - ".github/workflows/h2ads-profile-save-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/h2ads-profile-save-v2-2026-09-16
+          fetch-depth: 0
+
+      - name: Apply isolated H2ADS hotfix
+        run: python .github/scripts/h2ads-profile-save-v2.py
+
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("workers/windows/H2AdsWorker.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check workers/windows/browser-runner.mjs
+          node --check workers/windows/browser-session.mjs
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run H2ADS tests
+        run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts
+
+      - name: Build production bundle
+        run: pnpm build
+
+      - name: Commit validated hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add workers/windows/H2AdsWorker.ps1 server/h2adsWorkerFoundation.test.ts .github/workflows/h2ads-validate.yml
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git commit -m "h2ads: corrigir fechamento e fila de snapshots"
+          git push origin HEAD:fix/h2ads-profile-save-v2-2026-09-16
