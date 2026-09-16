@@ -7,7 +7,6 @@ on:
     paths:
       - ".github/workflows/fix-h2ads-profile-save-20260916.yml"
       - ".github/scripts/h2ads-profile-save-hotfix.py"
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,7 +22,7 @@ jobs:
           ref: fix/h2ads-profile-save-2026-09-16
           fetch-depth: 0
 
-      - name: Apply H2ADS profile persistence hardening
+      - name: Apply isolated H2ADS hotfix
         run: python .github/scripts/h2ads-profile-save-hotfix.py
 
       - name: Validate PowerShell syntax
@@ -69,5 +68,5 @@ jobs:
             echo "No changes to commit"
             exit 0
           fi
-          git commit -m "h2ads: salvar perfil com fechamento gracioso e retry"
+          git commit -m "h2ads: corrigir persistencia de perfil e fila de snapshots"
           git push origin HEAD:fix/h2ads-profile-save-2026-09-16
