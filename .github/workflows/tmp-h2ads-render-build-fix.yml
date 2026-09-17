@@ -1,0 +1,21 @@
+name: H2ADS Render build validation
+
+on:
+  push:
+    branches:
+      - fix/h2ads-foto-em-analise-v2-2026-09-17
+    paths:
+      - "scripts/patch-h2ads-schedule-topbar-sticky-groups-20260914.mjs"
+      - "scripts/patch-h2ads-layout-hotfix-20260914.mjs"
+      - ".github/workflows/tmp-h2ads-render-build-fix.yml"
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/h2ads-foto-em-analise-v2-2026-09-17
+      - name: Build same Docker image used by Render
+        run: docker build --progress=plain -t h2ads-render-check .
