@@ -323,7 +323,7 @@ export function StorefrontProductCard({
                 <p className="mt-2 text-[11px] font-medium text-slate-400 sm:text-sm">Mais corridas, mais tempo, mais tranquilidade.</p>
               </div>
             </div>
-            <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="mt-5 grid w-full gap-2 sm:gap-3" style={{ gridTemplateColumns: `repeat(${Math.max(1, priceModels.length)}, minmax(0, 1fr))` }}>
               {priceModels.map((model, index) => {
                 const isSelected = model.id === priceModelId;
                 const palette = OPTION_PALETTES[Math.min(index, OPTION_PALETTES.length - 1)];
