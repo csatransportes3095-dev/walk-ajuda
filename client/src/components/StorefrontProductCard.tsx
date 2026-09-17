@@ -323,7 +323,7 @@ export function StorefrontProductCard({
                 <p className="mt-2 text-[11px] font-medium text-slate-400 sm:text-sm">Mais corridas, mais tempo, mais tranquilidade.</p>
               </div>
             </div>
-            <div className="mt-5 grid w-full gap-2 sm:gap-3" style={{ gridTemplateColumns: `repeat(${Math.max(1, priceModels.length)}, minmax(0, 1fr))` }}>
+            <div className={`mt-5 grid w-full gap-2 sm:gap-3 ${priceModels.length === 1 ? "grid-cols-1" : priceModels.length === 2 ? "grid-cols-2" : priceModels.length === 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
               {priceModels.map((model, index) => {
                 const isSelected = model.id === priceModelId;
                 const palette = OPTION_PALETTES[Math.min(index, OPTION_PALETTES.length - 1)];
@@ -336,7 +336,7 @@ export function StorefrontProductCard({
                 const vipPreviewPrice = applyVipBenefitToPrice(model.price, model, true);
                 const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} className={`relative min-h-[205px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} className={`relative w-full min-h-[205px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
                     {modelVipMode !== 'all' && <span className={`absolute -right-1 -top-2 z-20 rounded-full border px-2 py-1 text-[8px] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
                     {modelPromotion?.active ? (
                       <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-gradient-to-r from-yellow-300 to-orange-400 px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#1a0d00] shadow-[0_0_16px_rgba(250,204,21,.45)] sm:text-[9px]">Oferta -{modelPromotion.discount}%</span>
