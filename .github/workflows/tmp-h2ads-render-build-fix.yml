@@ -5,8 +5,9 @@ on:
     branches:
       - fix/h2ads-foto-em-analise-v2-2026-09-17
     paths:
-      - "scripts/patch-h2ads-schedule-topbar-sticky-groups-20260914.mjs"
-      - "scripts/patch-h2ads-layout-hotfix-20260914.mjs"
+      - "Dockerfile"
+      - "client/src/pages/H2Ads.tsx"
+      - "scripts/patch-h2ads-photo-analysis-filter-20260917.mjs"
       - ".github/workflows/tmp-h2ads-render-build-fix.yml"
 
 jobs:
