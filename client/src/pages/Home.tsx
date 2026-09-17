@@ -4495,7 +4495,7 @@ export default function Home() {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-black/40 backdrop-blur-md shadow-sm border-b border-primary/30">
+      <header className="sticky top-0 z-40 bg-black/40 backdrop-blur-md shadow-sm border-b border-primary/30 md:static">
         <div className="container flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-gradient-to-br from-primary to-purple-600 rounded-lg flex items-center justify-center">
