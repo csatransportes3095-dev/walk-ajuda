@@ -7,8 +7,6 @@ import H2AdsOrderLinkControl from "@/components/H2AdsOrderLinkControl";
 import H2AdsNewInstanceOrderPicker, { suggestedH2AdsInstanceName, type H2AdsPendingOrderLink } from "@/components/H2AdsNewInstanceOrderPicker";
 import { H2ADS_NAME_MIN_LENGTH, validateH2AdsName } from "@shared/h2adsValidation";
 import { parseH2AdsProxyInput, type H2AdsProxyProtocol } from "@shared/h2adsProxyInput";
-import { buildH2AdsAppointmentByInstance, h2AdsAppointmentSortValue, matchesH2AdsScheduleFilter, type H2AdsAppointmentLike, type H2AdsOrderLinkLike, type H2AdsScheduleFilter } from "@shared/h2adsSchedule";
-import { getOperationalBucket } from "@shared/orderBuckets";
 
 const H2ADS_LOGO = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663911003862/NUtvqlTplGBXXVCr.png";
 const H2ADS_VISUAL_COLORS_KEY = "h2ads.visual-colors.v1";
@@ -69,9 +67,6 @@ export default function H2Ads() {
   const utils = trpc.useUtils();
   const dashboard = trpc.h2Ads.listDashboard.useQuery(undefined, { retry: false, staleTime: 0, refetchInterval: 1_000, refetchIntervalInBackground: true, refetchOnWindowFocus: true });
   const proxySecurityStatus = trpc.h2Ads.proxySecurityStatus.useQuery(undefined, { retry: false });
-  const scheduleLinksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
-  const scheduleAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 15_000, refetchIntervalInBackground: false });
-  const scheduleOrdersQuery = trpc.orderStatus.listOrders.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 15_000, refetchIntervalInBackground: false });
   const createGroup = trpc.h2Ads.createGroup.useMutation();
   const updateGroup = trpc.h2Ads.updateGroup.useMutation();
   const deleteGroup = trpc.h2Ads.deleteGroup.useMutation();
@@ -105,7 +100,6 @@ export default function H2Ads() {
   const [orderingGroups, setOrderingGroups] = useState(false);
   const [instanceSearch, setInstanceSearch] = useState("");
   const [closingAllBrowsers, setClosingAllBrowsers] = useState(false);
-  const [scheduleFilter, setScheduleFilter] = useState<H2AdsScheduleFilter | "photo_analysis">("all");
 
   const groups = dashboard.data?.groups ?? [];
   const instances = dashboard.data?.instances ?? [];
@@ -143,44 +137,6 @@ export default function H2Ads() {
   const workerById = useMemo(() => new Map(browserWorkers.map(worker => [worker.id, worker])), [browserWorkers]);
   const assignmentByInstance = useMemo(() => new Map(workerAssignments.map(assignment => [assignment.instanceId, assignment])), [workerAssignments]);
   const browserRunByInstance = useMemo(() => new Map(browserRuns.map(run => [run.instanceId, run])), [browserRuns]);
-  const appointmentByInstance = useMemo(() => buildH2AdsAppointmentByInstance(
-    (scheduleLinksQuery.data ?? []) as H2AdsOrderLinkLike[],
-    (scheduleAppointmentsQuery.data ?? []) as H2AdsAppointmentLike[],
-  ), [scheduleLinksQuery.data, scheduleAppointmentsQuery.data]);
-  const linkedOrderByInstance = useMemo(() => {
-    const orderByKey = new Map<string, any>();
-    for (const order of (scheduleOrdersQuery.data ?? []) as any[]) {
-      orderByKey.set(`${order.id}:${order.subOrderIndex ?? 0}`, order);
-    }
-    const result = new Map<number, any>();
-    for (const link of (scheduleLinksQuery.data ?? []) as any[]) {
-      const order = orderByKey.get(`${link.registrationId}:${link.subOrderIndex ?? 0}`);
-      if (order) result.set(link.instanceId, order);
-    }
-    return result;
-  }, [scheduleLinksQuery.data, scheduleOrdersQuery.data]);
-  const confirmedScheduleCount = useMemo(() => instances.filter(instance => appointmentByInstance.get(instance.id)?.status === "confirmed").length, [instances, appointmentByInstance]);
-  const pendingScheduleCount = useMemo(() => instances.filter(instance => appointmentByInstance.get(instance.id)?.status === "pending").length, [instances, appointmentByInstance]);
-  const photoAnalysisCount = useMemo(() => instances.filter(instance => getOperationalBucket({ latestStatus: linkedOrderByInstance.get(instance.id)?.latestStatus, scheduleStatus: null }) === "em_analise").length, [instances, linkedOrderByInstance]);
-  const scheduleFilteredInstances = useMemo(() => {
-    if (scheduleFilter === "all") return [] as typeof instances;
-    if (scheduleFilter === "photo_analysis") {
-      return instances
-        .filter(instance => getOperationalBucket({ latestStatus: linkedOrderByInstance.get(instance.id)?.latestStatus, scheduleStatus: null }) === "em_analise")
-        .filter(instance => !instanceSearchKey || normalizeH2AdsSearch(instance.name).includes(instanceSearchKey))
-        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
-    }
-    return instances
-      .filter(instance => matchesH2AdsScheduleFilter(appointmentByInstance.get(instance.id), scheduleFilter))
-      .filter(instance => !instanceSearchKey || normalizeH2AdsSearch(instance.name).includes(instanceSearchKey))
-      .sort((a, b) => {
-        const appointmentA = appointmentByInstance.get(a.id);
-        const appointmentB = appointmentByInstance.get(b.id);
-        const byDateTime = h2AdsAppointmentSortValue(appointmentA).localeCompare(h2AdsAppointmentSortValue(appointmentB));
-        if (byDateTime !== 0) return byDateTime;
-        return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
-      });
-  }, [instances, appointmentByInstance, linkedOrderByInstance, scheduleFilter, instanceSearchKey]);
   const selectedInstance = networkForm ? instances.find(instance => instance.id === networkForm.instanceId) : undefined;
   const encryptionReady = proxySecurityStatus.data?.encryptionReady === true;
   const saving = createGroup.isPending || updateGroup.isPending || deleteGroup.isPending || createInstance.isPending || createInstanceLinkedOrder.isPending || updateInstance.isPending || deleteInstance.isPending || saveNetworkProfile.isPending || saveProxyCredential.isPending || updateProxyRotation.isPending || validateProxy.isPending || createWorkerPairing.isPending || assignWorker.isPending || revokeWorker.isPending;
@@ -481,37 +437,11 @@ Isso encerra somente os browsers abertos. Grupos, clientes vinculados, proxies e
               {instanceSearch && <button type="button" onClick={() => setInstanceSearch("")} className="absolute right-3 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white" aria-label="Limpar pesquisa"><X className="h-4 w-4" /></button>}
             </div>
             <div className={`rounded-xl border px-4 py-3 text-xs font-black ${instanceSearchKey ? "border-[#148CFF]/30 bg-[#148CFF]/10 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-400"}`}>
-              {instanceSearchKey ? (scheduleFilter === "all" ? `${masterSearchMatchCount} instância(s) encontrada(s) em ${masterSearchResults.length} grupo(s)` : `${scheduleFilteredInstances.length} instância(s) no filtro selecionado`) : "Filtro mestre · busca em todos os grupos"}
-            </div>
-            <div className="w-full rounded-2xl border border-cyan-400/20 bg-[#07131B] p-2 lg:w-auto">
-              <div className="mb-2 px-1"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">Agendamentos H2ADS</p><p className="mt-0.5 text-[9px] font-semibold text-slate-500">Filtros rápidos do fluxo H2ADS; não alteram grupos nem instâncias.</p></div>
-              <div className="flex flex-wrap gap-1.5">
-                <button type="button" onClick={() => setScheduleFilter("all")} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "all" ? "border-white/25 bg-white/15 text-white" : "border-white/10 bg-white/[0.03] text-slate-300"}`}>TODOS ({instances.length})</button>
-                <button type="button" onClick={() => { setScheduleFilter("confirmed"); if (orderingGroups) setOrderingGroups(false); }} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "confirmed" ? "border-cyan-300/60 bg-cyan-400 text-[#031018]" : "border-cyan-400/20 bg-cyan-400/[0.06] text-cyan-100"}`}>AGENDAMENTOS CONFIRMADOS ({confirmedScheduleCount})</button>
-                <button type="button" onClick={() => { setScheduleFilter("pending"); if (orderingGroups) setOrderingGroups(false); }} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "pending" ? "border-amber-300/60 bg-amber-400 text-[#1A1000]" : "border-amber-400/20 bg-amber-400/[0.06] text-amber-100"}`}>AGUARDANDO AGENDAMENTO ({pendingScheduleCount})</button>
-                <button type="button" onClick={() => { setScheduleFilter("photo_analysis"); if (orderingGroups) setOrderingGroups(false); }} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "photo_analysis" ? "border-violet-300/60 bg-violet-400 text-[#14061D]" : "border-violet-400/20 bg-violet-400/[0.06] text-violet-100"}`}>FOTO EM ANÁLISE ({photoAnalysisCount})</button>
-              </div>
+              {instanceSearchKey ? `${masterSearchMatchCount} instância(s) encontrada(s) em ${masterSearchResults.length} grupo(s)` : "Filtro mestre · busca em todos os grupos"}
             </div>
           </div>
         </div>
-        <div className="p-4 sm:p-6">
-          {dashboard.isLoading && <div className="grid min-h-48 place-items-center text-sm text-slate-400">Carregando instâncias H2 Ads...</div>}
-          {!dashboard.isLoading && groups.length === 0 && <EmptyState />}
-          {!dashboard.isLoading && groups.length > 0 && scheduleFilter !== "all" && <section className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-black/20">
-            <header className="border-b border-white/8 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">{scheduleFilter === "confirmed" ? "Agendamentos confirmados" : scheduleFilter === "pending" ? "Aguardando agendamento" : "Foto em análise"}</p>
-              <p className="mt-1 text-xs font-semibold text-slate-400">Bloco único · sem divisão por grupo{scheduleFilter === "confirmed" ? " · data e horário em ordem crescente" : ""}</p>
-            </header>
-            {scheduleFilteredInstances.length === 0 ? <div className="p-6 text-center"><p className="font-black text-slate-300">Nenhuma instância neste filtro.</p><p className="mt-1 text-xs text-slate-500">O grupo original continua preservado; este filtro altera somente a visualização.</p></div> : <div className="grid grid-cols-1 gap-4 p-3 md:grid-cols-2 xl:grid-cols-4">{scheduleFilteredInstances.map(instance => {
-              const group = groups.find(item => item.id === instance.groupId);
-              const groupColor = group?.cardColor || visualColors[visualColorKey("group", instance.groupId)] || INSTANCE_DEFAULT_COLOR;
-              const assignment = assignmentByInstance.get(instance.id);
-              return <InstanceCard key={instance.id} instance={instance} profile={profileByInstance.get(instance.id)} hasCredential={credentialByInstance.has(instance.id)} assignment={assignment} browserRun={browserRunByInstance.get(instance.id)} worker={assignment ? workerById.get(assignment.workerId) : undefined} workers={browserWorkers} busy={saving} visualColor={groupColor} actionState={instanceAction[instance.id]} onAssignWorker={updateInstanceWorker} onPrepareBrowser={requestBrowserPreparation} onLaunchBrowser={requestBrowserLaunch} onCloseBrowser={requestBrowserClose} groups={activeGroups} onMoveGroup={moveInstanceToGroup} onDelete={() => removeInstance(instance.id, instance.name)} onEditInstance={() => setInstanceForm({ id: instance.id, groupId: String(instance.groupId), name: instance.name, notes: instance.notes ?? "", status: instance.status })} onEditRoute={() => openRouteEditor(instance.id)} />;
-            })}</div>}
-          </section>}
-          {!dashboard.isLoading && groups.length > 0 && scheduleFilter === "all" && instanceSearchKey && masterSearchMatchCount === 0 && <div className="mb-4 rounded-2xl border border-dashed border-[#F5B800]/30 bg-[#F5B800]/[0.06] p-5 text-center"><p className="font-black text-[#FFE37A]">Nenhuma instância encontrada.</p><p className="mt-1 text-xs text-slate-400">Tente outro nome. A pesquisa verifica todos os grupos.</p></div>}
-          {scheduleFilter === "all" && visibleGroups.map(group => <GroupSection key={group.id} group={group} instances={visibleInstancesByGroup.get(group.id) ?? []} profileByInstance={profileByInstance} credentialByInstance={credentialByInstance} workerById={workerById} assignmentByInstance={assignmentByInstance} browserRunByInstance={browserRunByInstance} workers={browserWorkers} groups={activeGroups} busy={saving} visualColors={visualColors} onVisualColor={setVisualColor} onEditGroup={() => setGroupForm({ id: group.id, name: group.name, description: group.description ?? "", status: group.status, cardColor: group.cardColor || INSTANCE_DEFAULT_COLOR })} onNewInstance={() => newInstance(group.id)} onEditInstance={instance => setInstanceForm({ id: instance.id, groupId: String(instance.groupId), name: instance.name, notes: instance.notes ?? "", status: instance.status })} onEditRoute={openRouteEditor} onAssignWorker={updateInstanceWorker} onPrepareBrowser={requestBrowserPreparation} onLaunchBrowser={requestBrowserLaunch} onCloseBrowser={requestBrowserClose} onMoveInstanceGroup={moveInstanceToGroup} onDeleteInstance={removeInstance} instanceAction={instanceAction} expanded={instanceSearchKey ? true : expandedGroups.has(group.id)} onToggle={() => toggleGroup(group.id)} ordering={orderingGroups && !instanceSearchKey} canMoveUp={groups.indexOf(group) > 0} canMoveDown={groups.indexOf(group) < groups.length - 1} onMoveUp={() => void moveGroup(group.id, -1)} onMoveDown={() => void moveGroup(group.id, 1)} onDeleteGroup={() => void removeGroup(group.id, group.name)} />)}
-        </div>
+        <div className="p-4 sm:p-6">{dashboard.isLoading && <div className="grid min-h-48 place-items-center text-sm text-slate-400">Carregando instâncias H2 Ads...</div>}{!dashboard.isLoading && groups.length === 0 && <EmptyState />}{!dashboard.isLoading && groups.length > 0 && instanceSearchKey && masterSearchMatchCount === 0 && <div className="mb-4 rounded-2xl border border-dashed border-[#F5B800]/30 bg-[#F5B800]/[0.06] p-5 text-center"><p className="font-black text-[#FFE37A]">Nenhuma instância encontrada.</p><p className="mt-1 text-xs text-slate-400">Tente outro nome. A pesquisa verifica todos os grupos.</p></div>}{visibleGroups.map(group => <GroupSection key={group.id} group={group} instances={visibleInstancesByGroup.get(group.id) ?? []} profileByInstance={profileByInstance} credentialByInstance={credentialByInstance} workerById={workerById} assignmentByInstance={assignmentByInstance} browserRunByInstance={browserRunByInstance} workers={browserWorkers} groups={activeGroups} busy={saving} visualColors={visualColors} onVisualColor={setVisualColor} onEditGroup={() => setGroupForm({ id: group.id, name: group.name, description: group.description ?? "", status: group.status, cardColor: group.cardColor || INSTANCE_DEFAULT_COLOR })} onNewInstance={() => newInstance(group.id)} onEditInstance={instance => setInstanceForm({ id: instance.id, groupId: String(instance.groupId), name: instance.name, notes: instance.notes ?? "", status: instance.status })} onEditRoute={openRouteEditor} onAssignWorker={updateInstanceWorker} onPrepareBrowser={requestBrowserPreparation} onLaunchBrowser={requestBrowserLaunch} onCloseBrowser={requestBrowserClose} onMoveInstanceGroup={moveInstanceToGroup} onDeleteInstance={removeInstance} instanceAction={instanceAction} expanded={instanceSearchKey ? true : expandedGroups.has(group.id)} onToggle={() => toggleGroup(group.id)} ordering={orderingGroups && !instanceSearchKey} canMoveUp={groups.indexOf(group) > 0} canMoveDown={groups.indexOf(group) < groups.length - 1} onMoveUp={() => void moveGroup(group.id, -1)} onMoveDown={() => void moveGroup(group.id, 1)} onDeleteGroup={() => void removeGroup(group.id, group.name)} />)}</div>
       </section>
       <section className="mt-6 grid gap-3 md:grid-cols-2"><article className="rounded-2xl border border-[#148CFF]/20 bg-[#148CFF]/[0.055] p-5"><div className="flex items-center gap-2 text-[#8CC8FF]"><ShieldCheck className="h-4 w-4" /><p className="text-sm font-black">Uma instância, uma rota</p></div><p className="mt-2 text-xs leading-5 text-slate-400">Cada configuração fica vinculada somente à instância escolhida.</p></article><article className="rounded-2xl border border-white/10 bg-white/[0.025] p-5"><div className="flex items-center gap-2 text-slate-300"><Network className="h-4 w-4" /><p className="text-sm font-black">Teste por clique</p></div><p className="mt-2 text-xs leading-5 text-slate-400">IP, localização, ISP, ASN e latência só são atualizados quando você clicar em validar.</p></article></section>
     </main>
