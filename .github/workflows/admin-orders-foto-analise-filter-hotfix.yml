@@ -1,0 +1,112 @@
+name: Admin Orders Foto em analise filter hotfix
+
+on:
+  push:
+    branches:
+      - fix/admin-orders-foto-analise-filter-2026-09-17
+    paths:
+      - ".github/workflows/admin-orders-foto-analise-filter-hotfix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/admin-orders-foto-analise-filter-2026-09-17
+          fetch-depth: 0
+
+      - name: Apply Foto em analise filter
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("client/src/pages/AdminOrders.tsx")
+          text = path.read_text(encoding="utf-8")
+
+          def replace_once(old: str, new: str, label: str):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '''    const matchStatus = filterStatus === "all"
+      || filterStatus === "urgente"
+      || filterStatus === "com_indicador"
+      || o.latestStatus === filterStatus
+      || (filterStatus === "sem_status" && !o.latestStatus)
+      || (isGroupFilter && groupFilterId !== null && (customGroupsQuery.data || []).find((g: any) => g.id === groupFilterId)?.memberIds.includes(o.id));''',
+              '''    const matchStatus = filterStatus === "all"
+      || filterStatus === "urgente"
+      || filterStatus === "com_indicador"
+      || o.latestStatus === filterStatus
+      || (filterStatus === "foto_em_analise_filter" && getOperationalBucket(o) === "em_analise")
+      || (filterStatus === "sem_status" && !o.latestStatus)
+      || (isGroupFilter && groupFilterId !== null && (customGroupsQuery.data || []).find((g: any) => g.id === groupFilterId)?.memberIds.includes(o.id));''',
+              "matchStatus",
+          )
+
+          marker = '''            {/* Status dinâmicos */}
+            {ACTIVE_STATUS_ORDER.map(s => {'''
+          button = '''            {/* Foto em análise — filtro operacional dedicado, independente do nome interno do status */}
+            {(() => {
+              const photoAnalysisCount = (orders || []).filter((o: any) => !isDeliveredStatus(o.latestStatus) && getOperationalBucket(o) === "em_analise").length;
+              return (
+                <button
+                  onClick={() => setFilterStatus("foto_em_analise_filter")}
+                  className={`relative flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-xl text-[11px] font-semibold border transition-all ${
+                    filterStatus === "foto_em_analise_filter"
+                      ? "bg-sky-500/20 border-sky-400 text-sky-200 shadow-md ring-1 ring-sky-400/30"
+                      : "bg-card border-border text-muted-foreground hover:border-sky-400/50 hover:text-sky-200"
+                  }`}
+                >
+                  {photoAnalysisCount > 0 && filterStatus !== "foto_em_analise_filter" && (
+                    <span className="absolute -top-1 -right-1 bg-sky-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold">{photoAnalysisCount > 9 ? '9+' : photoAnalysisCount}</span>
+                  )}
+                  <span className="text-base leading-none">🔍</span>
+                  <span className="text-center leading-tight">Foto em análise</span>
+                </button>
+              );
+            })()}
+            {/* Status dinâmicos */}
+            {ACTIVE_STATUS_ORDER.map(s => {'''
+          replace_once(marker, button, "status filter marker")
+
+          path.write_text(text, encoding="utf-8")
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run targeted tests
+        run: pnpm vitest run server/adminOrdersPhotoAnalysisFilter.test.ts server/adminOrdersOperationalFilters.test.ts
+
+      - name: Build production bundle
+        run: pnpm build
+
+      - name: Commit validated fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/AdminOrders.tsx server/adminOrdersPhotoAnalysisFilter.test.ts
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git commit -m "fix(orders): adicionar filtro Foto em analise"
+          git push origin HEAD:fix/admin-orders-foto-analise-filter-2026-09-17
