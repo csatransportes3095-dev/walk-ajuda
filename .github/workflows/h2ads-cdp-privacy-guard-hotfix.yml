@@ -1,0 +1,328 @@
+name: H2ADS CDP Privacy Guard hotfix
+
+on:
+  push:
+    branches:
+      - fix/h2ads-cdp-privacy-guard-2026-09-17
+    paths:
+      - ".github/workflows/h2ads-cdp-privacy-guard-hotfix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/h2ads-cdp-privacy-guard-2026-09-17
+          fetch-depth: 0
+
+      - name: Apply local CDP Privacy Guard
+        shell: python
+        run: |
+          from pathlib import Path
+
+          session_path = Path("workers/windows/browser-session.mjs")
+          test_path = Path("server/h2adsWorkerFoundation.test.ts")
+          text = session_path.read_text(encoding="utf-8")
+
+          def replace_once(old: str, new: str, label: str):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'const privacyExtensionDirectory = join(profileDirectory, "h2ads-privacy-extension");\n',
+              'const privacyExtensionDirectory = join(profileDirectory, "h2ads-privacy-extension");\nconst privacyBlockedPagePath = join(privacyExtensionDirectory, "blocked.html");\nconst devToolsActivePortPath = join(profileDirectory, "DevToolsActivePort");\n',
+              "privacy paths",
+          )
+
+          replace_once(
+              'let browserProbeInProgress = false;\n',
+              'let browserProbeInProgress = false;\nlet privacyGuardSocket;\nlet privacyGuardCommandId = 0;\nconst privacyGuardPending = new Map();\nconst privacyGuardSessions = new Set();\n',
+              "privacy state",
+          )
+
+          marker = 'async function rotateRelay() {\n'
+          cdp = r'''function isGoogleSorryUrl(value) {
+            try {
+              const url = new URL(String(value || ""));
+              const host = url.hostname.toLowerCase();
+              const googleHost = host === "google.com" || host.endsWith(".google.com") || host === "google.com.br" || host.endsWith(".google.com.br");
+              return googleHost && /^\/sorry(?:\/|$)/i.test(url.pathname);
+            } catch {
+              return false;
+            }
+          }
+
+          async function waitForDevToolsEndpoint(timeoutMs = 15_000) {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+              if (existsSync(devToolsActivePortPath)) {
+                try {
+                  const [portLine, browserPath] = readFileSync(devToolsActivePortPath, "utf8").trim().split(/\r?\n/);
+                  const port = Number(portLine);
+                  if (Number.isInteger(port) && port >= 1 && port <= 65_535 && browserPath?.startsWith("/devtools/browser/")) {
+                    return `ws://127.0.0.1:${port}${browserPath}`;
+                  }
+                } catch { }
+              }
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            throw new Error("privacy_guard_cdp_unavailable");
+          }
+
+          function resetPrivacyGuardCdp(reason = "privacy_guard_cdp_closed") {
+            for (const pending of privacyGuardPending.values()) {
+              clearTimeout(pending.timer);
+              pending.reject(new Error(reason));
+            }
+            privacyGuardPending.clear();
+            privacyGuardSessions.clear();
+          }
+
+          function closePrivacyGuardCdp() {
+            const socket = privacyGuardSocket;
+            privacyGuardSocket = undefined;
+            resetPrivacyGuardCdp();
+            if (!socket) return;
+            try {
+              if (socket.readyState === 0 || socket.readyState === 1) socket.close();
+            } catch { }
+          }
+
+          function sendCdp(method, params = {}, sessionId) {
+            if (!privacyGuardSocket || privacyGuardSocket.readyState !== 1) return Promise.reject(new Error("privacy_guard_cdp_closed"));
+            const id = ++privacyGuardCommandId;
+            return new Promise((resolve, reject) => {
+              const timer = setTimeout(() => {
+                privacyGuardPending.delete(id);
+                reject(new Error("privacy_guard_cdp_timeout"));
+              }, 5_000);
+              privacyGuardPending.set(id, { resolve, reject, timer });
+              const message = { id, method, params };
+              if (sessionId) message.sessionId = sessionId;
+              try {
+                privacyGuardSocket.send(JSON.stringify(message));
+              } catch (error) {
+                clearTimeout(timer);
+                privacyGuardPending.delete(id);
+                reject(error);
+              }
+            });
+          }
+
+          async function enableGoogleSorryInterception(sessionId) {
+            if (!sessionId || privacyGuardSessions.has(sessionId)) return;
+            await sendCdp("Fetch.enable", {
+              patterns: [
+                { urlPattern: "*://google.com/sorry*", resourceType: "Document", requestStage: "Request" },
+                { urlPattern: "*://*.google.com/sorry*", resourceType: "Document", requestStage: "Request" },
+                { urlPattern: "*://google.com.br/sorry*", resourceType: "Document", requestStage: "Request" },
+                { urlPattern: "*://*.google.com.br/sorry*", resourceType: "Document", requestStage: "Request" },
+              ],
+            }, sessionId);
+            privacyGuardSessions.add(sessionId);
+          }
+
+          async function fulfillGoogleSorryWithLocalPage(message) {
+            const sessionId = message.sessionId;
+            const requestId = message.params?.requestId;
+            const requestUrl = message.params?.request?.url;
+            if (!sessionId || !requestId) return;
+            if (!isGoogleSorryUrl(requestUrl)) {
+              await sendCdp("Fetch.continueRequest", { requestId }, sessionId).catch(() => undefined);
+              return;
+            }
+            const blockedHtml = readFileSync(privacyBlockedPagePath, "utf8");
+            await sendCdp("Fetch.fulfillRequest", {
+              requestId,
+              responseCode: 200,
+              responsePhrase: "OK",
+              responseHeaders: [
+                { name: "Content-Type", value: "text/html; charset=utf-8" },
+                { name: "Cache-Control", value: "no-store, max-age=0" },
+                { name: "X-Content-Type-Options", value: "nosniff" },
+              ],
+              body: Buffer.from(blockedHtml, "utf8").toString("base64"),
+            }, sessionId);
+            writeSession({
+              googleSorryPrivacyGuard: "blocked_by_cdp",
+              googleSorryBlockedAt: new Date().toISOString(),
+              privacyGuard: "protected",
+            });
+          }
+
+          function parseCdpMessage(event) {
+            try {
+              if (typeof event.data === "string") return JSON.parse(event.data);
+              if (event.data instanceof ArrayBuffer) return JSON.parse(Buffer.from(event.data).toString("utf8"));
+              if (ArrayBuffer.isView(event.data)) return JSON.parse(Buffer.from(event.data.buffer, event.data.byteOffset, event.data.byteLength).toString("utf8"));
+            } catch { }
+            return null;
+          }
+
+          function handleCdpMessage(event) {
+            const message = parseCdpMessage(event);
+            if (!message) return;
+            if (message.id) {
+              const pending = privacyGuardPending.get(message.id);
+              if (!pending) return;
+              clearTimeout(pending.timer);
+              privacyGuardPending.delete(message.id);
+              if (message.error) pending.reject(new Error(`privacy_guard_cdp_${message.error.code || "error"}`));
+              else pending.resolve(message.result ?? {});
+              return;
+            }
+            if (message.method === "Target.attachedToTarget") {
+              const sessionId = message.params?.sessionId;
+              const targetType = message.params?.targetInfo?.type;
+              if (sessionId && targetType === "page") void enableGoogleSorryInterception(sessionId).catch(() => undefined);
+              return;
+            }
+            if (message.method === "Fetch.requestPaused") {
+              void fulfillGoogleSorryWithLocalPage(message).catch(() => undefined);
+            }
+          }
+
+          async function installGoogleSorryCdpGuard() {
+            const endpoint = await waitForDevToolsEndpoint();
+            const socket = new WebSocket(endpoint);
+            privacyGuardSocket = socket;
+            socket.addEventListener("message", handleCdpMessage);
+            socket.addEventListener("close", () => {
+              if (privacyGuardSocket === socket) {
+                privacyGuardSocket = undefined;
+                resetPrivacyGuardCdp();
+              }
+            });
+            await new Promise((resolve, reject) => {
+              const timer = setTimeout(() => reject(new Error("privacy_guard_cdp_connect_timeout")), 8_000);
+              socket.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
+              socket.addEventListener("error", () => { clearTimeout(timer); reject(new Error("privacy_guard_cdp_connect_failed")); }, { once: true });
+            });
+            const targets = await sendCdp("Target.getTargets");
+            for (const target of targets.targetInfos ?? []) {
+              if (target.type !== "page") continue;
+              const attached = await sendCdp("Target.attachToTarget", { targetId: target.targetId, flatten: true });
+              await enableGoogleSorryInterception(attached.sessionId);
+            }
+            await sendCdp("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
+            writeSession({
+              googleSorryPrivacyGuard: "cdp_intercept_v1",
+              googleSorryPrivacyGuardReadyAt: new Date().toISOString(),
+              privacyGuard: "protected",
+            });
+          }
+
+          '''
+          cdp = "\n".join(line[10:] if line.startswith("          ") else line for line in cdp.splitlines()) + "\n"
+          replace_once(marker, cdp + marker, "CDP guard functions")
+
+          old_launch = '''    const labelPageUrl = createInstanceLabelPage();
+              const privacyGuardExtension = createGoogleSorryPrivacyGuard();
+              browser = spawn(executable, [
+                `--user-data-dir=${profileDirectory}`, `--proxy-server=http://127.0.0.1:${relayPort}`, "--proxy-bypass-list=<-loopback>",
+                "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+                `--load-extension=${privacyGuardExtension}`, "--no-first-run", "--no-default-browser-check", labelPageUrl,
+              ], { detached: false, stdio: "ignore", windowsHide: false });
+              writeSession({
+                startedAt: new Date().toISOString(), instanceLabelState: "static_tab", observedIp: initial.observedIp, browserObservedIp: initial.browserObservedIp,
+                browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+              });
+          '''
+          old_launch = "\n".join(line[10:] if line.startswith("          ") else line for line in old_launch.splitlines()) + "\n"
+          new_launch = '''    const labelPageUrl = createInstanceLabelPage();
+              createGoogleSorryPrivacyGuard();
+              try { if (existsSync(devToolsActivePortPath)) unlinkSync(devToolsActivePortPath); } catch { }
+              browser = spawn(executable, [
+                `--user-data-dir=${profileDirectory}`, `--proxy-server=http://127.0.0.1:${relayPort}`, "--proxy-bypass-list=<-loopback>",
+                "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+                "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--no-first-run", "--no-default-browser-check", labelPageUrl,
+              ], { detached: false, stdio: "ignore", windowsHide: false });
+              await installGoogleSorryCdpGuard();
+              writeSession({
+                startedAt: new Date().toISOString(), instanceLabelState: "static_tab", observedIp: initial.observedIp, browserObservedIp: initial.browserObservedIp,
+                browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "cdp_intercept_v1", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+              });
+          '''
+          new_launch = "\n".join(line[10:] if line.startswith("          ") else line for line in new_launch.splitlines()) + "\n"
+          replace_once(old_launch, new_launch, "browser launch")
+
+          replace_once(
+              '        if (killSwitchTimer) clearInterval(killSwitchTimer);\n        const manifestPath = join(profileDirectory, "h2ads-profile.json");',
+              '        if (killSwitchTimer) clearInterval(killSwitchTimer);\n        closePrivacyGuardCdp();\n        const manifestPath = join(profileDirectory, "h2ads-profile.json");',
+              "browser exit cleanup",
+          )
+
+          replace_once(
+              '    if (killSwitchTimer) clearInterval(killSwitchTimer);\n    const reason = error instanceof Error ? error.message : "browser_launch_failed";',
+              '    if (killSwitchTimer) clearInterval(killSwitchTimer);\n    closePrivacyGuardCdp();\n    const reason = error instanceof Error ? error.message : "browser_launch_failed";',
+              "launch failure cleanup",
+          )
+
+          required = [
+              'Fetch.fulfillRequest',
+              'Fetch.enable',
+              'DevToolsActivePort',
+              '--remote-debugging-address=127.0.0.1',
+              '--remote-debugging-port=0',
+              'googleSorryPrivacyGuard: "cdp_intercept_v1"',
+              'O H2ADS nao tenta contornar o reCAPTCHA',
+          ]
+          for item in required:
+              if item not in text:
+                  raise SystemExit(f"missing required marker: {item}")
+          if '--load-extension=${privacyGuardExtension}' in text:
+              raise SystemExit("legacy branded-Chrome extension flag is still in launch path")
+
+          session_path.write_text(text, encoding="utf-8")
+
+          test = test_path.read_text(encoding="utf-8")
+          anchor = '    expect(session).toContain("privacyGuardPreflight");\n    expect(session).toContain("--proxy-server=http://127.0.0.1:");\n'
+          replacement = '    expect(session).toContain("privacyGuardPreflight");\n    expect(session).toContain("Fetch.enable");\n    expect(session).toContain("Fetch.fulfillRequest");\n    expect(session).toContain("DevToolsActivePort");\n    expect(session).toContain("--remote-debugging-address=127.0.0.1");\n    expect(session).toContain("--remote-debugging-port=0");\n    expect(session).toContain(\'googleSorryPrivacyGuard: "cdp_intercept_v1"\');\n    expect(session).toContain("O H2ADS nao tenta contornar o reCAPTCHA");\n    expect(session).not.toContain("--load-extension=${privacyGuardExtension}");\n    expect(session).toContain("--proxy-server=http://127.0.0.1:");\n'
+          if test.count(anchor) != 1:
+              raise SystemExit("test anchor not found exactly once")
+          test_path.write_text(test.replace(anchor, replacement, 1), encoding="utf-8")
+
+      - name: Validate browser-session syntax
+        run: node --check workers/windows/browser-session.mjs
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run H2ADS tests
+        run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts
+
+      - name: Build production bundle
+        run: pnpm build
+
+      - name: Verify patch integrity
+        run: git diff --check
+
+      - name: Commit validated hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add workers/windows/browser-session.mjs server/h2adsWorkerFoundation.test.ts
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git commit -m "fix(h2ads): proteger google sorry via CDP local"
+          git push origin HEAD:fix/h2ads-cdp-privacy-guard-2026-09-17
