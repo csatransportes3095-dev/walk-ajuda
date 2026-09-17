@@ -1,0 +1,156 @@
+from pathlib import Path
+
+path = Path("client/src/pages/H2Ads.tsx")
+text = path.read_text(encoding="utf-8")
+
+FILTER_MARKER = 'FOTO EM ANÁLISE ({photoAnalysisCount})'
+
+if FILTER_MARKER in text:
+    required = [
+        'getOperationalBucket',
+        'scheduleOrdersQuery',
+        'photoAnalysisCount',
+        'setScheduleFilter("photo_analysis")',
+    ]
+    missing = [item for item in required if item not in text]
+    if missing:
+        raise SystemExit(f"Filtro parcialmente aplicado; marcadores ausentes: {missing}")
+    print("Filtro Foto em análise já está aplicado; nenhuma alteração necessária.")
+    raise SystemExit(0)
+
+
+def replace_once(old: str, new: str, label: str) -> None:
+    global text
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"{label}: esperado 1 trecho, encontrado {count}")
+    text = text.replace(old, new, 1)
+
+
+replace_once(
+    'import { parseH2AdsProxyInput, type H2AdsProxyProtocol } from "@shared/h2adsProxyInput";\n',
+    'import { parseH2AdsProxyInput, type H2AdsProxyProtocol } from "@shared/h2adsProxyInput";\n'
+    'import { buildH2AdsAppointmentByInstance, h2AdsAppointmentSortValue, matchesH2AdsScheduleFilter, type H2AdsAppointmentLike, type H2AdsOrderLinkLike, type H2AdsScheduleFilter } from "@shared/h2adsSchedule";\n'
+    'import { getOperationalBucket } from "@shared/orderBuckets";\n',
+    "imports",
+)
+
+replace_once(
+    '  const proxySecurityStatus = trpc.h2Ads.proxySecurityStatus.useQuery(undefined, { retry: false });\n',
+    '  const proxySecurityStatus = trpc.h2Ads.proxySecurityStatus.useQuery(undefined, { retry: false });\n'
+    '  const scheduleLinksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });\n'
+    '  const scheduleAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 15_000, refetchIntervalInBackground: false });\n'
+    '  const scheduleOrdersQuery = trpc.orderStatus.listOrders.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 15_000, refetchIntervalInBackground: false });\n',
+    "queries",
+)
+
+replace_once(
+    '  const [closingAllBrowsers, setClosingAllBrowsers] = useState(false);\n',
+    '  const [closingAllBrowsers, setClosingAllBrowsers] = useState(false);\n'
+    '  const [scheduleFilter, setScheduleFilter] = useState<H2AdsScheduleFilter | "photo_analysis">("all");\n',
+    "schedule state",
+)
+
+replace_once(
+    '  const browserRunByInstance = useMemo(() => new Map(browserRuns.map(run => [run.instanceId, run])), [browserRuns]);\n',
+    '''  const browserRunByInstance = useMemo(() => new Map(browserRuns.map(run => [run.instanceId, run])), [browserRuns]);
+  const appointmentByInstance = useMemo(() => buildH2AdsAppointmentByInstance(
+    (scheduleLinksQuery.data ?? []) as H2AdsOrderLinkLike[],
+    (scheduleAppointmentsQuery.data ?? []) as H2AdsAppointmentLike[],
+  ), [scheduleLinksQuery.data, scheduleAppointmentsQuery.data]);
+  const linkedOrderByInstance = useMemo(() => {
+    const orderByKey = new Map<string, any>();
+    for (const order of (scheduleOrdersQuery.data ?? []) as any[]) {
+      orderByKey.set(`${order.id}:${order.subOrderIndex ?? 0}`, order);
+    }
+    const result = new Map<number, any>();
+    for (const link of (scheduleLinksQuery.data ?? []) as any[]) {
+      const order = orderByKey.get(`${link.registrationId}:${link.subOrderIndex ?? 0}`);
+      if (order) result.set(link.instanceId, order);
+    }
+    return result;
+  }, [scheduleLinksQuery.data, scheduleOrdersQuery.data]);
+  const confirmedScheduleCount = useMemo(() => instances.filter(instance => appointmentByInstance.get(instance.id)?.status === "confirmed").length, [instances, appointmentByInstance]);
+  const pendingScheduleCount = useMemo(() => instances.filter(instance => appointmentByInstance.get(instance.id)?.status === "pending").length, [instances, appointmentByInstance]);
+  const photoAnalysisCount = useMemo(() => instances.filter(instance => getOperationalBucket({ latestStatus: linkedOrderByInstance.get(instance.id)?.latestStatus, scheduleStatus: null }) === "em_analise").length, [instances, linkedOrderByInstance]);
+  const scheduleFilteredInstances = useMemo(() => {
+    if (scheduleFilter === "all") return [] as typeof instances;
+    if (scheduleFilter === "photo_analysis") {
+      return instances
+        .filter(instance => getOperationalBucket({ latestStatus: linkedOrderByInstance.get(instance.id)?.latestStatus, scheduleStatus: null }) === "em_analise")
+        .filter(instance => !instanceSearchKey || normalizeH2AdsSearch(instance.name).includes(instanceSearchKey))
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
+    }
+    return instances
+      .filter(instance => matchesH2AdsScheduleFilter(appointmentByInstance.get(instance.id), scheduleFilter))
+      .filter(instance => !instanceSearchKey || normalizeH2AdsSearch(instance.name).includes(instanceSearchKey))
+      .sort((a, b) => {
+        const appointmentA = appointmentByInstance.get(a.id);
+        const appointmentB = appointmentByInstance.get(b.id);
+        const byDateTime = h2AdsAppointmentSortValue(appointmentA).localeCompare(h2AdsAppointmentSortValue(appointmentB));
+        if (byDateTime !== 0) return byDateTime;
+        return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
+      });
+  }, [instances, appointmentByInstance, linkedOrderByInstance, scheduleFilter, instanceSearchKey]);
+''',
+    "computed filters",
+)
+
+replace_once(
+    '''            <div className={`rounded-xl border px-4 py-3 text-xs font-black ${instanceSearchKey ? "border-[#148CFF]/30 bg-[#148CFF]/10 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-400"}`}>
+              {instanceSearchKey ? `${masterSearchMatchCount} instância(s) encontrada(s) em ${masterSearchResults.length} grupo(s)` : "Filtro mestre · busca em todos os grupos"}
+            </div>
+''',
+    '''            <div className={`rounded-xl border px-4 py-3 text-xs font-black ${instanceSearchKey ? "border-[#148CFF]/30 bg-[#148CFF]/10 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-400"}`}>
+              {instanceSearchKey ? (scheduleFilter === "all" ? `${masterSearchMatchCount} instância(s) encontrada(s) em ${masterSearchResults.length} grupo(s)` : `${scheduleFilteredInstances.length} instância(s) no filtro selecionado`) : "Filtro mestre · busca em todos os grupos"}
+            </div>
+            <div className="w-full rounded-2xl border border-cyan-400/20 bg-[#07131B] p-2 lg:w-auto">
+              <div className="mb-2 px-1"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">Agendamentos H2ADS</p><p className="mt-0.5 text-[9px] font-semibold text-slate-500">Filtros rápidos do fluxo H2ADS; não alteram grupos nem instâncias.</p></div>
+              <div className="flex flex-wrap gap-1.5">
+                <button type="button" onClick={() => setScheduleFilter("all")} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "all" ? "border-white/25 bg-white/15 text-white" : "border-white/10 bg-white/[0.03] text-slate-300"}`}>TODOS ({instances.length})</button>
+                <button type="button" onClick={() => { setScheduleFilter("confirmed"); if (orderingGroups) setOrderingGroups(false); }} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "confirmed" ? "border-cyan-300/60 bg-cyan-400 text-[#031018]" : "border-cyan-400/20 bg-cyan-400/[0.06] text-cyan-100"}`}>AGENDAMENTOS CONFIRMADOS ({confirmedScheduleCount})</button>
+                <button type="button" onClick={() => { setScheduleFilter("pending"); if (orderingGroups) setOrderingGroups(false); }} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "pending" ? "border-amber-300/60 bg-amber-400 text-[#1A1000]" : "border-amber-400/20 bg-amber-400/[0.06] text-amber-100"}`}>AGUARDANDO AGENDAMENTO ({pendingScheduleCount})</button>
+                <button type="button" onClick={() => { setScheduleFilter("photo_analysis"); if (orderingGroups) setOrderingGroups(false); }} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "photo_analysis" ? "border-violet-300/60 bg-violet-400 text-[#14061D]" : "border-violet-400/20 bg-violet-400/[0.06] text-violet-100"}`}>FOTO EM ANÁLISE ({photoAnalysisCount})</button>
+              </div>
+            </div>
+''',
+    "filter bar",
+)
+
+old_render = '''        <div className="p-4 sm:p-6">{dashboard.isLoading && <div className="grid min-h-48 place-items-center text-sm text-slate-400">Carregando instâncias H2 Ads...</div>}{!dashboard.isLoading && groups.length === 0 && <EmptyState />}{!dashboard.isLoading && groups.length > 0 && instanceSearchKey && masterSearchMatchCount === 0 && <div className="mb-4 rounded-2xl border border-dashed border-[#F5B800]/30 bg-[#F5B800]/[0.06] p-5 text-center"><p className="font-black text-[#FFE37A]">Nenhuma instância encontrada.</p><p className="mt-1 text-xs text-slate-400">Tente outro nome. A pesquisa verifica todos os grupos.</p></div>}{visibleGroups.map(group => <GroupSection key={group.id} group={group} instances={visibleInstancesByGroup.get(group.id) ?? []} profileByInstance={profileByInstance} credentialByInstance={credentialByInstance} workerById={workerById} assignmentByInstance={assignmentByInstance} browserRunByInstance={browserRunByInstance} workers={browserWorkers} groups={activeGroups} busy={saving} visualColors={visualColors} onVisualColor={setVisualColor} onEditGroup={() => setGroupForm({ id: group.id, name: group.name, description: group.description ?? "", status: group.status, cardColor: group.cardColor || INSTANCE_DEFAULT_COLOR })} onNewInstance={() => newInstance(group.id)} onEditInstance={instance => setInstanceForm({ id: instance.id, groupId: String(instance.groupId), name: instance.name, notes: instance.notes ?? "", status: instance.status })} onEditRoute={openRouteEditor} onAssignWorker={updateInstanceWorker} onPrepareBrowser={requestBrowserPreparation} onLaunchBrowser={requestBrowserLaunch} onCloseBrowser={requestBrowserClose} onMoveInstanceGroup={moveInstanceToGroup} onDeleteInstance={removeInstance} instanceAction={instanceAction} expanded={instanceSearchKey ? true : expandedGroups.has(group.id)} onToggle={() => toggleGroup(group.id)} ordering={orderingGroups && !instanceSearchKey} canMoveUp={groups.indexOf(group) > 0} canMoveDown={groups.indexOf(group) < groups.length - 1} onMoveUp={() => void moveGroup(group.id, -1)} onMoveDown={() => void moveGroup(group.id, 1)} onDeleteGroup={() => void removeGroup(group.id, group.name)} />)}</div>
+'''
+
+new_render = '''        <div className="p-4 sm:p-6">
+          {dashboard.isLoading && <div className="grid min-h-48 place-items-center text-sm text-slate-400">Carregando instâncias H2 Ads...</div>}
+          {!dashboard.isLoading && groups.length === 0 && <EmptyState />}
+          {!dashboard.isLoading && groups.length > 0 && scheduleFilter !== "all" && <section className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-black/20">
+            <header className="border-b border-white/8 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">{scheduleFilter === "confirmed" ? "Agendamentos confirmados" : scheduleFilter === "pending" ? "Aguardando agendamento" : "Foto em análise"}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">Bloco único · sem divisão por grupo{scheduleFilter === "confirmed" ? " · data e horário em ordem crescente" : ""}</p>
+            </header>
+            {scheduleFilteredInstances.length === 0 ? <div className="p-6 text-center"><p className="font-black text-slate-300">Nenhuma instância neste filtro.</p><p className="mt-1 text-xs text-slate-500">O grupo original continua preservado; este filtro altera somente a visualização.</p></div> : <div className="grid grid-cols-1 gap-4 p-3 md:grid-cols-2 xl:grid-cols-4">{scheduleFilteredInstances.map(instance => {
+              const group = groups.find(item => item.id === instance.groupId);
+              const groupColor = group?.cardColor || visualColors[visualColorKey("group", instance.groupId)] || INSTANCE_DEFAULT_COLOR;
+              const assignment = assignmentByInstance.get(instance.id);
+              return <InstanceCard key={instance.id} instance={instance} profile={profileByInstance.get(instance.id)} hasCredential={credentialByInstance.has(instance.id)} assignment={assignment} browserRun={browserRunByInstance.get(instance.id)} worker={assignment ? workerById.get(assignment.workerId) : undefined} workers={browserWorkers} busy={saving} visualColor={groupColor} actionState={instanceAction[instance.id]} onAssignWorker={updateInstanceWorker} onPrepareBrowser={requestBrowserPreparation} onLaunchBrowser={requestBrowserLaunch} onCloseBrowser={requestBrowserClose} groups={activeGroups} onMoveGroup={moveInstanceToGroup} onDelete={() => removeInstance(instance.id, instance.name)} onEditInstance={() => setInstanceForm({ id: instance.id, groupId: String(instance.groupId), name: instance.name, notes: instance.notes ?? "", status: instance.status })} onEditRoute={() => openRouteEditor(instance.id)} />;
+            })}</div>}
+          </section>}
+          {!dashboard.isLoading && groups.length > 0 && scheduleFilter === "all" && instanceSearchKey && masterSearchMatchCount === 0 && <div className="mb-4 rounded-2xl border border-dashed border-[#F5B800]/30 bg-[#F5B800]/[0.06] p-5 text-center"><p className="font-black text-[#FFE37A]">Nenhuma instância encontrada.</p><p className="mt-1 text-xs text-slate-400">Tente outro nome. A pesquisa verifica todos os grupos.</p></div>}
+          {scheduleFilter === "all" && visibleGroups.map(group => <GroupSection key={group.id} group={group} instances={visibleInstancesByGroup.get(group.id) ?? []} profileByInstance={profileByInstance} credentialByInstance={credentialByInstance} workerById={workerById} assignmentByInstance={assignmentByInstance} browserRunByInstance={browserRunByInstance} workers={browserWorkers} groups={activeGroups} busy={saving} visualColors={visualColors} onVisualColor={setVisualColor} onEditGroup={() => setGroupForm({ id: group.id, name: group.name, description: group.description ?? "", status: group.status, cardColor: group.cardColor || INSTANCE_DEFAULT_COLOR })} onNewInstance={() => newInstance(group.id)} onEditInstance={instance => setInstanceForm({ id: instance.id, groupId: String(instance.groupId), name: instance.name, notes: instance.notes ?? "", status: instance.status })} onEditRoute={openRouteEditor} onAssignWorker={updateInstanceWorker} onPrepareBrowser={requestBrowserPreparation} onLaunchBrowser={requestBrowserLaunch} onCloseBrowser={requestBrowserClose} onMoveInstanceGroup={moveInstanceToGroup} onDeleteInstance={removeInstance} instanceAction={instanceAction} expanded={instanceSearchKey ? true : expandedGroups.has(group.id)} onToggle={() => toggleGroup(group.id)} ordering={orderingGroups && !instanceSearchKey} canMoveUp={groups.indexOf(group) > 0} canMoveDown={groups.indexOf(group) < groups.length - 1} onMoveUp={() => void moveGroup(group.id, -1)} onMoveDown={() => void moveGroup(group.id, 1)} onDeleteGroup={() => void removeGroup(group.id, group.name)} />)}
+        </div>
+'''
+replace_once(old_render, new_render, "filtered rendering")
+
+required_after = [
+    FILTER_MARKER,
+    'const photoAnalysisCount = useMemo',
+    'scheduleFilter === "photo_analysis"',
+    'getOperationalBucket({ latestStatus:',
+    'scheduleOrdersQuery = trpc.orderStatus.listOrders.useQuery',
+]
+missing_after = [item for item in required_after if item not in text]
+if missing_after:
+    raise SystemExit(f"Patch incompleto: {missing_after}")
+
+path.write_text(text, encoding="utf-8")
+print("Filtro Foto em análise aplicado ao H2ADS.")
