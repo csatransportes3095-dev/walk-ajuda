@@ -26,7 +26,7 @@ jobs:
           ref: recovery/organizar-salvos-2026-08-24
           fetch-depth: 0
 
-      - name: Apply schedule filter layout
+      - name: Apply schedule/status filter layout
         shell: bash
         run: |
           python <<'PY'
@@ -43,17 +43,17 @@ jobs:
 
           replace_once(
               'import { parseH2AdsProxyInput, type H2AdsProxyProtocol } from "@shared/h2adsProxyInput";\n',
-              'import { parseH2AdsProxyInput, type H2AdsProxyProtocol } from "@shared/h2adsProxyInput";\nimport { buildH2AdsAppointmentByInstance, h2AdsAppointmentSortValue, matchesH2AdsScheduleFilter, type H2AdsAppointmentLike, type H2AdsOrderLinkLike, type H2AdsScheduleFilter } from "@shared/h2adsSchedule";\n',
+              'import { parseH2AdsProxyInput, type H2AdsProxyProtocol } from "@shared/h2adsProxyInput";\nimport { buildH2AdsAppointmentByInstance, h2AdsAppointmentSortValue, matchesH2AdsScheduleFilter, type H2AdsAppointmentLike, type H2AdsOrderLinkLike, type H2AdsScheduleFilter } from "@shared/h2adsSchedule";\nimport { getOperationalBucket } from "@shared/orderBuckets";\n',
           )
 
           replace_once(
               '  const proxySecurityStatus = trpc.h2Ads.proxySecurityStatus.useQuery(undefined, { retry: false });\n',
-              '  const proxySecurityStatus = trpc.h2Ads.proxySecurityStatus.useQuery(undefined, { retry: false });\n  const scheduleLinksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });\n  const scheduleAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 15_000, refetchIntervalInBackground: false });\n',
+              '  const proxySecurityStatus = trpc.h2Ads.proxySecurityStatus.useQuery(undefined, { retry: false });\n  const scheduleLinksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });\n  const scheduleAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 15_000, refetchIntervalInBackground: false });\n  const scheduleOrdersQuery = trpc.orderStatus.listOrders.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 15_000, refetchIntervalInBackground: false });\n',
           )
 
           replace_once(
               '  const [closingAllBrowsers, setClosingAllBrowsers] = useState(false);\n',
-              '  const [closingAllBrowsers, setClosingAllBrowsers] = useState(false);\n  const [scheduleFilter, setScheduleFilter] = useState<H2AdsScheduleFilter>("all");\n',
+              '  const [closingAllBrowsers, setClosingAllBrowsers] = useState(false);\n  const [scheduleFilter, setScheduleFilter] = useState<H2AdsScheduleFilter | "photo_analysis">("all");\n',
           )
 
           replace_once(
@@ -63,10 +63,29 @@ jobs:
     (scheduleLinksQuery.data ?? []) as H2AdsOrderLinkLike[],
     (scheduleAppointmentsQuery.data ?? []) as H2AdsAppointmentLike[],
   ), [scheduleLinksQuery.data, scheduleAppointmentsQuery.data]);
+  const linkedOrderByInstance = useMemo(() => {
+    const orderByKey = new Map<string, any>();
+    for (const order of (scheduleOrdersQuery.data ?? []) as any[]) {
+      orderByKey.set(`${order.id}:${order.subOrderIndex ?? 0}`, order);
+    }
+    const result = new Map<number, any>();
+    for (const link of (scheduleLinksQuery.data ?? []) as any[]) {
+      const order = orderByKey.get(`${link.registrationId}:${link.subOrderIndex ?? 0}`);
+      if (order) result.set(link.instanceId, order);
+    }
+    return result;
+  }, [scheduleLinksQuery.data, scheduleOrdersQuery.data]);
   const confirmedScheduleCount = useMemo(() => instances.filter(instance => appointmentByInstance.get(instance.id)?.status === "confirmed").length, [instances, appointmentByInstance]);
   const pendingScheduleCount = useMemo(() => instances.filter(instance => appointmentByInstance.get(instance.id)?.status === "pending").length, [instances, appointmentByInstance]);
+  const photoAnalysisCount = useMemo(() => instances.filter(instance => getOperationalBucket({ latestStatus: linkedOrderByInstance.get(instance.id)?.latestStatus, scheduleStatus: null }) === "em_analise").length, [instances, linkedOrderByInstance]);
   const scheduleFilteredInstances = useMemo(() => {
     if (scheduleFilter === "all") return [] as typeof instances;
+    if (scheduleFilter === "photo_analysis") {
+      return instances
+        .filter(instance => getOperationalBucket({ latestStatus: linkedOrderByInstance.get(instance.id)?.latestStatus, scheduleStatus: null }) === "em_analise")
+        .filter(instance => !instanceSearchKey || normalizeH2AdsSearch(instance.name).includes(instanceSearchKey))
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
+    }
     return instances
       .filter(instance => matchesH2AdsScheduleFilter(appointmentByInstance.get(instance.id), scheduleFilter))
       .filter(instance => !instanceSearchKey || normalizeH2AdsSearch(instance.name).includes(instanceSearchKey))
@@ -77,7 +96,7 @@ jobs:
         if (byDateTime !== 0) return byDateTime;
         return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
       });
-  }, [instances, appointmentByInstance, scheduleFilter, instanceSearchKey]);
+  }, [instances, appointmentByInstance, linkedOrderByInstance, scheduleFilter, instanceSearchKey]);
 ''',
           )
 
@@ -90,11 +109,12 @@ jobs:
               {instanceSearchKey ? (scheduleFilter === "all" ? `${masterSearchMatchCount} instância(s) encontrada(s) em ${masterSearchResults.length} grupo(s)` : `${scheduleFilteredInstances.length} instância(s) no filtro selecionado`) : "Filtro mestre · busca em todos os grupos"}
             </div>
             <div className="w-full rounded-2xl border border-cyan-400/20 bg-[#07131B] p-2 lg:w-auto">
-              <div className="mb-2 px-1"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">Agendamentos H2ADS</p><p className="mt-0.5 text-[9px] font-semibold text-slate-500">Nos filtros de agenda, todas as instâncias aparecem juntas em ordem cronológica.</p></div>
+              <div className="mb-2 px-1"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">Agendamentos H2ADS</p><p className="mt-0.5 text-[9px] font-semibold text-slate-500">Filtros rápidos do fluxo H2ADS; não alteram grupos nem instâncias.</p></div>
               <div className="flex flex-wrap gap-1.5">
                 <button type="button" onClick={() => setScheduleFilter("all")} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "all" ? "border-white/25 bg-white/15 text-white" : "border-white/10 bg-white/[0.03] text-slate-300"}`}>TODOS ({instances.length})</button>
                 <button type="button" onClick={() => { setScheduleFilter("confirmed"); if (orderingGroups) setOrderingGroups(false); }} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "confirmed" ? "border-cyan-300/60 bg-cyan-400 text-[#031018]" : "border-cyan-400/20 bg-cyan-400/[0.06] text-cyan-100"}`}>AGENDAMENTOS CONFIRMADOS ({confirmedScheduleCount})</button>
                 <button type="button" onClick={() => { setScheduleFilter("pending"); if (orderingGroups) setOrderingGroups(false); }} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "pending" ? "border-amber-300/60 bg-amber-400 text-[#1A1000]" : "border-amber-400/20 bg-amber-400/[0.06] text-amber-100"}`}>AGUARDANDO AGENDAMENTO ({pendingScheduleCount})</button>
+                <button type="button" onClick={() => { setScheduleFilter("photo_analysis"); if (orderingGroups) setOrderingGroups(false); }} className={`rounded-lg border px-3 py-2 text-[10px] font-black ${scheduleFilter === "photo_analysis" ? "border-violet-300/60 bg-violet-400 text-[#14061D]" : "border-violet-400/20 bg-violet-400/[0.06] text-violet-100"}`}>FOTO EM ANÁLISE ({photoAnalysisCount})</button>
               </div>
             </div>
 ''',
@@ -108,7 +128,7 @@ jobs:
           {!dashboard.isLoading && groups.length === 0 && <EmptyState />}
           {!dashboard.isLoading && groups.length > 0 && scheduleFilter !== "all" && <section className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-black/20">
             <header className="border-b border-white/8 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">{scheduleFilter === "confirmed" ? "Agendamentos confirmados" : "Aguardando agendamento"}</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">{scheduleFilter === "confirmed" ? "Agendamentos confirmados" : scheduleFilter === "pending" ? "Aguardando agendamento" : "Foto em análise"}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">Bloco único · sem divisão por grupo{scheduleFilter === "confirmed" ? " · data e horário em ordem crescente" : ""}</p>
             </header>
             {scheduleFilteredInstances.length === 0 ? <div className="p-6 text-center"><p className="font-black text-slate-300">Nenhuma instância neste filtro.</p><p className="mt-1 text-xs text-slate-500">O grupo original continua preservado; este filtro altera somente a visualização.</p></div> : <div className="grid grid-cols-1 gap-4 p-3 md:grid-cols-2 xl:grid-cols-4">{scheduleFilteredInstances.map(instance => {
@@ -149,11 +169,11 @@ jobs:
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "418982418+github-actions[bot]@users.noreply.github.com"
           git add client/src/pages/H2Ads.tsx
           if git diff --cached --quiet; then
             echo "No code change to commit"
             exit 0
           fi
-          git commit -m "feat(h2ads): show schedule filters in one chronological block"
+          git commit -m "fix(h2ads): adicionar filtro Foto em analise"
           git push origin HEAD:recovery/organizar-salvos-2026-08-24
