@@ -1,0 +1,62 @@
+name: H2ADS Foto em analise v2
+
+on:
+  push:
+    branches:
+      - fix/h2ads-foto-em-analise-v2-2026-09-17
+    paths:
+      - ".github/scripts/apply-h2ads-photo-analysis-filter.py"
+      - ".github/workflows/h2ads-foto-em-analise-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/h2ads-foto-em-analise-v2-2026-09-17
+          fetch-depth: 0
+
+      - name: Apply filter patch
+        run: python .github/scripts/apply-h2ads-photo-analysis-filter.py
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript check
+        run: pnpm check
+
+      - name: Build production bundle
+        run: pnpm build
+
+      - name: Verify filter markers
+        run: |
+          grep -q 'FOTO EM ANÁLISE ({photoAnalysisCount})' client/src/pages/H2Ads.tsx
+          grep -q 'setScheduleFilter("photo_analysis")' client/src/pages/H2Ads.tsx
+          grep -q 'scheduleOrdersQuery = trpc.orderStatus.listOrders.useQuery' client/src/pages/H2Ads.tsx
+
+      - name: Commit validated H2ADS change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/pages/H2Ads.tsx
+          if git diff --cached --quiet; then
+            echo "No code change to commit"
+            exit 0
+          fi
+          git commit -m "fix(h2ads): mostrar filtro Foto em analise"
+          git push origin HEAD:fix/h2ads-foto-em-analise-v2-2026-09-17
