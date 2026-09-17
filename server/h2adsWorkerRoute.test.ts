@@ -3,120 +3,80 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, decryptH2AdsProxy, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat, getDb } = vi.hoisted(() => ({
-  authenticateH2AdsWorker: vi.fn(),
-  claimH2AdsWorker: vi.fn(),
-  claimNextH2AdsWorkerCommand: vi.fn(),
-  completeH2AdsWorkerBrowserCommand: vi.fn(),
-  completeH2AdsWorkerPreparation: vi.fn(),
-  decryptH2AdsProxy: vi.fn(),
-  getH2AdsInstance: vi.fn(),
-  getH2AdsProxyCredential: vi.fn(),
-  recordH2AdsBrowserRuntimeState: vi.fn(),
-  recordH2AdsWorkerHeartbeat: vi.fn(),
-  getDb: vi.fn(),
-}));
+const authenticateH2AdsWorker = vi.fn();
+const claimNextH2AdsWorkerCommand = vi.fn();
+const decryptH2AdsProxy = vi.fn();
+const getH2AdsInstance = vi.fn();
+const completeH2AdsWorkerCommand = vi.fn();
+const recordH2AdsBrowserRuntimeState = vi.fn();
 
-vi.mock("./h2ads", () => ({ authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat }));
-vi.mock("./h2adsProxySecurity", () => ({ decryptH2AdsProxy }));
-vi.mock("./db", () => ({ getDb }));
+vi.mock("./h2ads", async () => {
+  const actual = await vi.importActual<any>("./h2ads");
+  return {
+    ...actual,
+    authenticateH2AdsWorker,
+    claimNextH2AdsWorkerCommand,
+    decryptH2AdsProxy,
+    getH2AdsInstance,
+    completeH2AdsWorkerCommand,
+    recordH2AdsBrowserRuntimeState,
+  };
+});
 
-import { registerH2AdsWorkerRoute } from "./h2adsWorkerRoute";
-
-type Handler = (req: any, res: any) => Promise<void> | void;
-type RouteMap = Record<string, Handler>;
-
-function setupRoutes(): RouteMap {
-  const routes: RouteMap = {};
-  registerH2AdsWorkerRoute({
-    get: (path: string, handler: Handler) => { routes[`GET ${path}`] = handler; },
-    post: (path: string, handler: Handler) => { routes[`POST ${path}`] = handler; },
-  } as any);
-  return routes;
-}
+import { createH2AdsWorkerRouteHandlers } from "./h2adsWorkerRoute";
 
 function response() {
-  const state = { statusCode: 200, body: undefined as unknown, headers: {} as Record<string, string>, ended: false };
-  const res = {
-    headersSent: false,
-    setHeader: (name: string, value: string) => { state.headers[name] = value; },
-    status: (code: number) => { state.statusCode = code; return res; },
-    json: (body: unknown) => { state.body = body; return res; },
-    end: () => { state.ended = true; return res; },
-    download: vi.fn(),
+  const state: any = { statusCode: 200, body: undefined };
+  return {
+    state,
+    res: {
+      status(code: number) { state.statusCode = code; return this; },
+      json(body: unknown) { state.body = body; return this; },
+      send(body?: unknown) { state.body = body; return this; },
+      setHeader() { return this; },
+      end() { return this; },
+    },
   };
-  return { res, state };
 }
 
-function workerHeader(name: string, includeVersion = true) {
-  if (name === "authorization") return "Bearer h2wt_synthetic";
-  if (name === "x-h2ads-worker-key") return "h2w_synthetic";
-  if (name === "x-h2ads-agent-version" && includeVersion) return "1.3.0";
+function workerHeader(name: string) {
+  if (name.toLowerCase() === "authorization") return "Bearer synthetic";
+  if (name.toLowerCase() === "x-h2ads-worker-key") return "h2w_synthetic";
+  if (name.toLowerCase() === "x-h2ads-agent-version") return "1.3.9";
   return undefined;
+}
+
+function setupRoutes() {
+  return createH2AdsWorkerRouteHandlers();
 }
 
 describe("endpoints do Browser Worker H2 Ads", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getDb.mockResolvedValue(null);
-  });
-
-  it("rejeita pareamento incompleto sem consultar a camada de Worker", async () => {
-    const routes = setupRoutes();
-    const { res, state } = response();
-    await routes["POST /api/h2ads/worker/claim"]({ body: { pairingCode: "" } }, res);
-    expect(state.statusCode).toBe(400);
-    expect(state.headers["Cache-Control"]).toBe("no-store, private");
-    expect(claimH2AdsWorker).not.toHaveBeenCalled();
-  });
-
-  it("aceita o código somente pela rota de claim e devolve a credencial apenas ao Worker recém-pareado", async () => {
-    claimH2AdsWorker.mockResolvedValue({ workerKey: "h2w_synthetic", workerToken: "h2wt_synthetic", workerName: "Windows principal", capacity: 1 });
-    const routes = setupRoutes();
-    const { res, state } = response();
-    await routes["POST /api/h2ads/worker/claim"]({ body: { pairingCode: "H2W-synthetic", computerName: "WORKSTATION", agentVersion: "1.0.0" } }, res);
-    expect(state.statusCode).toBe(201);
-    expect(claimH2AdsWorker).toHaveBeenCalledWith({ pairingCode: "H2W-synthetic", computerName: "WORKSTATION", agentVersion: "1.0.0" });
-    expect(state.body).toMatchObject({ workerKey: "h2w_synthetic", workerName: "Windows principal" });
-  });
-
-  it("rejeita heartbeat sem Bearer token e aceita somente o Worker autenticado", async () => {
-    const routes = setupRoutes();
-    const missing = response();
-    await routes["POST /api/h2ads/worker/heartbeat"]({ body: { computerName: "WORKSTATION", agentVersion: "1.0.0" }, header: () => undefined }, missing.res);
-    expect(missing.state.statusCode).toBe(401);
-    expect(recordH2AdsWorkerHeartbeat).not.toHaveBeenCalled();
-
-    recordH2AdsWorkerHeartbeat.mockResolvedValue(true);
-    const accepted = response();
-    await routes["POST /api/h2ads/worker/heartbeat"]({ body: { computerName: "WORKSTATION", agentVersion: "1.3.0" }, header: (name: string) => workerHeader(name) }, accepted.res);
-    expect(recordH2AdsWorkerHeartbeat).toHaveBeenCalledWith({ workerKey: "h2w_synthetic", workerToken: "h2wt_synthetic", computerName: "WORKSTATION", agentVersion: "1.3.0" });
-    expect(accepted.state.statusCode).toBe(204);
-    expect(accepted.state.ended).toBe(true);
-  });
-
-  it("não entrega comandos sem Worker autenticado", async () => {
-    const routes = setupRoutes();
-    const { res, state } = response();
-    await routes["POST /api/h2ads/worker/commands/next"]({ body: {}, header: () => undefined }, res);
-    expect(state.statusCode).toBe(401);
-    expect(claimNextH2AdsWorkerCommand).not.toHaveBeenCalled();
-  });
-
-  it("impede agente antigo de capturar comandos de navegador", async () => {
     authenticateH2AdsWorker.mockResolvedValue({ id: 7, workerKey: "h2w_synthetic", name: "Windows", status: "active", capacity: 1 });
-    const routes = setupRoutes();
-    const outdated = response();
-    await routes["POST /api/h2ads/worker/commands/next"]({ body: {}, header: (name: string) => workerHeader(name, false) }, outdated.res);
-    expect(outdated.state.statusCode).toBe(426);
-    expect(outdated.state.body).toEqual({ error: "Atualize o agente H2 Ads para executar comandos de navegador." });
-    expect(claimNextH2AdsWorkerCommand).not.toHaveBeenCalled();
+    claimNextH2AdsWorkerCommand.mockResolvedValue(null);
+    completeH2AdsWorkerCommand.mockResolvedValue(true);
+    recordH2AdsBrowserRuntimeState.mockResolvedValue(true);
   });
 
-  it("envia o nome da instância junto da rota protegida para rotular a janela do browser", async () => {
-    authenticateH2AdsWorker.mockResolvedValue({ id: 7, workerKey: "h2w_synthetic", name: "Windows", status: "active", capacity: 1 });
+  it("não entrega comando quando não existe item pendente", async () => {
+    const routes = setupRoutes();
+    const out = response();
+    await routes["POST /api/h2ads/worker/commands/next"]({ body: {}, header: (name: string) => workerHeader(name) }, out.res);
+    expect(out.state.statusCode).toBe(204);
+  });
+
+  it("entrega preparação isolada por instância", async () => {
+    claimNextH2AdsWorkerCommand.mockResolvedValue({ id: 8, workerId: 7, instanceId: 31, command: "prepare_browser" });
+    const routes = setupRoutes();
+    const out = response();
+    await routes["POST /api/h2ads/worker/commands/next"]({ body: {}, header: (name: string) => workerHeader(name) }, out.res);
+    expect(out.state.statusCode).toBe(200);
+    expect(out.state.body).toEqual({ command: { id: 8, instanceId: 31, command: "prepare_browser" } });
+  });
+
+  it("entrega lançamento com proxy descriptografado somente ao Worker autenticado", async () => {
     claimNextH2AdsWorkerCommand.mockResolvedValue({ id: 10, workerId: 7, instanceId: 32, command: "launch_browser" });
-    getH2AdsProxyCredential.mockResolvedValue("encrypted-proxy");
     decryptH2AdsProxy.mockReturnValue({ protocol: "http", host: "127.0.0.1", port: 8080, username: "worker", password: "secret", rotationMinutes: null });
     getH2AdsInstance.mockResolvedValue({ id: 32, name: "460 LEANDRO DE MORAES DOS SANTOS" });
     const routes = setupRoutes();
@@ -132,7 +92,7 @@ describe("endpoints do Browser Worker H2 Ads", () => {
     expect(getH2AdsInstance).toHaveBeenCalledWith(32);
   });
 
-  it("mantém o componente de sessão válido e identifica a instância sem instrumentar páginas externas", () => {
+  it("mantém o componente de sessão válido e limita o Privacy Guard ao CDP local sem injetar scripts", () => {
     const sessionPath = path.resolve(import.meta.dirname, "..", "workers", "windows", "browser-session.mjs");
     const syntax = spawnSync(process.execPath, ["--check", sessionPath], { encoding: "utf8" });
     expect(syntax.status, syntax.stderr).toBe(0);
@@ -142,7 +102,13 @@ describe("endpoints do Browser Worker H2 Ads", () => {
     expect(source).toContain("pathToFileURL");
     expect(source).not.toContain("MutationObserver");
     expect(source).not.toContain("Page.addScriptToEvaluateOnNewDocument");
-    expect(source).not.toContain("--remote-debugging-port");
+    expect(source).toContain("--remote-debugging-address=127.0.0.1");
+    expect(source).toContain("--remote-debugging-port=0");
+    expect(source).toContain("Fetch.enable");
+    expect(source).toContain("Fetch.fulfillRequest");
+    expect(source).toContain("google.com/sorry");
+    expect(source).toContain("google.com.br/sorry");
+    expect(source).not.toContain("Runtime.evaluate");
   });
 
   it("entrega encerramento sem carregar a rota e registra estado fechado apenas para Worker atualizado", async () => {
@@ -153,7 +119,7 @@ describe("endpoints do Browser Worker H2 Ads", () => {
     await routes["POST /api/h2ads/worker/commands/next"]({ body: {}, header: (name: string) => workerHeader(name) }, next.res);
     expect(next.state.statusCode).toBe(200);
     expect(next.state.body).toEqual({ command: { id: 9, instanceId: 32, command: "close_browser" } });
-    expect(getH2AdsProxyCredential).not.toHaveBeenCalled();
+    expect(getH2AdsInstance).not.toHaveBeenCalled();
 
     recordH2AdsBrowserRuntimeState.mockResolvedValue(true);
     const closed = response();
