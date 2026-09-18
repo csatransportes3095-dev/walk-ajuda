@@ -188,10 +188,9 @@ export function StorefrontProductCard({
   const priceModels = item.option.priceModels || [];
   const { isVipCustomer } = useVipMembership();
   const selectablePriceModels = priceModels.filter(model => !isVipOnlyLocked(model, isVipCustomer));
-  const mostChosenModel = priceModels[1] || null;
-  const preferredModel = mostChosenModel && !isVipOnlyLocked(mostChosenModel, isVipCustomer)
-    ? mostChosenModel
-    : selectablePriceModels[0] || null;
+  // A seleção automática sempre começa pela opção de menor valor, exibida à esquerda.
+  // Se ela for exclusiva VIP para o cliente atual, usa a primeira opção liberada.
+  const preferredModel = selectablePriceModels[0] || null;
   const [priceModelId, setPriceModelId] = useState<number | null>(preferredModel?.id ?? null);
   const [manifestAcceptedKey, setManifestAcceptedKey] = useState<string | null>(null);
 
@@ -210,9 +209,7 @@ export function StorefrontProductCard({
       return;
     }
     if (!selectablePriceModels.some((model) => model.id === priceModelId)) {
-      const nextDefault = mostChosenModel && !isVipOnlyLocked(mostChosenModel, isVipCustomer)
-        ? mostChosenModel
-        : selectablePriceModels[0] || null;
+      const nextDefault = selectablePriceModels[0] || null;
       setPriceModelId(nextDefault?.id ?? null);
     }
   }, [priceModels, priceModelId, isVipCustomer]);
