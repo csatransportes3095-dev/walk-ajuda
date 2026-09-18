@@ -5282,7 +5282,15 @@ export const appRouter = router({
           acp.id as registrationId,
           acp.phone,
           c.name as customerName,
-          c.referredBy,
+          COALESCE(
+            NULLIF(TRIM(c.referredBy), ''),
+            (
+              SELECT NULLIF(TRIM(cr.name), '') FROM customers cr
+              WHERE RIGHT(REGEXP_REPLACE(cr.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(c.referredByPhone, '[^0-9]', ''), 11)
+              LIMIT 1
+            ),
+            c.referredByPhone
+          ) as referredBy,
           c.referredByPhone,
           rca.status as frozenCommissionStatus,
           rca.commissionValue as frozenCommissionValue,
@@ -5345,8 +5353,8 @@ export const appRouter = router({
         FROM accessCodePhones acp
         LEFT JOIN customers c ON RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(acp.phone, '[^0-9]', ''), 11)
         LEFT JOIN referralCommissionAttributions rca ON rca.registrationId = acp.id
-        WHERE c.referredBy IS NOT NULL
-          AND c.referredBy != ''
+        WHERE c.referredByPhone IS NOT NULL
+          AND TRIM(c.referredByPhone) != ''
           AND EXISTS (SELECT 1 FROM orderStatusHistory osh WHERE osh.registrationId = acp.id)
           -- Primeiro REGISTRO QUE TEM PEDIDO. Sessoes antigas sem pedido nao podem esconder a indicacao.
           AND acp.id = (
