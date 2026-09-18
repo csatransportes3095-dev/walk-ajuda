@@ -44,7 +44,20 @@ async function run() {
         KEY \`idx_referral_commission_registration\` (\`registrationId\`)
       ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
     `);
-    console.log("[referral-commission-migrate] Estrutura de atribuições de comissão verificada com sucesso.");
+    const [columnRows] = await connection.query(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orderStatusHistory' AND COLUMN_NAME IN ('referralInvalid','referralInvalidReason','referralInvalidAt')"
+    );
+    const existingColumns = new Set((columnRows as Array<{ COLUMN_NAME: string }>).map((row) => row.COLUMN_NAME));
+    if (!existingColumns.has("referralInvalid")) {
+      await connection.query("ALTER TABLE \`orderStatusHistory\` ADD COLUMN \`referralInvalid\` TINYINT(1) NOT NULL DEFAULT 0");
+    }
+    if (!existingColumns.has("referralInvalidReason")) {
+      await connection.query("ALTER TABLE \`orderStatusHistory\` ADD COLUMN \`referralInvalidReason\` VARCHAR(512) NULL");
+    }
+    if (!existingColumns.has("referralInvalidAt")) {
+      await connection.query("ALTER TABLE \`orderStatusHistory\` ADD COLUMN \`referralInvalidAt\` DATETIME NULL");
+    }
+    console.log("[referral-commission-migrate] Estrutura de atribuicoes e estados de comissao verificada com sucesso.");
   } catch (error) {
     console.error("[referral-commission-migrate] Falha:", error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
