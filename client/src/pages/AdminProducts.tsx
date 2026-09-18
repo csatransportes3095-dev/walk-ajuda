@@ -1598,17 +1598,24 @@ export default function AdminProducts() {
             return (
               <div
                 key={product.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, product.id)}
                 onDragOver={(e) => handleDragOver(e, product.id)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, product.id)}
-                onDragEnd={handleDragEnd}
-                className={`bg-[#111128] border rounded-xl overflow-hidden transition-all ${product.isActive ? 'border-purple-500/30' : 'border-gray-700/30 opacity-60'} ${draggedId === product.id ? 'opacity-40 scale-95' : ''} ${dragOverId === product.id ? 'border-yellow-400 border-2 shadow-lg shadow-yellow-400/20' : ''}`}
+                className={`bg-[#111128] border rounded-xl overflow-hidden transition-all select-text ${product.isActive ? 'border-purple-500/30' : 'border-gray-700/30 opacity-60'} ${draggedId === product.id ? 'opacity-40 scale-95' : ''} ${dragOverId === product.id ? 'border-yellow-400 border-2 shadow-lg shadow-yellow-400/20' : ''}`}
+                style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
               >
                 {/* Product Header */}
                 <div className="p-4 flex items-center gap-3">
-                  <GripVertical className="w-5 h-5 text-gray-500 flex-shrink-0 cursor-grab active:cursor-grabbing" />
+                  <span
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, product.id)}
+                    onDragEnd={handleDragEnd}
+                    className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none"
+                    title="Arraste por aqui para reordenar"
+                    aria-label="Arrastar card para reordenar"
+                  >
+                    <GripVertical className="w-5 h-5 text-gray-500" />
+                  </span>
                   {product.iconUrl ? (
                     <img src={product.iconUrl} alt={product.name} className="w-12 h-12 rounded-lg flex-shrink-0 object-cover border border-purple-500/30" />
                   ) : (
