@@ -250,6 +250,9 @@ export const orderStatusHistory = mysqlTable("orderStatusHistory", {
   answers: text("answers"),
   isUrgent: int("isUrgent").notNull().default(0),
   commissionPaid: int("commissionPaid").notNull().default(0),
+  referralInvalid: int("referralInvalid").notNull().default(0),
+  referralInvalidReason: varchar("referralInvalidReason", { length: 512 }),
+  referralInvalidAt: timestamp("referralInvalidAt"),
   deliveryEstimate: bigint("deliveryEstimate", { mode: "number" }), // Unix timestamp (ms) da previsÃ£o de entrega
   // Fluxo de aprovaÃ§Ã£o de pedidos novos: 'approved' = visÃ­vel no fluxo normal; 'pending' = aguardando aprovaÃ§Ã£o do admin
   approval: varchar("approval", { length: 16 }).notNull().default("approved"),
