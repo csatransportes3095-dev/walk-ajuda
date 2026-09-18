@@ -32,7 +32,7 @@ import { syncUnifiedCustomerRegistry } from "./customerIdentity";
 import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, setCustomerCommercialProfileMode } from "./loans/h2Score";
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
-import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess } from "./routers/optionPriceModels";
+import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess, cloneOptionPriceModelsComplete } from "./routers/optionPriceModels";
 import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";
 import { vipInstallmentsRouter } from "./routers/vipInstallments";
 import { bindVipInstallmentCheckoutOrder } from "./vipInstallmentContracts";
@@ -74,7 +74,7 @@ import {
   deleteAccessCode, renewAccessCode, checkAccessCodeCanSubmit, consumeAccessCode,
   listAccessCodePhones, listAllAccessCodePhones,
   createCoupon, listCoupons, deleteCoupon, toggleCoupon, validateCoupon, consumeCoupon,
-  createProduct, listProducts, listActiveProducts, updateProduct, deleteProduct, toggleProduct,
+  createProduct, listProducts, listActiveProducts, updateProduct, deleteProduct, toggleProduct, cloneProductComplete,
   listHomeButtons, listActiveHomeButtons, createHomeButton, updateHomeButton, deleteHomeButton, reorderHomeButtons,
   listProductOptions, createProductOption, updateProductOption, deleteProductOption,
   listProductQuestions, listOptionQuestions, createProductQuestion, updateProductQuestion, deleteProductQuestion,
@@ -677,6 +677,56 @@ export const appRouter = router({
     toggle: adminProcedure
       .input(z.object({ id: z.number(), isActive: z.boolean() }))
       .mutation(async ({ input }) => { await toggleProduct(input.id, input.isActive); return { success: true }; }),
+
+    cloneComplete: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const clone = await cloneProductComplete(input.id);
+        await cloneOptionPriceModelsComplete(clone.optionIdMap);
+
+        let copiedAudios = 0;
+        for (const sourceQuestion of clone.sourceQuestions) {
+          const targetId = clone.questionIdMap[sourceQuestion.id];
+          if (!targetId || sourceQuestion.questionPresentation !== 'audio') continue;
+          try {
+            const promptAudio = await copyQuestionPromptAudio(sourceQuestion, targetId);
+            if (promptAudio.questionPresentation === 'audio') {
+              await updateProductQuestion(targetId, promptAudio);
+              copiedAudios++;
+            }
+          } catch (error) {
+            console.error('[Products] Falha ao duplicar áudio da pergunta', sourceQuestion.id, error);
+          }
+        }
+
+        const rulesKey = 'question_blocking_manifest_rules_v1';
+        const rawRules = await getSetting(rulesKey);
+        if (rawRules) {
+          try {
+            const rules = JSON.parse(rawRules);
+            if (Array.isArray(rules)) {
+              const clonedRules = rules.flatMap((rule: any) => {
+                const newQuestionId = clone.questionIdMap[Number(rule?.questionId)];
+                if (!newQuestionId) return [];
+                return [{ ...rule, id: `${newQuestionId}:${String(rule?.answer || '').trim().toLocaleUpperCase('pt-BR')}`, questionId: newQuestionId }];
+              });
+              if (clonedRules.length) await upsertSetting(rulesKey, JSON.stringify([...rules, ...clonedRules]));
+            }
+          } catch (error) {
+            console.error('[Products] Regras de bloqueio inválidas; card clonado sem duplicá-las.', error);
+          }
+        }
+
+        return {
+          success: true,
+          product: clone.product,
+          counts: {
+            options: Object.keys(clone.optionIdMap).length,
+            questions: Object.keys(clone.questionIdMap).length,
+            promptAudios: copiedAudios,
+          },
+        };
+      }),
 
     reorder: adminProcedure
       .input(z.object({ orderedIds: z.array(z.number()) }))
