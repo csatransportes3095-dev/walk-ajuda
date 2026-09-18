@@ -5271,11 +5271,12 @@ export const appRouter = router({
         return rows.map((r: { statusKey: string }) => r.statusKey);
       }),
 
-    // Admin: relatório de comissões (pedidos com indicador)
+    // Admin: relatorio de comissoes (pedidos com indicador)
     listCommissions: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) return [];
       await ensureCommissionReferralStatusColumns(db);
+      const commissionCandidates = await loadCommissionCandidates(db);
       const rows = await db.execute(`
         SELECT
           acp.id as registrationId,
@@ -5297,7 +5298,7 @@ export const appRouter = router({
           ) as latestStatus,
           (
             SELECT osh.serviceName FROM orderStatusHistory osh
-            WHERE osh.registrationId = acp.id
+            WHERE osh.registrationId = acp.id AND osh.serviceName IS NOT NULL AND osh.serviceName != ''
             ORDER BY osh.createdAt ASC LIMIT 1
           ) as serviceName,
           (
@@ -5323,68 +5324,72 @@ export const appRouter = router({
             WHERE osh.registrationId = acp.id AND osh.referralInvalid = 1
             ORDER BY osh.createdAt DESC LIMIT 1
           ) as referralInvalidReason,
-          COALESCE((
-            SELECT po.commissionValue
-            FROM orderStatusHistory osh2
-            JOIN productOptions po ON LOWER(osh2.serviceOption) LIKE CONCAT('%', LOWER(TRIM(po.label)), '%')
-            WHERE osh2.registrationId = acp.id
-              AND po.commissionValue > 0
-            ORDER BY LENGTH(po.label) DESC, osh2.createdAt ASC LIMIT 1
-          ), 0) as commissionValue,
           (
             SELECT osh.orderNumber FROM orderStatusHistory osh
             WHERE osh.registrationId = acp.id AND osh.orderNumber IS NOT NULL
             ORDER BY osh.createdAt ASC LIMIT 1
           ) as orderNumber,
           (
-            SELECT COUNT(DISTINCT acp2.id)
+            SELECT COUNT(DISTINCT RIGHT(REGEXP_REPLACE(acp2.phone, '[^0-9]', ''), 11))
             FROM accessCodePhones acp2
-            LEFT JOIN customers c2 ON REGEXP_REPLACE(c2.phone, '[^0-9]', '') = REGEXP_REPLACE(acp2.phone, '[^0-9]', '')
+            LEFT JOIN customers c2 ON RIGHT(REGEXP_REPLACE(c2.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(acp2.phone, '[^0-9]', ''), 11)
             WHERE c2.referredBy = c.referredBy
-              AND c2.referredByPhone = c.referredByPhone
-              AND (SELECT COUNT(*) FROM orderStatusHistory osh3 WHERE osh3.registrationId = acp2.id) > 0
+              AND COALESCE(c2.referredByPhone, '') = COALESCE(c.referredByPhone, '')
+              AND EXISTS (SELECT 1 FROM orderStatusHistory osh3 WHERE osh3.registrationId = acp2.id)
           ) as totalReferrals,
           (
             SELECT cr.profilePhotoUrl FROM customers cr
-            WHERE REGEXP_REPLACE(cr.phone, '[^0-9]', '') = REGEXP_REPLACE(c.referredByPhone, '[^0-9]', '')
+            WHERE RIGHT(REGEXP_REPLACE(cr.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(c.referredByPhone, '[^0-9]', ''), 11)
             LIMIT 1
           ) as referrerPhotoUrl
         FROM accessCodePhones acp
-        LEFT JOIN customers c ON REGEXP_REPLACE(c.phone, '[^0-9]', '') = REGEXP_REPLACE(acp.phone, '[^0-9]', '')
+        LEFT JOIN customers c ON RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(acp.phone, '[^0-9]', ''), 11)
         LEFT JOIN referralCommissionAttributions rca ON rca.registrationId = acp.id
         WHERE c.referredBy IS NOT NULL
           AND c.referredBy != ''
-          AND (
-            SELECT COUNT(*) FROM orderStatusHistory osh WHERE osh.registrationId = acp.id
-          ) > 0
-          -- Somente o primeiro pedido do cliente indicado (menor id de accessCodePhones para este telefone)
+          AND EXISTS (SELECT 1 FROM orderStatusHistory osh WHERE osh.registrationId = acp.id)
+          -- Primeiro REGISTRO QUE TEM PEDIDO. Sessoes antigas sem pedido nao podem esconder a indicacao.
           AND acp.id = (
             SELECT MIN(acp2.id) FROM accessCodePhones acp2
-            WHERE REGEXP_REPLACE(acp2.phone, '[^0-9]', '') = REGEXP_REPLACE(acp.phone, '[^0-9]', '')
+            WHERE RIGHT(REGEXP_REPLACE(acp2.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(acp.phone, '[^0-9]', ''), 11)
+              AND EXISTS (SELECT 1 FROM orderStatusHistory firstOrder WHERE firstOrder.registrationId = acp2.id)
           )
         ORDER BY c.referredBy, acp.id DESC
       `);
-      return (rows[0] as unknown as any[]).map((r: any) => ({
-        registrationId: r.registrationId as number,
-        phone: r.phone as string,
-        customerName: r.customerName as string | null,
-        referredBy: r.referredBy as string,
-        referredByPhone: r.referredByPhone as string | null,
-        latestStatus: r.latestStatus as string | null,
-        serviceName: (r.frozenServiceName || r.serviceName) as string | null,
-        serviceOption: (r.frozenServiceOption || r.serviceOption) as string | null,
-        submittedAt: r.frozenCreatedAt ? new Date(r.frozenCreatedAt).getTime() : (r.submittedAt ? Number(r.submittedAt) : null),
-        commissionPaid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'paga' ? 1 : 0) : Number(r.commissionPaid),
-        referralInvalid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'nao_elegivel' || r.frozenCommissionStatus === 'cancelada') : Number(r.referralInvalid || 0) === 1,
-        referralInvalidReason: r.frozenCommissionStatus ? (r.frozenCommissionInvalidReason ? String(r.frozenCommissionInvalidReason) : null) : (r.referralInvalidReason ? String(r.referralInvalidReason) : null),
-        commissionValue: r.frozenCommissionStatus ? Number(r.frozenCommissionValue ?? 0) : Number(r.commissionValue ?? 0),
-        commissionStatus: r.frozenCommissionStatus ? String(r.frozenCommissionStatus) : (Number(r.referralInvalid || 0) === 1 ? 'nao_elegivel' : (Number(r.commissionPaid) === 1 ? 'paga' : 'legado')),
-        orderNumber: r.frozenOrderNumber ? Number(r.frozenOrderNumber) : (r.orderNumber ? Number(r.orderNumber) : null),
-        totalReferrals: Number(r.totalReferrals ?? 0),
-        referrerPhotoUrl: r.referrerPhotoUrl as string | null,
-      }));
-    }),
 
+      return (rows[0] as unknown as any[]).map((r: any) => {
+        const legacyResolution = r.frozenCommissionStatus
+          ? null
+          : resolveLegacyCommissionValue({
+              serviceName: r.serviceName,
+              serviceOption: r.serviceOption,
+              candidates: commissionCandidates,
+            });
+        const commissionValue = r.frozenCommissionStatus
+          ? Number(r.frozenCommissionValue ?? 0)
+          : Number(legacyResolution?.value ?? 0);
+        return {
+          registrationId: r.registrationId as number,
+          phone: r.phone as string,
+          customerName: r.customerName as string | null,
+          referredBy: r.referredBy as string,
+          referredByPhone: r.referredByPhone as string | null,
+          latestStatus: r.latestStatus as string | null,
+          serviceName: (r.frozenServiceName || r.serviceName) as string | null,
+          serviceOption: (r.frozenServiceOption || r.serviceOption) as string | null,
+          submittedAt: r.frozenCreatedAt ? new Date(r.frozenCreatedAt).getTime() : (r.submittedAt ? Number(r.submittedAt) : null),
+          commissionPaid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'paga' ? 1 : 0) : Number(r.commissionPaid),
+          referralInvalid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'nao_elegivel' || r.frozenCommissionStatus === 'cancelada') : Number(r.referralInvalid || 0) === 1,
+          referralInvalidReason: r.frozenCommissionStatus ? (r.frozenCommissionInvalidReason ? String(r.frozenCommissionInvalidReason) : null) : (r.referralInvalidReason ? String(r.referralInvalidReason) : null),
+          commissionValue,
+          commissionStatus: r.frozenCommissionStatus ? String(r.frozenCommissionStatus) : (Number(r.referralInvalid || 0) === 1 ? 'nao_elegivel' : (Number(r.commissionPaid) === 1 ? 'paga' : 'legado')),
+          commissionResolution: r.frozenCommissionStatus ? 'frozen' : (legacyResolution?.reason || 'not_found'),
+          orderNumber: r.frozenOrderNumber ? Number(r.frozenOrderNumber) : (r.orderNumber ? Number(r.orderNumber) : null),
+          totalReferrals: Number(r.totalReferrals ?? 0),
+          referrerPhotoUrl: r.referrerPhotoUrl as string | null,
+        };
+      });
+    }),
     // Admin: invalidar ou revalidar indicação sem apagar o pedido, cliente ou histórico
     setCommissionReferralValidity: adminProcedure
       .input(z.object({
