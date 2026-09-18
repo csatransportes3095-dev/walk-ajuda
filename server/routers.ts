@@ -56,6 +56,7 @@ import { h2AssistantRouter } from "./routers/h2Assistant";
 import { h2AdsRouter } from "./routers/h2ads";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
+import { resolveLegacyCommissionValue, type CommissionCandidate } from "./commissionResolver";
 import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
 import { getConfiguredGlobalProgressKeys, sanitizeGlobalProgressKeys } from "../shared/orderProgressSequence";
@@ -311,21 +312,41 @@ function hasMailChannel(): boolean {
   return !!(process.env.RESEND_API_KEY || process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD);
 }
 
+let commissionReferralStatusSchemaReady = false;
+
 async function ensureCommissionReferralStatusColumns(db: any): Promise<void> {
-  const columns = [
-    ['referralInvalid', 'TINYINT(1) NOT NULL DEFAULT 0'],
-    ['referralInvalidReason', 'VARCHAR(512) NULL'],
-    ['referralInvalidAt', 'DATETIME NULL'],
-  ] as const;
-  for (const [name, definition] of columns) {
-    try {
-      await db.execute(sql.raw(`ALTER TABLE orderStatusHistory ADD COLUMN ${name} ${definition}`));
-    } catch (error: any) {
-      if (!/duplicate column|exists/i.test(String(error?.message || ''))) {
-        console.warn(`[commissions] não foi possível criar ${name}:`, error?.message);
-      }
-    }
+  if (commissionReferralStatusSchemaReady) return;
+  try {
+    await db.execute(sql.raw('SELECT referralInvalid, referralInvalidReason, referralInvalidAt FROM orderStatusHistory LIMIT 0'));
+    commissionReferralStatusSchemaReady = true;
+  } catch (error: any) {
+    console.error('[commissions] estrutura de validade indisponivel:', error?.message || error);
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Estrutura de comissoes ainda nao foi inicializada. Tente novamente em instantes.',
+    });
   }
+}
+
+async function loadCommissionCandidates(db: any): Promise<CommissionCandidate[]> {
+  const result = await db.execute(sql`
+    SELECT
+      po.id,
+      po.productId,
+      p.name AS productName,
+      po.label AS optionLabel,
+      po.commissionValue
+    FROM productOptions po
+    LEFT JOIN products p ON p.id = po.productId
+    WHERE po.commissionValue > 0
+  `);
+  return ((result[0] as unknown as any[]) || []).map((row: any) => ({
+    id: Number(row.id),
+    productId: Number(row.productId),
+    productName: row.productName ? String(row.productName) : null,
+    optionLabel: row.optionLabel ? String(row.optionLabel) : null,
+    commissionValue: Number(row.commissionValue || 0),
+  }));
 }
 
 export const appRouter = router({
