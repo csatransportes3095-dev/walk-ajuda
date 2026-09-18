@@ -5115,7 +5115,7 @@ export const appRouter = router({
       return { updated: affected };
     }),
 
-    // Admin: marcar/desmarcar comissão como paga
+    // Admin: marcar/desmarcar comissao como paga
     toggleCommissionPaid: adminProcedure
       .input(z.object({ registrationId: z.number(), paid: z.boolean() }))
       .mutation(async ({ input }) => {
@@ -5127,14 +5127,33 @@ export const appRouter = router({
         if (input.paid && frozenAttribution && frozenAttribution.status !== 'elegivel') {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'A comissão precisa ser aprovada antes do pagamento.' });
         }
+
         const stateRows = await db.execute(sql`
-          SELECT COALESCE(MAX(referralInvalid), 0) AS referralInvalid
+          SELECT
+            COALESCE(MAX(referralInvalid), 0) AS referralInvalid,
+            (SELECT serviceName FROM orderStatusHistory WHERE registrationId = ${input.registrationId} AND serviceName IS NOT NULL AND serviceName != '' ORDER BY createdAt ASC LIMIT 1) AS serviceName,
+            (SELECT serviceOption FROM orderStatusHistory WHERE registrationId = ${input.registrationId} AND serviceOption IS NOT NULL AND serviceOption != '' ORDER BY createdAt ASC LIMIT 1) AS serviceOption
           FROM orderStatusHistory WHERE registrationId = ${input.registrationId}
         `);
-        const referralInvalid = Number((stateRows[0] as unknown as Array<{ referralInvalid?: number }>)[0]?.referralInvalid || 0) === 1;
+        const orderState = (stateRows[0] as unknown as Array<{ referralInvalid?: number; serviceName?: string | null; serviceOption?: string | null }>)[0];
+        const referralInvalid = Number(orderState?.referralInvalid || 0) === 1;
         if (input.paid && referralInvalid) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Esta indicação está marcada como não válida. Revalide-a antes de marcar como paga.' });
         }
+
+        let resolvedCommissionValue = Number(frozenAttribution?.commissionValue || 0);
+        if (!frozenAttribution) {
+          const candidates = await loadCommissionCandidates(db);
+          resolvedCommissionValue = resolveLegacyCommissionValue({
+            serviceName: orderState?.serviceName,
+            serviceOption: orderState?.serviceOption,
+            candidates,
+          }).value;
+        }
+        if (input.paid && resolvedCommissionValue <= 0) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Valor da comissão não configurado para este produto/opção. Configure a comissão antes de pagar.' });
+        }
+
         const update = await db.execute(sql`
           UPDATE orderStatusHistory
           SET commissionPaid = ${input.paid ? 1 : 0}
@@ -5150,66 +5169,48 @@ export const appRouter = router({
           });
         }
 
-        // Se está marcando como PAGO, buscar dados do indicador e enviar e-mail
         if (input.paid) {
           try {
-            // Buscar dados do cliente indicado e do indicador
-            const rows = await db.execute(`
+            const rows = await db.execute(sql`
               SELECT
                 c.name as customerName,
                 c.referredBy as referrerName,
                 c.referredByPhone as referrerPhone,
-                acp.phone,
-                COALESCE((
-                  SELECT po.commissionValue
-                  FROM orderStatusHistory osh2
-                  JOIN productOptions po ON LOWER(osh2.serviceOption) LIKE CONCAT('%', LOWER(TRIM(po.label)), '%')
-                  WHERE osh2.registrationId = ${input.registrationId}
-                    AND po.commissionValue > 0
-                  ORDER BY LENGTH(po.label) DESC, osh2.createdAt ASC LIMIT 1
-                ), 0) as commissionValue
+                acp.phone
               FROM accessCodePhones acp
-              LEFT JOIN customers c ON REGEXP_REPLACE(c.phone, '[^0-9]', '') = REGEXP_REPLACE(acp.phone, '[^0-9]', '')
+              LEFT JOIN customers c ON RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(acp.phone, '[^0-9]', ''), 11)
               WHERE acp.id = ${input.registrationId}
               LIMIT 1
             `);
-            const row = (rows as any)[0]?.[0] || (Array.isArray(rows) ? (rows[0] as any)?.[0] : null);
+            const row = (rows[0] as unknown as any[])?.[0] || null;
             if (row?.referrerPhone) {
               const { getCustomerByPhone } = await import('./db');
               const referrerClean = String(row.referrerPhone).replace(/\D/g, '');
               const referrer = await getCustomerByPhone(referrerClean);
-              const commVal = row.commissionValue ? Number(row.commissionValue) : 0;
+              const commVal = resolvedCommissionValue;
               const commText = commVal > 0 ? ` de R$ ${(commVal / 100).toFixed(2).replace('.', ',')}` : '';
-              // Enviar e-mail se tiver e-mail cadastrado
               if (referrer?.email) {
                 const siteTitle = await getSetting('site_title') || 'H2 COLOMBIANO';
-                const transporter = nodemailer.createTransport({
-                  host: 'smtp.zoho.com',
-                  port: 465,
-                  secure: true,
-                  auth: { user: 'h2@h2colombiano.com', pass: process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '' },
-                });
                 await sendMailDirect({
                   from: `"${siteTitle}" <h2@h2colombiano.com>`,
                   to: referrer.email,
-                  subject: `\u2705 Sua comissão${commText} foi paga! - ${siteTitle}`,
+                  subject: `✅ Sua comissão${commText} foi paga! - ${siteTitle}`,
                   html: `
                     <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#e2e8f0;border-radius:12px;overflow:hidden">
                       <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:28px 24px;text-align:center">
-                        <h1 style="margin:0;font-size:22px;color:#fff">\u2705 Comissão Paga!</h1>
+                        <h1 style="margin:0;font-size:22px;color:#fff">✅ Comissão Paga!</h1>
                         <p style="margin:8px 0 0;color:#c4b5fd;font-size:14px">${siteTitle}</p>
                       </div>
                       <div style="padding:24px">
-                        <p style="font-size:15px;margin:0 0 16px">Olá <strong>${row.referrerName || referrer.name || 'indicador'}</strong>! \uD83C\uDF89</p>
+                        <p style="font-size:15px;margin:0 0 16px">Olá <strong>${row.referrerName || referrer.name || 'indicador'}</strong>! 🎉</p>
                         <p style="font-size:14px;color:#94a3b8;margin:0 0 16px">Sua comissão pela indicação de <strong style="color:#e2e8f0">${row.customerName || row.phone}</strong> foi <strong style="color:#4ade80">paga com sucesso</strong>!</p>
-                        ${commVal > 0 ? `<div style="background:#1e293b;border-radius:8px;padding:16px;text-align:center;margin:16px 0"><span style="font-size:24px;font-weight:bold;color:#4ade80">R$ ${(commVal / 100).toFixed(2).replace('.', ',')}</span><br><span style="font-size:12px;color:#64748b">Valor da comissão</span></div>` : ''}
-                        <p style="font-size:13px;color:#64748b;margin:16px 0 0">Obrigado por indicar! Continue indicando e ganhe mais. \uD83C\uDF89</p>
+                        <div style="background:#1e293b;border-radius:8px;padding:16px;text-align:center;margin:16px 0"><span style="font-size:24px;font-weight:bold;color:#4ade80">R$ ${(commVal / 100).toFixed(2).replace('.', ',')}</span><br><span style="font-size:12px;color:#64748b">Valor da comissão</span></div>
+                        <p style="font-size:13px;color:#64748b;margin:16px 0 0">Obrigado por indicar! Continue indicando e ganhe mais. 🎉</p>
                       </div>
                     </div>
                   `,
                 }).catch((e: any) => console.error('Erro e-mail comissão paga:', e));
               }
-              // Retornar dados para o frontend abrir WhatsApp
               return {
                 success: true,
                 whatsapp: {
@@ -5227,7 +5228,6 @@ export const appRouter = router({
 
         return { success: true };
       }),
-
     // Admin: definir previsão de entrega do pedido
     updateDeliveryEstimate: adminProcedure
       .input(z.object({ registrationId: z.number(), deliveryEstimate: z.number().nullable() }))
