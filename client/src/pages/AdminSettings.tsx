@@ -9,7 +9,7 @@ import AdminActionPasswordDialog from "@/components/AdminActionPasswordDialog";
 import { ImageCropModal } from "@/components/ImageCropModal";
 import { HomeButtonsManager } from "@/components/HomeButtonsManager";
 import { SharePreviewSettings } from "@/components/SharePreviewSettings";
-import { MaintenanceManifestSettings } from "@/components/MaintenanceManifestSettings";
+import { MaintenanceManifestSettings, type MaintenanceManifestSettingsHandle } from "@/components/MaintenanceManifestSettings";
 
 
 // Lista de fontes com estilos bem distintos
@@ -114,6 +114,7 @@ export default function AdminSettings() {
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"page" | "login" | "pix" | "contact" | "features" | "advanced" | "photo" | "security" | "og" | "trackingForm" | "whatsappOrder" | "whatsappLogin" | "apk" | "maintenance">("page");
+  const maintenanceManifestRef = useRef<MaintenanceManifestSettingsHandle>(null);
   const [apkFile, setApkFile] = useState<File | null>(null);
   const [uploadingApk, setUploadingApk] = useState(false);
   const [apkUrl, setApkUrl] = useState<string | null>(null);
@@ -269,6 +270,10 @@ export default function AdminSettings() {
   };
 
   const saveAll = () => {
+    if (activeTab === "maintenance") {
+      maintenanceManifestRef.current?.save();
+      return;
+    }
     updateMut.mutate({ settings: form });
   };
 
@@ -1448,7 +1453,7 @@ export default function AdminSettings() {
         )}
 
         {/* MAINTENANCE MANIFEST TAB */}
-        {activeTab === "maintenance" && <MaintenanceManifestSettings />}
+        {activeTab === "maintenance" && <MaintenanceManifestSettings ref={maintenanceManifestRef} />}
 
         {/* === ABA: FORMULÁRIO DE ACOMPANHAMENTO === */}
         {activeTab === 'trackingForm' && (
