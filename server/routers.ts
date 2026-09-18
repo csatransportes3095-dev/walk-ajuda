@@ -5188,7 +5188,15 @@ export const appRouter = router({
           acp.id as registrationId,
           acp.phone,
           c.name as customerName,
-          c.referredBy,
+          COALESCE(
+            NULLIF(TRIM(c.referredBy), ''),
+            (
+              SELECT NULLIF(TRIM(cr.name), '') FROM customers cr
+              WHERE REGEXP_REPLACE(cr.phone, '[^0-9]', '') = REGEXP_REPLACE(c.referredByPhone, '[^0-9]', '')
+              LIMIT 1
+            ),
+            c.referredByPhone
+          ) as referredBy,
           c.referredByPhone,
           rca.status as frozenCommissionStatus,
           rca.commissionValue as frozenCommissionValue,
@@ -5259,15 +5267,20 @@ export const appRouter = router({
         FROM accessCodePhones acp
         LEFT JOIN customers c ON REGEXP_REPLACE(c.phone, '[^0-9]', '') = REGEXP_REPLACE(acp.phone, '[^0-9]', '')
         LEFT JOIN referralCommissionAttributions rca ON rca.registrationId = acp.id
-        WHERE c.referredBy IS NOT NULL
-          AND c.referredBy != ''
+        WHERE c.referredByPhone IS NOT NULL
+          AND TRIM(c.referredByPhone) != ''
           AND (
             SELECT COUNT(*) FROM orderStatusHistory osh WHERE osh.registrationId = acp.id
           ) > 0
-          -- Somente o primeiro pedido do cliente indicado (menor id de accessCodePhones para este telefone)
+          -- Somente o primeiro pedido real do cliente indicado. Um acesso antigo sem
+          -- histórico não pode esconder do painel o primeiro pedido que foi concluído.
           AND acp.id = (
             SELECT MIN(acp2.id) FROM accessCodePhones acp2
             WHERE REGEXP_REPLACE(acp2.phone, '[^0-9]', '') = REGEXP_REPLACE(acp.phone, '[^0-9]', '')
+              AND EXISTS (
+                SELECT 1 FROM orderStatusHistory osh4
+                WHERE osh4.registrationId = acp2.id
+              )
           )
         ORDER BY c.referredBy, acp.id DESC
       `);
@@ -8976,4 +8989,3 @@ export const appRouter = router({
   }),
 });
 export type AppRouter = typeof appRouter;
-
