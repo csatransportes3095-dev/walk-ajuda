@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, Power, Route, Save, ShieldCheck, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -23,7 +23,11 @@ function localDateTime(value: string) {
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
 }
 
-export function MaintenanceManifestSettings() {
+export type MaintenanceManifestSettingsHandle = {
+  save: () => void;
+};
+
+export const MaintenanceManifestSettings = forwardRef<MaintenanceManifestSettingsHandle>(function MaintenanceManifestSettings(_, ref) {
   const utils = trpc.useUtils();
   const configQuery = trpc.maintenanceManifest.get.useQuery(undefined, { staleTime: 0 });
   const [draft, setDraft] = useState<MaintenanceManifestConfig>(emptyConfig);
@@ -73,6 +77,8 @@ export function MaintenanceManifestSettings() {
     });
   };
 
+  useImperativeHandle(ref, () => ({ save }), [draft, saveMutation]);
+
   if (configQuery.isLoading) return <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-6 text-sm text-slate-400">Carregando manifesto de manutenção...</div>;
 
   return (
@@ -110,4 +116,4 @@ export function MaintenanceManifestSettings() {
       </div>
     </section>
   );
-}
+});
