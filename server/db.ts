@@ -473,6 +473,98 @@ export async function toggleProduct(id: number, isActive: boolean): Promise<void
   await db.update(products).set({ isActive: isActive ? 1 : 0 }).where(eq(products.id, id));
 }
 
+export type CompleteProductCloneResult = {
+  product: Product;
+  optionIdMap: Record<number, number>;
+  questionIdMap: Record<number, number>;
+  sourceQuestions: ProductQuestion[];
+};
+
+/** Clona o grafo relacional do card. A cópia nasce inativa para revisão no ADM. */
+export async function cloneProductComplete(sourceProductId: number): Promise<CompleteProductCloneResult> {
+  const db = await getDb();
+  if (!db) throw new Error('Database not available');
+
+  return await db.transaction(async (tx) => {
+    const [source] = await tx.select().from(products).where(eq(products.id, sourceProductId)).limit(1);
+    if (!source) throw new Error('Produto não encontrado');
+
+    const allProducts = await tx.select({ name: products.name, sortOrder: products.sortOrder }).from(products);
+    const existingNames = new Set(allProducts.map(item => item.name.trim().toLocaleUpperCase('pt-BR')));
+    let cloneName = `${source.name} (CÓPIA)`;
+    let suffix = 2;
+    while (existingNames.has(cloneName.toLocaleUpperCase('pt-BR'))) cloneName = `${source.name} (CÓPIA ${suffix++})`;
+    const nextSortOrder = allProducts.reduce((max, item) => Math.max(max, Number(item.sortOrder || 0)), -1) + 1;
+
+    const productInsert = await tx.insert(products).values({
+      name: cloneName, description: source.description, iconUrl: source.iconUrl, buttonText: source.buttonText,
+      requireProfilePhoto: source.requireProfilePhoto, requireCarDocument: source.requireCarDocument,
+      requireAlvara: source.requireAlvara, requireCondutaxi: source.requireCondutaxi,
+      requireVehicle2016: source.requireVehicle2016, isPdfOnly: source.isPdfOnly,
+      showYearField: source.showYearField, cardColor: source.cardColor, cardBgColor: source.cardBgColor,
+      cardTextColor: source.cardTextColor, cardBtnColor: source.cardBtnColor, isActive: 0,
+      sortOrder: nextSortOrder, resellerDiscount: source.resellerDiscount, deliveryDays: source.deliveryDays,
+    });
+    const productId = Number(productInsert[0].insertId);
+
+    const optionIdMap: Record<number, number> = {};
+    const sourceOptions = await tx.select().from(productOptions).where(eq(productOptions.productId, sourceProductId)).orderBy(asc(productOptions.sortOrder));
+    for (const option of sourceOptions) {
+      const inserted = await tx.insert(productOptions).values({
+        productId, label: option.label, price: option.price, originalPrice: option.originalPrice,
+        type: option.type, requireProfilePhoto: option.requireProfilePhoto, requireCarDocument: option.requireCarDocument,
+        requireAlvara: option.requireAlvara, requireCondutaxi: option.requireCondutaxi,
+        requireVehicle2016: option.requireVehicle2016, isPdfOnly: option.isPdfOnly,
+        showYearField: option.showYearField, docNameMode: option.docNameMode, docCustomName: option.docCustomName,
+        sortOrder: option.sortOrder, isActive: option.isActive, warranty: option.warranty,
+        commissionValue: option.commissionValue, description: option.description,
+        resellerDiscount: option.resellerDiscount, promoEndsAt: option.promoEndsAt,
+        cardBorderColor: option.cardBorderColor, cardBgColor: option.cardBgColor,
+        cardTextColor: option.cardTextColor, cardButtonColor: option.cardButtonColor,
+        cardAccentColor: option.cardAccentColor,
+      });
+      const newOptionId = Number(inserted[0].insertId);
+      optionIdMap[option.id] = newOptionId;
+
+      const documents = await tx.select().from(optionDocuments).where(eq(optionDocuments.optionId, option.id));
+      if (documents.length) await tx.insert(optionDocuments).values(documents.map(doc => ({
+        optionId: newOptionId, label: doc.label, exampleImageUrl: doc.exampleImageUrl,
+        inputSource: doc.inputSource, sortOrder: doc.sortOrder, instruction: doc.instruction, exampleText: doc.exampleText,
+      })));
+      const tiers = await tx.select().from(warrantyTiers).where(eq(warrantyTiers.optionId, option.id));
+      if (tiers.length) await tx.insert(warrantyTiers).values(tiers.map(tier => ({
+        optionId: newOptionId, warrantyType: tier.warrantyType, warrantyValue: tier.warrantyValue,
+        warrantyLabel: tier.warrantyLabel, price: tier.price, originalPrice: tier.originalPrice,
+        sortOrder: tier.sortOrder, isActive: tier.isActive,
+      })));
+    }
+
+    const sourceQuestions = await tx.select().from(productQuestions).where(eq(productQuestions.productId, sourceProductId)).orderBy(asc(productQuestions.sortOrder), asc(productQuestions.id));
+    const questionIdMap: Record<number, number> = {};
+    const pending = [...sourceQuestions];
+    while (pending.length) {
+      const readyIndex = pending.findIndex(q => !q.parentQuestionId || questionIdMap[q.parentQuestionId]);
+      if (readyIndex < 0) throw new Error('Árvore de perguntas inválida no card original');
+      const [question] = pending.splice(readyIndex, 1);
+      const inserted = await tx.insert(productQuestions).values({
+        productId, optionId: question.optionId ? (optionIdMap[question.optionId] ?? null) : null,
+        question: question.question, fieldType: question.fieldType, options: question.options,
+        isRequired: question.isRequired, sortOrder: question.sortOrder, helpText: question.helpText,
+        audioMinDurationSeconds: question.audioMinDurationSeconds, audioMaxDurationSeconds: question.audioMaxDurationSeconds,
+        allowAudioRerecord: question.allowAudioRerecord, allowAudioFileUpload: question.allowAudioFileUpload,
+        questionPresentation: 'text', questionAudioUrl: null, questionAudioStorageKey: null,
+        showQuestionTextWithAudio: question.showQuestionTextWithAudio,
+        parentQuestionId: question.parentQuestionId ? questionIdMap[question.parentQuestionId] : null,
+        triggerOption: question.triggerOption,
+      });
+      questionIdMap[question.id] = Number(inserted[0].insertId);
+    }
+
+    const [product] = await tx.select().from(products).where(eq(products.id, productId)).limit(1);
+    return { product, optionIdMap, questionIdMap, sourceQuestions };
+  });
+}
+
 // ========== PRODUCT OPTIONS ==========
 
 export async function listProductOptions(productId: number): Promise<ProductOption[]> {

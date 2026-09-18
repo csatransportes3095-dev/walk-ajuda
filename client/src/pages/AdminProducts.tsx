@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, GripVertical, Eye, EyeOff, Save, X, HelpCircle, DollarSign, Package, ImagePlus, Loader2, FileText, Settings2, Palette, Gift, Volume2, Upload, Headphones } from "lucide-react";
+import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, GripVertical, Eye, EyeOff, Save, X, HelpCircle, DollarSign, Package, ImagePlus, Loader2, FileText, Settings2, Palette, Gift, Volume2, Upload, Headphones, Copy } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import ProductManifestEditor from "@/components/ProductManifestEditor";
 import React from "react";
@@ -1510,6 +1510,14 @@ export default function AdminProducts() {
   const updateMut = trpc.products.update.useMutation({ onSuccess: () => { utils.products.list.invalidate(); setEditingProduct(null); toast.success("Card atualizado!"); } });
   const deleteMut = trpc.products.delete.useMutation({ onSuccess: () => { utils.products.list.invalidate(); toast.success("Card excluído!"); } });
   const toggleMut = trpc.products.toggle.useMutation({ onSuccess: () => utils.products.list.invalidate() });
+  const cloneMut = trpc.products.cloneComplete.useMutation({
+    onSuccess: async (result) => {
+      await utils.products.list.invalidate();
+      setExpandedProduct(result.product.id);
+      toast.success(`Card completo clonado como “${result.product.name}”. Revise e ative quando estiver pronto.`);
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível clonar o card completo."),
+  });
 
   const createOptMut = trpc.productOptions.create.useMutation({ onSuccess: () => { utils.products.list.invalidate(); resetOptForm(); toast.success("Opção criada!"); } });
   const updateOptMut = trpc.productOptions.update.useMutation({ onSuccess: () => { utils.products.list.invalidate(); toast.success("Opção salva!"); } });
@@ -1632,6 +1640,19 @@ export default function AdminProducts() {
                       {product.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                     </button>
                     <button onClick={() => startEdit(product)} className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>
+                    <button
+                      disabled={cloneMut.isPending}
+                      onClick={() => {
+                        if (confirm(`Clonar o card “${product.name}” completo?\n\nA cópia incluirá imagem, opções, preços, documentos, perguntas, garantias, regras e manifestos. Ela ficará desativada até você revisar e ativar.`)) {
+                          cloneMut.mutate({ id: product.id });
+                        }
+                      }}
+                      className="p-2 text-cyan-300 hover:bg-cyan-500/20 rounded-lg transition-colors disabled:cursor-wait disabled:opacity-40"
+                      title="Clonar card completo"
+                      aria-label={`Clonar card completo ${product.name}`}
+                    >
+                      {cloneMut.isPending && cloneMut.variables?.id === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+                    </button>
                     <button onClick={() => { if (confirm("Excluir este card e todas suas opções/perguntas?")) deleteMut.mutate({ id: product.id }); }} className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                     <button onClick={() => setExpandedProduct(expandedProduct === product.id ? null : product.id)} className="p-2 text-gray-400 hover:bg-white/10 rounded-lg transition-colors">
                       {expandedProduct === product.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
