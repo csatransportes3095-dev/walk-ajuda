@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { getDb } from "../db";
+import { getDb, getSetting, upsertSetting } from "../db";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { applyVipBenefitToPrice } from "../../shared/vipPricing";
 
@@ -197,6 +197,46 @@ async function listModels(optionIds: number[], onlyActive: boolean): Promise<Opt
     }
   }
   return rows;
+}
+
+export async function cloneOptionPriceModelsComplete(optionIdMap: Record<number, number>): Promise<Record<number, number>> {
+  await ensureInfrastructure();
+  const db = await getDb();
+  if (!db) throw new Error("Banco de dados indisponível.");
+  const priceModelIdMap: Record<number, number> = {};
+
+  for (const [oldOptionRaw, newOptionId] of Object.entries(optionIdMap)) {
+    const oldOptionId = Number(oldOptionRaw);
+    const selector = await db.execute(sql`SELECT selectorLabel FROM optionPriceModelSettings WHERE optionId=${oldOptionId} LIMIT 1`);
+    const selectorRow = asRows<{ selectorLabel: string }>(selector)[0];
+    if (selectorRow) await db.execute(sql`
+      INSERT INTO optionPriceModelSettings (optionId, selectorLabel) VALUES (${newOptionId}, ${selectorRow.selectorLabel})
+      ON DUPLICATE KEY UPDATE selectorLabel=VALUES(selectorLabel)
+    `);
+
+    const models = await listModels([oldOptionId], false);
+    for (const model of models) {
+      const inserted: any = await db.execute(sql`
+        INSERT INTO optionPriceModels (optionId, label, price, originalPrice, promoEndsAt, sortOrder, isActive)
+        VALUES (${newOptionId}, ${model.label}, ${model.price}, ${model.originalPrice || ''}, ${model.promoEndsAt}, ${model.sortOrder}, ${model.isActive})
+      `);
+      const newModelId = Number(inserted?.[0]?.insertId || inserted?.insertId || 0);
+      if (!newModelId) throw new Error(`Não foi possível clonar a categoria ${model.label}.`);
+      priceModelIdMap[model.id] = newModelId;
+      await db.execute(sql`
+        INSERT INTO optionPriceModelVipSettings
+          (priceModelId, vipAccessMode, vipDiscountType, vipDiscountValue, vipHighlight, vipHighlightText)
+        VALUES (${newModelId}, ${model.vipAccessMode}, ${model.vipDiscountType}, ${model.vipDiscountValue}, ${model.vipHighlight}, ${model.vipHighlightText})
+        ON DUPLICATE KEY UPDATE vipAccessMode=VALUES(vipAccessMode), vipDiscountType=VALUES(vipDiscountType),
+          vipDiscountValue=VALUES(vipDiscountValue), vipHighlight=VALUES(vipHighlight), vipHighlightText=VALUES(vipHighlightText)
+      `);
+      const manifest = await getSetting(`price_model_manifest_${model.id}`);
+      if (manifest != null) await upsertSetting(`price_model_manifest_${newModelId}`, manifest);
+    }
+    const optionManifest = await getSetting(`option_manifest_${oldOptionId}`);
+    if (optionManifest != null) await upsertSetting(`option_manifest_${newOptionId}`, optionManifest);
+  }
+  return priceModelIdMap;
 }
 
 const modelInput = z.object({
