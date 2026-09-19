@@ -754,7 +754,7 @@ export default function AdminCustomers() {
     } else {
       matchSearch = c.name.toLowerCase().includes(term) ||
         c.phone.includes(term) ||
-        (c.phone || "").replace(/[^\d]/g, "").includes(termDigitsOnly) ||
+        (termDigitsOnly.length > 0 && (c.phone || "").replace(/[^\d]/g, "").includes(termDigitsOnly)) ||
         (c.email || "").toLowerCase().includes(term) ||
         (c.city || "").toLowerCase().includes(term) ||
         (c.referredBy || "").toLowerCase().includes(term) ||
