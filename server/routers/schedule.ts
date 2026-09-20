@@ -11,6 +11,7 @@ import { isValidCPF } from "@shared/cpf";
 import { isRecoveredCustomerName } from "../../shared/customerProfile";
 import { findMainCustomerByIdentity, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone } from "../customerAccess";
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
+import { isScheduleProfileRequirementEnabled, parseMaintenanceManifest } from "../../shared/maintenanceManifest";
 import { requireCustomerSession } from "../customerSession";
 import {
   getScheduleConfig, updateScheduleConfig,
@@ -185,13 +186,16 @@ function rejectIncompleteScheduleProfile() {
 }
 
 async function shouldBlockScheduleForCustomer(customer: any): Promise<boolean> {
-  return getMissingCustomerProfileFields(customer).length > 0;
+  const manifest = parseMaintenanceManifest(await getSetting("maintenance_manifest"));
+  return isScheduleProfileRequirementEnabled(manifest) && getMissingCustomerProfileFields(customer).length > 0;
 }
 
 async function buildAuthenticatedScheduleData(appt: any, customer: any) {
   const cfg = await getScheduleConfig();
   const missing = getMissingCustomerProfileFields(customer);
-  const updateRequired = missing.length > 0;
+  const manifest = parseMaintenanceManifest(await getSetting("maintenance_manifest"));
+  const requireCompleteProfile = isScheduleProfileRequirementEnabled(manifest);
+  const updateRequired = requireCompleteProfile && missing.length > 0;
   const slots = updateRequired ? [] : await listAvailableScheduleSlots(appt.templateId ?? null, appt.status === 'pending' && Boolean(appt.confirmedAt));
   const orderStatus = await getPublicOrderContext(Number(appt.registrationId));
   return {
