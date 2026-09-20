@@ -60,6 +60,14 @@ export function parseMaintenanceManifest(raw?: string | null): MaintenanceManife
   }
 }
 
+export function isScheduleProfileRequirementEnabled(config: MaintenanceManifestConfig): boolean {
+  // A exigência de cadastro completo no link de agendamento pertence ao
+  // manifesto. Com o manifesto desligado, nenhuma atualização cadastral pode
+  // ser forçada pelo fluxo /agendar/:token, mesmo que a opção tenha ficado
+  // previamente marcada no painel.
+  return config.enabled === true && config.requireCompleteProfileForSchedule === true;
+}
+
 export function maintenanceRouteIdForPath(pathname: string): MaintenanceRouteId | null {
   const path = pathname.toLowerCase().replace(/\/+$/, "") || "/";
   if (path === "/") return "home";

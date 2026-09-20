@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MAINTENANCE_MANIFEST,
   isMaintenanceManifestActiveForPath,
+  isScheduleProfileRequirementEnabled,
   maintenanceRouteIdForPath,
   parseMaintenanceManifest,
 } from "../shared/maintenanceManifest";
@@ -15,6 +16,29 @@ describe("Manifesto de Manutenção", () => {
     expect(DEFAULT_MAINTENANCE_MANIFEST.requireCompleteProfileForSchedule).toBe(false);
     expect(parseMaintenanceManifest(JSON.stringify({ requireCompleteProfileForSchedule: true })).requireCompleteProfileForSchedule).toBe(true);
     expect(parseMaintenanceManifest(JSON.stringify({ requireCompleteProfileForSchedule: 1 })).requireCompleteProfileForSchedule).toBe(false);
+  });
+
+  it("só exige cadastro completo no agendamento quando o manifesto também está ativo", () => {
+    const disabled = {
+      ...DEFAULT_MAINTENANCE_MANIFEST,
+      enabled: false,
+      requireCompleteProfileForSchedule: true,
+    };
+    expect(isScheduleProfileRequirementEnabled(disabled)).toBe(false);
+
+    const enabledWithoutRequirement = {
+      ...DEFAULT_MAINTENANCE_MANIFEST,
+      enabled: true,
+      requireCompleteProfileForSchedule: false,
+    };
+    expect(isScheduleProfileRequirementEnabled(enabledWithoutRequirement)).toBe(false);
+
+    const enabledWithRequirement = {
+      ...DEFAULT_MAINTENANCE_MANIFEST,
+      enabled: true,
+      requireCompleteProfileForSchedule: true,
+    };
+    expect(isScheduleProfileRequirementEnabled(enabledWithRequirement)).toBe(true);
   });
 
   it("aceita apenas rotas liberadas e descarta valores inválidos", () => {

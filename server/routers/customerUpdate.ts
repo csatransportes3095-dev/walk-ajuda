@@ -445,8 +445,12 @@ export const customerUpdateRouter = router({
       if (!String(photoRows[0]?.profilePhotoUrl || "").trim()) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Envie sua foto de perfil." });
       }
-      const cpfConflict = await findMainCustomerByIdentity({ cpf }, db);
-      const emailConflict = await findMainCustomerByIdentity({ email }, db);
+      // Só valida conflito de identidade quando este fluxo realmente está
+      // preenchendo/substituindo CPF ou e-mail. Uma atualização apenas de endereço
+      // não pode ser bloqueada por duplicidade legada de um dado que o cliente não
+      // alterou nesta operação.
+      const cpfConflict = selected.has("cpf") ? await findMainCustomerByIdentity({ cpf }, db) : null;
+      const emailConflict = selected.has("email") ? await findMainCustomerByIdentity({ email }, db) : null;
       if ((cpfConflict && Number(cpfConflict.id) !== Number(customer.id)) || (emailConflict && Number(emailConflict.id) !== Number(customer.id))) {
         throw new TRPCError({ code: "CONFLICT", message: "CPF ou e-mail já pertence a outro cadastro." });
       }
