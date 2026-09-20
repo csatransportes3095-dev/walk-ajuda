@@ -55,6 +55,12 @@ function getProfilePhotoDisplayUrl(profilePhotoUrl: string): string {
   return `${profilePhotoUrl}?repair=20260813`;
 }
 
+function normalizeReferralFilterPhone(value: unknown): string {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) digits = digits.slice(2);
+  return digits;
+}
+
 // formatDateBR agora usa useTimezone — ver abaixo no componente
 
 // Mapa de status para label e cor
@@ -419,6 +425,7 @@ export default function AdminCustomers() {
   const [showOnlyOrders, setShowOnlyOrders] = useState(false);
   const [showOnlyBlocked, setShowOnlyBlocked] = useState(false);
   const [showOnlyVip, setShowOnlyVip] = useState(false);
+  const [selectedReferrerPhone, setSelectedReferrerPhone] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name">("newest");
   const { fmt: formatDateBR } = useTimezone();
   const [, setLocation] = useLocation();
@@ -716,6 +723,30 @@ export default function AdminCustomers() {
 
   const customers: Customer[] = (customersQuery.data || []) as unknown as Customer[];
 
+  // O filtro de indicador usa o mesmo vínculo atual do cadastro principal
+  // (referredByPhone) usado pela árvore. Assim quantidade e lista nunca vêm
+  // de fontes diferentes.
+  const referralCustomerByPhone = new Map(
+    customers
+      .map((customer) => [normalizeReferralFilterPhone(customer.phone), customer] as const)
+      .filter(([phone]) => !!phone)
+  );
+  const referralCounts = new Map<string, { phone: string; name: string; count: number }>();
+  for (const customer of customers) {
+    const referrerPhone = normalizeReferralFilterPhone(customer.referredByPhone);
+    const customerPhone = normalizeReferralFilterPhone(customer.phone);
+    if (!referrerPhone || referrerPhone === customerPhone) continue;
+    const referrerCustomer = referralCustomerByPhone.get(referrerPhone);
+    const resolvedName = referrerCustomer?.name
+      || String((customer as any).resolvedReferrerName || customer.referredBy || referrerPhone);
+    const existing = referralCounts.get(referrerPhone);
+    if (existing) existing.count += 1;
+    else referralCounts.set(referrerPhone, { phone: referrerPhone, name: resolvedName, count: 1 });
+  }
+  const referralOptions = [...referralCounts.values()].sort((a, b) =>
+    b.count - a.count || a.name.localeCompare(b.name, "pt-BR")
+  );
+
   const sortedCustomers = [...customers].sort((a, b) => {
     if (sortOrder === "name") return a.name.localeCompare(b.name, 'pt-BR');
     if (sortOrder === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
@@ -760,10 +791,12 @@ export default function AdminCustomers() {
         (c.referredBy || "").toLowerCase().includes(term) ||
         (c.referredByPhone || "").includes(term);
     }
-    if (showOnlyVip) return matchSearch && !!c.vipActive;
-    if (showOnlyOrders) return matchSearch && !!c.hasOrder;
-    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
-    return matchSearch;
+    const matchReferrer = !selectedReferrerPhone
+      || normalizeReferralFilterPhone(c.referredByPhone) === selectedReferrerPhone;
+    if (showOnlyVip) return matchSearch && matchReferrer && !!c.vipActive;
+    if (showOnlyOrders) return matchSearch && matchReferrer && !!c.hasOrder;
+    if (showOnlyBlocked) return matchSearch && matchReferrer && c.blocked === 1;
+    return matchSearch && matchReferrer;
   });
 
   const startEdit = (c: Customer) => {
@@ -1108,6 +1141,51 @@ export default function AdminCustomers() {
           <option value="name">Nome A-Z</option>
         </select>
         </div>
+
+        {/* Filtro por indicador — mesma fonte da árvore e do contador */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <select
+            value={selectedReferrerPhone}
+            onChange={(event) => {
+              setSelectedReferrerPhone(event.target.value);
+              setSelectedIds(new Set());
+            }}
+            className="min-w-0 flex-1 rounded-xl border border-emerald-500/35 bg-card px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+          >
+            <option value="">Indicador: Todos ({referralOptions.length})</option>
+            {referralOptions.map((referrer) => (
+              <option key={referrer.phone} value={referrer.phone}>
+                {referrer.name} ({referrer.count})
+              </option>
+            ))}
+          </select>
+
+          {selectedReferrerPhone && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setLocation(`/admin/referral-tree?phone=${selectedReferrerPhone}`)}
+                className="rounded-xl border border-purple-500/35 bg-purple-500/10 px-3 py-2.5 text-xs font-black text-purple-300 hover:bg-purple-500/20"
+              >
+                Ver árvore
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedReferrerPhone("")}
+                className="rounded-xl border border-border bg-card px-3 py-2.5 text-xs font-bold text-muted-foreground hover:bg-muted"
+              >
+                Limpar indicador
+              </button>
+            </div>
+          )}
+        </div>
+
+        {selectedReferrerPhone && (
+          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200">
+            Mostrando <strong>{filtered.length}</strong> cliente(s) indicado(s) por{" "}
+            <strong>{referralCounts.get(selectedReferrerPhone)?.name || selectedReferrerPhone}</strong>.
+          </div>
+        )}
 
         {/* Barra de Seleção em Massa */}
         {(customers.some(c => c.hasOrder) || customers.some(c => c.blocked === 1) || selectedIds.size > 0) && (
