@@ -318,7 +318,7 @@ export default function SchedulePage() {
   const missingFields = data.profile?.missing || [];
   const profileUpdateRequired = data.profile?.updateRequired === true;
 
-  if (profileUpdateRequired || missingFields.length > 0) {
+  if (profileUpdateRequired) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
         <div className="bg-black/40 border border-white/10 rounded-2xl p-8 max-w-md">
