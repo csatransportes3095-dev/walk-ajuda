@@ -409,6 +409,28 @@ function AppContent() {
     ? isMaintenanceManifestActiveForPath(maintenanceManifest, location)
     : false;
 
+  // Se houver retirada automática programada, refaz a leitura do manifesto exatamente
+  // no horário escolhido pelo ADM. Nenhuma outra rota/regra é alterada.
+  useEffect(() => {
+    if (!maintenanceManifest?.enabled || !maintenanceManifest.autoDisableAtExpectedReturn || !maintenanceManifest.expectedReturnAt) return;
+    const cutoff = new Date(maintenanceManifest.expectedReturnAt).getTime();
+    if (!Number.isFinite(cutoff)) return;
+    const remaining = cutoff - Date.now();
+    if (remaining <= 0) {
+      maintenanceManifestQuery.refetch();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      maintenanceManifestQuery.refetch();
+    }, Math.min(remaining + 100, 2_147_000_000));
+    return () => window.clearTimeout(timer);
+  }, [
+    maintenanceManifest?.enabled,
+    maintenanceManifest?.autoDisableAtExpectedReturn,
+    maintenanceManifest?.expectedReturnAt,
+    maintenanceManifestQuery.refetch,
+  ]);
+
   // Proteção anti-print para rotas de cliente
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || undefined : undefined;
   const { WarningOverlay } = useAntiPrint(!isAdminRoute && !isH2AdsRoute ? clientPhone : undefined);
