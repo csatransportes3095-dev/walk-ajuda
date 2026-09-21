@@ -825,7 +825,21 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
         await updateProductOption(id, data);
-        return { success: true };
+
+        // Ao ATIVAR o agendamento automático, faz o retroativo imediatamente.
+        // A rotina é idempotente: pedidos que já possuem link não recebem outro.
+        // Falha no retroativo não desfaz a configuração da opção nem afeta pedidos.
+        let autoScheduleBackfill: any = null;
+        if (data.autoScheduleEnabled === 1) {
+          try {
+            const { backfillAutomaticSchedulesForOption } = await import("./autoSchedule");
+            autoScheduleBackfill = await backfillAutomaticSchedulesForOption(id);
+          } catch (error) {
+            console.error("[AutoSchedule] Falha isolada no retroativo da opção:", id, error);
+          }
+        }
+
+        return { success: true, autoScheduleBackfill };
       }),
 
         delete: adminProcedure
