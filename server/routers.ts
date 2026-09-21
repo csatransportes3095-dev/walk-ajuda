@@ -1242,12 +1242,22 @@ export const appRouter = router({
   maintenanceManifest: router({
     get: publicProcedure.query(async () => {
       const stored = await getSetting("maintenance_manifest");
-      return parseMaintenanceManifest(stored);
+      const config = parseMaintenanceManifest(stored);
+      if (config.enabled && config.autoDisableAtExpectedReturn && config.expectedReturnAt) {
+        const cutoff = new Date(config.expectedReturnAt).getTime();
+        if (Number.isFinite(cutoff) && cutoff <= Date.now()) {
+          const disabled = { ...config, enabled: false };
+          await upsertSetting("maintenance_manifest", JSON.stringify(disabled));
+          return disabled;
+        }
+      }
+      return config;
     }),
     update: adminProcedure
       .input(z.object({
         enabled: z.boolean(),
         requireCompleteProfileForSchedule: z.boolean(),
+        autoDisableAtExpectedReturn: z.boolean(),
         routeIds: z.array(z.enum(["home", "login", "loan", "gastos", "tracking"])),
         eyebrow: z.string().max(64),
         title: z.string().max(120),

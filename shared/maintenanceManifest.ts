@@ -11,6 +11,7 @@ export type MaintenanceRouteId = (typeof MAINTENANCE_ROUTE_OPTIONS)[number]["id"
 export type MaintenanceManifestConfig = {
   enabled: boolean;
   requireCompleteProfileForSchedule: boolean;
+  autoDisableAtExpectedReturn: boolean;
   routeIds: MaintenanceRouteId[];
   eyebrow: string;
   title: string;
@@ -22,6 +23,7 @@ export type MaintenanceManifestConfig = {
 export const DEFAULT_MAINTENANCE_MANIFEST: MaintenanceManifestConfig = {
   enabled: false,
   requireCompleteProfileForSchedule: false,
+  autoDisableAtExpectedReturn: false,
   routeIds: ["home", "login", "loan", "gastos", "tracking"],
   eyebrow: "COMUNICADO OPERACIONAL",
   title: "Estamos em manutenção programada",
@@ -48,6 +50,7 @@ export function parseMaintenanceManifest(raw?: string | null): MaintenanceManife
     return {
       enabled: parsed.enabled === true,
       requireCompleteProfileForSchedule: parsed.requireCompleteProfileForSchedule === true,
+      autoDisableAtExpectedReturn: parsed.autoDisableAtExpectedReturn === true,
       routeIds,
       eyebrow: safeText(parsed.eyebrow, DEFAULT_MAINTENANCE_MANIFEST.eyebrow, 64),
       title: safeText(parsed.title, DEFAULT_MAINTENANCE_MANIFEST.title, 120),
@@ -78,7 +81,16 @@ export function maintenanceRouteIdForPath(pathname: string): MaintenanceRouteId 
   return null;
 }
 
+export function isMaintenanceManifestExpired(config: MaintenanceManifestConfig, now = Date.now()) {
+  if (!config.autoDisableAtExpectedReturn || !config.expectedReturnAt) return false;
+  const cutoff = new Date(config.expectedReturnAt).getTime();
+  return Number.isFinite(cutoff) && cutoff <= now;
+}
+
 export function isMaintenanceManifestActiveForPath(config: MaintenanceManifestConfig, pathname: string) {
   const routeId = maintenanceRouteIdForPath(pathname);
-  return config.enabled && routeId !== null && config.routeIds.includes(routeId);
+  return config.enabled
+    && !isMaintenanceManifestExpired(config)
+    && routeId !== null
+    && config.routeIds.includes(routeId);
 }
