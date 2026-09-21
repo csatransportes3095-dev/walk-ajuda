@@ -146,6 +146,9 @@ export const productOptions = mysqlTable("productOptions", {
   cardTextColor: varchar("cardTextColor", { length: 32 }),
   cardButtonColor: varchar("cardButtonColor", { length: 32 }),
   cardAccentColor: varchar("cardAccentColor", { length: 32 }),
+  // Libera o agendamento automaticamente para pedidos desta opção.
+  // 0 mantém exatamente o fluxo manual atual do ADM.
+  autoScheduleEnabled: int("autoScheduleEnabled").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

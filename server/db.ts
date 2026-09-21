@@ -578,6 +578,7 @@ export async function createProductOption(data: {
   requireProfilePhoto?: boolean; requireCarDocument?: boolean; requireAlvara?: boolean;
   requireCondutaxi?: boolean; requireVehicle2016?: boolean; isPdfOnly?: boolean;
   showYearField?: boolean; docNameMode?: string; docCustomName?: string;
+  autoScheduleEnabled?: boolean;
 }): Promise<ProductOption> {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
@@ -595,6 +596,7 @@ export async function createProductOption(data: {
     showYearField: data.showYearField ? 1 : 0,
     docNameMode: data.docNameMode || 'none',
     docCustomName: data.docCustomName || '',
+    autoScheduleEnabled: data.autoScheduleEnabled ? 1 : 0,
   });
   const inserted = await db.select().from(productOptions).where(eq(productOptions.id, Number(result[0].insertId))).limit(1);
   return inserted[0];
@@ -607,6 +609,7 @@ export async function updateProductOption(id: number, data: Partial<{
   showYearField: number; docNameMode: string; docCustomName: string;
   warranty: string; commissionValue: number; description: string;
   promoEndsAt: number | null;
+  autoScheduleEnabled: number;
 }>): Promise<void> {
   const db = await getDb();
   if (!db) return;

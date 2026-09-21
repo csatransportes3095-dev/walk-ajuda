@@ -62,6 +62,7 @@ type OptionType = {
   warrantyTiers?: WarrantyTierType[];
   cardBorderColor?: string | null; cardBgColor?: string | null; cardTextColor?: string | null;
   cardButtonColor?: string | null; cardAccentColor?: string | null;
+  autoScheduleEnabled?: number;
 };
 
 type ProductWithRelations = {
@@ -328,6 +329,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
   const [cardTextColor, setCardTextColor] = useState((opt as any).cardTextColor || '');
   const [cardButtonColor, setCardButtonColor] = useState((opt as any).cardButtonColor || '');
   const [cardAccentColor, setCardAccentColor] = useState((opt as any).cardAccentColor || '');
+  const [autoScheduleEnabled, setAutoScheduleEnabled] = useState(Number((opt as any).autoScheduleEnabled || 0) === 1);
   const [dirty, setDirty] = useState(false);
 
   // Tiers de garantia
@@ -508,6 +510,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
       cardTextColor: cardTextColor || null,
       cardButtonColor: cardButtonColor || null,
       cardAccentColor: cardAccentColor || null,
+      autoScheduleEnabled: autoScheduleEnabled ? 1 : 0,
     });
     setDirty(false);
   };
@@ -589,6 +592,32 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                   <label className="text-xs text-yellow-300 block mb-1">Nome personalizado:</label>
                   <input value={docCustomName} onChange={e => { setDocCustomName(e.target.value); markDirty(); }} placeholder="Ex: joao-silva" style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }} />
                 </div>
+              )}
+            </div>
+
+            {/* Agendamento automático isolado por opção */}
+            <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-950/20 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black text-fuchsia-300">📅 Agendamento automático</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
+                    Ativado: ao finalizar um pedido desta opção, o sistema libera automaticamente o link individual de agendamento. Desativado: mantém o processo manual atual do ADM.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setAutoScheduleEnabled(v => !v); markDirty(); }}
+                  className={`min-w-[94px] rounded-lg border px-3 py-2 text-[11px] font-black transition-all ${autoScheduleEnabled
+                    ? 'border-fuchsia-400/60 bg-fuchsia-500/25 text-fuchsia-100'
+                    : 'border-gray-600 bg-black/30 text-gray-400'}`}
+                >
+                  {autoScheduleEnabled ? 'ATIVADO' : 'DESATIVADO'}
+                </button>
+              </div>
+              {autoScheduleEnabled && (
+                <p className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1.5 text-[10px] text-emerald-300">
+                  Pedidos novos recebem o link ao finalizar. Pedidos antigos elegíveis sem agendamento são liberados quando o cliente entra na vitrine ou em Acompanhar Pedido.
+                </p>
               )}
             </div>
 
