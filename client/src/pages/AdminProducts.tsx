@@ -171,6 +171,17 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
 }) {
   const utils = trpc.useUtils();
   const [expanded, setExpanded] = useState(false);
+  const autoScheduleRulesQuery = trpc.schedule.getAutoRules.useQuery();
+  const scheduleTemplatesQuery = trpc.schedule.listTemplates.useQuery();
+  const saveAutoScheduleRuleMut = trpc.schedule.saveAutoRule.useMutation({
+    onSuccess: () => {
+      utils.schedule.getAutoRules.invalidate();
+      toast.success("Agendamento automático atualizado!");
+    },
+    onError: () => toast.error("Não foi possível atualizar o agendamento automático."),
+  });
+  const autoScheduleRule = autoScheduleRulesQuery.data?.options?.[String(opt.id)] || { enabled: false, templateId: null };
+  const scheduleTemplates = scheduleTemplatesQuery.data || [];
 
   // Configurações da opção
   const [label, setLabel] = useState(opt.label);
@@ -464,6 +475,49 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
               />
               {parseFloat(commissionValue) > 0 && (
                 <p className="text-[10px] text-yellow-300 mt-1">💵 Comissão: R$ {parseFloat(commissionValue).toFixed(2).replace('.', ',')} por indicação</p>
+              )}
+            </div>
+
+            {/* Agendamento automático — configuração isolada por opção */}
+            <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs text-cyan-300 font-bold">📅 Agendamento automático para esta opção</p>
+                  <p className="text-[10px] text-gray-400">Ative somente nos serviços que precisam de foto/agendamento.</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={saveAutoScheduleRuleMut.isPending || autoScheduleRulesQuery.isLoading}
+                  onClick={() => saveAutoScheduleRuleMut.mutate({
+                    scope: "option",
+                    id: opt.id,
+                    enabled: !autoScheduleRule.enabled,
+                    templateId: autoScheduleRule.templateId ?? null,
+                  })}
+                  className={`min-w-[92px] rounded-lg px-3 py-2 text-xs font-black transition-colors disabled:opacity-50 ${autoScheduleRule.enabled ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`}
+                >
+                  {autoScheduleRule.enabled ? 'ATIVADO' : 'DESATIVADO'}
+                </button>
+              </div>
+              {autoScheduleRule.enabled && (
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-1">Modelo de agendamento</label>
+                  <select
+                    value={autoScheduleRule.templateId ?? ''}
+                    onChange={e => saveAutoScheduleRuleMut.mutate({
+                      scope: "option",
+                      id: opt.id,
+                      enabled: true,
+                      templateId: e.target.value ? Number(e.target.value) : null,
+                    })}
+                    style={{ ...whiteInputStyle, fontSize: '12px', padding: '6px 10px' }}
+                  >
+                    <option value="">Geral / sem modelo específico</option>
+                    {scheduleTemplates.map((template: any) => (
+                      <option key={template.id} value={template.id}>{template.name}</option>
+                    ))}
+                  </select>
+                </div>
               )}
             </div>
 
