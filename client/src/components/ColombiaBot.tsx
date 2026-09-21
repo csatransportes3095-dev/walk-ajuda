@@ -62,6 +62,7 @@ export type BotOrderData = {
   clientPhone: string;
   clientCity: string;
   trackingPin?: string;
+  scheduleUrl?: string;
 };
 
 interface Props {
@@ -853,6 +854,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
           productId: product.id,
           optionId: option?.id,
+          autoScheduleOptionId: option?.id,
           questionAudioFlowId: hasAudioAnswersForCurrentOption ? flowState.current.audioFlowId : undefined,
           audioDraftIds: hasAudioAnswersForCurrentOption ? audioDraftIdsForSubmit : undefined,
           couponCode: flowState.current.couponCode || undefined,
@@ -889,6 +891,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             clientPhone: clientPhoneForSubmit,
             clientCity: profileQuery.data?.city || '',
             trackingPin: (result as any).trackingPin || undefined,
+            scheduleUrl: (result as any).scheduleUrl || undefined,
           });
         } else {
           const message = (result as any).message || (result.success
