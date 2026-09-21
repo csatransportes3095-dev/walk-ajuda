@@ -56,6 +56,7 @@ import { h2AssistantRouter } from "./routers/h2Assistant";
 import { h2AdsRouter } from "./routers/h2ads";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
+import { ensureAutomaticScheduleForOrder } from "./autoSchedule";
 import { resolveLegacyCommissionValue, type CommissionCandidate } from "./commissionResolver";
 import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
@@ -1337,6 +1338,9 @@ export const appRouter = router({
         // Referências aditivas de respostas em áudio: usadas somente pelo novo tipo de pergunta.
         productId: z.number().int().positive().optional(),
         optionId: z.number().int().positive().optional(),
+        // Campo isolado do fluxo de áudio/comissão. Serve somente para decidir
+        // se esta opção da vitrine libera agendamento automático.
+        autoScheduleOptionId: z.number().int().positive().optional(),
         questionAudioFlowId: z.string().uuid().optional(),
         audioDraftIds: z.array(z.string().uuid()).max(20).optional(),
         docNameMode: z.string().optional(),
@@ -1595,6 +1599,26 @@ export const appRouter = router({
           } catch (e) { console.error('[AccessCode] Erro ao consumir após persistência:', e); }
 
           const docRegId = persistedOrder.registrationId;
+
+          // Agendamento automático é um efeito aditivo e não pode impedir a criação
+          // do pedido, comissão, indicação, financeiro ou qualquer outra etapa.
+          let automaticScheduleUrl: string | undefined;
+          if (input.autoScheduleOptionId && effectivePhone) {
+            try {
+              const automaticSchedule = await ensureAutomaticScheduleForOrder({
+                registrationId: persistedOrder.registrationId,
+                customerPhone: effectivePhone,
+                optionId: input.autoScheduleOptionId,
+                customerName: input.clientName || null,
+                customerEmail: input.email || null,
+                serviceName: input.service || null,
+                subOrderIndex: 0,
+              });
+              automaticScheduleUrl = automaticSchedule.url;
+            } catch (autoScheduleError) {
+              console.error('[AutoSchedule] Pedido salvo, mas a liberação automática do agendamento falhou:', autoScheduleError);
+            }
+          }
 
           // Comprovante PIX legado: só enviar ao R2 depois da persistência confirmada.
           if (!paymentProofUrl && input.paymentProof) {
@@ -2018,6 +2042,7 @@ export const appRouter = router({
                   service: input.service,
                   orderNumber: undefined,
                   pin: generatedPin || undefined,
+                  scheduleUrl: automaticScheduleUrl,
                 }),
               }, 'email cliente');
               console.log('[Email] Confirmação enviada ao cliente:', input.email);
@@ -2026,7 +2051,13 @@ export const appRouter = router({
             }
           }
 
-          return { success: true, message: emailSent ? 'Pedido enviado com sucesso!' : 'Pedido registrado! (email será reenviado em breve)', registrationId: outerRegId ?? null, trackingPin: generatedPin };
+          return {
+            success: true,
+            message: emailSent ? 'Pedido enviado com sucesso!' : 'Pedido registrado! (email será reenviado em breve)',
+            registrationId: outerRegId ?? null,
+            trackingPin: generatedPin,
+            scheduleUrl: automaticScheduleUrl ?? null,
+          };
         } catch (error) {
           console.error('Erro geral ao processar pedido:', error);
           return { success: false, message: 'Erro ao processar pedido' };
