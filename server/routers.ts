@@ -784,6 +784,7 @@ export const appRouter = router({
         cardTextColor: z.string().nullable().optional(),
         cardButtonColor: z.string().nullable().optional(),
         cardAccentColor: z.string().nullable().optional(),
+        autoScheduleEnabled: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
         try {
@@ -818,6 +819,7 @@ export const appRouter = router({
         cardTextColor: z.string().nullable().optional(),
         cardButtonColor: z.string().nullable().optional(),
         cardAccentColor: z.string().nullable().optional(),
+        autoScheduleEnabled: z.number().int().min(0).max(1).optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
