@@ -13,6 +13,7 @@ import { findMainCustomerByIdentity, normalizeCustomerCpf, normalizeCustomerEmai
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
 import { isScheduleProfileRequirementEnabled, parseMaintenanceManifest } from "../../shared/maintenanceManifest";
 import { requireCustomerSession } from "../customerSession";
+import { syncAutomaticSchedulesForCustomer } from "../autoSchedule";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -617,8 +618,16 @@ export const scheduleRouter = router({
   // Lista agendamentos pelo TELEFONE para a PÁGINA DE ACOMPANHAMENTO (público).
   // Mais confiável que registrationId, pois o telefone é a chave usada no acompanhamento.
   listForTrackingByPhone: publicProcedure
-    .input(z.object({ phone: z.string() }))
+    .input(z.object({ phone: z.string(), cpToken: z.string().min(32).max(512).optional() }))
     .query(async ({ input }) => {
+      if (input.cpToken) {
+        const session = await requireCustomerSession(input.cpToken, input.phone);
+        try {
+          await syncAutomaticSchedulesForCustomer(session.phone);
+        } catch (error) {
+          console.error("[AutoSchedule] Falha ao sincronizar pedidos antigos no acompanhamento:", error);
+        }
+      }
       const list = await listAppointmentsByPhone(input.phone);
       return list
         .filter(a => a.status !== "cancelled" && a.status !== "completed")
@@ -639,6 +648,11 @@ export const scheduleRouter = router({
     .input(z.object({ cpToken: z.string().min(32).max(512), phone: z.string().min(8).max(32) }))
     .query(async ({ input }) => {
       const session = await requireCustomerSession(input.cpToken, input.phone);
+      try {
+        await syncAutomaticSchedulesForCustomer(session.phone);
+      } catch (error) {
+        console.error("[AutoSchedule] Falha ao sincronizar pedidos antigos na vitrine:", error);
+      }
       const list = await listAppointmentsByPhone(session.phone);
       const appointment = list.find(a => a.status === "confirmed")
         ?? list.find(a => a.status === "pending");
