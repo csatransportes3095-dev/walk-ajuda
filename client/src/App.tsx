@@ -404,6 +404,7 @@ function AppContent() {
     refetchOnWindowFocus: true,
   });
   const maintenanceManifest = maintenanceManifestQuery.data;
+  const maintenanceRouteManaged = ["/", "/login", "/emprestimo", "/gastos", "/acompanhar"].includes(location.toLowerCase().replace(/\/+$/, "") || "/");
   const showMaintenanceManifest = maintenanceManifest
     ? isMaintenanceManifestActiveForPath(maintenanceManifest, location)
     : false;
@@ -471,6 +472,12 @@ function AppContent() {
   // 🔧 MODO MANUTENÇÃO — bloqueia todas as rotas públicas
   if (MAINTENANCE_MODE) {
     return <MaintenancePage />;
+  }
+
+  // Nas rotas controladas pelo manifesto, nunca renderize a página real antes de saber
+  // se a manutenção está ativa. Isso elimina o "flash" da página principal no refresh.
+  if (maintenanceRouteManaged && maintenanceManifestQuery.isLoading) {
+    return <div className="min-h-screen bg-[#040714]" aria-hidden="true" />;
   }
 
   // O manifesto bloqueia somente as rotas escolhidas pelo ADM; demais rotas seguem inalteradas.
