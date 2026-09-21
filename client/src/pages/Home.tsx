@@ -4,7 +4,7 @@ import { ServicosExtras } from "@/components/ServicosExtras";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MessageCircle, Zap, Phone, Clock, Users, Upload, FileUp, Ticket, Copy, Check, ImageIcon, AlertTriangle, Camera, Car, Loader2, UserCircle, X, KeyRound, ShoppingCart, Trash2, LogOut, HelpCircle, ChevronDown } from "lucide-react";
+import { MessageCircle, Zap, Phone, Clock, Users, Upload, FileUp, Ticket, Copy, Check, ImageIcon, AlertTriangle, Camera, Car, Loader2, UserCircle, X, KeyRound, ShoppingCart, Trash2, LogOut, HelpCircle, ChevronDown, Calendar } from "lucide-react";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -4223,6 +4223,16 @@ export default function Home() {
                 </span>
               )}
             </button>
+            {clientPhoneFromSession && (
+              <a
+                href="/acompanhar"
+                title="Meus agendamentos"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-lg text-xs font-medium transition-colors"
+              >
+                <Calendar className="w-4 h-4" />
+                <span className="hidden sm:inline">Agendamento</span>
+              </a>
+            )}
             {clientPhoneFromSession && (
               <button
                 onClick={() => setShowMyData(true)}
