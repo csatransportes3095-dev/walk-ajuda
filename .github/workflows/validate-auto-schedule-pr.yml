@@ -1,5 +1,7 @@
 name: Validate automatic scheduling PR
 on:
+  push:
+    branches: [auto-agendamento-produtos]
   pull_request:
     branches: [main]
     paths:
