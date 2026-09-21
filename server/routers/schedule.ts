@@ -6,6 +6,8 @@ import nodemailer from "nodemailer";
 import { sendMailDirect } from "../_core/sendMailDirect";
 import { publicSiteUrl } from "../../shared/publicLinks";
 import { resolveScheduleProfileRequirement } from "../scheduleProfileGuard";
+import { requireCustomerSession } from "../customerSession";
+import { getAutoScheduleRules, saveAutoScheduleRule, ensureAutomaticSchedulesForCustomer } from "../autoSchedule";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -79,6 +81,29 @@ export const scheduleRouter = router({
     .mutation(async ({ input }) => {
       await updateScheduleConfig(input);
       return { success: true };
+    }),
+
+  // Configuração isolada de agendamento automático por produto/opção.
+  // As regras ficam em siteSettings e não alteram tabelas/rotas de pedido, comissão ou indicação.
+  getAutoRules: adminProcedure.query(async () => await getAutoScheduleRules()),
+  saveAutoRule: adminProcedure
+    .input(z.object({
+      scope: z.enum(["product", "option"]),
+      id: z.number().int().positive(),
+      enabled: z.boolean(),
+      templateId: z.number().int().positive().nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      return await saveAutoScheduleRule(input);
+    }),
+
+  // Cliente autenticado: garante agendamentos automáticos também para pedidos antigos elegíveis.
+  // A sessão é validada antes de qualquer criação; a consulta pública por telefone continua somente leitura.
+  ensureAutomaticForCustomer: publicProcedure
+    .input(z.object({ token: z.string(), phone: z.string() }))
+    .mutation(async ({ input }) => {
+      const session = await requireCustomerSession(input.token, input.phone);
+      return await ensureAutomaticSchedulesForCustomer(session.phone);
     }),
 
   // ââ€â‚¬ââ€â‚¬ââ€â‚¬ MODELOS PRÉ-FEITOS ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
