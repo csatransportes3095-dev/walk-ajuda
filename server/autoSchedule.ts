@@ -73,7 +73,7 @@ async function loadAutomaticOptions(): Promise<AutomaticScheduleOption[]> {
   return (result[0] || []) as AutomaticScheduleOption[];
 }
 
-function findAutomaticOption(
+export function findAutomaticOption(
   options: AutomaticScheduleOption[],
   serviceName: unknown,
   serviceOption: unknown,
@@ -90,7 +90,13 @@ function findAutomaticOption(
   if (service) {
     const exactProduct = candidates.find((option) => normalizeLabel(option.productName) === service);
     if (exactProduct) return exactProduct;
-    return null;
+    // Pedidos antigos guardam o nome do produto como texto. Esse nome pode ter
+    // sido renomeado no ADM depois da compra, embora a opção continue sendo a
+    // mesma. Quando o rótulo da opção identifica um único card automático, ele
+    // é seguro e deve receber o link retroativo. Só recusamos quando existem
+    // dois cards automáticos com o mesmo rótulo, pois aí o produto é necessário
+    // para evitar associar o pedido ao card errado.
+    return candidates.length === 1 ? candidates[0] : null;
   }
 
   return candidates.length === 1 ? candidates[0] : null;
