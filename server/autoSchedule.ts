@@ -82,12 +82,18 @@ function findAutomaticOption(
   if (!optionLabel) return null;
   const service = normalizeLabel(serviceName);
   const candidates = options.filter((option) => normalizeLabel(option.label) === optionLabel);
-  if (candidates.length === 1) return candidates[0];
+  if (candidates.length === 0) return null;
+
+  // Quando o pedido antigo traz o produto, ele também precisa coincidir.
+  // Evita, por exemplo, que duas vitrines com a opção "Nome Completo"
+  // recebam agendamento uma da outra.
   if (service) {
     const exactProduct = candidates.find((option) => normalizeLabel(option.productName) === service);
     if (exactProduct) return exactProduct;
+    return null;
   }
-  return candidates[0] || null;
+
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 export async function ensureAutomaticScheduleForOrder(input: {
@@ -199,4 +205,122 @@ export async function syncAutomaticSchedulesForCustomer(phoneInput: string): Pro
   }
 
   return created;
+}
+
+
+export type AutomaticScheduleBackfillSummary = {
+  options: number;
+  scannedOrders: number;
+  matchedOrders: number;
+  created: number;
+  existing: number;
+  skippedClosed: number;
+  errors: number;
+};
+
+export async function backfillAutomaticSchedulesForOption(optionIdInput: number): Promise<AutomaticScheduleBackfillSummary> {
+  const db = await getDb() as any;
+  const optionId = Number(optionIdInput);
+  const summary: AutomaticScheduleBackfillSummary = {
+    options: 0,
+    scannedOrders: 0,
+    matchedOrders: 0,
+    created: 0,
+    existing: 0,
+    skippedClosed: 0,
+    errors: 0,
+  };
+  if (!db || !Number.isInteger(optionId) || optionId <= 0) return summary;
+
+  const option = await loadAutomaticOptionById(optionId);
+  if (!option) return summary;
+  summary.options = 1;
+
+  const result = await db.execute(sql`
+    SELECT id, registrationId, customerPhone, status, serviceName, serviceOption, createdAt
+    FROM orderStatusHistory
+    ORDER BY registrationId DESC, id DESC
+  `);
+  const rows = (result[0] || []) as any[];
+  if (rows.length === 0) return summary;
+
+  const byRegistration = new Map<number, any[]>();
+  for (const row of rows) {
+    const registrationId = Number(row.registrationId || 0);
+    if (!registrationId) continue;
+    const group = byRegistration.get(registrationId) || [];
+    group.push(row);
+    byRegistration.set(registrationId, group);
+  }
+
+  const customerCache = new Map<string, any>();
+
+  for (const [registrationId, history] of byRegistration.entries()) {
+    summary.scannedOrders++;
+    const latest = history[0];
+    if (!latest) continue;
+    if (isScheduleClosedStatus(latest.status)) {
+      summary.skippedClosed++;
+      continue;
+    }
+
+    const orderInfo = [...history].reverse().find((entry) => entry.serviceOption || entry.serviceName) || latest;
+    const matchedOption = findAutomaticOption([option], orderInfo.serviceName, orderInfo.serviceOption);
+    if (!matchedOption) continue;
+
+    const phone = normalizeCustomerPhone(orderInfo.customerPhone || latest.customerPhone);
+    if (!phone) continue;
+    summary.matchedOrders++;
+
+    try {
+      let customer = customerCache.get(phone);
+      if (customer === undefined) {
+        customer = await findMainCustomerByIdentity({ phone }, db);
+        customerCache.set(phone, customer || null);
+      }
+
+      const schedule = await ensureAutomaticScheduleForOrder({
+        registrationId,
+        customerPhone: phone,
+        optionId: option.id,
+        customerName: customer?.name || null,
+        customerEmail: customer?.email || null,
+        serviceName: orderInfo.serviceName || [option.productName, option.label].filter(Boolean).join(" — "),
+        subOrderIndex: 0,
+      });
+
+      if (schedule.created) summary.created++;
+      else if (schedule.token) summary.existing++;
+    } catch (error) {
+      summary.errors++;
+      console.error(`[AutoSchedule] Falha no retroativo do pedido ${registrationId} / opção ${option.id}:`, error);
+    }
+  }
+
+  return summary;
+}
+
+export async function backfillAllAutomaticSchedules(): Promise<AutomaticScheduleBackfillSummary> {
+  const options = await loadAutomaticOptions();
+  const total: AutomaticScheduleBackfillSummary = {
+    options: options.length,
+    scannedOrders: 0,
+    matchedOrders: 0,
+    created: 0,
+    existing: 0,
+    skippedClosed: 0,
+    errors: 0,
+  };
+
+  for (const option of options) {
+    const result = await backfillAutomaticSchedulesForOption(option.id);
+    total.scannedOrders += result.scannedOrders;
+    total.matchedOrders += result.matchedOrders;
+    total.created += result.created;
+    total.existing += result.existing;
+    total.skippedClosed += result.skippedClosed;
+    total.errors += result.errors;
+  }
+
+  return total;
 }
