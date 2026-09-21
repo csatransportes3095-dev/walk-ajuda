@@ -1235,6 +1235,10 @@ export const appRouter = router({
         // Referências aditivas de respostas em áudio: usadas somente pelo novo tipo de pergunta.
         productId: z.number().int().positive().optional(),
         optionId: z.number().int().positive().optional(),
+        // Referências exclusivas do agendamento automático.
+        // Mantidas separadas de productId/optionId para não alterar comissão, indicação ou áudio.
+        scheduleProductId: z.number().int().positive().optional(),
+        scheduleOptionId: z.number().int().positive().optional(),
         questionAudioFlowId: z.string().uuid().optional(),
         audioDraftIds: z.array(z.string().uuid()).max(20).optional(),
         docNameMode: z.string().optional(),
@@ -1640,6 +1644,7 @@ export const appRouter = router({
           } catch (e) { console.error('[AccessCode] Erro:', e); }
           // Salvar status inicial do pedido com produto e respostas
           let outerRegId: number | undefined;
+          let automaticScheduleResult: { token: string; url: string; created: boolean } | null = null;
           try {
             const db2 = await (await import('./db')).getDb();
             if (db2 && effectivePhone) {
@@ -1806,6 +1811,28 @@ export const appRouter = router({
                   await deleteQuestionAudioDrafts(audioDraftsForOrder.map(draft => draft.id));
                 }
                 outerRegId = regId;
+
+                // Agendamento automático é aditivo e isolado: qualquer falha aqui não interfere no pedido,
+                // comissão, indicação, cadastro, financeiro ou demais rotas.
+                if (input.scheduleProductId || input.scheduleOptionId) {
+                  try {
+                    const { ensureAutomaticScheduleForOrder } = await import('./autoSchedule');
+                    automaticScheduleResult = await ensureAutomaticScheduleForOrder({
+                      registrationId: regId,
+                      subOrderIndex: input.cartItemIndex ?? 0,
+                      customerPhone: phoneDigits,
+                      customerName: input.clientName || null,
+                      customerEmail: input.email || null,
+                      serviceName: input.service || null,
+                      serviceOption: input.nameOption || null,
+                      productId: input.scheduleProductId ?? null,
+                      optionId: input.scheduleOptionId ?? null,
+                    });
+                  } catch (autoScheduleError) {
+                    console.error('[AutoSchedule] Falha isolada ao liberar agendamento:', autoScheduleError);
+                  }
+                }
+
                 // Corrigir registrationId dos documentos salvos antes da criação do pedido
                 // Inclui docRegId = 0 (quando telefone não encontrado em accessCodePhones)
                 if (docRegId !== regId) {
@@ -1987,7 +2014,13 @@ export const appRouter = router({
             }
           }
 
-          return { success: true, message: emailSent ? 'Pedido enviado com sucesso!' : 'Pedido registrado! (email será reenviado em breve)', registrationId: outerRegId ?? null, trackingPin: generatedPin };
+          return {
+            success: true,
+            message: emailSent ? 'Pedido enviado com sucesso!' : 'Pedido registrado! (email será reenviado em breve)',
+            registrationId: outerRegId ?? null,
+            trackingPin: generatedPin,
+            autoSchedule: automaticScheduleResult,
+          };
         } catch (error) {
           console.error('Erro geral ao processar pedido:', error);
           return { success: false, message: 'Erro ao processar pedido' };
