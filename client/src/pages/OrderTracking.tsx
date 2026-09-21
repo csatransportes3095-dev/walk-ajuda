@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -625,6 +625,28 @@ export default function OrderTracking() {
   const rescheduleMut = trpc.schedule.requestReschedule.useMutation({
     onSuccess: () => { scheduleQuery.refetch(); },
   });
+
+  // Pedidos antigos elegíveis recebem o agendamento somente após validar a sessão do próprio cliente.
+  // A consulta pública por telefone permanece sem efeitos colaterais.
+  const ensureAutomaticScheduleMut = trpc.schedule.ensureAutomaticForCustomer.useMutation();
+  const automaticScheduleCheckedRef = useRef("");
+  useEffect(() => {
+    const cleanPhone = searchPhone.replace(/\D/g, "");
+    if (!canAccess || !pwdToken || cleanPhone.length < 10) return;
+    const key = `${pwdToken}:${cleanPhone}`;
+    if (automaticScheduleCheckedRef.current === key) return;
+    automaticScheduleCheckedRef.current = key;
+    ensureAutomaticScheduleMut.mutate(
+      { token: pwdToken, phone: cleanPhone },
+      {
+        onSuccess: () => { scheduleQuery.refetch(); },
+        onError: () => {
+          // O acompanhamento continua funcionando normalmente se a liberação automática falhar.
+          automaticScheduleCheckedRef.current = "";
+        },
+      },
+    );
+  }, [canAccess, pwdToken, searchPhone]);
 
   return (
     <div className="min-h-screen bg-[#0d0d1a] text-white">
