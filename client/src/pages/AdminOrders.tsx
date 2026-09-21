@@ -851,6 +851,30 @@ export default function AdminOrders() {
     placeholderData: (prev: any) => prev,
   });
 
+  // Uma única sincronização por abertura do painel garante o retroativo das opções
+  // que já estavam com agendamento automático ativo antes desta correção.
+  const autoScheduleBackfillMut = trpc.schedule.backfillAutomatic.useMutation({
+    onSuccess: async (result) => {
+      if ((result?.created || 0) > 0) {
+        toast.success(`${result.created} link(s) de agendamento antigo(s) gerado(s) automaticamente`);
+        await Promise.all([
+          trpcUtils.schedule.listAppointments.invalidate(),
+          trpcUtils.schedule.getForOrder.invalidate(),
+          ordersQuery.refetch(),
+        ]);
+      }
+    },
+    onError: (error) => {
+      console.error("[AutoSchedule] Retroativo administrativo falhou sem afetar o painel:", error);
+    },
+  });
+  const autoScheduleBackfillStartedRef = useRef(false);
+  useEffect(() => {
+    if (!isAdmin || ordersQuery.isLoading || autoScheduleBackfillStartedRef.current) return;
+    autoScheduleBackfillStartedRef.current = true;
+    autoScheduleBackfillMut.mutate();
+  }, [isAdmin, ordersQuery.isLoading]);
+
   // Consulta de poucos bytes: detecta mudança externa em status/agendamento sem buscar a lista inteira.
   const ordersUpdateMarkerQuery = trpc.orderStatus.getUpdateMarker.useQuery(undefined, {
     refetchInterval: 3000,
