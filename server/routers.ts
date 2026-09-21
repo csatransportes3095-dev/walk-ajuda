@@ -1600,25 +1600,9 @@ export const appRouter = router({
 
           const docRegId = persistedOrder.registrationId;
 
-          // Agendamento automático é um efeito aditivo e não pode impedir a criação
-          // do pedido, comissão, indicação, financeiro ou qualquer outra etapa.
+          // Declarado aqui para ser devolvido ao cliente; a criação da agenda é
+          // executada somente depois de todas as rotinas existentes do pedido.
           let automaticScheduleUrl: string | undefined;
-          if (input.autoScheduleOptionId && effectivePhone) {
-            try {
-              const automaticSchedule = await ensureAutomaticScheduleForOrder({
-                registrationId: persistedOrder.registrationId,
-                customerPhone: effectivePhone,
-                optionId: input.autoScheduleOptionId,
-                customerName: input.clientName || null,
-                customerEmail: input.email || null,
-                serviceName: input.service || null,
-                subOrderIndex: 0,
-              });
-              automaticScheduleUrl = automaticSchedule.url;
-            } catch (autoScheduleError) {
-              console.error('[AutoSchedule] Pedido salvo, mas a liberação automática do agendamento falhou:', autoScheduleError);
-            }
-          }
 
           // Comprovante PIX legado: só enviar ao R2 depois da persistência confirmada.
           if (!paymentProofUrl && input.paymentProof) {
@@ -2008,6 +1992,26 @@ export const appRouter = router({
               });
               console.log('[Financeiro] Venda registrada automaticamente - regId:', outerRegId);
             } catch (e) { console.error('[Financeiro] Erro ao registrar venda:', e); }
+          }
+
+          // Somente após pedido, indicação/comissão, cupom, PIN e financeiro:
+          // cria a agenda como efeito aditivo. Qualquer falha fica isolada e não
+          // reverte nem interfere nas rotinas anteriores.
+          if (input.autoScheduleOptionId && effectivePhone) {
+            try {
+              const automaticSchedule = await ensureAutomaticScheduleForOrder({
+                registrationId: persistedOrder.registrationId,
+                customerPhone: effectivePhone,
+                optionId: input.autoScheduleOptionId,
+                customerName: input.clientName || null,
+                customerEmail: input.email || null,
+                serviceName: input.service || null,
+                subOrderIndex: 0,
+              });
+              automaticScheduleUrl = automaticSchedule.url;
+            } catch (autoScheduleError) {
+              console.error('[AutoSchedule] Pedido salvo, mas a liberação automática do agendamento falhou:', autoScheduleError);
+            }
           }
 
           // Enviar email de confirmação ao cliente
