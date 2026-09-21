@@ -23,6 +23,7 @@ run_boot_step "db-migrate-private-authenticator-qr" pnpm run db:migrate:private-
 run_boot_step "db-migrate-admin-authenticator-vault" pnpm run db:migrate:admin-authenticator-vault
 run_boot_step "db-migrate-admin-authenticator-order-links" pnpm run db:migrate:admin-authenticator-order-links
 run_boot_step "db-migrate-option-card-appearance" pnpm run db:migrate:option-card-appearance
+run_boot_step "db-migrate-auto-schedule-options" pnpm exec tsx scripts/apply-auto-schedule-option-migration.ts
 run_boot_step "db-migrate-customer-address" pnpm exec tsx scripts/apply-customer-address-migration.ts
 run_boot_step "db-migrate-email-generator-history" pnpm exec tsx scripts/apply-email-generator-history-global-20260915.ts
 run_boot_step "db-migrate-locadora" pnpm run db:migrate:locadora
