@@ -302,9 +302,10 @@ function OptionPriceModelsEditor({ optionId }: { optionId: number }) {
 }
 
 // Componente completo para cada opção: documentos dinâmicos + perguntas
-function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, isLast, onMoveUp, onMoveDown }: {
+function OptionCard({ opt, productId, onUpdate, onAutoScheduleChange, onDelete, allProducts, isFirst, isLast, onMoveUp, onMoveDown }: {
   opt: OptionType; productId: number;
   onUpdate: (data: any) => void; onDelete: () => void;
+  onAutoScheduleChange: (enabled: boolean) => Promise<any>;
   allProducts?: ProductWithRelations[];
   isFirst?: boolean; isLast?: boolean;
   onMoveUp?: () => void; onMoveDown?: () => void;
@@ -330,6 +331,7 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
   const [cardButtonColor, setCardButtonColor] = useState((opt as any).cardButtonColor || '');
   const [cardAccentColor, setCardAccentColor] = useState((opt as any).cardAccentColor || '');
   const [autoScheduleEnabled, setAutoScheduleEnabled] = useState(Number((opt as any).autoScheduleEnabled || 0) === 1);
+  const [autoScheduleSaving, setAutoScheduleSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   // Tiers de garantia
@@ -492,6 +494,32 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
 
   const markDirty = () => setDirty(true);
 
+  const handleAutoScheduleToggle = async () => {
+    if (autoScheduleSaving) return;
+    const next = !autoScheduleEnabled;
+    setAutoScheduleSaving(true);
+    try {
+      const result = await onAutoScheduleChange(next);
+      setAutoScheduleEnabled(next);
+      if (next) {
+        const summary = result?.autoScheduleBackfill;
+        if (summary) {
+          toast.success(
+            `Agendamento automático ativado: ${summary.created || 0} link(s) antigo(s) criado(s), ${summary.existing || 0} já existente(s).`,
+          );
+        } else {
+          toast.success("Agendamento automático ativado e salvo no banco.");
+        }
+      } else {
+        toast.success("Agendamento automático desativado e salvo no banco.");
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível salvar o agendamento automático.");
+    } finally {
+      setAutoScheduleSaving(false);
+    }
+  };
+
   const handleSave = () => {
     const commissionCents = Math.round(parseFloat(commissionValue.replace(',', '.') || '0') * 100);
     onUpdate({
@@ -606,12 +634,13 @@ function OptionCard({ opt, productId, onUpdate, onDelete, allProducts, isFirst, 
                 </div>
                 <button
                   type="button"
-                  onClick={() => { setAutoScheduleEnabled(v => !v); markDirty(); }}
+                  onClick={handleAutoScheduleToggle}
+                  disabled={autoScheduleSaving}
                   className={`min-w-[94px] rounded-lg border px-3 py-2 text-[11px] font-black transition-all ${autoScheduleEnabled
                     ? 'border-fuchsia-400/60 bg-fuchsia-500/25 text-fuchsia-100'
-                    : 'border-gray-600 bg-black/30 text-gray-400'}`}
+                    : 'border-gray-600 bg-black/30 text-gray-400'} disabled:cursor-wait disabled:opacity-60`}
                 >
-                  {autoScheduleEnabled ? 'ATIVADO' : 'DESATIVADO'}
+                  {autoScheduleSaving ? 'SALVANDO...' : autoScheduleEnabled ? 'ATIVADO' : 'DESATIVADO'}
                 </button>
               </div>
               {autoScheduleEnabled && (
@@ -1550,6 +1579,9 @@ export default function AdminProducts() {
 
   const createOptMut = trpc.productOptions.create.useMutation({ onSuccess: () => { utils.products.list.invalidate(); resetOptForm(); toast.success("Opção criada!"); } });
   const updateOptMut = trpc.productOptions.update.useMutation({ onSuccess: () => { utils.products.list.invalidate(); toast.success("Opção salva!"); } });
+  const updateAutoScheduleMut = trpc.productOptions.update.useMutation({
+    onSuccess: () => utils.products.list.invalidate(),
+  });
   const deleteOptMut = trpc.productOptions.delete.useMutation({ onSuccess: () => { utils.products.list.invalidate(); toast.success("Opção excluída!"); } });
   const reorderOptMut = trpc.productOptions.reorder.useMutation({ onSuccess: () => utils.products.list.invalidate() });
 
@@ -1776,6 +1808,10 @@ export default function AdminProducts() {
                               opt={opt}
                               productId={product.id}
                               onUpdate={(data) => updateOptMut.mutate(data)}
+                              onAutoScheduleChange={(enabled) => updateAutoScheduleMut.mutateAsync({
+                                id: opt.id,
+                                autoScheduleEnabled: enabled ? 1 : 0,
+                              })}
                               onDelete={() => deleteOptMut.mutate({ id: opt.id })}
                               allProducts={productsList as ProductWithRelations[] | undefined}
                               isFirst={idx === 0}

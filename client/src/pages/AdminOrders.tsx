@@ -862,6 +862,8 @@ export default function AdminOrders() {
           trpcUtils.schedule.getForOrder.invalidate(),
           ordersQuery.refetch(),
         ]);
+      } else if ((result?.options || 0) === 0) {
+        toast.warning("Nenhuma opção está com agendamento automático ativado no banco.");
       }
     },
     onError: (error) => {
