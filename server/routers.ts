@@ -1819,7 +1819,7 @@ export const appRouter = router({
                     const { ensureAutomaticScheduleForOrder } = await import('./autoSchedule');
                     automaticScheduleResult = await ensureAutomaticScheduleForOrder({
                       registrationId: regId,
-                      subOrderIndex: input.cartItemIndex ?? 0,
+                      subOrderIndex: 0,
                       customerPhone: phoneDigits,
                       customerName: input.clientName || null,
                       customerEmail: input.email || null,
