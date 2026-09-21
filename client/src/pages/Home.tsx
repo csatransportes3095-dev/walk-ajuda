@@ -397,6 +397,7 @@ export default function Home() {
   }>({ dynamicDocs: {} });
 
   // ===== DADOS DO PEDIDO FINALIZADO (para mensagem WhatsApp) =====
+  const [automaticScheduleLinks, setAutomaticScheduleLinks] = useState<string[]>([]);
   const [submittedOrderData, setSubmittedOrderData] = useState<{
     cartItems: Array<{ service: string; nameOption: string; price: string }>;
     answers: Array<{ question: string; answer: string }>;
@@ -1671,6 +1672,7 @@ export default function Home() {
         // Enviar um pedido por item do carrinho
         setSubmitProgress(`Enviando pedido 1 de ${cartItems.length}...`);
         let successCount = 0;
+        const cartScheduleLinks: string[] = [];
         for (let i = 0; i < cartItems.length; i++) {
           const item = cartItems[i];
           setSubmitProgress(`Enviando pedido ${i + 1} de ${cartItems.length}: ${item.product.name}...`);
@@ -1707,6 +1709,7 @@ export default function Home() {
               answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
               productId: optionHasAudioQuestions ? selectedProduct?.id : undefined,
               optionId: optionHasAudioQuestions ? selectedOption?.id : undefined,
+              autoScheduleOptionId: item.option?.id || undefined,
               questionAudioFlowId: optionHasAudioQuestions ? questionAudioFlowId : undefined,
               audioDraftIds: optionHasAudioQuestions ? audioDraftIdsForSubmit : undefined,
               docNameMode: item.option?.docNameMode || 'none',
@@ -1726,6 +1729,8 @@ export default function Home() {
             if (!isPersistedOrderResult(itemResult)) {
               throw new Error('O servidor não confirmou o registro deste pedido.');
             }
+            const itemScheduleUrl = (itemResult as any).scheduleUrl;
+            if (typeof itemScheduleUrl === 'string' && itemScheduleUrl) cartScheduleLinks.push(itemScheduleUrl);
             successCount++;
           } catch (err) {
             console.error(`Erro ao enviar pedido ${i + 1}:`, err);
@@ -1738,6 +1743,7 @@ export default function Home() {
           return;
         }
         setCart([]);
+        setAutomaticScheduleLinks(Array.from(new Set(cartScheduleLinks)));
         // Salvar dados do pedido para mensagem WhatsApp
         const cartTotalPago = cartTotalValue - (cartCouponDiscountValue || 0);
         setSubmittedOrderData({
@@ -1817,6 +1823,7 @@ export default function Home() {
         answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
         productId: optionHasAudioQuestions ? selectedProduct?.id : undefined,
         optionId: optionHasAudioQuestions ? selectedOption?.id : undefined,
+        autoScheduleOptionId: selectedOption?.id || undefined,
         questionAudioFlowId: optionHasAudioQuestions ? questionAudioFlowId : undefined,
         audioDraftIds: optionHasAudioQuestions ? audioDraftIdsForSubmit : undefined,
         docNameMode: selectedOption?.docNameMode || 'none',
@@ -1887,6 +1894,8 @@ export default function Home() {
         });
         // Sessão VIP mantida até o cliente confirmar no WhatsApp
         setSuccessMessage('Arquivos enviados com sucesso!');
+        const scheduleUrl = (result as any).scheduleUrl;
+        setAutomaticScheduleLinks(typeof scheduleUrl === 'string' && scheduleUrl ? [scheduleUrl] : []);
         if ((result as any).trackingPin) setTrackingPinFromServer((result as any).trackingPin);
         setIsSubmitting(false);
         setPostOrderReferralStep('done');
@@ -2029,7 +2038,7 @@ export default function Home() {
     setDocFiles({});
     setClientName(''); setClientPhone(''); setClientCity('');
     setReferrerName(''); setReferrerPhone('');
-    setSuccessMessage(''); setCouponCode(''); setCouponValid(null);
+    setSuccessMessage(''); setAutomaticScheduleLinks([]); setCouponCode(''); setCouponValid(null);
     setCouponDiscount(null); setCouponMessage('');
     setPaymentProof(null); setPaymentProofPreview(null);
     setPixCopied(false); setIsSubmitting(false); setShowExamplePhoto(false);
@@ -4092,6 +4101,31 @@ export default function Home() {
               </div>
               <p className="text-green-400 font-bold text-sm">Seus arquivos e comprovante foram recebidos!</p>
             </div>
+
+            {automaticScheduleLinks.length > 0 && (
+              <div className="mb-5 rounded-2xl border-2 border-fuchsia-400/60 bg-gradient-to-br from-fuchsia-950/80 to-violet-950/70 p-5 text-center shadow-[0_0_28px_rgba(217,70,239,0.18)]">
+                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-fuchsia-300/40 bg-fuchsia-400/15">
+                  <CalendarDays className="h-7 w-7 text-fuchsia-200" />
+                </div>
+                <p className="text-sm font-black uppercase tracking-wide text-fuchsia-100">📸 Agendamento para foto liberado</p>
+                <p className="mt-2 text-xs leading-relaxed text-white/65">
+                  Escolha agora o dia e o horário disponível para realizar sua foto.
+                </p>
+                <div className="mt-4 space-y-2">
+                  {automaticScheduleLinks.map((scheduleUrl, index) => (
+                    <a
+                      key={scheduleUrl}
+                      href={scheduleUrl}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-black text-white transition hover:bg-fuchsia-500 active:scale-[0.98]"
+                    >
+                      <CalendarDays className="h-5 w-5" />
+                      {automaticScheduleLinks.length > 1 ? `AGENDAR FOTO ${index + 1}` : 'AGENDAR DIA E HORÁRIO'}
+                    </a>
+                  ))}
+                </div>
+                <p className="mt-3 text-[10px] text-white/40">O mesmo agendamento também fica disponível no menu da vitrine e em Acompanhar Pedido.</p>
+              </div>
+            )}
 
             {/* Senha de acompanhamento removida — cliente usa a senha da conta para rastrear */}
 
