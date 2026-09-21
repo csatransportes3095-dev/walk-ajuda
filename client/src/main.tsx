@@ -4,6 +4,7 @@ import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, splitLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
+import { useEffect } from "react";
 import superjson from "superjson";
 import App from "./App";
 import H2WelcomePremium from "./components/H2WelcomePremium";
@@ -32,6 +33,9 @@ import GlobalDevToolsProtection from "./components/GlobalDevToolsProtection";
 import AdminDevToolsTargetSelector from "./components/AdminDevToolsTargetSelector";
 import RafflePhotoIntegrityEnhancer from "./components/RafflePhotoIntegrityEnhancer";
 import H2AdsScheduleFlatView from "./components/H2AdsScheduleFlatView";
+import { MaintenanceManifestGate } from "./components/MaintenanceManifestGate";
+import { isMaintenanceManifestActiveForPath } from "@shared/maintenanceManifest";
+import { isH2AdsPath } from "@shared/h2adsRoute";
 import "./index.css";
 import "./welcome-neon-refresh.css";
 import "./admin-loans-mobile-fix.css";
@@ -85,9 +89,9 @@ function fetchWithTimeout(timeoutMs: number) {
 }
 const trpcClient = trpc.createClient({ links: [splitLink({ condition(op) { return op.type === "mutation"; }, true: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: fetchWithTimeout(150000) }), false: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: fetchWithTimeout(30000) }) })] });
 
-createRoot(document.getElementById("root")!).render(
-  <trpc.Provider client={trpcClient} queryClient={queryClient}>
-    <QueryClientProvider client={queryClient}>
+function RuntimeTree() {
+  return (
+    <>
       <GlobalDevToolsProtection /><AdminDevToolsTargetSelector /><AdminHomeTopSettingsEnhancer />
       <SpreadsheetModulesEnhancer /><SpreadsheetLegacyModulesCleanup />
       <AdminOrderLoginQuickEnhancer /><AdminOrderH2EmailQuickFix /><AdminOrderLoginCopyEnhancer /><AdminOrderAuthenticatorSyncEnhancer /><AdminOrderTrackingPinRetirement />
@@ -95,6 +99,64 @@ createRoot(document.getElementById("root")!).render(
       <QuestionBlockingRulesManager /><QuestionBlockingManifestGuard /><ProductManifestGuard /><OrderWhatsappQuestionTreeEnhancer /><PublicQuestionFlowEnhancer /><RegistrationReferralFirstGate />
       <H2WelcomePremium /><HomeTopRuntimeEnhancer /><H2AdsScheduleFlatView />
       <UnifiedCustomerAccessGate><UnifiedCustomerModuleBootstrap><App /></UnifiedCustomerModuleBootstrap></UnifiedCustomerAccessGate>
+    </>
+  );
+}
+
+function RootMaintenanceBoundary() {
+  const pathname = typeof window !== "undefined" ? window.location.pathname.toLowerCase() : "/";
+  const bypassManifest = pathname.startsWith("/admin") || isH2AdsPath(pathname);
+
+  const manifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
+    enabled: !bypassManifest,
+    staleTime: 0,
+    refetchInterval: !bypassManifest ? 30_000 : false,
+    refetchOnWindowFocus: true,
+    retry: 1,
+  });
+
+  const config = manifestQuery.data;
+
+  useEffect(() => {
+    if (bypassManifest || !config?.enabled || !config.autoDisableAtExpectedReturn || !config.expectedReturnAt) return;
+    const cutoff = new Date(config.expectedReturnAt).getTime();
+    if (!Number.isFinite(cutoff)) return;
+    const remaining = cutoff - Date.now();
+    if (remaining <= 0) {
+      void manifestQuery.refetch();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void manifestQuery.refetch();
+    }, Math.min(remaining + 100, 2_147_000_000));
+    return () => window.clearTimeout(timer);
+  }, [
+    bypassManifest,
+    config?.enabled,
+    config?.autoDisableAtExpectedReturn,
+    config?.expectedReturnAt,
+    manifestQuery.refetch,
+  ]);
+
+  // ADM e H2 Ads ficam fora do bloqueio para permitir controle operacional.
+  if (bypassManifest) return <RuntimeTree />;
+
+  // Nenhuma interface pública é montada enquanto o estado do manifesto não foi confirmado.
+  if (manifestQuery.isLoading || !config) {
+    return <div className="fixed inset-0 min-h-screen bg-[#040714]" aria-hidden="true" />;
+  }
+
+  if (isMaintenanceManifestActiveForPath(config, pathname)) {
+    return <MaintenanceManifestGate config={config} />;
+  }
+
+  return <RuntimeTree />;
+}
+
+createRoot(document.getElementById("root")!).render(
+  <trpc.Provider client={trpcClient} queryClient={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <RootMaintenanceBoundary />
     </QueryClientProvider>
   </trpc.Provider>
 );
