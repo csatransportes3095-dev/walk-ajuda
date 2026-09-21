@@ -7,6 +7,7 @@ import { MAINTENANCE_ROUTE_OPTIONS, type MaintenanceManifestConfig, type Mainten
 const emptyConfig: MaintenanceManifestConfig = {
   enabled: false,
   requireCompleteProfileForSchedule: false,
+  autoDisableAtExpectedReturn: false,
   routeIds: ["home", "login", "loan", "gastos", "tracking"],
   eyebrow: "COMUNICADO OPERACIONAL",
   title: "Estamos em manutenção programada",
@@ -67,6 +68,10 @@ export const MaintenanceManifestSettings = forwardRef<MaintenanceManifestSetting
       toast.error("Escolha pelo menos uma rota antes de ativar o manifesto.");
       return;
     }
+    if (draft.autoDisableAtExpectedReturn && !draft.expectedReturnAt) {
+      toast.error("Informe a data e hora para retirar o manifesto automaticamente.");
+      return;
+    }
     saveMutation.mutate({
       ...draft,
       eyebrow: draft.eyebrow.trim(),
@@ -107,6 +112,18 @@ export const MaintenanceManifestSettings = forwardRef<MaintenanceManifestSetting
             <label className="block space-y-1.5"><span className="text-xs font-bold text-slate-300">Título</span><input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} maxLength={120} className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-300/60" /></label>
             <label className="block space-y-1.5"><span className="text-xs font-bold text-slate-300">Informativo para o cliente</span><textarea value={draft.message} onChange={(event) => setDraft((current) => ({ ...current, message: event.target.value }))} maxLength={600} rows={4} className="w-full resize-y rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm leading-6 text-white outline-none focus:border-cyan-300/60" /></label>
             <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5"><span className="flex items-center gap-1.5 text-xs font-bold text-slate-300"><Clock3 className="h-3.5 w-3.5 text-cyan-200" />Início — opcional</span><input type="datetime-local" value={draft.startsAt} onChange={(event) => setDraft((current) => ({ ...current, startsAt: event.target.value }))} className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-300/60" /></label><label className="block space-y-1.5"><span className="flex items-center gap-1.5 text-xs font-bold text-slate-300"><Clock3 className="h-3.5 w-3.5 text-violet-200" />Previsão de retorno — opcional</span><input type="datetime-local" value={draft.expectedReturnAt} onChange={(event) => setDraft((current) => ({ ...current, expectedReturnAt: event.target.value }))} className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-300/60" /></label></div>
+            <button
+              type="button"
+              aria-pressed={draft.autoDisableAtExpectedReturn}
+              onClick={() => setDraft((current) => ({ ...current, autoDisableAtExpectedReturn: !current.autoDisableAtExpectedReturn }))}
+              className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${draft.autoDisableAtExpectedReturn ? "border-emerald-300/40 bg-emerald-300/10" : "border-white/10 bg-black/10 hover:bg-white/5"}`}
+            >
+              <span>
+                <span className="block text-xs font-black text-white">⏱️ Retirar manifesto automaticamente</span>
+                <span className="mt-1 block text-[10px] leading-5 text-slate-400">Quando ativado, o manifesto deixa de bloquear as rotas exatamente na data e hora da previsão de retorno.</span>
+              </span>
+              <span className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${draft.autoDisableAtExpectedReturn ? "bg-emerald-400/20 text-emerald-100" : "bg-white/5 text-slate-400"}`}>{draft.autoDisableAtExpectedReturn ? "ATIVADO" : "DESATIVADO"}</span>
+            </button>
           </div>
 
           <aside className="rounded-2xl border border-cyan-200/15 bg-white/[0.035] p-4 sm:p-5"><div className="flex items-center gap-2"><Route className="h-4 w-4 text-cyan-200" /><h3 className="font-black text-white">Rotas em manutenção</h3></div><p className="mt-1 text-xs leading-5 text-slate-400">Selecione somente onde deseja mostrar o card e interromper o acesso durante a manutenção.</p><div className="mt-4 space-y-2">{MAINTENANCE_ROUTE_OPTIONS.map((route) => { const checked = selectedRoutes.has(route.id); return <button type="button" key={route.id} onClick={() => toggleRoute(route.id)} className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition ${checked ? "border-cyan-300/35 bg-cyan-300/10" : "border-white/10 bg-black/10 hover:bg-white/5"}`}><span><span className="block text-sm font-bold text-white">{route.label}</span><span className="mt-0.5 block font-mono text-[11px] text-slate-400">{route.path}</span></span>{checked ? <CheckCircle2 className="h-5 w-5 flex-none text-cyan-200" /> : <span className="h-5 w-5 flex-none rounded-full border border-slate-500" />}</button>; })}</div><div className="mt-5 rounded-xl border border-amber-300/15 bg-amber-300/5 p-3 text-xs leading-5 text-amber-100"><ShieldCheck className="mr-1 inline h-3.5 w-3.5" />Rotas não selecionadas continuam funcionando normalmente.</div></aside>
