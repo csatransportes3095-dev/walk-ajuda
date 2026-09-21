@@ -5522,6 +5522,7 @@ export default function Home() {
               clientCity: data.clientCity,
             });
             if (data.trackingPin) setTrackingPinFromServer(data.trackingPin);
+            setAutomaticScheduleLinks(data.scheduleUrl ? [data.scheduleUrl] : []);
             setSuccessMessage('Pedido enviado com sucesso!');
             setPostOrderReferralStep('done');
             setStep('success');
