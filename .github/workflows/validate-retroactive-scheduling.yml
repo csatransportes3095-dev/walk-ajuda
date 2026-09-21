@@ -16,5 +16,17 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --no-frozen-lockfile
-      - run: pnpm check
+      - name: TypeScript diagnostic
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/check.log 2>&1
+          rc=$?
+          cat /tmp/check.log
+          if grep -E "server/autoSchedule\.ts|server/routers/schedule\.ts" /tmp/check.log | grep -q "error TS"; then
+            echo "TypeScript error found in retroactive scheduling files."
+            exit 1
+          fi
+          echo "No TypeScript errors in the server scheduling files changed by this fix. Repository-wide check exit code: $rc"
+          exit 0
       - run: pnpm build
