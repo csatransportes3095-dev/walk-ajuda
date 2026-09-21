@@ -4224,14 +4224,23 @@ export default function Home() {
               )}
             </button>
             {clientPhoneFromSession && (
-              <a
-                href="/acompanhar"
+              <button
+                type="button"
                 title="Meus agendamentos"
+                onClick={() => {
+                  const phone = String(clientPhoneFromSession || '').replace(/\D/g, '');
+                  if (phone) {
+                    sessionStorage.setItem('ot_searchPhone', phone);
+                    sessionStorage.setItem('ot_phoneInput', clientPhoneFromSession);
+                    sessionStorage.setItem('ot_searched', 'true');
+                  }
+                  window.location.href = '/acompanhar';
+                }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-lg text-xs font-medium transition-colors"
               >
                 <Calendar className="w-4 h-4" />
                 <span className="hidden sm:inline">Agendamento</span>
-              </a>
+              </button>
             )}
             {clientPhoneFromSession && (
               <button
