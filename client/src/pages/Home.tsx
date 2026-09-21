@@ -366,6 +366,7 @@ export default function Home() {
     clientName: string;
     clientPhone: string;
     clientCity: string;
+    scheduleLinks?: Array<{ service: string; url: string }>;
   } | null>(null);
 
   // ===== PROPAGANDA OBRIGATÓRIA =====
@@ -1483,13 +1484,14 @@ export default function Home() {
         // Enviar um pedido por item do carrinho
         setSubmitProgress(`Enviando pedido 1 de ${cartItems.length}...`);
         let successCount = 0;
+        const automaticScheduleLinks: Array<{ service: string; url: string }> = [];
         for (let i = 0; i < cartItems.length; i++) {
           const item = cartItems[i];
           setSubmitProgress(`Enviando pedido ${i + 1} de ${cartItems.length}: ${item.product.name}...`);
           // Calcular preço individual do item (sem desconto — o desconto é do carrinho todo)
           const itemRawPrice = item.option?.price || undefined;
           try {
-            await submitMutation.mutateAsync({
+            const itemResult = await submitMutation.mutateAsync({
               clientName: clientName.trim() || 'Cliente',
               service: item.product.name,
               nameOption: item.option?.label || 'N/A',
@@ -1519,6 +1521,8 @@ export default function Home() {
               answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
               productId: optionHasAudioQuestions ? selectedProduct?.id : undefined,
               optionId: optionHasAudioQuestions ? selectedOption?.id : undefined,
+              scheduleProductId: item.product.id,
+              scheduleOptionId: item.option?.id,
               questionAudioFlowId: optionHasAudioQuestions ? questionAudioFlowId : undefined,
               audioDraftIds: optionHasAudioQuestions ? audioDraftIdsForSubmit : undefined,
               docNameMode: item.option?.docNameMode || 'none',
@@ -1535,6 +1539,13 @@ export default function Home() {
               cartItemIndex: i,
             });
             successCount++;
+            const schedule = (itemResult as any)?.autoSchedule;
+            if (schedule?.url) {
+              automaticScheduleLinks.push({
+                service: item.option?.label ? `${item.product.name} - ${item.option.label}` : item.product.name,
+                url: schedule.url,
+              });
+            }
           } catch (err) {
             console.error(`Erro ao enviar pedido ${i + 1}:`, err);
           }
@@ -1556,6 +1567,7 @@ export default function Home() {
           clientName: clientName.trim() || 'Cliente',
           clientPhone: phone,
           clientCity: clientCity.trim(),
+          scheduleLinks: automaticScheduleLinks,
         });
         // Sessão VIP mantida até o cliente confirmar no WhatsApp
         setSuccessMessage(`${successCount} pedido(s) enviado(s) com sucesso!`);
@@ -1601,6 +1613,8 @@ export default function Home() {
         answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
         productId: optionHasAudioQuestions ? selectedProduct?.id : undefined,
         optionId: optionHasAudioQuestions ? selectedOption?.id : undefined,
+        scheduleProductId: selectedProduct?.id,
+        scheduleOptionId: selectedOption?.id,
         questionAudioFlowId: optionHasAudioQuestions ? questionAudioFlowId : undefined,
         audioDraftIds: optionHasAudioQuestions ? audioDraftIdsForSubmit : undefined,
         docNameMode: selectedOption?.docNameMode || 'none',
@@ -1652,6 +1666,12 @@ export default function Home() {
           clientName: clientName.trim() || 'Cliente',
           clientPhone: phone,
           clientCity: clientCity.trim(),
+          scheduleLinks: (result as any)?.autoSchedule?.url ? [{
+            service: selectedOption?.label
+              ? `${selectedProduct?.name || 'Serviço'} - ${selectedOption.label}`
+              : (selectedProduct?.name || 'Serviço'),
+            url: (result as any).autoSchedule.url,
+          }] : [],
         });
         // Sessão VIP mantida até o cliente confirmar no WhatsApp
         setSuccessMessage('Arquivos enviados com sucesso!');
@@ -3901,6 +3921,26 @@ export default function Home() {
               </div>
             )}
 
+            {postOrderReferralStep === 'done' && (submittedOrderData?.scheduleLinks?.length || 0) > 0 && (
+              <div className="mb-5 rounded-2xl border-2 border-cyan-400/60 bg-cyan-500/10 p-4 text-left shadow-lg shadow-cyan-500/10">
+                <p className="text-cyan-300 font-black text-sm text-center mb-1">📸 AGENDAMENTO LIBERADO</p>
+                <p className="text-white/80 text-xs text-center mb-3">
+                  Seu pedido precisa de atendimento com foto. Escolha agora o dia e horário.
+                </p>
+                <div className="space-y-2">
+                  {submittedOrderData?.scheduleLinks?.map((schedule, idx) => (
+                    <a
+                      key={`${schedule.url}-${idx}`}
+                      href={schedule.url}
+                      className="block w-full rounded-xl bg-cyan-500 hover:bg-cyan-400 px-4 py-3 text-center text-sm font-black text-black transition-colors"
+                    >
+                      📅 AGENDAR DIA E HORÁRIO{(submittedOrderData?.scheduleLinks?.length || 0) > 1 ? ` — ${schedule.service}` : ''}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Aviso e botão WhatsApp — só aparecem após responder a pergunta de indicação */}
             {postOrderReferralStep === 'done' && (
             <>
@@ -3973,6 +4013,16 @@ export default function Home() {
                 });
                 msg += `\n-------------------------`;
                 msg += `\n*************************`;
+              }
+
+              // Agendamento automático liberado para este pedido
+              const scheduleLinks = od?.scheduleLinks || [];
+              if (scheduleLinks.length > 0) {
+                msg += `\n\nAGENDAMENTO PARA FOTO:`;
+                scheduleLinks.forEach(schedule => {
+                  if (scheduleLinks.length > 1) msg += `\n${schedule.service}`;
+                  msg += `\nAgendar dia e horário: ${schedule.url}`;
+                });
               }
 
               // Documentos enviados
