@@ -655,7 +655,7 @@ export default function OrderTracking() {
 
   // Agendamentos deste cliente (busca por telefone — chave confiável)
   const scheduleQuery = trpc.schedule.listForTrackingByPhone.useQuery(
-    { phone: searchPhone },
+    { phone: searchPhone, cpToken: !admMode && pwdToken.length >= 32 ? pwdToken : undefined },
     { enabled: canAccess && !!searchPhone && searchPhone.length >= 10, refetchInterval: 30000 }
   );
   return (
