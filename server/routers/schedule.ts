@@ -13,7 +13,7 @@ import { findMainCustomerByIdentity, normalizeCustomerCpf, normalizeCustomerEmai
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
 import { isScheduleProfileRequirementEnabled, parseMaintenanceManifest } from "../../shared/maintenanceManifest";
 import { requireCustomerSession } from "../customerSession";
-import { syncAutomaticSchedulesForCustomer } from "../autoSchedule";
+import { syncAutomaticSchedulesForCustomer, backfillAllAutomaticSchedules } from "../autoSchedule";
 import {
   getScheduleConfig, updateScheduleConfig,
   listScheduleTemplates, createScheduleTemplate, updateScheduleTemplate, deleteScheduleTemplate, getScheduleTemplateById,
@@ -594,6 +594,13 @@ export const scheduleRouter = router({
         }
       }
       return { success: ok };
+    }),
+
+  // Retroativo administrativo dos pedidos antigos das opções já ativadas.
+  // Seguro para repetição: a criação usa a mesma idempotência do agendamento automático.
+  backfillAutomatic: adminProcedure
+    .mutation(async () => {
+      return await backfillAllAutomaticSchedules();
     }),
 
   // Lista agendamentos de um pedido para a PÁGINA DE ACOMPANHAMENTO (público)
