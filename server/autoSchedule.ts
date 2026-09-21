@@ -123,11 +123,46 @@ export async function ensureAutomaticScheduleForOrder(input: {
 }): Promise<{ token: string; url: string; created: boolean } | null> {
   if (!input.registrationId || !input.customerPhone) return null;
 
+  const db = await getDb() as any;
+  if (!db) return null;
+
+  // Confirma no servidor que os IDs recebidos pertencem ao produto/opção realmente comprado.
+  // Assim o navegador não consegue liberar agendamento usando o ID de outro produto ativo.
+  let authoritativeProductId: number | null = null;
+  let authoritativeOptionId: number | null = null;
+  if (input.optionId) {
+    const catalogResult = await db.execute(sql`
+      SELECT p.id AS productId, p.name AS productName, po.id AS optionId, po.label AS optionLabel
+      FROM productOptions po
+      INNER JOIN products p ON p.id = po.productId
+      WHERE po.id = ${input.optionId}
+      LIMIT 1
+    `);
+    const item = ((catalogResult?.[0] || []) as Array<any>)[0];
+    if (!item) return null;
+    if (input.productId && Number(item.productId) !== Number(input.productId)) return null;
+    if (normalizeText(item.productName) !== normalizeText(input.serviceName)) return null;
+    if (normalizeText(item.optionLabel) !== normalizeText(baseOptionLabel(input.serviceOption))) return null;
+    authoritativeProductId = Number(item.productId);
+    authoritativeOptionId = Number(item.optionId);
+  } else if (input.productId) {
+    const catalogResult = await db.execute(sql`
+      SELECT id, name FROM products WHERE id = ${input.productId} LIMIT 1
+    `);
+    const item = ((catalogResult?.[0] || []) as Array<any>)[0];
+    if (!item || normalizeText(item.name) !== normalizeText(input.serviceName)) return null;
+    authoritativeProductId = Number(item.id);
+  } else {
+    return null;
+  }
+
   const rules = await getAutoScheduleRules();
-  const rule = resolveAutoScheduleRule(rules, input.productId, input.optionId);
+  const rule = resolveAutoScheduleRule(rules, authoritativeProductId, authoritativeOptionId);
   if (!rule?.enabled) return null;
 
-  const subOrderIndex = Math.max(0, Number(input.subOrderIndex || 0));
+  // Cada envio de item já possui registrationId próprio; manter índice 0 preserva compatibilidade
+  // com o gerador manual existente e evita duplicidade entre fluxo automático e manual.
+  const subOrderIndex = 0;
   const existing = await getAppointmentByOrder(input.registrationId, subOrderIndex);
   if (existing) {
     return {
@@ -225,6 +260,13 @@ export async function ensureAutomaticSchedulesForCustomer(phone: string): Promis
     optionKey: normalizeText(row.optionLabel),
   }));
 
+  const customerResult = await db.execute(sql`
+    SELECT name, email FROM customers
+    WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${cleanPhone}
+    LIMIT 1
+  `);
+  const customer = ((customerResult?.[0] || []) as Array<any>)[0] || {};
+
   const results: Array<{ registrationId: number; token: string; url: string; serviceName: string | null; created: boolean }> = [];
 
   for (const order of [...orders.values()].sort((a, b) => a.firstId - b.firstId)) {
@@ -260,13 +302,6 @@ export async function ensureAutomaticSchedulesForCustomer(phone: string): Promis
       });
       continue;
     }
-
-    const customerRows = await db.execute(sql`
-      SELECT name, email FROM customers
-      WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${cleanPhone}
-      LIMIT 1
-    `);
-    const customer = ((customerRows?.[0] || []) as Array<any>)[0] || {};
 
     const appointment = await createAppointment({
       token: makeToken(),
