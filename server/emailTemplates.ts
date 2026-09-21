@@ -322,8 +322,9 @@ export function emailPedidoRecebidoCliente(opts: {
   service: string;
   orderNumber?: number | string;
   pin?: string;
+  scheduleUrl?: string;
 }): string {
-  const { siteTitle, siteDomain, siteBaseUrl, customerName, service, orderNumber, pin } = opts;
+  const { siteTitle, siteDomain, siteBaseUrl, customerName, service, orderNumber, pin, scheduleUrl } = opts;
   const branding = resolveBranding({ siteTitle, siteDomain, siteBaseUrl });
 
   const greeting = customerName
@@ -354,6 +355,13 @@ export function emailPedidoRecebidoCliente(opts: {
     </table>
 
     ${pinBlock}
+
+    ${scheduleUrl ? `
+      <div style="background:#1b1027;border:1px solid #a855f750;border-radius:8px;padding:16px;margin:18px 0;text-align:center;">
+        <p style="color:#e9d5ff;font-size:14px;font-weight:800;margin:0 0 8px;">📸 Agendamento para foto liberado</p>
+        <p style="color:#bca7d6;font-size:12px;margin:0 0 12px;line-height:1.6;">Escolha agora o dia e o horário disponível para realizar sua foto.</p>
+        ${ctaButton('📅 Agendar dia e horário', scheduleUrl)}
+      </div>` : ''}
 
     <p style="color:#888;font-size:13px;margin:16px 0 0;line-height:1.7;">Nossa equipe irá analisar seu pedido e você receberá atualizações por e-mail. Acompanhe o status do seu pedido pelo link abaixo:</p>
 
