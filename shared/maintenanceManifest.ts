@@ -87,10 +87,8 @@ export function isMaintenanceManifestExpired(config: MaintenanceManifestConfig, 
   return Number.isFinite(cutoff) && cutoff <= now;
 }
 
-export function isMaintenanceManifestActiveForPath(config: MaintenanceManifestConfig, pathname: string) {
-  const routeId = maintenanceRouteIdForPath(pathname);
-  return config.enabled
-    && !isMaintenanceManifestExpired(config)
-    && routeId !== null
-    && config.routeIds.includes(routeId);
+export function isMaintenanceManifestActiveForPath(config: MaintenanceManifestConfig, _pathname: string) {
+  // Manifesto ativo significa bloqueio total das páginas públicas.
+  // routeIds é mantido apenas por compatibilidade com configurações antigas.
+  return config.enabled && !isMaintenanceManifestExpired(config);
 }

@@ -404,7 +404,7 @@ function AppContent() {
     refetchOnWindowFocus: true,
   });
   const maintenanceManifest = maintenanceManifestQuery.data;
-  const maintenanceRouteManaged = ["/", "/login", "/emprestimo", "/gastos", "/acompanhar"].includes(location.toLowerCase().replace(/\/+$/, "") || "/");
+  const maintenancePublicScope = !isAdminRoute && !isH2AdsRoute;
   const showMaintenanceManifest = maintenanceManifest
     ? isMaintenanceManifestActiveForPath(maintenanceManifest, location)
     : false;
@@ -496,13 +496,14 @@ function AppContent() {
     return <MaintenancePage />;
   }
 
-  // Nas rotas controladas pelo manifesto, nunca renderize a página real antes de saber
-  // se a manutenção está ativa. Isso elimina o "flash" da página principal no refresh.
-  if (maintenanceRouteManaged && maintenanceManifestQuery.isLoading) {
+  // Em qualquer página pública, nunca renderize o conteúdo real antes de saber
+  // o estado do manifesto. Assim não existe flash da vitrine, login ou outra rota.
+  if (maintenancePublicScope && maintenanceManifestQuery.isLoading) {
     return <div className="min-h-screen bg-[#040714]" aria-hidden="true" />;
   }
 
-  // O manifesto bloqueia somente as rotas escolhidas pelo ADM; demais rotas seguem inalteradas.
+  // Manifesto ativo = bloqueio global de todas as páginas públicas.
+  // Admin e H2 Ads continuam fora deste gate para permitir controle operacional.
   if (showMaintenanceManifest && maintenanceManifest) {
     return <MaintenanceManifestGate config={maintenanceManifest} />;
   }
