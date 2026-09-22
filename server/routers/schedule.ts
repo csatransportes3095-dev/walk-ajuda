@@ -779,11 +779,11 @@ export const scheduleRouter = router({
         const statusResult = await updateLastOrderStatus({
           registrationId: appt.registrationId,
           subOrderIndex: appt.subOrderIndex ?? 0,
-          status: 'agendamento_confirmado',
+          status: 'agendamento_p_foto_confirmado',
           note: null,
         });
         if (!statusResult.success) {
-          console.error('[Schedule] Horário confirmado, mas status agendamento_confirmado não foi atualizado:', statusResult.error);
+          console.error('[Schedule] Horário confirmado, mas status agendamento_p_foto_confirmado não foi atualizado:', statusResult.error);
         }
       } catch (statusError) {
         console.error('[Schedule] Horário confirmado, mas falhou ao atualizar status do pedido:', statusError);
