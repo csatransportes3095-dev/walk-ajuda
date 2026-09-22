@@ -28,6 +28,35 @@ function makeToken(): string {
   return crypto.randomBytes(16).toString("hex");
 }
 
+async function resolveConfirmedScheduleOrderStatusKey(): Promise<string> {
+  try {
+    const db = await getDb() as any;
+    if (db) {
+      const result = await db.execute(sql`
+        SELECT \`key\`, label
+        FROM orderStatusTypes
+        WHERE isActive = 1
+          AND (
+            \`key\` IN ('agendamento_p_foto_confirmado', 'agendamento_confirmado')
+            OR LOWER(TRIM(label)) = 'agendamento confirmado'
+          )
+        ORDER BY
+          CASE
+            WHEN \`key\` = 'agendamento_p_foto_confirmado' THEN 0
+            WHEN LOWER(TRIM(label)) = 'agendamento confirmado' THEN 1
+            ELSE 2
+          END
+        LIMIT 1
+      `);
+      const row = (result?.[0] || [])[0] as { key?: string } | undefined;
+      if (row?.key) return String(row.key);
+    }
+  } catch (error) {
+    console.warn('[Schedule] Não foi possível resolver a chave de Agendamento Confirmado:', error);
+  }
+  return 'agendamento_p_foto_confirmado';
+}
+
 const SCHEDULE_ACCESS_DURATION_MS = 15 * 60 * 1000;
 type ScheduleAccessPayload = { appointmentToken: string; customerId: number; expiresAt: number };
 
@@ -776,14 +805,15 @@ export const scheduleRouter = router({
       // A confirmação da agenda já foi persistida; falha ao refletir o status
       // deve ser visível no log sem desfazer a reserva do horário.
       try {
+        const confirmedStatusKey = await resolveConfirmedScheduleOrderStatusKey();
         const statusResult = await updateLastOrderStatus({
           registrationId: appt.registrationId,
           subOrderIndex: appt.subOrderIndex ?? 0,
-          status: 'agendamento_p_foto_confirmado',
+          status: confirmedStatusKey,
           note: null,
         });
         if (!statusResult.success) {
-          console.error('[Schedule] Horário confirmado, mas status agendamento_p_foto_confirmado não foi atualizado:', statusResult.error);
+          console.error('[Schedule] Horário confirmado, mas o status de Agendamento Confirmado não foi atualizado:', statusResult.error);
         }
       } catch (statusError) {
         console.error('[Schedule] Horário confirmado, mas falhou ao atualizar status do pedido:', statusError);
