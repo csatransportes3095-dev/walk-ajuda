@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { publicSiteUrl } from "@shared/publicLinks";
 import { findProgressStatusIndex, resolveProgressPosition } from "@shared/orderProgressSequence";
 import { Link, useSearch } from "wouter";
