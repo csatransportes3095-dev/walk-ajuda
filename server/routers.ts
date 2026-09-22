@@ -4359,7 +4359,7 @@ export const appRouter = router({
         // atual estiver com agendamento automático ativo. Regravar o mesmo status
         // não cria links repetidos.
         const ANALYSIS_STATUSES = ['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise'];
-        if (ANALYSIS_STATUSES.includes(input.status) && previousStatus !== input.status) {
+        if (ANALYSIS_STATUSES.includes(input.status) && !ANALYSIS_STATUSES.includes(previousStatus)) {
           try {
             await regenerateAutomaticScheduleForOrder({
               registrationId: input.registrationId,
