@@ -5100,8 +5100,9 @@ export const appRouter = router({
         }
 
         const first = subHistory[0];
-        const oldServiceName = String(first.serviceName || '');
-        const oldServiceOption = String(first.serviceOption || '');
+        const currentServiceEntry = subHistory.find((entry: any) => entry.serviceName || entry.serviceOption) || first;
+        const oldServiceName = String(currentServiceEntry.serviceName || '');
+        const oldServiceOption = String(currentServiceEntry.serviceOption || '');
         const nextServiceName = input.serviceName !== undefined ? input.serviceName : oldServiceName;
         const nextServiceOption = input.serviceOption !== undefined ? input.serviceOption : oldServiceOption;
         const productChanged = nextServiceName !== oldServiceName || nextServiceOption !== oldServiceOption;
