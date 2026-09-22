@@ -79,8 +79,16 @@ export function findAutomaticOption(
   serviceOption: unknown,
 ): AutomaticScheduleOption | null {
   const optionLabel = normalizeLabel(baseServiceOptionLabel(serviceOption));
-  if (!optionLabel) return null;
   const service = normalizeLabel(serviceName);
+
+  // Pedidos antigos podem não ter serviceOption gravado. Nesse caso só é seguro
+  // inferir o agendamento quando o produto exato possui UMA única opção automática.
+  if (!optionLabel) {
+    if (!service) return null;
+    const productCandidates = options.filter((option) => normalizeLabel(option.productName) === service);
+    return productCandidates.length === 1 ? productCandidates[0] : null;
+  }
+
   const candidates = options.filter((option) => normalizeLabel(option.label) === optionLabel);
   if (candidates.length === 0) return null;
 
@@ -216,6 +224,59 @@ export async function regenerateScheduleForOrder(input: {
     registrationId,
     optionId: input.optionId,
   };
+}
+
+export async function ensureActiveAutomaticScheduleForAnalysis(input: {
+  registrationId: number;
+  customerPhone: string;
+  serviceName?: string | null;
+  serviceOption?: string | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  subOrderIndex?: number;
+}): Promise<AutomaticScheduleResult> {
+  const registrationId = Number(input.registrationId);
+  const subOrderIndex = Number.isInteger(input.subOrderIndex) ? Number(input.subOrderIndex) : 0;
+  const customerPhone = normalizeCustomerPhone(input.customerPhone);
+  if (!Number.isInteger(registrationId) || registrationId <= 0 || !customerPhone) {
+    return { created: false };
+  }
+
+  const automaticOptions = await loadAutomaticOptions();
+  const option = findAutomaticOption(automaticOptions, input.serviceName, input.serviceOption);
+  if (!option) {
+    console.warn('[AutoSchedule] EM ANÁLISE sem opção automática compatível:', {
+      registrationId,
+      subOrderIndex,
+      serviceName: input.serviceName || null,
+      serviceOption: input.serviceOption || null,
+    });
+    return { created: false, registrationId };
+  }
+
+  // Invariante de EM ANÁLISE: se já existe agenda ativa, não duplica.
+  // Se a última agenda está completed/cancelled (ou não existe), cria link NOVO.
+  const existing = await getAppointmentByOrder(registrationId, subOrderIndex);
+  if (existing && (existing.status === 'pending' || existing.status === 'confirmed')) {
+    return {
+      created: false,
+      appointmentId: existing.id,
+      token: existing.token,
+      url: publicSiteUrl(`/agendar/${existing.token}`),
+      registrationId,
+      optionId: option.id,
+    };
+  }
+
+  return regenerateScheduleForOrder({
+    registrationId,
+    customerPhone,
+    customerName: input.customerName,
+    customerEmail: input.customerEmail,
+    serviceName: input.serviceName || [option.productName, option.label].filter(Boolean).join(" — "),
+    subOrderIndex,
+    optionId: option.id,
+  });
 }
 
 export async function regenerateAutomaticScheduleForOrder(input: {
