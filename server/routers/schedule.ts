@@ -751,6 +751,34 @@ export const scheduleRouter = router({
       return buildAuthenticatedScheduleData(appt, customer);
     }),
 
+  // Se o cliente já está autenticado no sistema, reaproveita a sessão central
+  // e libera este token de agendamento sem pedir telefone/senha novamente.
+  authorizeFromSession: publicProcedure
+    .input(z.object({
+      token: z.string().min(32).max(64),
+      cpToken: z.string().min(32).max(512),
+    }))
+    .mutation(async ({ input }) => {
+      const appt = await getAppointmentByToken(input.token);
+      if (!appt) return { success: false as const, error: "invalid" as const };
+
+      const session = await requireCustomerSession(input.cpToken);
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Agendamento temporariamente indisponível." });
+
+      const customer = await findMainCustomerByIdentity({ phone: session.phone }, db);
+      if (!customer || customer.deletedAt || Number(customer.blocked) === 1 || !phonesMatch(customer.phone, appt.customerPhone)) {
+        return { success: false as const, error: "invalid" as const };
+      }
+
+      const accessToken = createScheduleAccessToken(input.token, Number(customer.id));
+      return {
+        success: true as const,
+        accessToken,
+        data: await buildAuthenticatedScheduleData(appt, customer),
+      };
+    }),
+
   // Consulta o estado da senha depois da identidade, sem exigir uma senha inexistente.
   checkPasswordStatus: publicProcedure
     .input(z.object({ token: z.string().min(32).max(64), identity: z.string().min(5).max(32) }))
