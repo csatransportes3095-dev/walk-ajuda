@@ -1,11 +1,12 @@
 import crypto from "crypto";
 import { sql } from "drizzle-orm";
-import { completeOpenAppointmentsForOrder, createAppointment, getAppointmentByOrder, getDb, getLatestOrderStatus } from "./db";
+import { completeOpenAppointmentsForOrder, createAppointment, deleteAppointment, getAppointmentByOrder, getDb, getLatestOrderStatus, getStatusLabelFromDb } from "./db";
 import { findMainCustomerByIdentity, normalizeCustomerPhone } from "./customerAccess";
 import { publicSiteUrl } from "../shared/publicLinks";
+import { sendMailDirect } from "./_core/sendMailDirect";
 
 const SCHEDULE_CLOSED_STATUSES = new Set([
-  "foto_em_anal", "foto_em_analise", "foto_analise", "em_analise",
+  "foto_em_anal", "foto_em_analise", "foto_analise",
   "documentos_aprovados", "foto_aprovada", "foto_perfil_aprovada",
   "aguardando_ativa", "aguardando_ficar_ativa",
   "conta_ativa", "p", "entregue", "pedido_entregue", "cancelado",
@@ -44,8 +45,45 @@ export function baseServiceOptionLabel(value: unknown): string {
   return raw.trim();
 }
 
-function isScheduleClosedStatus(status: unknown): boolean {
-  return SCHEDULE_CLOSED_STATUSES.has(String(status || "").trim());
+async function isScheduleClosedStatus(status: unknown): Promise<boolean> {
+  const key = String(status || "").trim();
+  if (!key) return false;
+  let label = key;
+  try { label = await getStatusLabelFromDb(key); } catch {}
+  const semantic = normalizeLabel(label).replace(/[_-]+/g, " ");
+  if (semantic === "em analise") return false;
+  if (semantic === "foto em analise") return true;
+  return SCHEDULE_CLOSED_STATUSES.has(key);
+}
+
+async function notifyAutomaticScheduleByEmail(input: {
+  email?: string | null;
+  customerName?: string | null;
+  serviceName?: string | null;
+  url: string;
+}): Promise<void> {
+  const email = String(input.email || "").trim();
+  if (!email) return;
+  try {
+    await sendMailDirect({
+      from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
+      to: email,
+      subject: "Novo agendamento liberado — H2 COLOMBIANO",
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0a0a18;color:#fff;border-radius:14px">
+          <h2 style="margin:0 0 12px;color:#e879f9">Novo agendamento liberado</h2>
+          <p style="margin:0 0 12px;color:#ddd">Olá${input.customerName ? `, <strong>${input.customerName}</strong>` : ""}!</p>
+          <p style="margin:0 0 12px;color:#ccc">Um novo agendamento foi liberado para o seu pedido${input.serviceName ? ` de <strong>${input.serviceName}</strong>` : ""}.</p>
+          <p style="margin:20px 0;text-align:center">
+            <a href="${input.url}" style="display:inline-block;background:#a855f7;color:#fff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:10px">Escolher data e horário</a>
+          </p>
+          <p style="margin:0;color:#888;font-size:12px">O mesmo agendamento também fica disponível em Acompanhar Pedido e no botão de Agendamento da vitrine.</p>
+        </div>
+      `,
+    });
+  } catch (error) {
+    console.error("[AutoSchedule] Agendamento criado, mas o e-mail do novo link falhou:", error);
+  }
 }
 
 async function loadAutomaticOptionById(optionId: number): Promise<AutomaticScheduleOption | null> {
@@ -129,14 +167,14 @@ export async function ensureAutomaticScheduleForOrder(input: {
   if (!option) return { created: false, registrationId, optionId };
 
   const latestStatus = await getLatestOrderStatus(registrationId);
-  if (latestStatus && isScheduleClosedStatus(latestStatus.status)) {
+  if (latestStatus && await isScheduleClosedStatus(latestStatus.status)) {
     return { created: false, registrationId, optionId };
   }
 
-  // Idempotência: qualquer histórico de agenda deste pedido impede uma segunda criação
-  // automática. Reabertura/cancelamento continuam exclusivamente sob controle do ADM.
+  // Só um agendamento ATIVO impede nova criação. Histórico completed/cancelled
+  // não bloqueia um novo ciclo; ao reabrir o fluxo ele é removido antes do novo token.
   const existing = await getAppointmentByOrder(registrationId, subOrderIndex);
-  if (existing) {
+  if (existing && (existing.status === "pending" || existing.status === "confirmed")) {
     return {
       created: false,
       appointmentId: existing.id,
@@ -145,6 +183,9 @@ export async function ensureAutomaticScheduleForOrder(input: {
       registrationId,
       optionId,
     };
+  }
+  if (existing && (existing.status === "completed" || existing.status === "cancelled")) {
+    await deleteAppointment(existing.id);
   }
 
   const token = crypto.randomBytes(16).toString("hex");
@@ -177,6 +218,7 @@ export async function regenerateScheduleForOrder(input: {
   serviceName?: string | null;
   subOrderIndex?: number;
   optionId?: number;
+  notifyCustomer?: boolean;
 }): Promise<AutomaticScheduleResult> {
   const registrationId = Number(input.registrationId);
   const subOrderIndex = Number.isInteger(input.subOrderIndex) ? Number(input.subOrderIndex) : 0;
@@ -185,9 +227,14 @@ export async function regenerateScheduleForOrder(input: {
     return { created: false };
   }
 
-  // Regeneração explícita: encerra SOMENTE agendas abertas deste mesmo
-  // pedido/subpedido. Não usa fallback por telefone para não afetar outro pedido.
+  // Regeneração explícita: finaliza qualquer agenda aberta deste mesmo
+  // pedido/subpedido e remove o registro finalizado antes de gerar um token NOVO.
+  // Nunca usa fallback por telefone para não afetar outro pedido do cliente.
   await completeOpenAppointmentsForOrder(registrationId, subOrderIndex, customerPhone, false);
+  const previous = await getAppointmentByOrder(registrationId, subOrderIndex);
+  if (previous && (previous.status === "completed" || previous.status === "cancelled")) {
+    await deleteAppointment(previous.id);
+  }
 
   let customerName = input.customerName ?? null;
   let customerEmail = input.customerEmail ?? null;
@@ -216,11 +263,21 @@ export async function regenerateScheduleForOrder(input: {
     templateId: null,
   });
 
+  const url = publicSiteUrl(`/agendar/${appointment.token}`);
+  if (input.notifyCustomer) {
+    await notifyAutomaticScheduleByEmail({
+      email: customerEmail,
+      customerName,
+      serviceName: input.serviceName,
+      url,
+    });
+  }
+
   return {
     created: true,
     appointmentId: appointment.id,
     token: appointment.token,
-    url: publicSiteUrl(`/agendar/${appointment.token}`),
+    url,
     registrationId,
     optionId: input.optionId,
   };
@@ -276,6 +333,7 @@ export async function ensureActiveAutomaticScheduleForAnalysis(input: {
     serviceName: input.serviceName || [option.productName, option.label].filter(Boolean).join(" — "),
     subOrderIndex,
     optionId: option.id,
+    notifyCustomer: true,
   });
 }
 
@@ -310,6 +368,7 @@ export async function regenerateAutomaticScheduleForOrder(input: {
     serviceName: input.serviceName || [option.productName, option.label].filter(Boolean).join(" — "),
     subOrderIndex: input.subOrderIndex,
     optionId: option.id,
+    notifyCustomer: true,
   });
 }
 
@@ -344,7 +403,7 @@ export async function syncAutomaticSchedulesForCustomer(phoneInput: string): Pro
 
   for (const [registrationId, history] of byRegistration.entries()) {
     const latest = history[0];
-    if (!latest || isScheduleClosedStatus(latest.status)) continue;
+    if (!latest || await isScheduleClosedStatus(latest.status)) continue;
 
     const orderInfo = [...history].reverse().find((entry) => entry.serviceOption || entry.serviceName) || latest;
     const option = findAutomaticOption(automaticOptions, orderInfo.serviceName, orderInfo.serviceOption);
@@ -417,7 +476,7 @@ export async function backfillAutomaticSchedulesForOption(optionIdInput: number)
     summary.scannedOrders++;
     const latest = history[0];
     if (!latest) continue;
-    if (isScheduleClosedStatus(latest.status)) {
+    if (await isScheduleClosedStatus(latest.status)) {
       summary.skippedClosed++;
       continue;
     }
