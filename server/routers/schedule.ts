@@ -401,12 +401,26 @@ export const scheduleRouter = router({
       orderStatus: z.string().optional(),
     }))
     .query(async ({ input }) => {
-      const photoAnalysisStatuses = new Set(['foto_em_anal', 'foto_em_analise', 'foto_analise']);
       let appt = await getAppointmentByOrder(input.registrationId, input.subOrderIndex);
+
+      let currentStatusKey = String(input.orderStatus || '');
+      let currentStatusLabel = currentStatusKey;
+      try {
+        if (currentStatusKey) currentStatusLabel = await getStatusLabelFromDb(currentStatusKey);
+      } catch {}
+      const normalizeSemantic = (value: unknown) => String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+      const isPhotoAnalysis = normalizeSemantic(currentStatusLabel) === 'foto em analise'
+        || normalizeSemantic(currentStatusKey) === 'foto em analise';
 
       // Autocorreção dos pedidos que já ficaram presos antes desta correção:
       // FOTO EM ANÁLISE encerra qualquer agenda pending/confirmed do mesmo pedido/subpedido.
-      if (photoAnalysisStatuses.has(String(input.orderStatus || ''))) {
+      if (isPhotoAnalysis) {
         if (appt && (appt.status === 'pending' || appt.status === 'confirmed')) {
           await completeAppointment(appt.id);
           appt = await getAppointmentByOrder(input.registrationId, input.subOrderIndex);
@@ -422,7 +436,7 @@ export const scheduleRouter = router({
       // registrationId antigo/diferente do mesmo cliente (re-cadastro). Se não
       // encontrar pela chave do pedido, casa pelo telefone (chave confiável),
       // priorizando o agendamento confirmado mais recente.
-      if (!appt && input.customerPhone && !photoAnalysisStatuses.has(String(input.orderStatus || ''))) {
+      if (!appt && input.customerPhone && !isPhotoAnalysis) {
         const byPhone = await listAppointmentsByPhone(input.customerPhone);
         if (byPhone.length > 0) {
           appt = byPhone.find(a => a.status === "confirmed")
