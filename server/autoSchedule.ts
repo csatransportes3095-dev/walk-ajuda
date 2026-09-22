@@ -230,6 +230,14 @@ export async function regenerateAutomaticScheduleForOrder(input: {
   const automaticOptions = await loadAutomaticOptions();
   const option = findAutomaticOption(automaticOptions, input.serviceName, input.serviceOption);
   if (!option) {
+    // Ao trocar produto ou voltar para Em Análise, um link antigo não pode
+    // permanecer ativo quando a nova opção não possui agendamento automático.
+    await completeOpenAppointmentsForOrder(
+      Number(input.registrationId),
+      Number.isInteger(input.subOrderIndex) ? Number(input.subOrderIndex) : 0,
+      input.customerPhone,
+      false,
+    );
     return { created: false, registrationId: Number(input.registrationId) };
   }
 
