@@ -21,7 +21,7 @@ import {
   getAppointmentByOrder, getAppointmentByToken, createAppointment, markAppointmentEmailSent, listAppointmentsByRegistration, listAppointmentsByPhone,
   cancelAppointment, reopenAppointment, confirmAppointment, listAppointments, deleteAppointment, completeAppointment,
   getAppointmentById, manualConfirmAppointment, adminDismissScheduleAlert,
-  getSetting, getLatestOrderStatus, getStatusLabelFromDb, getDb,
+  getSetting, getLatestOrderStatus, getStatusLabelFromDb, getDb, updateLastOrderStatus,
 } from "../db";
 
 function makeToken(): string {
@@ -770,6 +770,25 @@ export const scheduleRouter = router({
       const result = await confirmAppointment(input.token, input.slotId);
       if (!result.ok) throw new TRPCError({ code: "CONFLICT", message: result.reason || "Não foi possível agendar" });
       const appt = result.appointment!;
+
+      // Regra operacional: quando o CLIENTE confirma o horário, o status do
+      // mesmo pedido/subpedido passa automaticamente para Agendamento Confirmado.
+      // A confirmação da agenda já foi persistida; falha ao refletir o status
+      // deve ser visível no log sem desfazer a reserva do horário.
+      try {
+        const statusResult = await updateLastOrderStatus({
+          registrationId: appt.registrationId,
+          subOrderIndex: appt.subOrderIndex ?? 0,
+          status: 'agendamento_confirmado',
+          note: null,
+        });
+        if (!statusResult.success) {
+          console.error('[Schedule] Horário confirmado, mas status agendamento_confirmado não foi atualizado:', statusResult.error);
+        }
+      } catch (statusError) {
+        console.error('[Schedule] Horário confirmado, mas falhou ao atualizar status do pedido:', statusError);
+      }
+
       // Notificar admin por e-mail
       (async () => {
         try {
