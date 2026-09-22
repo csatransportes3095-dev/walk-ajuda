@@ -1371,6 +1371,13 @@ export async function updateLastOrderStatus(data: {
   // Em Análise passa por aqui. Assim a regeneração não depende da tela/rota
   // que originou a mudança e não duplica link ao apenas salvar o mesmo estágio.
   const analysisStatuses = new Set(['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise']);
+  const scheduleClosedAfterAnalysisStatuses = new Set([
+    'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',
+    'aguardando_ativa', 'aguardando_ficar_ativa',
+    'conta_ativa', 'p',
+    'entregue', 'pedido_entregue', 'cancelado',
+  ]);
+
   if (analysisStatuses.has(data.status) && !analysisStatuses.has(latestEntry.status)) {
     try {
       const { regenerateAutomaticScheduleForOrder } = await import('./autoSchedule');
@@ -1383,6 +1390,19 @@ export async function updateLastOrderStatus(data: {
       });
     } catch (error) {
       console.error('[AutoSchedule] Falha ao aplicar regra central de Em Análise:', error);
+    }
+  } else if (scheduleClosedAfterAnalysisStatuses.has(data.status)) {
+    try {
+      // Depois de Em Análise, a agenda aberta deixa de ser operacional.
+      // A chave exata pedido + subpedido evita encerrar agenda de outro pedido do mesmo telefone.
+      await completeOpenAppointmentsForOrder(
+        data.registrationId,
+        data.subOrderIndex,
+        latestEntry.customerPhone,
+        false,
+      );
+    } catch (error) {
+      console.error('[AutoSchedule] Falha ao encerrar agenda em etapa posterior a Em Análise:', error);
     }
   }
 
