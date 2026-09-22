@@ -69,8 +69,12 @@ if (next.includes(loginBefore)) {
 
 if (next.includes(pinBefore)) {
   next = next.replace(pinBefore, pinAfter);
-} else if (!next.includes('{ enabled: !!expandedPhone && isExpandedStatusTab')) {
-  throw new Error('Trecho customerPin esperado não encontrado; patch abortado.');
+} else if (next.includes('trpc.customerPin.adminGet.useQuery')) {
+  if (!next.includes('{ enabled: !!expandedPhone && isExpandedStatusTab')) {
+    throw new Error('Trecho customerPin esperado não encontrado; patch abortado.');
+  }
+} else {
+  console.log('[patch-admin-login-data-reload] customerPin legado não existe mais; etapa ignorada.');
 }
 
 if (!next.includes('function ReferrerLookup(')) {
