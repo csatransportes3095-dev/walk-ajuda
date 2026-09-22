@@ -56,7 +56,7 @@ import { h2AssistantRouter } from "./routers/h2Assistant";
 import { h2AdsRouter } from "./routers/h2ads";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
-import { ensureAutomaticScheduleForOrder } from "./autoSchedule";
+import { ensureAutomaticScheduleForOrder, regenerateAutomaticScheduleForOrder } from "./autoSchedule";
 import { resolveLegacyCommissionValue, type CommissionCandidate } from "./commissionResolver";
 import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
@@ -4324,6 +4324,29 @@ export const appRouter = router({
         if (input.status === 'recebido') {
           return { success: false, error: 'Status recebido não pode ser definido manualmente' };
         }
+        const beforeHistory = await getOrderStatusHistory(input.registrationId);
+        const orderedHistory = [...beforeHistory].reverse();
+        let initialStatusForTransition = 'recebido';
+        try {
+          const dbBefore = await (await import('./db')).getDb() as any;
+          const stResult = dbBefore ? await dbBefore.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`) : null;
+          const stRows = (stResult?.[0] || []) as any[];
+          if (stRows[0]?.key) initialStatusForTransition = String(stRows[0].key);
+        } catch {}
+        const subOrdersForTransition: any[][] = [];
+        let currentTransition: any[] = [];
+        for (const entry of orderedHistory) {
+          if ((entry.status === initialStatusForTransition || entry.status === 'recebido') && currentTransition.length > 0) {
+            subOrdersForTransition.push(currentTransition);
+            currentTransition = [entry];
+          } else {
+            currentTransition.push(entry);
+          }
+        }
+        if (currentTransition.length > 0) subOrdersForTransition.push(currentTransition);
+        subOrdersForTransition.reverse();
+        const previousStatus = subOrdersForTransition[input.subOrderIndex]?.at(-1)?.status ?? null;
+
         const result = await updateLastOrderStatus({
           registrationId: input.registrationId,
           subOrderIndex: input.subOrderIndex,
@@ -4332,11 +4355,24 @@ export const appRouter = router({
         });
         if (!result.success) return result;
 
-        // Foto em Análise encerra automaticamente a etapa de agendamento do mesmo
-        // pedido/subpedido. O histórico é preservado como completed, fazendo o pedido
-        // sair dos filtros Agendamento/Confirmado e cair somente em Foto em Análise.
-        if (['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise'].includes(input.status)) {
-          await completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex, input.customerPhone);
+        // Ao ENTRAR em Em Análise, gera um link novo somente se o produto/opção
+        // atual estiver com agendamento automático ativo. Regravar o mesmo status
+        // não cria links repetidos.
+        const ANALYSIS_STATUSES = ['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise'];
+        if (ANALYSIS_STATUSES.includes(input.status) && previousStatus !== input.status) {
+          try {
+            await regenerateAutomaticScheduleForOrder({
+              registrationId: input.registrationId,
+              subOrderIndex: input.subOrderIndex,
+              customerPhone: input.customerPhone,
+              customerName: input.customerName || null,
+              customerEmail: input.customerEmail || null,
+              serviceName: input.serviceName || null,
+              serviceOption: input.serviceOption || null,
+            });
+          } catch (error) {
+            console.error('[AutoSchedule] Falha ao regenerar agenda ao retornar para Em Análise:', error);
+          }
         }
 
         // Ao marcar como entregue, remover urgência obrigatoriamente
@@ -5059,27 +5095,96 @@ export const appRouter = router({
     updateOrderData: adminProcedure
       .input(z.object({
         registrationId: z.number(),
+        subOrderIndex: z.number().int().min(0).default(0),
+        customerPhone: z.string().optional(),
+        customerName: z.string().optional(),
+        customerEmail: z.string().email().optional(),
         serviceName: z.string().optional(),
         serviceOption: z.string().optional(),
         answers: z.string().optional(),
         pricePaid: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        const db = await (await import('./db')).getDb();
+        const db = await (await import('./db')).getDb() as any;
         if (!db) return { success: false };
-        // Atualizar o primeiro registro de histórico (onde ficam os dados do pedido)
+
+        const historyRows = await db.execute(sql`
+          SELECT id, customerPhone, serviceName, serviceOption, answers, pricePaid, createdAt
+          FROM orderStatusHistory
+          WHERE registrationId = ${input.registrationId}
+          ORDER BY createdAt ASC, id ASC
+        `);
+        const history = (historyRows[0] || []) as any[];
+        if (history.length === 0) return { success: false, error: 'Histórico não encontrado' };
+
+        let initialStatus = 'recebido';
+        try {
+          const stResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
+          const stRows = (stResult[0] || []) as any[];
+          if (stRows[0]?.key) initialStatus = String(stRows[0].key);
+        } catch {}
+
+        const subOrders: any[][] = [];
+        let current: any[] = [];
+        for (const entry of history) {
+          if ((entry.status === initialStatus || entry.status === 'recebido') && current.length > 0) {
+            subOrders.push(current);
+            current = [entry];
+          } else {
+            current.push(entry);
+          }
+        }
+        if (current.length > 0) subOrders.push(current);
+        subOrders.reverse();
+
+        const subHistory = subOrders[input.subOrderIndex];
+        if (!subHistory || subHistory.length === 0) {
+          return { success: false, error: 'Sub-pedido não encontrado' };
+        }
+
+        const first = subHistory[0];
+        const oldServiceName = String(first.serviceName || '');
+        const oldServiceOption = String(first.serviceOption || '');
+        const nextServiceName = input.serviceName !== undefined ? input.serviceName : oldServiceName;
+        const nextServiceOption = input.serviceOption !== undefined ? input.serviceOption : oldServiceOption;
+        const productChanged = nextServiceName !== oldServiceName || nextServiceOption !== oldServiceOption;
+
+        // Perguntas/respostas do pedido são históricas. Trocar produto/opção não pode
+        // apagá-las nem substituí-las pelas perguntas do produto novo.
+        const answersToPersist = input.answers !== undefined && !productChanged ? input.answers : first.answers;
+
         await db.execute(sql`
           UPDATE orderStatusHistory
           SET
-            serviceName = CASE WHEN ${input.serviceName !== undefined ? 1 : 0} = 1 THEN ${input.serviceName ?? null} ELSE serviceName END,
-            serviceOption = CASE WHEN ${input.serviceOption !== undefined ? 1 : 0} = 1 THEN ${input.serviceOption ?? null} ELSE serviceOption END,
-            answers = CASE WHEN ${input.answers !== undefined ? 1 : 0} = 1 THEN ${input.answers ?? null} ELSE answers END,
+            serviceName = ${nextServiceName || null},
+            serviceOption = ${nextServiceOption || null},
+            answers = ${answersToPersist ?? null},
             pricePaid = CASE WHEN ${input.pricePaid !== undefined ? 1 : 0} = 1 THEN ${input.pricePaid ?? null} ELSE pricePaid END
-          WHERE registrationId = ${input.registrationId}
-          ORDER BY createdAt ASC
+          WHERE id = ${first.id}
           LIMIT 1
         `);
-        return { success: true };
+
+        let scheduleCreated = false;
+        let scheduleUrl: string | null = null;
+        if (productChanged && input.customerPhone) {
+          try {
+            const schedule = await regenerateAutomaticScheduleForOrder({
+              registrationId: input.registrationId,
+              subOrderIndex: input.subOrderIndex,
+              customerPhone: input.customerPhone,
+              customerName: input.customerName || null,
+              customerEmail: input.customerEmail || null,
+              serviceName: nextServiceName || null,
+              serviceOption: nextServiceOption || null,
+            });
+            scheduleCreated = schedule.created;
+            scheduleUrl = schedule.url || null;
+          } catch (error) {
+            console.error('[AutoSchedule] Falha ao regenerar agenda após troca de produto:', error);
+          }
+        }
+
+        return { success: true, productChanged, scheduleCreated, scheduleUrl };
       }),
 
     // Admin: corrigir o titular de um pedido específico sem excluir histórico,
