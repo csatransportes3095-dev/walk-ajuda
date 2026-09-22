@@ -3055,6 +3055,7 @@ export async function completeOpenAppointmentsForOrder(
   registrationId: number,
   subOrderIndex: number,
   customerPhone?: string,
+  allowPhoneFallback: boolean = true,
 ): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
@@ -3080,6 +3081,10 @@ export async function completeOpenAppointmentsForOrder(
 
   // Se este pedido já teve qualquer agenda própria, nunca encerrar agenda de outro pedido por telefone.
   if (directHistory.length > 0) return 0;
+
+  // Fluxos de regeneração automática trabalham somente com a chave exata
+  // registrationId + subOrderIndex. Não podem consumir agenda de outro pedido.
+  if (!allowPhoneFallback) return 0;
 
   // Compatibilidade com re-cadastro: algumas agendas antigas ficaram ligadas a outro registrationId.
   // O fallback só é usado quando não existe histórico direto e casa o mesmo telefone do pedido atual.
