@@ -1990,10 +1990,7 @@ Olá, *{nome}*! 👋
 • Cidade: {cidade}
 
 Acompanhe seu pedido em:
-https://h2colombiano.com/link/acompanhamento
-
-🔐 *Senha de acesso:* {senha}
-⚠️ _Não compartilhe esta senha com ninguém para evitar bloqueios de acesso._`;
+https://h2colombiano.com/link/acompanhamento`;
 
 // Variáveis disponíveis com descrição completa
 const WA_ORDER_VARS = [
@@ -2005,7 +2002,6 @@ const WA_ORDER_VARS = [
       { label: "{cadastro}", value: "{cadastro}", desc: "Número do cadastro com asterisco (ex: *317)" },
       { label: "{pedido}", value: "{pedido}", desc: "Número do pedido com # (ex: #4000000)" },
       { label: "{cidade}", value: "{cidade}", desc: "Cidade e estado do cliente (ex: SÃO PAULO — SP)" },
-      { label: "{senha}", value: "{senha}", desc: "Senha de acesso (4 últimos dígitos do telefone)" },
     ],
   },
   {
@@ -2280,13 +2276,10 @@ Seu pedido já foi liberado.
 
 🌐 https://h2colombiano.com/link/acompanhamento
 
-🔐 *Senha de acesso:* {senha}
-⚠️ _Não compartilhe esta senha com ninguém para evitar bloqueios de acesso._
-
 Para resgatar seus dados:
 
 ✅ Acesse o site
-✅ Informe seu telefone e a senha de 4 dígitos
+✅ Informe seu telefone e sua senha de acesso
 ✅ Os dados de acesso serão exibidos na página do seu pedido
 
 ❌ Não tente acessar diretamente pelo aplicativo
@@ -2302,7 +2295,6 @@ const WA_LOGIN_VARS = [
     color: "#22c55e",
     vars: [
       { label: "{nome}", value: "{nome}", desc: "Nome completo do cliente (ex: DIEGO DO NASCIMENTO)" },
-      { label: "{senha}", value: "{senha}", desc: "Senha de acesso de 4 dígitos do cliente" },
       { label: "{telefone}", value: "{telefone}", desc: "Telefone do cliente" },
     ],
   },
