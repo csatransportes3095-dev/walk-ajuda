@@ -415,8 +415,44 @@ export const scheduleRouter = router({
         .replace(/\s+/g, ' ')
         .trim()
         .toLowerCase();
-      const isPhotoAnalysis = normalizeSemantic(currentStatusLabel) === 'foto em analise'
-        || normalizeSemantic(currentStatusKey) === 'foto em analise';
+      const currentStatusSemantic = normalizeSemantic(currentStatusLabel);
+      const currentStatusKeySemantic = normalizeSemantic(currentStatusKey);
+      const isAnalysis = currentStatusSemantic === 'em analise'
+        || currentStatusKeySemantic === 'em analise';
+      const isPhotoAnalysis = currentStatusSemantic === 'foto em analise'
+        || currentStatusKeySemantic === 'foto em analise';
+
+      // Reconciliação segura: somente o agendamento EXATO deste pedido/subpedido
+      // pode corrigir o status principal. Nunca usa o fallback por telefone para isso.
+      if (appt && appt.status === 'confirmed' && isAnalysis) {
+        try {
+          const confirmedStatusKey = await resolveConfirmedScheduleOrderStatusKey();
+          const statusResult = await updateLastOrderStatus({
+            registrationId: input.registrationId,
+            subOrderIndex: input.subOrderIndex,
+            status: confirmedStatusKey,
+            note: null,
+          });
+          if (statusResult.success) {
+            currentStatusKey = confirmedStatusKey;
+            currentStatusLabel = await getStatusLabelFromDb(confirmedStatusKey).catch(() => 'AGENDAMENTO CONFIRMADO');
+            console.info('[Schedule][reconcile] Status principal corrigido para AGENDAMENTO CONFIRMADO:', {
+              registrationId: input.registrationId,
+              subOrderIndex: input.subOrderIndex,
+              appointmentId: appt.id,
+            });
+          } else {
+            console.error('[Schedule][reconcile] Agendamento confirmado, mas não foi possível corrigir o status principal:', {
+              registrationId: input.registrationId,
+              subOrderIndex: input.subOrderIndex,
+              appointmentId: appt.id,
+              error: statusResult.error,
+            });
+          }
+        } catch (error) {
+          console.error('[Schedule][reconcile] Falha ao reconciliar AGENDAMENTO CONFIRMADO:', error);
+        }
+      }
 
       // Autocorreção dos pedidos que já ficaram presos antes desta correção:
       // FOTO EM ANÁLISE encerra qualquer agenda pending/confirmed do mesmo pedido/subpedido.
