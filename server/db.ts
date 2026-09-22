@@ -1342,12 +1342,21 @@ export async function updateLastOrderStatus(data: {
     return { success: false, error: 'Status inicial do pedido não pode ser definido manualmente após o início.' };
   }
 
-  const analysisStatuses = new Set(['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise']);
+  // Regras distintas:
+  // - EM ANÁLISE mantém/gera agendamento automático.
+  // - FOTO EM ANÁLISE encerra/finaliza o agendamento ativo.
+  const analysisStatuses = new Set(['em_analise']);
+  const scheduleClosedAfterAnalysisStatuses = new Set([
+    'foto_em_anal', 'foto_em_analise', 'foto_analise',
+    'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',
+    'aguardando_ativa', 'aguardando_ficar_ativa',
+    'conta_ativa', 'p',
+    'entregue', 'pedido_entregue', 'cancelado',
+  ]);
 
   // Se não houve troca de status, atualizar a nota. Em EM ANÁLISE também
   // garantimos a invariante operacional: precisa existir um agendamento ativo.
-  // Assim pedidos que já estavam em análise antes da correção são reparados
-  // automaticamente sem criar duplicata quando já há pending/confirmed.
+  // Em FOTO EM ANÁLISE (ou etapa posterior), qualquer agenda aberta é encerrada.
   if (latestEntry.status === data.status) {
     await db.execute(sql`
       UPDATE orderStatusHistory
@@ -1369,6 +1378,17 @@ export async function updateLastOrderStatus(data: {
       } catch (error) {
         console.error('[AutoSchedule] Falha ao garantir agenda ativa em EM ANÁLISE:', error);
       }
+    } else if (scheduleClosedAfterAnalysisStatuses.has(data.status)) {
+      try {
+        await completeOpenAppointmentsForOrder(
+          data.registrationId,
+          data.subOrderIndex,
+          latestEntry.customerPhone,
+          false,
+        );
+      } catch (error) {
+        console.error('[AutoSchedule] Falha ao finalizar agenda em FOTO EM ANÁLISE/etapa posterior:', error);
+      }
     }
 
     return { success: true };
@@ -1389,15 +1409,8 @@ export async function updateLastOrderStatus(data: {
     orderNumber: sourceForOrderNumber.orderNumber ?? null,
   });
 
-  // Regra central: qualquer fluxo que mova o subpedido de outro estágio para
-  // Em Análise passa por aqui. Assim a regeneração não depende da tela/rota
-  // que originou a mudança e não duplica link ao apenas salvar o mesmo estágio.
-  const scheduleClosedAfterAnalysisStatuses = new Set([
-    'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',
-    'aguardando_ativa', 'aguardando_ficar_ativa',
-    'conta_ativa', 'p',
-    'entregue', 'pedido_entregue', 'cancelado',
-  ]);
+  // Regra central: qualquer fluxo que mova o subpedido para EM ANÁLISE
+  // garante agenda ativa; FOTO EM ANÁLISE e etapas posteriores encerram a agenda.
 
   if (analysisStatuses.has(data.status) && !analysisStatuses.has(latestEntry.status)) {
     try {
@@ -1414,7 +1427,7 @@ export async function updateLastOrderStatus(data: {
     }
   } else if (scheduleClosedAfterAnalysisStatuses.has(data.status)) {
     try {
-      // Depois de Em Análise, a agenda aberta deixa de ser operacional.
+      // FOTO EM ANÁLISE (e qualquer etapa posterior) finaliza a agenda aberta.
       // A chave exata pedido + subpedido evita encerrar agenda de outro pedido do mesmo telefone.
       await completeOpenAppointmentsForOrder(
         data.registrationId,
