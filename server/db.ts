@@ -1366,6 +1366,26 @@ export async function updateLastOrderStatus(data: {
     serviceOption: sourceForService.serviceOption ?? null,
     orderNumber: sourceForOrderNumber.orderNumber ?? null,
   });
+
+  // Regra central: qualquer fluxo que mova o subpedido de outro estágio para
+  // Em Análise passa por aqui. Assim a regeneração não depende da tela/rota
+  // que originou a mudança e não duplica link ao apenas salvar o mesmo estágio.
+  const analysisStatuses = new Set(['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise']);
+  if (analysisStatuses.has(data.status) && !analysisStatuses.has(latestEntry.status)) {
+    try {
+      const { regenerateAutomaticScheduleForOrder } = await import('./autoSchedule');
+      await regenerateAutomaticScheduleForOrder({
+        registrationId: data.registrationId,
+        subOrderIndex: data.subOrderIndex,
+        customerPhone: latestEntry.customerPhone,
+        serviceName: sourceForService.serviceName ?? null,
+        serviceOption: sourceForService.serviceOption ?? null,
+      });
+    } catch (error) {
+      console.error('[AutoSchedule] Falha ao aplicar regra central de Em Análise:', error);
+    }
+  }
+
   return { success: true };
 }
 
