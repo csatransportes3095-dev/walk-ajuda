@@ -35,7 +35,7 @@ const stableAppointmentByOrder = new Map<string, any>();
  */
 export default function ScheduleStatusBadge({ registrationId, subOrderIndex, customerPhone, orderStatus }: Props) {
   const utils = trpc.useUtils();
-  const scheduleQueryInput = { registrationId, subOrderIndex, customerPhone: customerPhone ?? undefined };
+  const scheduleQueryInput = { registrationId, subOrderIndex, customerPhone: customerPhone ?? undefined, orderStatus: orderStatus ?? undefined };
 
   const apptQuery = trpc.schedule.getForOrder.useQuery(
     scheduleQueryInput,
@@ -110,7 +110,8 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
 
   const status = String(orderStatus || '');
   const scheduleClosedByOrder = [
-    // Em Análise mantém a nova agenda ativa conforme a regra automática atual.
+    // EM ANÁLISE pode manter agenda ativa; FOTO EM ANÁLISE encerra a agenda.
+    'foto_em_anal', 'foto_em_analise', 'foto_analise',
     'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',
     'aguardando_ativa', 'aguardando_ficar_ativa', 'conta_ativa', 'p',
     'entregue', 'pedido_entregue', 'cancelado',
