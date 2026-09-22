@@ -1288,6 +1288,26 @@ export async function addOrderStatus(data: { registrationId: number; customerPho
   return row;
 }
 
+function normalizeOrderStatusSemantic(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function isAnalysisStatusSemantic(key: unknown, label: unknown): boolean {
+  return normalizeOrderStatusSemantic(label) === 'em analise'
+    || normalizeOrderStatusSemantic(key) === 'em analise';
+}
+
+function isPhotoAnalysisStatusSemantic(key: unknown, label: unknown): boolean {
+  return normalizeOrderStatusSemantic(label) === 'foto em analise'
+    || normalizeOrderStatusSemantic(key) === 'foto em analise';
+}
+
 // Registra uma nova mudança de status no sub-pedido, preservando todo o histórico.
 // Se o status informado for igual ao status atual do sub-pedido, atualiza apenas a nota.
 export async function updateLastOrderStatus(data: {
@@ -1342,12 +1362,17 @@ export async function updateLastOrderStatus(data: {
     return { success: false, error: 'Status inicial do pedido não pode ser definido manualmente após o início.' };
   }
 
-  // Regras distintas:
-  // - EM ANÁLISE mantém/gera agendamento automático.
-  // - FOTO EM ANÁLISE encerra/finaliza o agendamento ativo.
-  const analysisStatuses = new Set(['em_analise']);
+  // Os status são editáveis pelo ADM. A regra operacional usa a label real
+  // do banco para distinguir EM ANÁLISE de FOTO EM ANÁLISE, sem depender da chave.
+  const [targetStatusLabel, previousStatusLabel] = await Promise.all([
+    getStatusLabelFromDb(data.status).catch(() => data.status),
+    getStatusLabelFromDb(latestEntry.status).catch(() => latestEntry.status),
+  ]);
+  const targetIsAnalysis = isAnalysisStatusSemantic(data.status, targetStatusLabel);
+  const previousIsAnalysis = isAnalysisStatusSemantic(latestEntry.status, previousStatusLabel);
+  const targetIsPhotoAnalysis = isPhotoAnalysisStatusSemantic(data.status, targetStatusLabel);
+
   const scheduleClosedAfterAnalysisStatuses = new Set([
-    'foto_em_anal', 'foto_em_analise', 'foto_analise',
     'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',
     'aguardando_ativa', 'aguardando_ficar_ativa',
     'conta_ativa', 'p',
@@ -1364,28 +1389,44 @@ export async function updateLastOrderStatus(data: {
       WHERE id = ${latestEntry.id}
     `);
 
-    if (analysisStatuses.has(data.status)) {
+    if (targetIsAnalysis) {
       try {
         const { ensureActiveAutomaticScheduleForAnalysis } = await import('./autoSchedule');
         const sourceForService = [...subHistory].reverse().find(h => h.serviceName || h.serviceOption) || latestEntry;
-        await ensureActiveAutomaticScheduleForAnalysis({
+        const result = await ensureActiveAutomaticScheduleForAnalysis({
           registrationId: data.registrationId,
           subOrderIndex: data.subOrderIndex,
           customerPhone: latestEntry.customerPhone,
           serviceName: sourceForService.serviceName ?? null,
           serviceOption: sourceForService.serviceOption ?? null,
         });
+        console.info('[AutoSchedule][status]', {
+          registrationId: data.registrationId,
+          subOrderIndex: data.subOrderIndex,
+          statusKey: data.status,
+          statusLabel: targetStatusLabel,
+          action: result.created ? 'created_new_schedule' : 'kept_existing_or_not_applicable',
+          appointmentId: result.appointmentId ?? null,
+        });
       } catch (error) {
         console.error('[AutoSchedule] Falha ao garantir agenda ativa em EM ANÁLISE:', error);
       }
-    } else if (scheduleClosedAfterAnalysisStatuses.has(data.status)) {
+    } else if (targetIsPhotoAnalysis || scheduleClosedAfterAnalysisStatuses.has(data.status)) {
       try {
-        await completeOpenAppointmentsForOrder(
+        const completed = await completeOpenAppointmentsForOrder(
           data.registrationId,
           data.subOrderIndex,
           latestEntry.customerPhone,
           false,
         );
+        console.info('[AutoSchedule][status]', {
+          registrationId: data.registrationId,
+          subOrderIndex: data.subOrderIndex,
+          statusKey: data.status,
+          statusLabel: targetStatusLabel,
+          action: 'finalize_schedule',
+          completed,
+        });
       } catch (error) {
         console.error('[AutoSchedule] Falha ao finalizar agenda em FOTO EM ANÁLISE/etapa posterior:', error);
       }
@@ -1412,29 +1453,45 @@ export async function updateLastOrderStatus(data: {
   // Regra central: qualquer fluxo que mova o subpedido para EM ANÁLISE
   // garante agenda ativa; FOTO EM ANÁLISE e etapas posteriores encerram a agenda.
 
-  if (analysisStatuses.has(data.status) && !analysisStatuses.has(latestEntry.status)) {
+  if (targetIsAnalysis && !previousIsAnalysis) {
     try {
       const { ensureActiveAutomaticScheduleForAnalysis } = await import('./autoSchedule');
-      await ensureActiveAutomaticScheduleForAnalysis({
+      const result = await ensureActiveAutomaticScheduleForAnalysis({
         registrationId: data.registrationId,
         subOrderIndex: data.subOrderIndex,
         customerPhone: latestEntry.customerPhone,
         serviceName: sourceForService.serviceName ?? null,
         serviceOption: sourceForService.serviceOption ?? null,
       });
+      console.info('[AutoSchedule][status]', {
+        registrationId: data.registrationId,
+        subOrderIndex: data.subOrderIndex,
+        statusKey: data.status,
+        statusLabel: targetStatusLabel,
+        action: result.created ? 'created_new_schedule' : 'kept_existing_or_not_applicable',
+        appointmentId: result.appointmentId ?? null,
+      });
     } catch (error) {
       console.error('[AutoSchedule] Falha ao aplicar regra central de Em Análise:', error);
     }
-  } else if (scheduleClosedAfterAnalysisStatuses.has(data.status)) {
+  } else if (targetIsPhotoAnalysis || scheduleClosedAfterAnalysisStatuses.has(data.status)) {
     try {
       // FOTO EM ANÁLISE (e qualquer etapa posterior) finaliza a agenda aberta.
       // A chave exata pedido + subpedido evita encerrar agenda de outro pedido do mesmo telefone.
-      await completeOpenAppointmentsForOrder(
+      const completed = await completeOpenAppointmentsForOrder(
         data.registrationId,
         data.subOrderIndex,
         latestEntry.customerPhone,
         false,
       );
+      console.info('[AutoSchedule][status]', {
+        registrationId: data.registrationId,
+        subOrderIndex: data.subOrderIndex,
+        statusKey: data.status,
+        statusLabel: targetStatusLabel,
+        action: 'finalize_schedule',
+        completed,
+      });
     } catch (error) {
       console.error('[AutoSchedule] Falha ao encerrar agenda em etapa posterior a Em Análise:', error);
     }
