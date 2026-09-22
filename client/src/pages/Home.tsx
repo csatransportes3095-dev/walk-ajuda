@@ -382,7 +382,6 @@ export default function Home() {
   });
   const [blockedByQuestion, setBlockedByQuestion] = useState<{ question: string; answer: string } | null>(null);
   const submitLockRef = useRef(false);
-  const [trackingPinFromServer, setTrackingPinFromServer] = useState<string | null>(null);
   const questionRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   // URLs de arquivos já salvos no servidor (restaurados ao retomar progresso)
@@ -1896,7 +1895,6 @@ export default function Home() {
         setSuccessMessage('Arquivos enviados com sucesso!');
         const scheduleUrl = (result as any).scheduleUrl;
         setAutomaticScheduleLinks(typeof scheduleUrl === 'string' && scheduleUrl ? [scheduleUrl] : []);
-        if ((result as any).trackingPin) setTrackingPinFromServer((result as any).trackingPin);
         setIsSubmitting(false);
         setPostOrderReferralStep('done');
         setStep("success");
@@ -5521,7 +5519,6 @@ export default function Home() {
               clientPhone: data.clientPhone,
               clientCity: data.clientCity,
             });
-            if (data.trackingPin) setTrackingPinFromServer(data.trackingPin);
             setAutomaticScheduleLinks(data.scheduleUrl ? [data.scheduleUrl] : []);
             setSuccessMessage('Pedido enviado com sucesso!');
             setPostOrderReferralStep('done');

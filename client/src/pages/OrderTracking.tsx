@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { publicSiteUrl } from "@shared/publicLinks";
 import { findProgressStatusIndex, resolveProgressPosition } from "@shared/orderProgressSequence";
 import { Link, useSearch } from "wouter";
@@ -80,7 +79,7 @@ function renderTextWithLinks(text: string): React.ReactNode {
 }
 
 export default function OrderTracking() {
-  // Modo ADM: ativado via URL ?adm=3095 — libera acesso sem PIN e desativa DevTools
+  // Modo ADM: ativado via URL ?adm=3095 — libera acesso administrativo e desativa DevTools
   const ADM_PASSWORD = '3095';
   const searchStr = useSearch();
   const [admMode, setAdmMode] = useState(() => {
@@ -121,17 +120,6 @@ export default function OrderTracking() {
   const [cpwdNew, setCpwdNew] = useState('');
   const [cpwdNewConfirm, setCpwdNewConfirm] = useState('');
   const [cpwdNewError, setCpwdNewError] = useState('');
-  // Legado (mantidos para compatibilidade com estados de CPF)
-  const [pinInput, setPinInput] = useState("");
-  const [pinVerified, setPinVerified] = useState(false);
-  const [pinError, setPinError] = useState(false);
-  const [pinBlocked, setPinBlocked] = useState(false);
-  const [pinAttempts, setPinAttempts] = useState(0);
-  const [showCreatePin, setShowCreatePin] = useState(false);
-  const [newPin, setNewPin] = useState("");
-  const [newPinConfirm, setNewPinConfirm] = useState("");
-  const [newPinError, setNewPinError] = useState("");
-
   const phoneDigits = useMemo(() => phoneInput.replace(/\D/g, ""), [phoneInput]);
 
   const formatInput = (val: string) => {
@@ -247,7 +235,6 @@ export default function OrderTracking() {
     sessionStorage.setItem('ot_phoneInput', phoneInput);
     setSearched(true);
     sessionStorage.setItem('ot_searched', 'true');
-    setPinVerified(false);
     setPwdVerified(false);
     setCpwdScreen('login');
     setCpwdInput('');
@@ -286,15 +273,6 @@ export default function OrderTracking() {
     { token: pwdToken },
     { enabled: !!pwdToken && !pwdVerified && !admMode, staleTime: 0 }
   );
-  const checkPinMutation = trpc.customerPin.check.useMutation();
-  const setPinMutation = trpc.customerPin.setPin.useMutation();
-  const updateCpfMutation = trpc.customers.updateCpfByPhone.useMutation();
-
-  // Estado para tela de atualização de CPF
-  const [needsCpfUpdate, setNeedsCpfUpdate] = useState(false);
-  const [cpfValue, setCpfValue] = useState('');
-  const [cpfError, setCpfError] = useState('');
-  const [cpfLoading, setCpfLoading] = useState(false);
 
   // Query para checar dados do cliente (CPF)
   const customerCheckQuery = trpc.customers.checkByPhone.useQuery(
@@ -302,58 +280,6 @@ export default function OrderTracking() {
     { enabled: !!searchPhone && searchPhone.length >= 10, staleTime: 0 }
   );
 
-  const handlePinSubmit = async (val?: string) => {
-    const pin = val ?? pinInput;
-    if (pin.length !== 4) return;
-    const result = await checkPinMutation.mutateAsync({ phone: searchPhone, pin });
-    if (result.blocked) {
-      setPinBlocked(true);
-      setPinError(false);
-      return;
-    }
-    if (result.success) {
-      // Verificar CPF antes de liberar acesso
-      const custCheck = await customerCheckQuery.refetch();
-      if (!(custCheck.data?.customer as any)?.cpf) {
-        setNeedsCpfUpdate(true);
-        setPinError(false);
-        return;
-      }
-      if (result.firstAccess) {
-        // Primeiro acesso: mostrar tela de criação de senha pessoal
-        setShowCreatePin(true);
-        setPinVerified(false);
-        sessionStorage.removeItem('ot_pinVerified');
-      } else {
-        setPinVerified(true);
-        sessionStorage.setItem('ot_pinVerified', 'true');
-        setShowCreatePin(false);
-      }
-      setPinError(false);
-    } else {
-      setPinAttempts((result as any).attempts ?? 0);
-      setPinError(true);
-      setPinInput("");
-    }
-  };
-
-  const handleCreatePin = async () => {
-    if (newPin.length !== 4) { setNewPinError("A senha deve ter exatamente 4 dígitos."); return; }
-    if (newPin !== newPinConfirm) { setNewPinError("As senhas não coincidem. Tente novamente."); return; }
-    await setPinMutation.mutateAsync({ phone: searchPhone, newPin });
-    // Verificar CPF antes de liberar acesso
-    const custCheck2 = await customerCheckQuery.refetch();
-    if (!(custCheck2.data?.customer as any)?.cpf) {
-      setNeedsCpfUpdate(true);
-      setShowCreatePin(false);
-      setNewPinError("");
-      return;
-    }
-    setShowCreatePin(false);
-    setPinVerified(true);
-    sessionStorage.setItem('ot_pinVerified', 'true');
-    setNewPinError("");
-  };
 
   const allHistory = statusQuery.data || [];
 
@@ -767,27 +693,17 @@ export default function OrderTracking() {
               sessionStorage.removeItem('ot_searchPhone');
               sessionStorage.removeItem('ot_phoneInput');
               sessionStorage.removeItem('ot_searched');
-              sessionStorage.removeItem('ot_pinVerified');
               sessionStorage.removeItem('ot_adm');
               localStorage.removeItem('cp_token');
               setAdmMode(false);
               setSearchPhone("");
               setPhoneInput("");
               setSearched(false);
-              setPinVerified(false);
               setPwdVerified(false);
               setPwdToken('');
               setCpwdScreen('login');
               setCpwdInput('');
               setCpwdError('');
-              setPinInput("");
-              setPinError(false);
-              setPinBlocked(false);
-              setPinAttempts(0);
-              setShowCreatePin(false);
-              setNewPin("");
-              setNewPinConfirm("");
-              setNewPinError("");
               setSelectedOrderIdx(0);
             }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors text-xs font-semibold border border-red-500/20"
@@ -882,60 +798,7 @@ export default function OrderTracking() {
           </div>
         )}
 
-        {/* Tela de atualização de CPF obrigatória */}
-        {history.length > 0 && needsCpfUpdate && (
-          <div className="bg-[#12122a] rounded-2xl border border-yellow-500/30 p-6 space-y-4">
-            <div className="text-center space-y-2">
-              <div className="text-3xl">📋</div>
-              <p className="text-white font-semibold">Atualização de cadastro necessária</p>
-              <p className="text-sm text-yellow-300">Para continuar, informe seu CPF. Este dado é obrigatório para todos os serviços.</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">CPF <span className="text-red-400">*</span></label>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={cpfValue}
-                onChange={(e) => {
-                  const d = e.target.value.replace(/\D/g, '').slice(0, 11);
-                  let f = d;
-                  if (d.length > 9) f = `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
-                  else if (d.length > 6) f = `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
-                  else if (d.length > 3) f = `${d.slice(0,3)}.${d.slice(3)}`;
-                  setCpfValue(f);
-                  setCpfError(d.length === 11 && !isValidCPF(d) ? 'CPF inválido. Digite um CPF válido para continuar.' : '');
-                }}
-                placeholder="000.000.000-00"
-                className={`w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 outline-none transition-all ${
-                  cpfError ? 'border-red-500' : isValidCPF(cpfValue) ? 'border-green-500' : 'border-gray-300'
-                }`}
-              />
-              {cpfError && <p className="text-red-400 text-sm mt-1">{cpfError}</p>}
-            </div>
-            <button
-              disabled={cpfLoading || !isValidCPF(cpfValue)}
-              onClick={async () => {
-                const d = normalizeCpf(cpfValue);
-                if (!isValidCPF(d)) { setCpfError('CPF inválido. Digite um CPF válido para continuar.'); return; }
-                setCpfLoading(true);
-                try {
-                  const res = await updateCpfMutation.mutateAsync({ phone: searchPhone, cpf: d });
-                  if (!res.success) { setCpfError(res.message || 'Erro ao salvar CPF'); return; }
-                  setNeedsCpfUpdate(false);
-                  setPinVerified(true);
-                  sessionStorage.setItem('ot_pinVerified', 'true');
-                  toast.success('CPF cadastrado com sucesso!');
-                } catch { setCpfError('Erro ao salvar. Tente novamente.'); }
-                finally { setCpfLoading(false); }
-              }}
-              className="w-full px-4 py-4 bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-600/80 hover:to-yellow-500/80 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-lg rounded-xl transition-all"
-            >
-              {cpfLoading ? 'Salvando...' : 'SALVAR E CONTINUAR'}
-            </button>
-          </div>
-        )}
-
-        {/* ===== NOVO SISTEMA DE SENHA ===== */}
+        {/* ===== SISTEMA ÚNICO DE SENHA ===== */}
         {/* Bloqueado pelo admin (via customerCheckQuery - bloqueia mesmo sem pedido) */}
         {searched && customerCheckQuery.data?.customerBlocked === true && (
           <div className="bg-[#12122a] rounded-2xl border border-red-500/30 p-6 space-y-3 text-center">
@@ -1158,7 +1021,7 @@ export default function OrderTracking() {
           </div>
         )}
 
-        {/* Resultados - conteúdo (acessível após PIN ou para pedidos finalizados) */}
+        {/* Resultados - conteúdo acessível somente após autenticação vigente */}
         {history.length > 0 && canAccess && latestStatus && latestCfg && (
           <>
             {/* Seletor de pedidos quando há múltiplos */}

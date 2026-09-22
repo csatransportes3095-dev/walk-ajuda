@@ -1385,12 +1385,6 @@ export default function AdminOrders() {
     { enabled: expandedId !== null && activeTab[expandedId!] === "status" }
   );
 
-  // Buscar PIN gerado para o cliente (senha de acompanhamento)
-  const customerPinQuery = trpc.customerPin.adminGet.useQuery(
-    { phone: expandedPhone },
-    { enabled: !!expandedPhone && expandedId !== null && activeTab[expandedId!] === "status" }
-  );
-
   // Queries para aba Perguntas
   const tqListQuery = trpc.trackingQuestions.list.useQuery();
   const createTQMutAdm = trpc.trackingQuestions.create.useMutation({ onSuccess: () => { toast.success('Pergunta criada!'); tqListQuery.refetch(); setShowNewTQAdm(false); resetNewTQAdm(); }, onError: () => toast.error('Erro ao criar') });
@@ -1559,23 +1553,6 @@ export default function AdminOrders() {
       toast.success(vars.orderNumber ? `Número #${vars.orderNumber} salvo!` : 'Número removido!');
     },
     onError: () => { setSavingOrderNumber(null); toast.error('Erro ao salvar número do pedido'); },
-  });
-
-  // Desbloqueio de PIN
-  const unlockPinMut = trpc.orderStatus.unlockPin.useMutation({
-    onSuccess: () => toast.success('PIN desbloqueado! O cliente pode tentar novamente.'),
-    onError: () => toast.error('Erro ao desbloquear PIN'),
-  });
-  // Reset de senha do cliente (volta para 4 últimos dígitos do telefone)
-  const resetPinMut = trpc.customerPin.adminReset.useMutation({
-    onSuccess: () => { toast.success('Senha resetada!'); customerPinQuery.refetch(); },
-    onError: () => toast.error('Erro ao resetar senha'),
-  });
-  // Edição manual do PIN pelo admin
-  const [adminPinEdit, setAdminPinEdit] = useState<Record<string, string>>({});
-  const setAdminPinMut = trpc.customerPin.adminSet.useMutation({
-    onSuccess: () => { toast.success('Senha de acompanhamento atualizada!'); customerPinQuery.refetch(); },
-    onError: () => toast.error('Erro ao salvar senha'),
   });
 
   const updateNoteMut = trpc.orderStatus.updateNote.useMutation({
@@ -3973,30 +3950,9 @@ export default function AdminOrders() {
                                             setLoginFields(prev => ({ ...prev, [arKey]: { ...(prev[arKey] ?? { loginPhone: '', loginEmail: '', loginPassword: '', authCode: '', emailLink: '', loginNotes: '', loginGroupLink: '' }), [f]: v } }));
                                           const waPhone = ar.customerPhone ? (ar.customerPhone.replace(/\D/g, '').startsWith('55') ? ar.customerPhone.replace(/\D/g, '') : `55${ar.customerPhone.replace(/\D/g, '')}`) : '';
                                           const hasLoginData = fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
-                                          const pinKey = arKey;
-                                          const currentPin = adminPinEdit[pinKey] !== undefined ? adminPinEdit[pinKey] : (customerPinQuery.data?.pin ?? '');
                                           return (
                                             <div className="space-y-3 mt-2">
-                                              {/* Senha de Acompanhamento */}
-                                              <div className="bg-blue-500/5 border border-blue-500/30 rounded-lg p-3 space-y-2">
-                                                <p className="text-xs font-semibold text-blue-400 flex items-center gap-1.5">
-                                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                                                  Senha de Acompanhamento do Pedido
-                                                </p>
-                                                <div className="flex items-center gap-2">
-                                                  <input type="text" inputMode="numeric" maxLength={4} value={currentPin}
-                                                    onChange={e => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setAdminPinEdit(prev => ({ ...prev, [pinKey]: v })); }}
-                                                    placeholder="_ _ _ _"
-                                                    className="w-24 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-300 font-mono font-bold tracking-widest text-center text-base focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                                                  />
-                                                  <button onClick={() => { if (currentPin.length === 4) { setAdminPinMut.mutate({ phone: ar.customerPhone || '', pin: currentPin }); } else { toast.error('A senha deve ter exatamente 4 dígitos'); } }} disabled={setAdminPinMut.isPending} className="px-2.5 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50">Salvar</button>
-                                                  <button onClick={() => { const newPin = Math.floor(1000 + Math.random() * 9000).toString(); setAdminPinEdit(prev => ({ ...prev, [pinKey]: newPin })); setAdminPinMut.mutate({ phone: ar.customerPhone || '', pin: newPin }); }} disabled={setAdminPinMut.isPending} className="px-2.5 py-1.5 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-lg text-xs font-semibold hover:bg-purple-500/30 transition-colors disabled:opacity-50">Gerar</button>
-                                                  <button onClick={() => { navigator.clipboard.writeText(currentPin); toast.success('Senha copiada!'); }} className="p-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg hover:bg-blue-500/30 transition-colors" title="Copiar senha">
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                                  </button>
-                                                </div>
-                                                <p className="text-xs text-blue-400/60">Enviada ao cliente em todos os emails de status</p>
-                                              </div>
+
 
                                               {/* Perguntas enviadas */}
                                               {trackingAnswersQuery.data && trackingAnswersQuery.data.length > 0 && (
@@ -4080,17 +4036,6 @@ export default function AdminOrders() {
                                                 </div>
                                               </div>
 
-                                              {/* Acesso PIN */}
-                                              <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 space-y-2">
-                                                <p className="text-xs font-semibold text-red-400 flex items-center gap-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>Acesso PIN</p>
-                                                <p className="text-xs text-muted-foreground">Se o cliente errou a senha 3 vezes e foi bloqueado, clique abaixo para liberar o acesso novamente.</p>
-                                                <button onClick={() => unlockPinMut.mutate({ phone: ar.customerPhone || '' })} disabled={unlockPinMut.isPending} className="w-full py-1.5 px-3 bg-red-500/20 border border-red-500/40 text-red-300 rounded-lg text-xs font-semibold hover:bg-red-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                                                  {unlockPinMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-red-300" />Desbloqueando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>Desbloquear PIN do Cliente</>)}
-                                                </button>
-                                                <button onClick={() => resetPinMut.mutate({ phone: ar.customerPhone || '' })} disabled={resetPinMut.isPending} className="w-full py-1.5 px-3 bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 rounded-lg text-xs font-semibold hover:bg-yellow-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                                                  {resetPinMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-yellow-300" />Resetando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Resetar Senha (volta ao telefone)</>)}
-                                                </button>
-                                              </div>
                                             </div>
                                           );
                                         })()}
@@ -4435,30 +4380,9 @@ export default function AdminOrders() {
                                                         setLoginFields(prev => ({ ...prev, [arKey]: { ...(prev[arKey] ?? { loginPhone: '', loginEmail: '', loginPassword: '', authCode: '', emailLink: '', loginNotes: '', loginGroupLink: '' }), [f]: v } }));
                                                       const waPhone = ar.customerPhone ? (ar.customerPhone.replace(/\D/g, '').startsWith('55') ? ar.customerPhone.replace(/\D/g, '') : `55${ar.customerPhone.replace(/\D/g, '')}`) : '';
                                                       const hasLoginData = fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
-                                                      const pinKey = arKey;
-                                                      const currentPin = adminPinEdit[pinKey] !== undefined ? adminPinEdit[pinKey] : (customerPinQuery.data?.pin ?? '');
                                                       return (
                                                         <div className="space-y-3 mt-2">
-                                                          {/* Senha de Acompanhamento */}
-                                                          <div className="bg-blue-500/5 border border-blue-500/30 rounded-lg p-3 space-y-2">
-                                                            <p className="text-xs font-semibold text-blue-400 flex items-center gap-1.5">
-                                                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                                                              Senha de Acompanhamento do Pedido
-                                                            </p>
-                                                            <div className="flex items-center gap-2">
-                                                              <input type="text" inputMode="numeric" maxLength={4} value={currentPin}
-                                                                onChange={e => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setAdminPinEdit(prev => ({ ...prev, [pinKey]: v })); }}
-                                                                placeholder="_ _ _ _"
-                                                                className="w-24 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-300 font-mono font-bold tracking-widest text-center text-base focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                                                              />
-                                                              <button onClick={() => { if (currentPin.length === 4) { setAdminPinMut.mutate({ phone: ar.customerPhone || '', pin: currentPin }); } else { toast.error('A senha deve ter exatamente 4 dígitos'); } }} disabled={setAdminPinMut.isPending} className="px-2.5 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50">Salvar</button>
-                                                              <button onClick={() => { const newPin = Math.floor(1000 + Math.random() * 9000).toString(); setAdminPinEdit(prev => ({ ...prev, [pinKey]: newPin })); setAdminPinMut.mutate({ phone: ar.customerPhone || '', pin: newPin }); }} disabled={setAdminPinMut.isPending} className="px-2.5 py-1.5 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-lg text-xs font-semibold hover:bg-purple-500/30 transition-colors disabled:opacity-50">Gerar</button>
-                                                              <button onClick={() => { navigator.clipboard.writeText(currentPin); toast.success('Senha copiada!'); }} className="p-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg hover:bg-blue-500/30 transition-colors" title="Copiar senha">
-                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                                              </button>
-                                                            </div>
-                                                            <p className="text-xs text-blue-400/60">Enviada ao cliente em todos os emails de status</p>
-                                                          </div>
+
 
                                                           {/* Perguntas enviadas */}
                                                           {trackingAnswersQuery.data && trackingAnswersQuery.data.length > 0 && (
@@ -4542,17 +4466,6 @@ export default function AdminOrders() {
                                                             </div>
                                                           </div>
 
-                                                          {/* Acesso PIN */}
-                                                          <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 space-y-2">
-                                                            <p className="text-xs font-semibold text-red-400 flex items-center gap-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>Acesso PIN</p>
-                                                            <p className="text-xs text-muted-foreground">Se o cliente errou a senha 3 vezes e foi bloqueado, clique abaixo para liberar o acesso novamente.</p>
-                                                            <button onClick={() => unlockPinMut.mutate({ phone: ar.customerPhone || '' })} disabled={unlockPinMut.isPending} className="w-full py-1.5 px-3 bg-red-500/20 border border-red-500/40 text-red-300 rounded-lg text-xs font-semibold hover:bg-red-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                                                              {unlockPinMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-red-300" />Desbloqueando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>Desbloquear PIN do Cliente</>)}
-                                                            </button>
-                                                            <button onClick={() => resetPinMut.mutate({ phone: ar.customerPhone || '' })} disabled={resetPinMut.isPending} className="w-full py-1.5 px-3 bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 rounded-lg text-xs font-semibold hover:bg-yellow-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                                                              {resetPinMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-yellow-300" />Resetando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Resetar Senha (volta ao telefone)</>)}
-                                                            </button>
-                                                          </div>
                                                         </div>
                                                       );
                                                     })()}
@@ -6003,7 +5916,6 @@ export default function AdminOrders() {
                         const uf = order.customerUf || '';
                         const localidade = cidade && uf ? `${cidade} — ${uf}` : cidade || uf || '';
                         const previsao = order.deliveryEstimate ? new Date(order.deliveryEstimate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-                        const pinForWa = customerPinQuery.data?.pin || adminPinEdit[getOrderKey(order)] || '';
                         const observacao = note[getOrderKey(order)] || '';
                         const cleanDesc = statusDescription
                           ? statusDescription.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/\*\*(.*?)\*\*/g, '*$1*').trim()
@@ -6025,7 +5937,7 @@ export default function AdminOrders() {
                             .replace(/\{pedido\}/gi, numPedido)
                             .replace(/\{servico\}/gi, servicoCompleto)
                             .replace(/\{cidade\}/gi, localidade)
-                            .replace(/\{senha\}/gi, pinForWa)
+                            .replace(/\{senha\}/gi, '')
                             .replace(/\{previsao\}/gi, previsao)
                             .replace(/\{observacao\}/gi, observacao)
                             .replace(/\{DIA\}/g, dia)
@@ -6053,11 +5965,6 @@ export default function AdminOrders() {
                           if (observacao) { linhas.push(`*Observação:* _${observacao}_`); linhas.push(``); }
                           linhas.push(`Acompanhe seu pedido em:`);
                           linhas.push(publicTrackingShareUrl());
-                          if (pinForWa) {
-                            linhas.push(``);
-                            linhas.push(`🔐 *Senha de acesso:* ${pinForWa}`);
-                            linhas.push(`⚠️ _Não compartilhe esta senha com ningém para evitar bloqueios de acesso._`);
-                          }
                           msg = linhas.join('\n');
                         }
 
@@ -6109,7 +6016,6 @@ export default function AdminOrders() {
                         // Montar mensagem WhatsApp com dados de login
                         const buildLoginWaMsg = () => {
                           const nome = order.customerName || order.codeClientName || '';
-                          const pinLogin = customerPinQuery.data?.pin || adminPinEdit[key] || '';
                           const telefone = order.phone || '';
                           const now = new Date();
                           const DIA = String(now.getDate()).padStart(2, '0');
@@ -6119,7 +6025,7 @@ export default function AdminOrders() {
                           if (waLoginTemplate) {
                             return repairWhatsappReplacementIcons(normalizeWhatsAppTrackingLinks(waLoginTemplate
                               .replace(/\{nome\}/g, nome)
-                              .replace(/\{senha\}/g, pinLogin)
+                              .replace(/\{senha\}/g, '')
                               .replace(/\{telefone\}/g, telefone)
                               .replace(/\{DIA\}/g, DIA)
                               .replace(/\{MES\}/g, MES)
@@ -6136,16 +6042,11 @@ export default function AdminOrders() {
                           linhas.push(`⚠️ IMPORTANTE: Os dados de acesso não são enviados por mensagem. Eles devem ser resgatados exclusivamente através do site abaixo:`);
                           linhas.push(``);
                           linhas.push(`🌐 ${publicTrackingShareUrl()}`);
-                          if (pinLogin) {
-                            linhas.push(``);
-                            linhas.push(`🔐 *Senha de acesso:* ${pinLogin}`);
-                            linhas.push(`⚠️ _Não compartilhe esta senha com ninguém para evitar bloqueios de acesso._`);
-                          }
                           linhas.push(``);
                           linhas.push(`Para resgatar seus dados:`);
                           linhas.push(``);
                           linhas.push(`✅ Acesse o site`);
-                          linhas.push(`✅ Informe seu telefone e a senha de 4 dígitos`);
+                          linhas.push(`✅ Informe seu telefone e sua senha de acesso`);
                           linhas.push(`✅ Os dados de acesso serão exibidos na página do seu pedido`);
                           linhas.push(``);
                           linhas.push(`❌ Não tente acessar diretamente pelo aplicativo`);
@@ -6160,65 +6061,7 @@ export default function AdminOrders() {
                         const hasLoginData = fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
                         return (
                           <div className="space-y-3">
-                            {/* Seção: Senha de Acompanhamento de Pedido */}
-                            {(() => {
-                              const pinKey = getOrderKey(order);
-                              const currentPin = adminPinEdit[pinKey] !== undefined ? adminPinEdit[pinKey] : (customerPinQuery.data?.pin ?? '');
-                              return (
-                                <div className="bg-blue-500/5 border border-blue-500/30 rounded-lg p-3 space-y-2">
-                                  <p className="text-xs font-semibold text-blue-400 flex items-center gap-1.5">
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                                    Senha de Acompanhamento do Pedido
-                                  </p>
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="text"
-                                      inputMode="numeric"
-                                      maxLength={4}
-                                      value={currentPin}
-                                      onChange={e => {
-                                        const v = e.target.value.replace(/\D/g, '').slice(0, 4);
-                                        setAdminPinEdit(prev => ({ ...prev, [pinKey]: v }));
-                                      }}
-                                      placeholder="_ _ _ _"
-                                      className="w-24 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-300 font-mono font-bold tracking-widest text-center text-base focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                                    />
-                                    <button
-                                      onClick={() => {
-                                        if (currentPin.length === 4) {
-                                          setAdminPinMut.mutate({ phone: order.phone, pin: currentPin });
-                                        } else {
-                                          toast.error('A senha deve ter exatamente 4 dígitos');
-                                        }
-                                      }}
-                                      disabled={setAdminPinMut.isPending}
-                                      className="px-2.5 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg text-xs font-semibold hover:bg-blue-500/30 transition-colors disabled:opacity-50"
-                                    >
-                                      Salvar
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        const newPin = Math.floor(1000 + Math.random() * 9000).toString();
-                                        setAdminPinEdit(prev => ({ ...prev, [pinKey]: newPin }));
-                                        setAdminPinMut.mutate({ phone: order.phone, pin: newPin });
-                                      }}
-                                      disabled={setAdminPinMut.isPending}
-                                      className="px-2.5 py-1.5 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-lg text-xs font-semibold hover:bg-purple-500/30 transition-colors disabled:opacity-50"
-                                    >
-                                      Gerar
-                                    </button>
-                                    <button
-                                      onClick={() => { navigator.clipboard.writeText(currentPin); toast.success('Senha copiada!'); }}
-                                      className="p-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-lg hover:bg-blue-500/30 transition-colors"
-                                      title="Copiar senha"
-                                    >
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                    </button>
-                                  </div>
-                                  <p className="text-xs text-blue-400/60">Enviada ao cliente em todos os emails de status</p>
-                                </div>
-                              );
-                            })()}
+
                             {/* Seção: Respostas do Formulário de Acompanhamento */}
                             {trackingAnswersQuery.data && trackingAnswersQuery.data.length > 0 && (
                               <div className="bg-blue-500/5 border border-blue-500/30 rounded-lg p-3 space-y-2">
@@ -6736,36 +6579,6 @@ export default function AdminOrders() {
                         </div>
                       </div>
 
-                      {/* Desbloqueio de PIN */}
-                      <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 space-y-2">
-                        <p className="text-xs font-semibold text-red-400 flex items-center gap-1">
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                          Acesso PIN
-                        </p>
-                        <p className="text-xs text-muted-foreground">Se o cliente errou a senha 3 vezes e foi bloqueado, clique abaixo para liberar o acesso novamente.</p>
-                        <button
-                          onClick={() => unlockPinMut.mutate({ phone: order.phone })}
-                          disabled={unlockPinMut.isPending}
-                          className="w-full py-1.5 px-3 bg-red-500/20 border border-red-500/40 text-red-300 rounded-lg text-xs font-semibold hover:bg-red-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                          {unlockPinMut.isPending ? (
-                            <><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-red-300" />Desbloqueando...</>
-                          ) : (
-                            <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>Desbloquear PIN do Cliente</>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => resetPinMut.mutate({ phone: order.phone })}
-                          disabled={resetPinMut.isPending}
-                          className="w-full py-1.5 px-3 bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 rounded-lg text-xs font-semibold hover:bg-yellow-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                          {resetPinMut.isPending ? (
-                            <><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-yellow-300" />Resetando...</>
-                          ) : (
-                            <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Resetar Senha (volta ao telefone)</>
-                          )}
-                        </button>
-                      </div>
                       {/* Cancelar / Arquivar / Deletar */}
                       <div className="flex flex-wrap gap-1.5 pt-1 border-t border-border">
                         <button

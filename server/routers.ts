@@ -70,6 +70,17 @@ import { sendMailDirect } from "./_core/sendMailDirect";
 import { emailStatusCliente, emailStatusAdmin, emailNovoPedidoAdmin, emailPedidoRecebidoCliente, emailCadastroFinalizadoAdmin, emailInicioCadastroAdmin, emailIndicacaoSucesso, emailComprovantePix, nl2br } from "./emailTemplates";
 import { parse as parseCookieHeader } from "cookie";
 import jwt from "jsonwebtoken";
+
+function stripLegacyOrderPinTemplate(text: string | null | undefined): string | null {
+  if (!text) return text ?? null;
+  return text
+    .split(/\r?\n/)
+    .filter(line => !line.includes('{senha}') && !/senha de acesso/i.test(line) && !/senha de 4 d[ií]gitos/i.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 import {
   validateAccessCode, createAccessCode, listAccessCodes, toggleAccessCode,
   deleteAccessCode, renewAccessCode, checkAccessCodeCanSubmit, consumeAccessCode,
@@ -1308,24 +1319,24 @@ export const appRouter = router({
     // Template editável da mensagem WhatsApp de atualização de pedido
     getWhatsappOrderTemplate: adminProcedure.query(async () => {
       const value = await getSetting('whatsapp_order_template');
-      return { template: value };
+      return { template: stripLegacyOrderPinTemplate(value) };
     }),
 
         saveWhatsappOrderTemplate: adminProcedure
       .input(z.object({ template: z.string() }))
       .mutation(async ({ input }) => {
-        await upsertSetting('whatsapp_order_template', input.template);
+        await upsertSetting('whatsapp_order_template', stripLegacyOrderPinTemplate(input.template) || '');
         return { success: true };
       }),
     // Template editável da mensagem WhatsApp de dados de login
     getWhatsappLoginTemplate: adminProcedure.query(async () => {
       const value = await getSetting('whatsapp_login_template');
-      return { template: value };
+      return { template: stripLegacyOrderPinTemplate(value) };
     }),
     saveWhatsappLoginTemplate: adminProcedure
       .input(z.object({ template: z.string() }))
       .mutation(async ({ input }) => {
-        await upsertSetting('whatsapp_login_template', input.template);
+        await upsertSetting('whatsapp_login_template', stripLegacyOrderPinTemplate(input.template) || '');
         return { success: true };
       }),
   }),
@@ -1930,30 +1941,8 @@ export const appRouter = router({
             try { await consumeCoupon(input.couponCode, input.clientName); } catch (e) { console.error('[Coupon] Erro:', e); }
           }
 
-          // Gerar senha de 4 dígitos para acompanhamento do pedido
-          let generatedPin: string | null = null;
-          if (input.phone) {
-            try {
-              const phone4 = input.phone.replace(/\D/g, '');
-              // Gerar PIN aleatório de 4 dígitos
-              generatedPin = String(Math.floor(1000 + Math.random() * 9000));
-              const { getDb: getDbPin } = await import('./db');
-              const { customerPins: customerPinsTable } = await import('../drizzle/schema');
-              const { eq: eqPin } = await import('drizzle-orm');
-              const dbPin = await getDbPin();
-              if (dbPin) {
-                const existingPin = await dbPin.select().from(customerPinsTable).where(eqPin(customerPinsTable.phone, phone4)).limit(1);
-                if (existingPin.length > 0) {
-                  // Atualizar PIN existente
-                  await dbPin.update(customerPinsTable).set({ pin: generatedPin, firstAccess: 0 }).where(eqPin(customerPinsTable.phone, phone4));
-                } else {
-                  // Criar novo PIN
-                  await dbPin.insert(customerPinsTable).values({ phone: phone4, pin: generatedPin, firstAccess: 0 });
-                }
-                console.log('[PIN] Senha de acompanhamento gerada para:', phone4);
-              }
-            } catch (e) { console.error('[PIN] Erro ao gerar senha:', e); }
-          }
+          // O acompanhamento usa exclusivamente customerPassword (senha universal).
+          // PINs antigos permanecem no banco apenas como histórico; nenhum novo PIN é gerado.
 
           // Lançar automaticamente no Controle Financeiro como Pendente
           if (outerRegId) {
@@ -2069,7 +2058,6 @@ export const appRouter = router({
                   customerName: input.clientName,
                   service: input.service,
                   orderNumber: undefined,
-                  pin: generatedPin || undefined,
                   scheduleUrl: automaticScheduleUrl,
                 }),
               }, 'email cliente');
@@ -2083,7 +2071,6 @@ export const appRouter = router({
             success: true,
             message: emailSent ? 'Pedido enviado com sucesso!' : 'Pedido registrado! (email será reenviado em breve)',
             registrationId: outerRegId ?? null,
-            trackingPin: generatedPin,
             scheduleUrl: automaticScheduleUrl ?? null,
           };
         } catch (error) {
@@ -4266,19 +4253,6 @@ export const appRouter = router({
             const emailBranding = await getEmailBranding();
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml = statusInfo.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo.description}</p></div>` : '';
-            // Buscar PIN gerado para o cliente (tabela customerPins)
-            let phonePin: string = input.customerPhone ? input.customerPhone.replace(/\D/g, '').slice(-4) : '????';
-            try {
-              const { getDb: getDbPin2 } = await import('./db');
-              const { customerPins: cpTable } = await import('../drizzle/schema');
-              const { eq: eqPin2 } = await import('drizzle-orm');
-              const dbPin2 = await getDbPin2();
-              if (dbPin2) {
-                const cleanPhone = input.customerPhone.replace(/\D/g, '');
-                const pinRow = await dbPin2.select().from(cpTable).where(eqPin2(cpTable.phone, cleanPhone)).limit(1);
-                if (pinRow[0]?.pin) phonePin = pinRow[0].pin;
-              }
-            } catch { /* usa fallback */ }
             await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
               to: input.customerEmail,
@@ -4428,19 +4402,6 @@ export const appRouter = router({
             const emailBranding = await getEmailBranding();
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml = statusInfo.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo.description}</p></div>` : '';
-            // Buscar PIN gerado para o cliente (tabela customerPins)
-            let phonePin: string = input.customerPhone ? input.customerPhone.replace(/\D/g, '').slice(-4) : '????';
-            try {
-              const { getDb: getDbPin3 } = await import('./db');
-              const { customerPins: cpTable3 } = await import('../drizzle/schema');
-              const { eq: eqPin3 } = await import('drizzle-orm');
-              const dbPin3 = await getDbPin3();
-              if (dbPin3) {
-                const cleanPhone3 = input.customerPhone.replace(/\D/g, '');
-                const pinRow3 = await dbPin3.select().from(cpTable3).where(eqPin3(cpTable3.phone, cleanPhone3)).limit(1);
-                if (pinRow3[0]?.pin) phonePin = pinRow3[0].pin;
-              }
-            } catch { /* usa fallback */ }
             // Gerar tracking ID para rastreamento de abertura
             const crypto = await import('crypto');
             const trackingId = crypto.randomBytes(24).toString('hex');
@@ -4752,19 +4713,6 @@ export const appRouter = router({
           const emailBranding = await getEmailBranding();
           const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
           const descriptionHtml2 = statusInfo2.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo2.description}</p></div>` : '';
-          // Buscar PIN gerado para o cliente (tabela customerPins)
-          let phonePin: string | null = input.customerPhone ? input.customerPhone.replace(/\D/g, '').slice(-4) : null;
-          try {
-            const { getDb: getDbPin4 } = await import('./db');
-            const { customerPins: cpTable4 } = await import('../drizzle/schema');
-            const { eq: eqPin4 } = await import('drizzle-orm');
-            const dbPin4 = await getDbPin4();
-            if (dbPin4 && input.customerPhone) {
-              const cleanPhone4 = input.customerPhone.replace(/\D/g, '');
-              const pinRow4 = await dbPin4.select().from(cpTable4).where(eqPin4(cpTable4.phone, cleanPhone4)).limit(1);
-              if (pinRow4[0]?.pin) phonePin = pinRow4[0].pin;
-            }
-          } catch { /* usa fallback */ }
           // Bloco de dados do pedido
           const reRows: string[] = [];
           if (input.customerNumber) reRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Cadastro</td><td style="color:#fff;font-size:13px;font-weight:bold;padding:4px 0;">*${input.customerNumber}</td></tr>`);
@@ -5707,19 +5655,6 @@ export const appRouter = router({
             const emailBranding = await getEmailBranding();
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
             const descriptionHtml3 = statusInfo3.description ? `<div style="background:#1a1a2e;border:1px solid #a855f720;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;line-height:1.7;">${statusInfo3.description}</p></div>` : '';
-            // Buscar PIN do cliente
-            let phonePin3: string | null = input.phone ? input.phone.replace(/\D/g, '').slice(-4) : null;
-            try {
-              const { getDb: getDbPin3m } = await import('./db');
-              const { customerPins: cpTable3m } = await import('../drizzle/schema');
-              const { eq: eqPin3m } = await import('drizzle-orm');
-              const dbPin3m = await getDbPin3m();
-              if (dbPin3m && input.phone) {
-                const cleanPhone3m = input.phone.replace(/\D/g, '');
-                const pinRow3m = await dbPin3m.select().from(cpTable3m).where(eqPin3m(cpTable3m.phone, cleanPhone3m)).limit(1);
-                if (pinRow3m[0]?.pin) phonePin3 = pinRow3m[0].pin;
-              }
-            } catch { /* usa fallback */ }
             const pinHtml3 = ''; // Senha de acompanhamento removida
             await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
@@ -5854,19 +5789,6 @@ export const appRouter = router({
               `<tr><td style="padding:6px 8px;color:#ccc;font-size:13px;border-bottom:1px solid #ffffff10;">${i + 1}. ${item.serviceName}${item.serviceOption ? ` — ${item.serviceOption}` : ''}</td></tr>`
             ).join('');
             const noteHtml = input.note ? `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 8px;">📋 Observação:</p><p style="color:#ccc;font-size:14px;margin:0;white-space:pre-line;">${input.note}</p></div>` : '';
-            // Buscar PIN do cliente
-            let phonePinM: string | null = input.phone ? input.phone.replace(/\D/g, '').slice(-4) : null;
-            try {
-              const { getDb: getDbPinM } = await import('./db');
-              const { customerPins: cpTableM } = await import('../drizzle/schema');
-              const { eq: eqPinM } = await import('drizzle-orm');
-              const dbPinM = await getDbPinM();
-              if (dbPinM && input.phone) {
-                const cleanPhoneM = input.phone.replace(/\D/g, '');
-                const pinRowM = await dbPinM.select().from(cpTableM).where(eqPinM(cpTableM.phone, cleanPhoneM)).limit(1);
-                if (pinRowM[0]?.pin) phonePinM = pinRowM[0].pin;
-              }
-            } catch { /* usa fallback */ }
             const pinHtmlM = ''; // Senha de acompanhamento removida
             await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
@@ -5914,55 +5836,19 @@ export const appRouter = router({
         return { success: true, deleted };
       }),
 
-    // Público: registrar tentativa de PIN e verificar bloqueio
+    // PIN legado desativado. Endpoints mantidos apenas para compatibilidade
+    // com clientes antigos, sem ler ou alterar o histórico de pinBlocks.
     checkPinAttempt: publicProcedure
       .input(z.object({ phone: z.string(), correct: z.boolean() }))
-      .mutation(async ({ input }) => {
-        const db = await (await import('./db')).getDb();
-        if (!db) return { blocked: false, attempts: 0 };
-        const phone = input.phone.replace(/\D/g, '');
-        // Buscar registro existente
-        const rows = await db.execute(sql`SELECT * FROM pinBlocks WHERE phone = ${phone} LIMIT 1`);
-        const existing = (rows[0] as unknown as Array<{ id: number; attempts: number; blocked: number }>)[0];
-        if (existing?.blocked === 1) return { blocked: true, attempts: existing.attempts };
-        if (input.correct) {
-          // Acerto: zerar tentativas
-          if (existing) await db.execute(sql`UPDATE pinBlocks SET attempts = 0 WHERE phone = ${phone}`);
-          return { blocked: false, attempts: 0 };
-        }
-        // Erro: incrementar tentativas
-        const newAttempts = (existing?.attempts ?? 0) + 1;
-        const nowBlocked = newAttempts >= 3 ? 1 : 0;
-        if (existing) {
-          await db.execute(sql`UPDATE pinBlocks SET attempts = ${newAttempts}, blocked = ${nowBlocked} WHERE phone = ${phone}`);
-        } else {
-          await db.execute(sql`INSERT INTO pinBlocks (phone, attempts, blocked) VALUES (${phone}, ${newAttempts}, ${nowBlocked})`);
-        }
-        return { blocked: nowBlocked === 1, attempts: newAttempts };
-      }),
+      .mutation(async () => ({ blocked: false, attempts: 0, legacyDisabled: true })),
 
-    // Admin: desbloquear PIN de um telefone
     unlockPin: adminProcedure
       .input(z.object({ phone: z.string() }))
-      .mutation(async ({ input }) => {
-        const db = await (await import('./db')).getDb();
-        if (!db) return { success: false };
-        const phone = input.phone.replace(/\D/g, '');
-        await db.execute(sql`UPDATE pinBlocks SET attempts = 0, blocked = 0 WHERE phone = ${phone}`);
-        return { success: true };
-      }),
+      .mutation(async () => ({ success: false, legacyDisabled: true })),
 
-    // Admin: verificar se um telefone está bloqueado
     getPinBlockStatus: adminProcedure
       .input(z.object({ phone: z.string() }))
-      .query(async ({ input }) => {
-        const db = await (await import('./db')).getDb();
-        if (!db) return { blocked: false, attempts: 0 };
-        const phone = input.phone.replace(/\D/g, '');
-        const rows = await db.execute(sql`SELECT attempts, blocked FROM pinBlocks WHERE phone = ${phone} LIMIT 1`);
-        const row = (rows[0] as unknown as Array<{ attempts: number; blocked: number }>)[0];
-        return { blocked: (row?.blocked ?? 0) === 1, attempts: row?.attempts ?? 0 };
-      }),
+      .query(async () => ({ blocked: false, attempts: 0, legacyDisabled: true })),
 
     // Admin: busca de emergência — busca em TODAS as pastas (ativas, arquivo, rgcnh, pastas personalizadas)
     emergencySearch: adminProcedure
@@ -6526,84 +6412,16 @@ export const appRouter = router({
       }),
   }),
 
-  // === SENHA PERSONALIZADA DO CLIENTE (acompanhar pedido) ===
+  // === PIN LEGADO DO CLIENTE (somente compatibilidade histórica) ===
+  // A autenticação vigente é exclusivamente customerPassword. Estes endpoints
+  // permanecem apenas para compatibilidade de tipos; não validam nem alteram PINs.
   customerPin: router({
-    // Verifica a senha do cliente e retorna se é primeiro acesso
-     check: publicProcedure
+    check: publicProcedure
       .input(z.object({ phone: z.string(), pin: z.string().length(4) }))
-      .mutation(async ({ input, ctx }) => {
-        const clientIp = (ctx.req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || ctx.req.socket?.remoteAddress || 'unknown';
-        // Verificar blocklist do admin (lista negra)
-        const adminBlockResult = await checkPhoneBlockedAndBlockIp(input.phone, clientIp, 'verificar_pin');
-        if (adminBlockResult.blocked) return { success: false, blocked: true, firstAccess: true, error: 'blocked' as const };
-        const { getDb } = await import('./db');
-        const { customerPins, pinBlocks } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return { success: false, blocked: false, firstAccess: true, error: 'db' as const };
-        const phone = input.phone.replace(/\D/g, '');
-        // Verificar bloqueio por tentativas erradas
-        const blockRows = await db.select().from(pinBlocks).where(eq(pinBlocks.phone, phone)).limit(1);
-        const block = blockRows[0];
-        if (block?.blocked) return { success: false, blocked: true, firstAccess: true, error: 'blocked' as const };;
-
-        // Buscar senha personalizada
-        const pinRows = await db.select().from(customerPins).where(eq(customerPins.phone, phone)).limit(1);
-        const customerPinRow = pinRows[0];
-
-        // Determinar senha correta
-        const phonePin = phone.slice(-4);
-        let correctPin: string;
-        let isFirstAccess = true;
-
-        if (customerPinRow && customerPinRow.firstAccess === 0 && customerPinRow.pin) {
-          correctPin = customerPinRow.pin;
-          isFirstAccess = false;
-        } else {
-          correctPin = phonePin;
-          isFirstAccess = true;
-        }
-
-        const isCorrect = input.pin === correctPin;
-
-        if (isCorrect) {
-          if (block) await db.update(pinBlocks).set({ attempts: 0, blocked: 0 }).where(eq(pinBlocks.phone, phone));
-          return { success: true, blocked: false, firstAccess: isFirstAccess, error: null };
-        } else {
-          const attempts = (block?.attempts ?? 0) + 1;
-          const blocked = attempts >= 3 ? 1 : 0;
-          if (block) {
-            await db.update(pinBlocks).set({ attempts, blocked }).where(eq(pinBlocks.phone, phone));
-          } else {
-            await db.insert(pinBlocks).values({ phone, attempts, blocked });
-          }
-          return { success: false, blocked: blocked === 1, firstAccess: isFirstAccess, error: 'wrong' as const, attempts };
-        }
-      }),
-
-    // Cliente cria sua senha pessoal (após primeiro acesso)
+      .mutation(async () => ({ success: false, blocked: false, firstAccess: false, error: 'legacy_disabled' as const })),
     setPin: publicProcedure
       .input(z.object({ phone: z.string(), newPin: z.string().length(4) }))
-      .mutation(async ({ input, ctx }) => {
-        const clientIp = (ctx.req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || ctx.req.socket?.remoteAddress || 'unknown';
-        const adminBlockResult = await checkPhoneBlockedAndBlockIp(input.phone, clientIp, 'criar_senha');
-        if (adminBlockResult.blocked) return { success: false };
-        const { getDb } = await import('./db');
-        const { customerPins } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return { success: false };
-        const phone = input.phone.replace(/\D/g, '');;
-        const existing = await db.select().from(customerPins).where(eq(customerPins.phone, phone)).limit(1);
-        if (existing.length > 0) {
-          await db.update(customerPins).set({ pin: input.newPin, firstAccess: 0 }).where(eq(customerPins.phone, phone));
-        } else {
-          await db.insert(customerPins).values({ phone, pin: input.newPin, firstAccess: 0 });
-        }
-        return { success: true };
-      }),
-
-    // Admin busca o PIN atual do cliente
+      .mutation(async () => ({ success: false, error: 'legacy_disabled' as const })),
     adminGet: adminProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
@@ -6615,51 +6433,14 @@ export const appRouter = router({
         const phone = input.phone.replace(/\D/g, '');
         const rows = await db.select().from(customerPins).where(eq(customerPins.phone, phone)).limit(1);
         if (!rows[0]) return null;
-        return { pin: rows[0].pin, firstAccess: rows[0].firstAccess };
+        return { pin: rows[0].pin, firstAccess: rows[0].firstAccess, legacyOnly: true };
       }),
-
-    // Admin reseta senha e desbloqueia cliente (volta para primeiro acesso)
     adminReset: adminProcedure
       .input(z.object({ phone: z.string() }))
-      .mutation(async ({ input }) => {
-        const { getDb } = await import('./db');
-        const { customerPins, pinBlocks } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return { success: false };
-
-        const phone = input.phone.replace(/\D/g, '');
-
-        // Desbloquear
-        const blockRows = await db.select().from(pinBlocks).where(eq(pinBlocks.phone, phone)).limit(1);
-        if (blockRows.length > 0) {
-          await db.update(pinBlocks).set({ attempts: 0, blocked: 0 }).where(eq(pinBlocks.phone, phone));
-        }
-        // Resetar senha (volta para primeiro acesso com PIN do telefone)
-        const pinRows = await db.select().from(customerPins).where(eq(customerPins.phone, phone)).limit(1);
-        if (pinRows.length > 0) {
-          await db.update(customerPins).set({ pin: null, firstAccess: 1 }).where(eq(customerPins.phone, phone));
-        }
-        return { success: true };
-      }),
-    // Admin: definir PIN manualmente
+      .mutation(async () => ({ success: false, error: 'legacy_disabled' as const })),
     adminSet: adminProcedure
       .input(z.object({ phone: z.string(), pin: z.string().length(4) }))
-      .mutation(async ({ input }) => {
-        const { getDb } = await import('./db');
-        const { customerPins } = await import('../drizzle/schema');
-        const { eq } = await import('drizzle-orm');
-        const db = await getDb();
-        if (!db) return { success: false };
-        const phone = input.phone.replace(/\D/g, '');
-        const existing = await db.select().from(customerPins).where(eq(customerPins.phone, phone)).limit(1);
-        if (existing.length > 0) {
-          await db.update(customerPins).set({ pin: input.pin, firstAccess: 0 }).where(eq(customerPins.phone, phone));
-        } else {
-          await db.insert(customerPins).values({ phone, pin: input.pin, firstAccess: 0 });
-        }
-        return { success: true };
-      }),
+      .mutation(async () => ({ success: false, error: 'legacy_disabled' as const })),
   }),
 
   // === SOLICITAÍ"¡Í"¢ES DE DOCUMENTOS PENDENTES ===

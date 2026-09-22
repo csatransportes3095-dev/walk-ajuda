@@ -321,22 +321,15 @@ export function emailPedidoRecebidoCliente(opts: {
   customerName?: string;
   service: string;
   orderNumber?: number | string;
-  pin?: string;
   scheduleUrl?: string;
 }): string {
-  const { siteTitle, siteDomain, siteBaseUrl, customerName, service, orderNumber, pin, scheduleUrl } = opts;
+  const { siteTitle, siteDomain, siteBaseUrl, customerName, service, orderNumber, scheduleUrl } = opts;
   const branding = resolveBranding({ siteTitle, siteDomain, siteBaseUrl });
 
   const greeting = customerName
     ? `Olá, <strong style="color:#e0e0e0;">${customerName}</strong>!`
     : 'Olá!';
 
-  const pinBlock = pin ? `
-    <div style="background:#0a1020;border:1px solid #3b82f640;border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
-      <p style="color:#3b82f6;font-size:11px;font-weight:700;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;"> Sua Senha de Acesso</p>
-      <p style="color:#fff;font-size:28px;font-weight:900;margin:0;letter-spacing:6px;">${pin}</p>
-      <p style="color:#666;font-size:11px;margin:8px 0 0;">Use esta senha para acompanhar seu pedido</p>
-    </div>` : '';
 
   const rows = [
     infoRow('Serviço:', service),
@@ -354,7 +347,6 @@ export function emailPedidoRecebidoCliente(opts: {
       ${rows.join('')}
     </table>
 
-    ${pinBlock}
 
     ${scheduleUrl ? `
       <div style="background:#1b1027;border:1px solid #a855f750;border-radius:8px;padding:16px;margin:18px 0;text-align:center;">

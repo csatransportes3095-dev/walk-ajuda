@@ -61,7 +61,6 @@ export type BotOrderData = {
   clientName: string;
   clientPhone: string;
   clientCity: string;
-  trackingPin?: string;
   scheduleUrl?: string;
 };
 
@@ -890,7 +889,6 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             clientName: flowState.current.clientName || profileQuery.data?.name || 'Cliente',
             clientPhone: clientPhoneForSubmit,
             clientCity: profileQuery.data?.city || '',
-            trackingPin: (result as any).trackingPin || undefined,
             scheduleUrl: (result as any).scheduleUrl || undefined,
           });
         } else {
