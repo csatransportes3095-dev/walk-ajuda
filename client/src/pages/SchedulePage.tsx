@@ -13,6 +13,10 @@ export default function SchedulePage() {
   const [accessToken, setAccessToken] = useState(() => {
     try { return sessionStorage.getItem(accessStorageKey) || ""; } catch { return ""; }
   });
+  const centralSessionToken = (() => {
+    try { return localStorage.getItem("cp_token") || ""; } catch { return ""; }
+  })();
+  const [centralSessionTried, setCentralSessionTried] = useState(false);
   const [identity, setIdentity] = useState("");
   const [password, setPassword] = useState("");
   const [authStep, setAuthStep] = useState<"identity" | "password">("identity");
@@ -29,6 +33,21 @@ export default function SchedulePage() {
     { token, accessToken: accessToken || undefined },
     { enabled: !!token, retry: false },
   );
+  const authorizeFromSessionMut = trpc.schedule.authorizeFromSession.useMutation({
+    onSuccess: (result) => {
+      if (!result.success || !result.accessToken) return;
+      try { sessionStorage.setItem(accessStorageKey, result.accessToken); } catch {}
+      setAccessToken(result.accessToken);
+      setIdentity("");
+      setPassword("");
+      setAuthStep("identity");
+      setNeedsPasswordCreation(false);
+    },
+    onError: () => {
+      // Sessão central inválida/expirada: mantém o fluxo manual atual sem bloquear a página.
+    },
+  });
+
   const passwordStatusMut = trpc.schedule.checkPasswordStatus.useMutation({
     onSuccess: (result) => {
       if (!result.success) {
@@ -125,6 +144,23 @@ export default function SchedulePage() {
   });
 
   const loadedProfile = data && "profile" in data ? data.profile : null;
+
+  useEffect(() => {
+    if (!data?.found || !data.requiresIdentity || accessToken || centralSessionTried) return;
+    if (centralSessionToken.length < 32) {
+      setCentralSessionTried(true);
+      return;
+    }
+    setCentralSessionTried(true);
+    authorizeFromSessionMut.mutate({ token, cpToken: centralSessionToken });
+  }, [
+    data?.found,
+    data?.requiresIdentity,
+    accessToken,
+    centralSessionTried,
+    centralSessionToken,
+    token,
+  ]);
 
   useEffect(() => {
     if (!loadedProfile?.updateRequired) return;
@@ -271,6 +307,18 @@ export default function SchedulePage() {
           <h1 className="text-xl font-bold text-white mb-2">Link inválido</h1>
           <p className="text-white/60 text-sm">Este link de agendamento não foi encontrado ou expirou. Entre em contato para receber um novo link.</p>
         </div>
+      </div>
+    );
+  }
+
+  if (
+    data.requiresIdentity &&
+    centralSessionToken.length >= 32 &&
+    (!centralSessionTried || authorizeFromSessionMut.isPending)
+  ) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-fuchsia-400" />
       </div>
     );
   }
