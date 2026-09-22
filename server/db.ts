@@ -1342,13 +1342,35 @@ export async function updateLastOrderStatus(data: {
     return { success: false, error: 'Status inicial do pedido não pode ser definido manualmente após o início.' };
   }
 
-  // Se não houve troca de status, atualizar apenas a nota do último evento.
+  const analysisStatuses = new Set(['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise']);
+
+  // Se não houve troca de status, atualizar a nota. Em EM ANÁLISE também
+  // garantimos a invariante operacional: precisa existir um agendamento ativo.
+  // Assim pedidos que já estavam em análise antes da correção são reparados
+  // automaticamente sem criar duplicata quando já há pending/confirmed.
   if (latestEntry.status === data.status) {
     await db.execute(sql`
       UPDATE orderStatusHistory
       SET note = ${data.note ?? null}
       WHERE id = ${latestEntry.id}
     `);
+
+    if (analysisStatuses.has(data.status)) {
+      try {
+        const { ensureActiveAutomaticScheduleForAnalysis } = await import('./autoSchedule');
+        const sourceForService = [...subHistory].reverse().find(h => h.serviceName || h.serviceOption) || latestEntry;
+        await ensureActiveAutomaticScheduleForAnalysis({
+          registrationId: data.registrationId,
+          subOrderIndex: data.subOrderIndex,
+          customerPhone: latestEntry.customerPhone,
+          serviceName: sourceForService.serviceName ?? null,
+          serviceOption: sourceForService.serviceOption ?? null,
+        });
+      } catch (error) {
+        console.error('[AutoSchedule] Falha ao garantir agenda ativa em EM ANÁLISE:', error);
+      }
+    }
+
     return { success: true };
   }
 
@@ -1370,7 +1392,6 @@ export async function updateLastOrderStatus(data: {
   // Regra central: qualquer fluxo que mova o subpedido de outro estágio para
   // Em Análise passa por aqui. Assim a regeneração não depende da tela/rota
   // que originou a mudança e não duplica link ao apenas salvar o mesmo estágio.
-  const analysisStatuses = new Set(['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise']);
   const scheduleClosedAfterAnalysisStatuses = new Set([
     'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',
     'aguardando_ativa', 'aguardando_ficar_ativa',
@@ -1380,8 +1401,8 @@ export async function updateLastOrderStatus(data: {
 
   if (analysisStatuses.has(data.status) && !analysisStatuses.has(latestEntry.status)) {
     try {
-      const { regenerateAutomaticScheduleForOrder } = await import('./autoSchedule');
-      await regenerateAutomaticScheduleForOrder({
+      const { ensureActiveAutomaticScheduleForAnalysis } = await import('./autoSchedule');
+      await ensureActiveAutomaticScheduleForAnalysis({
         registrationId: data.registrationId,
         subOrderIndex: data.subOrderIndex,
         customerPhone: latestEntry.customerPhone,
