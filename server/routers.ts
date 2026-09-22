@@ -5836,55 +5836,19 @@ export const appRouter = router({
         return { success: true, deleted };
       }),
 
-    // Público: registrar tentativa de PIN e verificar bloqueio
+    // PIN legado desativado. Endpoints mantidos apenas para compatibilidade
+    // com clientes antigos, sem ler ou alterar o histórico de pinBlocks.
     checkPinAttempt: publicProcedure
       .input(z.object({ phone: z.string(), correct: z.boolean() }))
-      .mutation(async ({ input }) => {
-        const db = await (await import('./db')).getDb();
-        if (!db) return { blocked: false, attempts: 0 };
-        const phone = input.phone.replace(/\D/g, '');
-        // Buscar registro existente
-        const rows = await db.execute(sql`SELECT * FROM pinBlocks WHERE phone = ${phone} LIMIT 1`);
-        const existing = (rows[0] as unknown as Array<{ id: number; attempts: number; blocked: number }>)[0];
-        if (existing?.blocked === 1) return { blocked: true, attempts: existing.attempts };
-        if (input.correct) {
-          // Acerto: zerar tentativas
-          if (existing) await db.execute(sql`UPDATE pinBlocks SET attempts = 0 WHERE phone = ${phone}`);
-          return { blocked: false, attempts: 0 };
-        }
-        // Erro: incrementar tentativas
-        const newAttempts = (existing?.attempts ?? 0) + 1;
-        const nowBlocked = newAttempts >= 3 ? 1 : 0;
-        if (existing) {
-          await db.execute(sql`UPDATE pinBlocks SET attempts = ${newAttempts}, blocked = ${nowBlocked} WHERE phone = ${phone}`);
-        } else {
-          await db.execute(sql`INSERT INTO pinBlocks (phone, attempts, blocked) VALUES (${phone}, ${newAttempts}, ${nowBlocked})`);
-        }
-        return { blocked: nowBlocked === 1, attempts: newAttempts };
-      }),
+      .mutation(async () => ({ blocked: false, attempts: 0, legacyDisabled: true })),
 
-    // Admin: desbloquear PIN de um telefone
     unlockPin: adminProcedure
       .input(z.object({ phone: z.string() }))
-      .mutation(async ({ input }) => {
-        const db = await (await import('./db')).getDb();
-        if (!db) return { success: false };
-        const phone = input.phone.replace(/\D/g, '');
-        await db.execute(sql`UPDATE pinBlocks SET attempts = 0, blocked = 0 WHERE phone = ${phone}`);
-        return { success: true };
-      }),
+      .mutation(async () => ({ success: false, legacyDisabled: true })),
 
-    // Admin: verificar se um telefone está bloqueado
     getPinBlockStatus: adminProcedure
       .input(z.object({ phone: z.string() }))
-      .query(async ({ input }) => {
-        const db = await (await import('./db')).getDb();
-        if (!db) return { blocked: false, attempts: 0 };
-        const phone = input.phone.replace(/\D/g, '');
-        const rows = await db.execute(sql`SELECT attempts, blocked FROM pinBlocks WHERE phone = ${phone} LIMIT 1`);
-        const row = (rows[0] as unknown as Array<{ attempts: number; blocked: number }>)[0];
-        return { blocked: (row?.blocked ?? 0) === 1, attempts: row?.attempts ?? 0 };
-      }),
+      .query(async () => ({ blocked: false, attempts: 0, legacyDisabled: true })),
 
     // Admin: busca de emergência — busca em TODAS as pastas (ativas, arquivo, rgcnh, pastas personalizadas)
     emergencySearch: adminProcedure
