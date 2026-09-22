@@ -1,5 +1,14 @@
 import fs from 'node:fs';
 
+const centralLifecycleSource = fs.readFileSync('server/db.ts', 'utf8');
+if (
+  centralLifecycleSource.includes('const scheduleClosedAfterAnalysisStatuses = new Set([') &&
+  centralLifecycleSource.includes("regenerateAutomaticScheduleForOrder")
+) {
+  console.log('[schedule-stage-close] regra central nova detectada; patch legado ignorado com seguranca.');
+  process.exit(0);
+}
+
 function patchFile(filePath, patches) {
   let source = fs.readFileSync(filePath, 'utf8');
   for (const patch of patches) {
