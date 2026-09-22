@@ -1039,9 +1039,14 @@ export default function AdminOrders() {
   });
 
   const updateOrderDataMutation = trpc.orderStatus.updateOrderData.useMutation({
-    onSuccess: (_, vars) => {
-      toast.success("Dados do pedido atualizados!");
-      setEditingOrderData(prev => { const n = { ...prev }; delete n[vars.registrationId]; return n; });
+    onSuccess: (data, vars) => {
+      if (data?.scheduleCreated) {
+        toast.success("Dados atualizados e novo link de agendamento gerado!");
+      } else {
+        toast.success("Dados do pedido atualizados!");
+      }
+      const editKey = `${vars.registrationId}_${vars.subOrderIndex ?? 0}`;
+      setEditingOrderData(prev => { const n = { ...prev }; delete n[editKey]; return n; });
       ordersQuery.refetch();
     },
     onError: () => toast.error("Erro ao atualizar dados do pedido"),
@@ -5398,11 +5403,11 @@ export default function AdminOrders() {
                                 value={editingPrice[String(order.id)]}
                                 onChange={e => setEditingPrice(prev => ({ ...prev, [String(order.id)]: e.target.value }))}
                                 onKeyDown={e => {
-                                  if (e.key === 'Enter') updatePriceMutation.mutate({ registrationId: order.id, pricePaid: editingPrice[String(order.id)] });
+                                  if (e.key === 'Enter') updatePriceMutation.mutate({ registrationId: order.id, subOrderIndex: order.subOrderIndex ?? 0, pricePaid: editingPrice[String(order.id)] });
                                   if (e.key === 'Escape') setEditingPrice(prev => { const n = { ...prev }; delete n[String(order.id)]; return n; });
                                 }}
                               />
-                              <button onClick={() => updatePriceMutation.mutate({ registrationId: order.id, pricePaid: editingPrice[String(order.id)] })} className="text-xs px-1.5 py-0.5 bg-green-600 text-white rounded">OK</button>
+                              <button onClick={() => updatePriceMutation.mutate({ registrationId: order.id, subOrderIndex: order.subOrderIndex ?? 0, pricePaid: editingPrice[String(order.id)] })} className="text-xs px-1.5 py-0.5 bg-green-600 text-white rounded">OK</button>
                               <button onClick={() => setEditingPrice(prev => { const n = { ...prev }; delete n[String(order.id)]; return n; })} className="text-xs px-1.5 py-0.5 bg-gray-600 text-white rounded">✕</button>
                             </span>
                           ) : (
@@ -7134,6 +7139,10 @@ export default function AdminOrders() {
                                       const ed = editingOrderData[getOrderKey(order)];
                                       updateOrderDataMutation.mutate({
                                         registrationId: order.id,
+                                        subOrderIndex: order.subOrderIndex ?? 0,
+                                        customerPhone: order.phone || undefined,
+                                        customerName: order.customerName || order.codeClientName || undefined,
+                                        customerEmail: order.customerEmail || undefined,
                                         serviceName: ed.serviceName || undefined,
                                         serviceOption: ed.serviceOption || undefined,
                                         pricePaid: ed.pricePaid || undefined,
