@@ -110,7 +110,7 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
 
   const status = String(orderStatus || '');
   const scheduleClosedByOrder = [
-    'foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise',
+    // Em Análise mantém a nova agenda ativa conforme a regra automática atual.
     'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',
     'aguardando_ativa', 'aguardando_ficar_ativa', 'conta_ativa', 'p',
     'entregue', 'pedido_entregue', 'cancelado',
