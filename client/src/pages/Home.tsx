@@ -958,6 +958,18 @@ export default function Home() {
       refetchOnWindowFocus: true,
     }
   );
+
+  // Pedido com agendamento automático deve refletir no botão da vitrine
+  // imediatamente, sem esperar o próximo intervalo de atualização.
+  useEffect(() => {
+    if (automaticScheduleLinks.length === 0) return;
+    if (customerSessionToken.length < 32 || clientPhoneFromSession.length < 8) return;
+    void myActiveScheduleQuery.refetch();
+  }, [
+    automaticScheduleLinks,
+    customerSessionToken,
+    clientPhoneFromSession,
+  ]);
   // Controle de acesso por produto
   const allowedProductsQuery = trpc.customers.getAllowedProducts.useQuery(
     { phone: clientPhoneFromSession },
