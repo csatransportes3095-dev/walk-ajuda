@@ -1331,7 +1331,7 @@ export const appRouter = router({
     // Template editável da mensagem WhatsApp de dados de login
     getWhatsappLoginTemplate: adminProcedure.query(async () => {
       const value = await getSetting('whatsapp_login_template');
-      return { template: value };
+      return { template: stripLegacyOrderPinTemplate(value) };
     }),
     saveWhatsappLoginTemplate: adminProcedure
       .input(z.object({ template: z.string() }))
