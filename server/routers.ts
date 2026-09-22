@@ -5109,7 +5109,7 @@ export const appRouter = router({
         if (!db) return { success: false };
 
         const historyRows = await db.execute(sql`
-          SELECT id, customerPhone, serviceName, serviceOption, answers, pricePaid, createdAt
+          SELECT id, customerPhone, status, serviceName, serviceOption, answers, pricePaid, createdAt
           FROM orderStatusHistory
           WHERE registrationId = ${input.registrationId}
           ORDER BY createdAt ASC, id ASC
