@@ -4324,29 +4324,6 @@ export const appRouter = router({
         if (input.status === 'recebido') {
           return { success: false, error: 'Status recebido não pode ser definido manualmente' };
         }
-        const beforeHistory = await getOrderStatusHistory(input.registrationId);
-        const orderedHistory = [...beforeHistory].reverse();
-        let initialStatusForTransition = 'recebido';
-        try {
-          const dbBefore = await (await import('./db')).getDb() as any;
-          const stResult = dbBefore ? await dbBefore.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`) : null;
-          const stRows = (stResult?.[0] || []) as any[];
-          if (stRows[0]?.key) initialStatusForTransition = String(stRows[0].key);
-        } catch {}
-        const subOrdersForTransition: any[][] = [];
-        let currentTransition: any[] = [];
-        for (const entry of orderedHistory) {
-          if ((entry.status === initialStatusForTransition || entry.status === 'recebido') && currentTransition.length > 0) {
-            subOrdersForTransition.push(currentTransition);
-            currentTransition = [entry];
-          } else {
-            currentTransition.push(entry);
-          }
-        }
-        if (currentTransition.length > 0) subOrdersForTransition.push(currentTransition);
-        subOrdersForTransition.reverse();
-        const previousStatus = subOrdersForTransition[input.subOrderIndex]?.at(-1)?.status ?? null;
-
         const result = await updateLastOrderStatus({
           registrationId: input.registrationId,
           subOrderIndex: input.subOrderIndex,
@@ -4354,26 +4331,6 @@ export const appRouter = router({
           note: input.note ?? null,
         });
         if (!result.success) return result;
-
-        // Ao ENTRAR em Em Análise, gera um link novo somente se o produto/opção
-        // atual estiver com agendamento automático ativo. Regravar o mesmo status
-        // não cria links repetidos.
-        const ANALYSIS_STATUSES = ['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise'];
-        if (ANALYSIS_STATUSES.includes(input.status) && !ANALYSIS_STATUSES.includes(previousStatus)) {
-          try {
-            await regenerateAutomaticScheduleForOrder({
-              registrationId: input.registrationId,
-              subOrderIndex: input.subOrderIndex,
-              customerPhone: input.customerPhone,
-              customerName: input.customerName || null,
-              customerEmail: input.customerEmail || null,
-              serviceName: input.serviceName || null,
-              serviceOption: input.serviceOption || null,
-            });
-          } catch (error) {
-            console.error('[AutoSchedule] Falha ao regenerar agenda ao retornar para Em Análise:', error);
-          }
-        }
 
         // Ao marcar como entregue, remover urgência obrigatoriamente
         const FINAL_STATUSES = ['entregue', 'pedido_entregue', 'cancelado'];
