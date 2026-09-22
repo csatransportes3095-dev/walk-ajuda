@@ -1366,6 +1366,26 @@ export async function updateLastOrderStatus(data: {
     serviceOption: sourceForService.serviceOption ?? null,
     orderNumber: sourceForOrderNumber.orderNumber ?? null,
   });
+
+  // Regra central: qualquer fluxo que mova o subpedido de outro estágio para
+  // Em Análise passa por aqui. Assim a regeneração não depende da tela/rota
+  // que originou a mudança e não duplica link ao apenas salvar o mesmo estágio.
+  const analysisStatuses = new Set(['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise']);
+  if (analysisStatuses.has(data.status) && !analysisStatuses.has(latestEntry.status)) {
+    try {
+      const { regenerateAutomaticScheduleForOrder } = await import('./autoSchedule');
+      await regenerateAutomaticScheduleForOrder({
+        registrationId: data.registrationId,
+        subOrderIndex: data.subOrderIndex,
+        customerPhone: latestEntry.customerPhone,
+        serviceName: sourceForService.serviceName ?? null,
+        serviceOption: sourceForService.serviceOption ?? null,
+      });
+    } catch (error) {
+      console.error('[AutoSchedule] Falha ao aplicar regra central de Em Análise:', error);
+    }
+  }
+
   return { success: true };
 }
 
@@ -3055,6 +3075,7 @@ export async function completeOpenAppointmentsForOrder(
   registrationId: number,
   subOrderIndex: number,
   customerPhone?: string,
+  allowPhoneFallback: boolean = true,
 ): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
@@ -3080,6 +3101,10 @@ export async function completeOpenAppointmentsForOrder(
 
   // Se este pedido já teve qualquer agenda própria, nunca encerrar agenda de outro pedido por telefone.
   if (directHistory.length > 0) return 0;
+
+  // Fluxos de regeneração automática trabalham somente com a chave exata
+  // registrationId + subOrderIndex. Não podem consumir agenda de outro pedido.
+  if (!allowPhoneFallback) return 0;
 
   // Compatibilidade com re-cadastro: algumas agendas antigas ficaram ligadas a outro registrationId.
   // O fallback só é usado quando não existe histórico direto e casa o mesmo telefone do pedido atual.

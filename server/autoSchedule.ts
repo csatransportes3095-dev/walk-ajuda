@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { sql } from "drizzle-orm";
-import { createAppointment, getAppointmentByOrder, getDb, getLatestOrderStatus } from "./db";
+import { completeOpenAppointmentsForOrder, createAppointment, getAppointmentByOrder, getDb, getLatestOrderStatus } from "./db";
 import { findMainCustomerByIdentity, normalizeCustomerPhone } from "./customerAccess";
 import { publicSiteUrl } from "../shared/publicLinks";
 
@@ -159,6 +159,97 @@ export async function ensureAutomaticScheduleForOrder(input: {
     registrationId,
     optionId,
   };
+}
+
+export async function regenerateScheduleForOrder(input: {
+  registrationId: number;
+  customerPhone: string;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  serviceName?: string | null;
+  subOrderIndex?: number;
+  optionId?: number;
+}): Promise<AutomaticScheduleResult> {
+  const registrationId = Number(input.registrationId);
+  const subOrderIndex = Number.isInteger(input.subOrderIndex) ? Number(input.subOrderIndex) : 0;
+  const customerPhone = normalizeCustomerPhone(input.customerPhone);
+  if (!Number.isInteger(registrationId) || registrationId <= 0 || !customerPhone) {
+    return { created: false };
+  }
+
+  // Regeneração explícita: encerra SOMENTE agendas abertas deste mesmo
+  // pedido/subpedido. Não usa fallback por telefone para não afetar outro pedido.
+  await completeOpenAppointmentsForOrder(registrationId, subOrderIndex, customerPhone, false);
+
+  let customerName = input.customerName ?? null;
+  let customerEmail = input.customerEmail ?? null;
+  if (!customerName || !customerEmail) {
+    try {
+      const db = await getDb() as any;
+      if (db) {
+        const customer = await findMainCustomerByIdentity({ phone: customerPhone }, db);
+        customerName = customerName || customer?.name || null;
+        customerEmail = customerEmail || customer?.email || null;
+      }
+    } catch {
+      // Dados de identificação são complementares; a agenda ainda pode ser criada.
+    }
+  }
+
+  const token = crypto.randomBytes(16).toString("hex");
+  const appointment = await createAppointment({
+    token,
+    registrationId,
+    subOrderIndex,
+    customerPhone,
+    customerName,
+    customerEmail,
+    serviceName: input.serviceName ?? null,
+    templateId: null,
+  });
+
+  return {
+    created: true,
+    appointmentId: appointment.id,
+    token: appointment.token,
+    url: publicSiteUrl(`/agendar/${appointment.token}`),
+    registrationId,
+    optionId: input.optionId,
+  };
+}
+
+export async function regenerateAutomaticScheduleForOrder(input: {
+  registrationId: number;
+  customerPhone: string;
+  serviceName?: string | null;
+  serviceOption?: string | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  subOrderIndex?: number;
+}): Promise<AutomaticScheduleResult> {
+  const automaticOptions = await loadAutomaticOptions();
+  const option = findAutomaticOption(automaticOptions, input.serviceName, input.serviceOption);
+  if (!option) {
+    // Ao trocar produto ou voltar para Em Análise, um link antigo não pode
+    // permanecer ativo quando a nova opção não possui agendamento automático.
+    await completeOpenAppointmentsForOrder(
+      Number(input.registrationId),
+      Number.isInteger(input.subOrderIndex) ? Number(input.subOrderIndex) : 0,
+      input.customerPhone,
+      false,
+    );
+    return { created: false, registrationId: Number(input.registrationId) };
+  }
+
+  return regenerateScheduleForOrder({
+    registrationId: input.registrationId,
+    customerPhone: input.customerPhone,
+    customerName: input.customerName,
+    customerEmail: input.customerEmail,
+    serviceName: input.serviceName || [option.productName, option.label].filter(Boolean).join(" — "),
+    subOrderIndex: input.subOrderIndex,
+    optionId: option.id,
+  });
 }
 
 export async function syncAutomaticSchedulesForCustomer(phoneInput: string): Promise<AutomaticScheduleResult[]> {
