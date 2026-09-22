@@ -1794,6 +1794,38 @@ export default function AdminOrders() {
     }
   };
 
+  // Colar print na área verde "Enviar para o cliente".
+  // Reutiliza o upload do admin para que o documento continue fromAdmin=1 e visível ao cliente.
+  const handlePasteAdminDoc = async (order: Order) => {
+    const label = newAdminDocLabel[getOrderKey(order)]?.trim();
+    if (!label) {
+      toast.error('Informe o nome do documento antes de colar o print');
+      return;
+    }
+    if (!navigator.clipboard?.read) {
+      toast.error('Seu navegador não permite ler prints copiados. Use Selecionar arquivo.');
+      return;
+    }
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      const imageItem = clipboardItems.find((item) => item.types.some((type) => type.startsWith('image/')));
+      const imageType = imageItem?.types.find((type) => type.startsWith('image/'));
+      if (!imageItem || !imageType) {
+        toast.error('Copie um print ou uma imagem e toque em Colar print novamente.');
+        return;
+      }
+
+      const blob = await imageItem.getType(imageType);
+      const extension = imageType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+      const printFile = new File([blob], `print-${Date.now()}.${extension}`, { type: imageType });
+      await handleAdminDocUpload(order, printFile);
+    } catch (error) {
+      console.warn('[Pedido][EnviarParaCliente] Não foi possível colar print:', error);
+      toast.error('Não foi possível acessar o print copiado. Copie a imagem e permita o acesso quando o navegador solicitar.');
+    }
+  };
+
   const handleDownloadFile = async (url: string, label: string, mimeType: string) => {
     try {
       const response = await fetch(url);
@@ -7303,24 +7335,37 @@ export default function AdminOrders() {
                               onChange={e => setNewAdminDocLabel(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
                               className="w-full text-xs bg-background border border-emerald-500/30 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-emerald-400"
                             />
-                            <label className={`flex items-center justify-center gap-2 w-full py-2 rounded-lg border-2 border-dashed cursor-pointer transition-colors ${
-                              uploadingAdminDocFor === getOrderKey(order)
-                                ? 'border-emerald-500/30 text-muted-foreground cursor-not-allowed'
-                                : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/5'
-                            }`}>
-                              {uploadingAdminDocFor === getOrderKey(order) ? (
-                                <><div className="animate-spin rounded-full h-3.5 w-3.5 border-t-2 border-emerald-400" /><span className="text-xs">Enviando...</span></>
-                              ) : (
-                                <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg><span className="text-xs font-medium">Selecionar arquivo (imagem ou PDF)</span></>
-                              )}
-                              <input
-                                type="file"
-                                accept="image/*,application/pdf"
-                                className="hidden"
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <label className={`flex items-center justify-center gap-2 w-full py-2 rounded-lg border-2 border-dashed cursor-pointer transition-colors ${
+                                uploadingAdminDocFor === getOrderKey(order)
+                                  ? 'border-emerald-500/30 text-muted-foreground cursor-not-allowed'
+                                  : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/5'
+                              }`}>
+                                {uploadingAdminDocFor === getOrderKey(order) ? (
+                                  <><div className="animate-spin rounded-full h-3.5 w-3.5 border-t-2 border-emerald-400" /><span className="text-xs">Enviando...</span></>
+                                ) : (
+                                  <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg><span className="text-xs font-medium">Selecionar arquivo (imagem ou PDF)</span></>
+                                )}
+                                <input
+                                  type="file"
+                                  accept="image/*,application/pdf"
+                                  className="hidden"
+                                  disabled={uploadingAdminDocFor === getOrderKey(order)}
+                                  onChange={e => { const f = e.target.files?.[0]; if (f) handleAdminDocUpload(order, f); e.target.value = ''; }}
+                                />
+                              </label>
+                              <button
+                                type="button"
                                 disabled={uploadingAdminDocFor === getOrderKey(order)}
-                                onChange={e => { const f = e.target.files?.[0]; if (f) handleAdminDocUpload(order, f); e.target.value = ''; }}
-                              />
-                            </label>
+                                onClick={() => { void handlePasteAdminDoc(order); }}
+                                className="flex items-center justify-center gap-2 w-full py-2 rounded-lg border-2 border-dashed border-cyan-400/45 text-cyan-300 hover:bg-cyan-400/10 disabled:border-emerald-500/30 disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
+                                title="Cole um print ou imagem e envie para o cliente"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v11a2 2 0 002 2h9a2 2 0 002-2v-2M15 4h5m0 0v5m0-5L9 15" /></svg>
+                                <span className="text-xs font-medium">Colar print</span>
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-emerald-200/70">Copie um print, informe o nome do documento e toque em <strong className="text-cyan-300">Colar print</strong> para enviar ao cliente.</p>
                           </div>
                         )}
                         {/* Formulário de URL de vídeo externo */}
