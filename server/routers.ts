@@ -5153,11 +5153,26 @@ export const appRouter = router({
         // apagá-las nem substituí-las pelas perguntas do produto novo.
         const answersToPersist = input.answers !== undefined && !productChanged ? input.answers : first.answers;
 
+        if (productChanged) {
+          // O status futuro herda serviço/opção do histórico mais recente. Por isso,
+          // sincronizamos somente as linhas que pertencem a ESTE subpedido para o
+          // produto antigo não reaparecer numa próxima transição de status.
+          for (const entry of subHistory) {
+            await db.execute(sql`
+              UPDATE orderStatusHistory
+              SET serviceName = ${nextServiceName || null},
+                  serviceOption = ${nextServiceOption || null}
+              WHERE id = ${entry.id}
+              LIMIT 1
+            `);
+          }
+        }
+
+        // Respostas continuam presas ao registro-base do subpedido e nunca são
+        // substituídas automaticamente ao trocar produto/opção.
         await db.execute(sql`
           UPDATE orderStatusHistory
           SET
-            serviceName = ${nextServiceName || null},
-            serviceOption = ${nextServiceOption || null},
             answers = ${answersToPersist ?? null},
             pricePaid = CASE WHEN ${input.pricePaid !== undefined ? 1 : 0} = 1 THEN ${input.pricePaid ?? null} ELSE pricePaid END
           WHERE id = ${first.id}
