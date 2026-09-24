@@ -3721,9 +3721,9 @@ function AccessControlTab() {
       ) : (
         <div className="space-y-2">
           {filtered.map((c: any) => {
-            const enabled = c.loanEnabled === 1 || c.loanEnabled === null || c.loanClientId === null;
-            // Se não tem loanClient, padrão é habilitado
-            const isEnabled = c.loanClientId === null ? true : !!c.loanEnabled;
+            // Sem loanClient não existe vínculo operacional real no módulo.
+            // A tela não deve mostrar "Liberado" até o espelho financeiro existir.
+            const isEnabled = c.loanClientId !== null && !!c.loanEnabled;
             const isPending = toggle.isPending && (toggle.variables as any)?.phone === c.phone;
             return (
               <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-card/60 border border-border">

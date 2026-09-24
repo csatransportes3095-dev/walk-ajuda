@@ -3,7 +3,7 @@ import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
 import { getDb, createFinancialSale } from "../db";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
-import { CUSTOMER_ROUTES, findMainCustomerByIdentity, getRouteAccess, setCustomerRoutePermissions } from "../customerAccess";
+import { CUSTOMER_ROUTES, findMainCustomerByIdentity, getRouteAccess, reconcileLegacyLoanPermissions, setCustomerRoutePermissions } from "../customerAccess";
 import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
@@ -2336,16 +2336,14 @@ export const loanRouter = router({
     const db = await getDb() as any;
     const phone = onlyDigits(input.phone);
     const existing = await qRows(db, drizzleSql`SELECT id, phone, cpf FROM loanClients WHERE RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', ''), 9)=RIGHT(${phone}, 9) LIMIT 1`);
+    let centralIdentity: any = existing[0] || { phone };
+
     if (existing.length) {
-      // Atualiza todos os registros com esse telefone (evita inconsistência em duplicatas)
       await db.execute(drizzleSql`UPDATE loanClients SET loanEnabled=${input.enabled}, updatedAt=NOW() WHERE id=${existing[0].id}`);
     } else {
-      const clients = await qRows(db, drizzleSql`SELECT * FROM spreadsheetClients WHERE id=${existing[0].id} LIMIT 1`);
-      if (!clients.length) throw new TRPCError({ code: "NOT_FOUND" });
-      const sc = clients[0];
       let mainCustomer: any;
       try {
-        mainCustomer = await requireCompleteMainCustomerProfile(db, { phone: sc.phone, cpf: sc.cpf });
+        mainCustomer = await requireCompleteMainCustomerProfile(db, { phone });
       } catch (profileError: any) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: profileError?.message || 'Conclua o cadastro principal antes de habilitar empréstimos.' });
       }
@@ -2356,8 +2354,9 @@ export const loanRouter = router({
         INSERT INTO loanClients (userId, name, cpf, phone, status, profileSlug, creditLimit, interestRate, maxDays, loanEnabled, allowedPaymentTypes)
         VALUES (1, ${mainCustomer.name}, ${mainCustomer.cpf || null}, ${mainCustomer.phone}, 'ativo', 'bronze', ${profile?.creditLimit || 500}, ${profile?.interestRate || 5}, ${profile?.maxDays || 30}, ${input.enabled}, ${paymentTypes})
       `);
+      centralIdentity = mainCustomer;
     }
-    const centralIdentity = existing[0] || { phone };
+
     await setMainCustomerLoanAccess(db, centralIdentity, input.enabled === 1, ctx.user?.name || 'ADM Empréstimos');
     try { await syncUnifiedCustomerRegistry(); } catch (error: any) {
       console.warn('[loans.toggleLoanByPhone] sincronização unificada não aplicada:', error?.message);
@@ -3693,9 +3692,12 @@ export const loanRouter = router({
   syncFromGastos: adminProcedure.mutation(async () => {
     const db = await getDb() as any;
 
-    // Contar total antes
+    // Contar total antes. A reconciliação central abaixo cria automaticamente
+    // quem já possui a rota emprestimo aprovada, inclusive cadastros que ficaram
+    // sem loanClient por falhas antigas de sincronização.
     const beforeRows = await qRows(db, drizzleSql`SELECT COUNT(*) as cnt FROM loanClients`);
     const before = Number(beforeRows[0]?.cnt || 0);
+    await reconcileLegacyLoanPermissions(db);
 
     // Inserir todos os clientes do Gastos que ainda não existem no Empréstimos
     // Usa REGEXP_REPLACE para normalizar telefone e CPF antes de comparar

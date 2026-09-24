@@ -226,8 +226,14 @@ export async function listRouteReleaseModes(dbArg?: any): Promise<Record<Custome
 
 async function syncLegacyLoanPermission(db: any, customerId: number, loanAllowed: boolean): Promise<void> {
   try {
-    const customer = (await rows(db, sql`SELECT phone, cpf FROM customers WHERE id=${customerId} LIMIT 1`))[0];
+    const customer = (await rows(db, sql`
+      SELECT id, name, phone, cpf, email, profilePhotoUrl
+      FROM customers
+      WHERE id=${customerId} AND deletedAt IS NULL
+      LIMIT 1
+    `))[0];
     if (!customer) return;
+
     const phone = normalizeCustomerPhone(customer.phone);
     const cpf = normalizeCustomerCpf(customer.cpf);
     const loanClients = await rows(db, sql`SELECT id, phone, cpf FROM loanClients`);
@@ -235,7 +241,54 @@ async function syncLegacyLoanPermission(db: any, customerId: number, loanAllowed
       (phone && samePhone(loanClient.phone, phone)) ||
       (cpf && normalizeCustomerCpf(loanClient.cpf) === cpf)
     ).map((loanClient: any) => Number(loanClient.id)).filter(Boolean);
-    if (relatedIds.length) await db.execute(sql`UPDATE loanClients SET loanEnabled=${loanAllowed ? 1 : 0}, updatedAt=NOW() WHERE id IN (${sql.raw(relatedIds.join(','))})`);
+
+    if (relatedIds.length) {
+      await db.execute(sql`UPDATE loanClients SET loanEnabled=${loanAllowed ? 1 : 0}, updatedAt=NOW() WHERE id IN (${sql.raw(relatedIds.join(','))})`);
+      return;
+    }
+
+    // Somente uma liberação EXPLÍCITA da rota Empréstimos pode criar o espelho
+    // operacional. Clientes legados sem restrição continuam preservados e não
+    // são cadastrados em massa no módulo financeiro apenas por abrir o sistema.
+    if (!loanAllowed) return;
+    const explicitLoanPermission = await rows(db, sql`
+      SELECT 1 AS allowed
+      FROM customerRoutePermissions
+      WHERE customerId=${customerId} AND route='emprestimo' AND status='approved'
+      LIMIT 1
+    `);
+    if (!explicitLoanPermission.length) return;
+
+    // O módulo financeiro só recebe um cadastro quando a identidade principal
+    // está completa. Isso evita loanClients técnicos/incompletos.
+    const name = String(customer.name || '').trim();
+    const email = normalizeCustomerEmail(customer.email);
+    const profilePhotoUrl = String(customer.profilePhotoUrl || '').trim();
+    if (!name || !phone || !cpf || !email || !profilePhotoUrl) return;
+
+    const profiles = await rows(db, sql`
+      SELECT creditLimit, interestRate, maxDays, defaultPaymentTypes
+      FROM loanProfiles
+      WHERE slug='bronze' AND isActive=1
+      LIMIT 1
+    `);
+    const profile = profiles[0] || {};
+    const creditLimit = Number(profile.creditLimit ?? 500);
+    const interestRate = Number(profile.interestRate ?? 5);
+    const maxDays = Number(profile.maxDays ?? 30);
+    const allowedPaymentTypes = String(profile.defaultPaymentTypes || 'diario');
+
+    await db.execute(sql`
+      INSERT INTO loanClients (
+        userId, name, cpf, phone, status, profileSlug, creditLimit,
+        interestRate, maxDays, loanEnabled, allowedPaymentTypes
+      )
+      VALUES (
+        1, ${name}, ${cpf}, ${phone}, 'ativo', 'bronze', ${creditLimit},
+        ${interestRate}, ${maxDays}, 1, ${allowedPaymentTypes}
+      )
+    `);
+    console.log(`[LoanAccess] cliente ${customerId} criado automaticamente em loanClients pela rota emprestimo.`);
   } catch (error: any) {
     console.warn('[customerAccess] espelho de Empréstimos não sincronizado:', error?.message);
   }
