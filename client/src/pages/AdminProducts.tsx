@@ -1605,11 +1605,19 @@ export default function AdminProducts() {
 
   return (
     <div className="min-h-screen bg-[#0a0a1a] text-white">
-      <AdminHeader title="Cards de Serviço" icon={<Package className="w-5 h-5" />} rightContent={
-        <Button onClick={() => setShowCreateForm(!showCreateForm)} className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 h-auto">
-          <Plus className="w-3.5 h-3.5 mr-1" /> Novo Card
-        </Button>
-      } />
+      <AdminHeader
+        title="Cards de Serviço"
+        icon={<Package className="w-5 h-5" />}
+        stackOnMobile
+        rightContent={
+          <Button
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 h-auto whitespace-nowrap"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" /> Novo Card
+          </Button>
+        }
+      />
 
       <div className="max-w-4xl mx-auto p-4 space-y-4">
         {/* Create Form */}
@@ -1674,33 +1682,62 @@ export default function AdminProducts() {
                 style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
               >
                 {/* Product Header */}
-                <div className="p-4 flex items-center gap-3">
-                  <span
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, product.id)}
-                    onDragEnd={handleDragEnd}
-                    className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none"
-                    title="Arraste por aqui para reordenar"
-                    aria-label="Arrastar card para reordenar"
-                  >
-                    <GripVertical className="w-5 h-5 text-gray-500" />
-                  </span>
-                  {product.iconUrl ? (
-                    <img src={product.iconUrl} alt={product.name} className="w-12 h-12 rounded-lg flex-shrink-0 object-cover border border-purple-500/30" />
-                  ) : (
-                    <div className="w-12 h-12 rounded-lg flex-shrink-0 bg-purple-500/10 border border-purple-500/30 flex items-center justify-center">
-                      <Package className="w-5 h-5 text-purple-400" />
+                <div className="p-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, product.id)}
+                      onDragEnd={handleDragEnd}
+                      className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none"
+                      title="Arraste por aqui para reordenar"
+                      aria-label="Arrastar card para reordenar"
+                    >
+                      <GripVertical className="w-5 h-5 text-gray-500" />
+                    </span>
+                    {product.iconUrl ? (
+                      <img src={product.iconUrl} alt={product.name} className="w-12 h-12 rounded-lg flex-shrink-0 object-cover border border-purple-500/30" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg flex-shrink-0 bg-purple-500/10 border border-purple-500/30 flex items-center justify-center">
+                        <Package className="w-5 h-5 text-purple-400" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-sm truncate">{product.name}</h3>
+                      <p className="text-xs text-gray-400 break-words">
+                        {product.options.length} opções · {totalDocs} docs · {totalQuestions} perguntas
+                      </p>
                     </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-sm truncate">{product.name}</h3>
-                    <p className="text-xs text-gray-400">{product.options.length} opções · {totalDocs} docs · {totalQuestions} perguntas</p>
+
+                    <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => toggleMut.mutate({ id: product.id, isActive: !product.isActive })} className={`p-2 rounded-lg transition-colors ${product.isActive ? 'text-green-400 hover:bg-green-500/20' : 'text-gray-500 hover:bg-gray-500/20'}`} title={product.isActive ? "Desativar" : "Ativar"}>
+                        {product.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
+                      <button onClick={() => startEdit(product)} className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Editar card" aria-label={`Editar card ${product.name}`}><Edit2 className="w-4 h-4" /></button>
+                      <button
+                        disabled={cloneMut.isPending}
+                        onClick={() => {
+                          if (confirm(`Clonar o card “${product.name}” completo?\n\nA cópia incluirá imagem, opções, preços, documentos, perguntas, garantias, regras e manifestos. Ela ficará desativada até você revisar e ativar.`)) {
+                            cloneMut.mutate({ id: product.id });
+                          }
+                        }}
+                        className="p-2 text-cyan-300 hover:bg-cyan-500/20 rounded-lg transition-colors disabled:cursor-wait disabled:opacity-40"
+                        title="Clonar card completo"
+                        aria-label={`Clonar card completo ${product.name}`}
+                      >
+                        {cloneMut.isPending && cloneMut.variables?.id === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                      <button onClick={() => { if (confirm("Excluir este card e todas suas opções/perguntas?")) deleteMut.mutate({ id: product.id }); }} className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Excluir card" aria-label={`Excluir card ${product.name}`}><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => setExpandedProduct(expandedProduct === product.id ? null : product.id)} className="p-2 text-gray-400 hover:bg-white/10 rounded-lg transition-colors" title={expandedProduct === product.id ? "Fechar detalhes" : "Abrir detalhes"} aria-label={expandedProduct === product.id ? `Fechar detalhes de ${product.name}` : `Abrir detalhes de ${product.name}`}>
+                        {expandedProduct === product.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => toggleMut.mutate({ id: product.id, isActive: !product.isActive })} className={`p-2 rounded-lg transition-colors ${product.isActive ? 'text-green-400 hover:bg-green-500/20' : 'text-gray-500 hover:bg-gray-500/20'}`} title={product.isActive ? "Desativar" : "Ativar"}>
-                      {product.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+
+                  <div className="mt-3 flex sm:hidden items-center justify-between gap-2 border-t border-purple-500/20 pt-3">
+                    <button onClick={() => toggleMut.mutate({ id: product.id, isActive: !product.isActive })} className={`p-2.5 rounded-lg transition-colors ${product.isActive ? 'text-green-400 hover:bg-green-500/20' : 'text-gray-500 hover:bg-gray-500/20'}`} title={product.isActive ? "Desativar" : "Ativar"} aria-label={product.isActive ? `Desativar ${product.name}` : `Ativar ${product.name}`}>
+                      {product.isActive ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
                     </button>
-                    <button onClick={() => startEdit(product)} className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>
+                    <button onClick={() => startEdit(product)} className="p-2.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Editar card" aria-label={`Editar card ${product.name}`}><Edit2 className="w-5 h-5" /></button>
                     <button
                       disabled={cloneMut.isPending}
                       onClick={() => {
@@ -1708,15 +1745,15 @@ export default function AdminProducts() {
                           cloneMut.mutate({ id: product.id });
                         }
                       }}
-                      className="p-2 text-cyan-300 hover:bg-cyan-500/20 rounded-lg transition-colors disabled:cursor-wait disabled:opacity-40"
+                      className="p-2.5 text-cyan-300 hover:bg-cyan-500/20 rounded-lg transition-colors disabled:cursor-wait disabled:opacity-40"
                       title="Clonar card completo"
                       aria-label={`Clonar card completo ${product.name}`}
                     >
-                      {cloneMut.isPending && cloneMut.variables?.id === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+                      {cloneMut.isPending && cloneMut.variables?.id === product.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Copy className="w-5 h-5" />}
                     </button>
-                    <button onClick={() => { if (confirm("Excluir este card e todas suas opções/perguntas?")) deleteMut.mutate({ id: product.id }); }} className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
-                    <button onClick={() => setExpandedProduct(expandedProduct === product.id ? null : product.id)} className="p-2 text-gray-400 hover:bg-white/10 rounded-lg transition-colors">
-                      {expandedProduct === product.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    <button onClick={() => { if (confirm("Excluir este card e todas suas opções/perguntas?")) deleteMut.mutate({ id: product.id }); }} className="p-2.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Excluir card" aria-label={`Excluir card ${product.name}`}><Trash2 className="w-5 h-5" /></button>
+                    <button onClick={() => setExpandedProduct(expandedProduct === product.id ? null : product.id)} className="p-2.5 text-gray-400 hover:bg-white/10 rounded-lg transition-colors" title={expandedProduct === product.id ? "Fechar detalhes" : "Abrir detalhes"} aria-label={expandedProduct === product.id ? `Fechar detalhes de ${product.name}` : `Abrir detalhes de ${product.name}`}>
+                      {expandedProduct === product.id ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                     </button>
                   </div>
                 </div>
