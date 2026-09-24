@@ -3297,7 +3297,7 @@ export async function confirmAppointment(token: string, slotId: number): Promise
 }
 
 // Lista todos os agendamentos (para o admin acompanhar)
-export async function listAppointments(): Promise<(ScheduleAppointment & { customerNumber?: number | null; orderStatusKey?: string | null; orderStatusLabel?: string | null })[]> {
+export async function listAppointments(): Promise<(ScheduleAppointment & { customerNumber?: number | null; customerProfilePhotoUrl?: string | null; orderStatusKey?: string | null; orderStatusLabel?: string | null })[]> {
   const db = await getDb();
   if (!db) return [];
   const { getTableColumns } = await import('drizzle-orm');
@@ -3306,12 +3306,13 @@ export async function listAppointments(): Promise<(ScheduleAppointment & { custo
     .select({
       ...apptCols,
       customerNumber: customers.customerNumber,
+      customerProfilePhotoUrl: customers.profilePhotoUrl,
     })
     .from(scheduleAppointments)
     .leftJoin(accessCodePhones, eq(accessCodePhones.id, scheduleAppointments.registrationId))
     .leftJoin(customers, eq(customers.phone, accessCodePhones.phone))
     .orderBy(desc(scheduleAppointments.id));
-  const all = rows as unknown as (ScheduleAppointment & { customerNumber?: number | null; orderStatusKey?: string | null; orderStatusLabel?: string | null })[];
+  const all = rows as unknown as (ScheduleAppointment & { customerNumber?: number | null; customerProfilePhotoUrl?: string | null; orderStatusKey?: string | null; orderStatusLabel?: string | null })[];
   // Deduplicar: manter apenas o registro mais recente por (registrationId, subOrderIndex)
   // Registros antigos/cancelados de reagendamentos anteriores não devem aparecer na lista
   const seen = new Map<string, typeof all[0]>();
@@ -3322,6 +3323,18 @@ export async function listAppointments(): Promise<(ScheduleAppointment & { custo
     }
   }
   const result = Array.from(seen.values());
+
+  // A foto do agendamento e um snapshot. Agendamentos automaticos antigos podem
+  // ter sido criados sem esse snapshot; nesse caso usa a foto atual do cadastro
+  // central do cliente, sem alterar horarios, status ou regras do agendamento.
+  for (const appt of result) {
+    const snapshotPhoto = String(appt.customerPhotoUrl || "").trim();
+    const profilePhoto = String(appt.customerProfilePhotoUrl || "").trim();
+    if ((!snapshotPhoto || snapshotPhoto.toUpperCase() === "NULL") && profilePhoto) {
+      appt.customerPhotoUrl = profilePhoto;
+    }
+  }
+
   // Enriquecer com o status mais recente do pedido (via registrationId)
   if (result.length > 0) {
     try {

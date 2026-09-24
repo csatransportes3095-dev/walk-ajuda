@@ -188,14 +188,30 @@ export async function ensureAutomaticScheduleForOrder(input: {
     await deleteAppointment(existing.id);
   }
 
+  let customerName = input.customerName ?? null;
+  let customerEmail = input.customerEmail ?? null;
+  let customerPhotoUrl: string | null = null;
+  try {
+    const db = await getDb() as any;
+    if (db) {
+      const customer = await findMainCustomerByIdentity({ phone: customerPhone }, db);
+      customerName = customerName || customer?.name || null;
+      customerEmail = customerEmail || customer?.email || null;
+      customerPhotoUrl = customer?.profilePhotoUrl || null;
+    }
+  } catch {
+    // Dados de identificacao sao complementares; a agenda ainda pode ser criada.
+  }
+
   const token = crypto.randomBytes(16).toString("hex");
   const appointment = await createAppointment({
     token,
     registrationId,
     subOrderIndex,
     customerPhone,
-    customerName: input.customerName ?? null,
-    customerEmail: input.customerEmail ?? null,
+    customerName,
+    customerEmail,
+    customerPhotoUrl,
     serviceName: input.serviceName || [option.productName, option.label].filter(Boolean).join(" — "),
     templateId: null,
   });
@@ -238,17 +254,17 @@ export async function regenerateScheduleForOrder(input: {
 
   let customerName = input.customerName ?? null;
   let customerEmail = input.customerEmail ?? null;
-  if (!customerName || !customerEmail) {
-    try {
-      const db = await getDb() as any;
-      if (db) {
-        const customer = await findMainCustomerByIdentity({ phone: customerPhone }, db);
-        customerName = customerName || customer?.name || null;
-        customerEmail = customerEmail || customer?.email || null;
-      }
-    } catch {
-      // Dados de identificação são complementares; a agenda ainda pode ser criada.
+  let customerPhotoUrl: string | null = null;
+  try {
+    const db = await getDb() as any;
+    if (db) {
+      const customer = await findMainCustomerByIdentity({ phone: customerPhone }, db);
+      customerName = customerName || customer?.name || null;
+      customerEmail = customerEmail || customer?.email || null;
+      customerPhotoUrl = customer?.profilePhotoUrl || null;
     }
+  } catch {
+    // Dados de identificacao sao complementares; a agenda ainda pode ser criada.
   }
 
   const token = crypto.randomBytes(16).toString("hex");
@@ -259,6 +275,7 @@ export async function regenerateScheduleForOrder(input: {
     customerPhone,
     customerName,
     customerEmail,
+    customerPhotoUrl,
     serviceName: input.serviceName ?? null,
     templateId: null,
   });
