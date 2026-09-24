@@ -12,9 +12,11 @@ interface AdminHeaderProps {
   backTo?: string;
   /** Conteúdo extra à direita (antes do botão Sair) */
   rightContent?: React.ReactNode;
+  /** Empilha título e ações no celular; padrão false para não alterar outras telas */
+  stackOnMobile?: boolean;
 }
 
-export default function AdminHeader({ icon, title, backTo = "/admin/codes", rightContent }: AdminHeaderProps) {
+export default function AdminHeader({ icon, title, backTo = "/admin/codes", rightContent, stackOnMobile = false }: AdminHeaderProps) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
 
@@ -32,15 +34,15 @@ export default function AdminHeader({ icon, title, backTo = "/admin/codes", righ
 
   return (
     <header className="sticky top-0 z-50 bg-[#0a0a1a]/95 backdrop-blur-md border-b border-purple-500/30">
-      <div className="max-w-4xl mx-auto flex items-center justify-between py-3 px-4">
-        <div className="flex items-center gap-2">
+      <div className={`max-w-4xl mx-auto py-3 px-4 ${stackOnMobile ? "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" : "flex items-center justify-between"}`}>
+        <div className={`flex items-center gap-2 ${stackOnMobile ? "w-full sm:w-auto min-w-0" : ""}`}>
           <a href={backTo} className="text-white/60 hover:text-white transition-colors p-1">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
           </a>
           {icon && <span className="text-purple-400">{icon}</span>}
-          <h1 className="text-lg font-bold text-white">{title}</h1>
+          <h1 className={`text-lg font-bold text-white ${stackOnMobile ? "leading-tight min-w-0" : ""}`}>{title}</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${stackOnMobile ? "w-full sm:w-auto justify-end" : ""}`}>
           <a
             href="/admin/vip#controle-parcelas"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/35 text-cyan-300 rounded-lg text-xs font-black transition-all"
