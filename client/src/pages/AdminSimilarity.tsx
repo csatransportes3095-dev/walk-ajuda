@@ -6,7 +6,7 @@ import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, ty
 import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
 import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } from "@/lib/faceQuality";
 import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
-import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, type FaceResemblanceDescriptor } from "@/lib/faceResemblanceEngine";
+import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, calibratedLocalResemblanceScore, type FaceResemblanceDescriptor } from "@/lib/faceResemblanceEngine";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 
 type CandidatePhoto = {
@@ -28,6 +28,8 @@ type ComparisonResult = {
   identityRaw?: number;
   identityDistance?: number | null;
   engineLabel?: string;
+  faceXGlobalScore?: number;
+  localCoreScore?: number;
   verdict?: MatchVerdict;
   verdictDetail?: string;
   regions?: RegionScores;
@@ -527,6 +529,8 @@ export default function AdminSimilarity() {
           let candidateResemblance: FaceResemblanceDescriptor | null = null;
           let primaryScore: number | undefined;
           let primaryCosine: number | undefined;
+          let faceXGlobalScore: number | undefined;
+          let localCoreScore: number | undefined;
           let engineLabel = "Fallback atual";
 
           if (masterResemblance) {
@@ -539,9 +543,16 @@ export default function AdminSimilarity() {
                 masterResemblance,
                 candidateResemblance,
               );
-              primaryScore = standardized.score;
+              const localCalibration = calibratedLocalResemblanceScore({
+                eyes: comparison.regions.eyes,
+                nose: comparison.regions.nose,
+                mouth: comparison.regions.mouth,
+              });
+              primaryScore = localCalibration.score;
+              localCoreScore = localCalibration.coreMean;
+              faceXGlobalScore = standardized.score;
               primaryCosine = standardized.cosine;
-              engineLabel = "Motor 112×112 • FaceX";
+              engineLabel = "Calibrado • Olhos + Nariz + Boca";
             } catch (error) {
               console.warn("Falha no motor 112x112 para esta foto; usando fallback:", error);
             }
@@ -623,10 +634,12 @@ export default function AdminSimilarity() {
             criticalFloor: comparison.criticalFloor,
             criticalMean: comparison.criticalMean,
             geometryScore: comparison.similarity,
-            identityScore: decision.identityScore,
+            identityScore: faceXGlobalScore ?? decision.identityScore,
             identityRaw: primaryCosine !== undefined ? primaryCosine : decision.identityRawSimilarity,
             identityDistance: primaryCosine !== undefined ? null : identityComparison?.distance ?? null,
             engineLabel,
+            faceXGlobalScore,
+            localCoreScore,
             verdict: decision.verdict,
             verdictDetail: decision.detail,
             regions: comparison.regions,
@@ -667,7 +680,12 @@ export default function AdminSimilarity() {
 
             if (left.resemblance && right.resemblance) {
               const standardized = compareFaceResemblanceDescriptors(left.resemblance, right.resemblance);
-              pairPrimaryScore = standardized.score;
+              const localCalibration = calibratedLocalResemblanceScore({
+                eyes: pairGeometry.regions.eyes,
+                nose: pairGeometry.regions.nose,
+                mouth: pairGeometry.regions.mouth,
+              });
+              pairPrimaryScore = localCalibration.score;
               pairRawSimilarity = Math.max(0, standardized.cosine);
             } else {
               const leftIdentity = left.identity ?? await extractIdentityDescriptor(
@@ -786,7 +804,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. A porcentagem principal usa alinhamento facial padronizado por 5 pontos em 112×112, embedding 512D e similaridade por cosseno calibrada. Geometria, regiões faciais, qualidade e crítico técnico permanecem como diagnósticos separados.
+                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. A porcentagem principal usa calibração local de olhos, nariz e boca, apoiada por alinhamento 112×112 e embedding FaceX 512D. O cosseno global, geometria, qualidade e crítico técnico permanecem como diagnósticos separados.
               </p>
             </div>
           </div>
@@ -1026,7 +1044,7 @@ export default function AdminSimilarity() {
                           </div>
                           {result.identityScore !== undefined && (
                             <div className="mb-1 rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2">
-                              <p className="text-[10px] uppercase text-slate-500">{result.engineLabel || "Apoio facial"}</p>
+                              <p className="text-[10px] uppercase text-slate-500">{result.faceXGlobalScore !== undefined ? "FaceX global 112×112" : (result.engineLabel || "Apoio facial")}</p>
                               <p className="text-sm font-black text-emerald-200">{result.identityScore.toFixed(1)}%</p>
                             </div>
                           )}
@@ -1081,8 +1099,8 @@ export default function AdminSimilarity() {
                               <p className="mt-1 text-xs leading-5 opacity-85">{verdict.detail}</p>
                               <p className="mt-1 text-[10px] opacity-65">
                                 {result.identityRaw !== undefined
-  ? result.engineLabel?.includes("112×112")
-    ? `Cosseno: ${result.identityRaw.toFixed(3)} • `
+  ? result.faceXGlobalScore !== undefined
+    ? `FaceX global: ${result.faceXGlobalScore.toFixed(1)}% • Cosseno: ${result.identityRaw.toFixed(3)} • Núcleo local: ${result.localCoreScore?.toFixed(1) ?? "—"}% • `
     : `Embedding de apoio: ${(result.identityRaw * 100).toFixed(1)}% • `
   : ""}
                                 {result.criticalFloor !== undefined ? `Elo geométrico: ${result.criticalFloor.toFixed(1)}%` : ""}
