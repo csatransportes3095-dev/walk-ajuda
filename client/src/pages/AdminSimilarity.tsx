@@ -340,6 +340,7 @@ export default function AdminSimilarity() {
     setMasterPreview(URL.createObjectURL(file));
     setMasterQuality(null);
     setResults([]);
+    setPairwiseResults([]);
   };
 
   const addFiles = (files: FileList | File[]) => {
@@ -361,6 +362,7 @@ export default function AdminSimilarity() {
       return [...current, ...added];
     });
     setResults([]);
+    setPairwiseResults([]);
   };
 
   const removeCandidate = (id: string) => {
@@ -370,6 +372,7 @@ export default function AdminSimilarity() {
       return current.filter((item) => item.id !== id);
     });
     setResults((current) => current.filter((item) => item.id !== id));
+    setPairwiseResults([]);
   };
 
   const clearMaster = () => {
@@ -378,6 +381,7 @@ export default function AdminSimilarity() {
     setMasterPreview(null);
     setMasterQuality(null);
     setResults([]);
+    setPairwiseResults([]);
     if (masterInputRef.current) masterInputRef.current.value = "";
   };
 
