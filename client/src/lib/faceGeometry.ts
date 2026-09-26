@@ -255,21 +255,21 @@ function errorToSimilarity(error: number, sensitivity: number) {
   return clamp(100 * Math.exp(-sensitivity * Math.max(0, error)));
 }
 
-// Os landmarks do MediaPipe tendem a produzir notas brutas altas até entre
-// pessoas diferentes. Esta calibração deliberadamente exige proximidade extrema:
-// 90 bruto ~= 72 final; 95 bruto ~= 86 final; só 99+ permanece perto de 100.
-function strictCalibrate(score: number) {
-  const normalized = clamp((score - 64) / 36, 0, 1);
-  return clamp(100 * Math.pow(normalized, 1.12));
+// Escala visual/intuitiva: mantém distância entre rostos diferentes sem transformar
+// uma semelhança moderada em 0-5%. É propositalmente mais legível do que a escala
+// interna bruta do MediaPipe.
+function intuitiveCalibrate(score: number) {
+  const s = clamp(score);
+  if (s <= 60) return 0;
+  if (s <= 70) return (s - 60) * 3.0;             // 60..70 => 0..30
+  if (s <= 80) return 30 + (s - 70) * 3.0;        // 70..80 => 30..60
+  if (s <= 90) return 60 + (s - 80) * 2.8;        // 80..90 => 60..88
+  return 88 + (s - 90) * 1.2;                     // 90..100 => 88..100
 }
 
-function weightedGeometricMean(entries: Array<[number, number]>) {
+function weightedMean(entries: Array<[number, number]>) {
   const totalWeight = entries.reduce((sum, [, weight]) => sum + weight, 0) || 1;
-  const logSum = entries.reduce((sum, [score, weight]) => {
-    const normalized = Math.max(0.0025, Math.min(1, score / 100));
-    return sum + Math.log(normalized) * weight;
-  }, 0);
-  return clamp(Math.exp(logSum / totalWeight) * 100);
+  return clamp(entries.reduce((sum, [score, weight]) => sum + score * weight, 0) / totalWeight);
 }
 
 function regionSimilarity(master: FaceLandmark[], candidate: FaceLandmark[], indices: number[], sensitivity: number, trim = 0.08) {
@@ -360,22 +360,23 @@ export function compareFaceGeometry(
     structure,
   };
 
-  // A interface exibe as notas já calibradas. Isso evita mostrar 90% em cada
-  // região só porque dois rostos humanos compartilham uma geometria básica.
+  // A interface exibe uma escala calibrada para leitura humana. Ela continua
+  // severa, mas deixa uma faixa útil para "semelhança parcial" e "chega perto".
   const regions: RegionScores = {
-    global: strictCalibrate(rawRegions.global),
-    eyes: strictCalibrate(rawRegions.eyes),
-    brows: strictCalibrate(rawRegions.brows),
-    nose: strictCalibrate(rawRegions.nose),
-    oval: strictCalibrate(rawRegions.oval),
-    mouth: strictCalibrate(rawRegions.mouth),
-    proportions: strictCalibrate(rawRegions.proportions),
-    symmetry: strictCalibrate(rawRegions.symmetry),
-    structure: strictCalibrate(rawRegions.structure),
+    global: intuitiveCalibrate(rawRegions.global),
+    eyes: intuitiveCalibrate(rawRegions.eyes),
+    brows: intuitiveCalibrate(rawRegions.brows),
+    nose: intuitiveCalibrate(rawRegions.nose),
+    oval: intuitiveCalibrate(rawRegions.oval),
+    mouth: intuitiveCalibrate(rawRegions.mouth),
+    proportions: intuitiveCalibrate(rawRegions.proportions),
+    symmetry: intuitiveCalibrate(rawRegions.symmetry),
+    structure: intuitiveCalibrate(rawRegions.structure),
   };
 
-  // Componentes críticos. Nenhuma região boa pode compensar totalmente outra
-  // região estruturalmente incompatível.
+  // Componentes críticos. Uma única região pode ficar distorcida por ângulo,
+  // óculos, expressão ou recorte; por isso o pior componente não pode zerar
+  // sozinho todo o rosto. Já duas ou mais regiões fracas derrubam a nota.
   const criticalEntries: Array<[number, number]> = [
     [regions.eyes, 0.18],
     [regions.nose, 0.24],
@@ -384,50 +385,58 @@ export function compareFaceGeometry(
     [regions.proportions, 0.10],
     [regions.global, 0.06],
   ];
-  const criticalScores = criticalEntries.map(([score]) => score);
-  const criticalFloor = Math.min(...criticalScores);
-  const criticalMean = weightedGeometricMean(criticalEntries);
 
-  // Boca e sobrancelhas mudam com expressão, idade e foto; entram pouco.
-  const expressionWeight = expressionDelta > 0.09 ? 0.01 : 0.025;
-  const secondary =
-    regions.brows * 0.45 +
-    regions.symmetry * 0.35 +
-    regions.mouth * 0.20;
+  const sortedCritical = [...criticalEntries].sort((a, b) => a[0] - b[0]);
+  const criticalScores = sortedCritical.map(([score]) => score);
+  const criticalFloor = criticalScores[0] ?? 0;
+  const secondWeakest = criticalScores[1] ?? criticalFloor;
+
+  const fullCriticalMean = weightedMean(criticalEntries);
+  const weakestEntry = sortedCritical[0];
+  const robustEntries = criticalEntries.filter((entry) => entry !== weakestEntry);
+  const robustCriticalMean = weightedMean(robustEntries);
+
+  // 85% do resultado vem do conjunto sem o único pior ponto; 10% ainda preserva
+  // o impacto do pior ponto e 5% usa regiões mais variáveis como apoio.
+  const secondary = weightedMean([
+    [regions.brows, 0.35],
+    [regions.symmetry, 0.35],
+    [regions.mouth, 0.30],
+  ]);
 
   let rawSimilarity =
-    criticalMean * (0.975 - expressionWeight) +
-    secondary * expressionWeight +
-    criticalFloor * 0.025;
+    robustCriticalMean * 0.85 +
+    fullCriticalMean * 0.10 +
+    secondary * 0.05;
 
-  // Penalidade por "elo fraco": para uma nota alta, TODAS as estruturas
-  // principais precisam concordar.
-  const below75 = criticalScores.filter((score) => score < 75).length;
-  const below65 = criticalScores.filter((score) => score < 65).length;
-  const below55 = criticalScores.filter((score) => score < 55).length;
+  const severeCount = criticalScores.filter((score) => score < 35).length;
+  const weakCount = criticalScores.filter((score) => score < 50).length;
+  const moderateWeakCount = criticalScores.filter((score) => score < 60).length;
 
-  if (criticalFloor < 45) rawSimilarity -= 24;
-  else if (criticalFloor < 55) rawSimilarity -= 17;
-  else if (criticalFloor < 65) rawSimilarity -= 11;
-  else if (criticalFloor < 75) rawSimilarity -= 6;
-  else if (criticalFloor < 82) rawSimilarity -= 3;
+  // Dois pontos anatômicos muito ruins são evidência bem mais forte do que um
+  // único ponto ruim isolado.
+  if (severeCount >= 3) rawSimilarity -= 30;
+  else if (severeCount >= 2) rawSimilarity -= 20;
+  else if (severeCount === 1 && secondWeakest < 50) rawSimilarity -= 10;
 
-  if (below55 >= 2) rawSimilarity -= 10;
-  else if (below65 >= 2) rawSimilarity -= 7;
-  else if (below75 >= 2) rawSimilarity -= 4;
+  if (weakCount >= 3) rawSimilarity -= 10;
+  else if (weakCount >= 2) rawSimilarity -= 6;
 
-  // RMS alto após alinhamento = formato não bateu de verdade.
-  if (rmsError > 0.075) rawSimilarity -= clamp((rmsError - 0.075) * 180, 0, 12);
+  if (moderateWeakCount >= 4) rawSimilarity -= 5;
+
+  // RMS alto após alinhamento = formato global não encaixou bem.
+  if (rmsError > 0.085) rawSimilarity -= clamp((rmsError - 0.085) * 120, 0, 8);
 
   let similarity = clamp(rawSimilarity);
 
-  // Tetos de segurança: impedem "90%" quando existe uma divergência clara em
-  // qualquer componente anatômico crítico.
-  if (criticalFloor < 82) similarity = Math.min(similarity, 86);
-  if (criticalFloor < 75) similarity = Math.min(similarity, 79);
-  if (criticalFloor < 65) similarity = Math.min(similarity, 69);
-  if (criticalFloor < 55) similarity = Math.min(similarity, 59);
-  if (criticalFloor < 45) similarity = Math.min(similarity, 49);
+  // Tetos dependem do SEGUNDO pior componente, não apenas do pior. Isso evita
+  // que uma região isolada derrube artificialmente uma comparação razoável.
+  if (secondWeakest < 30) similarity = Math.min(similarity, 44);
+  else if (secondWeakest < 40) similarity = Math.min(similarity, 54);
+  else if (secondWeakest < 50) similarity = Math.min(similarity, 64);
+  else if (secondWeakest < 58) similarity = Math.min(similarity, 72);
+
+  const criticalMean = robustCriticalMean;
 
   return {
     similarity,
