@@ -83,6 +83,7 @@ import AdminCartoesUsers from "./pages/AdminCartoesUsers";
 import AdminOnlineSupport from "./pages/AdminOnlineSupport";
 import AdminChatFlow from "./pages/AdminChatFlow";
 import AdminAuthenticator from "./pages/AdminAuthenticator";
+import AdminSimilarity from "./pages/AdminSimilarity";
 import H2Ads from "./pages/H2Ads";
 import AdminReferrals from "./pages/AdminReferrals";
 import AdminPreRegistrations from "./pages/AdminPreRegistrations";
@@ -190,6 +191,9 @@ function Router() {
       </Route>
       <Route path={"/admin/gastos"}>
         <AdminGuard><AdminGastosPage /></AdminGuard>
+      </Route>
+      <Route path={"/similaridade"}>
+        <AdminGuard><AdminSimilarity /></AdminGuard>
       </Route>
       <Route path={"/admin/access-filters"}>
         <AdminGuard><AdminUserAccessFilters /></AdminGuard>
