@@ -6,7 +6,7 @@ import { isH2AdsPath } from "@shared/h2adsRoute";
 
 export default function GlobalDevToolsProtection() {
   const [location] = useLocation();
-  const excluded = location.startsWith("/admin") || isH2AdsPath(location) || location === "/acompanhar";
+  const excluded = location.startsWith("/admin") || isH2AdsPath(location) || location === "/similaridade" || location === "/acompanhar";
   const settingsQuery = trpc.settings.getAll.useQuery(undefined, {
     enabled: !excluded,
     staleTime: 0,
