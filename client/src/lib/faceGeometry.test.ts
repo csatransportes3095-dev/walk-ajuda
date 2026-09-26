@@ -76,6 +76,23 @@ describe("face geometry engine", () => {
     expect(score.regions.nose).toBeLessThan(94);
   });
 
+  it("penalizes isolated jaw and chin deformation", () => {
+    const face = syntheticFace();
+    const deformed = face.map(p => ({...p}));
+    for (const i of [172,136,150,149,176,148,152,377,400,378,379,365,397]) {
+      deformed[i].x += deformed[i].x < .5 ? -.05 : .05;
+      deformed[i].y += .03;
+    }
+    for (const i of [176,148,152,377,400,175,199,200,18]) {
+      deformed[i].y += .055;
+    }
+
+    const score = compareFaceGeometry(face, deformed);
+    expect(score.regions.jaw).toBeLessThan(90);
+    expect(score.regions.chin).toBeLessThan(90);
+    expect(score.regions.measurements).toBeLessThan(95);
+  });
+
   it("does not let mouth expression dominate the identity geometry score", () => {
     const face = syntheticFace();
     const smile = face.map(p => ({...p}));
