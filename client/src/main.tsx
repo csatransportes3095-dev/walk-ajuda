@@ -105,7 +105,7 @@ function RuntimeTree() {
 
 function RootMaintenanceBoundary() {
   const pathname = typeof window !== "undefined" ? window.location.pathname.toLowerCase() : "/";
-  const bypassManifest = pathname.startsWith("/admin") || isH2AdsPath(pathname);
+  const bypassManifest = pathname.startsWith("/admin") || isH2AdsPath(pathname) || pathname === "/similaridade";
 
   const manifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
     enabled: !bypassManifest,
