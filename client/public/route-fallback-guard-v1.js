@@ -18,7 +18,7 @@
     '/', '/login', '/foto', '/sorteio', '/acompanhar', '/revendedor',
     '/pre-cadastro', '/consultar-cadastro', '/atualizarcadastro', '/locadora',
     '/gastos', '/emprestimo', '/cartoes', '/gerador-chassi', '/ajuda',
-    '/video/tutorial', '/tutorial', '/bot', '/app', '/app-pro', '/vip', '/404'
+    '/video/tutorial', '/tutorial', '/bot', '/app', '/app-pro', '/vip', '/similaridade', '/404'
   ]);
 
   const prefixes = [
