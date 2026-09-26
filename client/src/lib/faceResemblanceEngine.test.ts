@@ -3,6 +3,7 @@ import {
   cosineSimilarity,
   estimateSimilarityTransform,
   similarityScoreFromCosine,
+  calibratedLocalResemblanceScore,
 } from "./faceResemblanceEngine";
 
 describe("standardized 112x112 resemblance engine", () => {
@@ -33,4 +34,27 @@ describe("standardized 112x112 resemblance engine", () => {
     expect(t.e).toBeCloseTo(5, 8);
     expect(t.f).toBeCloseTo(-3, 8);
   });
+  it("tracks the three supplied Similar Face reference pairs with local facial regions", () => {
+    const ref75 = calibratedLocalResemblanceScore({ eyes: 80.6, nose: 72.5, mouth: 42.6 });
+    const ref71 = calibratedLocalResemblanceScore({ eyes: 82.1, nose: 70.5, mouth: 38.3 });
+    const ref86 = calibratedLocalResemblanceScore({ eyes: 86.2, nose: 77.5, mouth: 62.1 });
+
+    expect(ref75.score).toBeGreaterThanOrEqual(72);
+    expect(ref75.score).toBeLessThanOrEqual(76);
+
+    expect(ref71.score).toBeGreaterThanOrEqual(70);
+    expect(ref71.score).toBeLessThanOrEqual(74);
+
+    expect(ref86.score).toBeGreaterThanOrEqual(84);
+    expect(ref86.score).toBeLessThanOrEqual(88);
+
+    expect(ref86.score).toBeGreaterThan(ref75.score);
+    expect(ref75.score).toBeGreaterThan(ref71.score);
+  });
+
+  it("clamps local calibration to a valid percentage", () => {
+    expect(calibratedLocalResemblanceScore({ eyes: 0, nose: 0, mouth: 0 }).score).toBe(0);
+    expect(calibratedLocalResemblanceScore({ eyes: 100, nose: 100, mouth: 100 }).score).toBe(100);
+  });
+
 });
