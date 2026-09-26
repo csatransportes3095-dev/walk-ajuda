@@ -743,12 +743,19 @@ export default function AdminSimilarity() {
               {masterQuality && (
                 <div className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Qualidade da leitura</span>
-                    <strong>{masterQuality.score.toFixed(0)}%</strong>
+                    <span className="text-slate-400">Qualidade Foto Mestre</span>
+                    <strong>{masterQuality.capture.score.toFixed(0)}%</strong>
                   </div>
-                  {masterQuality.warnings.length > 0 && (
-                    <p className="mt-2 text-xs text-amber-300">{masterQuality.warnings.join(" • ")}</p>
-                  )}
+                  <div className="mt-2 space-y-1 text-xs">
+                    {masterQuality.capture.checks.slice(0, 4).map((check) => (
+                      <p key={check.code} className="text-emerald-300">✓ {check.message}</p>
+                    ))}
+                    {masterQuality.capture.issues.map((issue) => (
+                      <p key={issue.code} className={issue.severity === "critical" ? "text-red-300" : "text-amber-300"}>
+                        ⚠ {issue.message}
+                      </p>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -839,7 +846,7 @@ export default function AdminSimilarity() {
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3.5 font-black text-white shadow-lg shadow-cyan-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {analyzing ? <RotateCcw className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-                {analyzing ? "Analisando..." : "Analisar Similaridade"}
+                {analyzing ? "Analisando..." : results.length > 0 ? "Comparar novamente" : "Analisar Similaridade"}
               </button>
 
               {analyzing && (
@@ -933,11 +940,40 @@ export default function AdminSimilarity() {
                           )}
                           {result.reliability !== null && (
                             <div className="mb-1 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-                              <p className="text-[10px] uppercase text-slate-500">Confiabilidade da leitura</p>
-                              <p className="text-sm font-black">{result.reliability.toFixed(0)}%</p>
+                              <p className="text-[10px] uppercase text-slate-500">Confiabilidade da análise</p>
+                              <p className="text-sm font-black">{confidenceLabel(result.reliability)} • {result.reliability.toFixed(0)}%</p>
                             </div>
                           )}
                         </div>
+
+                        {result.masterCaptureQuality && result.candidateCaptureQuality && (
+                          <div className="mt-3 grid gap-2 md:grid-cols-2">
+                            {[
+                              ["Foto 1 • Mestre", result.masterCaptureQuality],
+                              ["Foto 2 • Comparação", result.candidateCaptureQuality],
+                            ].map(([label, quality]) => {
+                              const q = quality as FaceCaptureQuality;
+                              return (
+                                <div key={String(label)} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{String(label)}</p>
+                                    <p className="text-sm font-black text-white">{q.score.toFixed(0)}%</p>
+                                  </div>
+                                  <div className="mt-2 grid gap-1 text-[11px]">
+                                    {q.checks.slice(0, 4).map((check) => (
+                                      <p key={check.code} className="text-emerald-300">✓ {check.message}</p>
+                                    ))}
+                                    {q.issues.map((issue) => (
+                                      <p key={issue.code} className={issue.severity === "critical" ? "text-red-300" : "text-amber-300"}>
+                                        ⚠ {issue.message}
+                                      </p>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {!result.error && result.similarity !== null && (() => {
                           const verdict = verdictFor(result);
@@ -993,6 +1029,63 @@ export default function AdminSimilarity() {
                 ))}
               </div>
             )}
+
+            {pairwiseResults.length > 0 && (() => {
+              const valid = pairwiseResults.filter((pair) => Number.isFinite(pair.similarity));
+              const highest = valid[0];
+              const lowest = valid[valid.length - 1];
+              const average = valid.length
+                ? valid.reduce((sum, pair) => sum + pair.similarity, 0) / valid.length
+                : 0;
+
+              return (
+                <section className="rounded-2xl border border-cyan-400/20 bg-[#091018]/90 p-4 sm:p-5">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Todas as combinações</p>
+                      <h2 className="text-xl font-black">Resumo entre todas as fotos</h2>
+                    </div>
+                    <span className="text-xs text-slate-500">{valid.length} combinação(ões)</span>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-3">
+                      <p className="text-[10px] uppercase text-slate-500">Maior similaridade</p>
+                      <p className="mt-1 text-2xl font-black text-emerald-200">{highest?.similarity.toFixed(1) ?? "—"}%</p>
+                    </div>
+                    <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3">
+                      <p className="text-[10px] uppercase text-slate-500">Média</p>
+                      <p className="mt-1 text-2xl font-black text-cyan-200">{average.toFixed(1)}%</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-400/20 bg-amber-500/5 p-3">
+                      <p className="text-[10px] uppercase text-slate-500">Menor similaridade</p>
+                      <p className="mt-1 text-2xl font-black text-amber-200">{lowest?.similarity.toFixed(1) ?? "—"}%</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {valid.map((pair, index) => (
+                      <div key={pair.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                        <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-black">#{index + 1}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <img src={pair.leftPreview} alt="" className="h-9 w-9 rounded-lg object-cover" />
+                            <span className="truncate text-xs text-slate-300">{pair.leftName}</span>
+                            <span className="text-slate-600">×</span>
+                            <img src={pair.rightPreview} alt="" className="h-9 w-9 rounded-lg object-cover" />
+                            <span className="truncate text-xs text-slate-300">{pair.rightName}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-black text-cyan-300">{pair.similarity.toFixed(1)}%</p>
+                          <p className="text-[10px] text-slate-500">{confidenceLabel(pair.reliability)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })()}
 
             {candidates.length === 0 && (
               <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center">
