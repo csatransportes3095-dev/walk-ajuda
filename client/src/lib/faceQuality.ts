@@ -90,6 +90,78 @@ function sampleStats(
   return { mean, std, count };
 }
 
+export type CaptureMetricInput = {
+  width: number;
+  height: number;
+  faceWidthPx: number;
+  faceHeightPx: number;
+  faceAreaRatio: number;
+  brightness: number;
+  contrast: number;
+  sharpness: number;
+  shadowAsymmetry: number;
+  rollDeg: number;
+  yawAsymmetry: number;
+  nearBorder: boolean;
+  directionalBlurRatio: number;
+  eyeTexture: number;
+  criticalRegionLowTextureCount: number;
+};
+
+export function assessCaptureMetrics(metrics: CaptureMetricInput) {
+  let score = 100;
+  const issues: CaptureIssue[] = [];
+  const checks: CaptureCheck[] = [];
+  const addIssue = (code: string, message: string, severity: CaptureIssueSeverity, deduction: number) => {
+    issues.push({ code, message, severity });
+    score -= deduction;
+  };
+
+  if (metrics.width < 320 || metrics.height < 320) addIssue("low_resolution", "resolução insuficiente", "warning", 12);
+  else checks.push({ code: "resolution_ok", message: "resolução adequada" });
+
+  if (metrics.faceWidthPx < 120 || metrics.faceHeightPx < 150 || metrics.faceAreaRatio < 0.055) {
+    addIssue("face_small", "rosto muito pequeno na imagem", "warning", 16);
+  } else checks.push({ code: "face_size_ok", message: "tamanho do rosto adequado" });
+
+  if (metrics.nearBorder) addIssue("face_cropped", "rosto parcialmente cortado", "critical", 20);
+  else checks.push({ code: "face_detected", message: "rosto detectado por completo" });
+
+  if (metrics.brightness < 58) addIssue("too_dark", "iluminação insuficiente", "warning", 16);
+  else if (metrics.brightness > 218) addIssue("too_bright", "iluminação excessivamente clara", "warning", 16);
+  else checks.push({ code: "lighting_ok", message: "boa iluminação" });
+
+  if (metrics.contrast < 22) addIssue("low_contrast", "contraste facial baixo", "warning", 10);
+
+  if (metrics.sharpness < 8) addIssue("blur", "foto desfocada", "critical", 22);
+  else if (metrics.sharpness < 13) addIssue("soft_focus", "nitidez baixa", "warning", 10);
+  else checks.push({ code: "sharpness_ok", message: "boa nitidez" });
+
+  if (metrics.sharpness < 13 && metrics.directionalBlurRatio > 2.6) {
+    addIssue("motion_blur", "possível borrão de movimento", "warning", 8);
+  }
+
+  if (metrics.shadowAsymmetry > 34) addIssue("strong_shadow", "sombras muito fortes no rosto", "warning", 10);
+  else checks.push({ code: "shadow_ok", message: "iluminação facial equilibrada" });
+
+  if (metrics.rollDeg > 16) addIssue("roll_excessive", "inclinação facial excessiva", "critical", 18);
+  else if (metrics.rollDeg > 9) addIssue("roll", "rosto inclinado", "warning", 8);
+
+  if (metrics.yawAsymmetry > 0.22) addIssue("yaw_excessive", "ângulo facial excessivo", "critical", 20);
+  else if (metrics.yawAsymmetry > 0.13) addIssue("yaw", "rosto levemente lateral", "warning", 9);
+  else checks.push({ code: "pose_ok", message: "posição adequada" });
+
+  if (metrics.eyeTexture < Math.max(7, metrics.contrast * 0.22)) {
+    addIssue("eyes_low_visibility", "olhos pouco visíveis", "warning", 10);
+  } else checks.push({ code: "eyes_ok", message: "olhos detectados" });
+
+  if (metrics.criticalRegionLowTextureCount >= 3) {
+    addIssue("possible_occlusion", "possível oclusão significativa do rosto", "warning", 12);
+  } else checks.push({ code: "occlusion_ok", message: "regiões principais do rosto visíveis" });
+
+  return { score: clamp(score), issues, checks };
+}
+
 export function analyzeFaceCaptureQuality(
   canvas: HTMLCanvasElement,
   landmarks: FaceLandmark[],
@@ -232,56 +304,7 @@ export function analyzeFaceCaptureQuality(
     ovalBox.x2 >= width * 0.988 ||
     ovalBox.y2 >= height * 0.988;
 
-  let score = 100;
-  const addIssue = (code: string, message: string, severity: CaptureIssueSeverity, deduction: number) => {
-    issues.push({ code, message, severity });
-    score -= deduction;
-  };
-
-  if (width < 320 || height < 320) addIssue("low_resolution", "resolução insuficiente", "warning", 12);
-  else checks.push({ code: "resolution_ok", message: "resolução adequada" });
-
-  if (faceWidthPx < 120 || faceHeightPx < 150 || faceAreaRatio < 0.055) {
-    addIssue("face_small", "rosto muito pequeno na imagem", "warning", 16);
-  } else checks.push({ code: "face_size_ok", message: "tamanho do rosto adequado" });
-
-  if (nearBorder) addIssue("face_cropped", "rosto parcialmente cortado", "critical", 20);
-  else checks.push({ code: "face_detected", message: "rosto detectado por completo" });
-
-  if (brightness < 58) addIssue("too_dark", "iluminação insuficiente", "warning", 16);
-  else if (brightness > 218) addIssue("too_bright", "iluminação excessivamente clara", "warning", 16);
-  else checks.push({ code: "lighting_ok", message: "boa iluminação" });
-
-  if (contrast < 22) addIssue("low_contrast", "contraste facial baixo", "warning", 10);
-
-  if (sharpness < 8) addIssue("blur", "foto desfocada", "critical", 22);
-  else if (sharpness < 13) addIssue("soft_focus", "nitidez baixa", "warning", 10);
-  else checks.push({ code: "sharpness_ok", message: "boa nitidez" });
-
-  if (sharpness < 13 && directionalBlurRatio > 2.6) {
-    addIssue("motion_blur", "possível borrão de movimento", "warning", 8);
-  }
-
-  if (shadowAsymmetry > 34) addIssue("strong_shadow", "sombras muito fortes no rosto", "warning", 10);
-  else checks.push({ code: "shadow_ok", message: "iluminação facial equilibrada" });
-
-  if (rollDeg > 16) addIssue("roll_excessive", "inclinação facial excessiva", "critical", 18);
-  else if (rollDeg > 9) addIssue("roll", "rosto inclinado", "warning", 8);
-
-  if (yawAsymmetry > 0.22) addIssue("yaw_excessive", "ângulo facial excessivo", "critical", 20);
-  else if (yawAsymmetry > 0.13) addIssue("yaw", "rosto levemente lateral", "warning", 9);
-  else checks.push({ code: "pose_ok", message: "posição adequada" });
-
-  if (eyeTexture < Math.max(7, contrast * 0.22)) {
-    addIssue("eyes_low_visibility", "olhos pouco visíveis", "warning", 10);
-  } else checks.push({ code: "eyes_ok", message: "olhos detectados" });
-
-  if (criticalRegionLowTextureCount >= 3) {
-    addIssue("possible_occlusion", "possível oclusão significativa do rosto", "warning", 12);
-  } else checks.push({ code: "occlusion_ok", message: "regiões principais do rosto visíveis" });
-
-  return {
-    score: clamp(score),
+  const assessed = assessCaptureMetrics({
     width,
     height,
     faceWidthPx,
@@ -293,8 +316,27 @@ export function analyzeFaceCaptureQuality(
     shadowAsymmetry,
     rollDeg,
     yawAsymmetry,
-    issues,
-    checks,
+    nearBorder,
+    directionalBlurRatio,
+    eyeTexture,
+    criticalRegionLowTextureCount,
+  });
+
+  return {
+    score: assessed.score,
+    width,
+    height,
+    faceWidthPx,
+    faceHeightPx,
+    faceAreaRatio,
+    brightness,
+    contrast,
+    sharpness,
+    shadowAsymmetry,
+    rollDeg,
+    yawAsymmetry,
+    issues: assessed.issues,
+    checks: assessed.checks,
   };
 }
 
