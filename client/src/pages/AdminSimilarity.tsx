@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
 import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
 import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } from "@/lib/faceQuality";
-import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
+import { extractIdentityDescriptor, compareIdentityDescriptors, identityDescriptorStability, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 
 type CandidatePhoto = {
@@ -507,9 +507,14 @@ export default function AdminSimilarity() {
           const identityComparison = await compareIdentityDescriptors(masterIdentity, candidateIdentity);
 
           const captureReliability = Math.min(masterDetected.captureQuality.score, candidateDetected.captureQuality.score);
+          const embeddingStability = Math.min(
+            identityDescriptorStability(masterIdentity),
+            identityDescriptorStability(candidateIdentity),
+          );
           const reliability = clamp(
-            captureReliability * 0.65 +
-            Math.min(masterQ.score, candidateCombinedQuality) * 0.35
+            captureReliability * 0.55 +
+            Math.min(masterQ.score, candidateCombinedQuality) * 0.30 +
+            embeddingStability * 0.15
           );
           const decision = decideFaceMatch({
             identityRawSimilarity: identityComparison.rawSimilarity,
@@ -592,9 +597,14 @@ export default function AdminSimilarity() {
               right.detected.aspectRatio,
             );
             const pairIdentity = await compareIdentityDescriptors(left.identity, right.identity);
+            const pairEmbeddingStability = Math.min(
+              identityDescriptorStability(left.identity),
+              identityDescriptorStability(right.identity),
+            );
             const pairReliability = clamp(
-              Math.min(left.detected.captureQuality.score, right.detected.captureQuality.score) * 0.65 +
-              Math.min(left.detected.imageQuality.score, right.detected.imageQuality.score) * 0.35
+              Math.min(left.detected.captureQuality.score, right.detected.captureQuality.score) * 0.55 +
+              Math.min(left.detected.imageQuality.score, right.detected.imageQuality.score) * 0.30 +
+              pairEmbeddingStability * 0.15
             );
             const pairDecision = decideFaceMatch({
               identityRawSimilarity: pairIdentity.rawSimilarity,

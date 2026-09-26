@@ -1,6 +1,8 @@
 export type FaceIdentityDescriptor = {
   embedding: number[];
   detectionScore: number | null;
+  internalConsistency: number | null;
+  sampleCount: number;
 };
 
 export type FaceIdentityComparison = {
@@ -37,6 +39,25 @@ function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
+export function normalizeEmbedding(values: number[]) {
+  const norm = Math.sqrt(values.reduce((sum, value) => sum + value * value, 0));
+  if (!Number.isFinite(norm) || norm <= 1e-12) return [...values];
+  return values.map((value) => value / norm);
+}
+
+export function averageEmbeddings(embeddings: number[][]) {
+  if (!embeddings.length) return [];
+  const normalized = embeddings.map(normalizeEmbedding);
+  const length = normalized[0].length;
+  const compatible = normalized.filter((embedding) => embedding.length === length);
+  if (!compatible.length) return [];
+
+  const average = Array.from({ length }, (_, index) =>
+    compatible.reduce((sum, embedding) => sum + embedding[index], 0) / compatible.length
+  );
+  return normalizeEmbedding(average);
+}
+
 async function getIdentityEngine(): Promise<HumanInstance> {
   if (!enginePromise) {
     enginePromise = (async () => {
@@ -50,7 +71,7 @@ async function getIdentityEngine(): Promise<HumanInstance> {
         modelBasePath: HUMAN_MODEL_BASE,
         filter: {
           enabled: true,
-          equalization: true,
+          equalization: false,
           flip: false,
         },
         face: {
@@ -91,35 +112,77 @@ async function getIdentityEngine(): Promise<HumanInstance> {
   return enginePromise;
 }
 
-export async function extractIdentityDescriptor(
+async function extractSingleEmbedding(
+  human: HumanInstance,
   canvas: HTMLCanvasElement,
-  fallbackCanvas?: HTMLCanvasElement,
-): Promise<FaceIdentityDescriptor> {
-  const human = await getIdentityEngine();
-  let result = await human.detect(canvas);
-  let faces = result.face || [];
+): Promise<{ embedding: number[]; score: number | null } | null> {
+  const result = await human.detect(canvas);
+  const faces = result.face || [];
 
-  if (faces.length === 0 && fallbackCanvas) {
-    result = await human.detect(fallbackCanvas);
-    faces = result.face || [];
-  }
-
-  if (faces.length === 0) {
-    throw new Error("O motor de identidade não encontrou um rosto mesmo após o recorte de recuperação.");
-  }
+  if (faces.length === 0) return null;
   if (faces.length > 1) {
     throw new Error("O motor de identidade encontrou mais de um rosto.");
   }
 
-  const embedding = Array.from(faces[0].embedding || []);
+  const embedding = normalizeEmbedding(Array.from(faces[0].embedding || []));
   if (embedding.length < 128 || embedding.some((value) => !Number.isFinite(value))) {
     throw new Error("Não foi possível gerar um vetor facial confiável.");
   }
 
   return {
     embedding,
-    detectionScore: Number.isFinite(faces[0].score) ? Number(faces[0].score) : null,
+    score: Number.isFinite(faces[0].score) ? Number(faces[0].score) : null,
   };
+}
+
+export async function extractIdentityDescriptor(
+  canvas: HTMLCanvasElement,
+  fallbackCanvas?: HTMLCanvasElement,
+): Promise<FaceIdentityDescriptor> {
+  const human = await getIdentityEngine();
+
+  const primary = await extractSingleEmbedding(human, canvas);
+  const fallback = fallbackCanvas
+    ? await extractSingleEmbedding(human, fallbackCanvas)
+    : null;
+
+  const samples = [primary, fallback].filter(
+    (sample): sample is { embedding: number[]; score: number | null } => Boolean(sample)
+  );
+
+  if (!samples.length) {
+    throw new Error("O motor de identidade não encontrou um rosto mesmo após o recorte de recuperação.");
+  }
+
+  const embedding = averageEmbeddings(samples.map((sample) => sample.embedding));
+  if (embedding.length < 128) {
+    throw new Error("Não foi possível consolidar um vetor facial confiável.");
+  }
+
+  const validScores = samples
+    .map((sample) => sample.score)
+    .filter((score): score is number => score !== null && Number.isFinite(score));
+
+  let internalConsistency: number | null = null;
+  if (samples.length >= 2) {
+    internalConsistency = clamp01(
+      Number(human.match.similarity(samples[0].embedding, samples[1].embedding))
+    );
+  }
+
+  return {
+    embedding,
+    detectionScore: validScores.length
+      ? validScores.reduce((sum, score) => sum + score, 0) / validScores.length
+      : null,
+    internalConsistency,
+    sampleCount: samples.length,
+  };
+}
+
+export function identityDescriptorStability(descriptor: FaceIdentityDescriptor) {
+  if (descriptor.internalConsistency === null || descriptor.sampleCount < 2) return 65;
+  return Math.max(0, Math.min(100, descriptor.internalConsistency * 100));
 }
 
 export async function compareIdentityDescriptors(
