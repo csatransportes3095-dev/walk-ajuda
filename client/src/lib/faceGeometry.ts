@@ -17,6 +17,7 @@ export type RegionScores = {
   mouth: number;
   proportions: number;
   symmetry: number;
+  structure: number;
 };
 
 export type GeometryComparison = {
@@ -74,6 +75,12 @@ const PROPORTION_PAIRS: Array<[number, number]> = [
   [61,1], [291,1],  // cantos boca/nariz
   [33,1], [263,1],  // olhos/nariz
   [10,1], [1,152],
+];
+
+const STRUCTURE_ANCHORS = [
+  10, 152, 234, 454, 127, 356, 172, 397, 58, 288, 93, 323,
+  33, 133, 362, 263, 70, 107, 336, 300,
+  168, 1, 2, 98, 327, 61, 291, 13, 14,
 ];
 
 const SYMMETRY_PAIRS: Array<[[number, number],[number, number]]> = [
@@ -276,6 +283,25 @@ function symmetrySimilarity(master: FaceLandmark[], candidate: FaceLandmark[]) {
   return values.reduce((sum, s) => sum+s, 0) / Math.max(1, values.length);
 }
 
+function structuralSimilarity(master: FaceLandmark[], candidate: FaceLandmark[]) {
+  const errors: number[] = [];
+  for (let i = 0; i < STRUCTURE_ANCHORS.length; i += 1) {
+    for (let j = i + 1; j < STRUCTURE_ANCHORS.length; j += 1) {
+      const a = STRUCTURE_ANCHORS[i];
+      const b = STRUCTURE_ANCHORS[j];
+      const m = Math.max(1e-6, distance(master[a], master[b]));
+      const c = Math.max(1e-6, distance(candidate[a], candidate[b]));
+      errors.push(Math.abs(Math.log(m / c)));
+    }
+  }
+  errors.sort((a,b) => a-b);
+  // Descarta 8% dos pares mais discrepantes para reduzir efeito de expressão/oclusão pontual.
+  const keep = Math.max(1, Math.floor(errors.length * 0.92));
+  const retained = errors.slice(0, keep);
+  const rms = Math.sqrt(retained.reduce((sum, e) => sum + e*e, 0) / retained.length);
+  return clamp(100 * Math.exp(-4.2 * rms));
+}
+
 function expressionDifference(master: FaceLandmark[], candidate: FaceLandmark[]) {
   const mouthWidthM = Math.max(1e-6, distance(master[61], master[291]));
   const mouthWidthC = Math.max(1e-6, distance(candidate[61], candidate[291]));
@@ -298,6 +324,7 @@ export function compareFaceGeometry(
   const rawLandmarkSimilarity = errorToSimilarity(rmsError, 3.0);
   const proportions = proportionSimilarity(master, candidate);
   const symmetry = symmetrySimilarity(master, candidate);
+  const structure = structuralSimilarity(master, candidate);
 
   const expressionDelta = expressionDifference(master, candidate);
   const mouthWeight = expressionDelta > 0.10 ? 0.015 : expressionDelta > 0.055 ? 0.03 : 0.05;
@@ -312,16 +339,18 @@ export function compareFaceGeometry(
     mouth: regionSimilarity(master, candidate, MOUTH, 2.4, 0.12),
     proportions,
     symmetry,
+    structure,
   };
 
   const stableBlend =
-    regions.global * 0.22 +
-    regions.eyes * 0.18 +
-    regions.nose * 0.22 +
-    regions.oval * 0.20 +
-    regions.brows * 0.06 +
-    regions.proportions * 0.09 +
-    regions.symmetry * 0.03;
+    regions.global * 0.17 +
+    regions.eyes * 0.15 +
+    regions.nose * 0.19 +
+    regions.oval * 0.17 +
+    regions.brows * 0.05 +
+    regions.proportions * 0.08 +
+    regions.symmetry * 0.03 +
+    regions.structure * 0.16;
 
   const stableNormalized = stableBlend / 1.0;
   const similarity = clamp(stableNormalized * stableWeight + regions.mouth * mouthWeight + stableNormalized * (1 - stableWeight - mouthWeight));
