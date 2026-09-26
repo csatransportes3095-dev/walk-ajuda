@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
 import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
 import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } from "@/lib/faceQuality";
-import { extractIdentityDescriptor, compareIdentityDescriptors, identityDescriptorStability, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
+import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 
 type CandidatePhoto = {
@@ -276,18 +276,18 @@ function verdictFor(result: ComparisonResult) {
   }
 
   if (result.verdict === "strong") {
-    return { label: "FORTEMENTE COMPATÍVEL", detail: result.verdictDetail || "Vetor facial e geometria concordam fortemente.", tone: "text-emerald-200 border-emerald-400/25 bg-emerald-500/10" };
+    return { label: "FORTEMENTE COMPATÍVEL", detail: result.verdictDetail || "Apoio facial e geometria concordam fortemente.", tone: "text-emerald-200 border-emerald-400/25 bg-emerald-500/10" };
   }
   if (result.verdict === "near") {
-    return { label: "CHEGA PERTO", detail: result.verdictDetail || "Existe aproximação relevante, mas ainda há diferenças.", tone: "text-cyan-200 border-cyan-400/25 bg-cyan-500/10" };
+    return { label: "ALTA SEMELHANÇA", detail: result.verdictDetail || "Há forte parecência visual entre os rostos.", tone: "text-cyan-200 border-cyan-400/25 bg-cyan-500/10" };
   }
   if (result.verdict === "partial") {
-    return { label: "SEMELHANÇA PARCIAL", detail: result.verdictDetail || "Há alguns sinais de semelhança, mas não uma correspondência forte.", tone: "text-amber-200 border-amber-400/25 bg-amber-500/10" };
+    return { label: "SEMELHANÇA MODERADA", detail: result.verdictDetail || "Há algumas regiões parecidas e outras diferentes.", tone: "text-amber-200 border-amber-400/25 bg-amber-500/10" };
   }
   if (result.verdict === "inconclusive") {
     return { label: "INCONCLUSIVO", detail: result.verdictDetail || "A qualidade da leitura ainda não é suficiente.", tone: "text-amber-200 border-amber-400/25 bg-amber-500/10" };
   }
-  return { label: "BAIXA COMPATIBILIDADE", detail: result.verdictDetail || "O vetor facial e a geometria não sustentam uma correspondência forte.", tone: "text-red-200 border-red-400/25 bg-red-500/10" };
+  return { label: "BAIXA SEMELHANÇA", detail: result.verdictDetail || "Os rostos apresentam pouca parecência visual.", tone: "text-red-200 border-red-400/25 bg-red-500/10" };
 }
 
 const H2_LOGO = "/h2-brand-192.png";
@@ -507,14 +507,9 @@ export default function AdminSimilarity() {
           const identityComparison = await compareIdentityDescriptors(masterIdentity, candidateIdentity);
 
           const captureReliability = Math.min(masterDetected.captureQuality.score, candidateDetected.captureQuality.score);
-          const embeddingStability = Math.min(
-            identityDescriptorStability(masterIdentity),
-            identityDescriptorStability(candidateIdentity),
-          );
           const reliability = clamp(
-            captureReliability * 0.55 +
-            Math.min(masterQ.score, candidateCombinedQuality) * 0.30 +
-            embeddingStability * 0.15
+            captureReliability * 0.65 +
+            Math.min(masterQ.score, candidateCombinedQuality) * 0.35
           );
           const decision = decideFaceMatch({
             identityRawSimilarity: identityComparison.rawSimilarity,
@@ -523,7 +518,9 @@ export default function AdminSimilarity() {
             geometryCriticalFloor: comparison.criticalFloor,
             globalScore: comparison.regions.global,
             eyesScore: comparison.regions.eyes,
+            browsScore: comparison.regions.brows,
             noseScore: comparison.regions.nose,
+            mouthScore: comparison.regions.mouth,
             ovalScore: comparison.regions.oval,
             cheeksScore: comparison.regions.cheeks,
             jawScore: comparison.regions.jaw,
@@ -597,14 +594,9 @@ export default function AdminSimilarity() {
               right.detected.aspectRatio,
             );
             const pairIdentity = await compareIdentityDescriptors(left.identity, right.identity);
-            const pairEmbeddingStability = Math.min(
-              identityDescriptorStability(left.identity),
-              identityDescriptorStability(right.identity),
-            );
             const pairReliability = clamp(
-              Math.min(left.detected.captureQuality.score, right.detected.captureQuality.score) * 0.55 +
-              Math.min(left.detected.imageQuality.score, right.detected.imageQuality.score) * 0.30 +
-              pairEmbeddingStability * 0.15
+              Math.min(left.detected.captureQuality.score, right.detected.captureQuality.score) * 0.65 +
+              Math.min(left.detected.imageQuality.score, right.detected.imageQuality.score) * 0.35
             );
             const pairDecision = decideFaceMatch({
               identityRawSimilarity: pairIdentity.rawSimilarity,
@@ -613,7 +605,9 @@ export default function AdminSimilarity() {
               geometryCriticalFloor: pairGeometry.criticalFloor,
               globalScore: pairGeometry.regions.global,
               eyesScore: pairGeometry.regions.eyes,
+              browsScore: pairGeometry.regions.brows,
               noseScore: pairGeometry.regions.nose,
+              mouthScore: pairGeometry.regions.mouth,
               ovalScore: pairGeometry.regions.oval,
               cheeksScore: pairGeometry.regions.cheeks,
               jawScore: pairGeometry.regions.jaw,
@@ -906,7 +900,7 @@ export default function AdminSimilarity() {
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
-                    <h2 className="text-xl font-black">Resultado biofacial</h2>
+                    <h2 className="text-xl font-black">Resultado de semelhança facial</h2>
                   </div>
                   <span className="text-xs text-slate-500">Preferências pulsantes primeiro</span>
                 </div>
@@ -938,11 +932,11 @@ export default function AdminSimilarity() {
                         <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
                           <div>
                             <p className="text-4xl font-black tracking-tight text-cyan-300">{formatScore(result.similarity)}</p>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{scoreLabel(result.similarity)} compatibilidade biofacial</p>
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{scoreLabel(result.similarity)} semelhança facial</p>
                           </div>
                           {result.identityScore !== undefined && (
                             <div className="mb-1 rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2">
-                              <p className="text-[10px] uppercase text-slate-500">Vetor facial</p>
+                              <p className="text-[10px] uppercase text-slate-500">Apoio facial</p>
                               <p className="text-sm font-black text-emerald-200">{result.identityScore.toFixed(1)}%</p>
                             </div>
                           )}
@@ -996,7 +990,7 @@ export default function AdminSimilarity() {
                               <p className="text-xs font-black tracking-wide">{verdict.label}</p>
                               <p className="mt-1 text-xs leading-5 opacity-85">{verdict.detail}</p>
                               <p className="mt-1 text-[10px] opacity-65">
-                                {result.identityRaw !== undefined ? `Embedding bruto: ${(result.identityRaw * 100).toFixed(1)}% • ` : ""}
+                                {result.identityRaw !== undefined ? `Embedding de apoio: ${(result.identityRaw * 100).toFixed(1)}% • ` : ""}
                                 {result.criticalFloor !== undefined ? `Elo geométrico: ${result.criticalFloor.toFixed(1)}%` : ""}
                                 {result.criticalMean !== undefined ? ` • Conjunto crítico: ${result.criticalMean.toFixed(1)}%` : ""}
                               </p>

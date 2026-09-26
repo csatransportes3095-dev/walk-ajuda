@@ -1,64 +1,79 @@
 import { describe, expect, it } from "vitest";
 import { decideFaceMatch } from "./faceMatchDecision";
 
-describe("biofacial consensus math", () => {
-  it("keeps the supplied reference case in a useful middle range", () => {
+describe("facial resemblance scoring", () => {
+  it("keeps a morphology around 75% near that range even with a very high embedding", () => {
     const result = decideFaceMatch({
-      identityRawSimilarity: 0.38,
-      geometrySimilarity: 41.8,
-      geometryCriticalMean: 63.6,
-      geometryCriticalFloor: 28.2,
-      noseScore: 54.4,
-      jawScore: 55.0,
-      chinScore: 57.4,
-      measurementsScore: 39.5,
-      reliability: 96,
-    });
-    expect(result.finalScore).toBeGreaterThanOrEqual(60);
-    expect(result.finalScore).toBeLessThanOrEqual(78);
-  });
-
-  it("rewards agreement between both calculation branches", () => {
-    const lower = decideFaceMatch({
-      identityRawSimilarity: 0.38,
-      geometrySimilarity: 42,
-      geometryCriticalMean: 58,
-      geometryCriticalFloor: 35,
+      identityRawSimilarity: 0.95,
+      geometrySimilarity: 82.2,
+      geometryCriticalMean: 83.1,
+      geometryCriticalFloor: 56,
+      globalScore: 90.9,
+      eyesScore: 80.6,
+      browsScore: 69.5,
+      noseScore: 72.5,
+      mouthScore: 42.6,
+      ovalScore: 89.9,
+      cheeksScore: 69.6,
+      jawScore: 91.3,
+      chinScore: 89.8,
+      proportionsScore: 90.3,
+      measurementsScore: 56,
+      structureScore: 88.3,
+      symmetryScore: 97.3,
       reliability: 90,
     });
-    const higher = decideFaceMatch({
-      identityRawSimilarity: 0.62,
-      geometrySimilarity: 78,
-      geometryCriticalMean: 76,
-      geometryCriticalFloor: 64,
-      reliability: 90,
-    });
-    expect(higher.finalScore).toBeGreaterThan(lower.finalScore);
+    expect(result.morphologyScore).toBeGreaterThanOrEqual(74);
+    expect(result.morphologyScore).toBeLessThanOrEqual(78);
+    expect(result.finalScore).toBeGreaterThanOrEqual(72);
+    expect(result.finalScore).toBeLessThanOrEqual(82);
   });
 
-  it("reduces the score when several structural measurements are weak", () => {
-    const baseline = decideFaceMatch({
-      identityRawSimilarity: 0.65,
-      geometrySimilarity: 80,
-      geometryCriticalMean: 72,
-      geometryCriticalFloor: 60,
-      noseScore: 72,
-      jawScore: 70,
-      chinScore: 72,
-      measurementsScore: 68,
-      reliability: 92,
-    });
-    const weak = decideFaceMatch({
-      identityRawSimilarity: 0.65,
-      geometrySimilarity: 80,
-      geometryCriticalMean: 72,
+  it("does not let an extreme embedding override weak facial morphology", () => {
+    const result = decideFaceMatch({
+      identityRawSimilarity: 0.99,
+      geometrySimilarity: 48,
+      geometryCriticalMean: 44,
       geometryCriticalFloor: 30,
-      noseScore: 26,
-      jawScore: 25,
-      chinScore: 24,
-      measurementsScore: 28,
-      reliability: 92,
+      globalScore: 50,
+      eyesScore: 42,
+      browsScore: 38,
+      noseScore: 40,
+      mouthScore: 35,
+      ovalScore: 52,
+      cheeksScore: 41,
+      jawScore: 45,
+      chinScore: 43,
+      proportionsScore: 49,
+      measurementsScore: 37,
+      structureScore: 46,
+      symmetryScore: 88,
+      reliability: 95,
     });
-    expect(weak.finalScore).toBeLessThan(baseline.finalScore);
+    expect(result.finalScore).toBeLessThanOrEqual(50);
+  });
+
+  it("rewards broadly similar facial structures", () => {
+    const result = decideFaceMatch({
+      identityRawSimilarity: 0.60,
+      geometrySimilarity: 88,
+      geometryCriticalMean: 86,
+      geometryCriticalFloor: 70,
+      globalScore: 90,
+      eyesScore: 87,
+      browsScore: 84,
+      noseScore: 88,
+      mouthScore: 85,
+      ovalScore: 90,
+      cheeksScore: 83,
+      jawScore: 89,
+      chinScore: 86,
+      proportionsScore: 91,
+      measurementsScore: 84,
+      structureScore: 88,
+      symmetryScore: 92,
+      reliability: 94,
+    });
+    expect(result.finalScore).toBeGreaterThanOrEqual(82);
   });
 });

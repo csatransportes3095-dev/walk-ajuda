@@ -12,7 +12,9 @@ export type FaceMatchDecisionInput = {
   geometrySimilarity: number;
   geometryCriticalMean: number;
   geometryCriticalFloor: number;
+  browsScore?: number;
   noseScore?: number;
+  mouthScore?: number;
   jawScore?: number;
   chinScore?: number;
   measurementsScore?: number;
@@ -61,7 +63,9 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
   const criticalFloor = clamp(input.geometryCriticalFloor);
   const reliability = clamp(input.reliability);
 
+  const brows = clamp(input.browsScore ?? criticalMean);
   const nose = clamp(input.noseScore ?? criticalMean);
+  const mouth = clamp(input.mouthScore ?? criticalMean);
   const jaw = clamp(input.jawScore ?? criticalMean);
   const chin = clamp(input.chinScore ?? criticalMean);
   const measurements = clamp(input.measurementsScore ?? criticalMean);
@@ -72,11 +76,13 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
     criticalMean,
     globalScore: clamp(input.globalScore ?? criticalMean),
     eyesScore: clamp(input.eyesScore ?? criticalMean),
+    browsScore: brows,
     noseScore: nose,
     ovalScore: clamp(input.ovalScore ?? criticalMean),
     cheeksScore: clamp(input.cheeksScore ?? criticalMean),
     jawScore: jaw,
     chinScore: chin,
+    mouthScore: mouth,
     proportionsScore: clamp(input.proportionsScore ?? criticalMean),
     measurementsScore: measurements,
     structureScore: clamp(input.structureScore ?? criticalMean),
@@ -93,16 +99,16 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
       geometryConsensusScore: consensus.geometryConsensusScore,
       morphologyScore: consensus.morphologyScore,
       verdict: "inconclusive",
-      detail: "A qualidade das imagens não é suficiente para uma conclusão confiável.",
+      detail: "A qualidade das imagens nao e suficiente para medir a semelhanca facial com confianca.",
       identityRawSimilarity: raw,
     };
   }
 
   if (
-    raw >= 0.68 &&
-    consensus.geometryConsensusScore >= 72 &&
-    criticalMean >= 65 &&
-    criticalFloor >= 45
+    finalScore >= 82 &&
+    consensus.morphologyScore >= 80 &&
+    criticalMean >= 70 &&
+    criticalFloor >= 40
   ) {
     return {
       finalScore,
@@ -110,15 +116,14 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
       geometryConsensusScore: consensus.geometryConsensusScore,
       morphologyScore: consensus.morphologyScore,
       verdict: "strong",
-      detail: "Embedding e estruturas faciais concordam fortemente. Há alta compatibilidade biofacial.",
+      detail: "As principais estruturas do rosto apresentam semelhanca visual muito alta.",
       identityRawSimilarity: raw,
     };
   }
 
   if (
-    raw >= 0.58 &&
-    consensus.geometryConsensusScore >= 60 &&
-    criticalMean >= 52
+    finalScore >= 68 &&
+    consensus.morphologyScore >= 65
   ) {
     return {
       finalScore,
@@ -126,19 +131,19 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
       geometryConsensusScore: consensus.geometryConsensusScore,
       morphologyScore: consensus.morphologyScore,
       verdict: "near",
-      detail: "Os rostos chegam perto e há concordância relevante entre embedding e medidas faciais.",
+      detail: "Ha semelhanca facial alta entre formato, proporcoes e regioes principais do rosto.",
       identityRawSimilarity: raw,
     };
   }
 
-  if (finalScore >= 55) {
+  if (finalScore >= 50) {
     return {
       finalScore,
       identityScore,
       geometryConsensusScore: consensus.geometryConsensusScore,
       morphologyScore: consensus.morphologyScore,
       verdict: "partial",
-      detail: "Existe semelhança biofacial relevante, mas os sinais não são fortes o bastante para uma conclusão de identidade.",
+      detail: "Existe semelhanca facial moderada, com algumas regioes parecidas e outras diferentes.",
       identityRawSimilarity: raw,
     };
   }
@@ -149,7 +154,7 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
     geometryConsensusScore: consensus.geometryConsensusScore,
     morphologyScore: consensus.morphologyScore,
     verdict: "low",
-    detail: "A semelhança conjunta é baixa e não há suporte forte de correspondência.",
+    detail: "A semelhanca visual entre as estruturas faciais e baixa.",
     identityRawSimilarity: raw,
   };
 }
