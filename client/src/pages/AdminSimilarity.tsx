@@ -594,7 +594,7 @@ export default function AdminSimilarity() {
                     </div>
 
                     {result.regions && (
-                      <div className="grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-4 lg:grid-cols-8">
+                      <div className="grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-4 lg:grid-cols-9">
                         {[
                           ["Global", result.regions.global],
                           ["Olhos", result.regions.eyes],
@@ -604,6 +604,7 @@ export default function AdminSimilarity() {
                           ["Boca", result.regions.mouth],
                           ["Proporções", result.regions.proportions],
                           ["Simetria", result.regions.symmetry],
+                          ["Estrutura", result.regions.structure],
                         ].map(([label, value]) => (
                           <div key={String(label)} className="bg-[#0c0d14] px-3 py-3 text-center">
                             <p className="text-[10px] uppercase text-slate-500">{label}</p>
