@@ -52,7 +52,7 @@ type AnalyzedFaceForPairs = {
   name: string;
   preview: string;
   detected: DetectedFace;
-  identity: FaceIdentityDescriptor;
+  identity: FaceIdentityDescriptor | null;
   resemblance: FaceResemblanceDescriptor | null;
 };
 
@@ -460,13 +460,25 @@ export default function AdminSimilarity() {
         toast.warning("Motor 112×112 indisponível neste navegador. Usando fallback atual.");
       }
 
-      setProgress({ current: 0, total: candidates.length, name: "Preparando fallback facial..." });
-      let masterIdentity: FaceIdentityDescriptor;
-      try {
-        masterIdentity = await extractIdentityDescriptor(masterDetected.identityCanvas, masterDetected.identityFallbackCanvas);
-      } catch (error: any) {
-        toast.error(error?.message || "Não foi possível gerar o vetor facial da Foto Mestre.");
-        return;
+      let masterIdentity: FaceIdentityDescriptor | null = null;
+      const ensureMasterIdentity = async () => {
+        if (!masterIdentity) {
+          setProgress({ current: 0, total: candidates.length, name: "Preparando fallback facial..." });
+          masterIdentity = await extractIdentityDescriptor(
+            masterDetected.identityCanvas,
+            masterDetected.identityFallbackCanvas,
+          );
+        }
+        return masterIdentity;
+      };
+
+      if (!masterResemblance) {
+        try {
+          await ensureMasterIdentity();
+        } catch (error: any) {
+          toast.error(error?.message || "Não foi possível gerar o vetor facial da Foto Mestre.");
+          return;
+        }
       }
 
       const nextResults: ComparisonResult[] = [];
@@ -535,8 +547,19 @@ export default function AdminSimilarity() {
             }
           }
 
-          setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • fallback` });
-          const candidateIdentity = await extractIdentityDescriptor(candidateDetected.identityCanvas, candidateDetected.identityFallbackCanvas);
+          let candidateIdentity: FaceIdentityDescriptor | null = null;
+          let identityComparison: Awaited<ReturnType<typeof compareIdentityDescriptors>> | null = null;
+
+          if (primaryScore === undefined) {
+            setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • fallback` });
+            const fallbackMaster = await ensureMasterIdentity();
+            candidateIdentity = await extractIdentityDescriptor(
+              candidateDetected.identityCanvas,
+              candidateDetected.identityFallbackCanvas,
+            );
+            identityComparison = await compareIdentityDescriptors(fallbackMaster, candidateIdentity);
+          }
+
           analyzedFaces.push({
             id: candidate.id,
             name: candidate.file.name,
@@ -545,10 +568,10 @@ export default function AdminSimilarity() {
             identity: candidateIdentity,
             resemblance: candidateResemblance,
           });
-          const identityComparison = await compareIdentityDescriptors(masterIdentity, candidateIdentity);
+
           const rawForDecision = primaryCosine !== undefined
             ? Math.max(0, primaryCosine)
-            : identityComparison.rawSimilarity;
+            : identityComparison?.rawSimilarity ?? 0;
 
           const captureReliability = Math.min(masterDetected.captureQuality.score, candidateDetected.captureQuality.score);
           const reliability = clamp(
@@ -602,7 +625,7 @@ export default function AdminSimilarity() {
             geometryScore: comparison.similarity,
             identityScore: decision.identityScore,
             identityRaw: primaryCosine !== undefined ? primaryCosine : decision.identityRawSimilarity,
-            identityDistance: primaryCosine !== undefined ? null : identityComparison.distance,
+            identityDistance: primaryCosine !== undefined ? null : identityComparison?.distance ?? null,
             engineLabel,
             verdict: decision.verdict,
             verdictDetail: decision.detail,
@@ -639,13 +662,28 @@ export default function AdminSimilarity() {
               left.detected.aspectRatio,
               right.detected.aspectRatio,
             );
-            const pairIdentity = await compareIdentityDescriptors(left.identity, right.identity);
             let pairPrimaryScore: number | undefined;
-            let pairRawSimilarity = pairIdentity.rawSimilarity;
+            let pairRawSimilarity = 0;
+
             if (left.resemblance && right.resemblance) {
               const standardized = compareFaceResemblanceDescriptors(left.resemblance, right.resemblance);
               pairPrimaryScore = standardized.score;
               pairRawSimilarity = Math.max(0, standardized.cosine);
+            } else {
+              if (!left.identity) {
+                left.identity = await extractIdentityDescriptor(
+                  left.detected.identityCanvas,
+                  left.detected.identityFallbackCanvas,
+                );
+              }
+              if (!right.identity) {
+                right.identity = await extractIdentityDescriptor(
+                  right.detected.identityCanvas,
+                  right.detected.identityFallbackCanvas,
+                );
+              }
+              const pairIdentity = await compareIdentityDescriptors(left.identity, right.identity);
+              pairRawSimilarity = pairIdentity.rawSimilarity;
             }
             const pairReliability = clamp(
               Math.min(left.detected.captureQuality.score, right.detected.captureQuality.score) * 0.65 +
