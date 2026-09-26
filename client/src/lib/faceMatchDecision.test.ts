@@ -106,4 +106,30 @@ describe("facial resemblance scoring", () => {
     }
   });
 
+  it("uses the standardized 112x112 score as the final percentage without geometry mixing", () => {
+    const result = decideFaceMatch({
+      identityRawSimilarity: 0.38,
+      primarySimilarityScore: 86.4,
+      geometrySimilarity: 42,
+      geometryCriticalMean: 48,
+      geometryCriticalFloor: 30,
+      globalScore: 45,
+      eyesScore: 46,
+      browsScore: 44,
+      noseScore: 43,
+      mouthScore: 40,
+      ovalScore: 50,
+      cheeksScore: 42,
+      jawScore: 45,
+      chinScore: 44,
+      proportionsScore: 47,
+      measurementsScore: 41,
+      structureScore: 46,
+      symmetryScore: 80,
+      reliability: 90,
+    });
+    expect(result.finalScore).toBeCloseTo(86.4, 10);
+    expect(result.verdict).toBe("near");
+  });
+
 });
