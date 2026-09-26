@@ -353,6 +353,12 @@ function verdictFor(result: ComparisonResult) {
   return { label: "BAIXA COMPATIBILIDADE", detail: result.verdictDetail || "O vetor facial e a geometria não sustentam uma correspondência forte.", tone: "text-red-200 border-red-400/25 bg-red-500/10" };
 }
 
+const H2_LOGO = "/h2-brand-192.png";
+
+function qualifiesForGoodUse(result: ComparisonResult) {
+  return (result.similarity ?? 0) >= 64 && (result.criticalMean ?? 0) >= 64;
+}
+
 export default function AdminSimilarity() {
   const masterInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef = useRef<HTMLInputElement>(null);
@@ -412,6 +418,24 @@ export default function AdminSimilarity() {
       return current.filter((item) => item.id !== id);
     });
     setResults((current) => current.filter((item) => item.id !== id));
+  };
+
+  const clearMaster = () => {
+    if (masterPreview) URL.revokeObjectURL(masterPreview);
+    setMasterFile(null);
+    setMasterPreview(null);
+    setMasterQuality(null);
+    setResults([]);
+    if (masterInputRef.current) masterInputRef.current.value = "";
+  };
+
+  const clearCandidates = () => {
+    candidates.forEach((item) => URL.revokeObjectURL(item.preview));
+    setCandidates([]);
+    setResults([]);
+    setProgress({ current: 0, total: 0, name: "" });
+    if (filesInputRef.current) filesInputRef.current.value = "";
+    if (folderInputRef.current) folderInputRef.current.value = "";
   };
 
   const clearAll = () => {
@@ -570,11 +594,54 @@ export default function AdminSimilarity() {
   };
 
   return (
-    <div className="min-h-screen bg-[#080910] text-white">
-      <AdminHeader title="Similaridade Facial" icon={<ScanFace className="h-5 w-5" />} backTo="/admin/codes" />
+    <div className="relative min-h-screen overflow-x-hidden bg-[#06070d] text-white">
+      <style>{`
+        @keyframes h2-neon-pulse {
+          0%, 100% {
+            border-color: rgba(34, 211, 238, .42);
+            box-shadow: 0 0 0 rgba(34,211,238,0), 0 0 18px rgba(34,211,238,.14), inset 0 0 22px rgba(34,211,238,.035);
+          }
+          50% {
+            border-color: rgba(74, 222, 128, .92);
+            box-shadow: 0 0 14px rgba(34,211,238,.42), 0 0 34px rgba(74,222,128,.28), inset 0 0 32px rgba(34,211,238,.08);
+          }
+        }
+        @keyframes h2-good-badge-pulse {
+          0%, 100% { opacity: .82; transform: scale(1); text-shadow: 0 0 8px rgba(74,222,128,.45); }
+          50% { opacity: 1; transform: scale(1.035); text-shadow: 0 0 16px rgba(34,211,238,.9), 0 0 24px rgba(74,222,128,.75); }
+        }
+        .h2-good-use-card { animation: h2-neon-pulse 1.45s ease-in-out infinite; }
+        .h2-good-use-badge { animation: h2-good-badge-pulse 1.1s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .h2-good-use-card, .h2-good-use-badge { animation: none !important; }
+        }
+      `}</style>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 space-y-6">
-        <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4">
+      <div className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center overflow-hidden">
+        <img
+          src={H2_LOGO}
+          alt=""
+          aria-hidden="true"
+          className="w-[58vw] max-w-[820px] min-w-[320px] select-none object-contain opacity-[0.035] sm:opacity-[0.045]"
+        />
+      </div>
+
+      <div className="relative z-10">
+        <AdminHeader title="Similaridade Facial" icon={<ScanFace className="h-5 w-5" />} backTo="/admin/codes" />
+
+        <header className="border-b border-cyan-400/10 bg-gradient-to-r from-black/55 via-[#0b1220]/80 to-black/55">
+          <div className="mx-auto flex w-full max-w-[1920px] items-center gap-4 px-4 py-4 sm:px-6 lg:px-8">
+            <img src={H2_LOGO} alt="H2 Colombiano" className="h-16 w-16 shrink-0 rounded-2xl object-contain ring-1 ring-cyan-300/25 shadow-lg shadow-cyan-950/40 sm:h-20 sm:w-20" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-cyan-300 sm:text-xs">H2 COLOMBIANO</p>
+              <h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Comparador de Similaridade Facial</h1>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400 sm:text-sm">Análise biofacial local com vetor facial, geometria e medidas estruturais.</p>
+            </div>
+          </div>
+        </header>
+
+        <main className="mx-auto w-full max-w-[1920px] space-y-5 px-3 py-4 sm:px-5 sm:py-5 lg:px-8 xl:px-10">
+        <section className="rounded-2xl border border-cyan-400/20 bg-[#07141a]/90 p-4 shadow-lg shadow-black/20 sm:p-5">
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-cyan-300" />
             <div>
@@ -586,7 +653,7 @@ export default function AdminSimilarity() {
           </div>
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-[360px_1fr]">
+        <section className="grid min-w-0 gap-5 lg:grid-cols-[380px_minmax(0,1fr)] 2xl:grid-cols-[420px_minmax(0,1fr)]">
           <div className="space-y-4">
             <div className="rounded-2xl border border-amber-400/25 bg-white/[0.035] p-4">
               <div className="mb-3 flex items-center justify-between">
@@ -597,13 +664,7 @@ export default function AdminSimilarity() {
                 {masterFile && (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (masterPreview) URL.revokeObjectURL(masterPreview);
-                      setMasterFile(null);
-                      setMasterPreview(null);
-                      setMasterQuality(null);
-                      setResults([]);
-                    }}
+                    onClick={clearMaster}
                     className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white"
                     title="Remover Foto Mestre"
                   >
@@ -696,13 +757,38 @@ export default function AdminSimilarity() {
                 }}
               />
 
-              <div className="mt-4 flex items-center justify-between text-sm">
-                <span className="text-slate-400">{candidates.length} imagem(ns) selecionada(s)</span>
-                {candidates.length > 0 && (
-                  <button type="button" onClick={clearAll} className="flex items-center gap-1.5 text-xs font-bold text-red-300 hover:text-red-200">
-                    <Trash2 className="h-3.5 w-3.5" /> Limpar
+              <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-slate-400">{candidates.length} imagem(ns) selecionada(s)</span>
+                  {results.length > 0 && <span className="text-[11px] font-bold text-cyan-300">{results.length} resultado(s)</span>}
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={clearMaster}
+                    disabled={!masterFile}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/5 px-3 py-2.5 text-xs font-black text-amber-200 transition hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-35"
+                  >
+                    <X className="h-3.5 w-3.5" /> Limpar Mestre
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={clearCandidates}
+                    disabled={candidates.length === 0}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-red-400/25 bg-red-400/5 px-3 py-2.5 text-xs font-black text-red-200 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-35"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Limpar Comparações
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearAll}
+                    disabled={!masterFile && candidates.length === 0 && results.length === 0}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/5 px-3 py-2.5 text-xs font-black text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-35"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Limpar Tudo
+                  </button>
+                </div>
               </div>
 
               <button
@@ -735,7 +821,7 @@ export default function AdminSimilarity() {
           <div className="space-y-4">
             {candidates.length > 0 && results.length === 0 && !analyzing && (
               <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                   {candidates.map((candidate) => (
                     <div key={candidate.id} className="group relative overflow-hidden rounded-xl border border-white/10 bg-black/30">
                       <img src={candidate.preview} alt={candidate.file.name} className="aspect-square w-full object-cover" />
@@ -755,7 +841,7 @@ export default function AdminSimilarity() {
 
             {rankedResults.length > 0 && (
               <div className="space-y-3">
-                <div className="flex items-end justify-between">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
                     <h2 className="text-xl font-black">Resultado biofacial</h2>
@@ -764,15 +850,29 @@ export default function AdminSimilarity() {
                 </div>
 
                 {rankedResults.map((result, index) => (
-                  <article key={result.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035]">
-                    <div className="flex gap-4 p-4">
-                      <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-xl bg-black/40">
+                  <article
+                    key={result.id}
+                    className={`overflow-hidden rounded-2xl border bg-white/[0.035] transition-shadow ${qualifiesForGoodUse(result) ? "h2-good-use-card border-cyan-300/60" : "border-white/10"}`}
+                  >
+                    {qualifiesForGoodUse(result) && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-300/25 bg-gradient-to-r from-emerald-500/15 via-cyan-400/10 to-emerald-500/15 px-4 py-2.5">
+                        <div className="h2-good-use-badge flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
+                          <ShieldCheck className="h-4 w-4 text-cyan-300" />
+                          % BOA PARA USO
+                        </div>
+                        <div className="text-[11px] font-bold text-cyan-100/85">
+                          Final {formatScore(result.similarity)} • Crítico {result.criticalMean?.toFixed(1)}%
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-4 p-4 sm:flex-row">
+                      <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-xl bg-black/40 sm:h-28 sm:w-28">
                         <img src={result.preview} alt={result.name} className="h-full w-full object-cover" />
                         <span className="absolute left-2 top-2 rounded-md bg-black/75 px-2 py-1 text-xs font-black">#{index + 1}</span>
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-slate-300">{result.name}</p>
+                        <p className="max-w-full truncate text-sm font-bold text-slate-300" title={result.name}>{result.name}</p>
                         <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
                           <div>
                             <p className="text-4xl font-black tracking-tight text-cyan-300">{formatScore(result.similarity)}</p>
@@ -825,7 +925,7 @@ export default function AdminSimilarity() {
                     </div>
 
                     {result.regions && (
-                      <div className="grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-4 xl:grid-cols-7">
+                      <div className="grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
                         {[
                           ["Global", result.regions.global],
                           ["Olhos", result.regions.eyes],
@@ -866,7 +966,8 @@ export default function AdminSimilarity() {
             )}
           </div>
         </section>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
