@@ -473,6 +473,11 @@ export default function AdminSimilarity() {
   };
 
   const analyze = async () => {
+    if (!similarRuntime) {
+      toast.error("Carregue o XAPK Similar Face 1.0.27 antes de comparar. O fallback H2 foi bloqueado para evitar resultados diferentes da referência.");
+      xapkInputRef.current?.click();
+      return;
+    }
     if (!masterFile) {
       toast.error("Selecione a Foto Mestre.");
       return;
@@ -519,12 +524,13 @@ export default function AdminSimilarity() {
         try {
           masterReferenceEmbedding = await similarRuntime.embedFile(masterFile);
         } catch (error: any) {
-          console.warn("Motor Similar Face indisponível para a Foto Mestre:", error);
-          toast.warning("Motor Similar Face falhou nesta leitura. Usando o motor H2 atual como fallback.");
+          console.error("Motor Similar Face falhou na Foto Mestre:", error);
+          toast.error(error?.message || "Falha no Similar Face ao processar a Foto Mestre.");
+          return;
         }
       }
 
-      setProgress({ current: 0, total: candidates.length, name: "Carregando motor facial 112×112..." });
+      setProgress({ current: 0, total: candidates.length, name: "Carregando diagnósticos H2..." });
       let masterResemblance: FaceResemblanceDescriptor | null = null;
       if (!masterReferenceEmbedding) {
         try {
@@ -623,12 +629,23 @@ export default function AdminSimilarity() {
               faceXGlobalScore = primaryScore;
               engineLabel = "Similar Face 1.0.27 • TFLite local";
               referenceEngine = true;
-            } catch (error) {
-              console.warn("Falha no Similar Face para esta foto; usando fallback H2:", error);
+            } catch (error: any) {
+              console.error("Falha no Similar Face para esta foto:", error);
+              nextResults.push({
+                id: candidate.id,
+                name: candidate.file.name,
+                preview: candidate.preview,
+                similarity: null,
+                reliability: null,
+                warnings: [],
+                error: error?.message || "Falha no motor Similar Face",
+              });
+              setResults([...nextResults]);
+              continue;
             }
           }
 
-          if (primaryScore === undefined && masterResemblance) {
+          if (primaryScore === undefined && masterResemblance && !similarRuntime) {
             try {
               candidateResemblance = await extractFaceResemblanceDescriptor(
                 candidateDetected.canvas,
@@ -879,7 +896,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos continuam processadas localmente. Quando o XAPK de referência está carregado, o índice principal usa o detector e reconhecedor TFLite do Similar Face 1.0.27, com alinhamento 112×112 e embedding 512D. Se o motor de referência não estiver disponível, o H2 mantém o FaceX atual como fallback.
+                As fotos continuam processadas localmente. Para comparar, o XAPK Similar Face 1.0.27 deve estar carregado. O resultado principal usa somente o detector e reconhecedor TFLite de referência, com alinhamento 112×112 e embedding 512D. O fallback H2 foi bloqueado para não misturar escalas nem alterar o ranking.
               </p>
             </div>
           </div>
@@ -1074,12 +1091,12 @@ export default function AdminSimilarity() {
 
               <button
                 type="button"
-                disabled={analyzing || !masterFile || candidates.length === 0}
+                disabled={analyzing || runtimeLoading || !similarRuntime || !masterFile || candidates.length === 0}
                 onClick={analyze}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3.5 font-black text-white shadow-lg shadow-cyan-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {analyzing ? <RotateCcw className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-                {analyzing ? "Analisando..." : results.length > 0 ? "Comparar novamente" : "Analisar Similaridade"}
+                {analyzing ? "Analisando..." : !similarRuntime ? "Carregue o XAPK para comparar" : results.length > 0 ? "Comparar novamente" : "Analisar Similaridade"}
               </button>
 
               {analyzing && (
@@ -1127,7 +1144,7 @@ export default function AdminSimilarity() {
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
                     <h2 className="text-xl font-black">Resultado de semelhança facial</h2>
                   </div>
-                  <span className="text-xs text-slate-500">Ordem por índice H2 • sem aprovação automática</span>
+                  <span className="text-xs text-slate-500">Ordem pelo Similar Face 1.0.27</span>
                 </div>
 
                 {rankedResults.map((result, index) => (
@@ -1145,7 +1162,7 @@ export default function AdminSimilarity() {
                         <p className="max-w-full truncate text-sm font-bold text-slate-300" title={result.name}>{result.name}</p>
                         <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
                           <div>
-                            <p className="text-4xl font-black tracking-tight text-cyan-300">{formatScore(result.similarity)}</p>
+                            <p className="text-4xl font-black tracking-tight text-cyan-300">{result.referenceEngine && result.similarity !== null ? `${Math.round(result.similarity)}%` : formatScore(result.similarity)}</p>
                             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "Similar Face 1.0.27 • referência local" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
                           </div>
                           {result.identityScore !== undefined && (
