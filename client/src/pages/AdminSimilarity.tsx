@@ -29,8 +29,28 @@ type ComparisonResult = {
   verdict?: MatchVerdict;
   verdictDetail?: string;
   regions?: RegionScores;
+  masterCaptureQuality?: FaceCaptureQuality;
+  candidateCaptureQuality?: FaceCaptureQuality;
   warnings: string[];
   error?: string;
+};
+
+type PairwiseResult = {
+  id: string;
+  leftName: string;
+  rightName: string;
+  leftPreview: string;
+  rightPreview: string;
+  similarity: number;
+  reliability: number;
+};
+
+type AnalyzedFaceForPairs = {
+  id: string;
+  name: string;
+  preview: string;
+  detected: DetectedFace;
+  identity: FaceIdentityDescriptor;
 };
 
 type ImageQuality = {
@@ -285,6 +305,7 @@ export default function AdminSimilarity() {
   const [masterPreview, setMasterPreview] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CandidatePhoto[]>([]);
   const [results, setResults] = useState<ComparisonResult[]>([]);
+  const [pairwiseResults, setPairwiseResults] = useState<PairwiseResult[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, name: "" });
   const [masterQuality, setMasterQuality] = useState<{ score: number; warnings: string[]; imageScore: number; capture: FaceCaptureQuality } | null>(null);
@@ -364,6 +385,7 @@ export default function AdminSimilarity() {
     candidates.forEach((item) => URL.revokeObjectURL(item.preview));
     setCandidates([]);
     setResults([]);
+    setPairwiseResults([]);
     setProgress({ current: 0, total: 0, name: "" });
     if (filesInputRef.current) filesInputRef.current.value = "";
     if (folderInputRef.current) folderInputRef.current.value = "";
@@ -376,6 +398,7 @@ export default function AdminSimilarity() {
     setMasterPreview(null);
     setCandidates([]);
     setResults([]);
+    setPairwiseResults([]);
     setMasterQuality(null);
     setProgress({ current: 0, total: 0, name: "" });
   };
@@ -392,6 +415,7 @@ export default function AdminSimilarity() {
 
     setAnalyzing(true);
     setResults([]);
+    setPairwiseResults([]);
     setProgress({ current: 0, total: candidates.length, name: "Preparando motor facial..." });
 
     try {
@@ -427,6 +451,15 @@ export default function AdminSimilarity() {
       }
 
       const nextResults: ComparisonResult[] = [];
+      const analyzedFaces: AnalyzedFaceForPairs[] = [
+        {
+          id: "master",
+          name: masterFile.name,
+          preview: masterPreview || "",
+          detected: masterDetected,
+          identity: masterIdentity,
+        },
+      ];
 
       for (let index = 0; index < candidates.length; index += 1) {
         const candidate = candidates[index];
@@ -460,6 +493,13 @@ export default function AdminSimilarity() {
 
           setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • vetor facial` });
           const candidateIdentity = await extractIdentityDescriptor(candidateDetected.identityCanvas, candidateDetected.identityFallbackCanvas);
+          analyzedFaces.push({
+            id: candidate.id,
+            name: candidate.file.name,
+            preview: candidate.preview,
+            detected: candidateDetected,
+            identity: candidateIdentity,
+          });
           const identityComparison = await compareIdentityDescriptors(masterIdentity, candidateIdentity);
 
           const captureReliability = Math.min(masterDetected.captureQuality.score, candidateDetected.captureQuality.score);
@@ -515,6 +555,8 @@ export default function AdminSimilarity() {
             verdict: decision.verdict,
             verdictDetail: decision.detail,
             regions: comparison.regions,
+            masterCaptureQuality: masterDetected.captureQuality,
+            candidateCaptureQuality: candidateDetected.captureQuality,
             warnings: Array.from(new Set([...masterQ.warnings.map((w) => `Mestre: ${w}`), ...qualityWarnings])),
           });
           setResults([...nextResults]);
@@ -530,6 +572,58 @@ export default function AdminSimilarity() {
           });
           setResults([...nextResults]);
         }
+      }
+
+      if (analyzedFaces.length >= 3) {
+        const pairs: PairwiseResult[] = [];
+        for (let i = 0; i < analyzedFaces.length; i += 1) {
+          for (let j = i + 1; j < analyzedFaces.length; j += 1) {
+            const left = analyzedFaces[i];
+            const right = analyzedFaces[j];
+
+            const pairGeometry = compareFaceGeometry(
+              left.detected.landmarks,
+              right.detected.landmarks,
+              left.detected.aspectRatio,
+              right.detected.aspectRatio,
+            );
+            const pairIdentity = await compareIdentityDescriptors(left.identity, right.identity);
+            const pairReliability = clamp(
+              Math.min(left.detected.captureQuality.score, right.detected.captureQuality.score) * 0.65 +
+              Math.min(left.detected.imageQuality.score, right.detected.imageQuality.score) * 0.35
+            );
+            const pairDecision = decideFaceMatch({
+              identityRawSimilarity: pairIdentity.rawSimilarity,
+              geometrySimilarity: pairGeometry.similarity,
+              geometryCriticalMean: pairGeometry.criticalMean,
+              geometryCriticalFloor: pairGeometry.criticalFloor,
+              globalScore: pairGeometry.regions.global,
+              eyesScore: pairGeometry.regions.eyes,
+              noseScore: pairGeometry.regions.nose,
+              ovalScore: pairGeometry.regions.oval,
+              cheeksScore: pairGeometry.regions.cheeks,
+              jawScore: pairGeometry.regions.jaw,
+              chinScore: pairGeometry.regions.chin,
+              proportionsScore: pairGeometry.regions.proportions,
+              measurementsScore: pairGeometry.regions.measurements,
+              structureScore: pairGeometry.regions.structure,
+              symmetryScore: pairGeometry.regions.symmetry,
+              reliability: pairReliability,
+            });
+
+            pairs.push({
+              id: `${left.id}::${right.id}`,
+              leftName: left.name,
+              rightName: right.name,
+              leftPreview: left.preview,
+              rightPreview: right.preview,
+              similarity: pairDecision.finalScore,
+              reliability: pairReliability,
+            });
+          }
+        }
+        pairs.sort((a, b) => b.similarity - a.similarity);
+        setPairwiseResults(pairs);
       }
 
       toast.success("Comparação concluída.");
