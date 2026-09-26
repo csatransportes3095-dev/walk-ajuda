@@ -16,6 +16,7 @@ type ComparisonResult = {
   preview: string;
   similarity: number | null;
   reliability: number | null;
+  criticalFloor?: number;
   regions?: RegionScores;
   warnings: string[];
   error?: string;
@@ -220,10 +221,34 @@ function formatScore(score: number | null) {
 
 function scoreLabel(score: number | null) {
   if (score === null) return "Sem leitura";
-  if (score >= 90) return "Muito alta";
-  if (score >= 80) return "Alta";
-  if (score >= 70) return "Moderada";
+  if (score >= 92) return "Excepcional";
+  if (score >= 84) return "Muito alta";
+  if (score >= 74) return "Alta";
+  if (score >= 62) return "Moderada";
   return "Baixa";
+}
+
+function verdictFor(result: ComparisonResult) {
+  if (result.similarity === null) {
+    return { label: "INCONCLUSIVO", detail: "Não houve leitura suficiente para comparar.", tone: "text-slate-300 border-white/10 bg-white/5" };
+  }
+  const s = result.similarity;
+  const r = result.reliability ?? 0;
+  const floor = result.criticalFloor ?? s;
+
+  if (r < 60) {
+    return { label: "INCONCLUSIVO", detail: "A qualidade da leitura ainda não é suficiente para um parecer forte.", tone: "text-amber-200 border-amber-400/25 bg-amber-500/10" };
+  }
+  if (s >= 90 && floor >= 84 && r >= 75) {
+    return { label: "FORTEMENTE COMPATÍVEL", detail: "A geometria facial é muito próxima. Pode ser a mesma pessoa, mas esta análise não confirma identidade.", tone: "text-emerald-200 border-emerald-400/25 bg-emerald-500/10" };
+  }
+  if (s >= 76 && floor >= 68) {
+    return { label: "CHEGA PERTO", detail: "Há semelhanças importantes, mas ainda existem diferenças estruturais relevantes.", tone: "text-cyan-200 border-cyan-400/25 bg-cyan-500/10" };
+  }
+  if (s >= 62) {
+    return { label: "SEMELHANÇA PARCIAL", detail: "Algumas regiões coincidem, porém a geometria completa não sustenta uma aproximação forte.", tone: "text-amber-200 border-amber-400/25 bg-amber-500/10" };
+  }
+  return { label: "BAIXA COMPATIBILIDADE", detail: "As diferenças geométricas entre os rostos são grandes.", tone: "text-red-200 border-red-400/25 bg-red-500/10" };
 }
 
 export default function AdminSimilarity() {
@@ -383,6 +408,7 @@ export default function AdminSimilarity() {
             preview: candidate.preview,
             similarity: comparison.similarity,
             reliability,
+            criticalFloor: comparison.criticalFloor,
             regions: comparison.regions,
             warnings: Array.from(new Set([...masterQ.warnings.map((w) => `Mestre: ${w}`), ...qualityWarnings])),
           });
@@ -625,6 +651,19 @@ export default function AdminSimilarity() {
                             </div>
                           )}
                         </div>
+
+                        {!result.error && result.similarity !== null && (() => {
+                          const verdict = verdictFor(result);
+                          return (
+                            <div className={`mt-3 rounded-xl border px-3 py-2 ${verdict.tone}`}>
+                              <p className="text-xs font-black tracking-wide">{verdict.label}</p>
+                              <p className="mt-1 text-xs leading-5 opacity-85">{verdict.detail}</p>
+                              {result.criticalFloor !== undefined && (
+                                <p className="mt-1 text-[10px] opacity-65">Elo geométrico mais fraco: {result.criticalFloor.toFixed(1)}%</p>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {result.error && (
                           <p className="mt-2 flex items-center gap-2 text-sm font-bold text-red-300">
