@@ -2,29 +2,12 @@ import { useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { AlertTriangle, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-
-type Landmark = { x: number; y: number; z: number };
-type FaceMeshResults = { multiFaceLandmarks?: Landmark[][] };
-type FaceMeshInstance = {
-  setOptions: (options: Record<string, unknown>) => void;
-  onResults: (callback: (results: FaceMeshResults) => void) => void;
-  send: (input: { image: HTMLCanvasElement }) => Promise<void>;
-};
+import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
 
 type CandidatePhoto = {
   id: string;
   file: File;
   preview: string;
-};
-
-type RegionScores = {
-  global: number;
-  eyes: number;
-  brows: number;
-  nose: number;
-  oval: number;
-  mouth: number;
-  proportions: number;
 };
 
 type ComparisonResult = {
@@ -38,109 +21,136 @@ type ComparisonResult = {
   error?: string;
 };
 
-const MP_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh";
-const SCRIPT_ID = "h2-mediapipe-face-mesh";
+type ImageQuality = {
+  score: number;
+  brightness: number;
+  contrast: number;
+  sharpness: number;
+  warnings: string[];
+};
 
-const FACE_OVAL = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
-const LEFT_EYE = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
-const RIGHT_EYE = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398];
-const LEFT_BROW = [70,63,105,66,107,55,65,52,53,46];
-const RIGHT_BROW = [336,296,334,293,300,285,295,282,283,276];
-const NOSE = [1,2,4,5,6,19,20,45,48,64,94,98,115,168,195,197,220,275,278,294,327,344,440];
-const MOUTH = [61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,78];
-const EYES = [...LEFT_EYE, ...RIGHT_EYE];
-const BROWS = [...LEFT_BROW, ...RIGHT_BROW];
-const GLOBAL_STABLE = Array.from(new Set([...FACE_OVAL, ...EYES, ...BROWS, ...NOSE]));
+type DetectedFace = {
+  landmarks: FaceLandmark[];
+  aspectRatio: number;
+  imageQuality: ImageQuality;
+};
 
-const PROPORTION_PAIRS: Array<[number, number]> = [
-  [234,454],
-  [10,152],
-  [33,133],
-  [362,263],
-  [61,291],
-  [98,327],
-  [168,2],
-  [70,300],
-  [127,356],
-  [172,397],
-  [58,288],
-  [93,323],
-];
+type FaceLandmarkerInstance = {
+  detect: (image: HTMLCanvasElement) => {
+    faceLandmarks?: FaceLandmark[][];
+  };
+};
 
-let faceMeshPromise: Promise<FaceMeshInstance> | null = null;
+const MP_VERSION = "1.0.1";
+const MP_MODULE_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/+esm`;
+const MP_WASM_ROOT = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`;
+const MP_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+
+let faceLandmarkerPromise: Promise<FaceLandmarkerInstance> | null = null;
 
 function clamp(value: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, value));
 }
 
-function distance(a: Landmark, b: Landmark) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
+async function getFaceLandmarker(): Promise<FaceLandmarkerInstance> {
+  if (!faceLandmarkerPromise) {
+    faceLandmarkerPromise = (async () => {
+      const visionModule: any = await import(/* @vite-ignore */ MP_MODULE_URL);
+      const vision = await visionModule.FilesetResolver.forVisionTasks(MP_WASM_ROOT);
 
-function meanPoint(points: Landmark[], indices: number[]) {
-  const total = indices.reduce(
-    (acc, index) => {
-      acc.x += points[index].x;
-      acc.y += points[index].y;
-      acc.z += points[index].z;
-      return acc;
-    },
-    { x: 0, y: 0, z: 0 }
-  );
-  const n = indices.length || 1;
-  return { x: total.x / n, y: total.y / n, z: total.z / n };
-}
-
-function loadScript(src: string) {
-  return new Promise<void>((resolve, reject) => {
-    const current = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
-    if (current?.dataset.loaded === "true") return resolve();
-    if (current) {
-      current.addEventListener("load", () => resolve(), { once: true });
-      current.addEventListener("error", () => reject(new Error("Falha ao carregar o motor facial.")), { once: true });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = SCRIPT_ID;
-    script.src = src;
-    script.async = true;
-    script.crossOrigin = "anonymous";
-    script.onload = () => {
-      script.dataset.loaded = "true";
-      resolve();
-    };
-    script.onerror = () => reject(new Error("Falha ao carregar o motor facial."));
-    document.head.appendChild(script);
-  });
-}
-
-async function getFaceMesh() {
-  if (!faceMeshPromise) {
-    faceMeshPromise = (async () => {
-      await loadScript(`${MP_ROOT}/face_mesh.js`);
-      const FaceMeshCtor = (window as any).FaceMesh;
-      if (!FaceMeshCtor) throw new Error("MediaPipe FaceMesh indisponível.");
-
-      const model: FaceMeshInstance = new FaceMeshCtor({
-        locateFile: (file: string) => `${MP_ROOT}/${file}`,
-      });
-      model.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: true,
-        selfieMode: false,
-        minDetectionConfidence: 0.75,
-        minTrackingConfidence: 0.75,
-      });
-      return model;
+      try {
+        return await visionModule.FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: MP_MODEL_URL, delegate: "GPU" },
+          runningMode: "IMAGE",
+          numFaces: 3,
+          minFaceDetectionConfidence: 0.82,
+          minFacePresenceConfidence: 0.82,
+          minTrackingConfidence: 0.82,
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: true,
+        });
+      } catch {
+        // Fallback para máquinas/navegadores sem WebGL/GPU compatível.
+        return await visionModule.FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: MP_MODEL_URL, delegate: "CPU" },
+          runningMode: "IMAGE",
+          numFaces: 3,
+          minFaceDetectionConfidence: 0.82,
+          minFacePresenceConfidence: 0.82,
+          minTrackingConfidence: 0.82,
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: true,
+        });
+      }
     })();
   }
-  return faceMeshPromise;
+  return faceLandmarkerPromise;
+}
+
+function calculateImageQuality(canvas: HTMLCanvasElement): ImageQuality {
+  const sample = document.createElement("canvas");
+  const maxSide = 420;
+  const scale = Math.min(1, maxSide / Math.max(canvas.width, canvas.height));
+  sample.width = Math.max(32, Math.round(canvas.width * scale));
+  sample.height = Math.max(32, Math.round(canvas.height * scale));
+  const ctx = sample.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return { score: 70, brightness: 0, contrast: 0, sharpness: 0, warnings: ["qualidade da imagem não medida"] };
+
+  ctx.drawImage(canvas, 0, 0, sample.width, sample.height);
+  const { data } = ctx.getImageData(0, 0, sample.width, sample.height);
+  const gray = new Float32Array(sample.width * sample.height);
+  let sum = 0;
+  let sumSq = 0;
+
+  for (let p = 0, i = 0; i < data.length; i += 4, p += 1) {
+    const g = data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722;
+    gray[p] = g;
+    sum += g;
+    sumSq += g * g;
+  }
+
+  const n = gray.length || 1;
+  const brightness = sum / n;
+  const contrast = Math.sqrt(Math.max(0, sumSq / n - brightness * brightness));
+
+  // Variância do Laplaciano: indicador simples de nitidez/desfoque.
+  let lapSum = 0;
+  let lapSumSq = 0;
+  let lapN = 0;
+  for (let y = 1; y < sample.height - 1; y += 1) {
+    for (let x = 1; x < sample.width - 1; x += 1) {
+      const k = y * sample.width + x;
+      const lap = gray[k - sample.width] + gray[k + sample.width] + gray[k - 1] + gray[k + 1] - 4 * gray[k];
+      lapSum += lap;
+      lapSumSq += lap * lap;
+      lapN += 1;
+    }
+  }
+  const lapMean = lapSum / Math.max(1, lapN);
+  const sharpness = Math.sqrt(Math.max(0, lapSumSq / Math.max(1, lapN) - lapMean * lapMean));
+
+  let score = 100;
+  const warnings: string[] = [];
+  if (brightness < 55) { score -= 24; warnings.push("foto muito escura"); }
+  else if (brightness < 75) { score -= 10; warnings.push("foto escura"); }
+  if (brightness > 220) { score -= 22; warnings.push("foto muito clara/estourada"); }
+  else if (brightness > 200) { score -= 9; warnings.push("foto muito clara"); }
+  if (contrast < 24) { score -= 18; warnings.push("baixo contraste"); }
+  if (sharpness < 8) { score -= 32; warnings.push("foto desfocada"); }
+  else if (sharpness < 13) { score -= 14; warnings.push("nitidez baixa"); }
+
+  return { score: clamp(score), brightness, contrast, sharpness, warnings };
 }
 
 async function fileToCanvas(file: File) {
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions);
-  const maxSide = 1600;
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions);
+  } catch {
+    bitmap = await createImageBitmap(file);
+  }
+
+  const maxSide = 1800;
   const ratio = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
@@ -152,184 +162,32 @@ async function fileToCanvas(file: File) {
   }
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
-  return canvas;
-}
 
-async function detectFace(file: File): Promise<Landmark[] | null> {
-  const model = await getFaceMesh();
-  const canvas = await fileToCanvas(file);
-
-  return await new Promise<Landmark[] | null>(async (resolve, reject) => {
-    let finished = false;
-    const timeout = window.setTimeout(() => {
-      if (finished) return;
-      finished = true;
-      reject(new Error("Tempo excedido ao analisar a face."));
-    }, 20000);
-
-    model.onResults((results) => {
-      if (finished) return;
-      finished = true;
-      window.clearTimeout(timeout);
-      const face = results.multiFaceLandmarks?.[0];
-      resolve(face && face.length >= 468 ? face.slice(0, 468) : null);
-    });
-
-    try {
-      await model.send({ image: canvas });
-    } catch (error) {
-      if (!finished) {
-        finished = true;
-        window.clearTimeout(timeout);
-        reject(error);
-      }
-    }
-  });
-}
-
-function normalizeFace(points: Landmark[]) {
-  const leftEye = meanPoint(points, [33, 133]);
-  const rightEye = meanPoint(points, [362, 263]);
-  const center = {
-    x: (leftEye.x + rightEye.x) / 2,
-    y: (leftEye.y + rightEye.y) / 2,
-    z: (leftEye.z + rightEye.z) / 2,
+  return {
+    canvas,
+    aspectRatio: canvas.width / Math.max(1, canvas.height),
+    imageQuality: calculateImageQuality(canvas),
   };
-  const eyeDistance = Math.max(0.0001, distance(leftEye, rightEye));
-  const angle = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-
-  return points.map((point) => {
-    const dx = point.x - center.x;
-    const dy = point.y - center.y;
-    return {
-      x: (dx * cos + dy * sin) / eyeDistance,
-      y: (-dx * sin + dy * cos) / eyeDistance,
-      z: (point.z - center.z) / eyeDistance,
-    };
-  });
 }
 
-function alignCandidate(master: Landmark[], candidate: Landmark[]) {
-  const mc = meanPoint(master, GLOBAL_STABLE);
-  const cc = meanPoint(candidate, GLOBAL_STABLE);
-  let a = 0;
-  let b = 0;
-  let denom = 0;
+async function detectFace(file: File): Promise<DetectedFace | null> {
+  const model = await getFaceLandmarker();
+  const prepared = await fileToCanvas(file);
+  const result = model.detect(prepared.canvas);
+  const faces = result.faceLandmarks || [];
 
-  for (const index of GLOBAL_STABLE) {
-    const cx = candidate[index].x - cc.x;
-    const cy = candidate[index].y - cc.y;
-    const mx = master[index].x - mc.x;
-    const my = master[index].y - mc.y;
-    a += cx * mx + cy * my;
-    b += cx * my - cy * mx;
-    denom += cx * cx + cy * cy;
+  if (faces.length > 1) {
+    throw new Error("A foto contém mais de um rosto. Use uma imagem com apenas uma pessoa.");
   }
 
-  const magnitude = Math.hypot(a, b) || 1;
-  const scale = denom > 0 ? magnitude / denom : 1;
-  const cos = a / magnitude;
-  const sin = b / magnitude;
+  const face = faces[0];
+  if (!face || face.length < 468) return null;
 
-  return candidate.map((point) => {
-    const x = point.x - cc.x;
-    const y = point.y - cc.y;
-    return {
-      x: scale * (cos * x - sin * y) + mc.x,
-      y: scale * (sin * x + cos * y) + mc.y,
-      z: point.z * scale,
-    };
-  });
-}
-
-function regionSimilarity(master: Landmark[], candidate: Landmark[], indices: number[], sensitivity = 3.15) {
-  if (!indices.length) return 0;
-  let sumSquares = 0;
-  for (const index of indices) {
-    const dx = master[index].x - candidate[index].x;
-    const dy = master[index].y - candidate[index].y;
-    const dz = (master[index].z - candidate[index].z) * 0.15;
-    sumSquares += dx * dx + dy * dy + dz * dz;
-  }
-  const rms = Math.sqrt(sumSquares / indices.length);
-  return clamp(100 * Math.exp(-sensitivity * rms));
-}
-
-function proportionSimilarity(master: Landmark[], candidate: Landmark[]) {
-  let total = 0;
-  for (const [a, b] of PROPORTION_PAIRS) {
-    const m = distance(master[a], master[b]);
-    const c = distance(candidate[a], candidate[b]);
-    const denominator = Math.max(0.0001, (m + c) / 2);
-    const relativeError = Math.abs(m - c) / denominator;
-    total += clamp(100 * (1 - relativeError * 2.2));
-  }
-  return total / PROPORTION_PAIRS.length;
-}
-
-function evaluateQuality(points: Landmark[]) {
-  const xs = FACE_OVAL.map((i) => points[i].x);
-  const ys = FACE_OVAL.map((i) => points[i].y);
-  const width = Math.max(...xs) - Math.min(...xs);
-  const height = Math.max(...ys) - Math.min(...ys);
-  const coverage = Math.sqrt(Math.max(0, width * height));
-
-  const leftEye = meanPoint(points, [33, 133]);
-  const rightEye = meanPoint(points, [362, 263]);
-  const roll = Math.abs(Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180 / Math.PI);
-
-  const nose = points[1];
-  const leftCheek = points[234];
-  const rightCheek = points[454];
-  const leftDistance = distance(nose, leftCheek);
-  const rightDistance = distance(nose, rightCheek);
-  const yawAsymmetry = Math.abs(leftDistance - rightDistance) / Math.max(0.0001, leftDistance + rightDistance);
-
-  let score = 100;
-  const warnings: string[] = [];
-
-  if (coverage < 0.23) {
-    score -= clamp((0.23 - coverage) * 180, 0, 32);
-    warnings.push("Rosto pequeno na imagem");
-  }
-  if (roll > 10) {
-    score -= clamp((roll - 10) * 1.4, 0, 24);
-    warnings.push("Rosto inclinado");
-  }
-  if (yawAsymmetry > 0.13) {
-    score -= clamp((yawAsymmetry - 0.13) * 150, 0, 32);
-    warnings.push("Rosto de lado / perspectiva forte");
-  }
-
-  return { score: clamp(score), warnings };
-}
-
-function compareFaces(masterRaw: Landmark[], candidateRaw: Landmark[]) {
-  const master = normalizeFace(masterRaw);
-  const candidate = alignCandidate(master, normalizeFace(candidateRaw));
-
-  const regions: RegionScores = {
-    global: regionSimilarity(master, candidate, GLOBAL_STABLE, 2.85),
-    eyes: regionSimilarity(master, candidate, EYES, 3.25),
-    brows: regionSimilarity(master, candidate, BROWS, 3.05),
-    nose: regionSimilarity(master, candidate, NOSE, 3.35),
-    oval: regionSimilarity(master, candidate, FACE_OVAL, 3.0),
-    mouth: regionSimilarity(master, candidate, MOUTH, 2.45),
-    proportions: proportionSimilarity(master, candidate),
+  return {
+    landmarks: face.slice(0, Math.min(478, face.length)),
+    aspectRatio: prepared.aspectRatio,
+    imageQuality: prepared.imageQuality,
   };
-
-  const similarity =
-    regions.global * 0.20 +
-    regions.eyes * 0.20 +
-    regions.nose * 0.20 +
-    regions.oval * 0.20 +
-    regions.brows * 0.08 +
-    regions.mouth * 0.05 +
-    regions.proportions * 0.07;
-
-  return { similarity: clamp(similarity), regions };
 }
 
 function formatScore(score: number | null) {
@@ -355,7 +213,7 @@ export default function AdminSimilarity() {
   const [results, setResults] = useState<ComparisonResult[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, name: "" });
-  const [masterQuality, setMasterQuality] = useState<{ score: number; warnings: string[] } | null>(null);
+  const [masterQuality, setMasterQuality] = useState<{ score: number; warnings: string[]; imageScore: number } | null>(null);
 
   const rankedResults = useMemo(
     () => [...results].sort((a, b) => (b.similarity ?? -1) - (a.similarity ?? -1)),
@@ -431,13 +289,16 @@ export default function AdminSimilarity() {
     setProgress({ current: 0, total: candidates.length, name: "Preparando motor facial..." });
 
     try {
-      const masterLandmarks = await detectFace(masterFile);
-      if (!masterLandmarks) {
+      const masterDetected = await detectFace(masterFile);
+      if (!masterDetected) {
         toast.error("Não foi possível detectar um rosto completo na Foto Mestre.");
         return;
       }
 
-      const masterQ = evaluateQuality(masterLandmarks);
+      const masterGeometryQ = evaluateFaceGeometryQuality(masterDetected.landmarks, masterDetected.aspectRatio);
+      const masterCombinedQuality = clamp(masterGeometryQ.score * 0.72 + masterDetected.imageQuality.score * 0.28);
+      const masterWarnings = Array.from(new Set([...masterGeometryQ.warnings, ...masterDetected.imageQuality.warnings]));
+      const masterQ = { score: masterCombinedQuality, warnings: masterWarnings, imageScore: masterDetected.imageQuality.score };
       setMasterQuality(masterQ);
       const nextResults: ComparisonResult[] = [];
 
@@ -446,8 +307,8 @@ export default function AdminSimilarity() {
         setProgress({ current: index + 1, total: candidates.length, name: candidate.file.name });
 
         try {
-          const candidateLandmarks = await detectFace(candidate.file);
-          if (!candidateLandmarks) {
+          const candidateDetected = await detectFace(candidate.file);
+          if (!candidateDetected) {
             nextResults.push({
               id: candidate.id,
               name: candidate.file.name,
@@ -461,9 +322,16 @@ export default function AdminSimilarity() {
             continue;
           }
 
-          const quality = evaluateQuality(candidateLandmarks);
-          const comparison = compareFaces(masterLandmarks, candidateLandmarks);
-          const reliability = clamp((masterQ.score + quality.score) / 2);
+          const candidateGeometryQ = evaluateFaceGeometryQuality(candidateDetected.landmarks, candidateDetected.aspectRatio);
+          const candidateCombinedQuality = clamp(candidateGeometryQ.score * 0.72 + candidateDetected.imageQuality.score * 0.28);
+          const qualityWarnings = Array.from(new Set([...candidateGeometryQ.warnings, ...candidateDetected.imageQuality.warnings]));
+          const comparison = compareFaceGeometry(
+            masterDetected.landmarks,
+            candidateDetected.landmarks,
+            masterDetected.aspectRatio,
+            candidateDetected.aspectRatio,
+          );
+          const reliability = clamp(Math.min(masterQ.score, candidateCombinedQuality) * 0.72 + ((masterQ.score + candidateCombinedQuality) / 2) * 0.28);
 
           nextResults.push({
             id: candidate.id,
@@ -472,7 +340,7 @@ export default function AdminSimilarity() {
             similarity: comparison.similarity,
             reliability,
             regions: comparison.regions,
-            warnings: Array.from(new Set([...masterQ.warnings.map((w) => `Mestre: ${w}`), ...quality.warnings])),
+            warnings: Array.from(new Set([...masterQ.warnings.map((w) => `Mestre: ${w}`), ...qualityWarnings])),
           });
           setResults([...nextResults]);
         } catch (error: any) {
@@ -508,7 +376,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. A rota usa 468 pontos faciais no navegador e calcula um índice geométrico próprio. O resultado é uma medida de semelhança de geometria facial, não uma confirmação de identidade.
+                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. A rota usa até 478 pontos faciais 3D no navegador, alinhamento rígido de pose e cálculo geométrico robusto. O resultado é uma medida de semelhança de geometria facial, não uma confirmação de identidade.
               </p>
             </div>
           </div>
@@ -726,7 +594,7 @@ export default function AdminSimilarity() {
                     </div>
 
                     {result.regions && (
-                      <div className="grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-4 lg:grid-cols-7">
+                      <div className="grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-4 lg:grid-cols-8">
                         {[
                           ["Global", result.regions.global],
                           ["Olhos", result.regions.eyes],
@@ -735,6 +603,7 @@ export default function AdminSimilarity() {
                           ["Maxilar / oval", result.regions.oval],
                           ["Boca", result.regions.mouth],
                           ["Proporções", result.regions.proportions],
+                          ["Simetria", result.regions.symmetry],
                         ].map(([label, value]) => (
                           <div key={String(label)} className="bg-[#0c0d14] px-3 py-3 text-center">
                             <p className="text-[10px] uppercase text-slate-500">{label}</p>
