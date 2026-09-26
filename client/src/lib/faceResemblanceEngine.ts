@@ -318,19 +318,21 @@ export function createFacePartCanvas(
   const ctx = output.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error(`Nao foi possivel preparar a regiao facial ${part}.`);
 
-  // O APK de referencia trabalha com regioes fixas depois do alinhamento
-  // 112x112. Aqui cada regiao e redimensionada para a entrada 112x112 do
-  // mesmo embedder FaceX, sem usar landmarks geometricos no score local.
+  // Mantem a regiao exatamente na mesma posicao e escala do rosto alinhado
+  // 112x112. O restante fica mascarado. Isso evita distorcer olhos/nariz/boca
+  // para ocupar o rosto inteiro, que saturava os embeddings locais.
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, 112, 112);
   ctx.drawImage(
     alignedCanvas,
     rect.x,
     rect.y,
     rect.w,
     rect.h,
-    0,
-    0,
-    112,
-    112,
+    rect.x,
+    rect.y,
+    rect.w,
+    rect.h,
   );
   return output;
 }
