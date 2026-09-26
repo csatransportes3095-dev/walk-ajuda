@@ -180,6 +180,11 @@ export async function extractIdentityDescriptor(
   };
 }
 
+export function identityDescriptorStability(descriptor: FaceIdentityDescriptor) {
+  if (descriptor.internalConsistency === null || descriptor.sampleCount < 2) return 65;
+  return Math.max(0, Math.min(100, descriptor.internalConsistency * 100));
+}
+
 export async function compareIdentityDescriptors(
   master: FaceIdentityDescriptor,
   candidate: FaceIdentityDescriptor,
