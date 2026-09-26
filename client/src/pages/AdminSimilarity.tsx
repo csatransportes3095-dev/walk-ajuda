@@ -281,6 +281,14 @@ function verdictFor(result: ComparisonResult) {
     return { label: "INCONCLUSIVO", detail: result.error || "Não houve leitura suficiente para comparar.", tone: "text-slate-300 border-white/10 bg-white/5" };
   }
 
+  if (result.faceXGlobalScore !== undefined) {
+    return {
+      label: "ÍNDICE H2 • SEM APROVAÇÃO AUTOMÁTICA",
+      detail: "O índice mede a proximidade segundo o motor H2. Ele não confirma que a foto é adequada e ainda não foi calibrado para reproduzir outros aplicativos.",
+      tone: "text-cyan-200 border-cyan-400/20 bg-cyan-500/5",
+    };
+  }
+
   if (result.verdict === "strong") {
     return { label: "MUITO ALTA SEMELHANÇA", detail: result.verdictDetail || "As principais regiões faciais apresentam parecência muito alta.", tone: "text-emerald-200 border-emerald-400/25 bg-emerald-500/10" };
   }
@@ -297,10 +305,6 @@ function verdictFor(result: ComparisonResult) {
 }
 
 const H2_LOGO = "/h2-brand-192.png";
-
-function meetsH2Preference(result: ComparisonResult) {
-  return (result.similarity ?? 0) >= 86 && (result.reliability ?? 0) >= 60;
-}
 
 export default function AdminSimilarity() {
   const masterInputRef = useRef<HTMLInputElement>(null);
@@ -319,13 +323,7 @@ export default function AdminSimilarity() {
   const rankedResults = useMemo(
     () =>
       [...results].sort((a, b) => {
-        const aPreferred = meetsH2Preference(a) ? 1 : 0;
-        const bPreferred = meetsH2Preference(b) ? 1 : 0;
-
-        // Preferências pulsantes sempre aparecem primeiro.
-        if (aPreferred !== bPreferred) return bPreferred - aPreferred;
-
-        // Dentro do mesmo grupo, maior resultado final primeiro.
+        // O indice e ordenado numericamente, sem classificar fotos como aprovadas.
         const similarityDiff = (b.similarity ?? -1) - (a.similarity ?? -1);
         if (similarityDiff !== 0) return similarityDiff;
 
@@ -747,25 +745,6 @@ export default function AdminSimilarity() {
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#06070d] text-white">
       <style>{`
-        @keyframes h2-neon-pulse {
-          0%, 100% {
-            border-color: rgba(34, 211, 238, .42);
-            box-shadow: 0 0 0 rgba(34,211,238,0), 0 0 18px rgba(34,211,238,.14), inset 0 0 22px rgba(34,211,238,.035);
-          }
-          50% {
-            border-color: rgba(74, 222, 128, .92);
-            box-shadow: 0 0 14px rgba(34,211,238,.42), 0 0 34px rgba(74,222,128,.28), inset 0 0 32px rgba(34,211,238,.08);
-          }
-        }
-        @keyframes h2-good-badge-pulse {
-          0%, 100% { opacity: .82; transform: scale(1); text-shadow: 0 0 8px rgba(74,222,128,.45); }
-          50% { opacity: 1; transform: scale(1.035); text-shadow: 0 0 16px rgba(34,211,238,.9), 0 0 24px rgba(74,222,128,.75); }
-        }
-        .h2-good-use-card { animation: h2-neon-pulse 1.45s ease-in-out infinite; }
-        .h2-good-use-badge { animation: h2-good-badge-pulse 1.1s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) {
-          .h2-good-use-card, .h2-good-use-badge { animation: none !important; }
-        }
       `}</style>
 
       <div className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center overflow-hidden">
@@ -1004,25 +983,14 @@ export default function AdminSimilarity() {
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
                     <h2 className="text-xl font-black">Resultado de semelhança facial</h2>
                   </div>
-                  <span className="text-xs text-slate-500">Preferências ≥ 86% primeiro</span>
+                  <span className="text-xs text-slate-500">Ordem por índice H2 • sem aprovação automática</span>
                 </div>
 
                 {rankedResults.map((result, index) => (
                   <article
                     key={result.id}
-                    className={`overflow-hidden rounded-2xl border bg-white/[0.035] transition-shadow ${meetsH2Preference(result) ? "h2-good-use-card border-cyan-300/60" : "border-white/10"}`}
+                    className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035]"
                   >
-                    {meetsH2Preference(result) && (
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-300/25 bg-gradient-to-r from-emerald-500/15 via-cyan-400/10 to-emerald-500/15 px-4 py-2.5">
-                        <div className="h2-good-use-badge flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
-                          <ShieldCheck className="h-4 w-4 text-cyan-300" />
-                          ÍNDICE H2 ≥ 86%
-                        </div>
-                        <div className="text-[11px] font-bold text-cyan-100/85">
-                          Final {formatScore(result.similarity)} • Crítico técnico {result.criticalMean?.toFixed(1)}%
-                        </div>
-                      </div>
-                    )}
                     <div className="flex flex-col gap-4 p-4 sm:flex-row">
                       <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-xl bg-black/40 sm:h-28 sm:w-28">
                         <img src={result.preview} alt={result.name} className="h-full w-full object-cover" />
@@ -1034,7 +1002,7 @@ export default function AdminSimilarity() {
                         <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
                           <div>
                             <p className="text-4xl font-black tracking-tight text-cyan-300">{formatScore(result.similarity)}</p>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{scoreLabel(result.similarity)} semelhança facial</p>
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
                           </div>
                           {result.identityScore !== undefined && (
                             <div className="mb-1 rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2">
