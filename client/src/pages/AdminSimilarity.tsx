@@ -3,6 +3,8 @@ import AdminHeader from "@/components/AdminHeader";
 import { AlertTriangle, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
+import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
+import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 
 type CandidatePhoto = {
   id: string;
@@ -18,6 +20,12 @@ type ComparisonResult = {
   reliability: number | null;
   criticalFloor?: number;
   criticalMean?: number;
+  geometryScore?: number;
+  identityScore?: number;
+  identityRaw?: number;
+  identityDistance?: number | null;
+  verdict?: MatchVerdict;
+  verdictDetail?: string;
   regions?: RegionScores;
   warnings: string[];
   error?: string;
@@ -35,6 +43,7 @@ type DetectedFace = {
   landmarks: FaceLandmark[];
   aspectRatio: number;
   imageQuality: ImageQuality;
+  canvas: HTMLCanvasElement;
 };
 
 type FaceLandmarkerInstance = {
@@ -213,6 +222,7 @@ async function detectFace(file: File): Promise<DetectedFace | null> {
     landmarks: face.slice(0, Math.min(478, face.length)),
     aspectRatio: prepared.aspectRatio,
     imageQuality: calculateImageQuality(prepared.canvas, face),
+    canvas: prepared.canvas,
   };
 }
 
@@ -230,27 +240,23 @@ function scoreLabel(score: number | null) {
 }
 
 function verdictFor(result: ComparisonResult) {
-  if (result.similarity === null) {
-    return { label: "INCONCLUSIVO", detail: "Não houve leitura suficiente para comparar.", tone: "text-slate-300 border-white/10 bg-white/5" };
+  if (result.similarity === null || !result.verdict) {
+    return { label: "INCONCLUSIVO", detail: result.error || "Não houve leitura suficiente para comparar.", tone: "text-slate-300 border-white/10 bg-white/5" };
   }
-  const s = result.similarity;
-  const r = result.reliability ?? 0;
-  const floor = result.criticalFloor ?? s;
-  const mean = result.criticalMean ?? s;
 
-  if (r < 60) {
-    return { label: "INCONCLUSIVO", detail: "A qualidade da leitura ainda não é suficiente para um parecer forte.", tone: "text-amber-200 border-amber-400/25 bg-amber-500/10" };
+  if (result.verdict === "strong") {
+    return { label: "FORTEMENTE COMPATÍVEL", detail: result.verdictDetail || "Vetor facial e geometria concordam fortemente.", tone: "text-emerald-200 border-emerald-400/25 bg-emerald-500/10" };
   }
-  if (s >= 88 && mean >= 82 && r >= 75) {
-    return { label: "FORTEMENTE COMPATÍVEL", detail: "A geometria facial é muito próxima. Pode ser a mesma pessoa, mas esta análise não confirma identidade.", tone: "text-emerald-200 border-emerald-400/25 bg-emerald-500/10" };
+  if (result.verdict === "near") {
+    return { label: "CHEGA PERTO", detail: result.verdictDetail || "Existe aproximação relevante, mas ainda há diferenças.", tone: "text-cyan-200 border-cyan-400/25 bg-cyan-500/10" };
   }
-  if (s >= 65 && mean >= 62) {
-    return { label: "CHEGA PERTO", detail: "Há uma semelhança geométrica relevante entre os rostos, embora ainda existam diferenças visíveis.", tone: "text-cyan-200 border-cyan-400/25 bg-cyan-500/10" };
+  if (result.verdict === "partial") {
+    return { label: "SEMELHANÇA PARCIAL", detail: result.verdictDetail || "Há alguns sinais de semelhança, mas não uma correspondência forte.", tone: "text-amber-200 border-amber-400/25 bg-amber-500/10" };
   }
-  if (s >= 45) {
-    return { label: "SEMELHANÇA PARCIAL", detail: "Existem alguns pontos parecidos, mas a estrutura completa ainda apresenta diferenças importantes.", tone: "text-amber-200 border-amber-400/25 bg-amber-500/10" };
+  if (result.verdict === "inconclusive") {
+    return { label: "INCONCLUSIVO", detail: result.verdictDetail || "A qualidade da leitura ainda não é suficiente.", tone: "text-amber-200 border-amber-400/25 bg-amber-500/10" };
   }
-  return { label: "BAIXA COMPATIBILIDADE", detail: "As diferenças geométricas entre os rostos são grandes.", tone: "text-red-200 border-red-400/25 bg-red-500/10" };
+  return { label: "BAIXA COMPATIBILIDADE", detail: result.verdictDetail || "O vetor facial e a geometria não sustentam uma correspondência forte.", tone: "text-red-200 border-red-400/25 bg-red-500/10" };
 }
 
 export default function AdminSimilarity() {
@@ -357,6 +363,15 @@ export default function AdminSimilarity() {
         return;
       }
 
+      setProgress({ current: 0, total: candidates.length, name: "Gerando vetor facial da Foto Mestre..." });
+      let masterIdentity: FaceIdentityDescriptor;
+      try {
+        masterIdentity = await extractIdentityDescriptor(masterDetected.canvas);
+      } catch (error: any) {
+        toast.error(error?.message || "Não foi possível gerar o vetor facial da Foto Mestre.");
+        return;
+      }
+
       const nextResults: ComparisonResult[] = [];
 
       for (let index = 0; index < candidates.length; index += 1) {
@@ -388,7 +403,19 @@ export default function AdminSimilarity() {
             masterDetected.aspectRatio,
             candidateDetected.aspectRatio,
           );
+
+          setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • vetor facial` });
+          const candidateIdentity = await extractIdentityDescriptor(candidateDetected.canvas);
+          const identityComparison = await compareIdentityDescriptors(masterIdentity, candidateIdentity);
+
           const reliability = clamp(Math.min(masterQ.score, candidateCombinedQuality) * 0.72 + ((masterQ.score + candidateCombinedQuality) / 2) * 0.28);
+          const decision = decideFaceMatch({
+            identityRawSimilarity: identityComparison.rawSimilarity,
+            geometrySimilarity: comparison.similarity,
+            geometryCriticalMean: comparison.criticalMean,
+            geometryCriticalFloor: comparison.criticalFloor,
+            reliability,
+          });
 
           if (reliability < 40) {
             nextResults.push({
@@ -408,10 +435,16 @@ export default function AdminSimilarity() {
             id: candidate.id,
             name: candidate.file.name,
             preview: candidate.preview,
-            similarity: comparison.similarity,
+            similarity: decision.finalScore,
             reliability,
             criticalFloor: comparison.criticalFloor,
             criticalMean: comparison.criticalMean,
+            geometryScore: comparison.similarity,
+            identityScore: decision.identityScore,
+            identityRaw: decision.identityRawSimilarity,
+            identityDistance: identityComparison.distance,
+            verdict: decision.verdict,
+            verdictDetail: decision.detail,
             regions: comparison.regions,
             warnings: Array.from(new Set([...masterQ.warnings.map((w) => `Mestre: ${w}`), ...qualityWarnings])),
           });
@@ -449,7 +482,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. A rota usa até 478 pontos faciais 3D no navegador, alinhamento rígido de pose e cálculo geométrico robusto. O resultado é uma medida de semelhança de geometria facial, não uma confirmação de identidade.
+                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. A comparação roda localmente e combina vetor facial (embedding) como prova principal com até 478 pontos 3D como conferência geométrica. O resultado indica compatibilidade biométrica e não deve ser tratado como prova absoluta de identidade.
               </p>
             </div>
           </div>
@@ -510,7 +543,7 @@ export default function AdminSimilarity() {
               {masterQuality && (
                 <div className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Qualidade geométrica</span>
+                    <span className="text-slate-400">Qualidade da leitura</span>
                     <strong>{masterQuality.score.toFixed(0)}%</strong>
                   </div>
                   {masterQuality.warnings.length > 0 && (
@@ -627,7 +660,7 @@ export default function AdminSimilarity() {
                 <div className="flex items-end justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
-                    <h2 className="text-xl font-black">Resultado da geometria</h2>
+                    <h2 className="text-xl font-black">Resultado biofacial</h2>
                   </div>
                   <span className="text-xs text-slate-500">Maior similaridade primeiro</span>
                 </div>
@@ -645,8 +678,20 @@ export default function AdminSimilarity() {
                         <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
                           <div>
                             <p className="text-4xl font-black tracking-tight text-cyan-300">{formatScore(result.similarity)}</p>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{scoreLabel(result.similarity)} similaridade geométrica</p>
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{scoreLabel(result.similarity)} compatibilidade biofacial</p>
                           </div>
+                          {result.identityScore !== undefined && (
+                            <div className="mb-1 rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2">
+                              <p className="text-[10px] uppercase text-slate-500">Vetor facial</p>
+                              <p className="text-sm font-black text-emerald-200">{result.identityScore.toFixed(1)}%</p>
+                            </div>
+                          )}
+                          {result.geometryScore !== undefined && (
+                            <div className="mb-1 rounded-lg border border-violet-400/20 bg-violet-500/5 px-3 py-2">
+                              <p className="text-[10px] uppercase text-slate-500">Geometria</p>
+                              <p className="text-sm font-black text-violet-200">{result.geometryScore.toFixed(1)}%</p>
+                            </div>
+                          )}
                           {result.reliability !== null && (
                             <div className="mb-1 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
                               <p className="text-[10px] uppercase text-slate-500">Confiabilidade da leitura</p>
@@ -661,9 +706,11 @@ export default function AdminSimilarity() {
                             <div className={`mt-3 rounded-xl border px-3 py-2 ${verdict.tone}`}>
                               <p className="text-xs font-black tracking-wide">{verdict.label}</p>
                               <p className="mt-1 text-xs leading-5 opacity-85">{verdict.detail}</p>
-                              {result.criticalFloor !== undefined && (
-                                <p className="mt-1 text-[10px] opacity-65">Elo geométrico mais fraco: {result.criticalFloor.toFixed(1)}%{result.criticalMean !== undefined ? ` • Conjunto crítico: ${result.criticalMean.toFixed(1)}%` : ""}</p>
-                              )}
+                              <p className="mt-1 text-[10px] opacity-65">
+                                {result.identityRaw !== undefined ? `Embedding bruto: ${(result.identityRaw * 100).toFixed(1)}% • ` : ""}
+                                {result.criticalFloor !== undefined ? `Elo geométrico: ${result.criticalFloor.toFixed(1)}%` : ""}
+                                {result.criticalMean !== undefined ? ` • Conjunto crítico: ${result.criticalMean.toFixed(1)}%` : ""}
+                              </p>
                             </div>
                           );
                         })()}
