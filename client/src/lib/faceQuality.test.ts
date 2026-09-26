@@ -39,7 +39,7 @@ describe("face capture quality rules", () => {
     const result = assessCaptureMetrics({ ...good, sharpness: 6, directionalBlurRatio: 3.4 });
     expect(codes(result)).toContain("blur");
     expect(codes(result)).toContain("motion_blur");
-    expect(result.score).toBeLessThan(good.width);
+    expect(result.score).toBeLessThan(80);
   });
 
   it("flags low resolution and a face that is too small", () => {
