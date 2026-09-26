@@ -670,19 +670,17 @@ export default function AdminSimilarity() {
               pairPrimaryScore = standardized.score;
               pairRawSimilarity = Math.max(0, standardized.cosine);
             } else {
-              if (!left.identity) {
-                left.identity = await extractIdentityDescriptor(
-                  left.detected.identityCanvas,
-                  left.detected.identityFallbackCanvas,
-                );
-              }
-              if (!right.identity) {
-                right.identity = await extractIdentityDescriptor(
-                  right.detected.identityCanvas,
-                  right.detected.identityFallbackCanvas,
-                );
-              }
-              const pairIdentity = await compareIdentityDescriptors(left.identity, right.identity);
+              const leftIdentity = left.identity ?? await extractIdentityDescriptor(
+                left.detected.identityCanvas,
+                left.detected.identityFallbackCanvas,
+              );
+              const rightIdentity = right.identity ?? await extractIdentityDescriptor(
+                right.detected.identityCanvas,
+                right.detected.identityFallbackCanvas,
+              );
+              left.identity = leftIdentity;
+              right.identity = rightIdentity;
+              const pairIdentity = await compareIdentityDescriptors(leftIdentity, rightIdentity);
               pairRawSimilarity = pairIdentity.rawSimilarity;
             }
             const pairReliability = clamp(
