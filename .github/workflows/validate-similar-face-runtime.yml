@@ -6,7 +6,7 @@ on:
       - feat/similar-face-reference-runtime-20260926
     paths:
       - "client/src/lib/similarFaceReference.ts"
-      - "client/src/lib/similarFaceReference.test.ts"
+      - "server/similarFaceReference.test.ts"
       - "client/src/lib/similarFaceTfliteRuntime.ts"
       - "client/src/pages/AdminSimilarity.tsx"
       - ".github/workflows/validate-similar-face-runtime.yml"
@@ -35,7 +35,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Similar Face unit test
-        run: pnpm vitest run client/src/lib/similarFaceReference.test.ts
+        run: pnpm vitest run server/similarFaceReference.test.ts
 
       - name: TypeScript check
         run: pnpm check
