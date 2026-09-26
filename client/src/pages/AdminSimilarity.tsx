@@ -87,16 +87,41 @@ async function getFaceLandmarker(): Promise<FaceLandmarkerInstance> {
   return faceLandmarkerPromise;
 }
 
-function calculateImageQuality(canvas: HTMLCanvasElement): ImageQuality {
+function calculateImageQuality(canvas: HTMLCanvasElement, landmarks?: FaceLandmark[]): ImageQuality {
   const sample = document.createElement("canvas");
   const maxSide = 420;
-  const scale = Math.min(1, maxSide / Math.max(canvas.width, canvas.height));
-  sample.width = Math.max(32, Math.round(canvas.width * scale));
-  sample.height = Math.max(32, Math.round(canvas.height * scale));
+
+  let sx = 0;
+  let sy = 0;
+  let sw = canvas.width;
+  let sh = canvas.height;
+
+  if (landmarks?.length) {
+    const xs = landmarks.map((p) => p.x);
+    const ys = landmarks.map((p) => p.y);
+    const minX = Math.max(0, Math.min(...xs));
+    const maxX = Math.min(1, Math.max(...xs));
+    const minY = Math.max(0, Math.min(...ys));
+    const maxY = Math.min(1, Math.max(...ys));
+    const padX = (maxX - minX) * 0.18;
+    const padY = (maxY - minY) * 0.18;
+    const x1 = Math.max(0, minX - padX);
+    const x2 = Math.min(1, maxX + padX);
+    const y1 = Math.max(0, minY - padY);
+    const y2 = Math.min(1, maxY + padY);
+    sx = Math.floor(x1 * canvas.width);
+    sy = Math.floor(y1 * canvas.height);
+    sw = Math.max(1, Math.ceil((x2 - x1) * canvas.width));
+    sh = Math.max(1, Math.ceil((y2 - y1) * canvas.height));
+  }
+
+  const scale = Math.min(1, maxSide / Math.max(sw, sh));
+  sample.width = Math.max(32, Math.round(sw * scale));
+  sample.height = Math.max(32, Math.round(sh * scale));
   const ctx = sample.getContext("2d", { willReadFrequently: true });
   if (!ctx) return { score: 70, brightness: 0, contrast: 0, sharpness: 0, warnings: ["qualidade da imagem não medida"] };
 
-  ctx.drawImage(canvas, 0, 0, sample.width, sample.height);
+  ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sample.width, sample.height);
   const { data } = ctx.getImageData(0, 0, sample.width, sample.height);
   const gray = new Float32Array(sample.width * sample.height);
   let sum = 0;
@@ -166,7 +191,6 @@ async function fileToCanvas(file: File) {
   return {
     canvas,
     aspectRatio: canvas.width / Math.max(1, canvas.height),
-    imageQuality: calculateImageQuality(canvas),
   };
 }
 
@@ -186,7 +210,7 @@ async function detectFace(file: File): Promise<DetectedFace | null> {
   return {
     landmarks: face.slice(0, Math.min(478, face.length)),
     aspectRatio: prepared.aspectRatio,
-    imageQuality: prepared.imageQuality,
+    imageQuality: calculateImageQuality(prepared.canvas, face),
   };
 }
 
@@ -300,6 +324,12 @@ export default function AdminSimilarity() {
       const masterWarnings = Array.from(new Set([...masterGeometryQ.warnings, ...masterDetected.imageQuality.warnings]));
       const masterQ = { score: masterCombinedQuality, warnings: masterWarnings, imageScore: masterDetected.imageQuality.score };
       setMasterQuality(masterQ);
+
+      if (masterQ.score < 45) {
+        toast.error("A Foto Mestre está com qualidade insuficiente. Use uma foto mais nítida, frontal e bem iluminada.");
+        return;
+      }
+
       const nextResults: ComparisonResult[] = [];
 
       for (let index = 0; index < candidates.length; index += 1) {
@@ -332,6 +362,20 @@ export default function AdminSimilarity() {
             candidateDetected.aspectRatio,
           );
           const reliability = clamp(Math.min(masterQ.score, candidateCombinedQuality) * 0.72 + ((masterQ.score + candidateCombinedQuality) / 2) * 0.28);
+
+          if (reliability < 40) {
+            nextResults.push({
+              id: candidate.id,
+              name: candidate.file.name,
+              preview: candidate.preview,
+              similarity: null,
+              reliability,
+              warnings: Array.from(new Set([...masterQ.warnings.map((w) => `Mestre: ${w}`), ...qualityWarnings])),
+              error: "Qualidade insuficiente para uma comparação confiável",
+            });
+            setResults([...nextResults]);
+            continue;
+          }
 
           nextResults.push({
             id: candidate.id,
