@@ -8575,6 +8575,13 @@ export const appRouter = router({
         return await getIndicatedByReferrer(input.phone);
       }),
 
+    getTree: adminProcedure
+      .input(z.object({ phone: z.string(), depth: z.number().int().min(1).max(8).default(5) }))
+      .query(async ({ input }) => {
+        const { getReferralTree } = await import('./db');
+        return await getReferralTree(input.phone, input.depth);
+      }),
+
     getReferred: publicProcedure
       .input(z.object({ referrerPhone: z.string() }))
       .query(async ({ input }) => {

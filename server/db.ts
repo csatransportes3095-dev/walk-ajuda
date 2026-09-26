@@ -3786,57 +3786,189 @@ export async function validateReferrer(phone: string): Promise<{ valid: boolean;
 
 
 /// ─── Rastreamento de Indicações ────────────────────────────
+
+type ReferralGraphCustomer = {
+  id: number;
+  name: string;
+  phone: string;
+  referredBy?: string | null;
+  referredByPhone?: string | null;
+  profilePhotoUrl?: string | null;
+  createdAt: Date;
+};
+
+type ReferralGraphEdge = {
+  referrerPhone: string;
+  referrerName: string | null;
+  referredCustomerId: number;
+  createdAt: Date;
+  source: "customer" | "history";
+};
+
+function normalizeReferralGraphPhone(value: unknown): string {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) digits = digits.slice(2);
+  return digits;
+}
+
+/**
+ * Fonte única para contador, lista e árvore de indicações.
+ *
+ * Prioridade:
+ * 1. vínculo atual do cadastro principal (customers.referredByPhone);
+ * 2. referralHistory apenas como contingência para cadastro legado sem vínculo atual.
+ *
+ * Um histórico antigo nunca sobrescreve o indicador atualmente gravado no cliente.
+ */
+async function loadReferralGraph(db: any) {
+  const customerRows = await db.select({
+    id: customers.id,
+    name: customers.name,
+    phone: customers.phone,
+    referredBy: customers.referredBy,
+    referredByPhone: customers.referredByPhone,
+    profilePhotoUrl: customers.profilePhotoUrl,
+    createdAt: customers.createdAt,
+  }).from(customers).where(sql`${customers.deletedAt} IS NULL`);
+
+  const activeCustomers = customerRows as ReferralGraphCustomer[];
+  const byId = new Map<number, ReferralGraphCustomer>();
+  const byPhone = new Map<string, ReferralGraphCustomer>();
+
+  for (const customer of activeCustomers) {
+    byId.set(Number(customer.id), customer);
+    const phone = normalizeReferralGraphPhone(customer.phone);
+    if (phone && !byPhone.has(phone)) byPhone.set(phone, customer);
+  }
+
+  const edgeByCustomerId = new Map<number, ReferralGraphEdge>();
+
+  for (const customer of activeCustomers) {
+    const referrerPhone = normalizeReferralGraphPhone(customer.referredByPhone);
+    const customerPhone = normalizeReferralGraphPhone(customer.phone);
+    if (!referrerPhone || referrerPhone === customerPhone) continue;
+    const referrer = byPhone.get(referrerPhone);
+    edgeByCustomerId.set(Number(customer.id), {
+      referrerPhone,
+      referrerName: referrer?.name || customer.referredBy || null,
+      referredCustomerId: Number(customer.id),
+      createdAt: customer.createdAt instanceof Date ? customer.createdAt : new Date(customer.createdAt),
+      source: "customer",
+    });
+  }
+
+  const historyRows = await db.select({
+    referrerPhone: referralHistory.referrerPhone,
+    referrerName: referralHistory.referrerName,
+    referredCustomerId: referralHistory.referredCustomerId,
+    referredPhone: referralHistory.referredPhone,
+    createdAt: referralHistory.createdAt,
+  }).from(referralHistory).orderBy(desc(referralHistory.createdAt));
+
+  for (const history of historyRows as any[]) {
+    const historyReferrerPhone = normalizeReferralGraphPhone(history.referrerPhone);
+    const child = byId.get(Number(history.referredCustomerId))
+      || byPhone.get(normalizeReferralGraphPhone(history.referredPhone));
+    if (!historyReferrerPhone || !child) continue;
+
+    // O cadastro principal atual sempre vence. O histórico serve apenas para
+    // registros legados que ainda não possuem referredByPhone no customers.
+    const currentReferrerPhone = normalizeReferralGraphPhone(child.referredByPhone);
+    if (currentReferrerPhone) continue;
+
+    const childPhone = normalizeReferralGraphPhone(child.phone);
+    if (childPhone === historyReferrerPhone || edgeByCustomerId.has(Number(child.id))) continue;
+
+    const referrer = byPhone.get(historyReferrerPhone);
+    edgeByCustomerId.set(Number(child.id), {
+      referrerPhone: historyReferrerPhone,
+      referrerName: referrer?.name || history.referrerName || null,
+      referredCustomerId: Number(child.id),
+      createdAt: history.createdAt instanceof Date ? history.createdAt : new Date(history.createdAt),
+      source: "history",
+    });
+  }
+
+  const childrenByReferrer = new Map<string, ReferralGraphEdge[]>();
+  const parentByCustomerId = new Map<number, ReferralGraphEdge>();
+
+  for (const edge of edgeByCustomerId.values()) {
+    const list = childrenByReferrer.get(edge.referrerPhone) || [];
+    list.push(edge);
+    childrenByReferrer.set(edge.referrerPhone, list);
+    parentByCustomerId.set(edge.referredCustomerId, edge);
+  }
+
+  for (const list of childrenByReferrer.values()) {
+    list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  return { activeCustomers, byId, byPhone, childrenByReferrer, parentByCustomerId };
+}
+
+function latestReferralDate(edges: ReferralGraphEdge[]): Date | null {
+  if (!edges.length) return null;
+  return edges.reduce((latest, edge) => edge.createdAt > latest ? edge.createdAt : latest, edges[0].createdAt);
+}
+
 export async function getReferralStats(referrerPhone: string): Promise<ReferralStats | null> {
   const db = await getDb();
   if (!db) return null;
-  const phoneDigits = referrerPhone.replace(/\D/g, '');
-  const result = await db.select().from(referralStats)
+
+  const phoneDigits = normalizeReferralGraphPhone(referrerPhone);
+  if (!phoneDigits) return null;
+
+  const graph = await loadReferralGraph(db);
+  const edges = graph.childrenByReferrer.get(phoneDigits) || [];
+  const referrer = graph.byPhone.get(phoneDigits);
+
+  const cached = await db.select().from(referralStats)
     .where(eq(referralStats.referrerPhone, phoneDigits))
     .limit(1);
-  if (result.length > 0) return result[0];
-  // Fallback: contar indicações direto da tabela customers
-  const countRows = await db.execute(
-    sql`SELECT COUNT(*) as cnt FROM customers
-        WHERE REGEXP_REPLACE(referredByPhone, '[^0-9]', '') = ${phoneDigits}
-          AND referredBy IS NOT NULL AND referredBy != ''`
-  ) as any;
-  const cntRow = (Array.isArray(countRows[0]) ? countRows[0][0] : countRows[0]) as any;
-  const cnt = Number(cntRow?.cnt ?? 0);
-  if (cnt === 0) return null;
-  // Buscar nome do indicador
-  const nameRows = await db.execute(
-    sql`SELECT name FROM customers WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${phoneDigits} LIMIT 1`
-  ) as any;
-  const nameRow = (Array.isArray(nameRows[0]) ? nameRows[0][0] : nameRows[0]) as any;
-  const referrerName = nameRow?.name ?? '';
-  // Criar entrada no referralStats para futuras consultas
-  try {
-    await db.insert(referralStats).values({
-      referrerPhone: phoneDigits,
-      referrerName,
-      totalReferred: cnt,
-      lastReferralAt: new Date(),
-    });
-    const created = await db.select().from(referralStats)
-      .where(eq(referralStats.referrerPhone, phoneDigits)).limit(1);
-    if (created.length > 0) return created[0];
-  } catch (_) { /* ignora duplicata */ }
+
+  if (!referrer && edges.length === 0 && cached.length === 0) return null;
+
   return {
-    id: 0,
+    ...(cached[0] || {}),
+    id: cached[0]?.id ?? 0,
     referrerPhone: phoneDigits,
-    referrerName,
-    totalReferred: cnt,
-    lastReferralAt: new Date(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  } as any;
+    referrerName: referrer?.name || edges[0]?.referrerName || cached[0]?.referrerName || "",
+    totalReferred: edges.length,
+    lastReferralAt: latestReferralDate(edges),
+    updatedAt: cached[0]?.updatedAt || new Date(),
+  } as ReferralStats;
 }
 
 export async function listAllReferralStats(): Promise<ReferralStats[]> {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(referralStats)
-    .orderBy(sql`${referralStats.totalReferred} DESC`);
+
+  const graph = await loadReferralGraph(db);
+  const cachedRows = await db.select().from(referralStats);
+  const cachedByPhone = new Map(cachedRows.map((row: any) => [normalizeReferralGraphPhone(row.referrerPhone), row]));
+
+  const result: ReferralStats[] = [];
+  let syntheticId = -1;
+
+  for (const [referrerPhone, edges] of graph.childrenByReferrer.entries()) {
+    if (!edges.length) continue;
+    const cached = cachedByPhone.get(referrerPhone) as any;
+    const referrer = graph.byPhone.get(referrerPhone);
+    result.push({
+      ...(cached || {}),
+      id: cached?.id ?? syntheticId--,
+      referrerPhone,
+      referrerName: referrer?.name || edges[0]?.referrerName || cached?.referrerName || referrerPhone,
+      totalReferred: edges.length,
+      lastReferralAt: latestReferralDate(edges),
+      updatedAt: cached?.updatedAt || new Date(),
+    } as ReferralStats);
+  }
+
+  return result.sort((a, b) =>
+    Number(b.totalReferred || 0) - Number(a.totalReferred || 0)
+    || String(a.referrerName || "").localeCompare(String(b.referrerName || ""), "pt-BR")
+  );
 }
 
 export async function recordReferral(data: {
@@ -3849,26 +3981,28 @@ export async function recordReferral(data: {
 }): Promise<ReferralHistory> {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
-  
-  const phoneDigits = data.referrerPhone.replace(/\D/g, '');
-  
+
+  const phoneDigits = normalizeReferralGraphPhone(data.referrerPhone);
+  const referredPhoneDigits = normalizeReferralGraphPhone(data.referredPhone);
+
   // Registrar no histórico
   await db.insert(referralHistory).values({
     referrerPhone: phoneDigits,
     referrerName: data.referrerName,
     referredCustomerId: data.referredCustomerId,
-    referredPhone: data.referredPhone.replace(/\D/g, ''),
+    referredPhone: referredPhoneDigits,
     referredName: data.referredName,
     orderId: data.orderId ?? null,
     // O cadastro apenas registra a origem. A comissão só é qualificada no primeiro pedido elegível.
     status: 'pending',
   });
-  
-  // Atualizar ou criar stats
+
+  // referralStats continua como cache histórico. A leitura do ADM não confia
+  // mais nele para montar contador/lista/árvore.
   const existing = await db.select().from(referralStats)
     .where(eq(referralStats.referrerPhone, phoneDigits))
     .limit(1);
-  
+
   if (existing.length > 0) {
     await db.update(referralStats)
       .set({
@@ -3884,7 +4018,7 @@ export async function recordReferral(data: {
       lastReferralAt: new Date(),
     });
   }
-  
+
   const result = await db.select().from(referralHistory)
     .orderBy(sql`${referralHistory.id} DESC`)
     .limit(1);
@@ -3894,7 +4028,7 @@ export async function recordReferral(data: {
 export async function getReferralHistory(referrerPhone: string): Promise<ReferralHistory[]> {
   const db = await getDb();
   if (!db) return [];
-  const phoneDigits = referrerPhone.replace(/\D/g, '');
+  const phoneDigits = normalizeReferralGraphPhone(referrerPhone);
   return await db.select().from(referralHistory)
     .where(eq(referralHistory.referrerPhone, phoneDigits))
     .orderBy(sql`${referralHistory.createdAt} DESC`);
@@ -3909,8 +4043,8 @@ export async function getReferralChain(referrerPhone: string, depth: number = 5)
 }>> {
   const db = await getDb();
   if (!db) return [];
-  
-  const phoneDigits = referrerPhone.replace(/\D/g, '');
+
+  const graph = await loadReferralGraph(db);
   const chain: Array<{
     level: number;
     phone: string;
@@ -3918,45 +4052,28 @@ export async function getReferralChain(referrerPhone: string, depth: number = 5)
     totalReferred: number;
     profilePhotoUrl?: string | null;
   }> = [];
-  
-  let currentPhone = phoneDigits;
-  let level = 0;
+
+  let currentPhone = normalizeReferralGraphPhone(referrerPhone);
   const visited = new Set<string>();
-  
-  while (level < depth && !visited.has(currentPhone)) {
+
+  for (let level = 0; level < Math.max(1, depth) && currentPhone && !visited.has(currentPhone); level++) {
     visited.add(currentPhone);
-    
-    // Buscar stats do indicador
-    const stats = await db.select().from(referralStats)
-      .where(eq(referralStats.referrerPhone, currentPhone))
-      .limit(1);
-    
-    if (stats.length === 0) break;
-    
-    // Buscar dados completos do cliente
-    const customer = await db.select().from(customers)
-      .where(eq(customers.phone, currentPhone))
-      .limit(1);
-    
+    const customer = graph.byPhone.get(currentPhone);
+    if (!customer) break;
+
     chain.push({
       level,
       phone: currentPhone,
-      name: stats[0].referrerName || 'Desconhecido',
-      totalReferred: stats[0].totalReferred,
-      profilePhotoUrl: customer[0]?.profilePhotoUrl,
+      name: customer.name || "Desconhecido",
+      totalReferred: (graph.childrenByReferrer.get(currentPhone) || []).length,
+      profilePhotoUrl: customer.profilePhotoUrl || null,
     });
-    
-    // Buscar quem indicou este cliente
-    const referrer = await db.select().from(customers)
-      .where(eq(customers.phone, currentPhone))
-      .limit(1);
-    
-    if (!referrer[0]?.referredByPhone) break;
-    
-    currentPhone = referrer[0].referredByPhone.replace(/\D/g, '');
-    level++;
+
+    const parentEdge = graph.parentByCustomerId.get(Number(customer.id));
+    if (!parentEdge) break;
+    currentPhone = parentEdge.referrerPhone;
   }
-  
+
   return chain;
 }
 
@@ -3970,52 +4087,98 @@ export async function getIndicatedByReferrer(referrerPhone: string): Promise<Arr
 }>> {
   const db = await getDb();
   if (!db) return [];
-  
-  const phoneDigits = referrerPhone.replace(/\D/g, '');
-  
-  // Buscar registros de referralHistory
-  const referrals = await db.select({
-    referredPhone: referralHistory.referredPhone,
-    createdAt: referralHistory.createdAt,
-  })
-    .from(referralHistory)
-    .where(eq(referralHistory.referrerPhone, phoneDigits))
-    .orderBy(sql`${referralHistory.createdAt} DESC`);
-  
-  if (referrals.length === 0) return [];
-  
-  // Buscar dados dos clientes indicados
-  const results = [];
-  for (const referral of referrals) {
-    // Remover formatação do telefone para comparação
-    const cleanPhone = referral.referredPhone.replace(/\D/g, '');
-    
-    // Buscar cliente com esse telefone (sem formatação)
-    const customer = await db.select({
-      customerId: customers.id,
-      name: customers.name,
-      phone: customers.phone,
-      profilePhotoUrl: customers.profilePhotoUrl,
-    })
-      .from(customers)
-      .where(sql`REPLACE(REPLACE(REPLACE(REPLACE(${customers.phone}, '(', ''), ')', ''), ' ', ''), '-', '') = ${cleanPhone}`)
-      .limit(1);
-    
-    if (customer.length > 0) {
-      results.push({
-        customerId: customer[0].customerId,
-        name: customer[0].name,
-        phone: customer[0].phone,
-        profilePhotoUrl: customer[0].profilePhotoUrl || null,
-        createdAt: referral.createdAt,
-        orderStatus: null,
-      });
-    }
-  }
-  
-  return results;
+
+  const phoneDigits = normalizeReferralGraphPhone(referrerPhone);
+  const graph = await loadReferralGraph(db);
+  const edges = graph.childrenByReferrer.get(phoneDigits) || [];
+
+  return edges.flatMap((edge) => {
+    const customer = graph.byId.get(edge.referredCustomerId);
+    if (!customer) return [];
+    return [{
+      customerId: Number(customer.id),
+      name: customer.name,
+      phone: customer.phone,
+      profilePhotoUrl: customer.profilePhotoUrl || null,
+      createdAt: edge.createdAt,
+      orderStatus: null,
+    }];
+  });
 }
 
+export type ReferralTreeNode = {
+  customerId: number;
+  name: string;
+  phone: string;
+  profilePhotoUrl?: string | null;
+  totalReferred: number;
+  children: ReferralTreeNode[];
+};
+
+export async function getReferralTree(referrerPhone: string, depth: number = 5): Promise<{
+  root: ReferralTreeNode | null;
+  parent: { customerId: number; name: string; phone: string; profilePhotoUrl?: string | null } | null;
+  totalDescendants: number;
+}> {
+  const db = await getDb();
+  if (!db) return { root: null, parent: null, totalDescendants: 0 };
+
+  const graph = await loadReferralGraph(db);
+  const rootPhone = normalizeReferralGraphPhone(referrerPhone);
+  const rootCustomer = graph.byPhone.get(rootPhone);
+  if (!rootCustomer) return { root: null, parent: null, totalDescendants: 0 };
+
+  const maxDepth = Math.min(8, Math.max(1, depth));
+
+  const buildNode = (customer: ReferralGraphCustomer, level: number, path: Set<number>): ReferralTreeNode => {
+    const customerId = Number(customer.id);
+    const phone = normalizeReferralGraphPhone(customer.phone);
+    const directEdges = graph.childrenByReferrer.get(phone) || [];
+
+    if (level >= maxDepth || path.has(customerId)) {
+      return {
+        customerId,
+        name: customer.name,
+        phone: customer.phone,
+        profilePhotoUrl: customer.profilePhotoUrl || null,
+        totalReferred: directEdges.length,
+        children: [],
+      };
+    }
+
+    const nextPath = new Set(path);
+    nextPath.add(customerId);
+    const children = directEdges.flatMap((edge) => {
+      const child = graph.byId.get(edge.referredCustomerId);
+      if (!child || nextPath.has(Number(child.id))) return [];
+      return [buildNode(child, level + 1, nextPath)];
+    });
+
+    return {
+      customerId,
+      name: customer.name,
+      phone: customer.phone,
+      profilePhotoUrl: customer.profilePhotoUrl || null,
+      totalReferred: directEdges.length,
+      children,
+    };
+  };
+
+  const root = buildNode(rootCustomer, 0, new Set<number>());
+  const parentEdge = graph.parentByCustomerId.get(Number(rootCustomer.id));
+  const parentCustomer = parentEdge ? graph.byPhone.get(parentEdge.referrerPhone) : null;
+  const parent = parentCustomer ? {
+    customerId: Number(parentCustomer.id),
+    name: parentCustomer.name,
+    phone: parentCustomer.phone,
+    profilePhotoUrl: parentCustomer.profilePhotoUrl || null,
+  } : null;
+
+  const countDescendants = (node: ReferralTreeNode): number =>
+    node.children.reduce((sum, child) => sum + 1 + countDescendants(child), 0);
+
+  return { root, parent, totalDescendants: countDescendants(root) };
+}
 
 export async function createReferralReport(data: {
   reporterPhone: string;
@@ -4035,7 +4198,6 @@ export async function createReferralReport(data: {
     status: "pending",
   });
 }
-
 
 export async function deleteReferralHistory(referredCustomerId: number) {
   const db = await getDb();
