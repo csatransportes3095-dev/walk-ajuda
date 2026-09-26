@@ -22,9 +22,12 @@ export type RegionScores = {
 
 export type GeometryComparison = {
   similarity: number;
+  rawSimilarity: number;
   rawLandmarkSimilarity: number;
   proportionsSimilarity: number;
   symmetrySimilarity: number;
+  criticalFloor: number;
+  criticalMean: number;
   rmsError: number;
   regions: RegionScores;
 };
@@ -252,6 +255,23 @@ function errorToSimilarity(error: number, sensitivity: number) {
   return clamp(100 * Math.exp(-sensitivity * Math.max(0, error)));
 }
 
+// Os landmarks do MediaPipe tendem a produzir notas brutas altas até entre
+// pessoas diferentes. Esta calibração deliberadamente exige proximidade extrema:
+// 90 bruto ~= 72 final; 95 bruto ~= 86 final; só 99+ permanece perto de 100.
+function strictCalibrate(score: number) {
+  const normalized = clamp((score - 64) / 36, 0, 1);
+  return clamp(100 * Math.pow(normalized, 1.12));
+}
+
+function weightedGeometricMean(entries: Array<[number, number]>) {
+  const totalWeight = entries.reduce((sum, [, weight]) => sum + weight, 0) || 1;
+  const logSum = entries.reduce((sum, [score, weight]) => {
+    const normalized = Math.max(0.0025, Math.min(1, score / 100));
+    return sum + Math.log(normalized) * weight;
+  }, 0);
+  return clamp(Math.exp(logSum / totalWeight) * 100);
+}
+
 function regionSimilarity(master: FaceLandmark[], candidate: FaceLandmark[], indices: number[], sensitivity: number, trim = 0.08) {
   return errorToSimilarity(robustRms(pointErrors(master, candidate, indices), trim), sensitivity);
 }
@@ -327,39 +347,96 @@ export function compareFaceGeometry(
   const structure = structuralSimilarity(master, candidate);
 
   const expressionDelta = expressionDifference(master, candidate);
-  const mouthWeight = expressionDelta > 0.10 ? 0.015 : expressionDelta > 0.055 ? 0.03 : 0.05;
-  const stableWeight = 0.91 - mouthWeight;
 
-  const regions: RegionScores = {
+  const rawRegions: RegionScores = {
     global: rawLandmarkSimilarity,
-    eyes: regionSimilarity(master, candidate, EYES, 3.5, 0.10),
-    brows: regionSimilarity(master, candidate, BROWS, 3.15, 0.08),
-    nose: regionSimilarity(master, candidate, NOSE, 3.65, 0.08),
-    oval: regionSimilarity(master, candidate, FACE_OVAL, 3.25, 0.08),
-    mouth: regionSimilarity(master, candidate, MOUTH, 2.4, 0.12),
+    eyes: regionSimilarity(master, candidate, EYES, 4.8, 0.04),
+    brows: regionSimilarity(master, candidate, BROWS, 4.3, 0.03),
+    nose: regionSimilarity(master, candidate, NOSE, 5.2, 0.03),
+    oval: regionSimilarity(master, candidate, FACE_OVAL, 4.7, 0.03),
+    mouth: regionSimilarity(master, candidate, MOUTH, 3.1, 0.06),
     proportions,
     symmetry,
     structure,
   };
 
-  const stableBlend =
-    regions.global * 0.17 +
-    regions.eyes * 0.15 +
-    regions.nose * 0.19 +
-    regions.oval * 0.17 +
-    regions.brows * 0.05 +
-    regions.proportions * 0.08 +
-    regions.symmetry * 0.03 +
-    regions.structure * 0.16;
+  // A interface exibe as notas já calibradas. Isso evita mostrar 90% em cada
+  // região só porque dois rostos humanos compartilham uma geometria básica.
+  const regions: RegionScores = {
+    global: strictCalibrate(rawRegions.global),
+    eyes: strictCalibrate(rawRegions.eyes),
+    brows: strictCalibrate(rawRegions.brows),
+    nose: strictCalibrate(rawRegions.nose),
+    oval: strictCalibrate(rawRegions.oval),
+    mouth: strictCalibrate(rawRegions.mouth),
+    proportions: strictCalibrate(rawRegions.proportions),
+    symmetry: strictCalibrate(rawRegions.symmetry),
+    structure: strictCalibrate(rawRegions.structure),
+  };
 
-  const stableNormalized = stableBlend / 1.0;
-  const similarity = clamp(stableNormalized * stableWeight + regions.mouth * mouthWeight + stableNormalized * (1 - stableWeight - mouthWeight));
+  // Componentes críticos. Nenhuma região boa pode compensar totalmente outra
+  // região estruturalmente incompatível.
+  const criticalEntries: Array<[number, number]> = [
+    [regions.eyes, 0.18],
+    [regions.nose, 0.24],
+    [regions.oval, 0.20],
+    [regions.structure, 0.22],
+    [regions.proportions, 0.10],
+    [regions.global, 0.06],
+  ];
+  const criticalScores = criticalEntries.map(([score]) => score);
+  const criticalFloor = Math.min(...criticalScores);
+  const criticalMean = weightedGeometricMean(criticalEntries);
+
+  // Boca e sobrancelhas mudam com expressão, idade e foto; entram pouco.
+  const expressionWeight = expressionDelta > 0.09 ? 0.01 : 0.025;
+  const secondary =
+    regions.brows * 0.45 +
+    regions.symmetry * 0.35 +
+    regions.mouth * 0.20;
+
+  let rawSimilarity =
+    criticalMean * (0.975 - expressionWeight) +
+    secondary * expressionWeight +
+    criticalFloor * 0.025;
+
+  // Penalidade por "elo fraco": para uma nota alta, TODAS as estruturas
+  // principais precisam concordar.
+  const below75 = criticalScores.filter((score) => score < 75).length;
+  const below65 = criticalScores.filter((score) => score < 65).length;
+  const below55 = criticalScores.filter((score) => score < 55).length;
+
+  if (criticalFloor < 45) rawSimilarity -= 24;
+  else if (criticalFloor < 55) rawSimilarity -= 17;
+  else if (criticalFloor < 65) rawSimilarity -= 11;
+  else if (criticalFloor < 75) rawSimilarity -= 6;
+  else if (criticalFloor < 82) rawSimilarity -= 3;
+
+  if (below55 >= 2) rawSimilarity -= 10;
+  else if (below65 >= 2) rawSimilarity -= 7;
+  else if (below75 >= 2) rawSimilarity -= 4;
+
+  // RMS alto após alinhamento = formato não bateu de verdade.
+  if (rmsError > 0.075) rawSimilarity -= clamp((rmsError - 0.075) * 180, 0, 12);
+
+  let similarity = clamp(rawSimilarity);
+
+  // Tetos de segurança: impedem "90%" quando existe uma divergência clara em
+  // qualquer componente anatômico crítico.
+  if (criticalFloor < 82) similarity = Math.min(similarity, 86);
+  if (criticalFloor < 75) similarity = Math.min(similarity, 79);
+  if (criticalFloor < 65) similarity = Math.min(similarity, 69);
+  if (criticalFloor < 55) similarity = Math.min(similarity, 59);
+  if (criticalFloor < 45) similarity = Math.min(similarity, 49);
 
   return {
     similarity,
+    rawSimilarity: clamp(rawSimilarity),
     rawLandmarkSimilarity,
     proportionsSimilarity: proportions,
     symmetrySimilarity: symmetry,
+    criticalFloor,
+    criticalMean,
     rmsError,
     regions,
   };
