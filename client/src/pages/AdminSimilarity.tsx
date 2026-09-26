@@ -474,6 +474,10 @@ export default function AdminSimilarity() {
             geometrySimilarity: comparison.similarity,
             geometryCriticalMean: comparison.criticalMean,
             geometryCriticalFloor: comparison.criticalFloor,
+            noseScore: comparison.regions.nose,
+            jawScore: comparison.regions.jaw,
+            chinScore: comparison.regions.chin,
+            measurementsScore: comparison.regions.measurements,
             reliability,
           });
 
