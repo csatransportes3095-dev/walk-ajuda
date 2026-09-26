@@ -2,7 +2,9 @@ import { useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { AlertTriangle, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { FACE_OVAL, compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
+import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
+import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
+import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } from "@/lib/faceQuality";
 import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 
@@ -27,8 +29,28 @@ type ComparisonResult = {
   verdict?: MatchVerdict;
   verdictDetail?: string;
   regions?: RegionScores;
+  masterCaptureQuality?: FaceCaptureQuality;
+  candidateCaptureQuality?: FaceCaptureQuality;
   warnings: string[];
   error?: string;
+};
+
+type PairwiseResult = {
+  id: string;
+  leftName: string;
+  rightName: string;
+  leftPreview: string;
+  rightPreview: string;
+  similarity: number;
+  reliability: number;
+};
+
+type AnalyzedFaceForPairs = {
+  id: string;
+  name: string;
+  preview: string;
+  detected: DetectedFace;
+  identity: FaceIdentityDescriptor;
 };
 
 type ImageQuality = {
@@ -43,6 +65,7 @@ type DetectedFace = {
   landmarks: FaceLandmark[];
   aspectRatio: number;
   imageQuality: ImageQuality;
+  captureQuality: FaceCaptureQuality;
   canvas: HTMLCanvasElement;
   identityCanvas: HTMLCanvasElement;
   identityFallbackCanvas: HTMLCanvasElement;
@@ -207,94 +230,6 @@ async function fileToCanvas(file: File) {
   };
 }
 
-function createFaceOnlyCanvas(
-  canvas: HTMLCanvasElement,
-  landmarks: FaceLandmark[],
-  expansion = 1.08,
-) {
-  const oval = FACE_OVAL.map((index) => landmarks[index]).filter(Boolean);
-  if (oval.length < 20) return canvas;
-
-  const pixelOval = oval.map((point) => ({
-    x: point.x * canvas.width,
-    y: point.y * canvas.height,
-  }));
-
-  const center = pixelOval.reduce(
-    (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
-    { x: 0, y: 0 },
-  );
-  center.x /= pixelOval.length;
-  center.y /= pixelOval.length;
-
-  const expanded = pixelOval.map((point) => ({
-    x: center.x + (point.x - center.x) * expansion,
-    y: center.y + (point.y - center.y) * expansion,
-  }));
-
-  const xs = expanded.map((p) => p.x);
-  const ys = expanded.map((p) => p.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-
-  // Quadrado neutro dá ao detector contexto de enquadramento sem reintroduzir
-  // fundo real, cabelo externo ou orelhas.
-  const faceWidth = maxX - minX;
-  const faceHeight = maxY - minY;
-  const side = Math.max(faceWidth, faceHeight) * 1.28;
-  const cropCenterX = (minX + maxX) / 2;
-  const cropCenterY = (minY + maxY) / 2 + faceHeight * 0.015;
-  const desiredX = cropCenterX - side / 2;
-  const desiredY = cropCenterY - side / 2;
-
-  const output = document.createElement("canvas");
-  output.width = 512;
-  output.height = 512;
-  const ctx = output.getContext("2d");
-  if (!ctx) return canvas;
-
-  ctx.fillStyle = "rgb(127,127,127)";
-  ctx.fillRect(0, 0, output.width, output.height);
-
-  const sourceX = Math.max(0, desiredX);
-  const sourceY = Math.max(0, desiredY);
-  const sourceRight = Math.min(canvas.width, desiredX + side);
-  const sourceBottom = Math.min(canvas.height, desiredY + side);
-  const sourceW = Math.max(1, sourceRight - sourceX);
-  const sourceH = Math.max(1, sourceBottom - sourceY);
-
-  const mapX = (x: number) => ((x - desiredX) / side) * output.width;
-  const mapY = (y: number) => ((y - desiredY) / side) * output.height;
-
-  ctx.save();
-  ctx.beginPath();
-  expanded.forEach((point, index) => {
-    const x = mapX(point.x);
-    const y = mapY(point.y);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.closePath();
-  ctx.clip();
-
-  ctx.drawImage(
-    canvas,
-    sourceX,
-    sourceY,
-    sourceW,
-    sourceH,
-    mapX(sourceX),
-    mapY(sourceY),
-    (sourceW / side) * output.width,
-    (sourceH / side) * output.height,
-  );
-  ctx.restore();
-
-  return output;
-}
-
 async function detectFace(file: File): Promise<DetectedFace | null> {
   const model = await getFaceLandmarker();
   const prepared = await fileToCanvas(file);
@@ -309,14 +244,16 @@ async function detectFace(file: File): Promise<DetectedFace | null> {
   if (!face || face.length < 468) return null;
 
   const landmarks = face.slice(0, Math.min(478, face.length));
+  const canonical = createCanonicalFaceCanvases(prepared.canvas, landmarks);
 
   return {
     landmarks,
     aspectRatio: prepared.aspectRatio,
     imageQuality: calculateImageQuality(prepared.canvas, face),
+    captureQuality: analyzeFaceCaptureQuality(prepared.canvas, landmarks, prepared.aspectRatio),
     canvas: prepared.canvas,
-    identityCanvas: createFaceOnlyCanvas(prepared.canvas, landmarks, 1.08),
-    identityFallbackCanvas: createFaceOnlyCanvas(prepared.canvas, landmarks, 1.18),
+    identityCanvas: canonical.primary,
+    identityFallbackCanvas: canonical.fallback,
   };
 }
 
@@ -368,9 +305,10 @@ export default function AdminSimilarity() {
   const [masterPreview, setMasterPreview] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CandidatePhoto[]>([]);
   const [results, setResults] = useState<ComparisonResult[]>([]);
+  const [pairwiseResults, setPairwiseResults] = useState<PairwiseResult[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, name: "" });
-  const [masterQuality, setMasterQuality] = useState<{ score: number; warnings: string[]; imageScore: number } | null>(null);
+  const [masterQuality, setMasterQuality] = useState<{ score: number; warnings: string[]; imageScore: number; capture: FaceCaptureQuality } | null>(null);
 
   const rankedResults = useMemo(
     () =>
@@ -402,6 +340,7 @@ export default function AdminSimilarity() {
     setMasterPreview(URL.createObjectURL(file));
     setMasterQuality(null);
     setResults([]);
+    setPairwiseResults([]);
   };
 
   const addFiles = (files: FileList | File[]) => {
@@ -423,6 +362,7 @@ export default function AdminSimilarity() {
       return [...current, ...added];
     });
     setResults([]);
+    setPairwiseResults([]);
   };
 
   const removeCandidate = (id: string) => {
@@ -432,6 +372,7 @@ export default function AdminSimilarity() {
       return current.filter((item) => item.id !== id);
     });
     setResults((current) => current.filter((item) => item.id !== id));
+    setPairwiseResults([]);
   };
 
   const clearMaster = () => {
@@ -440,6 +381,7 @@ export default function AdminSimilarity() {
     setMasterPreview(null);
     setMasterQuality(null);
     setResults([]);
+    setPairwiseResults([]);
     if (masterInputRef.current) masterInputRef.current.value = "";
   };
 
@@ -447,6 +389,7 @@ export default function AdminSimilarity() {
     candidates.forEach((item) => URL.revokeObjectURL(item.preview));
     setCandidates([]);
     setResults([]);
+    setPairwiseResults([]);
     setProgress({ current: 0, total: 0, name: "" });
     if (filesInputRef.current) filesInputRef.current.value = "";
     if (folderInputRef.current) folderInputRef.current.value = "";
@@ -459,6 +402,7 @@ export default function AdminSimilarity() {
     setMasterPreview(null);
     setCandidates([]);
     setResults([]);
+    setPairwiseResults([]);
     setMasterQuality(null);
     setProgress({ current: 0, total: 0, name: "" });
   };
@@ -475,6 +419,7 @@ export default function AdminSimilarity() {
 
     setAnalyzing(true);
     setResults([]);
+    setPairwiseResults([]);
     setProgress({ current: 0, total: candidates.length, name: "Preparando motor facial..." });
 
     try {
@@ -487,7 +432,12 @@ export default function AdminSimilarity() {
       const masterGeometryQ = evaluateFaceGeometryQuality(masterDetected.landmarks, masterDetected.aspectRatio);
       const masterCombinedQuality = clamp(masterGeometryQ.score * 0.72 + masterDetected.imageQuality.score * 0.28);
       const masterWarnings = Array.from(new Set([...masterGeometryQ.warnings, ...masterDetected.imageQuality.warnings]));
-      const masterQ = { score: masterCombinedQuality, warnings: masterWarnings, imageScore: masterDetected.imageQuality.score };
+      const masterQ = {
+        score: masterCombinedQuality,
+        warnings: masterWarnings,
+        imageScore: masterDetected.imageQuality.score,
+        capture: masterDetected.captureQuality,
+      };
       setMasterQuality(masterQ);
 
       if (masterQ.score < 45) {
@@ -505,6 +455,15 @@ export default function AdminSimilarity() {
       }
 
       const nextResults: ComparisonResult[] = [];
+      const analyzedFaces: AnalyzedFaceForPairs[] = [
+        {
+          id: "master",
+          name: masterFile.name,
+          preview: masterPreview || "",
+          detected: masterDetected,
+          identity: masterIdentity,
+        },
+      ];
 
       for (let index = 0; index < candidates.length; index += 1) {
         const candidate = candidates[index];
@@ -538,18 +497,36 @@ export default function AdminSimilarity() {
 
           setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • vetor facial` });
           const candidateIdentity = await extractIdentityDescriptor(candidateDetected.identityCanvas, candidateDetected.identityFallbackCanvas);
+          analyzedFaces.push({
+            id: candidate.id,
+            name: candidate.file.name,
+            preview: candidate.preview,
+            detected: candidateDetected,
+            identity: candidateIdentity,
+          });
           const identityComparison = await compareIdentityDescriptors(masterIdentity, candidateIdentity);
 
-          const reliability = clamp(Math.min(masterQ.score, candidateCombinedQuality) * 0.72 + ((masterQ.score + candidateCombinedQuality) / 2) * 0.28);
+          const captureReliability = Math.min(masterDetected.captureQuality.score, candidateDetected.captureQuality.score);
+          const reliability = clamp(
+            captureReliability * 0.65 +
+            Math.min(masterQ.score, candidateCombinedQuality) * 0.35
+          );
           const decision = decideFaceMatch({
             identityRawSimilarity: identityComparison.rawSimilarity,
             geometrySimilarity: comparison.similarity,
             geometryCriticalMean: comparison.criticalMean,
             geometryCriticalFloor: comparison.criticalFloor,
+            globalScore: comparison.regions.global,
+            eyesScore: comparison.regions.eyes,
             noseScore: comparison.regions.nose,
+            ovalScore: comparison.regions.oval,
+            cheeksScore: comparison.regions.cheeks,
             jawScore: comparison.regions.jaw,
             chinScore: comparison.regions.chin,
+            proportionsScore: comparison.regions.proportions,
             measurementsScore: comparison.regions.measurements,
+            structureScore: comparison.regions.structure,
+            symmetryScore: comparison.regions.symmetry,
             reliability,
           });
 
@@ -582,6 +559,8 @@ export default function AdminSimilarity() {
             verdict: decision.verdict,
             verdictDetail: decision.detail,
             regions: comparison.regions,
+            masterCaptureQuality: masterDetected.captureQuality,
+            candidateCaptureQuality: candidateDetected.captureQuality,
             warnings: Array.from(new Set([...masterQ.warnings.map((w) => `Mestre: ${w}`), ...qualityWarnings])),
           });
           setResults([...nextResults]);
@@ -597,6 +576,58 @@ export default function AdminSimilarity() {
           });
           setResults([...nextResults]);
         }
+      }
+
+      if (analyzedFaces.length >= 3) {
+        const pairs: PairwiseResult[] = [];
+        for (let i = 0; i < analyzedFaces.length; i += 1) {
+          for (let j = i + 1; j < analyzedFaces.length; j += 1) {
+            const left = analyzedFaces[i];
+            const right = analyzedFaces[j];
+
+            const pairGeometry = compareFaceGeometry(
+              left.detected.landmarks,
+              right.detected.landmarks,
+              left.detected.aspectRatio,
+              right.detected.aspectRatio,
+            );
+            const pairIdentity = await compareIdentityDescriptors(left.identity, right.identity);
+            const pairReliability = clamp(
+              Math.min(left.detected.captureQuality.score, right.detected.captureQuality.score) * 0.65 +
+              Math.min(left.detected.imageQuality.score, right.detected.imageQuality.score) * 0.35
+            );
+            const pairDecision = decideFaceMatch({
+              identityRawSimilarity: pairIdentity.rawSimilarity,
+              geometrySimilarity: pairGeometry.similarity,
+              geometryCriticalMean: pairGeometry.criticalMean,
+              geometryCriticalFloor: pairGeometry.criticalFloor,
+              globalScore: pairGeometry.regions.global,
+              eyesScore: pairGeometry.regions.eyes,
+              noseScore: pairGeometry.regions.nose,
+              ovalScore: pairGeometry.regions.oval,
+              cheeksScore: pairGeometry.regions.cheeks,
+              jawScore: pairGeometry.regions.jaw,
+              chinScore: pairGeometry.regions.chin,
+              proportionsScore: pairGeometry.regions.proportions,
+              measurementsScore: pairGeometry.regions.measurements,
+              structureScore: pairGeometry.regions.structure,
+              symmetryScore: pairGeometry.regions.symmetry,
+              reliability: pairReliability,
+            });
+
+            pairs.push({
+              id: `${left.id}::${right.id}`,
+              leftName: left.name,
+              rightName: right.name,
+              leftPreview: left.preview,
+              rightPreview: right.preview,
+              similarity: pairDecision.finalScore,
+              reliability: pairReliability,
+            });
+          }
+        }
+        pairs.sort((a, b) => b.similarity - a.similarity);
+        setPairwiseResults(pairs);
       }
 
       toast.success("Comparação concluída.");
@@ -716,12 +747,19 @@ export default function AdminSimilarity() {
               {masterQuality && (
                 <div className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Qualidade da leitura</span>
-                    <strong>{masterQuality.score.toFixed(0)}%</strong>
+                    <span className="text-slate-400">Qualidade Foto Mestre</span>
+                    <strong>{masterQuality.capture.score.toFixed(0)}%</strong>
                   </div>
-                  {masterQuality.warnings.length > 0 && (
-                    <p className="mt-2 text-xs text-amber-300">{masterQuality.warnings.join(" • ")}</p>
-                  )}
+                  <div className="mt-2 space-y-1 text-xs">
+                    {masterQuality.capture.checks.slice(0, 4).map((check) => (
+                      <p key={check.code} className="text-emerald-300">✓ {check.message}</p>
+                    ))}
+                    {masterQuality.capture.issues.map((issue) => (
+                      <p key={issue.code} className={issue.severity === "critical" ? "text-red-300" : "text-amber-300"}>
+                        ⚠ {issue.message}
+                      </p>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -812,7 +850,7 @@ export default function AdminSimilarity() {
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3.5 font-black text-white shadow-lg shadow-cyan-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {analyzing ? <RotateCcw className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-                {analyzing ? "Analisando..." : "Analisar Similaridade"}
+                {analyzing ? "Analisando..." : results.length > 0 ? "Comparar novamente" : "Analisar Similaridade"}
               </button>
 
               {analyzing && (
@@ -906,11 +944,40 @@ export default function AdminSimilarity() {
                           )}
                           {result.reliability !== null && (
                             <div className="mb-1 rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-                              <p className="text-[10px] uppercase text-slate-500">Confiabilidade da leitura</p>
-                              <p className="text-sm font-black">{result.reliability.toFixed(0)}%</p>
+                              <p className="text-[10px] uppercase text-slate-500">Confiabilidade da análise</p>
+                              <p className="text-sm font-black">{confidenceLabel(result.reliability)} • {result.reliability.toFixed(0)}%</p>
                             </div>
                           )}
                         </div>
+
+                        {result.masterCaptureQuality && result.candidateCaptureQuality && (
+                          <div className="mt-3 grid gap-2 md:grid-cols-2">
+                            {[
+                              ["Foto 1 • Mestre", result.masterCaptureQuality],
+                              ["Foto 2 • Comparação", result.candidateCaptureQuality],
+                            ].map(([label, quality]) => {
+                              const q = quality as FaceCaptureQuality;
+                              return (
+                                <div key={String(label)} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{String(label)}</p>
+                                    <p className="text-sm font-black text-white">{q.score.toFixed(0)}%</p>
+                                  </div>
+                                  <div className="mt-2 grid gap-1 text-[11px]">
+                                    {q.checks.slice(0, 4).map((check) => (
+                                      <p key={check.code} className="text-emerald-300">✓ {check.message}</p>
+                                    ))}
+                                    {q.issues.map((issue) => (
+                                      <p key={issue.code} className={issue.severity === "critical" ? "text-red-300" : "text-amber-300"}>
+                                        ⚠ {issue.message}
+                                      </p>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {!result.error && result.similarity !== null && (() => {
                           const verdict = verdictFor(result);
@@ -966,6 +1033,63 @@ export default function AdminSimilarity() {
                 ))}
               </div>
             )}
+
+            {pairwiseResults.length > 0 && (() => {
+              const valid = pairwiseResults.filter((pair) => Number.isFinite(pair.similarity));
+              const highest = valid[0];
+              const lowest = valid[valid.length - 1];
+              const average = valid.length
+                ? valid.reduce((sum, pair) => sum + pair.similarity, 0) / valid.length
+                : 0;
+
+              return (
+                <section className="rounded-2xl border border-cyan-400/20 bg-[#091018]/90 p-4 sm:p-5">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Todas as combinações</p>
+                      <h2 className="text-xl font-black">Resumo entre todas as fotos</h2>
+                    </div>
+                    <span className="text-xs text-slate-500">{valid.length} combinação(ões)</span>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-3">
+                      <p className="text-[10px] uppercase text-slate-500">Maior similaridade</p>
+                      <p className="mt-1 text-2xl font-black text-emerald-200">{highest?.similarity.toFixed(1) ?? "—"}%</p>
+                    </div>
+                    <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3">
+                      <p className="text-[10px] uppercase text-slate-500">Média</p>
+                      <p className="mt-1 text-2xl font-black text-cyan-200">{average.toFixed(1)}%</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-400/20 bg-amber-500/5 p-3">
+                      <p className="text-[10px] uppercase text-slate-500">Menor similaridade</p>
+                      <p className="mt-1 text-2xl font-black text-amber-200">{lowest?.similarity.toFixed(1) ?? "—"}%</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {valid.map((pair, index) => (
+                      <div key={pair.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                        <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-black">#{index + 1}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <img src={pair.leftPreview} alt="" className="h-9 w-9 rounded-lg object-cover" />
+                            <span className="truncate text-xs text-slate-300">{pair.leftName}</span>
+                            <span className="text-slate-600">×</span>
+                            <img src={pair.rightPreview} alt="" className="h-9 w-9 rounded-lg object-cover" />
+                            <span className="truncate text-xs text-slate-300">{pair.rightName}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-black text-cyan-300">{pair.similarity.toFixed(1)}%</p>
+                          <p className="text-[10px] text-slate-500">{confidenceLabel(pair.reliability)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })()}
 
             {candidates.length === 0 && (
               <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center">
