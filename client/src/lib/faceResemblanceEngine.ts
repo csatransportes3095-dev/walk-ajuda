@@ -1,13 +1,25 @@
 import { LEFT_IRIS, RIGHT_IRIS, type FaceLandmark } from "./faceGeometry";
 
+export type FacePartName = "eyes" | "nose" | "mouth";
+
+export type FacePartDescriptorMap = Record<FacePartName, number[]>;
+
+export type FacePartComparison = {
+  cosine: number;
+  score: number;
+};
+
 export type FaceResemblanceDescriptor = {
   embedding: number[];
   alignedCanvas: HTMLCanvasElement;
+  parts: FacePartDescriptorMap;
 };
 
 export type FaceResemblanceComparison = {
   cosine: number;
   score: number;
+  parts: Record<FacePartName, FacePartComparison>;
+  partMeanScore: number;
 };
 
 type Point2 = { x: number; y: number };
@@ -289,6 +301,40 @@ async function getRuntime(): Promise<FaceXRuntime> {
   return runtimePromise;
 }
 
+const PART_RECTS: Record<FacePartName, { x: number; y: number; w: number; h: number }> = {
+  eyes: { x: 16, y: 36, w: 80, h: 28 },
+  nose: { x: 36, y: 56, w: 40, h: 32 },
+  mouth: { x: 28, y: 80, w: 56, h: 28 },
+};
+
+export function createFacePartCanvas(
+  alignedCanvas: HTMLCanvasElement,
+  part: FacePartName,
+) {
+  const rect = PART_RECTS[part];
+  const output = document.createElement("canvas");
+  output.width = 112;
+  output.height = 112;
+  const ctx = output.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error(`Nao foi possivel preparar a regiao facial ${part}.`);
+
+  // O APK de referencia trabalha com regioes fixas depois do alinhamento
+  // 112x112. Aqui cada regiao e redimensionada para a entrada 112x112 do
+  // mesmo embedder FaceX, sem usar landmarks geometricos no score local.
+  ctx.drawImage(
+    alignedCanvas,
+    rect.x,
+    rect.y,
+    rect.w,
+    rect.h,
+    0,
+    0,
+    112,
+    112,
+  );
+  return output;
+}
+
 async function embedAlignedCanvas(canvas: HTMLCanvasElement) {
   const runtime = await getRuntime();
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -331,7 +377,16 @@ export async function extractFaceResemblanceDescriptor(
 ): Promise<FaceResemblanceDescriptor> {
   const alignedCanvas = createArcFaceAligned112(canvas, landmarks);
   const embedding = await embedAlignedCanvas(alignedCanvas);
-  return { embedding, alignedCanvas };
+  const [eyes, nose, mouth] = await Promise.all([
+    embedAlignedCanvas(createFacePartCanvas(alignedCanvas, "eyes")),
+    embedAlignedCanvas(createFacePartCanvas(alignedCanvas, "nose")),
+    embedAlignedCanvas(createFacePartCanvas(alignedCanvas, "mouth")),
+  ]);
+  return {
+    embedding,
+    alignedCanvas,
+    parts: { eyes, nose, mouth },
+  };
 }
 
 export function compareFaceResemblanceDescriptors(
@@ -339,8 +394,29 @@ export function compareFaceResemblanceDescriptors(
   b: FaceResemblanceDescriptor,
 ): FaceResemblanceComparison {
   const cosine = cosineSimilarity(a.embedding, b.embedding);
+  const parts = {
+    eyes: {
+      cosine: cosineSimilarity(a.parts.eyes, b.parts.eyes),
+      score: 0,
+    },
+    nose: {
+      cosine: cosineSimilarity(a.parts.nose, b.parts.nose),
+      score: 0,
+    },
+    mouth: {
+      cosine: cosineSimilarity(a.parts.mouth, b.parts.mouth),
+      score: 0,
+    },
+  };
+
+  parts.eyes.score = similarityScoreFromCosine(parts.eyes.cosine);
+  parts.nose.score = similarityScoreFromCosine(parts.nose.cosine);
+  parts.mouth.score = similarityScoreFromCosine(parts.mouth.cosine);
+
   return {
     cosine,
     score: similarityScoreFromCosine(cosine),
+    parts,
+    partMeanScore: (parts.eyes.score + parts.nose.score + parts.mouth.score) / 3,
   };
 }
