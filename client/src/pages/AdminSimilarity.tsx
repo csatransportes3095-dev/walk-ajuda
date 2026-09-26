@@ -543,7 +543,7 @@ export default function AdminSimilarity() {
               {masterQuality && (
                 <div className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Qualidade geométrica</span>
+                    <span className="text-slate-400">Qualidade da leitura</span>
                     <strong>{masterQuality.score.toFixed(0)}%</strong>
                   </div>
                   {masterQuality.warnings.length > 0 && (
@@ -660,7 +660,7 @@ export default function AdminSimilarity() {
                 <div className="flex items-end justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
-                    <h2 className="text-xl font-black">Resultado da geometria</h2>
+                    <h2 className="text-xl font-black">Resultado biofacial</h2>
                   </div>
                   <span className="text-xs text-slate-500">Maior similaridade primeiro</span>
                 </div>
@@ -678,7 +678,7 @@ export default function AdminSimilarity() {
                         <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
                           <div>
                             <p className="text-4xl font-black tracking-tight text-cyan-300">{formatScore(result.similarity)}</p>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{scoreLabel(result.similarity)} similaridade geométrica</p>
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{scoreLabel(result.similarity)} compatibilidade biofacial</p>
                           </div>
                           {result.identityScore !== undefined && (
                             <div className="mb-1 rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2">
