@@ -3,7 +3,6 @@ import {
   cosineSimilarity,
   estimateSimilarityTransform,
   similarityScoreFromCosine,
-  calibratedLocalResemblanceScore,
   compareFaceResemblanceDescriptors,
 } from "./faceResemblanceEngine";
 
@@ -35,29 +34,6 @@ describe("standardized 112x112 resemblance engine", () => {
     expect(t.e).toBeCloseTo(5, 8);
     expect(t.f).toBeCloseTo(-3, 8);
   });
-  it("tracks the three supplied Similar Face reference pairs with local facial regions", () => {
-    const ref75 = calibratedLocalResemblanceScore({ eyes: 80.6, nose: 72.5, mouth: 42.6 });
-    const ref71 = calibratedLocalResemblanceScore({ eyes: 82.1, nose: 70.5, mouth: 38.3 });
-    const ref86 = calibratedLocalResemblanceScore({ eyes: 86.2, nose: 77.5, mouth: 62.1 });
-
-    expect(ref75.score).toBeGreaterThanOrEqual(72);
-    expect(ref75.score).toBeLessThanOrEqual(76);
-
-    expect(ref71.score).toBeGreaterThanOrEqual(70);
-    expect(ref71.score).toBeLessThanOrEqual(74);
-
-    expect(ref86.score).toBeGreaterThanOrEqual(84);
-    expect(ref86.score).toBeLessThanOrEqual(88);
-
-    expect(ref86.score).toBeGreaterThan(ref75.score);
-    expect(ref75.score).toBeGreaterThan(ref71.score);
-  });
-
-  it("clamps local calibration to a valid percentage", () => {
-    expect(calibratedLocalResemblanceScore({ eyes: 0, nose: 0, mouth: 0 }).score).toBe(0);
-    expect(calibratedLocalResemblanceScore({ eyes: 100, nose: 100, mouth: 100 }).score).toBe(100);
-  });
-
   it("compares FaceX eye nose and mouth embeddings independently", () => {
     const a = {
       embedding: [1, 0, 0],
@@ -86,6 +62,26 @@ describe("standardized 112x112 resemblance engine", () => {
       (result.parts.eyes.score + result.parts.nose.score + result.parts.mouth.score) / 3,
       10,
     );
+  });
+
+  it("keeps the whole-face score independent of local eye nose and mouth diagnostics", () => {
+    const a = {
+      embedding: [1, 0, 0],
+      alignedCanvas: null as unknown as HTMLCanvasElement,
+      parts: { eyes: [1, 0, 0], nose: [1, 0, 0], mouth: [1, 0, 0] },
+    };
+    const b = {
+      embedding: [0.4, Math.sqrt(0.84), 0],
+      alignedCanvas: null as unknown as HTMLCanvasElement,
+      parts: { eyes: [0, 1, 0], nose: [0, 1, 0], mouth: [0, 1, 0] },
+    };
+    const first = compareFaceResemblanceDescriptors(a, b);
+    b.parts.eyes = [1, 0, 0];
+    b.parts.nose = [1, 0, 0];
+    b.parts.mouth = [1, 0, 0];
+    const second = compareFaceResemblanceDescriptors(a, b);
+    expect(first.score).toBeCloseTo(second.score, 10);
+    expect(first.partMeanScore).not.toBeCloseTo(second.partMeanScore, 3);
   });
 
 });

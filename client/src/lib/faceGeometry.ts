@@ -245,9 +245,14 @@ function bestRotation(master: FaceLandmark[], candidate: FaceLandmark[], indices
     [sxy-syx, szx+sxz, syz+szy, -sxx-syy+szz],
   ];
 
+  // O metodo das potencias seleciona o autovalor de maior modulo. A matriz
+  // de Horn tambem pode ter um autovalor negativo de modulo maior, gerando
+  // uma rotacao errada ate para a mesma face apenas girada. Deslocar a
+  // diagonal preserva os autovetores e seleciona o maior autovalor positivo.
+  const shift = Math.max(...n.map((row) => row.reduce((sum, value) => sum + Math.abs(value), 0))) + 1;
   let q = [1,0,0,0];
-  for (let iter=0; iter<40; iter++) {
-    const next = n.map((row) => row.reduce((sum, value, j) => sum + value*q[j], 0));
+  for (let iter=0; iter<80; iter++) {
+    const next = n.map((row, i) => row.reduce((sum, value, j) => sum + value*q[j], shift*q[i]));
     const norm = Math.hypot(...next) || 1;
     q = next.map((v) => v / norm);
   }

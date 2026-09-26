@@ -6,7 +6,7 @@ import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, ty
 import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
 import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } from "@/lib/faceQuality";
 import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
-import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, calibratedLocalResemblanceScore, type FaceResemblanceDescriptor, type FacePartComparison } from "@/lib/faceResemblanceEngine";
+import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, type FaceResemblanceDescriptor, type FacePartComparison } from "@/lib/faceResemblanceEngine";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 
 type CandidatePhoto = {
@@ -29,7 +29,6 @@ type ComparisonResult = {
   identityDistance?: number | null;
   engineLabel?: string;
   faceXGlobalScore?: number;
-  localCoreScore?: number;
   faceXPartScores?: Record<"eyes" | "nose" | "mouth", FacePartComparison>;
   faceXPartMean?: number;
   verdict?: MatchVerdict;
@@ -299,7 +298,7 @@ function verdictFor(result: ComparisonResult) {
 
 const H2_LOGO = "/h2-brand-192.png";
 
-function qualifiesForGoodUse(result: ComparisonResult) {
+function meetsH2Preference(result: ComparisonResult) {
   return (result.similarity ?? 0) >= 86 && (result.reliability ?? 0) >= 60;
 }
 
@@ -320,8 +319,8 @@ export default function AdminSimilarity() {
   const rankedResults = useMemo(
     () =>
       [...results].sort((a, b) => {
-        const aPreferred = qualifiesForGoodUse(a) ? 1 : 0;
-        const bPreferred = qualifiesForGoodUse(b) ? 1 : 0;
+        const aPreferred = meetsH2Preference(a) ? 1 : 0;
+        const bPreferred = meetsH2Preference(b) ? 1 : 0;
 
         // Preferências pulsantes sempre aparecem primeiro.
         if (aPreferred !== bPreferred) return bPreferred - aPreferred;
@@ -532,7 +531,6 @@ export default function AdminSimilarity() {
           let primaryScore: number | undefined;
           let primaryCosine: number | undefined;
           let faceXGlobalScore: number | undefined;
-          let localCoreScore: number | undefined;
           let faceXPartScores: Record<"eyes" | "nose" | "mouth", FacePartComparison> | undefined;
           let faceXPartMean: number | undefined;
           let engineLabel = "Fallback atual";
@@ -547,18 +545,12 @@ export default function AdminSimilarity() {
                 masterResemblance,
                 candidateResemblance,
               );
-              const localCalibration = calibratedLocalResemblanceScore({
-                eyes: comparison.regions.eyes,
-                nose: comparison.regions.nose,
-                mouth: comparison.regions.mouth,
-              });
-              primaryScore = localCalibration.score;
-              localCoreScore = localCalibration.coreMean;
+              primaryScore = standardized.score;
               faceXGlobalScore = standardized.score;
               faceXPartScores = standardized.parts;
               faceXPartMean = standardized.partMeanScore;
               primaryCosine = standardized.cosine;
-              engineLabel = "Calibrado • Olhos + Nariz + Boca";
+              engineLabel = "FaceX • rosto inteiro 112×112";
             } catch (error) {
               console.warn("Falha no motor 112x112 para esta foto; usando fallback:", error);
             }
@@ -645,7 +637,6 @@ export default function AdminSimilarity() {
             identityDistance: primaryCosine !== undefined ? null : identityComparison?.distance ?? null,
             engineLabel,
             faceXGlobalScore,
-            localCoreScore,
             faceXPartScores,
             faceXPartMean,
             verdict: decision.verdict,
@@ -688,12 +679,7 @@ export default function AdminSimilarity() {
 
             if (left.resemblance && right.resemblance) {
               const standardized = compareFaceResemblanceDescriptors(left.resemblance, right.resemblance);
-              const localCalibration = calibratedLocalResemblanceScore({
-                eyes: pairGeometry.regions.eyes,
-                nose: pairGeometry.regions.nose,
-                mouth: pairGeometry.regions.mouth,
-              });
-              pairPrimaryScore = localCalibration.score;
+              pairPrimaryScore = standardized.score;
               pairRawSimilarity = Math.max(0, standardized.cosine);
             } else {
               const leftIdentity = left.identity ?? await extractIdentityDescriptor(
@@ -812,7 +798,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. A porcentagem principal usa calibração local de olhos, nariz e boca, apoiada por alinhamento 112×112 e embedding FaceX 512D. O cosseno global, geometria, qualidade e crítico técnico permanecem como diagnósticos separados.
+                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. O índice principal usa o rosto inteiro alinhado em 112×112 e o embedding FaceX 512D. Olhos, nariz, boca, geometria e qualidade são diagnósticos separados. A escala é própria do H2 e não equivale à porcentagem de outros aplicativos.
               </p>
             </div>
           </div>
@@ -1024,13 +1010,13 @@ export default function AdminSimilarity() {
                 {rankedResults.map((result, index) => (
                   <article
                     key={result.id}
-                    className={`overflow-hidden rounded-2xl border bg-white/[0.035] transition-shadow ${qualifiesForGoodUse(result) ? "h2-good-use-card border-cyan-300/60" : "border-white/10"}`}
+                    className={`overflow-hidden rounded-2xl border bg-white/[0.035] transition-shadow ${meetsH2Preference(result) ? "h2-good-use-card border-cyan-300/60" : "border-white/10"}`}
                   >
-                    {qualifiesForGoodUse(result) && (
+                    {meetsH2Preference(result) && (
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-300/25 bg-gradient-to-r from-emerald-500/15 via-cyan-400/10 to-emerald-500/15 px-4 py-2.5">
                         <div className="h2-good-use-badge flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
                           <ShieldCheck className="h-4 w-4 text-cyan-300" />
-                          % BOA PARA USO
+                          ÍNDICE H2 ≥ 86%
                         </div>
                         <div className="text-[11px] font-bold text-cyan-100/85">
                           Final {formatScore(result.similarity)} • Crítico técnico {result.criticalMean?.toFixed(1)}%
@@ -1133,7 +1119,7 @@ export default function AdminSimilarity() {
                               <p className="mt-1 text-[10px] opacity-65">
                                 {result.identityRaw !== undefined
   ? result.faceXGlobalScore !== undefined
-    ? `FaceX global: ${result.faceXGlobalScore.toFixed(1)}% • Cosseno: ${result.identityRaw.toFixed(3)} • Geometria local antiga: ${result.localCoreScore?.toFixed(1) ?? "—"}% • `
+    ? `FaceX global: ${result.faceXGlobalScore.toFixed(1)}% • Cosseno: ${result.identityRaw.toFixed(3)} • `
     : `Embedding de apoio: ${(result.identityRaw * 100).toFixed(1)}% • `
   : ""}
                                 {result.criticalFloor !== undefined ? `Elo geométrico: ${result.criticalFloor.toFixed(1)}%` : ""}
