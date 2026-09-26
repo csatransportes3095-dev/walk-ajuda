@@ -169,7 +169,8 @@ async function extractModelsFromXapk(file: File) {
 
 async function loadTfliteModel(bytes: Uint8Array) {
   const { tflite } = await getModules();
-  const blob = new Blob([bytes], { type: "application/octet-stream" });
+  const ownedBytes = Uint8Array.from(bytes);
+  const blob = new Blob([ownedBytes.buffer], { type: "application/octet-stream" });
   const url = URL.createObjectURL(blob);
   try {
     return await tflite.loadTFLiteModel(url, { numThreads: 1 }) as TfliteModelLike;
