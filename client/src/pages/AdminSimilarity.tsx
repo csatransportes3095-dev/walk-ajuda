@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { AlertTriangle, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +8,8 @@ import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } f
 import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
 import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, type FaceResemblanceDescriptor, type FacePartComparison } from "@/lib/faceResemblanceEngine";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
+import { loadCachedSimilarFaceRuntime, loadSimilarFaceRuntimeFromXapk, clearCachedSimilarFaceRuntime, type SimilarFaceRuntime } from "@/lib/similarFaceTfliteRuntime";
+import { cosineSimilarity512, similarFaceScorePercent } from "@/lib/similarFaceReference";
 
 type CandidatePhoto = {
   id: string;
@@ -31,6 +33,7 @@ type ComparisonResult = {
   faceXGlobalScore?: number;
   faceXPartScores?: Record<"eyes" | "nose" | "mouth", FacePartComparison>;
   faceXPartMean?: number;
+  referenceEngine?: boolean;
   verdict?: MatchVerdict;
   verdictDetail?: string;
   regions?: RegionScores;
@@ -57,6 +60,7 @@ type AnalyzedFaceForPairs = {
   detected: DetectedFace;
   identity: FaceIdentityDescriptor | null;
   resemblance: FaceResemblanceDescriptor | null;
+  referenceEmbedding?: Float32Array | null;
 };
 
 type ImageQuality = {
@@ -281,10 +285,18 @@ function verdictFor(result: ComparisonResult) {
     return { label: "INCONCLUSIVO", detail: result.error || "Não houve leitura suficiente para comparar.", tone: "text-slate-300 border-white/10 bg-white/5" };
   }
 
+  if (result.referenceEngine) {
+    return {
+      label: "SIMILAR FACE 1.0.27 • REFERÊNCIA LOCAL",
+      detail: "Percentual calculado pelo pipeline TFLite de referência carregado localmente. Geometria e qualidade abaixo são apenas diagnósticos e não alteram esse percentual.",
+      tone: "text-emerald-200 border-emerald-400/20 bg-emerald-500/5",
+    };
+  }
+
   if (result.faceXGlobalScore !== undefined) {
     return {
       label: "ÍNDICE H2 • SEM APROVAÇÃO AUTOMÁTICA",
-      detail: "O índice mede a proximidade segundo o motor H2. Ele não confirma que a foto é adequada e ainda não foi calibrado para reproduzir outros aplicativos.",
+      detail: "O índice mede a proximidade segundo o motor H2. Ele não confirma que a foto é adequada.",
       tone: "text-cyan-200 border-cyan-400/20 bg-cyan-500/5",
     };
   }
@@ -310,6 +322,7 @@ export default function AdminSimilarity() {
   const masterInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const xapkInputRef = useRef<HTMLInputElement>(null);
 
   const [masterFile, setMasterFile] = useState<File | null>(null);
   const [masterPreview, setMasterPreview] = useState<string | null>(null);
@@ -319,6 +332,54 @@ export default function AdminSimilarity() {
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, name: "" });
   const [masterQuality, setMasterQuality] = useState<{ score: number; warnings: string[]; imageScore: number; capture: FaceCaptureQuality } | null>(null);
+  const [similarRuntime, setSimilarRuntime] = useState<SimilarFaceRuntime | null>(null);
+  const [runtimeLoading, setRuntimeLoading] = useState(true);
+  const [runtimeMessage, setRuntimeMessage] = useState("Verificando motor de referência...");
+
+  useEffect(() => {
+    let active = true;
+    loadCachedSimilarFaceRuntime()
+      .then((runtime) => {
+        if (!active) return;
+        setSimilarRuntime(runtime);
+        setRuntimeMessage(runtime ? runtime.sourceLabel : "Motor Similar Face ainda não carregado.");
+      })
+      .catch(() => {
+        if (!active) return;
+        setRuntimeMessage("Motor Similar Face ainda não carregado.");
+      })
+      .finally(() => {
+        if (active) setRuntimeLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const loadXapk = async (file?: File) => {
+    if (!file) return;
+    setRuntimeLoading(true);
+    setRuntimeMessage("Extraindo e inicializando o Similar Face...");
+    try {
+      const runtime = await loadSimilarFaceRuntimeFromXapk(file);
+      setSimilarRuntime(runtime);
+      setRuntimeMessage(runtime.sourceLabel);
+      toast.success("Motor Similar Face carregado e salvo no cache local.");
+    } catch (error: any) {
+      setSimilarRuntime(null);
+      setRuntimeMessage(error?.message || "Falha ao carregar o XAPK.");
+      toast.error(error?.message || "Falha ao carregar o XAPK.");
+    } finally {
+      setRuntimeLoading(false);
+    }
+  };
+
+  const resetReferenceRuntime = async () => {
+    await clearCachedSimilarFaceRuntime();
+    setSimilarRuntime(null);
+    setRuntimeMessage("Motor Similar Face ainda não carregado.");
+    toast.success("Cache local do motor Similar Face removido.");
+  };
 
   const rankedResults = useMemo(
     () =>
@@ -444,21 +505,37 @@ export default function AdminSimilarity() {
       };
       setMasterQuality(masterQ);
 
-      if (masterQ.score < 45) {
+      if (masterQ.score < 45 && !similarRuntime) {
         toast.error("A Foto Mestre está com qualidade insuficiente. Use uma foto mais nítida, frontal e bem iluminada.");
         return;
+      }
+      if (masterQ.score < 45 && similarRuntime) {
+        toast.warning("Qualidade H2 baixa na Foto Mestre; o Similar Face continuará a leitura de referência.");
+      }
+
+      let masterReferenceEmbedding: Float32Array | null = null;
+      if (similarRuntime) {
+        setProgress({ current: 0, total: candidates.length, name: "Similar Face 1.0.27 • Foto Mestre" });
+        try {
+          masterReferenceEmbedding = await similarRuntime.embedFile(masterFile);
+        } catch (error: any) {
+          console.warn("Motor Similar Face indisponível para a Foto Mestre:", error);
+          toast.warning("Motor Similar Face falhou nesta leitura. Usando o motor H2 atual como fallback.");
+        }
       }
 
       setProgress({ current: 0, total: candidates.length, name: "Carregando motor facial 112×112..." });
       let masterResemblance: FaceResemblanceDescriptor | null = null;
-      try {
-        masterResemblance = await extractFaceResemblanceDescriptor(
-          masterDetected.canvas,
-          masterDetected.landmarks,
-        );
-      } catch (error: any) {
-        console.warn("Motor 112x112 indisponível; usando fallback:", error);
-        toast.warning("Motor 112×112 indisponível neste navegador. Usando fallback atual.");
+      if (!masterReferenceEmbedding) {
+        try {
+          masterResemblance = await extractFaceResemblanceDescriptor(
+            masterDetected.canvas,
+            masterDetected.landmarks,
+          );
+        } catch (error: any) {
+          console.warn("Motor 112x112 indisponível; usando fallback:", error);
+          toast.warning("Motor 112×112 indisponível neste navegador. Usando fallback atual.");
+        }
       }
 
       let masterIdentity: FaceIdentityDescriptor | null = null;
@@ -473,7 +550,7 @@ export default function AdminSimilarity() {
         return masterIdentity;
       };
 
-      if (!masterResemblance) {
+      if (!masterReferenceEmbedding && !masterResemblance) {
         try {
           await ensureMasterIdentity();
         } catch (error: any) {
@@ -491,6 +568,7 @@ export default function AdminSimilarity() {
           detected: masterDetected,
           identity: masterIdentity,
           resemblance: masterResemblance,
+          referenceEmbedding: masterReferenceEmbedding,
         },
       ];
 
@@ -533,7 +611,24 @@ export default function AdminSimilarity() {
           let faceXPartMean: number | undefined;
           let engineLabel = "Fallback atual";
 
-          if (masterResemblance) {
+          let candidateReferenceEmbedding: Float32Array | null = null;
+          let referenceEngine = false;
+
+          if (similarRuntime && masterReferenceEmbedding) {
+            try {
+              setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • Similar Face 1.0.27` });
+              candidateReferenceEmbedding = await similarRuntime.embedFile(candidate.file);
+              primaryCosine = cosineSimilarity512(masterReferenceEmbedding, candidateReferenceEmbedding);
+              primaryScore = similarFaceScorePercent(primaryCosine);
+              faceXGlobalScore = primaryScore;
+              engineLabel = "Similar Face 1.0.27 • TFLite local";
+              referenceEngine = true;
+            } catch (error) {
+              console.warn("Falha no Similar Face para esta foto; usando fallback H2:", error);
+            }
+          }
+
+          if (primaryScore === undefined && masterResemblance) {
             try {
               candidateResemblance = await extractFaceResemblanceDescriptor(
                 candidateDetected.canvas,
@@ -574,6 +669,7 @@ export default function AdminSimilarity() {
             detected: candidateDetected,
             identity: candidateIdentity,
             resemblance: candidateResemblance,
+            referenceEmbedding: candidateReferenceEmbedding,
           });
 
           const rawForDecision = primaryCosine !== undefined
@@ -607,7 +703,7 @@ export default function AdminSimilarity() {
             reliability,
           });
 
-          if (reliability < 40) {
+          if (reliability < 40 && !referenceEngine) {
             nextResults.push({
               id: candidate.id,
               name: candidate.file.name,
@@ -625,7 +721,7 @@ export default function AdminSimilarity() {
             id: candidate.id,
             name: candidate.file.name,
             preview: candidate.preview,
-            similarity: decision.finalScore,
+            similarity: referenceEngine && primaryScore !== undefined ? primaryScore : decision.finalScore,
             reliability,
             criticalFloor: comparison.criticalFloor,
             criticalMean: comparison.criticalMean,
@@ -637,6 +733,7 @@ export default function AdminSimilarity() {
             faceXGlobalScore,
             faceXPartScores,
             faceXPartMean,
+            referenceEngine,
             verdict: decision.verdict,
             verdictDetail: decision.detail,
             regions: comparison.regions,
@@ -675,7 +772,10 @@ export default function AdminSimilarity() {
             let pairPrimaryScore: number | undefined;
             let pairRawSimilarity = 0;
 
-            if (left.resemblance && right.resemblance) {
+            if (left.referenceEmbedding && right.referenceEmbedding) {
+              pairRawSimilarity = Math.max(0, cosineSimilarity512(left.referenceEmbedding, right.referenceEmbedding));
+              pairPrimaryScore = similarFaceScorePercent(pairRawSimilarity);
+            } else if (left.resemblance && right.resemblance) {
               const standardized = compareFaceResemblanceDescriptors(left.resemblance, right.resemblance);
               pairPrimaryScore = standardized.score;
               pairRawSimilarity = Math.max(0, standardized.cosine);
@@ -725,7 +825,9 @@ export default function AdminSimilarity() {
               rightName: right.name,
               leftPreview: left.preview,
               rightPreview: right.preview,
-              similarity: pairDecision.finalScore,
+              similarity: pairPrimaryScore !== undefined && left.referenceEmbedding && right.referenceEmbedding
+                ? pairPrimaryScore
+                : pairDecision.finalScore,
               reliability: pairReliability,
             });
           }
@@ -777,7 +879,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. O índice principal usa o rosto inteiro alinhado em 112×112 e o embedding FaceX 512D. Olhos, nariz, boca, geometria e qualidade são diagnósticos separados. A escala é própria do H2 e não equivale à porcentagem de outros aplicativos.
+                As fotos continuam processadas localmente. Quando o XAPK de referência está carregado, o índice principal usa o detector e reconhecedor TFLite do Similar Face 1.0.27, com alinhamento 112×112 e embedding 512D. Se o motor de referência não estiver disponível, o H2 mantém o FaceX atual como fallback.
               </p>
             </div>
           </div>
@@ -852,6 +954,48 @@ export default function AdminSimilarity() {
             <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Comparação</p>
               <h2 className="mt-1 text-lg font-black">Fotos para comparar</h2>
+
+              <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.05] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">Motor de referência</p>
+                    <p className="mt-1 text-xs text-slate-300">{runtimeLoading ? "Inicializando..." : runtimeMessage}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={runtimeLoading}
+                      onClick={() => xapkInputRef.current?.click()}
+                      className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-100 hover:bg-emerald-400/15 disabled:opacity-40"
+                    >
+                      {similarRuntime ? "Trocar XAPK" : "Carregar XAPK"}
+                    </button>
+                    {similarRuntime && (
+                      <button
+                        type="button"
+                        disabled={runtimeLoading}
+                        onClick={resetReferenceRuntime}
+                        className="rounded-lg border border-red-400/25 bg-red-400/5 px-3 py-2 text-xs font-black text-red-200 hover:bg-red-400/10 disabled:opacity-40"
+                      >
+                        Limpar motor
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  ref={xapkInputRef}
+                  type="file"
+                  accept=".xapk,application/zip"
+                  className="hidden"
+                  onChange={(e) => {
+                    loadXapk(e.target.files?.[0]);
+                    e.currentTarget.value = "";
+                  }}
+                />
+                <p className="mt-2 text-[10px] leading-4 text-slate-500">
+                  O XAPK é lido somente no navegador. Os modelos ficam no cache local deste dispositivo e não são enviados ao servidor nem gravados no GitHub.
+                </p>
+              </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
@@ -1002,11 +1146,11 @@ export default function AdminSimilarity() {
                         <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
                           <div>
                             <p className="text-4xl font-black tracking-tight text-cyan-300">{formatScore(result.similarity)}</p>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "Similar Face 1.0.27 • referência local" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
                           </div>
                           {result.identityScore !== undefined && (
                             <div className="mb-1 rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2">
-                              <p className="text-[10px] uppercase text-slate-500">{result.faceXGlobalScore !== undefined ? "FaceX global 112×112" : (result.engineLabel || "Apoio facial")}</p>
+                              <p className="text-[10px] uppercase text-slate-500">{result.engineLabel || (result.faceXGlobalScore !== undefined ? "FaceX global 112×112" : "Apoio facial")}</p>
                               <p className="text-sm font-black text-emerald-200">{result.identityScore.toFixed(1)}%</p>
                             </div>
                           )}
@@ -1087,7 +1231,7 @@ export default function AdminSimilarity() {
                               <p className="mt-1 text-[10px] opacity-65">
                                 {result.identityRaw !== undefined
   ? result.faceXGlobalScore !== undefined
-    ? `FaceX global: ${result.faceXGlobalScore.toFixed(1)}% • Cosseno: ${result.identityRaw.toFixed(3)} • `
+    ? `${result.referenceEngine ? "Similar Face" : "FaceX global"}: ${result.faceXGlobalScore.toFixed(1)}% • Cosseno: ${result.identityRaw.toFixed(3)} • `
     : `Embedding de apoio: ${(result.identityRaw * 100).toFixed(1)}% • `
   : ""}
                                 {result.criticalFloor !== undefined ? `Elo geométrico: ${result.criticalFloor.toFixed(1)}%` : ""}
