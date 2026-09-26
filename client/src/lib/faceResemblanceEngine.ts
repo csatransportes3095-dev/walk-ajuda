@@ -95,7 +95,11 @@ function sourceFivePoints(canvas: HTMLCanvasElement, landmarks: FaceLandmark[]):
     throw new Error("Landmarks insuficientes para alinhamento facial 112x112.");
   }
 
-  return normalized.map((point) => ({
+  const eyes = [leftEye, rightEye].sort((a, b) => a.x - b.x);
+  const mouth = [leftMouth, rightMouth].sort((a, b) => a.x - b.x);
+  const imageOrdered = [eyes[0], eyes[1], nose, mouth[0], mouth[1]];
+
+  return imageOrdered.map((point) => ({
     x: point.x * canvas.width,
     y: point.y * canvas.height,
   }));
