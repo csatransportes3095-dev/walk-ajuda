@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { AlertTriangle, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
+import { FACE_OVAL, compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
 import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 
@@ -44,6 +44,7 @@ type DetectedFace = {
   aspectRatio: number;
   imageQuality: ImageQuality;
   canvas: HTMLCanvasElement;
+  identityCanvas: HTMLCanvasElement;
 };
 
 type FaceLandmarkerInstance = {
@@ -205,6 +206,62 @@ async function fileToCanvas(file: File) {
   };
 }
 
+function createFaceOnlyCanvas(canvas: HTMLCanvasElement, landmarks: FaceLandmark[]) {
+  const oval = FACE_OVAL.map((index) => landmarks[index]).filter(Boolean);
+  if (oval.length < 20) return canvas;
+
+  const xs = oval.map((p) => p.x);
+  const ys = oval.map((p) => p.y);
+  const minXn = Math.max(0, Math.min(...xs));
+  const maxXn = Math.min(1, Math.max(...xs));
+  const minYn = Math.max(0, Math.min(...ys));
+  const maxYn = Math.min(1, Math.max(...ys));
+
+  // Padding mínimo: mantém a borda da face sem trazer cabelo, orelha ou fundo.
+  const padXn = (maxXn - minXn) * 0.035;
+  const padYn = (maxYn - minYn) * 0.03;
+  const x1n = Math.max(0, minXn - padXn);
+  const x2n = Math.min(1, maxXn + padXn);
+  const y1n = Math.max(0, minYn - padYn);
+  const y2n = Math.min(1, maxYn + padYn);
+
+  const sx = Math.floor(x1n * canvas.width);
+  const sy = Math.floor(y1n * canvas.height);
+  const sw = Math.max(1, Math.ceil((x2n - x1n) * canvas.width));
+  const sh = Math.max(1, Math.ceil((y2n - y1n) * canvas.height));
+
+  const maxSide = 640;
+  const scale = Math.min(1, maxSide / Math.max(sw, sh));
+  const output = document.createElement("canvas");
+  output.width = Math.max(192, Math.round(sw * scale));
+  output.height = Math.max(192, Math.round(sh * scale));
+
+  const ctx = output.getContext("2d");
+  if (!ctx) return canvas;
+
+  // Fundo neutro uniforme: nenhum pixel do cenário original participa.
+  ctx.fillStyle = "rgb(127,127,127)";
+  ctx.fillRect(0, 0, output.width, output.height);
+
+  const scaleX = output.width / sw;
+  const scaleY = output.height / sh;
+
+  ctx.save();
+  ctx.beginPath();
+  oval.forEach((point, index) => {
+    const x = (point.x * canvas.width - sx) * scaleX;
+    const y = (point.y * canvas.height - sy) * scaleY;
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, output.width, output.height);
+  ctx.restore();
+
+  return output;
+}
+
 async function detectFace(file: File): Promise<DetectedFace | null> {
   const model = await getFaceLandmarker();
   const prepared = await fileToCanvas(file);
@@ -218,11 +275,14 @@ async function detectFace(file: File): Promise<DetectedFace | null> {
   const face = faces[0];
   if (!face || face.length < 468) return null;
 
+  const landmarks = face.slice(0, Math.min(478, face.length));
+
   return {
-    landmarks: face.slice(0, Math.min(478, face.length)),
+    landmarks,
     aspectRatio: prepared.aspectRatio,
     imageQuality: calculateImageQuality(prepared.canvas, face),
     canvas: prepared.canvas,
+    identityCanvas: createFaceOnlyCanvas(prepared.canvas, landmarks),
   };
 }
 
@@ -366,7 +426,7 @@ export default function AdminSimilarity() {
       setProgress({ current: 0, total: candidates.length, name: "Gerando vetor facial da Foto Mestre..." });
       let masterIdentity: FaceIdentityDescriptor;
       try {
-        masterIdentity = await extractIdentityDescriptor(masterDetected.canvas);
+        masterIdentity = await extractIdentityDescriptor(masterDetected.identityCanvas);
       } catch (error: any) {
         toast.error(error?.message || "Não foi possível gerar o vetor facial da Foto Mestre.");
         return;
@@ -405,7 +465,7 @@ export default function AdminSimilarity() {
           );
 
           setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • vetor facial` });
-          const candidateIdentity = await extractIdentityDescriptor(candidateDetected.canvas);
+          const candidateIdentity = await extractIdentityDescriptor(candidateDetected.identityCanvas);
           const identityComparison = await compareIdentityDescriptors(masterIdentity, candidateIdentity);
 
           const reliability = clamp(Math.min(masterQ.score, candidateCombinedQuality) * 0.72 + ((masterQ.score + candidateCombinedQuality) / 2) * 0.28);
@@ -414,6 +474,10 @@ export default function AdminSimilarity() {
             geometrySimilarity: comparison.similarity,
             geometryCriticalMean: comparison.criticalMean,
             geometryCriticalFloor: comparison.criticalFloor,
+            noseScore: comparison.regions.nose,
+            jawScore: comparison.regions.jaw,
+            chinScore: comparison.regions.chin,
+            measurementsScore: comparison.regions.measurements,
             reliability,
           });
 
@@ -482,7 +546,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. A comparação roda localmente e combina vetor facial (embedding) como prova principal com até 478 pontos 3D como conferência geométrica. O resultado indica compatibilidade biométrica e não deve ser tratado como prova absoluta de identidade.
+                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. Antes do vetor facial, o sistema mascara tudo fora do oval real da face: fundo, cabelo e orelhas ficam com peso zero. A comparação combina embedding facial com medidas de olhos, sobrancelhas, nariz, boca, bochechas, maxilar, queixo e proporções 3D.
               </p>
             </div>
           </div>
@@ -727,15 +791,19 @@ export default function AdminSimilarity() {
                     </div>
 
                     {result.regions && (
-                      <div className="grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-4 lg:grid-cols-9">
+                      <div className="grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-4 xl:grid-cols-7">
                         {[
                           ["Global", result.regions.global],
                           ["Olhos", result.regions.eyes],
                           ["Sobrancelhas", result.regions.brows],
                           ["Nariz", result.regions.nose],
-                          ["Maxilar / oval", result.regions.oval],
+                          ["Oval facial", result.regions.oval],
+                          ["Bochechas", result.regions.cheeks],
+                          ["Maxilar", result.regions.jaw],
+                          ["Queixo", result.regions.chin],
                           ["Boca", result.regions.mouth],
                           ["Proporções", result.regions.proportions],
+                          ["Medidas exatas", result.regions.measurements],
                           ["Simetria", result.regions.symmetry],
                           ["Estrutura", result.regions.structure],
                         ].map(([label, value]) => (
