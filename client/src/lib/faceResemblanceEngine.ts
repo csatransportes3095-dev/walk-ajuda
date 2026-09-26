@@ -26,11 +26,9 @@ type FaceXRuntime = {
   embedFn: (handle: number, inputPtr: number, outputPtr: number) => number;
 };
 
-const FACEX_COMMIT = "af7ca9937705a10901ca4b72c4eb19ef49a4ac53";
-const FACEX_SCRIPT_URL =
-  `https://cdn.jsdelivr.net/gh/facex-engine/facex@${FACEX_COMMIT}/wasm/facex.js`;
-const FACEX_WEIGHT_URL =
-  "https://github.com/facex-engine/facex/releases/download/v1.0.0/edgeface_xs_fp32.bin";
+const FACEX_SCRIPT_URL = "/face-model/facex.js";
+const FACEX_WASM_URL = "/face-model/facex.wasm";
+const FACEX_WEIGHT_URL = "/face-model/edgeface_xs_fp32.bin";
 
 const TARGET_5PT: Point2[] = [
   { x: 38.2946, y: 51.6963 },
@@ -198,7 +196,7 @@ function loadScriptOnce(url: string) {
 }
 
 async function loadWeightsCached(url: string) {
-  const key = "h2-facex-xs-v1";
+  const key = "h2-facex-xs-v2";
   try {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open("h2-face-model-cache", 1);
@@ -246,7 +244,9 @@ async function getRuntime(): Promise<FaceXRuntime> {
         throw new Error("Motor FaceX indisponivel no navegador.");
       }
 
-      const module: FaceXModuleInstance = await factory();
+      const module: FaceXModuleInstance = await factory({
+        locateFile: (file: string) => file === "facex.wasm" ? FACEX_WASM_URL : file,
+      });
       const weights = await loadWeightsCached(FACEX_WEIGHT_URL);
       module.FS.writeFile("/h2-face.bin", weights);
 
