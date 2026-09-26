@@ -1,3 +1,5 @@
+import { calculateBiofacialConsensus } from "./biofacialConsensus";
+
 export type MatchVerdict =
   | "strong"
   | "near"
@@ -14,12 +16,21 @@ export type FaceMatchDecisionInput = {
   jawScore?: number;
   chinScore?: number;
   measurementsScore?: number;
+  globalScore?: number;
+  eyesScore?: number;
+  ovalScore?: number;
+  cheeksScore?: number;
+  proportionsScore?: number;
+  structureScore?: number;
+  symmetryScore?: number;
   reliability: number;
 };
 
 export type FaceMatchDecision = {
   finalScore: number;
   identityScore: number;
+  geometryConsensusScore: number;
+  morphologyScore: number;
   verdict: MatchVerdict;
   detail: string;
   identityRawSimilarity: number;
@@ -45,91 +56,89 @@ export function calibrateIdentitySimilarity(raw: number) {
 
 export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecision {
   const raw = Math.max(0, Math.min(1, input.identityRawSimilarity));
-  const identityScore = calibrateIdentitySimilarity(raw);
   const geometry = clamp(input.geometrySimilarity);
   const criticalMean = clamp(input.geometryCriticalMean);
   const criticalFloor = clamp(input.geometryCriticalFloor);
+  const reliability = clamp(input.reliability);
+
   const nose = clamp(input.noseScore ?? criticalMean);
   const jaw = clamp(input.jawScore ?? criticalMean);
   const chin = clamp(input.chinScore ?? criticalMean);
   const measurements = clamp(input.measurementsScore ?? criticalMean);
-  const reliability = clamp(input.reliability);
 
-  // Identidade é a prova principal; geometria é confirmação secundária.
-  let finalScore = identityScore * 0.82 + geometry * 0.18;
+  const consensus = calculateBiofacialConsensus({
+    embeddingRaw: raw,
+    geometryScore: geometry,
+    criticalMean,
+    globalScore: clamp(input.globalScore ?? criticalMean),
+    eyesScore: clamp(input.eyesScore ?? criticalMean),
+    noseScore: nose,
+    ovalScore: clamp(input.ovalScore ?? criticalMean),
+    cheeksScore: clamp(input.cheeksScore ?? criticalMean),
+    jawScore: jaw,
+    chinScore: chin,
+    proportionsScore: clamp(input.proportionsScore ?? criticalMean),
+    measurementsScore: measurements,
+    structureScore: clamp(input.structureScore ?? criticalMean),
+    symmetryScore: clamp(input.symmetryScore ?? criticalMean),
+  });
 
-  // Vetor facial baixo impõe teto. Uma geometria "bonita" nunca pode carregar
-  // sozinha duas pessoas diferentes para 80-90%.
-  if (raw < 0.38) finalScore = Math.min(finalScore, 25);
-  else if (raw < 0.44) finalScore = Math.min(finalScore, 34);
-  else if (raw < 0.48) finalScore = Math.min(finalScore, 44);
-  else if (raw < 0.52) finalScore = Math.min(finalScore, 55);
-  else if (raw < 0.58) finalScore = Math.min(finalScore, 68);
-  else if (raw < 0.64) finalScore = Math.min(finalScore, 80);
-  else if (raw < 0.70) finalScore = Math.min(finalScore, 89);
-
-  // Travas faciais explícitas: nariz, maxilar, queixo e medidas exatas são
-  // estruturas discriminantes e não podem ser escondidas por uma média global.
-  const structuralWeak = [nose, jaw, chin, measurements].filter((score) => score < 45).length;
-  const structuralSevere = [nose, jaw, chin, measurements].filter((score) => score < 32).length;
-
-  if (structuralSevere >= 2) finalScore = Math.min(finalScore, 38);
-  else if (structuralSevere === 1 && structuralWeak >= 2) finalScore = Math.min(finalScore, 50);
-
-  if (structuralWeak >= 3) finalScore = Math.min(finalScore, 46);
-  else if (structuralWeak >= 2) finalScore = Math.min(finalScore, 58);
-
-  if (jaw < 35 && chin < 35) finalScore = Math.min(finalScore, 42);
-  if (nose < 35 && measurements < 45) finalScore = Math.min(finalScore, 48);
-
-  // Geometria extremamente incompatível também impede conclusão alta, mesmo
-  // quando a textura/aparência gerou embedding relativamente próximo.
-  if (criticalMean < 35) finalScore = Math.min(finalScore, 48);
-  else if (criticalMean < 45) finalScore = Math.min(finalScore, 58);
-  else if (criticalMean < 55) finalScore = Math.min(finalScore, 70);
-
-  if (criticalFloor < 20 && criticalMean < 55) {
-    finalScore = Math.min(finalScore, 52);
-  }
-
-  finalScore = clamp(finalScore);
+  const finalScore = consensus.similarityScore;
+  const identityScore = consensus.embeddingVisualScore;
 
   if (reliability < 60) {
     return {
       finalScore,
       identityScore,
+      geometryConsensusScore: consensus.geometryConsensusScore,
+      morphologyScore: consensus.morphologyScore,
       verdict: "inconclusive",
-      detail: "A qualidade das imagens não é suficiente para uma conclusão segura.",
+      detail: "A qualidade das imagens não é suficiente para uma conclusão confiável.",
       identityRawSimilarity: raw,
     };
   }
 
-  if (raw >= 0.68 && finalScore >= 86 && criticalMean >= 62) {
+  if (
+    raw >= 0.68 &&
+    consensus.geometryConsensusScore >= 72 &&
+    criticalMean >= 65 &&
+    criticalFloor >= 45
+  ) {
     return {
       finalScore,
       identityScore,
+      geometryConsensusScore: consensus.geometryConsensusScore,
+      morphologyScore: consensus.morphologyScore,
       verdict: "strong",
-      detail: "Vetor facial e geometria concordam fortemente. Pode ser a mesma pessoa, mas o resultado não é prova de identidade.",
+      detail: "Embedding e estruturas faciais concordam fortemente. Há alta compatibilidade biofacial.",
       identityRawSimilarity: raw,
     };
   }
 
-  if (raw >= 0.58 && finalScore >= 68 && criticalMean >= 50) {
+  if (
+    raw >= 0.58 &&
+    consensus.geometryConsensusScore >= 60 &&
+    criticalMean >= 52
+  ) {
     return {
       finalScore,
       identityScore,
+      geometryConsensusScore: consensus.geometryConsensusScore,
+      morphologyScore: consensus.morphologyScore,
       verdict: "near",
-      detail: "Existe aproximação relevante no vetor facial e na geometria, mas ainda há diferenças.",
+      detail: "Os rostos chegam perto e há concordância relevante entre embedding e medidas faciais.",
       identityRawSimilarity: raw,
     };
   }
 
-  if (raw >= 0.48 && finalScore >= 45) {
+  if (finalScore >= 55) {
     return {
       finalScore,
       identityScore,
+      geometryConsensusScore: consensus.geometryConsensusScore,
+      morphologyScore: consensus.morphologyScore,
       verdict: "partial",
-      detail: "Há alguns sinais de semelhança, porém eles não são fortes o bastante para tratar os rostos como muito próximos.",
+      detail: "Existe semelhança biofacial relevante, mas os sinais não são fortes o bastante para uma conclusão de identidade.",
       identityRawSimilarity: raw,
     };
   }
@@ -137,8 +146,10 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
   return {
     finalScore,
     identityScore,
+    geometryConsensusScore: consensus.geometryConsensusScore,
+    morphologyScore: consensus.morphologyScore,
     verdict: "low",
-    detail: "O vetor facial não sustenta uma correspondência forte; a geometria não pode elevar esse resultado sozinha.",
+    detail: "A semelhança conjunta é baixa e não há suporte forte de correspondência.",
     identityRawSimilarity: raw,
   };
 }
