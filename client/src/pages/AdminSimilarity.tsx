@@ -6,6 +6,7 @@ import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, ty
 import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
 import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } from "@/lib/faceQuality";
 import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
+import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, type FaceResemblanceDescriptor } from "@/lib/faceResemblanceEngine";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 
 type CandidatePhoto = {
@@ -26,6 +27,7 @@ type ComparisonResult = {
   identityScore?: number;
   identityRaw?: number;
   identityDistance?: number | null;
+  engineLabel?: string;
   verdict?: MatchVerdict;
   verdictDetail?: string;
   regions?: RegionScores;
@@ -51,6 +53,7 @@ type AnalyzedFaceForPairs = {
   preview: string;
   detected: DetectedFace;
   identity: FaceIdentityDescriptor;
+  resemblance: FaceResemblanceDescriptor | null;
 };
 
 type ImageQuality = {
@@ -445,7 +448,19 @@ export default function AdminSimilarity() {
         return;
       }
 
-      setProgress({ current: 0, total: candidates.length, name: "Gerando vetor facial da Foto Mestre..." });
+      setProgress({ current: 0, total: candidates.length, name: "Carregando motor facial 112×112..." });
+      let masterResemblance: FaceResemblanceDescriptor | null = null;
+      try {
+        masterResemblance = await extractFaceResemblanceDescriptor(
+          masterDetected.canvas,
+          masterDetected.landmarks,
+        );
+      } catch (error: any) {
+        console.warn("Motor 112x112 indisponível; usando fallback:", error);
+        toast.warning("Motor 112×112 indisponível neste navegador. Usando fallback atual.");
+      }
+
+      setProgress({ current: 0, total: candidates.length, name: "Preparando fallback facial..." });
       let masterIdentity: FaceIdentityDescriptor;
       try {
         masterIdentity = await extractIdentityDescriptor(masterDetected.identityCanvas, masterDetected.identityFallbackCanvas);
@@ -462,6 +477,7 @@ export default function AdminSimilarity() {
           preview: masterPreview || "",
           detected: masterDetected,
           identity: masterIdentity,
+          resemblance: masterResemblance,
         },
       ];
 
@@ -495,7 +511,31 @@ export default function AdminSimilarity() {
             candidateDetected.aspectRatio,
           );
 
-          setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • vetor facial` });
+          setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • motor 112×112` });
+          let candidateResemblance: FaceResemblanceDescriptor | null = null;
+          let primaryScore: number | undefined;
+          let primaryCosine: number | undefined;
+          let engineLabel = "Fallback atual";
+
+          if (masterResemblance) {
+            try {
+              candidateResemblance = await extractFaceResemblanceDescriptor(
+                candidateDetected.canvas,
+                candidateDetected.landmarks,
+              );
+              const standardized = compareFaceResemblanceDescriptors(
+                masterResemblance,
+                candidateResemblance,
+              );
+              primaryScore = standardized.score;
+              primaryCosine = standardized.cosine;
+              engineLabel = "Motor 112×112 • FaceX";
+            } catch (error) {
+              console.warn("Falha no motor 112x112 para esta foto; usando fallback:", error);
+            }
+          }
+
+          setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • fallback` });
           const candidateIdentity = await extractIdentityDescriptor(candidateDetected.identityCanvas, candidateDetected.identityFallbackCanvas);
           analyzedFaces.push({
             id: candidate.id,
@@ -503,8 +543,12 @@ export default function AdminSimilarity() {
             preview: candidate.preview,
             detected: candidateDetected,
             identity: candidateIdentity,
+            resemblance: candidateResemblance,
           });
           const identityComparison = await compareIdentityDescriptors(masterIdentity, candidateIdentity);
+          const rawForDecision = primaryCosine !== undefined
+            ? Math.max(0, primaryCosine)
+            : identityComparison.rawSimilarity;
 
           const captureReliability = Math.min(masterDetected.captureQuality.score, candidateDetected.captureQuality.score);
           const reliability = clamp(
@@ -512,7 +556,8 @@ export default function AdminSimilarity() {
             Math.min(masterQ.score, candidateCombinedQuality) * 0.35
           );
           const decision = decideFaceMatch({
-            identityRawSimilarity: identityComparison.rawSimilarity,
+            identityRawSimilarity: rawForDecision,
+            primarySimilarityScore: primaryScore,
             geometrySimilarity: comparison.similarity,
             geometryCriticalMean: comparison.criticalMean,
             geometryCriticalFloor: comparison.criticalFloor,
@@ -556,8 +601,9 @@ export default function AdminSimilarity() {
             criticalMean: comparison.criticalMean,
             geometryScore: comparison.similarity,
             identityScore: decision.identityScore,
-            identityRaw: decision.identityRawSimilarity,
-            identityDistance: identityComparison.distance,
+            identityRaw: primaryCosine !== undefined ? primaryCosine : decision.identityRawSimilarity,
+            identityDistance: primaryCosine !== undefined ? null : identityComparison.distance,
+            engineLabel,
             verdict: decision.verdict,
             verdictDetail: decision.detail,
             regions: comparison.regions,
@@ -594,12 +640,20 @@ export default function AdminSimilarity() {
               right.detected.aspectRatio,
             );
             const pairIdentity = await compareIdentityDescriptors(left.identity, right.identity);
+            let pairPrimaryScore: number | undefined;
+            let pairRawSimilarity = pairIdentity.rawSimilarity;
+            if (left.resemblance && right.resemblance) {
+              const standardized = compareFaceResemblanceDescriptors(left.resemblance, right.resemblance);
+              pairPrimaryScore = standardized.score;
+              pairRawSimilarity = Math.max(0, standardized.cosine);
+            }
             const pairReliability = clamp(
               Math.min(left.detected.captureQuality.score, right.detected.captureQuality.score) * 0.65 +
               Math.min(left.detected.imageQuality.score, right.detected.imageQuality.score) * 0.35
             );
             const pairDecision = decideFaceMatch({
-              identityRawSimilarity: pairIdentity.rawSimilarity,
+              identityRawSimilarity: pairRawSimilarity,
+              primarySimilarityScore: pairPrimaryScore,
               geometrySimilarity: pairGeometry.similarity,
               geometryCriticalMean: pairGeometry.criticalMean,
               geometryCriticalFloor: pairGeometry.criticalFloor,
@@ -696,7 +750,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. Antes do vetor facial, o sistema mascara tudo fora do oval real da face: fundo, cabelo e orelhas ficam com peso zero. A comparação combina embedding facial com medidas de olhos, sobrancelhas, nariz, boca, bochechas, maxilar, queixo e proporções 3D.
+                As fotos selecionadas não são enviadas para R2 nem gravadas no banco. A porcentagem principal usa alinhamento facial padronizado por 5 pontos em 112×112, embedding 512D e similaridade por cosseno calibrada. Geometria, regiões faciais, qualidade e crítico técnico permanecem como diagnósticos separados.
               </p>
             </div>
           </div>
@@ -936,7 +990,7 @@ export default function AdminSimilarity() {
                           </div>
                           {result.identityScore !== undefined && (
                             <div className="mb-1 rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2">
-                              <p className="text-[10px] uppercase text-slate-500">Apoio facial</p>
+                              <p className="text-[10px] uppercase text-slate-500">{result.engineLabel || "Apoio facial"}</p>
                               <p className="text-sm font-black text-emerald-200">{result.identityScore.toFixed(1)}%</p>
                             </div>
                           )}
@@ -990,7 +1044,11 @@ export default function AdminSimilarity() {
                               <p className="text-xs font-black tracking-wide">{verdict.label}</p>
                               <p className="mt-1 text-xs leading-5 opacity-85">{verdict.detail}</p>
                               <p className="mt-1 text-[10px] opacity-65">
-                                {result.identityRaw !== undefined ? `Embedding de apoio: ${(result.identityRaw * 100).toFixed(1)}% • ` : ""}
+                                {result.identityRaw !== undefined
+  ? result.engineLabel?.includes("112×112")
+    ? `Cosseno: ${result.identityRaw.toFixed(3)} • `
+    : `Embedding de apoio: ${(result.identityRaw * 100).toFixed(1)}% • `
+  : ""}
                                 {result.criticalFloor !== undefined ? `Elo geométrico: ${result.criticalFloor.toFixed(1)}%` : ""}
                                 {result.criticalMean !== undefined ? ` • Conjunto crítico: ${result.criticalMean.toFixed(1)}%` : ""}
                               </p>
