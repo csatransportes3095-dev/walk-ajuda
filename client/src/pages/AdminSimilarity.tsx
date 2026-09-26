@@ -276,7 +276,7 @@ function verdictFor(result: ComparisonResult) {
   }
 
   if (result.verdict === "strong") {
-    return { label: "FORTEMENTE COMPATÍVEL", detail: result.verdictDetail || "Apoio facial e geometria concordam fortemente.", tone: "text-emerald-200 border-emerald-400/25 bg-emerald-500/10" };
+    return { label: "MUITO ALTA SEMELHANÇA", detail: result.verdictDetail || "As principais regiões faciais apresentam parecência muito alta.", tone: "text-emerald-200 border-emerald-400/25 bg-emerald-500/10" };
   }
   if (result.verdict === "near") {
     return { label: "ALTA SEMELHANÇA", detail: result.verdictDetail || "Há forte parecência visual entre os rostos.", tone: "text-cyan-200 border-cyan-400/25 bg-cyan-500/10" };
