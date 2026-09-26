@@ -539,7 +539,7 @@ export default function AdminSimilarity() {
         return masterIdentity;
       };
 
-      if (!masterResemblance) {
+      if (!masterReferenceEmbedding && !masterResemblance) {
         try {
           await ensureMasterIdentity();
         } catch (error: any) {
@@ -710,7 +710,7 @@ export default function AdminSimilarity() {
             id: candidate.id,
             name: candidate.file.name,
             preview: candidate.preview,
-            similarity: decision.finalScore,
+            similarity: referenceEngine && primaryScore !== undefined ? primaryScore : decision.finalScore,
             reliability,
             criticalFloor: comparison.criticalFloor,
             criticalMean: comparison.criticalMean,
@@ -814,7 +814,9 @@ export default function AdminSimilarity() {
               rightName: right.name,
               leftPreview: left.preview,
               rightPreview: right.preview,
-              similarity: pairDecision.finalScore,
+              similarity: pairPrimaryScore !== undefined && left.referenceEmbedding && right.referenceEmbedding
+                ? pairPrimaryScore
+                : pairDecision.finalScore,
               reliability: pairReliability,
             });
           }
