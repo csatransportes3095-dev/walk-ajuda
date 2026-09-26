@@ -14,8 +14,12 @@ export type RegionScores = {
   brows: number;
   nose: number;
   oval: number;
+  cheeks: number;
+  jaw: number;
+  chin: number;
   mouth: number;
   proportions: number;
+  measurements: number;
   symmetry: number;
   structure: number;
 };
@@ -41,6 +45,17 @@ export const LEFT_BROW = [70,63,105,66,107,55,65,52,53,46];
 export const RIGHT_BROW = [336,296,334,293,300,285,295,282,283,276];
 export const NOSE = [1,2,4,5,6,19,20,45,48,64,94,98,115,168,195,197,220,275,278,294,327,344,440];
 export const MOUTH = [61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,78];
+
+// Regiões exclusivamente faciais. Nenhum ponto de cabelo, fundo ou orelha entra.
+export const CHEEKS = [
+  234,93,132,58,172,205,50,187,
+  454,323,361,288,397,425,280,411,
+];
+export const JAW = [
+  172,136,150,149,176,148,152,
+  377,400,378,379,365,397,
+];
+export const CHIN = [176,148,152,377,400,175,199,200,18];
 
 export const EYES = [...LEFT_EYE, ...RIGHT_EYE, ...LEFT_IRIS, ...RIGHT_IRIS];
 export const BROWS = [...LEFT_BROW, ...RIGHT_BROW];
@@ -78,6 +93,33 @@ const PROPORTION_PAIRS: Array<[number, number]> = [
   [61,1], [291,1],  // cantos boca/nariz
   [33,1], [263,1],  // olhos/nariz
   [10,1], [1,152],
+];
+
+type MeasurementSpec = {
+  label: string;
+  numerator: [number, number];
+  denominator: [number, number];
+};
+
+const EXACT_MEASUREMENTS: MeasurementSpec[] = [
+  { label: "largura/altura rosto", numerator: [234,454], denominator: [10,152] },
+  { label: "maxilar/bochechas", numerator: [172,397], denominator: [234,454] },
+  { label: "queixo/bochechas", numerator: [148,377], denominator: [234,454] },
+  { label: "distancia olhos/rosto", numerator: [133,362], denominator: [234,454] },
+  { label: "olho esquerdo/rosto", numerator: [33,133], denominator: [234,454] },
+  { label: "olho direito/rosto", numerator: [362,263], denominator: [234,454] },
+  { label: "nariz/rosto", numerator: [98,327], denominator: [234,454] },
+  { label: "altura nariz/rosto", numerator: [168,2], denominator: [10,152] },
+  { label: "boca/rosto", numerator: [61,291], denominator: [234,454] },
+  { label: "nariz-boca/rosto", numerator: [2,13], denominator: [10,152] },
+  { label: "boca-queixo/rosto", numerator: [13,152], denominator: [10,152] },
+  { label: "testa-ponte/rosto", numerator: [10,168], denominator: [10,152] },
+  { label: "ponte-nariz/rosto", numerator: [168,2], denominator: [10,152] },
+  { label: "nariz-queixo/rosto", numerator: [2,152], denominator: [10,152] },
+  { label: "sobrancelha esquerda/olho", numerator: [70,33], denominator: [33,133] },
+  { label: "sobrancelha direita/olho", numerator: [300,263], denominator: [362,263] },
+  { label: "bochecha esquerda/nariz", numerator: [234,1], denominator: [234,454] },
+  { label: "bochecha direita/nariz", numerator: [454,1], denominator: [234,454] },
 ];
 
 const STRUCTURE_ANCHORS = [
@@ -322,6 +364,25 @@ function structuralSimilarity(master: FaceLandmark[], candidate: FaceLandmark[])
   return clamp(100 * Math.exp(-4.2 * rms));
 }
 
+function exactMeasurementSimilarity(master: FaceLandmark[], candidate: FaceLandmark[]) {
+  const scores: number[] = [];
+
+  for (const spec of EXACT_MEASUREMENTS) {
+    const masterDen = Math.max(1e-6, distance(master[spec.denominator[0]], master[spec.denominator[1]]));
+    const candidateDen = Math.max(1e-6, distance(candidate[spec.denominator[0]], candidate[spec.denominator[1]]));
+    const masterRatio = distance(master[spec.numerator[0]], master[spec.numerator[1]]) / masterDen;
+    const candidateRatio = distance(candidate[spec.numerator[0]], candidate[spec.numerator[1]]) / candidateDen;
+    const logError = Math.abs(Math.log(Math.max(1e-6, masterRatio) / Math.max(1e-6, candidateRatio)));
+    scores.push(100 * Math.exp(-5.0 * logError));
+  }
+
+  scores.sort((a,b) => a-b);
+  // Mantém a maior parte das medidas, mas reduz o impacto de uma única medida
+  // distorcida por ângulo ou expressão.
+  const retained = scores.slice(Math.floor(scores.length * 0.06));
+  return retained.reduce((sum, score) => sum + score, 0) / Math.max(1, retained.length);
+}
+
 function expressionDifference(master: FaceLandmark[], candidate: FaceLandmark[]) {
   const mouthWidthM = Math.max(1e-6, distance(master[61], master[291]));
   const mouthWidthC = Math.max(1e-6, distance(candidate[61], candidate[291]));
@@ -345,6 +406,7 @@ export function compareFaceGeometry(
   const proportions = proportionSimilarity(master, candidate);
   const symmetry = symmetrySimilarity(master, candidate);
   const structure = structuralSimilarity(master, candidate);
+  const measurements = exactMeasurementSimilarity(master, candidate);
 
   const expressionDelta = expressionDifference(master, candidate);
 
@@ -354,8 +416,12 @@ export function compareFaceGeometry(
     brows: regionSimilarity(master, candidate, BROWS, 4.3, 0.03),
     nose: regionSimilarity(master, candidate, NOSE, 5.2, 0.03),
     oval: regionSimilarity(master, candidate, FACE_OVAL, 4.7, 0.03),
+    cheeks: regionSimilarity(master, candidate, CHEEKS, 5.0, 0.02),
+    jaw: regionSimilarity(master, candidate, JAW, 5.4, 0.02),
+    chin: regionSimilarity(master, candidate, CHIN, 5.6, 0.02),
     mouth: regionSimilarity(master, candidate, MOUTH, 3.1, 0.06),
     proportions,
+    measurements,
     symmetry,
     structure,
   };
@@ -368,8 +434,12 @@ export function compareFaceGeometry(
     brows: intuitiveCalibrate(rawRegions.brows),
     nose: intuitiveCalibrate(rawRegions.nose),
     oval: intuitiveCalibrate(rawRegions.oval),
+    cheeks: intuitiveCalibrate(rawRegions.cheeks),
+    jaw: intuitiveCalibrate(rawRegions.jaw),
+    chin: intuitiveCalibrate(rawRegions.chin),
     mouth: intuitiveCalibrate(rawRegions.mouth),
     proportions: intuitiveCalibrate(rawRegions.proportions),
+    measurements: intuitiveCalibrate(rawRegions.measurements),
     symmetry: intuitiveCalibrate(rawRegions.symmetry),
     structure: intuitiveCalibrate(rawRegions.structure),
   };
@@ -378,11 +448,14 @@ export function compareFaceGeometry(
   // óculos, expressão ou recorte; por isso o pior componente não pode zerar
   // sozinho todo o rosto. Já duas ou mais regiões fracas derrubam a nota.
   const criticalEntries: Array<[number, number]> = [
-    [regions.eyes, 0.18],
-    [regions.nose, 0.24],
-    [regions.oval, 0.20],
-    [regions.structure, 0.22],
-    [regions.proportions, 0.10],
+    [regions.eyes, 0.13],
+    [regions.nose, 0.16],
+    [regions.cheeks, 0.10],
+    [regions.jaw, 0.12],
+    [regions.chin, 0.10],
+    [regions.structure, 0.13],
+    [regions.measurements, 0.12],
+    [regions.proportions, 0.08],
     [regions.global, 0.06],
   ];
 
