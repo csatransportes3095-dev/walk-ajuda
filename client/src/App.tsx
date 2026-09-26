@@ -382,6 +382,7 @@ function AppContent() {
   const [location] = useLocation();
   const isAdminRoute = location.startsWith("/admin");
   const isH2AdsRoute = isH2AdsPath(location);
+  const isSimilarityRoute = location.toLowerCase() === "/similaridade";
   const isTrackingRoute = location === "/acompanhar";
   const isLoginRoute = location === "/login";
   const isRaffleRoute = location === "/sorteio";
@@ -402,13 +403,13 @@ function AppContent() {
   const isLocadoraRoute = location === "/locadora" || location === "/locadora/";
   const isLocadoraBrandRoute = location === "/locadora" || location.startsWith("/locadora/") || location.startsWith("/admin/locadora");
   const maintenanceManifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
-    enabled: !isAdminRoute && !isH2AdsRoute,
+    enabled: !isAdminRoute && !isH2AdsRoute && !isSimilarityRoute,
     staleTime: 15_000,
-    refetchInterval: !isAdminRoute && !isH2AdsRoute ? 30_000 : false,
+    refetchInterval: !isAdminRoute && !isH2AdsRoute && !isSimilarityRoute ? 30_000 : false,
     refetchOnWindowFocus: true,
   });
   const maintenanceManifest = maintenanceManifestQuery.data;
-  const maintenancePublicScope = !isAdminRoute && !isH2AdsRoute;
+  const maintenancePublicScope = !isAdminRoute && !isH2AdsRoute && !isSimilarityRoute;
   const showMaintenanceManifest = maintenanceManifest
     ? isMaintenanceManifestActiveForPath(maintenanceManifest, location)
     : false;
@@ -437,7 +438,7 @@ function AppContent() {
 
   // Proteção anti-print para rotas de cliente
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || undefined : undefined;
-  const { WarningOverlay } = useAntiPrint(!isAdminRoute && !isH2AdsRoute ? clientPhone : undefined);
+  const { WarningOverlay } = useAntiPrint(!isAdminRoute && !isH2AdsRoute && !isSimilarityRoute ? clientPhone : undefined);
 
   // Mantém identidades instaláveis isoladas por módulo e usa o emblema H2 nas rotas gerais.
   useEffect(() => {
@@ -472,25 +473,25 @@ function AppContent() {
       document.title = "Meus Cartões";
       return;
     }
-    if (manifest) manifest.href = isAdminRoute ? "/manifest-admin.json" : "/manifest.json";
+    if (manifest) manifest.href = isAdminRoute || isSimilarityRoute ? "/manifest-admin.json" : "/manifest.json";
     if (theme) theme.content = "#1a0a2e";
     appleIcons.forEach((link) => { link.href = h2AppleIcon; });
     favicons.forEach((link) => { link.href = link.sizes.value === "16x16" ? h2Favicon16 : h2Favicon32; });
     document.title = "H2 COLOMBIANO";
-  }, [isAdminRoute, isCartoesRoute, isH2AdsRoute, isLocadoraBrandRoute]);
+  }, [isAdminRoute, isCartoesRoute, isH2AdsRoute, isLocadoraBrandRoute, isSimilarityRoute]);
 
   // Redirect de rotas com maiúsculas para minúsculas (DEVE ficar após todos os hooks)
   if (location !== location.toLowerCase() && !isAdminRoute) {
     return <Redirect to={location.toLowerCase()} />;
   }
 
-  if (isAdminRoute || isH2AdsRoute) {
+  if (isAdminRoute || isH2AdsRoute || isSimilarityRoute) {
     return (
       <>
         <div className="min-h-screen pb-24 sm:pb-0">
           <Router />
         </div>
-        {isAdminRoute && location !== "/admin/login" && <AdminPWABanner />}
+        {(isAdminRoute || isSimilarityRoute) && location !== "/admin/login" && <AdminPWABanner />}
       </>
     );
   }
