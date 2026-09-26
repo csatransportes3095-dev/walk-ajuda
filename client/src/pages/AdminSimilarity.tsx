@@ -285,10 +285,18 @@ function verdictFor(result: ComparisonResult) {
     return { label: "INCONCLUSIVO", detail: result.error || "Não houve leitura suficiente para comparar.", tone: "text-slate-300 border-white/10 bg-white/5" };
   }
 
+  if (result.referenceEngine) {
+    return {
+      label: "SIMILAR FACE 1.0.27 • REFERÊNCIA LOCAL",
+      detail: "Percentual calculado pelo pipeline TFLite de referência carregado localmente. Geometria e qualidade abaixo são apenas diagnósticos e não alteram esse percentual.",
+      tone: "text-emerald-200 border-emerald-400/20 bg-emerald-500/5",
+    };
+  }
+
   if (result.faceXGlobalScore !== undefined) {
     return {
       label: "ÍNDICE H2 • SEM APROVAÇÃO AUTOMÁTICA",
-      detail: "O índice mede a proximidade segundo o motor H2. Ele não confirma que a foto é adequada e ainda não foi calibrado para reproduzir outros aplicativos.",
+      detail: "O índice mede a proximidade segundo o motor H2. Ele não confirma que a foto é adequada.",
       tone: "text-cyan-200 border-cyan-400/20 bg-cyan-500/5",
     };
   }
@@ -497,9 +505,12 @@ export default function AdminSimilarity() {
       };
       setMasterQuality(masterQ);
 
-      if (masterQ.score < 45) {
+      if (masterQ.score < 45 && !similarRuntime) {
         toast.error("A Foto Mestre está com qualidade insuficiente. Use uma foto mais nítida, frontal e bem iluminada.");
         return;
+      }
+      if (masterQ.score < 45 && similarRuntime) {
+        toast.warning("Qualidade H2 baixa na Foto Mestre; o Similar Face continuará a leitura de referência.");
       }
 
       let masterReferenceEmbedding: Float32Array | null = null;
@@ -692,7 +703,7 @@ export default function AdminSimilarity() {
             reliability,
           });
 
-          if (reliability < 40) {
+          if (reliability < 40 && !referenceEngine) {
             nextResults.push({
               id: candidate.id,
               name: candidate.file.name,
