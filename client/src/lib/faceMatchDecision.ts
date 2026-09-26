@@ -105,10 +105,8 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
   }
 
   if (
-    finalScore >= 82 &&
-    consensus.morphologyScore >= 80 &&
-    criticalMean >= 70 &&
-    criticalFloor >= 40
+    finalScore >= 92 &&
+    consensus.morphologyScore >= 88
   ) {
     return {
       finalScore,
@@ -122,8 +120,8 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
   }
 
   if (
-    finalScore >= 68 &&
-    consensus.morphologyScore >= 65
+    finalScore >= 86 &&
+    consensus.morphologyScore >= 80
   ) {
     return {
       finalScore,
@@ -136,7 +134,7 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
     };
   }
 
-  if (finalScore >= 50) {
+  if (finalScore >= 60) {
     return {
       finalScore,
       identityScore,

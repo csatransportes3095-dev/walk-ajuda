@@ -263,10 +263,10 @@ function formatScore(score: number | null) {
 
 function scoreLabel(score: number | null) {
   if (score === null) return "Sem leitura";
-  if (score >= 90) return "Muito alta";
-  if (score >= 75) return "Alta";
-  if (score >= 60) return "Moderada";
-  if (score >= 40) return "Parcial";
+  if (score >= 92) return "Muito alta";
+  if (score >= 86) return "Alta";
+  if (score >= 65) return "Moderada";
+  if (score >= 45) return "Parcial";
   return "Baixa";
 }
 
@@ -276,7 +276,7 @@ function verdictFor(result: ComparisonResult) {
   }
 
   if (result.verdict === "strong") {
-    return { label: "FORTEMENTE COMPATÍVEL", detail: result.verdictDetail || "Apoio facial e geometria concordam fortemente.", tone: "text-emerald-200 border-emerald-400/25 bg-emerald-500/10" };
+    return { label: "MUITO ALTA SEMELHANÇA", detail: result.verdictDetail || "As principais regiões faciais apresentam parecência muito alta.", tone: "text-emerald-200 border-emerald-400/25 bg-emerald-500/10" };
   }
   if (result.verdict === "near") {
     return { label: "ALTA SEMELHANÇA", detail: result.verdictDetail || "Há forte parecência visual entre os rostos.", tone: "text-cyan-200 border-cyan-400/25 bg-cyan-500/10" };
@@ -293,7 +293,7 @@ function verdictFor(result: ComparisonResult) {
 const H2_LOGO = "/h2-brand-192.png";
 
 function qualifiesForGoodUse(result: ComparisonResult) {
-  return (result.similarity ?? 0) >= 64 && (result.criticalMean ?? 0) >= 64;
+  return (result.similarity ?? 0) >= 86 && (result.reliability ?? 0) >= 60;
 }
 
 export default function AdminSimilarity() {
@@ -902,7 +902,7 @@ export default function AdminSimilarity() {
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
                     <h2 className="text-xl font-black">Resultado de semelhança facial</h2>
                   </div>
-                  <span className="text-xs text-slate-500">Preferências pulsantes primeiro</span>
+                  <span className="text-xs text-slate-500">Preferências ≥ 86% primeiro</span>
                 </div>
 
                 {rankedResults.map((result, index) => (
@@ -917,7 +917,7 @@ export default function AdminSimilarity() {
                           % BOA PARA USO
                         </div>
                         <div className="text-[11px] font-bold text-cyan-100/85">
-                          Final {formatScore(result.similarity)} • Crítico {result.criticalMean?.toFixed(1)}%
+                          Final {formatScore(result.similarity)} • Crítico técnico {result.criticalMean?.toFixed(1)}%
                         </div>
                       </div>
                     )}

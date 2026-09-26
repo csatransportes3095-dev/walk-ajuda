@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compareFaceGeometry,
+  calculateCriticalResemblance,
   evaluateFaceGeometryQuality,
   type FaceLandmark,
 } from "./faceGeometry";
@@ -93,14 +94,55 @@ describe("face geometry engine", () => {
     expect(score.regions.measurements).toBeLessThan(95);
   });
 
-  it("does not let mouth expression dominate the identity geometry score", () => {
+  it("lets mouth differences affect resemblance without collapsing the whole score", () => {
     const face = syntheticFace();
     const smile = face.map(p => ({...p}));
     for (const i of [61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,78]) {
       smile[i].y += i % 2 ? -.035 : .035;
     }
     const score = compareFaceGeometry(face, smile);
-    expect(score.similarity).toBeGreaterThan(92);
+    expect(score.similarity).toBeGreaterThan(70);
+    expect(score.criticalMean).toBeLessThan(100);
+  });
+
+  it("recalculates the supplied reference critical score more strictly", () => {
+    const critical = calculateCriticalResemblance({
+      global: 90.9,
+      eyes: 80.6,
+      brows: 69.5,
+      nose: 72.5,
+      oval: 89.9,
+      cheeks: 69.6,
+      jaw: 91.3,
+      chin: 89.8,
+      mouth: 42.6,
+      proportions: 90.3,
+      measurements: 56.0,
+      symmetry: 97.3,
+      structure: 88.3,
+    });
+    expect(critical.mean).toBeGreaterThanOrEqual(62);
+    expect(critical.mean).toBeLessThanOrEqual(66);
+    expect(critical.floor).toBeCloseTo(42.6, 1);
+  });
+
+  it("keeps critical score high only when the core regions are consistently high", () => {
+    const critical = calculateCriticalResemblance({
+      global: 94,
+      eyes: 91,
+      brows: 88,
+      nose: 92,
+      oval: 93,
+      cheeks: 89,
+      jaw: 91,
+      chin: 90,
+      mouth: 90,
+      proportions: 92,
+      measurements: 88,
+      symmetry: 95,
+      structure: 91,
+    });
+    expect(critical.mean).toBeGreaterThanOrEqual(89);
   });
 
   it("flags strong roll as lower geometry quality", () => {

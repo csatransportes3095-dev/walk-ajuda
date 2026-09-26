@@ -75,5 +75,35 @@ describe("facial resemblance scoring", () => {
       reliability: 94,
     });
     expect(result.finalScore).toBeGreaterThanOrEqual(82);
+    expect(result.verdict).not.toBe("low");
   });
+  it("reserves high-similarity verdict for scores at or above 86", () => {
+    const base = {
+      identityRawSimilarity: 0.60,
+      geometrySimilarity: 84,
+      geometryCriticalMean: 80,
+      geometryCriticalFloor: 68,
+      globalScore: 84,
+      eyesScore: 83,
+      browsScore: 82,
+      noseScore: 84,
+      mouthScore: 82,
+      ovalScore: 85,
+      cheeksScore: 81,
+      jawScore: 84,
+      chinScore: 83,
+      proportionsScore: 85,
+      measurementsScore: 82,
+      structureScore: 84,
+      symmetryScore: 90,
+      reliability: 92,
+    };
+
+    const result = decideFaceMatch(base);
+    if (result.finalScore < 86) {
+      expect(result.verdict).not.toBe("near");
+      expect(result.verdict).not.toBe("strong");
+    }
+  });
+
 });
