@@ -247,3 +247,58 @@ export function createReferenceAligned112(
   ctx.restore();
   return output;
 }
+
+
+export function resizeReferenceDetector640(source: HTMLCanvasElement) {
+  const output = document.createElement("canvas");
+  output.width = 640;
+  output.height = 640;
+  const ctx = output.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Falha ao criar entrada 640x640.");
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(source, 0, 0, 640, 640);
+  return output;
+}
+
+export function detectorCanvasToFloatInput(canvas: HTMLCanvasElement) {
+  if (canvas.width !== 640 || canvas.height !== 640) {
+    throw new Error("A entrada do detector deve ser 640x640.");
+  }
+
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Falha ao ler a entrada do detector.");
+
+  const rgba = ctx.getImageData(0, 0, 640, 640).data;
+  const out = new Float32Array(640 * 640 * 3);
+
+  for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+    const p = normalizeDetectorRgbToBgr(rgba[i], rgba[i + 1], rgba[i + 2]);
+    out[j] = p[0];
+    out[j + 1] = p[1];
+    out[j + 2] = p[2];
+  }
+
+  return out;
+}
+
+export function recognizerCanvasToFloatInput(canvas: HTMLCanvasElement) {
+  if (canvas.width !== 112 || canvas.height !== 112) {
+    throw new Error("A entrada do reconhecedor deve ser 112x112.");
+  }
+
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Falha ao ler a entrada do reconhecedor.");
+
+  const rgba = ctx.getImageData(0, 0, 112, 112).data;
+  const out = new Float32Array(112 * 112 * 3);
+
+  for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+    const p = normalizeRecognizerRgb(rgba[i], rgba[i + 1], rgba[i + 2]);
+    out[j] = p[0];
+    out[j + 1] = p[1];
+    out[j + 2] = p[2];
+  }
+
+  return out;
+}
