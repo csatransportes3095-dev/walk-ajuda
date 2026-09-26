@@ -9,6 +9,7 @@ export type MatchVerdict =
 
 export type FaceMatchDecisionInput = {
   identityRawSimilarity: number;
+  primarySimilarityScore?: number;
   geometrySimilarity: number;
   geometryCriticalMean: number;
   geometryCriticalFloor: number;
@@ -89,8 +90,12 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
     symmetryScore: clamp(input.symmetryScore ?? criticalMean),
   });
 
-  const finalScore = consensus.similarityScore;
-  const identityScore = consensus.embeddingVisualScore;
+  const finalScore = Number.isFinite(input.primarySimilarityScore)
+    ? clamp(Number(input.primarySimilarityScore))
+    : consensus.similarityScore;
+  const identityScore = Number.isFinite(input.primarySimilarityScore)
+    ? clamp(Number(input.primarySimilarityScore))
+    : consensus.embeddingVisualScore;
 
   if (reliability < 60) {
     return {
@@ -104,10 +109,7 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
     };
   }
 
-  if (
-    finalScore >= 92 &&
-    consensus.morphologyScore >= 88
-  ) {
+  if (finalScore >= 92) {
     return {
       finalScore,
       identityScore,
@@ -119,10 +121,7 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
     };
   }
 
-  if (
-    finalScore >= 86 &&
-    consensus.morphologyScore >= 80
-  ) {
+  if (finalScore >= 86) {
     return {
       finalScore,
       identityScore,
