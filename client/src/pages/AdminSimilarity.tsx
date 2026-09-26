@@ -2,7 +2,9 @@ import { useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { AlertTriangle, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { FACE_OVAL, compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
+import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
+import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
+import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } from "@/lib/faceQuality";
 import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 
@@ -43,6 +45,7 @@ type DetectedFace = {
   landmarks: FaceLandmark[];
   aspectRatio: number;
   imageQuality: ImageQuality;
+  captureQuality: FaceCaptureQuality;
   canvas: HTMLCanvasElement;
   identityCanvas: HTMLCanvasElement;
   identityFallbackCanvas: HTMLCanvasElement;
@@ -207,94 +210,6 @@ async function fileToCanvas(file: File) {
   };
 }
 
-function createFaceOnlyCanvas(
-  canvas: HTMLCanvasElement,
-  landmarks: FaceLandmark[],
-  expansion = 1.08,
-) {
-  const oval = FACE_OVAL.map((index) => landmarks[index]).filter(Boolean);
-  if (oval.length < 20) return canvas;
-
-  const pixelOval = oval.map((point) => ({
-    x: point.x * canvas.width,
-    y: point.y * canvas.height,
-  }));
-
-  const center = pixelOval.reduce(
-    (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
-    { x: 0, y: 0 },
-  );
-  center.x /= pixelOval.length;
-  center.y /= pixelOval.length;
-
-  const expanded = pixelOval.map((point) => ({
-    x: center.x + (point.x - center.x) * expansion,
-    y: center.y + (point.y - center.y) * expansion,
-  }));
-
-  const xs = expanded.map((p) => p.x);
-  const ys = expanded.map((p) => p.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-
-  // Quadrado neutro dá ao detector contexto de enquadramento sem reintroduzir
-  // fundo real, cabelo externo ou orelhas.
-  const faceWidth = maxX - minX;
-  const faceHeight = maxY - minY;
-  const side = Math.max(faceWidth, faceHeight) * 1.28;
-  const cropCenterX = (minX + maxX) / 2;
-  const cropCenterY = (minY + maxY) / 2 + faceHeight * 0.015;
-  const desiredX = cropCenterX - side / 2;
-  const desiredY = cropCenterY - side / 2;
-
-  const output = document.createElement("canvas");
-  output.width = 512;
-  output.height = 512;
-  const ctx = output.getContext("2d");
-  if (!ctx) return canvas;
-
-  ctx.fillStyle = "rgb(127,127,127)";
-  ctx.fillRect(0, 0, output.width, output.height);
-
-  const sourceX = Math.max(0, desiredX);
-  const sourceY = Math.max(0, desiredY);
-  const sourceRight = Math.min(canvas.width, desiredX + side);
-  const sourceBottom = Math.min(canvas.height, desiredY + side);
-  const sourceW = Math.max(1, sourceRight - sourceX);
-  const sourceH = Math.max(1, sourceBottom - sourceY);
-
-  const mapX = (x: number) => ((x - desiredX) / side) * output.width;
-  const mapY = (y: number) => ((y - desiredY) / side) * output.height;
-
-  ctx.save();
-  ctx.beginPath();
-  expanded.forEach((point, index) => {
-    const x = mapX(point.x);
-    const y = mapY(point.y);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.closePath();
-  ctx.clip();
-
-  ctx.drawImage(
-    canvas,
-    sourceX,
-    sourceY,
-    sourceW,
-    sourceH,
-    mapX(sourceX),
-    mapY(sourceY),
-    (sourceW / side) * output.width,
-    (sourceH / side) * output.height,
-  );
-  ctx.restore();
-
-  return output;
-}
-
 async function detectFace(file: File): Promise<DetectedFace | null> {
   const model = await getFaceLandmarker();
   const prepared = await fileToCanvas(file);
@@ -309,14 +224,16 @@ async function detectFace(file: File): Promise<DetectedFace | null> {
   if (!face || face.length < 468) return null;
 
   const landmarks = face.slice(0, Math.min(478, face.length));
+  const canonical = createCanonicalFaceCanvases(prepared.canvas, landmarks);
 
   return {
     landmarks,
     aspectRatio: prepared.aspectRatio,
     imageQuality: calculateImageQuality(prepared.canvas, face),
+    captureQuality: analyzeFaceCaptureQuality(prepared.canvas, landmarks, prepared.aspectRatio),
     canvas: prepared.canvas,
-    identityCanvas: createFaceOnlyCanvas(prepared.canvas, landmarks, 1.08),
-    identityFallbackCanvas: createFaceOnlyCanvas(prepared.canvas, landmarks, 1.18),
+    identityCanvas: canonical.primary,
+    identityFallbackCanvas: canonical.fallback,
   };
 }
 
@@ -370,7 +287,7 @@ export default function AdminSimilarity() {
   const [results, setResults] = useState<ComparisonResult[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, name: "" });
-  const [masterQuality, setMasterQuality] = useState<{ score: number; warnings: string[]; imageScore: number } | null>(null);
+  const [masterQuality, setMasterQuality] = useState<{ score: number; warnings: string[]; imageScore: number; capture: FaceCaptureQuality } | null>(null);
 
   const rankedResults = useMemo(
     () =>
@@ -487,7 +404,12 @@ export default function AdminSimilarity() {
       const masterGeometryQ = evaluateFaceGeometryQuality(masterDetected.landmarks, masterDetected.aspectRatio);
       const masterCombinedQuality = clamp(masterGeometryQ.score * 0.72 + masterDetected.imageQuality.score * 0.28);
       const masterWarnings = Array.from(new Set([...masterGeometryQ.warnings, ...masterDetected.imageQuality.warnings]));
-      const masterQ = { score: masterCombinedQuality, warnings: masterWarnings, imageScore: masterDetected.imageQuality.score };
+      const masterQ = {
+        score: masterCombinedQuality,
+        warnings: masterWarnings,
+        imageScore: masterDetected.imageQuality.score,
+        capture: masterDetected.captureQuality,
+      };
       setMasterQuality(masterQ);
 
       if (masterQ.score < 45) {
@@ -540,16 +462,27 @@ export default function AdminSimilarity() {
           const candidateIdentity = await extractIdentityDescriptor(candidateDetected.identityCanvas, candidateDetected.identityFallbackCanvas);
           const identityComparison = await compareIdentityDescriptors(masterIdentity, candidateIdentity);
 
-          const reliability = clamp(Math.min(masterQ.score, candidateCombinedQuality) * 0.72 + ((masterQ.score + candidateCombinedQuality) / 2) * 0.28);
+          const captureReliability = Math.min(masterDetected.captureQuality.score, candidateDetected.captureQuality.score);
+          const reliability = clamp(
+            captureReliability * 0.65 +
+            Math.min(masterQ.score, candidateCombinedQuality) * 0.35
+          );
           const decision = decideFaceMatch({
             identityRawSimilarity: identityComparison.rawSimilarity,
             geometrySimilarity: comparison.similarity,
             geometryCriticalMean: comparison.criticalMean,
             geometryCriticalFloor: comparison.criticalFloor,
+            globalScore: comparison.regions.global,
+            eyesScore: comparison.regions.eyes,
             noseScore: comparison.regions.nose,
+            ovalScore: comparison.regions.oval,
+            cheeksScore: comparison.regions.cheeks,
             jawScore: comparison.regions.jaw,
             chinScore: comparison.regions.chin,
+            proportionsScore: comparison.regions.proportions,
             measurementsScore: comparison.regions.measurements,
+            structureScore: comparison.regions.structure,
+            symmetryScore: comparison.regions.symmetry,
             reliability,
           });
 
