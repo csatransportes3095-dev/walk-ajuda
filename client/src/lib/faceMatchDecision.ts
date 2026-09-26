@@ -10,6 +10,10 @@ export type FaceMatchDecisionInput = {
   geometrySimilarity: number;
   geometryCriticalMean: number;
   geometryCriticalFloor: number;
+  noseScore?: number;
+  jawScore?: number;
+  chinScore?: number;
+  measurementsScore?: number;
   reliability: number;
 };
 
@@ -45,6 +49,10 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
   const geometry = clamp(input.geometrySimilarity);
   const criticalMean = clamp(input.geometryCriticalMean);
   const criticalFloor = clamp(input.geometryCriticalFloor);
+  const nose = clamp(input.noseScore ?? criticalMean);
+  const jaw = clamp(input.jawScore ?? criticalMean);
+  const chin = clamp(input.chinScore ?? criticalMean);
+  const measurements = clamp(input.measurementsScore ?? criticalMean);
   const reliability = clamp(input.reliability);
 
   // Identidade é a prova principal; geometria é confirmação secundária.
@@ -59,6 +67,20 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
   else if (raw < 0.58) finalScore = Math.min(finalScore, 68);
   else if (raw < 0.64) finalScore = Math.min(finalScore, 80);
   else if (raw < 0.70) finalScore = Math.min(finalScore, 89);
+
+  // Travas faciais explícitas: nariz, maxilar, queixo e medidas exatas são
+  // estruturas discriminantes e não podem ser escondidas por uma média global.
+  const structuralWeak = [nose, jaw, chin, measurements].filter((score) => score < 45).length;
+  const structuralSevere = [nose, jaw, chin, measurements].filter((score) => score < 32).length;
+
+  if (structuralSevere >= 2) finalScore = Math.min(finalScore, 38);
+  else if (structuralSevere === 1 && structuralWeak >= 2) finalScore = Math.min(finalScore, 50);
+
+  if (structuralWeak >= 3) finalScore = Math.min(finalScore, 46);
+  else if (structuralWeak >= 2) finalScore = Math.min(finalScore, 58);
+
+  if (jaw < 35 && chin < 35) finalScore = Math.min(finalScore, 42);
+  if (nose < 35 && measurements < 45) finalScore = Math.min(finalScore, 48);
 
   // Geometria extremamente incompatível também impede conclusão alta, mesmo
   // quando a textura/aparência gerou embedding relativamente próximo.
