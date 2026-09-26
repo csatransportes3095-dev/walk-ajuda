@@ -6,7 +6,7 @@ import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, ty
 import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
 import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } from "@/lib/faceQuality";
 import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
-import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, calibratedLocalResemblanceScore, type FaceResemblanceDescriptor } from "@/lib/faceResemblanceEngine";
+import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, calibratedLocalResemblanceScore, type FaceResemblanceDescriptor, type FacePartComparison } from "@/lib/faceResemblanceEngine";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 
 type CandidatePhoto = {
@@ -30,6 +30,8 @@ type ComparisonResult = {
   engineLabel?: string;
   faceXGlobalScore?: number;
   localCoreScore?: number;
+  faceXPartScores?: Record<"eyes" | "nose" | "mouth", FacePartComparison>;
+  faceXPartMean?: number;
   verdict?: MatchVerdict;
   verdictDetail?: string;
   regions?: RegionScores;
@@ -531,6 +533,8 @@ export default function AdminSimilarity() {
           let primaryCosine: number | undefined;
           let faceXGlobalScore: number | undefined;
           let localCoreScore: number | undefined;
+          let faceXPartScores: Record<"eyes" | "nose" | "mouth", FacePartComparison> | undefined;
+          let faceXPartMean: number | undefined;
           let engineLabel = "Fallback atual";
 
           if (masterResemblance) {
@@ -551,6 +555,8 @@ export default function AdminSimilarity() {
               primaryScore = localCalibration.score;
               localCoreScore = localCalibration.coreMean;
               faceXGlobalScore = standardized.score;
+              faceXPartScores = standardized.parts;
+              faceXPartMean = standardized.partMeanScore;
               primaryCosine = standardized.cosine;
               engineLabel = "Calibrado • Olhos + Nariz + Boca";
             } catch (error) {
@@ -640,6 +646,8 @@ export default function AdminSimilarity() {
             engineLabel,
             faceXGlobalScore,
             localCoreScore,
+            faceXPartScores,
+            faceXPartMean,
             verdict: decision.verdict,
             verdictDetail: decision.detail,
             regions: comparison.regions,
@@ -1091,6 +1099,31 @@ export default function AdminSimilarity() {
                           </div>
                         )}
 
+                        {result.faceXPartScores && (
+                          <div className="mt-3 rounded-xl border border-cyan-400/15 bg-cyan-500/[0.04] p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-[11px] font-black uppercase tracking-wide text-cyan-300">FaceX por partes • diagnóstico</p>
+                              <p className="text-xs font-black text-white">Média {result.faceXPartMean?.toFixed(1)}%</p>
+                            </div>
+                            <div className="mt-2 grid grid-cols-3 gap-2">
+                              {[
+                                ["Olhos", result.faceXPartScores.eyes],
+                                ["Nariz", result.faceXPartScores.nose],
+                                ["Boca", result.faceXPartScores.mouth],
+                              ].map(([label, value]) => {
+                                const v = value as FacePartComparison;
+                                return (
+                                  <div key={String(label)} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                                    <p className="text-[10px] uppercase text-slate-500">{String(label)}</p>
+                                    <p className="text-sm font-black text-cyan-200">{v.score.toFixed(1)}%</p>
+                                    <p className="text-[10px] text-slate-500">cos {v.cosine.toFixed(3)}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         {!result.error && result.similarity !== null && (() => {
                           const verdict = verdictFor(result);
                           return (
@@ -1100,7 +1133,7 @@ export default function AdminSimilarity() {
                               <p className="mt-1 text-[10px] opacity-65">
                                 {result.identityRaw !== undefined
   ? result.faceXGlobalScore !== undefined
-    ? `FaceX global: ${result.faceXGlobalScore.toFixed(1)}% • Cosseno: ${result.identityRaw.toFixed(3)} • Núcleo local: ${result.localCoreScore?.toFixed(1) ?? "—"}% • `
+    ? `FaceX global: ${result.faceXGlobalScore.toFixed(1)}% • Cosseno: ${result.identityRaw.toFixed(3)} • Geometria local antiga: ${result.localCoreScore?.toFixed(1) ?? "—"}% • `
     : `Embedding de apoio: ${(result.identityRaw * 100).toFixed(1)}% • `
   : ""}
                                 {result.criticalFloor !== undefined ? `Elo geométrico: ${result.criticalFloor.toFixed(1)}%` : ""}
