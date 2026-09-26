@@ -59,7 +59,7 @@ async function getIdentityEngine(): Promise<HumanInstance> {
             rotation: true,
             return: true,
             maxDetected: 2,
-            minConfidence: 0.72,
+            minConfidence: 0.58,
           },
           mesh: { enabled: true },
           attention: { enabled: false },
@@ -91,13 +91,21 @@ async function getIdentityEngine(): Promise<HumanInstance> {
   return enginePromise;
 }
 
-export async function extractIdentityDescriptor(canvas: HTMLCanvasElement): Promise<FaceIdentityDescriptor> {
+export async function extractIdentityDescriptor(
+  canvas: HTMLCanvasElement,
+  fallbackCanvas?: HTMLCanvasElement,
+): Promise<FaceIdentityDescriptor> {
   const human = await getIdentityEngine();
-  const result = await human.detect(canvas);
-  const faces = result.face || [];
+  let result = await human.detect(canvas);
+  let faces = result.face || [];
+
+  if (faces.length === 0 && fallbackCanvas) {
+    result = await human.detect(fallbackCanvas);
+    faces = result.face || [];
+  }
 
   if (faces.length === 0) {
-    throw new Error("O motor de identidade não encontrou um rosto.");
+    throw new Error("O motor de identidade não encontrou um rosto mesmo após o recorte de recuperação.");
   }
   if (faces.length > 1) {
     throw new Error("O motor de identidade encontrou mais de um rosto.");

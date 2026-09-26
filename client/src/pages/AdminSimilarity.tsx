@@ -45,6 +45,7 @@ type DetectedFace = {
   imageQuality: ImageQuality;
   canvas: HTMLCanvasElement;
   identityCanvas: HTMLCanvasElement;
+  identityFallbackCanvas: HTMLCanvasElement;
 };
 
 type FaceLandmarkerInstance = {
@@ -206,57 +207,89 @@ async function fileToCanvas(file: File) {
   };
 }
 
-function createFaceOnlyCanvas(canvas: HTMLCanvasElement, landmarks: FaceLandmark[]) {
+function createFaceOnlyCanvas(
+  canvas: HTMLCanvasElement,
+  landmarks: FaceLandmark[],
+  expansion = 1.08,
+) {
   const oval = FACE_OVAL.map((index) => landmarks[index]).filter(Boolean);
   if (oval.length < 20) return canvas;
 
-  const xs = oval.map((p) => p.x);
-  const ys = oval.map((p) => p.y);
-  const minXn = Math.max(0, Math.min(...xs));
-  const maxXn = Math.min(1, Math.max(...xs));
-  const minYn = Math.max(0, Math.min(...ys));
-  const maxYn = Math.min(1, Math.max(...ys));
+  const pixelOval = oval.map((point) => ({
+    x: point.x * canvas.width,
+    y: point.y * canvas.height,
+  }));
 
-  // Padding mínimo: mantém a borda da face sem trazer cabelo, orelha ou fundo.
-  const padXn = (maxXn - minXn) * 0.035;
-  const padYn = (maxYn - minYn) * 0.03;
-  const x1n = Math.max(0, minXn - padXn);
-  const x2n = Math.min(1, maxXn + padXn);
-  const y1n = Math.max(0, minYn - padYn);
-  const y2n = Math.min(1, maxYn + padYn);
+  const center = pixelOval.reduce(
+    (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+    { x: 0, y: 0 },
+  );
+  center.x /= pixelOval.length;
+  center.y /= pixelOval.length;
 
-  const sx = Math.floor(x1n * canvas.width);
-  const sy = Math.floor(y1n * canvas.height);
-  const sw = Math.max(1, Math.ceil((x2n - x1n) * canvas.width));
-  const sh = Math.max(1, Math.ceil((y2n - y1n) * canvas.height));
+  const expanded = pixelOval.map((point) => ({
+    x: center.x + (point.x - center.x) * expansion,
+    y: center.y + (point.y - center.y) * expansion,
+  }));
 
-  const maxSide = 640;
-  const scale = Math.min(1, maxSide / Math.max(sw, sh));
+  const xs = expanded.map((p) => p.x);
+  const ys = expanded.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  // Quadrado neutro dá ao detector contexto de enquadramento sem reintroduzir
+  // fundo real, cabelo externo ou orelhas.
+  const faceWidth = maxX - minX;
+  const faceHeight = maxY - minY;
+  const side = Math.max(faceWidth, faceHeight) * 1.28;
+  const cropCenterX = (minX + maxX) / 2;
+  const cropCenterY = (minY + maxY) / 2 + faceHeight * 0.015;
+  const desiredX = cropCenterX - side / 2;
+  const desiredY = cropCenterY - side / 2;
+
   const output = document.createElement("canvas");
-  output.width = Math.max(192, Math.round(sw * scale));
-  output.height = Math.max(192, Math.round(sh * scale));
-
+  output.width = 512;
+  output.height = 512;
   const ctx = output.getContext("2d");
   if (!ctx) return canvas;
 
-  // Fundo neutro uniforme: nenhum pixel do cenário original participa.
   ctx.fillStyle = "rgb(127,127,127)";
   ctx.fillRect(0, 0, output.width, output.height);
 
-  const scaleX = output.width / sw;
-  const scaleY = output.height / sh;
+  const sourceX = Math.max(0, desiredX);
+  const sourceY = Math.max(0, desiredY);
+  const sourceRight = Math.min(canvas.width, desiredX + side);
+  const sourceBottom = Math.min(canvas.height, desiredY + side);
+  const sourceW = Math.max(1, sourceRight - sourceX);
+  const sourceH = Math.max(1, sourceBottom - sourceY);
+
+  const mapX = (x: number) => ((x - desiredX) / side) * output.width;
+  const mapY = (y: number) => ((y - desiredY) / side) * output.height;
 
   ctx.save();
   ctx.beginPath();
-  oval.forEach((point, index) => {
-    const x = (point.x * canvas.width - sx) * scaleX;
-    const y = (point.y * canvas.height - sy) * scaleY;
+  expanded.forEach((point, index) => {
+    const x = mapX(point.x);
+    const y = mapY(point.y);
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
   ctx.closePath();
   ctx.clip();
-  ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, output.width, output.height);
+
+  ctx.drawImage(
+    canvas,
+    sourceX,
+    sourceY,
+    sourceW,
+    sourceH,
+    mapX(sourceX),
+    mapY(sourceY),
+    (sourceW / side) * output.width,
+    (sourceH / side) * output.height,
+  );
   ctx.restore();
 
   return output;
@@ -282,7 +315,8 @@ async function detectFace(file: File): Promise<DetectedFace | null> {
     aspectRatio: prepared.aspectRatio,
     imageQuality: calculateImageQuality(prepared.canvas, face),
     canvas: prepared.canvas,
-    identityCanvas: createFaceOnlyCanvas(prepared.canvas, landmarks),
+    identityCanvas: createFaceOnlyCanvas(prepared.canvas, landmarks, 1.08),
+    identityFallbackCanvas: createFaceOnlyCanvas(prepared.canvas, landmarks, 1.18),
   };
 }
 
@@ -426,7 +460,7 @@ export default function AdminSimilarity() {
       setProgress({ current: 0, total: candidates.length, name: "Gerando vetor facial da Foto Mestre..." });
       let masterIdentity: FaceIdentityDescriptor;
       try {
-        masterIdentity = await extractIdentityDescriptor(masterDetected.identityCanvas);
+        masterIdentity = await extractIdentityDescriptor(masterDetected.identityCanvas, masterDetected.identityFallbackCanvas);
       } catch (error: any) {
         toast.error(error?.message || "Não foi possível gerar o vetor facial da Foto Mestre.");
         return;
@@ -465,7 +499,7 @@ export default function AdminSimilarity() {
           );
 
           setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • vetor facial` });
-          const candidateIdentity = await extractIdentityDescriptor(candidateDetected.identityCanvas);
+          const candidateIdentity = await extractIdentityDescriptor(candidateDetected.identityCanvas, candidateDetected.identityFallbackCanvas);
           const identityComparison = await compareIdentityDescriptors(masterIdentity, candidateIdentity);
 
           const reliability = clamp(Math.min(masterQ.score, candidateCombinedQuality) * 0.72 + ((masterQ.score + candidateCombinedQuality) / 2) * 0.28);
