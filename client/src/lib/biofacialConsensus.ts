@@ -4,11 +4,13 @@ export type BiofacialConsensusInput = {
   criticalMean: number;
   globalScore: number;
   eyesScore: number;
+  browsScore: number;
   noseScore: number;
   ovalScore: number;
   cheeksScore: number;
   jawScore: number;
   chinScore: number;
+  mouthScore: number;
   proportionsScore: number;
   measurementsScore: number;
   structureScore: number;
@@ -39,60 +41,61 @@ export function calibrateEmbeddingForSimilarity(raw: number) {
 export function calculateBiofacialConsensus(input: BiofacialConsensusInput): BiofacialConsensusResult {
   const embeddingVisualScore = calibrateEmbeddingForSimilarity(input.embeddingRaw);
 
+  // A nota principal mede parecenca visual/morfologica, nao identidade.
+  // Os pesos somam 100% e privilegiam estruturas perceptiveis do rosto.
   const morphologyScore = weightedMean([
-    [input.globalScore, 0.08],
-    [input.eyesScore, 0.12],
-    [input.noseScore, 0.12],
+    [input.globalScore, 0.06],
+    [input.eyesScore, 0.10],
+    [input.browsScore, 0.07],
+    [input.noseScore, 0.11],
+    [input.mouthScore, 0.10],
     [input.ovalScore, 0.10],
-    [input.cheeksScore, 0.10],
-    [input.jawScore, 0.10],
-    [input.chinScore, 0.08],
-    [input.proportionsScore, 0.10],
-    [input.measurementsScore, 0.12],
-    [input.structureScore, 0.06],
-    [input.symmetryScore, 0.02],
+    [input.cheeksScore, 0.08],
+    [input.jawScore, 0.08],
+    [input.chinScore, 0.07],
+    [input.proportionsScore, 0.08],
+    [input.measurementsScore, 0.10],
+    [input.structureScore, 0.05],
   ]);
 
   const geometryConsensusScore = clamp(
-    input.criticalMean * 0.45 +
-    morphologyScore * 0.40 +
-    input.geometryScore * 0.15
+    morphologyScore * 0.70 +
+    input.criticalMean * 0.20 +
+    input.geometryScore * 0.10
   );
 
+  // O embedding e apenas apoio. Mesmo um embedding muito alto nao pode
+  // transformar uma morfologia moderada em 90%+.
   let similarityScore = clamp(
-    embeddingVisualScore * 0.60 +
-    geometryConsensusScore * 0.40
+    morphologyScore * 0.87 +
+    geometryConsensusScore * 0.10 +
+    embeddingVisualScore * 0.03
   );
-
-  const gap = Math.abs(embeddingVisualScore - geometryConsensusScore);
-  if (embeddingVisualScore >= 65 && geometryConsensusScore >= 60 && gap <= 18) {
-    similarityScore += 2.5;
-  }
 
   const structural = [
+    input.eyesScore,
+    input.browsScore,
     input.noseScore,
+    input.mouthScore,
     input.ovalScore,
     input.cheeksScore,
     input.jawScore,
     input.chinScore,
     input.measurementsScore,
-    input.structureScore,
   ];
   const severeCount = structural.filter((score) => score < 30).length;
-  const weakCount = structural.filter((score) => score < 42).length;
+  const weakCount = structural.filter((score) => score < 45).length;
 
-  if (severeCount >= 3) similarityScore -= 12;
-  else if (severeCount >= 2) similarityScore -= 8;
-  else if (severeCount === 1 && weakCount >= 3) similarityScore -= 5;
+  if (severeCount >= 3) similarityScore -= 8;
+  else if (severeCount >= 2) similarityScore -= 5;
 
-  if (weakCount >= 4) similarityScore -= 6;
-  else if (weakCount >= 3) similarityScore -= 3;
+  if (weakCount >= 4) similarityScore -= 4;
+  else if (weakCount >= 3) similarityScore -= 2;
 
-  if (input.jawScore < 28 && input.chinScore < 28) similarityScore -= 5;
-  if (input.noseScore < 28 && input.measurementsScore < 35) similarityScore -= 4;
-
-  if (gap > 42) similarityScore -= 6;
-  else if (gap > 32) similarityScore -= 3;
+  // Tetos morfologicos impedem que o embedding domine comparacoes pouco parecidas.
+  if (morphologyScore < 45) similarityScore = Math.min(similarityScore, 50);
+  else if (morphologyScore < 55) similarityScore = Math.min(similarityScore, 60);
+  else if (morphologyScore < 65) similarityScore = Math.min(similarityScore, 70);
 
   return {
     similarityScore: clamp(similarityScore),
