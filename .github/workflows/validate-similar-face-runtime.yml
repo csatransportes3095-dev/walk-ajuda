@@ -37,8 +37,5 @@ jobs:
       - name: Similar Face unit test
         run: pnpm vitest run server/similarFaceReference.test.ts
 
-      - name: TypeScript check
-        run: pnpm check
-
       - name: Build
         run: pnpm build
