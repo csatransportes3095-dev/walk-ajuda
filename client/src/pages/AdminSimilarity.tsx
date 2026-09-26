@@ -373,7 +373,21 @@ export default function AdminSimilarity() {
   const [masterQuality, setMasterQuality] = useState<{ score: number; warnings: string[]; imageScore: number } | null>(null);
 
   const rankedResults = useMemo(
-    () => [...results].sort((a, b) => (b.similarity ?? -1) - (a.similarity ?? -1)),
+    () =>
+      [...results].sort((a, b) => {
+        const aPreferred = qualifiesForGoodUse(a) ? 1 : 0;
+        const bPreferred = qualifiesForGoodUse(b) ? 1 : 0;
+
+        // Preferências pulsantes sempre aparecem primeiro.
+        if (aPreferred !== bPreferred) return bPreferred - aPreferred;
+
+        // Dentro do mesmo grupo, maior resultado final primeiro.
+        const similarityDiff = (b.similarity ?? -1) - (a.similarity ?? -1);
+        if (similarityDiff !== 0) return similarityDiff;
+
+        // Desempate: maior conjunto crítico primeiro.
+        return (b.criticalMean ?? -1) - (a.criticalMean ?? -1);
+      }),
     [results]
   );
 
@@ -846,7 +860,7 @@ export default function AdminSimilarity() {
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
                     <h2 className="text-xl font-black">Resultado biofacial</h2>
                   </div>
-                  <span className="text-xs text-slate-500">Maior similaridade primeiro</span>
+                  <span className="text-xs text-slate-500">Preferências pulsantes primeiro</span>
                 </div>
 
                 {rankedResults.map((result, index) => (
