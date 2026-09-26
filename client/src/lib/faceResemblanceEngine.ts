@@ -75,26 +75,6 @@ export function similarityScoreFromCosine(cosine: number) {
   return clamp(100 / (1 + Math.exp(2 - 10 * c)), 0, 100);
 }
 
-export type LocalResemblanceScores = {
-  eyes: number;
-  nose: number;
-  mouth: number;
-};
-
-export function calibratedLocalResemblanceScore(scores: LocalResemblanceScores) {
-  const coreMean = clamp((scores.eyes + scores.nose + scores.mouth) / 3, 0, 100);
-
-  // Calibracao inicial baseada em tres pares de referencia medidos no
-  // Similar Face (75%, 71% e 86%). Usa as mesmas tres regioes locais
-  // identificadas no APK: olhos, nariz e boca.
-  const score = clamp(coreMean * 1.22 - 5.7, 0, 100);
-
-  return {
-    score,
-    coreMean,
-  };
-}
-
 export function cosineSimilarity(a: number[], b: number[]) {
   if (!a.length || a.length !== b.length) return 0;
   let dot = 0;
