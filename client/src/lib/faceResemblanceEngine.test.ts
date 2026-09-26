@@ -4,6 +4,7 @@ import {
   estimateSimilarityTransform,
   similarityScoreFromCosine,
   calibratedLocalResemblanceScore,
+  compareFaceResemblanceDescriptors,
 } from "./faceResemblanceEngine";
 
 describe("standardized 112x112 resemblance engine", () => {
@@ -55,6 +56,36 @@ describe("standardized 112x112 resemblance engine", () => {
   it("clamps local calibration to a valid percentage", () => {
     expect(calibratedLocalResemblanceScore({ eyes: 0, nose: 0, mouth: 0 }).score).toBe(0);
     expect(calibratedLocalResemblanceScore({ eyes: 100, nose: 100, mouth: 100 }).score).toBe(100);
+  });
+
+  it("compares FaceX eye nose and mouth embeddings independently", () => {
+    const a = {
+      embedding: [1, 0, 0],
+      alignedCanvas: null as unknown as HTMLCanvasElement,
+      parts: {
+        eyes: [1, 0, 0],
+        nose: [1, 0, 0],
+        mouth: [1, 0, 0],
+      },
+    };
+    const b = {
+      embedding: [1, 0, 0],
+      alignedCanvas: null as unknown as HTMLCanvasElement,
+      parts: {
+        eyes: [1, 0, 0],
+        nose: [0.8, 0.2, 0],
+        mouth: [0, 1, 0],
+      },
+    };
+
+    const result = compareFaceResemblanceDescriptors(a, b);
+    expect(result.parts.eyes.cosine).toBeCloseTo(1, 8);
+    expect(result.parts.nose.cosine).toBeGreaterThan(0.9);
+    expect(result.parts.mouth.cosine).toBeCloseTo(0, 8);
+    expect(result.partMeanScore).toBeCloseTo(
+      (result.parts.eyes.score + result.parts.nose.score + result.parts.mouth.score) / 3,
+      10,
+    );
   });
 
 });
