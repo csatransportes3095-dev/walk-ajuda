@@ -7,7 +7,8 @@ import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
 import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } from "@/lib/faceQuality";
 import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
 import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, type FaceResemblanceDescriptor, type FacePartComparison } from "@/lib/faceResemblanceEngine";
-import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";\nimport { loadCachedSimilarFaceRuntime, loadSimilarFaceRuntimeFromXapk, clearCachedSimilarFaceRuntime, type SimilarFaceRuntime } from "@/lib/similarFaceTfliteRuntime";
+import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
+import { loadCachedSimilarFaceRuntime, loadSimilarFaceRuntimeFromXapk, clearCachedSimilarFaceRuntime, type SimilarFaceRuntime } from "@/lib/similarFaceTfliteRuntime";
 import { cosineSimilarity512, similarFaceScorePercent } from "@/lib/similarFaceReference";
 
 type CandidatePhoto = {
@@ -32,6 +33,7 @@ type ComparisonResult = {
   faceXGlobalScore?: number;
   faceXPartScores?: Record<"eyes" | "nose" | "mouth", FacePartComparison>;
   faceXPartMean?: number;
+  referenceEngine?: boolean;
   verdict?: MatchVerdict;
   verdictDetail?: string;
   regions?: RegionScores;
@@ -58,6 +60,7 @@ type AnalyzedFaceForPairs = {
   detected: DetectedFace;
   identity: FaceIdentityDescriptor | null;
   resemblance: FaceResemblanceDescriptor | null;
+  referenceEmbedding?: Float32Array | null;
 };
 
 type ImageQuality = {
