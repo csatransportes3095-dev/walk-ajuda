@@ -181,3 +181,69 @@ export function createDetectorRetryCanvas(sourceSquare: HTMLCanvasElement) {
   ctx.drawImage(sourceSquare, margin, margin);
   return output;
 }
+
+
+type ReferencePoint = { x: number; y: number };
+
+export function estimateReferenceTransform(source: ReferencePoint[]) {
+  if (source.length !== 5) {
+    throw new Error("O alinhamento exige cinco pontos.");
+  }
+
+  const target = SIMILAR_FACE_REFERENCE.arcFaceTarget;
+  const srcMean = source.reduce(
+    (acc, p) => ({ x: acc.x + p.x / 5, y: acc.y + p.y / 5 }),
+    { x: 0, y: 0 },
+  );
+  const dstMean = target.reduce(
+    (acc, p) => ({ x: acc.x + p[0] / 5, y: acc.y + p[1] / 5 }),
+    { x: 0, y: 0 },
+  );
+
+  let den = 0;
+  let numA = 0;
+  let numB = 0;
+  for (let i = 0; i < 5; i += 1) {
+    const sx = source[i].x - srcMean.x;
+    const sy = source[i].y - srcMean.y;
+    const tx = target[i][0] - dstMean.x;
+    const ty = target[i][1] - dstMean.y;
+    den += sx * sx + sy * sy;
+    numA += sx * tx + sy * ty;
+    numB += sx * ty - sy * tx;
+  }
+
+  if (den < 1e-9) throw new Error("Falha ao estimar alinhamento.");
+
+  const a = numA / den;
+  const b = numB / den;
+
+  return {
+    a,
+    b,
+    c: -b,
+    d: a,
+    e: dstMean.x - a * srcMean.x + b * srcMean.y,
+    f: dstMean.y - b * srcMean.x - a * srcMean.y,
+  };
+}
+
+export function createReferenceAligned112(
+  source: HTMLCanvasElement,
+  fivePoints: ReferencePoint[],
+) {
+  const t = estimateReferenceTransform(fivePoints);
+  const output = document.createElement("canvas");
+  output.width = 112;
+  output.height = 112;
+  const ctx = output.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Falha ao criar face alinhada.");
+
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, 112, 112);
+  ctx.save();
+  ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f);
+  ctx.drawImage(source, 0, 0);
+  ctx.restore();
+  return output;
+}
