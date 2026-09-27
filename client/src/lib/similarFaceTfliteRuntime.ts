@@ -419,6 +419,79 @@ async function createRuntime(detectorBytes: Uint8Array, recognizerBytes: Uint8Ar
   };
 }
 
+export async function getCachedH2FaceModelBytes() {
+  await requestPersistentStorage();
+
+  let [detector, recognizer] = await Promise.all([
+    cacheGet(CACHE_DETECTOR),
+    cacheGet(CACHE_RECOGNIZER),
+  ]);
+
+  if (!detector || !recognizer) {
+    [detector, recognizer] = await Promise.all([
+      cacheStorageGet(CACHE_DETECTOR),
+      cacheStorageGet(CACHE_RECOGNIZER),
+    ]);
+  }
+
+  if (!detector || !recognizer) return null;
+  return { detector, recognizer };
+}
+
+export async function persistH2FaceModelBytes(detector: Uint8Array, recognizer: Uint8Array) {
+  await requestPersistentStorage();
+  await Promise.all([
+    cachePut(CACHE_DETECTOR, detector),
+    cachePut(CACHE_RECOGNIZER, recognizer),
+    cacheStoragePut(CACHE_DETECTOR, detector),
+    cacheStoragePut(CACHE_RECOGNIZER, recognizer),
+  ]);
+}
+
+function assertH2FaceModel(bytes: Uint8Array) {
+  if (
+    bytes.length < 8 ||
+    bytes[4] !== 0x54 ||
+    bytes[5] !== 0x46 ||
+    bytes[6] !== 0x4c ||
+    bytes[7] !== 0x33
+  ) {
+    throw new Error("Componente H2 Face inválido.");
+  }
+}
+
+export async function loadH2FaceRuntimeFromBytes(
+  detector: Uint8Array,
+  recognizer: Uint8Array,
+  sourceLabel = "H2 Face • motor automático",
+) {
+  assertH2FaceModel(detector);
+  assertH2FaceModel(recognizer);
+  await persistH2FaceModelBytes(detector, recognizer);
+  return await createRuntime(detector, recognizer, sourceLabel);
+}
+
+export async function loadH2FaceRuntimeFromUrls(detectorUrl: string, recognizerUrl: string) {
+  const fetchModel = async (url: string) => {
+    const response = await fetch(url, { cache: "force-cache", credentials: "omit" });
+    if (!response.ok) throw new Error("Não foi possível inicializar o motor H2 Face.");
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    assertH2FaceModel(bytes);
+    return bytes;
+  };
+
+  const [detector, recognizer] = await Promise.all([
+    fetchModel(detectorUrl),
+    fetchModel(recognizerUrl),
+  ]);
+
+  return await loadH2FaceRuntimeFromBytes(
+    detector,
+    recognizer,
+    "H2 Face • motor automático",
+  );
+}
+
 export async function loadSimilarFaceRuntimeFromXapk(file: File) {
   const models = await extractModelsFromXapk(file);
   await requestPersistentStorage();
