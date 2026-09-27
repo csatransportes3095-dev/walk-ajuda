@@ -234,7 +234,7 @@ async function extractModelsFromXapk(file: File) {
     /com\.consisai\.face_album\.apk$/i.test(name),
   );
   if (!baseName) {
-    throw new Error("APK principal do Similar Face não encontrado dentro do XAPK.");
+    throw new Error("Arquivo principal do motor H2 Face não encontrado.");
   }
 
   const apkBytes = await xapk.files[baseName].async("uint8array");
@@ -428,7 +428,7 @@ export async function loadSimilarFaceRuntimeFromXapk(file: File) {
     cacheStoragePut(CACHE_DETECTOR, models.detector),
     cacheStoragePut(CACHE_RECOGNIZER, models.recognizer),
   ]);
-  return await createRuntime(models.detector, models.recognizer, "Similar Face 1.0.27 • armazenamento persistente local");
+  return await createRuntime(models.detector, models.recognizer, "H2 Face • armazenamento persistente local");
 }
 
 export async function loadCachedSimilarFaceRuntime() {
@@ -454,7 +454,7 @@ export async function loadCachedSimilarFaceRuntime() {
   }
 
   if (!detector || !recognizer) return null;
-  return await createRuntime(detector, recognizer, "Similar Face 1.0.27 • armazenamento persistente local");
+  return await createRuntime(detector, recognizer, "H2 Face • armazenamento persistente local");
 }
 
 export async function clearCachedSimilarFaceRuntime() {
