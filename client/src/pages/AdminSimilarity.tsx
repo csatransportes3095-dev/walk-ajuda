@@ -371,8 +371,8 @@ export default function AdminSimilarity() {
       toast.success("Motor H2 Face carregado e salvo no armazenamento local.");
     } catch (error: any) {
       setSimilarRuntime(null);
-      setRuntimeMessage(error?.message || "Falha ao carregar o XAPK.");
-      toast.error(error?.message || "Falha ao carregar o XAPK.");
+      setRuntimeMessage(error?.message || "Falha ao carregar o motor H2 Face.");
+      toast.error(error?.message || "Falha ao carregar o motor H2 Face.");
     } finally {
       setRuntimeLoading(false);
     }
