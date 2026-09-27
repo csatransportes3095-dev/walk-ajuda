@@ -272,7 +272,9 @@ function formatScore(score: number | null) {
 }
 
 function shouldPulseSimilarity(score: number | null) {
-  return score !== null && score > 85.5;
+  if (score === null) return false;
+  const displayed = Math.round(score * 10) / 10;
+  return displayed > 85.5;
 }
 
 function scoreLabel(score: number | null) {
