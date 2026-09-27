@@ -121,7 +121,7 @@ function decryptModel(input: Uint8Array) {
     out[6] !== 0x4c ||
     out[7] !== 0x33
   ) {
-    throw new Error("Modelo TFLite extraído do XAPK não foi reconhecido.");
+    throw new Error("Componente do motor H2 Face não foi reconhecido.");
   }
   return out;
 }
@@ -234,7 +234,7 @@ async function extractModelsFromXapk(file: File) {
     /com\.consisai\.face_album\.apk$/i.test(name),
   );
   if (!baseName) {
-    throw new Error("APK principal do Similar Face não encontrado dentro do XAPK.");
+    throw new Error("Arquivo principal do motor H2 Face não encontrado.");
   }
 
   const apkBytes = await xapk.files[baseName].async("uint8array");
@@ -428,7 +428,7 @@ export async function loadSimilarFaceRuntimeFromXapk(file: File) {
     cacheStoragePut(CACHE_DETECTOR, models.detector),
     cacheStoragePut(CACHE_RECOGNIZER, models.recognizer),
   ]);
-  return await createRuntime(models.detector, models.recognizer, "Similar Face 1.0.27 • armazenamento persistente local");
+  return await createRuntime(models.detector, models.recognizer, "H2 Face • armazenamento persistente local");
 }
 
 export async function loadCachedSimilarFaceRuntime() {
@@ -454,7 +454,7 @@ export async function loadCachedSimilarFaceRuntime() {
   }
 
   if (!detector || !recognizer) return null;
-  return await createRuntime(detector, recognizer, "Similar Face 1.0.27 • armazenamento persistente local");
+  return await createRuntime(detector, recognizer, "H2 Face • armazenamento persistente local");
 }
 
 export async function clearCachedSimilarFaceRuntime() {
