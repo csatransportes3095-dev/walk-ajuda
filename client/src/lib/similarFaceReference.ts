@@ -185,6 +185,95 @@ export function createDetectorRetryCanvas(sourceSquare: HTMLCanvasElement) {
 
 export type ReferencePoint = { x: number; y: number };
 
+const OPENCV_410_SCRIPT = "https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js";
+let referenceOpenCvPromise: Promise<any> | null = null;
+
+function loadReferenceScript(src: string) {
+  const current = document.querySelector<HTMLScriptElement>(`script[data-h2-opencv="${src}"]`);
+  if (current) {
+    if ((window as any).cv) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      current.addEventListener("load", () => resolve(), { once: true });
+      current.addEventListener("error", () => reject(new Error("Falha ao carregar OpenCV 4.10.0.")), { once: true });
+    });
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.crossOrigin = "anonymous";
+    script.dataset.h2Opencv = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Falha ao carregar OpenCV 4.10.0."));
+    document.head.appendChild(script);
+  });
+}
+
+export async function getReferenceOpenCv() {
+  if (!referenceOpenCvPromise) {
+    referenceOpenCvPromise = (async () => {
+      await loadReferenceScript(OPENCV_410_SCRIPT);
+      let cv: any = (window as any).cv;
+      if (!cv) throw new Error("OpenCV 4.10.0 não inicializado.");
+
+      // Algumas builds expõem cv como Promise; outras expõem o Module
+      // antes de o runtime WASM terminar de inicializar.
+      if (typeof cv.then === "function") {
+        cv = await cv;
+        (window as any).cv = cv;
+      }
+
+      if (!cv?.Mat) {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(
+            () => reject(new Error("Tempo esgotado ao inicializar OpenCV 4.10.0.")),
+            20000,
+          );
+          const previous = cv.onRuntimeInitialized;
+          cv.onRuntimeInitialized = () => {
+            window.clearTimeout(timeout);
+            try {
+              if (typeof previous === "function") previous();
+            } finally {
+              resolve();
+            }
+          };
+        });
+      }
+
+      if (!cv?.Mat || typeof cv.resize !== "function" || typeof cv.warpAffine !== "function") {
+        throw new Error("OpenCV 4.10.0 carregado sem resize/warpAffine.");
+      }
+      return cv;
+    })().catch((error) => {
+      referenceOpenCvPromise = null;
+      throw error;
+    });
+  }
+  return referenceOpenCvPromise;
+}
+
+function cvMatFromCanvas(cv: any, canvas: HTMLCanvasElement) {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Falha ao ler pixels para OpenCV.");
+  return cv.matFromImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
+}
+
+function cvMatToCanvas(mat: any, width: number, height: number) {
+  const output = document.createElement("canvas");
+  output.width = width;
+  output.height = height;
+  const ctx = output.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Falha ao criar canvas OpenCV.");
+
+  const rgba = new Uint8ClampedArray(mat.data.length);
+  rgba.set(mat.data);
+  ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
+  return output;
+}
+
+
 function f32(value: number) {
   return Math.fround(value);
 }
@@ -262,103 +351,65 @@ export function estimateReferenceTransform(sourceInput: ReferencePoint[]) {
   return { a, b, c, d, e, f };
 }
 
-function invertAffine(t: ReturnType<typeof estimateReferenceTransform>) {
-  const det = t.a * t.d - t.b * t.c;
-  if (Math.abs(det) < 1e-12) throw new Error("Transformação facial inválida.");
-
-  const ia = t.d / det;
-  const ic = -t.c / det;
-  const ib = -t.b / det;
-  const id = t.a / det;
-  const ie = -(ia * t.e + ic * t.f);
-  const iff = -(ib * t.e + id * t.f);
-  return { a: ia, b: ib, c: ic, d: id, e: ie, f: iff };
-}
-
-function sampleChannel(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  x: number,
-  y: number,
-  channel: number,
-) {
-  if (x < 0 || y < 0 || x >= width || y >= height) return 0;
-  return data[(y * width + x) * 4 + channel];
-}
-
-/**
- * Aproxima o INTER_LINEAR do cv::warpAffine. O OpenCV quantiza a fração
- * em uma tabela de 32 passos; fazer a mesma quantização evita a diferença
- * de amostragem do drawImage/canvas entre navegadores.
- */
-export function createReferenceAligned112(
+export async function createReferenceAligned112(
   source: HTMLCanvasElement,
   fivePoints: ReferencePoint[],
 ) {
+  const cv = await getReferenceOpenCv();
   const transform = estimateReferenceTransform(fivePoints);
-  const inverse = invertAffine(transform);
+  const src = cvMatFromCanvas(cv, source);
+  const dst = new cv.Mat();
+  const matrix = cv.matFromArray(
+    2,
+    3,
+    cv.CV_32F,
+    [
+      transform.a, transform.c, transform.e,
+      transform.b, transform.d, transform.f,
+    ],
+  );
 
-  const srcCtx = source.getContext("2d", { willReadFrequently: true });
-  if (!srcCtx) throw new Error("Falha ao ler a imagem para alinhamento.");
-  const src = srcCtx.getImageData(0, 0, source.width, source.height);
-
-  const output = document.createElement("canvas");
-  output.width = 112;
-  output.height = 112;
-  const outCtx = output.getContext("2d", { willReadFrequently: true });
-  if (!outCtx) throw new Error("Falha ao criar face alinhada.");
-
-  const dst = outCtx.createImageData(112, 112);
-  const tab = 32;
-
-  for (let y = 0; y < 112; y += 1) {
-    for (let x = 0; x < 112; x += 1) {
-      const sx = inverse.a * x + inverse.c * y + inverse.e;
-      const sy = inverse.b * x + inverse.d * y + inverse.f;
-
-      const qx = Math.round(sx * tab);
-      const qy = Math.round(sy * tab);
-      const x0 = Math.floor(qx / tab);
-      const y0 = Math.floor(qy / tab);
-      const fx = (qx - x0 * tab) / tab;
-      const fy = (qy - y0 * tab) / tab;
-      const x1 = x0 + 1;
-      const y1 = y0 + 1;
-
-      const w00 = (1 - fx) * (1 - fy);
-      const w10 = fx * (1 - fy);
-      const w01 = (1 - fx) * fy;
-      const w11 = fx * fy;
-
-      const di = (y * 112 + x) * 4;
-      for (let c = 0; c < 3; c += 1) {
-        const value =
-          sampleChannel(src.data, source.width, source.height, x0, y0, c) * w00 +
-          sampleChannel(src.data, source.width, source.height, x1, y0, c) * w10 +
-          sampleChannel(src.data, source.width, source.height, x0, y1, c) * w01 +
-          sampleChannel(src.data, source.width, source.height, x1, y1, c) * w11;
-        dst.data[di + c] = Math.max(0, Math.min(255, Math.round(value)));
-      }
-      dst.data[di + 3] = 255;
-    }
+  try {
+    // Mesmo OpenCV 4.10.0 e mesmos parâmetros observados no APK:
+    // INTER_LINEAR + BORDER_CONSTANT preto, saída 112x112.
+    cv.warpAffine(
+      src,
+      dst,
+      matrix,
+      new cv.Size(112, 112),
+      cv.INTER_LINEAR,
+      cv.BORDER_CONSTANT,
+      new cv.Scalar(0, 0, 0, 255),
+    );
+    return cvMatToCanvas(dst, 112, 112);
+  } finally {
+    matrix.delete();
+    dst.delete();
+    src.delete();
   }
-
-  outCtx.putImageData(dst, 0, 0);
-  return output;
 }
 
+export async function resizeReferenceDetector640(source: HTMLCanvasElement) {
+  const cv = await getReferenceOpenCv();
+  const src = cvMatFromCanvas(cv, source);
+  const dst = new cv.Mat();
 
-export function resizeReferenceDetector640(source: HTMLCanvasElement) {
-  const output = document.createElement("canvas");
-  output.width = 640;
-  output.height = 640;
-  const ctx = output.getContext("2d", { willReadFrequently: true });
-  if (!ctx) throw new Error("Falha ao criar entrada 640x640.");
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(source, 0, 0, 640, 640);
-  return output;
+  try {
+    // O APK usa cv::resize(..., INTER_LINEAR) do OpenCV 4.10.0.
+    // Não usar drawImage aqui: o filtro do navegador muda pixels/landmarks.
+    cv.resize(
+      src,
+      dst,
+      new cv.Size(640, 640),
+      0,
+      0,
+      cv.INTER_LINEAR,
+    );
+    return cvMatToCanvas(dst, 640, 640);
+  } finally {
+    dst.delete();
+    src.delete();
+  }
 }
 
 export function detectorCanvasToFloatInput(canvas: HTMLCanvasElement) {
