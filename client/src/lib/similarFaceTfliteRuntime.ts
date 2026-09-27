@@ -121,7 +121,7 @@ function decryptModel(input: Uint8Array) {
     out[6] !== 0x4c ||
     out[7] !== 0x33
   ) {
-    throw new Error("Modelo TFLite extraído do XAPK não foi reconhecido.");
+    throw new Error("Componente do motor H2 Face não foi reconhecido.");
   }
   return out;
 }
