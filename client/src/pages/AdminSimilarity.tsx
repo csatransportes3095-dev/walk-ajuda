@@ -271,6 +271,10 @@ function formatScore(score: number | null) {
   return score === null ? "—" : `${score.toFixed(1)}%`;
 }
 
+function shouldPulseSimilarity(score: number | null) {
+  return score !== null && score > 85.5;
+}
+
 function scoreLabel(score: number | null) {
   if (score === null) return "Sem leitura";
   if (score >= 92) return "Muito alta";
@@ -864,6 +868,34 @@ export default function AdminSimilarity() {
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#06070d] text-white">
       <style>{`
+        @keyframes h2SimilarityPulse {
+          0%, 100% {
+            transform: scale(1);
+            text-shadow: 0 0 0 rgba(34, 211, 238, 0);
+            filter: brightness(1);
+          }
+          50% {
+            transform: scale(1.085);
+            text-shadow:
+              0 0 10px rgba(34, 211, 238, 0.95),
+              0 0 24px rgba(16, 185, 129, 0.72);
+            filter: brightness(1.28);
+          }
+        }
+
+        .h2-similarity-pulse {
+          display: inline-block;
+          transform-origin: left center;
+          animation: h2SimilarityPulse 1.05s ease-in-out infinite;
+          will-change: transform, filter, text-shadow;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .h2-similarity-pulse {
+            animation: none;
+            text-shadow: 0 0 12px rgba(34, 211, 238, 0.7);
+          }
+        }
       `}</style>
 
       <div className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center overflow-hidden">
@@ -1162,7 +1194,9 @@ export default function AdminSimilarity() {
                         <p className="max-w-full truncate text-sm font-bold text-slate-300" title={result.name}>{result.name}</p>
                         <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
                           <div>
-                            <p className="text-4xl font-black tracking-tight text-cyan-300">{result.referenceEngine && result.similarity !== null ? `${Math.round(result.similarity)}%` : formatScore(result.similarity)}</p>
+                            <p className={`text-4xl font-black tracking-tight text-cyan-300 ${shouldPulseSimilarity(result.similarity) ? "h2-similarity-pulse" : ""}`}>
+                              {result.referenceEngine && result.similarity !== null ? `${Math.round(result.similarity)}%` : formatScore(result.similarity)}
+                            </p>
                             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "Similar Face 1.0.27 • referência local" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
                           </div>
                           {result.identityScore !== undefined && (
