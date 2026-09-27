@@ -39,7 +39,7 @@ export type SimilarFaceRuntime = {
   sourceLabel: string;
 };
 
-const JSZIP_URL = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
+const JSZIP_SCRIPT = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
 const TF_CORE_SCRIPT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.22.0/dist/tf-core.min.js";
 const TF_CPU_SCRIPT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu@4.22.0/dist/tf-backend-cpu.min.js";
 const TFLITE_SCRIPT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/dist/tf-tflite.min.js";
@@ -169,8 +169,9 @@ async function cacheGet(key: string) {
 }
 
 async function extractModelsFromXapk(file: File) {
-  const zipModule: any = await import(/* @vite-ignore */ JSZIP_URL);
-  const JSZip = zipModule.default || zipModule;
+  await loadScriptOnce(JSZIP_SCRIPT, () => Boolean((window as any).JSZip));
+  const JSZip: any = (window as any).JSZip;
+  if (!JSZip) throw new Error("JSZip não inicializado.");
   const xapk = await JSZip.loadAsync(await file.arrayBuffer());
 
   const baseName = Object.keys(xapk.files).find((name) =>
