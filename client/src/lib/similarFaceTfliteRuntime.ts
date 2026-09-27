@@ -457,6 +457,53 @@ export async function loadCachedSimilarFaceRuntime() {
   return await createRuntime(detector, recognizer, "H2 Face • armazenamento persistente local");
 }
 
+async function fetchH2FaceServerModel(kind: "detector" | "recognizer") {
+  try {
+    const response = await fetch(`/api/h2-face/model/${kind}`, {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "force-cache",
+    });
+    if (!response.ok) return null;
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (
+      bytes.length < 8 ||
+      bytes[4] !== 0x54 ||
+      bytes[5] !== 0x46 ||
+      bytes[6] !== 0x4c ||
+      bytes[7] !== 0x33
+    ) {
+      throw new Error("Componente H2 Face inválido.");
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadAutomaticH2FaceRuntime() {
+  const cached = await loadCachedSimilarFaceRuntime();
+  if (cached) return cached;
+
+  const [detector, recognizer] = await Promise.all([
+    fetchH2FaceServerModel("detector"),
+    fetchH2FaceServerModel("recognizer"),
+  ]);
+
+  if (!detector || !recognizer) return null;
+
+  await requestPersistentStorage();
+  await Promise.all([
+    cachePut(CACHE_DETECTOR, detector),
+    cachePut(CACHE_RECOGNIZER, recognizer),
+    cacheStoragePut(CACHE_DETECTOR, detector),
+    cacheStoragePut(CACHE_RECOGNIZER, recognizer),
+  ]);
+
+  return await createRuntime(detector, recognizer, "H2 Face • pronto");
+}
+
 export async function clearCachedSimilarFaceRuntime() {
   try {
     const db = await openCache();
