@@ -183,68 +183,168 @@ export function createDetectorRetryCanvas(sourceSquare: HTMLCanvasElement) {
 }
 
 
-type ReferencePoint = { x: number; y: number };
+export type ReferencePoint = { x: number; y: number };
 
-export function estimateReferenceTransform(source: ReferencePoint[]) {
-  if (source.length !== 5) {
+function f32(value: number) {
+  return Math.fround(value);
+}
+
+/**
+ * Replica a correção de ordem dos olhos feita em alignFace() no APK.
+ * O detector pode devolver os dois olhos invertidos em fotos espelhadas.
+ */
+export function normalizeReferenceLandmarkOrder(points: ReferencePoint[]) {
+  if (points.length !== 5) {
     throw new Error("O alinhamento exige cinco pontos.");
   }
 
-  const target = SIMILAR_FACE_REFERENCE.arcFaceTarget;
-  const srcMean = source.reduce(
-    (acc, p) => ({ x: acc.x + p.x / 5, y: acc.y + p.y / 5 }),
-    { x: 0, y: 0 },
-  );
-  const dstMean = target.reduce(
-    (acc, p) => ({ x: acc.x + p[0] / 5, y: acc.y + p[1] / 5 }),
-    { x: 0, y: 0 },
-  );
+  const out = points.map((p) => ({
+    x: Math.trunc(Number(p.x)),
+    y: Math.trunc(Number(p.y)),
+  }));
 
+  if (out[0].x > out[1].x) {
+    if (out[2].y > out[0].y && out[2].y > out[1].y) {
+      const tmp = out[0];
+      out[0] = out[1];
+      out[1] = tmp;
+    }
+  } else if (out[0].x === out[1].x) {
+    out[0].x -= 1;
+  }
+
+  return out;
+}
+
+export function estimateReferenceTransform(sourceInput: ReferencePoint[]) {
+  const source = normalizeReferenceLandmarkOrder(sourceInput);
+  const target = SIMILAR_FACE_REFERENCE.arcFaceTarget;
+
+  let srcMeanX = 0;
+  let srcMeanY = 0;
+  let dstMeanX = 0;
+  let dstMeanY = 0;
+
+  for (let i = 0; i < 5; i += 1) {
+    srcMeanX = f32(srcMeanX + f32(source[i].x / 5));
+    srcMeanY = f32(srcMeanY + f32(source[i].y / 5));
+    dstMeanX = f32(dstMeanX + f32(target[i][0] / 5));
+    dstMeanY = f32(dstMeanY + f32(target[i][1] / 5));
+  }
+
+  // Para 2D, esta forma fechada é equivalente ao Umeyama usado no APK
+  // quando a orientação é preservada. A correção dos olhos acima evita
+  // que selfies espelhadas caiam no ramo de reflexão.
   let den = 0;
   let numA = 0;
   let numB = 0;
   for (let i = 0; i < 5; i += 1) {
-    const sx = source[i].x - srcMean.x;
-    const sy = source[i].y - srcMean.y;
-    const tx = target[i][0] - dstMean.x;
-    const ty = target[i][1] - dstMean.y;
-    den += sx * sx + sy * sy;
-    numA += sx * tx + sy * ty;
-    numB += sx * ty - sy * tx;
+    const sx = f32(source[i].x - srcMeanX);
+    const sy = f32(source[i].y - srcMeanY);
+    const tx = f32(target[i][0] - dstMeanX);
+    const ty = f32(target[i][1] - dstMeanY);
+    den = f32(den + f32(sx * sx + sy * sy));
+    numA = f32(numA + f32(sx * tx + sy * ty));
+    numB = f32(numB + f32(sx * ty - sy * tx));
   }
 
-  if (den < 1e-9) throw new Error("Falha ao estimar alinhamento.");
+  if (Math.abs(den) < 1e-9) {
+    throw new Error("Falha ao estimar alinhamento.");
+  }
 
-  const a = numA / den;
-  const b = numB / den;
+  const a = f32(numA / den);
+  const b = f32(numB / den);
+  const c = f32(-b);
+  const d = a;
+  const e = f32(dstMeanX - f32(a * srcMeanX) + f32(b * srcMeanY));
+  const f = f32(dstMeanY - f32(b * srcMeanX) - f32(a * srcMeanY));
 
-  return {
-    a,
-    b,
-    c: -b,
-    d: a,
-    e: dstMean.x - a * srcMean.x + b * srcMean.y,
-    f: dstMean.y - b * srcMean.x - a * srcMean.y,
-  };
+  return { a, b, c, d, e, f };
 }
 
+function invertAffine(t: ReturnType<typeof estimateReferenceTransform>) {
+  const det = t.a * t.d - t.b * t.c;
+  if (Math.abs(det) < 1e-12) throw new Error("Transformação facial inválida.");
+
+  const ia = t.d / det;
+  const ic = -t.c / det;
+  const ib = -t.b / det;
+  const id = t.a / det;
+  const ie = -(ia * t.e + ic * t.f);
+  const iff = -(ib * t.e + id * t.f);
+  return { a: ia, b: ib, c: ic, d: id, e: ie, f: iff };
+}
+
+function sampleChannel(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  channel: number,
+) {
+  if (x < 0 || y < 0 || x >= width || y >= height) return 0;
+  return data[(y * width + x) * 4 + channel];
+}
+
+/**
+ * Aproxima o INTER_LINEAR do cv::warpAffine. O OpenCV quantiza a fração
+ * em uma tabela de 32 passos; fazer a mesma quantização evita a diferença
+ * de amostragem do drawImage/canvas entre navegadores.
+ */
 export function createReferenceAligned112(
   source: HTMLCanvasElement,
   fivePoints: ReferencePoint[],
 ) {
-  const t = estimateReferenceTransform(fivePoints);
+  const transform = estimateReferenceTransform(fivePoints);
+  const inverse = invertAffine(transform);
+
+  const srcCtx = source.getContext("2d", { willReadFrequently: true });
+  if (!srcCtx) throw new Error("Falha ao ler a imagem para alinhamento.");
+  const src = srcCtx.getImageData(0, 0, source.width, source.height);
+
   const output = document.createElement("canvas");
   output.width = 112;
   output.height = 112;
-  const ctx = output.getContext("2d", { willReadFrequently: true });
-  if (!ctx) throw new Error("Falha ao criar face alinhada.");
+  const outCtx = output.getContext("2d", { willReadFrequently: true });
+  if (!outCtx) throw new Error("Falha ao criar face alinhada.");
 
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, 112, 112);
-  ctx.save();
-  ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f);
-  ctx.drawImage(source, 0, 0);
-  ctx.restore();
+  const dst = outCtx.createImageData(112, 112);
+  const tab = 32;
+
+  for (let y = 0; y < 112; y += 1) {
+    for (let x = 0; x < 112; x += 1) {
+      const sx = inverse.a * x + inverse.c * y + inverse.e;
+      const sy = inverse.b * x + inverse.d * y + inverse.f;
+
+      const qx = Math.round(sx * tab);
+      const qy = Math.round(sy * tab);
+      const x0 = Math.floor(qx / tab);
+      const y0 = Math.floor(qy / tab);
+      const fx = (qx - x0 * tab) / tab;
+      const fy = (qy - y0 * tab) / tab;
+      const x1 = x0 + 1;
+      const y1 = y0 + 1;
+
+      const w00 = (1 - fx) * (1 - fy);
+      const w10 = fx * (1 - fy);
+      const w01 = (1 - fx) * fy;
+      const w11 = fx * fy;
+
+      const di = (y * 112 + x) * 4;
+      for (let c = 0; c < 3; c += 1) {
+        const value =
+          sampleChannel(src.data, source.width, source.height, x0, y0, c) * w00 +
+          sampleChannel(src.data, source.width, source.height, x1, y0, c) * w10 +
+          sampleChannel(src.data, source.width, source.height, x0, y1, c) * w01 +
+          sampleChannel(src.data, source.width, source.height, x1, y1, c) * w11;
+        dst.data[di + c] = Math.max(0, Math.min(255, Math.round(value)));
+      }
+      dst.data[di + 3] = 255;
+    }
+  }
+
+  outCtx.putImageData(dst, 0, 0);
   return output;
 }
 
