@@ -1,12 +1,12 @@
 import {
   SIMILAR_FACE_REFERENCE,
-  applySimilarFaceNms,
   createDetectorRetryCanvas,
   createDetectorSquareCanvas,
   createReferenceAligned112,
   detectorCanvasToFloatInput,
   recognizerCanvasToFloatInput,
   resizeReferenceDetector640,
+  parseDetectorRows,
   similarFaceScorePercent,
   cosineSimilarity512,
   type SimilarFaceDetection,
@@ -260,48 +260,17 @@ async function runModel(model: TfliteModelLike, values: Float32Array, shape: num
   }
 }
 
-function mapDetectionToSquare(
-  detection: SimilarFaceDetection,
-  squareSide: number,
-) {
-  const scale = squareSide / 640;
-  return {
-    ...detection,
-    x1: detection.x1 * scale,
-    y1: detection.y1 * scale,
-    x2: detection.x2 * scale,
-    y2: detection.y2 * scale,
-    landmarks: detection.landmarks.map((p) => ({
-      x: p.x * scale,
-      y: p.y * scale,
-    })),
-  };
+function detectionArea(detection: SimilarFaceDetection) {
+  return Math.max(0, detection.x2 - detection.x1) *
+    Math.max(0, detection.y2 - detection.y1);
 }
 
-function parseRawDetections(raw: Float32Array) {
-  const rows: SimilarFaceDetection[] = [];
-  const width = SIMILAR_FACE_REFERENCE.detectorOutput[1];
-
-  for (let offset = 0; offset + width <= raw.length; offset += width) {
-    const score = raw[offset + 4];
-    if (!(score > SIMILAR_FACE_REFERENCE.detectorScoreThreshold)) continue;
-    rows.push({
-      x1: raw[offset],
-      y1: raw[offset + 1],
-      x2: raw[offset + 2],
-      y2: raw[offset + 3],
-      score,
-      landmarks: [
-        { x: raw[offset + 5], y: raw[offset + 6] },
-        { x: raw[offset + 7], y: raw[offset + 8] },
-        { x: raw[offset + 9], y: raw[offset + 10] },
-        { x: raw[offset + 11], y: raw[offset + 12] },
-        { x: raw[offset + 13], y: raw[offset + 14] },
-      ],
-    });
-  }
-
-  return applySimilarFaceNms(rows);
+function selectNativePrimaryFace(detections: SimilarFaceDetection[]) {
+  return [...detections].sort((a, b) => {
+    const areaDiff = detectionArea(b) - detectionArea(a);
+    if (areaDiff !== 0) return areaDiff;
+    return b.score - a.score;
+  })[0];
 }
 
 async function jpegRoundTrip112(canvas: HTMLCanvasElement) {
@@ -327,22 +296,28 @@ async function jpegRoundTrip112(canvas: HTMLCanvasElement) {
 }
 
 async function detectFivePoints(model: TfliteModelLike, source: HTMLCanvasElement) {
+  // Fluxo nativo do APK:
+  // 1) imagem original -> quadrado preto com cópia no canto superior esquerdo
+  // 2) resize para 640x640
+  // 3) se falhar, adiciona 20% de borda NA imagem 640 e redimensiona de novo
+  // 4) o alinhamento 112x112 usa exatamente a imagem 640 que foi detectada
   const firstSquare = createDetectorSquareCanvas(source);
+  const firstDetectorCanvas = resizeReferenceDetector640(firstSquare);
 
-  const attempts = [
-    firstSquare,
-    createDetectorRetryCanvas(firstSquare),
-  ];
+  const retryLetterboxed = createDetectorRetryCanvas(firstDetectorCanvas);
+  const retryDetectorCanvas = resizeReferenceDetector640(retryLetterboxed);
 
-  for (const square of attempts) {
-    const resized = resizeReferenceDetector640(square);
-    const input = detectorCanvasToFloatInput(resized);
+  const attempts = [firstDetectorCanvas, retryDetectorCanvas];
+
+  for (const detectorCanvas of attempts) {
+    const input = detectorCanvasToFloatInput(detectorCanvas);
     const raw = await runModel(model, input, [...SIMILAR_FACE_REFERENCE.detectorInput]);
-    const detections = parseRawDetections(raw);
+    const detections = parseDetectorRows(raw);
     if (detections.length) {
+      const primary = selectNativePrimaryFace(detections);
       return {
-        square,
-        detection: mapDetectionToSquare(detections[0], square.width),
+        detectorCanvas,
+        detection: primary,
       };
     }
   }
@@ -358,8 +333,8 @@ async function createRuntime(detectorBytes: Uint8Array, recognizerBytes: Uint8Ar
 
   const embedFile = async (file: File) => {
     const canvas = await fileToCanvas(file);
-    const { square, detection } = await detectFivePoints(detectorModel, canvas);
-    const aligned = createReferenceAligned112(square, detection.landmarks);
+    const { detectorCanvas, detection } = await detectFivePoints(detectorModel, canvas);
+    const aligned = createReferenceAligned112(detectorCanvas, detection.landmarks);
     const jpeg = await jpegRoundTrip112(aligned);
     const input = recognizerCanvasToFloatInput(jpeg);
     const raw = await runModel(recognizerModel, input, [...SIMILAR_FACE_REFERENCE.recognizerInput]);
