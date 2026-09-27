@@ -349,6 +349,40 @@ export default function AdminSimilarity() {
   useEffect(() => {
     let active = true;
 
+    const bootstrapCentralModels = async (local: { detector: Uint8Array; recognizer: Uint8Array }) => {
+      try {
+        const statusResponse = await fetch("/api/h2-face/status", {
+          cache: "no-store",
+          credentials: "include",
+        });
+        const status = statusResponse.ok ? await statusResponse.json() : null;
+        if (status?.ready) return;
+
+        const upload = async (kind: "detector" | "recognizer", bytes: Uint8Array) => {
+          const body = Uint8Array.from(bytes).buffer;
+          const response = await fetch(`/api/h2-face/bootstrap/${kind}`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/octet-stream" },
+            body,
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload?.error || "Falha ao sincronizar o motor H2 Face.");
+          }
+        };
+
+        await Promise.all([
+          upload("detector", local.detector),
+          upload("recognizer", local.recognizer),
+        ]);
+
+        if (active) setRuntimeMessage("H2 Face pronto • motor central sincronizado");
+      } catch (error) {
+        console.warn("[H2 Face] sincronização central pendente:", error);
+      }
+    };
+
     const start = async () => {
       setRuntimeLoading(true);
       setRuntimeMessage("Inicializando H2 Face...");
@@ -370,6 +404,10 @@ export default function AdminSimilarity() {
         if (!active) return;
         setSimilarRuntime(runtime);
         setRuntimeMessage("H2 Face pronto");
+
+        if (local) {
+          void bootstrapCentralModels(local);
+        }
       } catch (error: any) {
         if (!active) return;
         setSimilarRuntime(null);
