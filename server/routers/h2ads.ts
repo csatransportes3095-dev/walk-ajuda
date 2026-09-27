@@ -27,6 +27,8 @@ import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyR
 import { h2AdsOrderLinkRouterPart } from "../h2adsOrderLinkRouter";
 import { setH2AdsOrderLink } from "../h2adsOrderLink";
 import { assignH2AdsInstanceWorkerPortable } from "../h2adsProfilePortability";
+import { autoProvisionH2AdsInstance, getH2AdsAutoWorkerStatus, rotateH2AdsInstanceProxy } from "../h2adsAutoProvisioning";
+import { importH2AdsProxyPool, listH2AdsProxyPool } from "../h2adsProxyPool";
 
 export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
 export const h2AdsInstanceStatusSchema = z.enum(["draft", "paused", "archived"]);
@@ -119,6 +121,11 @@ export const h2AdsValidateProxySchema = z.object({
   instanceId: z.number().int().positive(),
 }).strict();
 
+export const h2AdsProxyPoolImportSchema = z.object({
+  proxies: z.string().trim().min(1).max(2_000_000),
+  proxyProtocol: z.enum(["http", "https", "socks5"]).default("http"),
+}).strict();
+
 export const h2AdsCreateWorkerPairingSchema = z.object({
   name: z.string().trim().min(2).max(128),
   capacity: z.number().int().min(1).max(20).default(1),
@@ -168,6 +175,21 @@ export const h2AdsRouter = {
   ...h2AdsOrderLinkRouterPart,
   listDashboard: adminProcedure.query(async () => listH2AdsDashboard()),
   proxySecurityStatus: adminProcedure.query(() => ({ encryptionReady: isH2AdsProxyEncryptionReady() })),
+  proxyPool: adminProcedure.query(async () => ({
+    ...(await listH2AdsProxyPool()),
+    autoWorker: await getH2AdsAutoWorkerStatus(),
+  })),
+  importProxyPool: adminProcedure.input(h2AdsProxyPoolImportSchema).mutation(async ({ input }) => {
+    if (!isH2AdsProxyEncryptionReady()) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "A chave segura de proxy não está disponível no ambiente." });
+    }
+    try {
+      return { success: true, ...(await importH2AdsProxyPool(input)) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível adicionar proxies à fila.";
+      throw new TRPCError({ code: "BAD_REQUEST", message });
+    }
+  }),
 
   createWorkerPairing: adminProcedure.input(h2AdsCreateWorkerPairingSchema).mutation(async ({ input }) => {
     const pairing = await createH2AdsWorkerPairingCode(input);
@@ -262,6 +284,45 @@ export const h2AdsRouter = {
       try { await deleteH2AdsInstance(id); } catch { }
       const message = error instanceof Error ? error.message : "Não foi possível criar a instância já vinculada ao pedido.";
       throw new TRPCError({ code: message.includes("outra instância") ? "CONFLICT" : "BAD_REQUEST", message });
+    }
+  }),
+
+  createInstanceLinkedOrderAuto: adminProcedure.input(h2AdsCreateLinkedInstanceSchema).mutation(async ({ input }) => {
+    const { registrationId, subOrderIndex, ...instanceInput } = input;
+    await requireWritableGroup(instanceInput.groupId);
+    const id = await createH2AdsInstance(instanceInput);
+    try {
+      await setH2AdsOrderLink(id, registrationId, subOrderIndex);
+    } catch (error) {
+      try { await deleteH2AdsInstance(id); } catch { }
+      const message = error instanceof Error ? error.message : "Não foi possível criar a instância já vinculada ao pedido.";
+      throw new TRPCError({ code: message.includes("outra instância") ? "CONFLICT" : "BAD_REQUEST", message });
+    }
+
+    try {
+      const provision = await autoProvisionH2AdsInstance(id);
+      return { success: true, id, provision };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Instância criada, mas a preparação automática não foi concluída.";
+      return {
+        success: true,
+        id,
+        provision: {
+          status: "worker_unavailable" as const,
+          instanceId: id,
+          message,
+        },
+      };
+    }
+  }),
+
+  rotateProxyAuto: adminProcedure.input(h2AdsValidateProxySchema).mutation(async ({ input }) => {
+    await requireConfigurableInstance(input.instanceId);
+    try {
+      return { success: true, ...(await rotateH2AdsInstanceProxy(input.instanceId)) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível trocar o proxy desta instância.";
+      throw new TRPCError({ code: "CONFLICT", message });
     }
   }),
 
