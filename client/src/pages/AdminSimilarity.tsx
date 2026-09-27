@@ -291,7 +291,7 @@ function verdictFor(result: ComparisonResult) {
 
   if (result.referenceEngine) {
     return {
-      label: "SIMILAR FACE 1.0.27 • REFERÊNCIA LOCAL",
+      label: "H2 FACE • MOTOR LOCAL",
       detail: "Percentual calculado pelo pipeline TFLite de referência carregado localmente. Geometria e qualidade abaixo são apenas diagnósticos e não alteram esse percentual.",
       tone: "text-emerald-200 border-emerald-400/20 bg-emerald-500/5",
     };
@@ -346,11 +346,11 @@ export default function AdminSimilarity() {
       .then((runtime) => {
         if (!active) return;
         setSimilarRuntime(runtime);
-        setRuntimeMessage(runtime ? runtime.sourceLabel : "Motor Similar Face ainda não carregado.");
+        setRuntimeMessage(runtime ? runtime.sourceLabel : "Motor H2 Face ainda não carregado.");
       })
       .catch(() => {
         if (!active) return;
-        setRuntimeMessage("Motor Similar Face ainda não carregado.");
+        setRuntimeMessage("Motor H2 Face ainda não carregado.");
       })
       .finally(() => {
         if (active) setRuntimeLoading(false);
@@ -363,12 +363,12 @@ export default function AdminSimilarity() {
   const loadXapk = async (file?: File) => {
     if (!file) return;
     setRuntimeLoading(true);
-    setRuntimeMessage("Extraindo e inicializando o Similar Face...");
+    setRuntimeMessage("Inicializando o motor H2 Face...");
     try {
       const runtime = await loadSimilarFaceRuntimeFromXapk(file);
       setSimilarRuntime(runtime);
       setRuntimeMessage(runtime.sourceLabel);
-      toast.success("Motor Similar Face carregado e salvo no cache local.");
+      toast.success("Motor H2 Face carregado e salvo no armazenamento local.");
     } catch (error: any) {
       setSimilarRuntime(null);
       setRuntimeMessage(error?.message || "Falha ao carregar o XAPK.");
@@ -381,8 +381,8 @@ export default function AdminSimilarity() {
   const resetReferenceRuntime = async () => {
     await clearCachedSimilarFaceRuntime();
     setSimilarRuntime(null);
-    setRuntimeMessage("Motor Similar Face ainda não carregado.");
-    toast.success("Cache local do motor Similar Face removido.");
+    setRuntimeMessage("Motor H2 Face ainda não carregado.");
+    toast.success("Armazenamento local do motor H2 Face removido.");
   };
 
   const rankedResults = useMemo(
@@ -478,7 +478,7 @@ export default function AdminSimilarity() {
 
   const analyze = async () => {
     if (!similarRuntime) {
-      toast.error("Carregue o XAPK Similar Face 1.0.27 antes de comparar. O fallback H2 foi bloqueado para evitar resultados diferentes da referência.");
+      toast.error("Carregue o arquivo do motor H2 Face antes de comparar. O fallback foi bloqueado para não misturar resultados.");
       xapkInputRef.current?.click();
       return;
     }
@@ -519,17 +519,17 @@ export default function AdminSimilarity() {
         return;
       }
       if (masterQ.score < 45 && similarRuntime) {
-        toast.warning("Qualidade H2 baixa na Foto Mestre; o Similar Face continuará a leitura de referência.");
+        toast.warning("Qualidade auxiliar baixa na Foto Mestre; o H2 Face continuará a leitura principal.");
       }
 
       let masterReferenceEmbedding: Float32Array | null = null;
       if (similarRuntime) {
-        setProgress({ current: 0, total: candidates.length, name: "Similar Face 1.0.27 • Foto Mestre" });
+        setProgress({ current: 0, total: candidates.length, name: "H2 Face • Foto Mestre" });
         try {
           masterReferenceEmbedding = await similarRuntime.embedFile(masterFile);
         } catch (error: any) {
-          console.error("Motor Similar Face falhou na Foto Mestre:", error);
-          toast.error(error?.message || "Falha no Similar Face ao processar a Foto Mestre.");
+          console.error("Motor H2 Face falhou na Foto Mestre:", error);
+          toast.error(error?.message || "Falha no H2 Face ao processar a Foto Mestre.");
           return;
         }
       }
@@ -626,15 +626,15 @@ export default function AdminSimilarity() {
 
           if (similarRuntime && masterReferenceEmbedding) {
             try {
-              setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • Similar Face 1.0.27` });
+              setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • H2 Face` });
               candidateReferenceEmbedding = await similarRuntime.embedFile(candidate.file);
               primaryCosine = cosineSimilarity512(masterReferenceEmbedding, candidateReferenceEmbedding);
               primaryScore = similarFaceScorePercent(primaryCosine);
               faceXGlobalScore = primaryScore;
-              engineLabel = "Similar Face 1.0.27 • TFLite local";
+              engineLabel = "H2 Face • motor local";
               referenceEngine = true;
             } catch (error: any) {
-              console.error("Falha no Similar Face para esta foto:", error);
+              console.error("Falha no H2 Face para esta foto:", error);
               nextResults.push({
                 id: candidate.id,
                 name: candidate.file.name,
@@ -642,7 +642,7 @@ export default function AdminSimilarity() {
                 similarity: null,
                 reliability: null,
                 warnings: [],
-                error: error?.message || "Falha no motor Similar Face",
+                error: error?.message || "Falha no motor H2 Face",
               });
               setResults([...nextResults]);
               continue;
@@ -928,7 +928,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos continuam processadas localmente. Para comparar, o XAPK Similar Face 1.0.27 deve estar carregado. O resultado principal usa somente o detector e reconhecedor TFLite de referência, com alinhamento 112×112 e embedding 512D. O fallback H2 foi bloqueado para não misturar escalas nem alterar o ranking.
+                As fotos continuam processadas localmente. Para comparar, o motor H2 Face deve estar carregado. O resultado principal usa o motor facial local com alinhamento 112×112 e embedding 512D. O fallback foi bloqueado para não misturar escalas nem alterar o ranking.
               </p>
             </div>
           </div>
@@ -1017,7 +1017,7 @@ export default function AdminSimilarity() {
                       onClick={() => xapkInputRef.current?.click()}
                       className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-100 hover:bg-emerald-400/15 disabled:opacity-40"
                     >
-                      {similarRuntime ? "Trocar XAPK" : "Carregar XAPK"}
+                      {similarRuntime ? "Trocar motor" : "Carregar motor"}
                     </button>
                     {similarRuntime && (
                       <button
@@ -1042,7 +1042,7 @@ export default function AdminSimilarity() {
                   }}
                 />
                 <p className="mt-2 text-[10px] leading-4 text-slate-500">
-                  O XAPK é lido somente no navegador. Os modelos ficam no cache local deste dispositivo e não são enviados ao servidor nem gravados no GitHub.
+                  O arquivo do motor é lido somente no navegador. Os componentes do H2 Face ficam armazenados localmente neste dispositivo e não são enviados ao servidor.
                 </p>
               </div>
 
@@ -1128,7 +1128,7 @@ export default function AdminSimilarity() {
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3.5 font-black text-white shadow-lg shadow-cyan-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {analyzing ? <RotateCcw className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-                {analyzing ? "Analisando..." : !similarRuntime ? "Carregue o XAPK para comparar" : results.length > 0 ? "Comparar novamente" : "Analisar Similaridade"}
+                {analyzing ? "Analisando..." : !similarRuntime ? "Carregue o motor H2 Face para comparar" : results.length > 0 ? "Comparar novamente" : "Analisar Similaridade"}
               </button>
 
               {analyzing && (
@@ -1176,7 +1176,7 @@ export default function AdminSimilarity() {
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
                     <h2 className="text-xl font-black">Resultado de semelhança facial</h2>
                   </div>
-                  <span className="text-xs text-slate-500">Ordem pelo Similar Face 1.0.27</span>
+                  <span className="text-xs text-slate-500">Ordem pelo H2 Face</span>
                 </div>
 
                 {rankedResults.map((result, index) => (
@@ -1197,7 +1197,7 @@ export default function AdminSimilarity() {
                             <p className={`text-4xl font-black tracking-tight text-cyan-300 ${shouldPulseSimilarity(result.similarity) ? "h2-similarity-pulse" : ""}`}>
                               {result.referenceEngine && result.similarity !== null ? `${Math.round(result.similarity)}%` : formatScore(result.similarity)}
                             </p>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "Similar Face 1.0.27 • referência local" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "H2 Face • motor local" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
                           </div>
                           {result.identityScore !== undefined && (
                             <div className="mb-1 rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2">
@@ -1282,7 +1282,7 @@ export default function AdminSimilarity() {
                               <p className="mt-1 text-[10px] opacity-65">
                                 {result.identityRaw !== undefined
   ? result.faceXGlobalScore !== undefined
-    ? `${result.referenceEngine ? "Similar Face" : "FaceX global"}: ${result.faceXGlobalScore.toFixed(1)}% • Cosseno: ${result.identityRaw.toFixed(3)} • `
+    ? `${result.referenceEngine ? "H2 Face" : "FaceX global"}: ${result.faceXGlobalScore.toFixed(1)}% • Cosseno: ${result.identityRaw.toFixed(3)} • `
     : `Embedding de apoio: ${(result.identityRaw * 100).toFixed(1)}% • `
   : ""}
                                 {result.criticalFloor !== undefined ? `Elo geométrico: ${result.criticalFloor.toFixed(1)}%` : ""}
