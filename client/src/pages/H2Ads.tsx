@@ -67,6 +67,7 @@ export default function H2Ads() {
   const utils = trpc.useUtils();
   const dashboard = trpc.h2Ads.listDashboard.useQuery(undefined, { retry: false, staleTime: 0, refetchInterval: 1_000, refetchIntervalInBackground: true, refetchOnWindowFocus: true });
   const proxySecurityStatus = trpc.h2Ads.proxySecurityStatus.useQuery(undefined, { retry: false });
+  const proxyPool = trpc.h2Ads.proxyPool.useQuery(undefined, { retry: false, staleTime: 0, refetchInterval: 2_000, refetchOnWindowFocus: true });
   const createGroup = trpc.h2Ads.createGroup.useMutation();
   const updateGroup = trpc.h2Ads.updateGroup.useMutation();
   const deleteGroup = trpc.h2Ads.deleteGroup.useMutation();
@@ -84,6 +85,7 @@ export default function H2Ads() {
   const launchBrowser = trpc.h2Ads.launchBrowser.useMutation();
   const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();
   const updateProxyRotation = trpc.h2Ads.updateProxyRotation.useMutation();
+  const importProxyPool = trpc.h2Ads.importProxyPool.useMutation();
   const [groupForm, setGroupForm] = useState<GroupForm | null>(null);
   const [instanceForm, setInstanceForm] = useState<InstanceForm | null>(null);
   const [newInstanceOrderLink, setNewInstanceOrderLink] = useState<H2AdsPendingOrderLink | null>(null);
@@ -100,6 +102,8 @@ export default function H2Ads() {
   const [orderingGroups, setOrderingGroups] = useState(false);
   const [instanceSearch, setInstanceSearch] = useState("");
   const [closingAllBrowsers, setClosingAllBrowsers] = useState(false);
+  const [proxyPoolText, setProxyPoolText] = useState("");
+  const [proxyPoolProtocol, setProxyPoolProtocol] = useState<H2AdsProxyProtocol>("http");
 
   const groups = dashboard.data?.groups ?? [];
   const instances = dashboard.data?.instances ?? [];
@@ -139,8 +143,8 @@ export default function H2Ads() {
   const browserRunByInstance = useMemo(() => new Map(browserRuns.map(run => [run.instanceId, run])), [browserRuns]);
   const selectedInstance = networkForm ? instances.find(instance => instance.id === networkForm.instanceId) : undefined;
   const encryptionReady = proxySecurityStatus.data?.encryptionReady === true;
-  const saving = createGroup.isPending || updateGroup.isPending || deleteGroup.isPending || createInstance.isPending || createInstanceLinkedOrder.isPending || updateInstance.isPending || deleteInstance.isPending || saveNetworkProfile.isPending || saveProxyCredential.isPending || updateProxyRotation.isPending || validateProxy.isPending || createWorkerPairing.isPending || assignWorker.isPending || revokeWorker.isPending;
-  const refresh = () => dashboard.refetch();
+  const saving = createGroup.isPending || updateGroup.isPending || deleteGroup.isPending || createInstance.isPending || createInstanceLinkedOrder.isPending || updateInstance.isPending || deleteInstance.isPending || saveNetworkProfile.isPending || saveProxyCredential.isPending || updateProxyRotation.isPending || validateProxy.isPending || createWorkerPairing.isPending || assignWorker.isPending || revokeWorker.isPending || importProxyPool.isPending;
+  const refresh = async () => { await Promise.all([dashboard.refetch(), proxyPool.refetch()]); };
   const setVisualColor = (kind: "group" | "instance", id: number, color: string) => {
     if (!/^#[0-9a-fA-F]{6}$/.test(color)) return;
     setVisualColors(current => {
@@ -235,6 +239,29 @@ export default function H2Ads() {
   };
 
   const closeRouteEditor = () => { setNetworkForm(null); setProxyConfig(""); setProxyProtocol("http"); setProxyRotationMinutes(""); setShowNewRoute(false); };
+
+  const addProxyPool = async () => {
+    if (!proxyPoolText.trim()) {
+      toast.error("Cole um ou mais proxies, um por linha.");
+      return;
+    }
+    try {
+      const result = await importProxyPool.mutateAsync({
+        proxies: proxyPoolText,
+        proxyProtocol: proxyPoolProtocol,
+      });
+      if (result.added > 0) setProxyPoolText("");
+      const parts = [
+        `${result.added} adicionado(s)`,
+        result.duplicates ? `${result.duplicates} repetido(s)` : null,
+        result.invalid ? `${result.invalid} inválido(s)` : null,
+      ].filter(Boolean);
+      toast.success(parts.join(" · "));
+      await proxyPool.refetch();
+    } catch (error) {
+      toast.error(errorText(error, "Não foi possível adicionar proxies à fila."));
+    }
+  };
 
   const saveGroup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -424,8 +451,52 @@ Isso encerra somente os browsers abertos. Grupos, clientes vinculados, proxies e
       <div className="hidden items-center gap-2 rounded-full border border-[#F5B800]/25 bg-[#F5B800]/10 px-3 py-1.5 text-xs font-bold text-[#FFE37A] sm:flex"><LockKeyhole className="h-3.5 w-3.5" />Acesso administrativo</div>
     </div></header>
     <main className="relative mx-auto max-w-none px-4 py-7 sm:px-6 sm:py-10 lg:px-5 2xl:px-8">
-      <section className="grid gap-6 lg:grid-cols-[1fr_300px]"><div><div className="inline-flex items-center gap-2 rounded-full border border-[#148CFF]/25 bg-[#148CFF]/10 px-3 py-1.5 text-xs font-bold text-[#8CC8FF]"><Activity className="h-3.5 w-3.5" />Painel de instâncias autorizado</div><h2 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl">Uma rota por instância, sem confusão.</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">Edite, substitua e teste a rota no cartão da própria instância. Grupos, instâncias e configurações permanecem isolados de todas as outras áreas.</p></div><aside className="rounded-2xl border border-[#F5B800]/25 bg-gradient-to-br from-[#171208]/90 to-[#101823]/90 p-4"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#FFE37A]">Uso direto</p><p className="mt-1 text-sm font-semibold text-white">Rota individual por instância</p><p className="mt-3 text-xs leading-5 text-slate-400">Cole uma rota nova, confira antes de salvar e valide por clique. Sem browser remoto ou automação.</p></aside></section>
+      <section className="grid gap-6 lg:grid-cols-[1fr_300px]"><div><div className="inline-flex items-center gap-2 rounded-full border border-[#148CFF]/25 bg-[#148CFF]/10 px-3 py-1.5 text-xs font-bold text-[#8CC8FF]"><Activity className="h-3.5 w-3.5" />Painel de instâncias autorizado</div><h2 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl">Uma rota por instância, sem confusão.</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">Edite, substitua e teste a rota no cartão da própria instância. Grupos, instâncias e configurações permanecem isolados de todas as outras áreas.</p></div><aside className="rounded-2xl border border-[#F5B800]/25 bg-gradient-to-br from-[#171208]/90 to-[#101823]/90 p-4"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#FFE37A]">Uso direto</p><p className="mt-1 text-sm font-semibold text-white">Rota individual por instância</p><p className="mt-3 text-xs leading-5 text-slate-400">Abasteça a fila de proxies uma vez. As novas instâncias criadas pelos pedidos usam o próximo proxy disponível e o WALK1 automaticamente.</p></aside></section>
       <section className="mt-7 grid gap-3 sm:grid-cols-4"><Metric icon={Layers3} value={groups.length} label="grupos" text="Organização própria do módulo." tone="gold" /><Metric icon={Monitor} value={instances.length} label="instâncias" text="Cada uma possui rota própria." tone="blue" /><Metric icon={WifiOff} value={credentialStatuses.length} label="rotas vinculadas" text="Teste manual por instância." tone="red" /><Metric icon={Wifi} value={browserWorkers.filter(worker => worker.connectionStatus === "online").length} label="Workers online" text={`${browserWorkers.length} computador(es) autorizado(s).`} tone="blue" /></section>
+      <section className="mt-6 overflow-hidden rounded-3xl border border-cyan-400/20 bg-[#0D1016]/90 shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+        <header className="flex flex-col gap-3 border-b border-white/10 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">Fila de Proxies H2ADS</p>
+            <h3 className="mt-1 text-xl font-black text-white">Cole os proxies aqui</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-400">Um proxy por linha no formato host:porta:usuário:senha. O conteúdo é cifrado e nunca volta a aparecer na tela.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-black">
+            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-emerald-200">DISPONÍVEIS {proxyPool.data?.counts.available ?? 0}</span>
+            <span className="rounded-full border border-blue-400/25 bg-blue-400/10 px-3 py-1.5 text-blue-200">EM USO {proxyPool.data?.counts.assigned ?? 0}</span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-slate-300">USADOS {proxyPool.data?.counts.used ?? 0}</span>
+            <span className="rounded-full border border-rose-400/25 bg-rose-400/10 px-3 py-1.5 text-rose-200">FALHARAM {proxyPool.data?.counts.failed ?? 0}</span>
+          </div>
+        </header>
+        <div className="grid gap-4 p-5 lg:grid-cols-[1fr_280px] sm:p-6">
+          <div>
+            <textarea
+              value={proxyPoolText}
+              onChange={event => setProxyPoolText(event.target.value)}
+              placeholder={"proxy1.exemplo.com:1234:usuario:senha\nproxy2.exemplo.com:1234:usuario:senha"}
+              className="min-h-40 w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-mono text-xs leading-6 text-white outline-none placeholder:text-slate-600 focus:border-cyan-400/50"
+              spellCheck={false}
+            />
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <select value={proxyPoolProtocol} onChange={event => setProxyPoolProtocol(event.target.value as H2AdsProxyProtocol)} className="h-11 rounded-xl border border-white/10 bg-black/25 px-3 text-xs font-black text-white">
+                <option value="http">HTTP</option>
+                <option value="https">HTTPS</option>
+                <option value="socks5">SOCKS5</option>
+              </select>
+              <button type="button" onClick={() => void addProxyPool()} disabled={importProxyPool.isPending || !proxyPoolText.trim() || !encryptionReady} className="h-11 rounded-xl bg-cyan-500 px-5 text-sm font-black text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">
+                {importProxyPool.isPending ? "ADICIONANDO..." : "ADICIONAR À FILA"}
+              </button>
+            </div>
+          </div>
+          <aside className="rounded-2xl border border-[#148CFF]/20 bg-[#148CFF]/[0.05] p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#8CC8FF]">Automação</p>
+            <p className="mt-2 text-sm font-black text-white">Worker automático: {proxyPool.data?.autoWorker.name || "WALK1"}</p>
+            <p className={`mt-1 text-xs font-bold ${proxyPool.data?.autoWorker.online ? "text-emerald-300" : "text-amber-300"}`}>
+              {proxyPool.data?.autoWorker.online ? "ONLINE · pronto para preparar instâncias" : proxyPool.data?.autoWorker.found ? "OFFLINE" : "WALK1 ainda não localizado"}
+            </p>
+            <p className="mt-3 text-[11px] leading-5 text-slate-400">Proxy repetido não entra novamente. Assim que um proxy é atribuído, ele sai dos disponíveis. Ao trocar ou excluir uma instância, o proxy anterior permanece fora da fila.</p>
+          </aside>
+        </div>
+      </section>
       {dashboard.isError && <section className="mt-6 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-5 text-sm text-rose-100" role="alert"><strong>Base H2 Ads indisponível.</strong><p className="mt-1 text-xs">Nenhum dado de outra área será usado como alternativa.</p></section>}
       <WorkerPanel workers={browserWorkers} onCreate={() => { setPairingCode(null); setWorkerForm({ ...emptyWorker }); }} onRevoke={disableWorker} busy={saving} />
       <section className="mt-6 overflow-hidden rounded-3xl border border-white/10 bg-[#0D1016]/90 shadow-[0_24px_80px_rgba(0,0,0,0.32)]"><header className="flex flex-col gap-4 border-b border-white/10 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-[#FFE37A]">Grupos e instâncias</p><h3 className="mt-1 text-xl font-black text-white">Configuração no lugar certo</h3></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => void requestCloseAllBrowsers()} disabled={closingAllBrowsers || activeBrowserInstanceIds.length === 0} title={activeBrowserInstanceIds.length ? "Fecha somente os browsers atualmente abertos; grupos, vínculos, proxies e configurações permanecem." : "Nenhuma instância com browser aberto"} className="inline-flex items-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/15 px-4 py-2.5 text-sm font-black text-rose-100 transition hover:border-rose-300/70 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"><Square className="h-4 w-4 fill-current" />{closingAllBrowsers ? "FECHANDO..." : `FECHAR TODAS ATIVAS${activeBrowserInstanceIds.length ? ` (${activeBrowserInstanceIds.length})` : ""}`}</button><button type="button" onClick={() => setOrderingGroups(value => !value)} disabled={Boolean(instanceSearchKey)} title={instanceSearchKey ? "Limpe a pesquisa para ordenar os grupos" : undefined} className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40 ${orderingGroups ? "border-[#148CFF]/40 bg-[#148CFF]/15 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-300"}`}><ArrowUpDown className="h-4 w-4" />{orderingGroups ? "Concluir ordem" : "Ordenar grupos"}</button><button type="button" onClick={() => setGroupForm({ ...emptyGroup })} className="inline-flex items-center gap-2 rounded-xl border border-[#F5B800]/30 bg-[#F5B800]/10 px-4 py-2.5 text-sm font-black text-[#FFE37A]"><FolderPlus className="h-4 w-4" />Novo grupo</button><button type="button" onClick={() => newInstance()} className="inline-flex items-center gap-2 rounded-xl bg-[#F5B800] px-4 py-2.5 text-sm font-black text-[#171003]"><Plus className="h-4 w-4" />Nova instância</button></div></header>

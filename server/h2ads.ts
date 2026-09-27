@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
-import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceBrowserRuns, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsWorkerBrowserCommands, h2AdsWorkerCommands, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceBrowserRun, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment } from "../drizzle/schema";
+import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceBrowserRuns, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsProxyPool, h2AdsWorkerBrowserCommands, h2AdsWorkerCommands, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceBrowserRun, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment } from "../drizzle/schema";
 import { getDb } from "./db";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 
@@ -178,6 +178,7 @@ export async function deleteH2AdsInstance(id: number): Promise<boolean> {
     await tx.delete(h2AdsInstanceWorkerAssignments).where(eq(h2AdsInstanceWorkerAssignments.instanceId, id));
     await tx.delete(h2AdsInstanceProxyCredentials).where(eq(h2AdsInstanceProxyCredentials.instanceId, id));
     await tx.delete(h2AdsInstanceNetworkProfiles).where(eq(h2AdsInstanceNetworkProfiles.instanceId, id));
+    await tx.update(h2AdsProxyPool).set({ status: "used", consumedAt: new Date() }).where(and(eq(h2AdsProxyPool.assignedInstanceId, id), eq(h2AdsProxyPool.status, "assigned")));
     await tx.execute(sql`DELETE FROM h2ads_order_links WHERE instanceId = ${id}`);
     const deleted = await tx.delete(h2AdsInstances).where(eq(h2AdsInstances.id, id));
     return Number(deleted[0].affectedRows) === 1;
