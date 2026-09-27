@@ -43,7 +43,7 @@ const JSZIP_SCRIPT = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.j
 const TF_CORE_SCRIPT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.22.0/dist/tf-core.min.js";
 const TF_CPU_SCRIPT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu@4.22.0/dist/tf-backend-cpu.min.js";
 const TFLITE_SCRIPT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/dist/tf-tflite.min.js";
-const TFLITE_WASM_ROOT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/dist/";
+const TFLITE_WASM_ROOT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/wasm/";
 
 const MODEL_KEY = new Uint8Array([
   0x5e, 0x1f, 0x11, 0x2c, 0xc8, 0x6e, 0x3f, 0xf1,
