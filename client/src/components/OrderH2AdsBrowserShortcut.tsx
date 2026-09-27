@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { Play, Plus, Square } from "lucide-react";
+import { Play, Plus, RefreshCw, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { resolveH2AdsOrderBrowserShortcutState, resolveH2AdsOrderLinkRepairCandidate } from "@shared/h2adsOrderBrowserShortcut";
@@ -24,7 +24,9 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();
   const updateInstance = trpc.h2Ads.updateInstance.useMutation();
   const setOrderLink = trpc.h2Ads.setOrderLink.useMutation();
-  const createInstanceLinkedOrder = trpc.h2Ads.createInstanceLinkedOrder.useMutation();
+  const createInstanceLinkedOrderAuto = trpc.h2Ads.createInstanceLinkedOrderAuto.useMutation();
+  const rotateProxyAuto = trpc.h2Ads.rotateProxyAuto.useMutation();
+  const deleteInstance = trpc.h2Ads.deleteInstance.useMutation();
 
   const dashboard = dashboardQuery.data;
   const orders = (ordersQuery.data ?? []) as any[];
@@ -57,7 +59,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     orders,
   });
 
-  const pending = launchBrowser.isPending || closeBrowser.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrder.isPending;
+  const pending = launchBrowser.isPending || closeBrowser.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrderAuto.isPending || rotateProxyAuto.isPending || deleteInstance.isPending;
 
   const refresh = async () => {
     await Promise.all([
@@ -98,7 +100,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     if (!confirmed) return;
 
     try {
-      await createInstanceLinkedOrder.mutateAsync({
+      const created = await createInstanceLinkedOrderAuto.mutateAsync({
         groupId: group.id,
         name,
         notes: null,
@@ -106,7 +108,11 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
         registrationId,
         subOrderIndex,
       });
-      toast.success("Instância H2ADS criada e vinculada ao pedido.");
+      const provision = created.provision;
+      if (provision.status === "preparing") toast.success("Instância criada. Proxy + WALK1 configurados e preparação enviada.");
+      else if (provision.status === "awaiting_proxy") toast.warning("Instância criada, mas a fila de proxies está vazia.");
+      else if (provision.status === "worker_unavailable") toast.warning(provision.message);
+      else toast.error(provision.message);
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível criar a instância H2ADS.");
@@ -134,6 +140,44 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível fechar o browser H2ADS.");
+    }
+  };
+
+  const rotateProxy = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!shortcut || pending) return;
+    if (shortcut.state === "browser_open") {
+      toast.error("Feche o browser antes de trocar o proxy.");
+      return;
+    }
+    if (!window.confirm("Trocar o proxy desta instância?\n\nO proxy atual será marcado como USADO e não voltará para a fila.")) return;
+    try {
+      const result = await rotateProxyAuto.mutateAsync({ instanceId: shortcut.instanceId });
+      if (result.status === "preparing") toast.success("Proxy trocado. WALK1 recebeu a nova preparação.");
+      else if (result.status === "awaiting_proxy") toast.warning("Fila vazia. O proxy atual foi mantido.");
+      else if (result.status === "worker_unavailable") toast.warning(result.message);
+      else toast.error(result.message);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível trocar o proxy.");
+    }
+  };
+
+  const deleteLinkedInstance = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!shortcut || pending) return;
+    if (shortcut.state === "browser_open") {
+      toast.error("Feche o browser antes de deletar a instância.");
+      return;
+    }
+    const label = linkedInstance?.name || `instância #${shortcut.instanceId}`;
+    if (!window.confirm(`DELETAR ${label}?\n\nA instância H2ADS e o vínculo com este pedido serão apagados. O pedido e o cliente não serão excluídos.`)) return;
+    try {
+      await deleteInstance.mutateAsync({ id: shortcut.instanceId });
+      toast.success("Instância H2ADS deletada.");
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível deletar a instância H2ADS.");
     }
   };
 
@@ -233,12 +277,30 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     </button>
     <button
       type="button"
+      onClick={rotateProxy}
+      disabled={pending || shortcut.state === "browser_open" || shortcut.state === "queued" || shortcut.state === "preparing"}
+      className="inline-flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-400/15 px-2 py-1 text-[9px] font-black text-amber-200 transition hover:bg-amber-400/25 disabled:cursor-not-allowed disabled:opacity-30"
+      title={shortcut.state === "browser_open" ? "Feche o browser antes de trocar o proxy" : "Pegar o próximo proxy disponível da fila"}
+    >
+      <RefreshCw className="h-3 w-3" />TROCAR PROXY
+    </button>
+    <button
+      type="button"
       onClick={moveToDelivered}
       disabled={!deliveredGroup || alreadyDelivered || pending}
       className="inline-flex items-center gap-1 rounded-full border border-teal-400/35 bg-teal-400/15 px-2 py-1 text-[9px] font-black text-teal-200 transition hover:bg-teal-400/25 disabled:cursor-not-allowed disabled:opacity-30"
       title={deliveredTitle}
     >
       {alreadyDelivered ? "ENTREGUE ✓" : "ENTREGUE"}
+    </button>
+    <button
+      type="button"
+      onClick={deleteLinkedInstance}
+      disabled={pending || shortcut.state === "browser_open" || shortcut.state === "queued" || shortcut.state === "preparing"}
+      className="inline-flex items-center gap-1 rounded-full border border-red-500/45 bg-red-500/15 px-2 py-1 text-[9px] font-black text-red-200 transition hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-30"
+      title={shortcut.state === "browser_open" ? "Feche o browser antes de deletar" : "Deletar somente a instância H2ADS vinculada"}
+    >
+      <Trash2 className="h-3 w-3" />DELETAR
     </button>
   </span>;
 }
