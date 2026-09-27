@@ -54,6 +54,8 @@ const CACHE_DB = "h2-similar-face-runtime";
 const CACHE_STORE = "models";
 const CACHE_DETECTOR = "fd_f32_v1";
 const CACHE_RECOGNIZER = "fr_f16_v1";
+const CACHE_STORAGE_NAME = "h2-similar-face-models-v1";
+const CACHE_STORAGE_PREFIX = "/__h2-similar-face-model/";
 
 let modulesPromise: Promise<RuntimeModules> | null = null;
 
@@ -122,6 +124,60 @@ function decryptModel(input: Uint8Array) {
     throw new Error("Modelo TFLite extraído do XAPK não foi reconhecido.");
   }
   return out;
+}
+
+async function requestPersistentStorage() {
+  try {
+    if (navigator.storage?.persist) {
+      await navigator.storage.persist();
+    }
+  } catch {
+    // O navegador pode recusar persistência; o cache normal continua funcionando.
+  }
+}
+
+function cacheStorageRequest(key: string) {
+  return new Request(`${CACHE_STORAGE_PREFIX}${encodeURIComponent(key)}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+}
+
+async function cacheStoragePut(key: string, bytes: Uint8Array) {
+  try {
+    const cache = await caches.open(CACHE_STORAGE_NAME);
+    const owned = Uint8Array.from(bytes);
+    await cache.put(
+      cacheStorageRequest(key),
+      new Response(owned.buffer, {
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Cache-Control": "private, max-age=31536000, immutable",
+        },
+      }),
+    );
+  } catch {
+    // Cache Storage é redundância; IndexedDB segue como principal.
+  }
+}
+
+async function cacheStorageGet(key: string) {
+  try {
+    const cache = await caches.open(CACHE_STORAGE_NAME);
+    const response = await cache.match(cacheStorageRequest(key));
+    if (!response) return null;
+    return new Uint8Array(await response.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+async function cacheStorageClear() {
+  try {
+    await caches.delete(CACHE_STORAGE_NAME);
+  } catch {
+    // Ignora falha de limpeza.
+  }
 }
 
 async function openCache() {
@@ -365,20 +421,40 @@ async function createRuntime(detectorBytes: Uint8Array, recognizerBytes: Uint8Ar
 
 export async function loadSimilarFaceRuntimeFromXapk(file: File) {
   const models = await extractModelsFromXapk(file);
+  await requestPersistentStorage();
   await Promise.all([
     cachePut(CACHE_DETECTOR, models.detector),
     cachePut(CACHE_RECOGNIZER, models.recognizer),
+    cacheStoragePut(CACHE_DETECTOR, models.detector),
+    cacheStoragePut(CACHE_RECOGNIZER, models.recognizer),
   ]);
-  return await createRuntime(models.detector, models.recognizer, "Similar Face 1.0.27 • XAPK local");
+  return await createRuntime(models.detector, models.recognizer, "Similar Face 1.0.27 • armazenamento persistente local");
 }
 
 export async function loadCachedSimilarFaceRuntime() {
-  const [detector, recognizer] = await Promise.all([
+  await requestPersistentStorage();
+
+  let [detector, recognizer] = await Promise.all([
     cacheGet(CACHE_DETECTOR),
     cacheGet(CACHE_RECOGNIZER),
   ]);
+
+  if (!detector || !recognizer) {
+    [detector, recognizer] = await Promise.all([
+      cacheStorageGet(CACHE_DETECTOR),
+      cacheStorageGet(CACHE_RECOGNIZER),
+    ]);
+
+    if (detector && recognizer) {
+      await Promise.all([
+        cachePut(CACHE_DETECTOR, detector),
+        cachePut(CACHE_RECOGNIZER, recognizer),
+      ]);
+    }
+  }
+
   if (!detector || !recognizer) return null;
-  return await createRuntime(detector, recognizer, "Similar Face 1.0.27 • cache local");
+  return await createRuntime(detector, recognizer, "Similar Face 1.0.27 • armazenamento persistente local");
 }
 
 export async function clearCachedSimilarFaceRuntime() {
@@ -394,4 +470,6 @@ export async function clearCachedSimilarFaceRuntime() {
   } catch {
     // Ignora falha de limpeza.
   }
+
+  await cacheStorageClear();
 }
