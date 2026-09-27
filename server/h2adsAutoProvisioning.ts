@@ -158,7 +158,7 @@ async function attachAndValidateReservedProxy(instanceId: number, reserved: { id
       latencyMs: null,
       lastCheckMessage: failure.message,
     });
-    await markH2AdsProxyFailed(reserved.id, failure.category || "proxy_unavailable");
+    await markH2AdsProxyFailed(reserved.id, failure.code || "proxy_unavailable");
     return { ok: false as const, error: failure.message };
   }
 }
