@@ -2724,6 +2724,28 @@ export const h2AdsInstanceProxyCredentials = mysqlTable("h2ads_instance_proxy_cr
 export type H2AdsInstanceProxyCredential = typeof h2AdsInstanceProxyCredentials.$inferSelect;
 export type InsertH2AdsInstanceProxyCredential = typeof h2AdsInstanceProxyCredentials.$inferInsert;
 
+// Fila protegida de proxies H2ADS. O valor original permanece cifrado e cada proxy entra uma única vez.
+export const h2AdsProxyPool = mysqlTable("h2ads_proxy_pool", {
+  id: int("id").autoincrement().primaryKey(),
+  fingerprint: varchar("fingerprint", { length: 64 }).notNull(),
+  cipherVersion: varchar("cipherVersion", { length: 16 }).notNull().default("v1"),
+  encryptedPayload: text("encryptedPayload").notNull(),
+  protocol: varchar("protocol", { length: 16 }).notNull().default("http"),
+  status: mysqlEnum("status", ["available", "assigned", "used", "failed", "disabled"]).notNull().default("available"),
+  assignedInstanceId: int("assignedInstanceId"),
+  lastErrorCategory: varchar("lastErrorCategory", { length: 64 }),
+  assignedAt: timestamp("assignedAt"),
+  consumedAt: timestamp("consumedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  fingerprintUnique: uniqueIndex("h2ads_proxy_pool_fingerprint_uq").on(table.fingerprint),
+  statusIndex: index("h2ads_proxy_pool_status_idx").on(table.status, table.id),
+  instanceIndex: index("h2ads_proxy_pool_instance_idx").on(table.assignedInstanceId),
+}));
+export type H2AdsProxyPool = typeof h2AdsProxyPool.$inferSelect;
+export type InsertH2AdsProxyPool = typeof h2AdsProxyPool.$inferInsert;
+
 // Computadores autorizados a executar browsers H2 Ads. O token de pareamento é guardado somente como hash.
 export const h2AdsBrowserWorkers = mysqlTable("h2ads_browser_workers", {
   id: int("id").autoincrement().primaryKey(),
