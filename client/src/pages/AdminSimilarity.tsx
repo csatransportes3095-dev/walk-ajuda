@@ -10,7 +10,6 @@ import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, ty
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 import { getCachedH2FaceModelBytes, loadH2FaceRuntimeFromBytes, loadH2FaceRuntimeFromUrls, type SimilarFaceRuntime } from "@/lib/similarFaceTfliteRuntime";
 import { cosineSimilarity512, similarFaceScorePercent } from "@/lib/similarFaceReference";
-import { trpc } from "@/lib/trpc";
 
 type CandidatePhoto = {
   id: string;
@@ -291,10 +290,17 @@ function verdictFor(result: ComparisonResult) {
   }
 
   if (result.referenceEngine) {
+    if (shouldPulseSimilarity(result.similarity)) {
+      return {
+        label: "✓ FOTO BOA PARA USAR",
+        detail: "Resultado H2 Face acima de 85,5%. A foto entrou na faixa destacada para uso.",
+        tone: "text-emerald-100 border-emerald-300/40 bg-emerald-500/10",
+      };
+    }
     return {
-      label: "H2 FACE • MOTOR LOCAL",
-      detail: "Percentual calculado pelo pipeline TFLite de referência carregado localmente. Geometria e qualidade abaixo são apenas diagnósticos e não alteram esse percentual.",
-      tone: "text-emerald-200 border-emerald-400/20 bg-emerald-500/5",
+      label: "H2 FACE • RESULTADO",
+      detail: "Percentual calculado pelo H2 Face. Geometria e qualidade abaixo são diagnósticos auxiliares e não alteram esse percentual.",
+      tone: "text-cyan-100 border-cyan-400/20 bg-cyan-500/5",
     };
   }
 
@@ -339,74 +345,28 @@ export default function AdminSimilarity() {
   const [similarRuntime, setSimilarRuntime] = useState<SimilarFaceRuntime | null>(null);
   const [runtimeLoading, setRuntimeLoading] = useState(true);
   const [runtimeMessage, setRuntimeMessage] = useState("Verificando motor de referência...");
-  const trpcUtils = trpc.useUtils();
-  const setConfigMutation = trpc.config.set.useMutation();
 
   useEffect(() => {
     let active = true;
-
-    const uploadComponent = async (bytes: Uint8Array, fileName: string) => {
-      const form = new FormData();
-      form.append("file", new File([Uint8Array.from(bytes)], fileName, { type: "image/jpeg" }));
-      const response = await fetch("/api/upload/admin-image", {
-        method: "POST",
-        body: form,
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Upload administrativo do H2 Face indisponível.");
-      const payload = await response.json();
-      if (!payload?.url) throw new Error("R2 não retornou a URL do componente H2 Face.");
-      return String(payload.url);
-    };
 
     const start = async () => {
       setRuntimeLoading(true);
       setRuntimeMessage("Inicializando H2 Face...");
 
       try {
-        const [local, config] = await Promise.all([
-          getCachedH2FaceModelBytes(),
-          trpcUtils.config.get.fetch(),
-        ]);
+        const local = await getCachedH2FaceModelBytes();
 
-        let detectorUrl = String(config?.h2_face_runtime_a_url || "").trim();
-        let recognizerUrl = String(config?.h2_face_runtime_b_url || "").trim();
+        const runtime = local
+          ? await loadH2FaceRuntimeFromBytes(
+              local.detector,
+              local.recognizer,
+              "H2 Face • motor principal",
+            )
+          : await loadH2FaceRuntimeFromUrls(
+              "/api/h2-face/model/detector",
+              "/api/h2-face/model/recognizer",
+            );
 
-        if (local) {
-          const runtime = await loadH2FaceRuntimeFromBytes(
-            local.detector,
-            local.recognizer,
-            "H2 Face • motor local",
-          );
-          if (!active) return;
-          setSimilarRuntime(runtime);
-          setRuntimeMessage("H2 Face pronto");
-
-          if (!detectorUrl || !recognizerUrl) {
-            void (async () => {
-              try {
-                if (!detectorUrl) {
-                  detectorUrl = await uploadComponent(local.detector, "h2-face-core-a.jpg");
-                  await setConfigMutation.mutateAsync({ key: "h2_face_runtime_a_url", value: detectorUrl });
-                }
-                if (!recognizerUrl) {
-                  recognizerUrl = await uploadComponent(local.recognizer, "h2-face-core-b.jpg");
-                  await setConfigMutation.mutateAsync({ key: "h2_face_runtime_b_url", value: recognizerUrl });
-                }
-                if (active) setRuntimeMessage("H2 Face pronto • motor sincronizado");
-              } catch (error) {
-                console.warn("[H2 Face] sincronização automática com R2 não concluída:", error);
-              }
-            })();
-          }
-          return;
-        }
-
-        if (!detectorUrl || !recognizerUrl) {
-          throw new Error("Motor H2 Face ainda não foi preparado neste servidor.");
-        }
-
-        const runtime = await loadH2FaceRuntimeFromUrls(detectorUrl, recognizerUrl);
         if (!active) return;
         setSimilarRuntime(runtime);
         setRuntimeMessage("H2 Face pronto");
@@ -670,7 +630,7 @@ export default function AdminSimilarity() {
               primaryCosine = cosineSimilarity512(masterReferenceEmbedding, candidateReferenceEmbedding);
               primaryScore = similarFaceScorePercent(primaryCosine);
               faceXGlobalScore = primaryScore;
-              engineLabel = "H2 Face • motor local";
+              engineLabel = "H2 Face • motor principal";
               referenceEngine = true;
             } catch (error: any) {
               console.error("Falha no H2 Face para esta foto:", error);
@@ -1051,7 +1011,7 @@ export default function AdminSimilarity() {
                   </span>
                 </div>
                 <p className="mt-2 text-[10px] leading-4 text-slate-500">
-                  O motor é carregado automaticamente. O usuário não precisa selecionar APK, XAPK ou arquivo técnico.
+                  H2 Face é carregado automaticamente e fica pronto para uso neste navegador.
                 </p>
               </div>
 
@@ -1206,7 +1166,7 @@ export default function AdminSimilarity() {
                             <p className="text-4xl font-black tracking-tight text-cyan-300">
                               {formatScore(result.similarity)}
                             </p>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "H2 Face • motor local" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "H2 Face • motor principal" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
                             {shouldPulseSimilarity(result.similarity) && (
                               <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-300/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-200">
                                 <ShieldCheck className="h-3.5 w-3.5" />
