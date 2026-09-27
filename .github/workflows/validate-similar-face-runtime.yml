@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/similar-face-reference-runtime-20260926
+      - fix/similar-face-opencv410-runtime-20260927
     paths:
       - "client/src/lib/similarFaceReference.ts"
       - "server/similarFaceReference.test.ts"
