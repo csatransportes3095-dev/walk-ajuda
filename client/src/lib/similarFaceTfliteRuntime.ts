@@ -302,10 +302,10 @@ async function detectFivePoints(model: TfliteModelLike, source: HTMLCanvasElemen
   // 3) se falhar, adiciona 20% de borda NA imagem 640 e redimensiona de novo
   // 4) o alinhamento 112x112 usa exatamente a imagem 640 que foi detectada
   const firstSquare = createDetectorSquareCanvas(source);
-  const firstDetectorCanvas = resizeReferenceDetector640(firstSquare);
+  const firstDetectorCanvas = await resizeReferenceDetector640(firstSquare);
 
   const retryLetterboxed = createDetectorRetryCanvas(firstDetectorCanvas);
-  const retryDetectorCanvas = resizeReferenceDetector640(retryLetterboxed);
+  const retryDetectorCanvas = await resizeReferenceDetector640(retryLetterboxed);
 
   const attempts = [firstDetectorCanvas, retryDetectorCanvas];
 
@@ -334,7 +334,7 @@ async function createRuntime(detectorBytes: Uint8Array, recognizerBytes: Uint8Ar
   const embedFile = async (file: File) => {
     const canvas = await fileToCanvas(file);
     const { detectorCanvas, detection } = await detectFivePoints(detectorModel, canvas);
-    const aligned = createReferenceAligned112(detectorCanvas, detection.landmarks);
+    const aligned = await createReferenceAligned112(detectorCanvas, detection.landmarks);
     const jpeg = await jpegRoundTrip112(aligned);
     const input = recognizerCanvasToFloatInput(jpeg);
     const raw = await runModel(recognizerModel, input, [...SIMILAR_FACE_REFERENCE.recognizerInput]);
