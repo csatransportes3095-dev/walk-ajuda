@@ -8,7 +8,7 @@ import { analyzeFaceCaptureQuality, confidenceLabel, type FaceCaptureQuality } f
 import { extractIdentityDescriptor, compareIdentityDescriptors, type FaceIdentityDescriptor } from "@/lib/faceIdentity";
 import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, type FaceResemblanceDescriptor, type FacePartComparison } from "@/lib/faceResemblanceEngine";
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
-import { loadCachedSimilarFaceRuntime, loadSimilarFaceRuntimeFromXapk, clearCachedSimilarFaceRuntime, type SimilarFaceRuntime } from "@/lib/similarFaceTfliteRuntime";
+import { loadAutomaticH2FaceRuntime, type SimilarFaceRuntime } from "@/lib/similarFaceTfliteRuntime";
 import { cosineSimilarity512, similarFaceScorePercent } from "@/lib/similarFaceReference";
 
 type CandidatePhoto = {
@@ -290,10 +290,17 @@ function verdictFor(result: ComparisonResult) {
   }
 
   if (result.referenceEngine) {
+    if (shouldPulseSimilarity(result.similarity)) {
+      return {
+        label: "✓ FOTO BOA PARA USAR",
+        detail: "Resultado H2 Face acima de 85,5%. A foto entrou na faixa destacada para uso.",
+        tone: "text-emerald-100 border-emerald-300/40 bg-emerald-500/10",
+      };
+    }
     return {
-      label: "H2 FACE • MOTOR LOCAL",
-      detail: "Percentual calculado pelo pipeline TFLite de referência carregado localmente. Geometria e qualidade abaixo são apenas diagnósticos e não alteram esse percentual.",
-      tone: "text-emerald-200 border-emerald-400/20 bg-emerald-500/5",
+      label: "H2 FACE • RESULTADO",
+      detail: "Percentual calculado pelo motor H2 Face. Geometria e qualidade abaixo são diagnósticos auxiliares e não alteram esse percentual.",
+      tone: "text-cyan-100 border-cyan-400/20 bg-cyan-500/5",
     };
   }
 
@@ -326,7 +333,6 @@ export default function AdminSimilarity() {
   const masterInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
-  const xapkInputRef = useRef<HTMLInputElement>(null);
 
   const [masterFile, setMasterFile] = useState<File | null>(null);
   const [masterPreview, setMasterPreview] = useState<string | null>(null);
@@ -342,15 +348,17 @@ export default function AdminSimilarity() {
 
   useEffect(() => {
     let active = true;
-    loadCachedSimilarFaceRuntime()
+    setRuntimeMessage("Inicializando H2 Face...");
+    loadAutomaticH2FaceRuntime()
       .then((runtime) => {
         if (!active) return;
         setSimilarRuntime(runtime);
-        setRuntimeMessage(runtime ? runtime.sourceLabel : "Motor H2 Face ainda não carregado.");
+        setRuntimeMessage(runtime ? "H2 Face pronto" : "H2 Face indisponível");
       })
       .catch(() => {
         if (!active) return;
-        setRuntimeMessage("Motor H2 Face ainda não carregado.");
+        setSimilarRuntime(null);
+        setRuntimeMessage("H2 Face indisponível");
       })
       .finally(() => {
         if (active) setRuntimeLoading(false);
@@ -359,31 +367,6 @@ export default function AdminSimilarity() {
       active = false;
     };
   }, []);
-
-  const loadXapk = async (file?: File) => {
-    if (!file) return;
-    setRuntimeLoading(true);
-    setRuntimeMessage("Inicializando o motor H2 Face...");
-    try {
-      const runtime = await loadSimilarFaceRuntimeFromXapk(file);
-      setSimilarRuntime(runtime);
-      setRuntimeMessage(runtime.sourceLabel);
-      toast.success("Motor H2 Face carregado e salvo no armazenamento local.");
-    } catch (error: any) {
-      setSimilarRuntime(null);
-      setRuntimeMessage(error?.message || "Falha ao carregar o motor H2 Face.");
-      toast.error(error?.message || "Falha ao carregar o motor H2 Face.");
-    } finally {
-      setRuntimeLoading(false);
-    }
-  };
-
-  const resetReferenceRuntime = async () => {
-    await clearCachedSimilarFaceRuntime();
-    setSimilarRuntime(null);
-    setRuntimeMessage("Motor H2 Face ainda não carregado.");
-    toast.success("Armazenamento local do motor H2 Face removido.");
-  };
 
   const rankedResults = useMemo(
     () =>
@@ -478,8 +461,7 @@ export default function AdminSimilarity() {
 
   const analyze = async () => {
     if (!similarRuntime) {
-      toast.error("Carregue o arquivo do motor H2 Face antes de comparar. O fallback foi bloqueado para não misturar resultados.");
-      xapkInputRef.current?.click();
+      toast.error("O H2 Face ainda está inicializando. Atualize a página se o motor não ficar pronto.");
       return;
     }
     if (!masterFile) {
@@ -868,32 +850,33 @@ export default function AdminSimilarity() {
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#06070d] text-white">
       <style>{`
-        @keyframes h2SimilarityPulse {
+        @keyframes h2ResultPulse {
           0%, 100% {
-            transform: scale(1);
-            text-shadow: 0 0 0 rgba(34, 211, 238, 0);
+            border-color: rgba(16, 185, 129, 0.34);
+            box-shadow: 0 0 0 rgba(16, 185, 129, 0), 0 0 0 rgba(34, 211, 238, 0);
             filter: brightness(1);
           }
           50% {
-            transform: scale(1.085);
-            text-shadow:
-              0 0 10px rgba(34, 211, 238, 0.95),
-              0 0 24px rgba(16, 185, 129, 0.72);
-            filter: brightness(1.28);
+            border-color: rgba(52, 211, 153, 0.95);
+            box-shadow:
+              0 0 18px rgba(16, 185, 129, 0.48),
+              0 0 42px rgba(34, 211, 238, 0.22);
+            filter: brightness(1.08);
           }
         }
 
-        .h2-similarity-pulse {
-          display: inline-block;
-          transform-origin: left center;
-          animation: h2SimilarityPulse 1.05s ease-in-out infinite;
-          will-change: transform, filter, text-shadow;
+        .h2-result-pulse {
+          animation: h2ResultPulse 1.15s ease-in-out infinite;
+          background:
+            linear-gradient(135deg, rgba(16, 185, 129, 0.075), rgba(34, 211, 238, 0.025) 38%, rgba(255,255,255,0.035));
+          will-change: box-shadow, filter, border-color;
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .h2-similarity-pulse {
+          .h2-result-pulse {
             animation: none;
-            text-shadow: 0 0 12px rgba(34, 211, 238, 0.7);
+            border-color: rgba(52, 211, 153, 0.85);
+            box-shadow: 0 0 22px rgba(16, 185, 129, 0.3);
           }
         }
       `}</style>
@@ -928,7 +911,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos continuam processadas localmente. Para comparar, o motor H2 Face deve estar carregado. O resultado principal usa o motor facial local com alinhamento 112×112 e embedding 512D. O fallback foi bloqueado para não misturar escalas nem alterar o ranking.
+                As fotos são processadas localmente pelo H2 Face. O motor é inicializado automaticamente, sem exigir arquivo, aplicativo ou configuração do usuário. O resultado principal usa alinhamento facial 112×112 e vetor 512D.
               </p>
             </div>
           </div>
@@ -1005,45 +988,15 @@ export default function AdminSimilarity() {
               <h2 className="mt-1 text-lg font-black">Fotos para comparar</h2>
 
               <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.05] p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">Motor de referência</p>
-                    <p className="mt-1 text-xs text-slate-300">{runtimeLoading ? "Inicializando..." : runtimeMessage}</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">H2 Face</p>
+                    <p className="mt-1 text-xs text-slate-300">{runtimeLoading ? "Inicializando automaticamente..." : runtimeMessage}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={runtimeLoading}
-                      onClick={() => xapkInputRef.current?.click()}
-                      className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-100 hover:bg-emerald-400/15 disabled:opacity-40"
-                    >
-                      {similarRuntime ? "Trocar motor" : "Carregar motor"}
-                    </button>
-                    {similarRuntime && (
-                      <button
-                        type="button"
-                        disabled={runtimeLoading}
-                        onClick={resetReferenceRuntime}
-                        className="rounded-lg border border-red-400/25 bg-red-400/5 px-3 py-2 text-xs font-black text-red-200 hover:bg-red-400/10 disabled:opacity-40"
-                      >
-                        Limpar motor
-                      </button>
-                    )}
-                  </div>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${similarRuntime ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-amber-400/30 bg-amber-400/10 text-amber-200"}`}>
+                    {similarRuntime ? "Pronto" : runtimeLoading ? "Carregando" : "Indisponível"}
+                  </span>
                 </div>
-                <input
-                  ref={xapkInputRef}
-                  type="file"
-                  accept=".xapk,application/zip"
-                  className="hidden"
-                  onChange={(e) => {
-                    loadXapk(e.target.files?.[0]);
-                    e.currentTarget.value = "";
-                  }}
-                />
-                <p className="mt-2 text-[10px] leading-4 text-slate-500">
-                  O arquivo do motor é lido somente no navegador. Os componentes do H2 Face ficam armazenados localmente neste dispositivo e não são enviados ao servidor.
-                </p>
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
@@ -1128,7 +1081,7 @@ export default function AdminSimilarity() {
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3.5 font-black text-white shadow-lg shadow-cyan-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {analyzing ? <RotateCcw className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-                {analyzing ? "Analisando..." : !similarRuntime ? "Carregue o motor H2 Face para comparar" : results.length > 0 ? "Comparar novamente" : "Analisar Similaridade"}
+                {analyzing ? "Analisando..." : runtimeLoading ? "Inicializando H2 Face..." : !similarRuntime ? "H2 Face indisponível" : results.length > 0 ? "Comparar novamente" : "Analisar Similaridade"}
               </button>
 
               {analyzing && (
@@ -1182,7 +1135,7 @@ export default function AdminSimilarity() {
                 {rankedResults.map((result, index) => (
                   <article
                     key={result.id}
-                    className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035]"
+                    className={`overflow-hidden rounded-2xl border bg-white/[0.035] ${shouldPulseSimilarity(result.similarity) ? "h2-result-pulse border-emerald-400/40" : "border-white/10"}`}
                   >
                     <div className="flex flex-col gap-4 p-4 sm:flex-row">
                       <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-xl bg-black/40 sm:h-28 sm:w-28">
@@ -1194,9 +1147,14 @@ export default function AdminSimilarity() {
                         <p className="max-w-full truncate text-sm font-bold text-slate-300" title={result.name}>{result.name}</p>
                         <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1">
                           <div>
-                            <p className={`text-4xl font-black tracking-tight text-cyan-300 ${shouldPulseSimilarity(result.similarity) ? "h2-similarity-pulse" : ""}`}>
-                              {result.referenceEngine && result.similarity !== null ? `${Math.round(result.similarity)}%` : formatScore(result.similarity)}
+                            <p className="text-4xl font-black tracking-tight text-cyan-300">
+                              {formatScore(result.similarity)}
                             </p>
+                            {shouldPulseSimilarity(result.similarity) && (
+                              <div className="mt-2 inline-flex items-center rounded-full border border-emerald-300/50 bg-emerald-400/15 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-emerald-100 shadow-lg shadow-emerald-950/30">
+                                ✓ Foto boa para usar
+                              </div>
+                            )}
                             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "H2 Face • motor local" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
                           </div>
                           {result.identityScore !== undefined && (
