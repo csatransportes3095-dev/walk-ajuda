@@ -40,9 +40,9 @@ export type SimilarFaceRuntime = {
 };
 
 const JSZIP_URL = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
-const TF_CORE_URL = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.22.0/+esm";
-const TF_CPU_URL = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu@4.22.0/+esm";
-const TFLITE_URL = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/+esm";
+const TF_CORE_SCRIPT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.22.0/dist/tf-core.min.js";
+const TF_CPU_SCRIPT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu@4.22.0/dist/tf-backend-cpu.min.js";
+const TFLITE_SCRIPT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/dist/tf-tflite.min.js";
 const TFLITE_WASM_ROOT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/dist/";
 
 const MODEL_KEY = new Uint8Array([
@@ -57,12 +57,42 @@ const CACHE_RECOGNIZER = "fr_f16_v1";
 
 let modulesPromise: Promise<RuntimeModules> | null = null;
 
+function loadScriptOnce(src: string, globalCheck: () => boolean) {
+  if (globalCheck()) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[data-h2-src="${src}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Falha ao carregar ${src}`)), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.crossOrigin = "anonymous";
+    script.dataset.h2Src = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Falha ao carregar ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
 async function getModules(): Promise<RuntimeModules> {
   if (!modulesPromise) {
     modulesPromise = (async () => {
-      await import(/* @vite-ignore */ TF_CPU_URL);
-      const tf: any = await import(/* @vite-ignore */ TF_CORE_URL);
-      const tflite: any = await import(/* @vite-ignore */ TFLITE_URL);
+      await loadScriptOnce(TF_CORE_SCRIPT, () => Boolean((window as any).tf));
+      await loadScriptOnce(TF_CPU_SCRIPT, () => {
+        const tf = (window as any).tf;
+        return Boolean(tf?.findBackend?.("cpu"));
+      });
+      await loadScriptOnce(TFLITE_SCRIPT, () => Boolean((window as any).tflite));
+
+      const tf: any = (window as any).tf;
+      const tflite: any = (window as any).tflite;
+      if (!tf || !tflite) {
+        throw new Error("Runtime TensorFlow/TFLite não inicializado.");
+      }
       if (typeof tflite.setWasmPath === "function") {
         tflite.setWasmPath(TFLITE_WASM_ROOT);
       }
