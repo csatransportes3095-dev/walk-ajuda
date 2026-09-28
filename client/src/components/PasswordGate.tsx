@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { ESTADOS_BR, CIDADES_POR_UF } from "@/lib/brasilData";
 import { trpc } from "@/lib/trpc";
@@ -1301,7 +1302,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               <p className="text-white text-sm font-bold">Precisa de outro serviço?</p>
               <p className="mt-1 text-slate-400 text-xs leading-relaxed">Fale com o atendimento caso queira solicitar acesso a outras áreas do sistema.</p>
               <a
-                href={`https://wa.me/55${whatsappNum}?text=${encodeURIComponent('Olá, gostaria de solicitar acesso a outro serviço do sistema.')}`}
+                href={`https://wa.me/55${whatsappNum}?text=${encodeWhatsappMessage('Olá, gostaria de solicitar acesso a outro serviço do sistema.')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-4 inline-flex items-center gap-2 rounded-xl border border-green-400/40 bg-green-500/15 px-5 py-3 text-sm font-bold text-green-200 transition-colors hover:bg-green-500/25"
@@ -1649,7 +1650,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     <p className="text-white/70 text-xs mt-1">Não se preocupe! Clique abaixo e te enviamos sua senha pelo WhatsApp em instantes.</p>
                   </div>
                   <a
-                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Olá! Estou tentando acessar o site Walk Ajuda para fazer meu pedido, mas minha senha não está funcionando.\nMeu número: ${formatPhone(clientPhone)}\nPoderia me ajudar com uma nova senha?`)}`}
+                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeWhatsappMessage(`Olá! Estou tentando acessar o site Walk Ajuda para fazer meu pedido, mas minha senha não está funcionando.\nMeu número: ${formatPhone(clientPhone)}\nPoderia me ajudar com uma nova senha?`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => {
@@ -2749,7 +2750,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   Esqueceu sua senha? Entre em contato pelo
                 </p>
                 <a
-                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Olá! Esqueci minha senha de acesso ao site. Meu telefone é ${getPhoneDigits(clientPhone)}`)}`}
+                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeWhatsappMessage(`Olá! Esqueci minha senha de acesso ao site. Meu telefone é ${getPhoneDigits(clientPhone)}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-4 py-2 bg-green-600/20 border border-green-500/30 hover:bg-green-600/30 text-green-400 rounded-xl text-sm font-semibold transition-colors"

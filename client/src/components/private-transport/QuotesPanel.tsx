@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useEffect, useState } from "react";
 import { Check, ChevronLeft, ClipboardList, ExternalLink, FileText, MapPin, MessageCircle, Plus, Route, Send, X } from "lucide-react";
 import { toast } from "sonner";
@@ -14,7 +15,7 @@ function money(value: unknown) { return Number(value || 0).toLocaleString("pt-BR
 function composeAddress(address: string, number: string) { return number.trim() ? `${address.trim()}, ${number.trim()}` : address.trim(); }
 function addressFromCep(data: { street?: string; neighborhood?: string; city?: string; state?: string }) { return [data.street, data.neighborhood, data.city && data.state ? `${data.city}/${data.state}` : data.city || data.state].filter(Boolean).join(" - "); }
 function publicLink(token: string) { return `${window.location.origin}/orcamento/${token}`; }
-function waLink(phone: string, message: string) { let number = String(phone || "").replace(/\D/g, ""); if (number.length <= 11) number = `55${number}`; return `https://wa.me/${number}?text=${encodeURIComponent(message)}`; }
+function waLink(phone: string, message: string) { let number = String(phone || "").replace(/\D/g, ""); if (number.length <= 11) number = `55${number}`; return `https://wa.me/${number}?text=${encodeWhatsappMessage(message)}`; }
 
 export function QuotesPanel({ token, clients }: { token: string; clients: any[] }) {
   const [view, setView] = useState<View>("list");

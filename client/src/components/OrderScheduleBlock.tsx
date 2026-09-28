@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -17,7 +18,7 @@ interface Props {
 function waLink(phone: string, text: string): string {
   const digits = phone.replace(/\D/g, "");
   const full = digits.startsWith("55") ? digits : `55${digits}`;
-  return `https://wa.me/${full}?text=${encodeURIComponent(text)}`;
+  return `https://wa.me/${full}?text=${encodeWhatsappMessage(text)}`;
 }
 
 function formatDate(d: string): string {

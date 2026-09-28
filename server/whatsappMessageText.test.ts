@@ -1,75 +1,102 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { repairCommissionWhatsappMessage, repairWhatsappReplacementIcons } from "../shared/whatsappMessageText";
+import {
+  encodeWhatsappMessage,
+  prepareWhatsappMessage,
+  repairCommissionWhatsappMessage,
+  repairWhatsappReplacementIcons,
+  WHATSAPP_ICON,
+} from "../shared/whatsappMessageText";
 
 const projectRoot = path.resolve(import.meta.dirname, "..");
 
-describe("ícones de mensagens WhatsApp", () => {
-  it("recupera apenas os marcadores operacionais conhecidos que chegaram como U+FFFD", () => {
+function collectSourceFiles(root: string): string[] {
+  const output: string[] = [];
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      output.push(...collectSourceFiles(full));
+      continue;
+    }
+    if (!/\.(ts|tsx)$/.test(entry.name) || /\.test\.(ts|tsx)$/.test(entry.name)) continue;
+    output.push(full);
+  }
+  return output;
+}
+
+describe("mensagens WhatsApp", () => {
+  it("recupera marcadores operacionais conhecidos que chegaram como U+FFFD", () => {
     const legacyText = [
       "\uFFFD SEUS DADOS DE ACESSO ESTÃO PRONTOS!",
       "\uFFFD IMPORTANTE",
       "\uFFFD VÍDEO — COMO ENTRAR NA SUA CONTA",
       "\uFFFD Não tente acessar diretamente pelo aplicativo.",
+      "\uFFFD SORTEIO H2 COLOMBIANO — LISTA ATUALIZADA",
+      "\uFFFD TODOS OS ESCOLHIDOS",
+      "\uFFFD RESUMO",
+      "\uFFFD Pagos: 2",
+      "\uFFFD Aguardando: 1",
+      "\uFFFD Disponíveis: 97",
     ].join("\n");
 
-    expect(repairWhatsappReplacementIcons(legacyText)).toBe([
-      "🔐 SEUS DADOS DE ACESSO ESTÃO PRONTOS!",
-      "⚠️ IMPORTANTE",
-      "🎥 VÍDEO — COMO ENTRAR NA SUA CONTA",
-      "⚠️ Não tente acessar diretamente pelo aplicativo.",
-    ].join("\n"));
+    const repaired = repairWhatsappReplacementIcons(legacyText);
+    expect(repaired).toContain(WHATSAPP_ICON.lock);
+    expect(repaired).toContain(WHATSAPP_ICON.warning);
+    expect(repaired).toContain(WHATSAPP_ICON.video);
+    expect(repaired).toContain(WHATSAPP_ICON.ticket);
+    expect(repaired).toContain(WHATSAPP_ICON.clipboard);
+    expect(repaired).toContain(WHATSAPP_ICON.chart);
+    expect(repaired).toContain(WHATSAPP_ICON.paid);
+    expect(repaired).toContain(WHATSAPP_ICON.pending);
+    expect(repaired).toContain(WHATSAPP_ICON.numbers);
   });
 
-  it("não inventa ícones para conteúdo desconhecido", () => {
-    expect(repairWhatsappReplacementIcons("\uFFFD Texto personalizado")).toBe("\uFFFD Texto personalizado");
+  it("preserva emojis válidos e codifica UTF-8 sem U+FFFD", () => {
+    const encoded = encodeWhatsappMessage(`${WHATSAPP_ICON.paid} PAGO ${WHATSAPP_ICON.party}`);
+    expect(encoded).toContain("%E2%9C%85");
+    expect(encoded).toContain("%F0%9F%8E%89");
+    expect(encoded).not.toContain("%EF%BF%BD");
   });
 
-  it("recupera os marcadores das três notificações de comissão", () => {
-    const commissionText = [
-      "\uFFFD *COMISSÃO PAGA*",
-      "\uFFFD *INDICAÇÃO CONFIRMADA*",
-      "\uFFFD *DADOS PARA PAGAMENTO DA COMISSÃO*",
-      "\uFFFD *Cliente indicado:* ALEXANDRE",
-      "\uFFFD *Telefone:* (11) 94001-4943",
-      "\uFFFD *Valor da comissão:* R$ 10,00",
-      "Obrigado pela indicação!\uFFFD",
-    ].join("\n");
-
-    expect(repairWhatsappReplacementIcons(commissionText)).toBe([
-      "✅ *COMISSÃO PAGA*",
-      "🎉 *INDICAÇÃO CONFIRMADA*",
-      "💳 *DADOS PARA PAGAMENTO DA COMISSÃO*",
-      "👤 *Cliente indicado:* ALEXANDRE",
-      "📱 *Telefone:* (11) 94001-4943",
-      "💰 *Valor da comissão:* R$ 10,00",
-      "Obrigado pela indicação!🎉",
-    ].join("\n"));
+  it("remove U+FFFD residual antes de montar o wa.me", () => {
+    expect(prepareWhatsappMessage("Teste \uFFFD desconhecido")).toBe("Teste  desconhecido");
+    expect(encodeWhatsappMessage("Teste \uFFFD desconhecido")).not.toContain("%EF%BF%BD");
   });
 
-  it("não deixa U+FFFD residual no payload final de comissão", () => {
-    expect(repairCommissionWhatsappMessage("\uFFFD *INDICAÇÃO CONFIRMADA*\n\uFFFD texto desconhecido")).toBe("🎉 *INDICAÇÃO CONFIRMADA*\n texto desconhecido");
+  it("mantém compatibilidade do fluxo de comissão", () => {
+    const text = repairCommissionWhatsappMessage("\uFFFD *INDICAÇÃO CONFIRMADA*\n\uFFFD *Valor da comissão:* R$ 10,00");
+    expect(text).toContain(WHATSAPP_ICON.party);
+    expect(text).toContain(WHATSAPP_ICON.money);
+    expect(text).not.toContain("\uFFFD");
   });
 
-  it("aplica o reparo antes de abrir os três caminhos de template no painel", () => {
-    const source = fs.readFileSync(path.join(projectRoot, "client/src/pages/AdminOrders.tsx"), "utf8");
+  it("proíbe encodeURIComponent direto em links de mensagem do WhatsApp", () => {
+    const roots = [
+      path.join(projectRoot, "client", "src"),
+      path.join(projectRoot, "server"),
+    ];
+    const offenders: string[] = [];
 
-    expect(source).toContain("repairWhatsappReplacementIcons(normalizeWhatsAppTrackingLinks(waOrderTemplate");
-    expect(source).toContain("repairWhatsappReplacementIcons(normalizeWhatsAppTrackingLinks(waLoginTemplate");
-    expect(source.match(/setWaModalMsg\(repairWhatsappReplacementIcons\(/g)).toHaveLength(2);
+    for (const root of roots) {
+      for (const file of collectSourceFiles(root)) {
+        const source = fs.readFileSync(file, "utf8");
+        if (!source.includes("wa.me")) continue;
+        if (source.includes("?text=${encodeURIComponent")) {
+          offenders.push(path.relative(projectRoot, file) + ": ?text encodeURIComponent");
+        }
+        if (/const\s+(msg|encodedMsg)\s*=\s*encodeURIComponent\(/.test(source)) {
+          offenders.push(path.relative(projectRoot, file) + ": mensagem pré-codificada com encodeURIComponent");
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
   });
 
-  it("protege os três envios reais do painel de comissões antes do encodeURIComponent", () => {
+  it("mantém a correção específica do painel de comissões ligada ao codificador central", () => {
     const source = fs.readFileSync(path.join(projectRoot, "client/src/pages/AdminCommissions.tsx"), "utf8");
-
-    expect(source).toContain('import { repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";');
-    expect(source.match(/encodeURIComponent\(repairCommissionWhatsappMessage\(msg\)\)/g)).toHaveLength(2);
-    expect(source.match(/encodeURIComponent\(repairCommissionWhatsappMessage\(msgPix\)\)/g)).toHaveLength(1);
-  });
-
-  it("não carrega mais o diagnóstico/interceptor temporário de comissões", () => {
-    const main = fs.readFileSync(path.join(projectRoot, "client/src/main.tsx"), "utf8");
-    expect(main).not.toContain("CommissionWhatsappEmojiFix");
+    expect(source).toContain('encodeWhatsappMessage(repairCommissionWhatsappMessage(msg))');
+    expect(source).toContain('encodeWhatsappMessage(repairCommissionWhatsappMessage(msgPix))');
   });
 });

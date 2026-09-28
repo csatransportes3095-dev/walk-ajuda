@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import {
@@ -717,7 +718,7 @@ export default function AdminConsultas() {
     if (!fileUrl) { toast.error("Faça upload de um arquivo primeiro."); return; }
     const phone = req.customerPhone.replace(/\D/g, "");
     const fullUrl = fileUrl.startsWith("http") ? fileUrl : `${window.location.origin}${fileUrl}`;
-    const msg = encodeURIComponent(`Olá ${req.customerName || ""}! Segue o arquivo da sua consulta *${req.formTitle}*:\n\n${fullUrl}`);
+    const msg = encodeWhatsappMessage(`Olá ${req.customerName || ""}! Segue o arquivo da sua consulta *${req.formTitle}*:\n\n${fullUrl}`);
     window.open(`https://wa.me/55${phone}?text=${msg}`, "_blank");
   };
 

@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState } from 'react';
 import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -115,7 +116,7 @@ export default function AdminCustomerPasswordPage() {
       ``,
       `_Equipe Walk Ajuda_ 🚀`,
     ].join('\n');
-    return `https://wa.me/55${telefone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+    return `https://wa.me/55${telefone.replace(/\D/g, '')}?text=${encodeWhatsappMessage(msg)}`;
   };
 
   const handleApprove = async () => {

@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -167,7 +168,7 @@ export default function AdminBroadcast() {
       fullMessage = fullMessage ? `${fullMessage}\n\n${waImageUrl.trim()}` : waImageUrl.trim();
     }
 
-    const encodedMsg = encodeURIComponent(fullMessage);
+    const encodedMsg = encodeWhatsappMessage(fullMessage);
     const links = targets.map(c => ({
       phone: c.phone,
       name: c.name,
