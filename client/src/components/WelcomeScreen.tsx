@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Zap, ClipboardList, Search, ShieldX, WifiOff, RefreshCw, Trophy, Star, Gift, Ticket, Bell, Sparkles, MessageCircle } from "lucide-react";
@@ -479,7 +480,7 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
       let finalUrl = url;
       if (url.includes('wa.me') && waMsg && waMsg.trim() !== '') {
         const separator = url.includes('?') ? '&' : '?';
-        finalUrl = `${url}${separator}text=${encodeURIComponent(waMsg.trim())}`;
+        finalUrl = `${url}${separator}text=${encodeWhatsappMessage(waMsg.trim())}`;
       }
       if (openInNewTab === 1) {
         window.open(finalUrl, "_blank");
