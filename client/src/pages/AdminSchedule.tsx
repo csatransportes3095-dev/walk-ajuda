@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { trpc } from "@/lib/trpc";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
@@ -909,17 +910,17 @@ function AppointmentsTab() {
       msg = (schedCfg as any)?.scheduledWhatsappMessage || '';
       if (!msg) msg = `Olá {nome}! Seu atendimento está confirmado para o dia {data} às {hora}. Fique disponível no WhatsApp nesse horário!`;
       msg = applyMsgVars(msg, a, scheduleLink);
-      return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+      return `https://wa.me/${phone}?text=${encodeWhatsappMessage(msg)}`;
     }
     msg = (schedCfg as any)?.whatsappMessage || '';
     if (msg) {
       msg = applyMsgVars(msg, a, scheduleLink);
       if (scheduleLink && !msg.includes(scheduleLink)) msg = msg + '\n\n🔗 Link para agendar:\n' + scheduleLink;
-      return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+      return `https://wa.me/${phone}?text=${encodeWhatsappMessage(msg)}`;
     }
     if (scheduleLink) {
       const defaultMsg = `Olá ${a.customerName || ''}! Aqui está seu link para agendar:\n${scheduleLink}`;
-      return `https://wa.me/${phone}?text=${encodeURIComponent(defaultMsg)}`;
+      return `https://wa.me/${phone}?text=${encodeWhatsappMessage(defaultMsg)}`;
     }
     return `https://wa.me/${phone}`;
   }
@@ -982,7 +983,7 @@ function AppointmentsTab() {
       if (!msg) msg = (schedCfg as any)?.scheduledWhatsappMessage || '';
       if (!msg) msg = `Olá {nome}! Seu atendimento está confirmado para o dia {data} às {hora}. Fique disponível no WhatsApp nesse horário!`;
       msg = applyMsgVars(msg, a, scheduleLink);
-      return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+      return `https://wa.me/${phone}?text=${encodeWhatsappMessage(msg)}`;
     }
 
     // Sem horário: usa mensagem do template ou global + link
@@ -997,12 +998,12 @@ function AppointmentsTab() {
       if (scheduleLink && !msg.includes(scheduleLink)) {
         msg = msg + '\n\n🔗 Link para agendar:\n' + scheduleLink;
       }
-      return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+      return `https://wa.me/${phone}?text=${encodeWhatsappMessage(msg)}`;
     }
     // Sem mensagem configurada: só o link
     if (scheduleLink) {
       const defaultMsg = `Olá ${a.customerName || ''}! Aqui está seu link para agendar:\n${scheduleLink}`;
-      return `https://wa.me/${phone}?text=${encodeURIComponent(defaultMsg)}`;
+      return `https://wa.me/${phone}?text=${encodeWhatsappMessage(defaultMsg)}`;
     }
     return `https://wa.me/${phone}`;
   }
