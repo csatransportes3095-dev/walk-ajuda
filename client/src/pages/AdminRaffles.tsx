@@ -134,6 +134,19 @@ export default function AdminRaffles() {
     return phone;
   };
 
+  // Emoticons do texto do WhatsApp são montados por code point, sem caracteres
+  // emoji literais no bundle. Isso evita o U+FFFD (losango com ?) visto no WhatsApp.
+  const whatsappEmoji = {
+    ticket: String.fromCodePoint(0x1f39f) + String.fromCharCode(0xfe0f),
+    trophy: String.fromCodePoint(0x1f3c6),
+    clipboard: String.fromCodePoint(0x1f4cb),
+    paid: String.fromCharCode(0x2705),
+    pending: String.fromCharCode(0x23f3),
+    chart: String.fromCodePoint(0x1f4ca),
+    numbers: String.fromCodePoint(0x1f522),
+    link: String.fromCodePoint(0x1f517),
+  };
+
   const buildWhatsappRaffleList = (raffle: Raffle, entries: RaffleEntry[], mode: "all" | "paid" | "pending") => {
     const allEntries = [...entries].sort((a, b) => a.number - b.number);
     const filtered = mode === "all"
@@ -147,25 +160,26 @@ export default function AdminRaffles() {
 
     const lines = filtered.map(entry => {
       const number = String(entry.number).padStart(2, "0");
-      const payment = entry.paymentStatus === "paid" ? "✅ PAGO" : "⏳ AGUARDANDO";
-      return `${entry.paymentStatus === "paid" ? "✅" : "⏳"} *${number}* — ${entry.customerName} — ${formatPhone(entry.customerPhone)} — ${payment}`;
+      const icon = entry.paymentStatus === "paid" ? whatsappEmoji.paid : whatsappEmoji.pending;
+      const payment = entry.paymentStatus === "paid" ? `${whatsappEmoji.paid} PAGO` : `${whatsappEmoji.pending} AGUARDANDO`;
+      return `${icon} *${number}* — ${entry.customerName} — ${formatPhone(entry.customerPhone)} — ${payment}`;
     });
 
     return [
-      "🎟️ *SORTEIO H2 COLOMBIANO — LISTA ATUALIZADA*",
-      `🏆 *${raffle.title}*`,
-      `📋 *${modeLabel}*`,
+      `${whatsappEmoji.ticket} *SORTEIO H2 COLOMBIANO — LISTA ATUALIZADA*`,
+      `${whatsappEmoji.trophy} *${raffle.title}*`,
+      `${whatsappEmoji.clipboard} *${modeLabel}*`,
       "",
       ...(lines.length ? lines : ["Nenhum número nesta categoria."]),
       "",
-      "📊 *RESUMO*",
-      `🎟️ Escolhidos: *${allEntries.length}*`,
-      `✅ Pagos: *${paidCount}*`,
-      `⏳ Aguardando: *${pendingCount}*`,
-      `🔢 Disponíveis: *${availableCount}*`,
+      `${whatsappEmoji.chart} *RESUMO*`,
+      `${whatsappEmoji.ticket} Escolhidos: *${allEntries.length}*`,
+      `${whatsappEmoji.paid} Pagos: *${paidCount}*`,
+      `${whatsappEmoji.pending} Aguardando: *${pendingCount}*`,
+      `${whatsappEmoji.numbers} Disponíveis: *${availableCount}*`,
       "",
-      "🔗 https://h2colombiano.com/sorteio",
-    ].join("\n");
+      `${whatsappEmoji.link} https://h2colombiano.com/sorteio`,
+    ].join("\n").normalize("NFC");
   };
 
   const copyWhatsappRaffleList = async (raffle: Raffle, entries: RaffleEntry[]) => {
@@ -180,7 +194,8 @@ export default function AdminRaffles() {
 
   const openWhatsappRaffleList = (raffle: Raffle, entries: RaffleEntry[]) => {
     const message = buildWhatsappRaffleList(raffle, entries, whatsappListMode);
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, "_blank");
   };
 
   return (
