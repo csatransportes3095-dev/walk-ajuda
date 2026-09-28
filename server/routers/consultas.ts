@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { z } from "zod";
 import { publicProcedure, router, adminProcedure } from "../_core/trpc";
 import {
@@ -281,7 +282,7 @@ export const consultasRouter = {
       let whatsappUrl = "";
       if (input.sendVia === "whatsapp" && req.customerPhone) {
         const phone = req.customerPhone.replace(/\D/g, "");
-        const msg = encodeURIComponent(`Olá ${req.customerName || ""}! Resposta da consulta *${req.formTitle}*:\n\n${input.adminResponse}`);
+        const msg = encodeWhatsappMessage(`Olá ${req.customerName || ""}! Resposta da consulta *${req.formTitle}*:\n\n${input.adminResponse}`);
         whatsappUrl = `https://wa.me/55${phone}?text=${msg}`;
       }
 
