@@ -1,4 +1,4 @@
-import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
+import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { router, publicProcedure, adminProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -552,7 +552,7 @@ export const scheduleRouter = router({
       const waMsg = `Olá${customerName}! Seu agendamento do pedido #${appt.registrationId} foi liberado para reagendamento. Por favor, escolha um novo horário pelo link abaixo:\n${link}`;
       const digits = appt.customerPhone.replace(/\D/g, '');
       const waFull = digits.startsWith('55') ? digits : `55${digits}`;
-      const waUrl = `https://wa.me/${waFull}?text=${encodeWhatsappMessage(waMsg)}`;
+      const waUrl = buildWhatsappMessageUrl(waFull, waMsg);
       // Email — enviar de forma assíncrona para não bloquear o retorno do waLink
       setImmediate(async () => {
         try {
@@ -629,7 +629,7 @@ export const scheduleRouter = router({
           .replace(/\{telefone\}/gi, appt.customerPhone)
           .replace(/\{servico\}/gi, (appt as any).serviceName || '')
           .replace(/\{cadastro\}/gi, appt.registrationId ? `*${appt.registrationId}` : '');
-        waLink = `https://wa.me/${waFull}?text=${encodeWhatsappMessage(msg)}`;
+        waLink = buildWhatsappMessageUrl(waFull, msg);
       } catch (e) { console.warn('[ScheduleWA] Erro ao montar waLink:', e); }
       return { success: true, waLink };
     }),
