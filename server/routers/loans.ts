@@ -1,4 +1,4 @@
-import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
+import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
@@ -1431,7 +1431,7 @@ export const loanRouter = router({
     // Retorna dados para o frontend montar o link do WhatsApp
     const phone = loan.clientPhone ? loan.clientPhone.replace(/\D/g, '') : null;
     const waMsg = `Olá ${loan.clientName}! Infelizmente sua solicitação de empréstimo foi reprovada.\n\nMotivo: ${input.reason}\n\nEm caso de dúvidas, entre em contato conosco.`;
-    const whatsappUrl = phone ? `https://wa.me/55${phone}?text=${encodeWhatsappMessage(waMsg)}` : null;
+    const whatsappUrl = phone ? buildWhatsappMessageUrl(`55${phone}`, waMsg) : null;
     return { ok: true, sentTo, whatsappUrl, clientPhone: loan.clientPhone, clientName: loan.clientName };
   }),
 
@@ -3390,7 +3390,7 @@ export const loanRouter = router({
     // Retornar URL + dados para WhatsApp
     const phone = loan.clientPhone ? loan.clientPhone.replace(/\D/g, '') : null;
     const waMsg = `Olá ${loan.clientName}! Segue o extrato completo do seu empréstimo #EMP-${String(input.loanId).padStart(4,'0')}.\n\nValor: ${fmtBRL(parseFloat(loan.amount))} | Total c/ juros: ${fmtBRL(totalAmount)}\nPago: ${fmtBRL(totalPaid)} | Saldo: ${fmtBRL(remaining)}\n\nAcesse o PDF: ${url}\n\nEm caso de dúvidas, entre em contato conosco.`;
-    const whatsappUrl = phone ? `https://wa.me/55${phone}?text=${encodeWhatsappMessage(waMsg)}` : null;
+    const whatsappUrl = phone ? buildWhatsappMessageUrl(`55${phone}`, waMsg) : null;
     return { ok: true, pdfUrl: url, docId, clientName: loan.clientName, clientPhone: loan.clientPhone, clientEmail: loan.clientEmail, whatsappUrl, pdfBuffer: pdfBuffer.toString('base64') };
   }),
 
@@ -3579,7 +3579,7 @@ export const loanRouter = router({
     const paymentTypeLabel = input.paymentType === 'diario' ? 'Diário' : input.paymentType === 'semanal' ? 'Semanal' : input.paymentType === 'quinzenal' ? 'Quinzenal' : 'Mensal';
     const defaultMsg = `Ola ${clientName}!\n\nVoce tem um *CREDITO PRE-APROVADO* esperando por voce!\n\nValor: *${fmtBRL(offerAmount)}*\n${installments}x de *${fmtBRL(installmentValue)}* (${paymentTypeLabel})\nJuros: ${interestRate}% a.m.\n\nVeja sua proposta completa:\n${url}\n\nOferta valida por 7 dias. Entre em contato para liberar seu credito!`;
     const waMsg = input.customMessage ? `${input.customMessage}\n\nProposta: ${url}` : defaultMsg;
-    const whatsappUrl = `https://wa.me/55${rawPhone}?text=${encodeWhatsappMessage(waMsg)}`;
+    const whatsappUrl = buildWhatsappMessageUrl(`55${rawPhone}`, waMsg);
     return { ok: true, pdfUrl: url, whatsappUrl, clientName, installmentValue, totalAmount, installments, interestRate };
   }),
 
