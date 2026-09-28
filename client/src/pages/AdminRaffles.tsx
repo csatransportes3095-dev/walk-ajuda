@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Gift, Plus, Trash2, Play, Eye, EyeOff, Edit2, Trophy, Users, Shield, Key, Ticket, Package, Globe, Lock, ExternalLink, Save } from "lucide-react";
+import { Gift, Plus, Trash2, Play, Eye, EyeOff, Edit2, Trophy, Users, Shield, Key, Ticket, Package, Globe, Lock, ExternalLink, Save, Copy, MessageCircle } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 
 type Raffle = {
@@ -58,6 +58,7 @@ export default function AdminRaffles() {
   const [editMaxNumbers, setEditMaxNumbers] = useState(1);
   const [viewingId, setViewingId] = useState<number | null>(null);
   const [confirmRemoveEntry, setConfirmRemoveEntry] = useState<{ entryId: number; raffleId: number; number: number; name: string } | null>(null);
+  const [whatsappListMode, setWhatsappListMode] = useState<"all" | "paid" | "pending">("all");
 
   // Configuração de senha do sorteio
   const { data: raffleConfig, refetch: refetchRaffleConfig } = trpc.raffleAccess.getConfig.useQuery();
@@ -126,8 +127,60 @@ export default function AdminRaffles() {
   };
 
   const formatPhone = (phone: string) => {
-    if (phone.length === 11) return `(${phone.slice(0,2)}) ${phone.slice(2,7)}-${phone.slice(7)}`;
+    const digits = String(phone || "").replace(/\D/g, "");
+    if (digits.length === 13 && digits.startsWith("55")) return `+55 (${digits.slice(2,4)}) ${digits.slice(4,9)}-${digits.slice(9)}`;
+    if (digits.length === 11) return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
+    if (digits.length === 10) return `(${digits.slice(0,2)}) ${digits.slice(2,6)}-${digits.slice(6)}`;
     return phone;
+  };
+
+  const buildWhatsappRaffleList = (raffle: Raffle, entries: RaffleEntry[], mode: "all" | "paid" | "pending") => {
+    const allEntries = [...entries].sort((a, b) => a.number - b.number);
+    const filtered = mode === "all"
+      ? allEntries
+      : allEntries.filter(entry => entry.paymentStatus === mode);
+
+    const paidCount = allEntries.filter(entry => entry.paymentStatus === "paid").length;
+    const pendingCount = allEntries.filter(entry => entry.paymentStatus === "pending").length;
+    const availableCount = Math.max(0, 100 - allEntries.length);
+    const modeLabel = mode === "paid" ? "SOMENTE PAGOS" : mode === "pending" ? "AGUARDANDO PAGAMENTO" : "TODOS OS ESCOLHIDOS";
+
+    const lines = filtered.map(entry => {
+      const number = String(entry.number).padStart(2, "0");
+      const payment = entry.paymentStatus === "paid" ? "✅ PAGO" : "⏳ AGUARDANDO";
+      return `${entry.paymentStatus === "paid" ? "✅" : "⏳"} *${number}* — ${entry.customerName} — ${formatPhone(entry.customerPhone)} — ${payment}`;
+    });
+
+    return [
+      "🎟️ *SORTEIO H2 COLOMBIANO — LISTA ATUALIZADA*",
+      `🏆 *${raffle.title}*`,
+      `📋 *${modeLabel}*`,
+      "",
+      ...(lines.length ? lines : ["Nenhum número nesta categoria."]),
+      "",
+      "📊 *RESUMO*",
+      `🎟️ Escolhidos: *${allEntries.length}*`,
+      `✅ Pagos: *${paidCount}*`,
+      `⏳ Aguardando: *${pendingCount}*`,
+      `🔢 Disponíveis: *${availableCount}*`,
+      "",
+      "🔗 https://h2colombiano.com/sorteio",
+    ].join("\n");
+  };
+
+  const copyWhatsappRaffleList = async (raffle: Raffle, entries: RaffleEntry[]) => {
+    const message = buildWhatsappRaffleList(raffle, entries, whatsappListMode);
+    try {
+      await navigator.clipboard.writeText(message);
+      toast.success("Lista do WhatsApp copiada!");
+    } catch {
+      toast.error("Não foi possível copiar a lista.");
+    }
+  };
+
+  const openWhatsappRaffleList = (raffle: Raffle, entries: RaffleEntry[]) => {
+    const message = buildWhatsappRaffleList(raffle, entries, whatsappListMode);
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -444,6 +497,49 @@ export default function AdminRaffles() {
                       <h5 className="font-bold text-white mb-3 flex items-center gap-2">
                         <Users className="w-4 h-4 text-blue-400" /> Números Escolhidos ({viewingRaffle.entries?.length || 0})
                       </h5>
+
+                      <div className="mb-4 rounded-xl border border-green-500/25 bg-green-500/[0.07] p-3">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div>
+                            <p className="flex items-center gap-2 text-sm font-black text-green-300">
+                              <MessageCircle className="h-4 w-4" /> Lista para WhatsApp
+                            </p>
+                            <p className="mt-1 text-xs text-white/50">Somente leitura: usa a lista atual deste sorteio sem alterar números, pagamentos ou participantes.</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => setWhatsappListMode("all")}
+                              className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-all ${whatsappListMode === "all" ? "border-blue-400/50 bg-blue-500/20 text-blue-200" : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"}`}>
+                              Todos
+                            </button>
+                            <button type="button" onClick={() => setWhatsappListMode("paid")}
+                              className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-all ${whatsappListMode === "paid" ? "border-green-400/50 bg-green-500/20 text-green-200" : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"}`}>
+                              Pagos
+                            </button>
+                            <button type="button" onClick={() => setWhatsappListMode("pending")}
+                              className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-all ${whatsappListMode === "pending" ? "border-orange-400/50 bg-orange-500/20 text-orange-200" : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"}`}>
+                              Aguardando
+                            </button>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void copyWhatsappRaffleList(raffle, (viewingRaffle.entries ?? []) as RaffleEntry[])}
+                            disabled={!viewingRaffle.entries?.length}
+                            className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-500/15 px-3 py-2 text-xs font-black text-cyan-200 transition hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Copy className="h-4 w-4" /> COPIAR LISTA
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openWhatsappRaffleList(raffle, (viewingRaffle.entries ?? []) as RaffleEntry[])}
+                            disabled={!viewingRaffle.entries?.length}
+                            className="inline-flex items-center gap-2 rounded-lg border border-green-400/30 bg-green-500/20 px-3 py-2 text-xs font-black text-green-100 transition hover:bg-green-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <MessageCircle className="h-4 w-4" /> ABRIR WHATSAPP
+                          </button>
+                        </div>
+                      </div>
                       {(!viewingRaffle.entries || viewingRaffle.entries.length === 0) ? (
                         <p className="text-white/50 text-sm">Nenhum número escolhido ainda.</p>
                       ) : (
