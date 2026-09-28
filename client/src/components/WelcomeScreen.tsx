@@ -1,4 +1,4 @@
-import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
+import { buildWhatsappMessageUrl, rewriteWhatsappPrefillUrl } from "@shared/whatsappUrl";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Zap, ClipboardList, Search, ShieldX, WifiOff, RefreshCw, Trophy, Star, Gift, Ticket, Bell, Sparkles, MessageCircle } from "lucide-react";
@@ -476,11 +476,12 @@ export default function WelcomeScreen({ children }: { children: React.ReactNode 
     sessionStorage.setItem(WELCOME_CHOICE_KEY, "extra");
     setChoiceMade(true);
     if (url.startsWith("http")) {
-      // Se for link wa.me e tiver mensagem configurada, adicionar texto
-      let finalUrl = url;
+      // Mensagens pré-preenchidas passam pelo endpoint compatível com WhatsApp Desktop.
+      let finalUrl = rewriteWhatsappPrefillUrl(url);
       if (url.includes('wa.me') && waMsg && waMsg.trim() !== '') {
-        const separator = url.includes('?') ? '&' : '?';
-        finalUrl = `${url}${separator}text=${encodeWhatsappMessage(waMsg.trim())}`;
+        let phone = '';
+        try { phone = new URL(url).pathname.replace(/\D/g, ''); } catch {}
+        finalUrl = buildWhatsappMessageUrl(phone, waMsg.trim());
       }
       if (openInNewTab === 1) {
         window.open(finalUrl, "_blank");
