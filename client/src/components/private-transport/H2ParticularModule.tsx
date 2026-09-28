@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useEffect, useMemo, useState } from "react";
 import { CalendarPlus, CarFront, ChevronRight, ClipboardList, Edit3, Heart, MapPin, Phone, Plus, Search, Star, Users, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
@@ -29,7 +30,7 @@ function cleanPhone(phone?: string | null) {
 function whatsappUrl(phone?: string | null, message?: string) {
   let number = cleanPhone(phone);
   if (number.length <= 11) number = `55${number}`;
-  return `https://wa.me/${number}${message ? `?text=${encodeURIComponent(message)}` : ""}`;
+  return `https://wa.me/${number}${message ? `?text=${encodeWhatsappMessage(message)}` : ""}`;
 }
 
 function formatPhone(phone?: string | null) {
