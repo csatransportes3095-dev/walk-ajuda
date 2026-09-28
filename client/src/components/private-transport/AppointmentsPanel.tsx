@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CalendarDays, CalendarPlus, CheckCircle2, ChevronLeft, Clock3, MapPin, Phone, Plus, Route, X } from "lucide-react";
 import { toast } from "sonner";
@@ -15,7 +16,7 @@ function currency(value: unknown) { return Number(value || 0).toLocaleString("pt
 function composeAddress(address: string, number: string) { return number.trim() ? `${address.trim()}, ${number.trim()}` : address.trim(); }
 function addressFromCep(data: { street?: string; neighborhood?: string; city?: string; state?: string }) { return [data.street, data.neighborhood, data.city && data.state ? `${data.city}/${data.state}` : data.city || data.state].filter(Boolean).join(" - "); }
 function formatDate(value: string | Date) { return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
-function whatsApp(phone?: string | null, name?: string | null) { let raw = String(phone || "").replace(/\D/g, ""); if (raw.length <= 11) raw = `55${raw}`; return `https://wa.me/${raw}?text=${encodeURIComponent(`Olá ${name || ""}, tudo bem?`)}`; }
+function whatsApp(phone?: string | null, name?: string | null) { let raw = String(phone || "").replace(/\D/g, ""); if (raw.length <= 11) raw = `55${raw}`; return `https://wa.me/${raw}?text=${encodeWhatsappMessage(`Olá ${name || ""}, tudo bem?`)}`; }
 
 export function AppointmentsPanel({ token, clients }: { token: string; clients: any[] }) {
   const [view, setView] = useState<AppointmentView>("list");
