@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { trpc } from "@/lib/trpc";
 
 /**
@@ -12,7 +13,7 @@ export default function WhatsAppFloat() {
   const number = rawNumber.replace(/[^\d]/g, "");
   if (!number) return null;
 
-  const message = encodeURIComponent(
+  const message = encodeWhatsappMessage(
     "Olá! Vim pelo site da Walk Ajuda e preciso de ajuda."
   );
   const href = `https://wa.me/${number}?text=${message}`;
