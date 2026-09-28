@@ -1,4 +1,5 @@
-import { encodeWhatsappMessage, prepareWhatsappMessage } from "@shared/whatsappMessageText";
+import { prepareWhatsappMessage } from "@shared/whatsappMessageText";
+import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -195,7 +196,7 @@ export default function AdminRaffles() {
 
   const openWhatsappRaffleList = (raffle: Raffle, entries: RaffleEntry[]) => {
     const message = buildWhatsappRaffleList(raffle, entries, whatsappListMode);
-    const whatsappUrl = `https://wa.me/?text=${encodeWhatsappMessage(message)}`;
+    const whatsappUrl = buildWhatsappMessageUrl(null, message);
     window.open(whatsappUrl, "_blank");
   };
 

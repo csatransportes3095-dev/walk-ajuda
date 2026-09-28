@@ -8,6 +8,7 @@ import {
   repairWhatsappReplacementIcons,
   WHATSAPP_ICON,
 } from "../shared/whatsappMessageText";
+import { buildWhatsappMessageUrl, rewriteWhatsappPrefillUrl } from "../shared/whatsappUrl";
 
 const projectRoot = path.resolve(import.meta.dirname, "..");
 
@@ -89,6 +90,22 @@ describe("mensagens WhatsApp", () => {
     expect(encoded).not.toContain("%EF%BF%BD");
     expect(encoded).toContain("%E2%8F%B3");
     expect(encoded).toContain("%E2%9C%85");
+  });
+
+  it("usa api.whatsapp.com para mensagens pré-preenchidas com emoji no desktop", () => {
+    const url = buildWhatsappMessageUrl(null, `${WHATSAPP_ICON.paid} PAGO ${WHATSAPP_ICON.party}`);
+    expect(url).toMatch(/^https:\/\/api\.whatsapp\.com\/send\?text=/);
+    expect(url).toContain("%E2%9C%85");
+    expect(url).toContain("%F0%9F%8E%89");
+    expect(url).not.toContain("%EF%BF%BD");
+  });
+
+  it("reescreve links wa.me com texto para o endpoint compatível", () => {
+    const old = `https://wa.me/5511999999999?text=${encodeWhatsappMessage(`${WHATSAPP_ICON.paid} Teste`)}`;
+    const next = rewriteWhatsappPrefillUrl(old);
+    expect(next).toContain("https://api.whatsapp.com/send?phone=5511999999999&text=");
+    expect(next).toContain("%E2%9C%85");
+    expect(next).not.toContain("wa.me/");
   });
 
   it("remove U+FFFD residual antes de montar o wa.me", () => {

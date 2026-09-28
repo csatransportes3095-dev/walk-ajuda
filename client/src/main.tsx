@@ -1,4 +1,5 @@
 import "./lib/vehicleModelCheckoutHotfix";
+import { installWhatsappDesktopCompat } from "@/lib/whatsappDesktopCompat";
 import { trpc } from "@/lib/trpc";
 import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -42,6 +43,8 @@ import "./admin-loans-mobile-fix.css";
 import "./h2-welcome-reference-top.css";
 import "./h2-welcome-mobile-car-fix.css";
 import "./h2-footer-mobile-fix.css";
+
+installWhatsappDesktopCompat();
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false }, mutations: { retry: 0 } } });
 const redirectToLoginIfUnauthorized = (error: unknown) => { if (!(error instanceof TRPCClientError) || typeof window === "undefined" || error.message !== UNAUTHED_ERR_MSG) return; window.location.href = "/admin/login"; };
