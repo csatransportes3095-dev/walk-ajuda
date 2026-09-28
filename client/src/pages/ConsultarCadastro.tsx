@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -250,7 +251,7 @@ export default function ConsultarCadastro() {
             {/* Botão WhatsApp para aprovados */}
             {data.status === "aprovado" && (
               <a
-                href={`https://wa.me/5511978307371?text=${encodeURIComponent('Olá! Meu cadastro foi aprovado e gostaria de dar continuidade ao processo.')}`}
+                href={`https://wa.me/5511978307371?text=${encodeWhatsappMessage('Olá! Meu cadastro foi aprovado e gostaria de dar continuidade ao processo.')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-green-500 hover:bg-green-400 text-white font-semibold text-sm transition-all duration-200 hover:scale-105 shadow-lg shadow-green-500/30"
@@ -276,7 +277,7 @@ export default function ConsultarCadastro() {
             {/* Botão para reprovados */}
             {data.status === "reprovado" && (
               <a
-                href={`https://wa.me/5511978307371?text=${encodeURIComponent('Olá! Meu cadastro não foi aprovado e gostaria de entender o motivo.')}`}
+                href={`https://wa.me/5511978307371?text=${encodeWhatsappMessage('Olá! Meu cadastro não foi aprovado e gostaria de entender o motivo.')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-gray-300 font-semibold text-sm transition-all duration-200"
