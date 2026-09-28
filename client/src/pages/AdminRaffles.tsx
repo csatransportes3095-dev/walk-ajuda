@@ -1,4 +1,4 @@
-import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
+import { encodeWhatsappMessage, prepareWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -186,7 +186,7 @@ export default function AdminRaffles() {
   const copyWhatsappRaffleList = async (raffle: Raffle, entries: RaffleEntry[]) => {
     const message = buildWhatsappRaffleList(raffle, entries, whatsappListMode);
     try {
-      await navigator.clipboard.writeText(message);
+      await navigator.clipboard.writeText(prepareWhatsappMessage(message));
       toast.success("Lista do WhatsApp copiada!");
     } catch {
       toast.error("Não foi possível copiar a lista.");
