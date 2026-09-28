@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { ExternalLink, FileDown, MessageCircle, ReceiptText } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -5,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 function money(value: unknown) { return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function receiptLink(token: string) { return `${window.location.origin}/recibo/${token}`; }
-function waLink(message: string) { return `https://wa.me/?text=${encodeURIComponent(message)}`; }
+function waLink(message: string) { return `https://wa.me/?text=${encodeWhatsappMessage(message)}`; }
 
 export function ReceiptsPanel({ token }: { token: string }) {
   const receiptsQuery = trpc.privateTransport.receipts.list.useQuery({ token }, { enabled: !!token });
