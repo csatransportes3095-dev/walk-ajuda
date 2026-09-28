@@ -1,4 +1,5 @@
 import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
+import { selectLoanInstallmentFocus } from "@shared/loanInstallmentFocus";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
@@ -1174,6 +1175,76 @@ export const loanRouter = router({
         result = result.filter((r: any) => r.status === input.status);
       }
     }
+
+    // Parcela em foco: retorna somente a ação mais importante de cada empréstimo
+    // para o ADM não precisar abrir e percorrer 20/25 parcelas diárias.
+    // Não muda status, valores ou regras de pagamento; é apenas uma visão resumida.
+    const visibleLoanIds = result.map((row: any) => Number(row.id)).filter((id: number) => Number.isFinite(id) && id > 0);
+    if (visibleLoanIds.length) {
+      const focusRows = await qRows(db, drizzleSql.raw(`
+        SELECT li.*, lc.late_fee_disabled AS clientLateFeeDisabled, l.paymentType AS focusPaymentType
+        FROM loanInstallments li
+        JOIN loans l ON l.id=li.loanId
+        JOIN loanClients lc ON lc.id=l.clientId
+        WHERE li.loanId IN (${visibleLoanIds.join(',')})
+          AND li.status IN ('em_analise','pendente','atrasado','pago','pago_juros')
+        ORDER BY li.loanId ASC, li.installmentNumber ASC
+      `));
+
+      const focusRowsByLoan = new Map<number, any[]>();
+      for (const raw of focusRows) {
+        const loanId = Number(raw.loanId);
+        const baseAmount = raw.originalAmount != null ? Number(raw.originalAmount || 0) : Number(raw.amount || 0);
+        const isDaily = String(raw.focusPaymentType || '') === 'diario';
+        const canCalculateAutomaticFee =
+          isDaily &&
+          Number(raw.clientLateFeeDisabled || 0) !== 1 &&
+          (raw.status === 'pendente' || raw.status === 'atrasado');
+        const automaticFee = canCalculateAutomaticFee
+          ? calculateLateFeeForInstallment({
+              dueDate: raw.dueDate,
+              amount: baseAmount,
+              config: summaryLateFeeConfig,
+              clock: summaryClock,
+            })
+          : 0;
+        const resolvedFee = isDaily
+          ? resolveEffectiveLateFee(raw, automaticFee)
+          : { overrideActive: false, overrideFee: 0, fee: 0 };
+        const effectiveAmount = isDaily && (resolvedFee.fee > 0 || resolvedFee.overrideActive)
+          ? Math.round((baseAmount + resolvedFee.fee) * 100) / 100
+          : Number(raw.amount || 0);
+
+        const normalized = {
+          ...raw,
+          amount: effectiveAmount,
+          originalAmount: baseAmount.toFixed(2),
+          feeApplied: Number(resolvedFee.fee || 0).toFixed(2),
+          isOverdue:
+            (raw.status === 'pendente' || raw.status === 'atrasado') &&
+            String(raw.dueDate || '').slice(0, 10) < today,
+        };
+        const list = focusRowsByLoan.get(loanId) || [];
+        list.push(normalized);
+        focusRowsByLoan.set(loanId, list);
+      }
+
+      result = result.map((loan: any) => {
+        const selected = selectLoanInstallmentFocus(focusRowsByLoan.get(Number(loan.id)) || [], today);
+        return {
+          ...loan,
+          focusInstallment: selected
+            ? {
+                ...selected.installment,
+                focusReason: selected.reason,
+              }
+            : null,
+        };
+      });
+    } else {
+      result = result.map((loan: any) => ({ ...loan, focusInstallment: null }));
+    }
+
     return result;
   }),
 
