@@ -311,8 +311,8 @@ let commissionsSource = fs.readFileSync(commissionsFile, 'utf8');
 
 commissionsSource = replaceOnce(
   commissionsSource,
-  'import { repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";\n',
-  'import { repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";\nimport { buildStatusRuntimeCss, getStatusRuntimeClasses } from "@/lib/statusCustomColors";\n',
+  'import { encodeWhatsappMessage, repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";\n',
+  'import { encodeWhatsappMessage, repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";\nimport { buildStatusRuntimeCss, getStatusRuntimeClasses } from "@/lib/statusCustomColors";\n',
   'import cores em AdminCommissions',
 );
 
