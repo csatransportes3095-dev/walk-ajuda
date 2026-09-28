@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState, useEffect } from 'react';
 import { SpreadsheetPage } from './SpreadsheetPage';
 import { GastosLoginPage } from './GastosLoginPage';
@@ -12,7 +13,7 @@ function AcessoNegado({ routeLabel, reason, onLogout }: { routeLabel: string; re
   const { data: settings } = trpc.settings.getAll.useQuery();
   const rawNumber = settings?.whatsapp_number || '5511978307371';
   const adminNumber = rawNumber.replace(/\D/g, '');
-  const msg = encodeURIComponent(`Olá! Gostaria de solicitar acesso à área de ${routeLabel}. Meu cadastro já está feito.`);
+  const msg = encodeWhatsappMessage(`Olá! Gostaria de solicitar acesso à área de ${routeLabel}. Meu cadastro já está feito.`);
   const href = `https://wa.me/${adminNumber}?text=${msg}`;
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#070a16] via-[#0a0f22] to-[#070a16] flex items-center justify-center p-4">
