@@ -59,6 +59,38 @@ describe("mensagens WhatsApp", () => {
     expect(encoded).not.toContain("%EF%BF%BD");
   });
 
+  it("gera URL ASCII pura para ícones conhecidos", () => {
+    const encoded = encodeWhatsappMessage(
+      `${WHATSAPP_ICON.ticket} Sorteio ${WHATSAPP_ICON.trophy} ${WHATSAPP_ICON.clipboard} ${WHATSAPP_ICON.paid} ${WHATSAPP_ICON.pending}`,
+    );
+    expect(encoded).toMatch(/^[\x20-\x7E]*$/);
+    expect(encoded).toContain("%F0%9F%8E%9F%EF%B8%8F");
+    expect(encoded).toContain("%F0%9F%8F%86");
+    expect(encoded).toContain("%F0%9F%93%8B");
+    expect(encoded).toContain("%E2%9C%85");
+    expect(encoded).toContain("%E2%8F%B3");
+    expect(encoded).not.toContain("%EF%BF%BD");
+  });
+
+  it("recupera os ícones quebrados nas linhas numeradas do sorteio", () => {
+    const broken = [
+      "\uFFFD *01* — FERNANDO — (43) 99135-5806 — \uFFFD AGUARDANDO",
+      "\uFFFD *03* — ANDERSON — (11) 98509-1510 — \uFFFD PAGO",
+    ].join("\n");
+
+    const prepared = prepareWhatsappMessage(broken);
+    expect(prepared).toContain(`${WHATSAPP_ICON.pending} *01*`);
+    expect(prepared).toContain(`${WHATSAPP_ICON.paid} *03*`);
+    expect(prepared).toContain(`${WHATSAPP_ICON.pending} AGUARDANDO`);
+    expect(prepared).toContain(`${WHATSAPP_ICON.paid} PAGO`);
+    expect(prepared).not.toContain("\uFFFD");
+
+    const encoded = encodeWhatsappMessage(broken);
+    expect(encoded).not.toContain("%EF%BF%BD");
+    expect(encoded).toContain("%E2%8F%B3");
+    expect(encoded).toContain("%E2%9C%85");
+  });
+
   it("remove U+FFFD residual antes de montar o wa.me", () => {
     expect(prepareWhatsappMessage("Teste \uFFFD desconhecido")).toBe("Teste  desconhecido");
     expect(encodeWhatsappMessage("Teste \uFFFD desconhecido")).not.toContain("%EF%BF%BD");
