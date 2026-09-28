@@ -1,19 +1,32 @@
 import { encodeWhatsappMessage } from "./whatsappMessageText";
 
 /**
- * WhatsApp Desktop/Web possui um histórico de quebrar emojis em links wa.me
- * com mensagem pré-preenchida. Para mensagens, usamos o endpoint longo oficial,
- * preservando UTF-8 percent-encoded de ponta a ponta.
+ * Caminho único para abrir WhatsApp no H2.
+ * O endpoint api.whatsapp.com/send se mostrou estável no WhatsApp Web/Desktop
+ * para mensagens com emoji, ao contrário do redirecionamento curto wa.me.
  */
-export function buildWhatsappMessageUrl(phone: string | null | undefined, message: string): string {
+export function buildWhatsappMessageUrl(
+  phone: string | null | undefined,
+  message: string | null | undefined = "",
+): string {
   const digits = String(phone || "").replace(/\D/g, "");
-  const text = encodeWhatsappMessage(message);
+  const cleanMessage = String(message || "");
+  const params: string[] = [];
+
+  if (digits) params.push(`phone=${digits}`);
+  if (cleanMessage) params.push(`text=${encodeWhatsappMessage(cleanMessage)}`);
   if (digits) {
-    return `https://api.whatsapp.com/send?phone=${digits}&text=${text}&type=phone_number&app_absent=0`;
+    params.push("type=phone_number");
+    params.push("app_absent=0");
   }
-  return `https://api.whatsapp.com/send?text=${text}`;
+
+  return `https://api.whatsapp.com/send${params.length ? `?${params.join("&")}` : ""}`;
 }
 
+/**
+ * Normaliza qualquer link conhecido do WhatsApp para o mesmo caminho usado
+ * pelo Sorteio. Serve para links antigos salvos no banco e componentes legados.
+ */
 export function rewriteWhatsappPrefillUrl(value: string): string {
   const raw = String(value || "").trim();
   if (!raw) return raw;
@@ -26,9 +39,16 @@ export function rewriteWhatsappPrefillUrl(value: string): string {
   }
 
   const host = url.hostname.toLowerCase();
-  if (host !== "wa.me" || !url.searchParams.has("text")) return raw;
+  const isShort = host === "wa.me" || host === "www.wa.me";
+  const isApi = host === "api.whatsapp.com";
+  const isWeb = host === "web.whatsapp.com";
 
-  const phone = url.pathname.replace(/\D/g, "");
+  if (!isShort && !isApi && !isWeb) return raw;
+
+  const phone = isShort
+    ? url.pathname.replace(/\D/g, "")
+    : String(url.searchParams.get("phone") || "").replace(/\D/g, "");
   const message = url.searchParams.get("text") || "";
+
   return buildWhatsappMessageUrl(phone, message);
 }
