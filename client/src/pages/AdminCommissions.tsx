@@ -5,7 +5,8 @@ import { Download, CheckCircle, Clock, Users, ExternalLink, Hash, Package, Trend
 import AdminHeader from "@/components/AdminHeader";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { encodeWhatsappMessage, repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
+import { repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";
 
 function formatPhone(phone: string) {
   const d = phone.replace(/\D/g, "");
