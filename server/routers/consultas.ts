@@ -1,4 +1,4 @@
-import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
+import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { z } from "zod";
 import { publicProcedure, router, adminProcedure } from "../_core/trpc";
 import {
@@ -278,12 +278,12 @@ export const consultasRouter = {
         );
       }
 
-      // Para WhatsApp: retornar o link wa.me para o frontend abrir
+      // Para WhatsApp: retornar o endpoint compatível com emojis no desktop
       let whatsappUrl = "";
       if (input.sendVia === "whatsapp" && req.customerPhone) {
         const phone = req.customerPhone.replace(/\D/g, "");
-        const msg = encodeWhatsappMessage(`Olá ${req.customerName || ""}! Resposta da consulta *${req.formTitle}*:\n\n${input.adminResponse}`);
-        whatsappUrl = `https://wa.me/55${phone}?text=${msg}`;
+        const msg = `Olá ${req.customerName || ""}! Resposta da consulta *${req.formTitle}*:\n\n${input.adminResponse}`;
+        whatsappUrl = buildWhatsappMessageUrl(`55${phone}`, msg);
       }
 
       return { success: true, emailSent, whatsappUrl };
