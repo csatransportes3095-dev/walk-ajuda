@@ -943,6 +943,34 @@ function LoansTab() {
           const h2Color = h2Level?.slug === 'diamante' ? 'cyan' : h2Level?.slug === 'ouro' ? 'amber' : h2Level?.slug === 'prata' ? 'slate' : 'orange';
           const h2ColorClass = h2Color === 'cyan' ? 'border-cyan-400/35 bg-cyan-500/10' : h2Color === 'amber' ? 'border-amber-400/35 bg-amber-500/10' : h2Color === 'slate' ? 'border-slate-300/35 bg-slate-400/10' : 'border-orange-400/35 bg-orange-500/10';
           const h2BarClass = h2Color === 'cyan' ? 'bg-cyan-400' : h2Color === 'amber' ? 'bg-amber-400' : h2Color === 'slate' ? 'bg-slate-300' : 'bg-orange-400';
+          const focusInst = loan.focusInstallment as any | null;
+          const focusReason = String(focusInst?.focusReason || '');
+          const focusIsReview = focusReason === 'proof_review';
+          const focusIsOverdue = focusReason === 'overdue';
+          const focusIsToday = focusReason === 'due_today';
+          const focusIsNext = focusReason === 'next_pending';
+          const focusIsLastPaid = focusReason === 'last_paid';
+          const focusIsRolled = Boolean(focusInst?.notes && String(focusInst.notes).includes('rolled_from_interest_only'));
+          const focusLabel = focusIsReview
+            ? 'COMPROVANTE RECEBIDO'
+            : focusIsOverdue
+              ? 'PARCELA ATRASADA'
+              : focusIsToday
+                ? 'VENCE HOJE'
+                : focusIsNext
+                  ? 'PRÓXIMA PARCELA'
+                  : focusIsLastPaid
+                    ? 'ÚLTIMA PARCELA PAGA'
+                    : 'PARCELA EM FOCO';
+          const focusTone = focusIsReview
+            ? 'border-violet-400/45 bg-violet-500/10'
+            : focusIsOverdue
+              ? 'border-red-400/45 bg-red-500/10'
+              : focusIsToday
+                ? 'border-amber-400/45 bg-amber-500/10'
+                : focusIsNext
+                  ? 'border-sky-400/35 bg-sky-500/10'
+                  : 'border-emerald-400/30 bg-emerald-500/[0.07]';
 
           return (
             <Card key={loan.id} className={`border ${loan.isOverdue ? "border-red-500/40" : loan.status === "pendente" ? "border-yellow-500/40" : "border-border/60"} bg-card/60 overflow-hidden`}>
@@ -1223,6 +1251,128 @@ function LoansTab() {
 
                 </div>
 
+                {/* Parcela em foco — ação prioritária sem abrir o histórico completo */}
+                {!isPreRelease && focusInst && (
+                  <section className={`mt-4 rounded-2xl border p-3 sm:p-4 ${focusTone}`} data-testid="loan-focus-installment">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/55">🔥 Ação agora</span>
+                          <Badge variant="outline" className="border-white/15 bg-black/15 text-[10px] font-black text-white/80">
+                            {focusLabel}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                          <p className="text-lg font-black text-white">Parcela #{focusInst.installmentNumber} de {loan.totalInstallments}</p>
+                          <p className="text-base font-black text-cyan-200">{fmt(focusInst.amount)}</p>
+                        </div>
+                        <p className="mt-1 text-xs text-white/60">
+                          Vencimento: <span className="font-semibold text-white/85">{fmtDate(focusInst.dueDate)}</span>
+                          {Number(focusInst.feeApplied || 0) > 0 && (
+                            <span className="ml-2 text-orange-300">· Multa/taxa: {fmt(focusInst.feeApplied)}</span>
+                          )}
+                        </p>
+                        {focusIsReview && focusInst.proofSentAt && (
+                          <p className="mt-1 text-xs font-semibold text-violet-200">Comprovante enviado em {fmtDateTime(focusInst.proofSentAt)}</p>
+                        )}
+                        {focusIsRolled && (
+                          <p className="mt-1 text-xs font-semibold text-blue-300">🔄 Parcela gerada por rolagem de juros</p>
+                        )}
+                        {focusIsLastPaid && (
+                          <p className="mt-1 text-xs text-emerald-200/80">Nenhuma ação pendente. Esta é apenas a última parcela paga para referência.</p>
+                        )}
+                      </div>
+                      <div className="shrink-0 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-center">
+                        <p className="text-[10px] uppercase tracking-wide text-white/45">Andamento</p>
+                        <p className="mt-0.5 text-sm font-black text-white">{loan.paidInstallments}/{loan.totalInstallments}</p>
+                        <p className="text-[10px] text-white/45">parcelas pagas</p>
+                      </div>
+                    </div>
+
+                    {!focusIsLastPaid && (
+                      <div className={`mt-3 grid gap-2 border-t border-white/10 pt-3 ${
+                        focusIsReview && focusInst.proofUrl ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3'
+                      }`}>
+                        {focusIsReview && focusInst.proofUrl && (
+                          <a
+                            href={focusInst.proofUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-400/35 bg-blue-500/15 px-3 py-2 text-center text-xs font-black text-blue-200 transition hover:bg-blue-500/25"
+                          >
+                            <ExternalLink className="h-4 w-4" /> VER COMPROVANTE
+                          </a>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModal({ inst: focusInst, loanId: loan.id });
+                            setPmAmountPaid(String(parseFloat(focusInst.amount) || ""));
+                            setPmPaidAt(todayBRT());
+                            setPmObservation("");
+                            setPmFile(null);
+                            setPmFilePreview(null);
+                          }}
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-400/35 bg-emerald-500/15 px-3 py-2 text-center text-xs font-black text-emerald-200 transition hover:bg-emerald-500/25"
+                        >
+                          <CheckCircle className="h-4 w-4" /> {focusIsReview ? 'APROVAR' : 'PAGO MANUAL'}
+                        </button>
+
+                        {focusIsReview ? (
+                          <>
+                            {loan.paymentType === 'diario' && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenLateFee(focusInst, loan.id)}
+                                className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-400/35 bg-amber-500/15 px-3 py-2 text-center text-xs font-black text-amber-200 transition hover:bg-amber-500/25"
+                              >
+                                <AlertTriangle className="h-4 w-4" /> TAXA / MULTA
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => refusePayment.mutate({ installmentId: focusInst.id, reason: "Comprovante inválido" })}
+                              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-400/35 bg-red-500/15 px-3 py-2 text-center text-xs font-black text-red-200 transition hover:bg-red-500/25"
+                            >
+                              <XCircle className="h-4 w-4" /> RECUSAR
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {loan.interestOnlyEnabled && focusInst.status === 'pendente' ? (
+                              <button
+                                type="button"
+                                onClick={() => setInterestOnlyInstModal({ inst: focusInst, loan })}
+                                className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-400/35 bg-amber-500/15 px-3 py-2 text-center text-xs font-black text-amber-200 transition hover:bg-amber-500/25"
+                              >
+                                <DollarSign className="h-4 w-4" /> COBRAR JUROS
+                              </button>
+                            ) : loan.paymentType === 'diario' ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenLateFee(focusInst, loan.id)}
+                                className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-400/35 bg-amber-500/15 px-3 py-2 text-center text-xs font-black text-amber-200 transition hover:bg-amber-500/25"
+                              >
+                                <AlertTriangle className="h-4 w-4" /> TAXA / MULTA
+                              </button>
+                            ) : null}
+                            {(!loan.interestOnlyEnabled || !focusInst.isOverdue) && (
+                              <button
+                                type="button"
+                                onClick={() => setInstallmentNotifyModal({ loan, inst: focusInst })}
+                                className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-400/35 bg-blue-500/15 px-3 py-2 text-center text-xs font-black text-blue-200 transition hover:bg-blue-500/25"
+                              >
+                                <span className="text-base">&#128241;</span> AVISAR
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                )}
+
                 {/* Ações da etapa de liberação */}
                 {(loan.status === "pendente" || isPixPending || isPixSent) && (
                   <div className="mt-4 border-t border-border/40 pt-3">
@@ -1267,8 +1417,8 @@ function LoansTab() {
                             isExpanded ? "border-violet-500 bg-violet-600 text-white shadow-lg" : "border-violet-500/40 bg-violet-500/10 text-violet-300"
                           }`}
                         >
-                          <span className="text-xl">{isExpanded ? "▲" : "▼"}</span>
-                          <span className="text-xs font-semibold">Parcelas</span>
+                          <span className="text-xl">{isExpanded ? "▲" : "📚"}</span>
+                          <span className="text-xs font-semibold">{isExpanded ? "Fechar histórico" : "Histórico"}</span>
                         </button>
                         <button
                           onClick={() => handleOpenStatement(loan)}
@@ -1327,12 +1477,25 @@ function LoansTab() {
                     </div>
                 </div>
 
-                {/* Parcelas expandidas */}
+                {/* Histórico completo — fica contido para não alongar todo o painel */}
                 {!isPreRelease && isExpanded && instData && instData.id === loan.id && (
-                  <div className="mt-4 border-t border-border pt-4 space-y-2">
-                    <p className="text-sm font-medium mb-3">
-                      Parcelas — {loan.paymentType === "diario" ? "Pagamento Diário" : loan.paymentType === "semanal" ? "Pagamento Semanal" : loan.paymentType === "quinzenal" ? "Pagamento Quinzenal" : "Pagamento Mensal"}
-                    </p>
+                  <div className="mt-4 border-t border-border pt-4">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold">
+                          Histórico de parcelas — {loan.paymentType === "diario" ? "Pagamento Diário" : loan.paymentType === "semanal" ? "Pagamento Semanal" : loan.paymentType === "quinzenal" ? "Pagamento Quinzenal" : "Pagamento Mensal"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">Lista completa para consulta. A ação principal fica no bloco “Ação agora” acima.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedLoan(null)}
+                        className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold text-white/70 hover:bg-white/10"
+                      >
+                        Fechar
+                      </button>
+                    </div>
+                    <div className="max-h-[65vh] space-y-2 overflow-y-auto rounded-xl border border-white/5 bg-black/10 p-2 pr-1">
                     {(instData.installments as any[]).map((inst) => {
                       const todayDateStr = todayBRTDate();
                       const isVenceHoje = inst.status === "pendente" && inst.dueDate === todayDateStr;
@@ -1527,6 +1690,7 @@ function LoansTab() {
                         </div>
                       );
                     })}
+                    </div>
                   </div>
                 )}
 
