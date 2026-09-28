@@ -20,7 +20,8 @@ import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticato
 import OrderH2AdsBrowserShortcut from "@/components/OrderH2AdsBrowserShortcut";
 import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl, publicTrackingShareUrl } from "@shared/publicLinks";
 import { getOperationalBucket } from "@shared/orderBuckets";
-import { encodeWhatsappMessage, repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
+import { repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
+import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { selectWhatsappTemplateForStatus } from "@shared/whatsappTemplateSelection";
 import { snapshotUnicodeText } from "@shared/whatsappUnicodeDiagnostics";
 import { getConfiguredGlobalProgressKeys, getDefaultGlobalProgressKeys } from "@shared/orderProgressSequence";
@@ -490,7 +491,7 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
                         <div><p className="text-xs text-muted-foreground">Opção</p><div className="text-sm text-foreground space-y-1">{ar.serviceOption ? ar.serviceOption.split(/(?=Garantia)/i).map((part, idx) => <p key={idx}>— {part}</p>) : '-'}</div></div>
                       </div>
                       {waPhone && (
-                        <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 mt-2 px-3 py-2 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-medium hover:bg-green-600/30 transition-colors">
+                        <a href={buildWhatsappMessageUrl(waPhone)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 mt-2 px-3 py-2 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-medium hover:bg-green-600/30 transition-colors">
                           <MessageCircle className="w-3.5 h-3.5" />WhatsApp
                         </a>
                       )}
@@ -4030,7 +4031,7 @@ export default function AdminOrders() {
                                                     {saveLoginDataMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-lime-300" />Salvando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Dados de Login</>)}
                                                   </button>
                                                   {waPhone && hasLoginData && (
-                                                    <a href={`https://wa.me/${waPhone}?text=${encodeWhatsappMessage(`🔐 Seus dados de acesso estão prontos! Acesse: ${publicTrackingShareUrl()}`)}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
+                                                    <a href={buildWhatsappMessageUrl(waPhone, `🔐 Seus dados de acesso estão prontos! Acesse: ${publicTrackingShareUrl()}`)} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
                                                       <MessageCircle className="w-3.5 h-3.5" />WhatsApp
                                                     </a>
                                                   )}
@@ -4460,7 +4461,7 @@ export default function AdminOrders() {
                                                                 {saveLoginDataMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-lime-300" />Salvando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Dados de Login</>)}
                                                               </button>
                                                               {waPhone && hasLoginData && (
-                                                                <a href={`https://wa.me/${waPhone}?text=${encodeWhatsappMessage(`🔐 Seus dados de acesso estão prontos! Acesse: ${publicTrackingShareUrl()}`)}`} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
+                                                                <a href={buildWhatsappMessageUrl(waPhone, `🔐 Seus dados de acesso estão prontos! Acesse: ${publicTrackingShareUrl()}`)} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5">
                                                                   <MessageCircle className="w-3.5 h-3.5" />WhatsApp
                                                                 </a>
                                                               )}
@@ -5346,7 +5347,7 @@ export default function AdminOrders() {
                           )}
                           {order.phone && (
                             <a
-                              href={`https://wa.me/55${order.phone.replace(/\D/g, '')}`}
+                              href={buildWhatsappMessageUrl(`55${order.phone.replace(/\D/g, '')}`)}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={e => e.stopPropagation()}
@@ -6429,7 +6430,7 @@ export default function AdminOrders() {
                               </button>
                               {waPhone && hasLoginData && (
                                 <a
-                                  href={`https://wa.me/${waPhone}?text=${encodeWhatsappMessage(buildLoginWaMsg())}`}
+                                  href={buildWhatsappMessageUrl(waPhone, buildLoginWaMsg())}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="py-1.5 px-3 bg-green-600/20 border border-green-500/40 text-green-300 rounded-lg text-xs font-semibold hover:bg-green-600/30 transition-colors flex items-center gap-1.5"
@@ -7962,19 +7963,19 @@ export default function AdminOrders() {
               })()}
 
               <details className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-amber-50/85">
-                <summary className="cursor-pointer font-semibold text-amber-100">Diagnóstico temporário — payload real antes de abrir wa.me</summary>
+                <summary className="cursor-pointer font-semibold text-amber-100">Diagnóstico temporário — payload real antes de abrir WhatsApp</summary>
                 <pre className="mt-3 max-h-52 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify({
                   selectedTemplateId: waModalSelectedId,
                   payload: snapshotUnicodeText(waModalMsg),
-                  url: `https://wa.me/${waModalOrder.waPhone}?text=${encodeWhatsappMessage(waModalMsg)}`,
-                  decodedUrlPayload: snapshotUnicodeText(new URL(`https://wa.me/${waModalOrder.waPhone}?text=${encodeWhatsappMessage(waModalMsg)}`).searchParams.get("text") ?? ""),
+                  url: buildWhatsappMessageUrl(waModalOrder.waPhone, waModalMsg),
+                  decodedUrlPayload: snapshotUnicodeText(new URL(buildWhatsappMessageUrl(waModalOrder.waPhone, waModalMsg)).searchParams.get("text") ?? ""),
                 }, null, 2)}</pre>
               </details>
 
               {/* Botões de ação */}
               <div className="flex gap-3 pt-2">
                 <a
-                  href={`https://wa.me/${waModalOrder.waPhone}?text=${encodeWhatsappMessage(waModalMsg)}`}
+                  href={buildWhatsappMessageUrl(waModalOrder.waPhone, waModalMsg)}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setWaModalOrder(null)}
