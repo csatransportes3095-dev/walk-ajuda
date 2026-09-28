@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useRoute } from "wouter";
 import { ServicosExtras } from "@/components/ServicosExtras";
@@ -4378,7 +4379,7 @@ export default function Home() {
                 msg += `\n*************************`;
               }
 
-              const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
+              const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeWhatsappMessage(msg)}`;
               window.open(whatsappUrl, '_blank');
               setWhatsappClicked(true);
             }}
