@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -24,7 +25,7 @@ function buildWhatsAppLink(phone: string | null | undefined, name: string, statu
   const msg = status === "aprovado"
     ? `Olá ${name}! 🎉 Seu pré-cadastro na *Walk Ajuda* foi *APROVADO*! Entre em contato conosco para dar continuidade ao processo.`
     : `Olá ${name}. Infelizmente seu pré-cadastro na *Walk Ajuda* não foi aprovado desta vez. Qualquer dúvida, entre em contato.`;
-  return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+  return `https://wa.me/${num}?text=${encodeWhatsappMessage(msg)}`;
 }
 
 const STATUS_CONFIG = {
