@@ -107,6 +107,18 @@ describe("mensagens WhatsApp", () => {
     expect(next).toContain("%E2%9C%85");
     expect(next).not.toContain("wa.me/");
   });
+  it("reescreve também botões wa.me sem mensagem para o mesmo endpoint geral", () => {
+    expect(rewriteWhatsappPrefillUrl("https://wa.me/5511999999999"))
+      .toBe("https://api.whatsapp.com/send?phone=5511999999999&type=phone_number&app_absent=0");
+  });
+
+  it("pedido e entregue usam o mesmo construtor de WhatsApp do sorteio", () => {
+    const source = fs.readFileSync(path.join(projectRoot, "client/src/pages/AdminOrders.tsx"), "utf8");
+    expect(source).toContain('import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";');
+    expect(source).toContain("href={buildWhatsappMessageUrl(waModalOrder.waPhone, waModalMsg)}");
+    expect(source).toContain("href={buildWhatsappMessageUrl(waPhone, buildLoginWaMsg())}");
+    expect(source).not.toContain("?text=${encodeWhatsappMessage");
+  });
 
   it("remove U+FFFD residual antes de montar o wa.me", () => {
     expect(prepareWhatsappMessage("Teste \uFFFD desconhecido")).toBe("Teste  desconhecido");
