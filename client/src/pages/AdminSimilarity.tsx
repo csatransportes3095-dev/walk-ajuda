@@ -501,7 +501,7 @@ export default function AdminSimilarity() {
         return;
       }
 
-      toast.error("Nenhum print de imagem encontrado. Tire/copiei o print e clique em Colar print novamente.");
+      toast.error("Nenhum print de imagem encontrado. Copie o print e clique em Colar print novamente.");
     } catch (error) {
       console.error("Falha ao ler print da área de transferência:", error);
       toast.error("Não foi possível ler o print. Autorize a área de transferência no navegador e tente novamente.");
