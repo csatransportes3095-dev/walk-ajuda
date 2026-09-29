@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
-import { AlertTriangle, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
+import { AlertTriangle, ClipboardPaste, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
 import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
@@ -472,6 +472,40 @@ export default function AdminSimilarity() {
     });
     setResults([]);
     setPairwiseResults([]);
+  };
+
+  const pasteComparisonPrint = async () => {
+    if (!navigator.clipboard?.read) {
+      toast.error("Este navegador não permite colar o print direto. Use Fotos para selecionar a imagem.");
+      return;
+    }
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      const acceptedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((type) => acceptedTypes.has(type));
+        if (!imageType) continue;
+
+        const blob = await item.getType(imageType);
+        const extension = imageType === "image/png" ? "png" : imageType === "image/webp" ? "webp" : "jpg";
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const file = new File([blob], `print-${stamp}.${extension}`, {
+          type: imageType,
+          lastModified: Date.now(),
+        });
+
+        addFiles([file]);
+        toast.success("Print adicionado para comparação.");
+        return;
+      }
+
+      toast.error("Nenhum print de imagem encontrado. Copie o print e clique em Colar print novamente.");
+    } catch (error) {
+      console.error("Falha ao ler print da área de transferência:", error);
+      toast.error("Não foi possível ler o print. Autorize a área de transferência no navegador e tente novamente.");
+    }
   };
 
   const removeCandidate = (id: string) => {
@@ -1055,7 +1089,7 @@ export default function AdminSimilarity() {
                 </p>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="mt-4 grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => filesInputRef.current?.click()}
@@ -1069,6 +1103,15 @@ export default function AdminSimilarity() {
                   className="flex items-center justify-center gap-2 rounded-xl border border-violet-400/30 bg-violet-400/10 px-3 py-3 text-sm font-bold text-violet-100 hover:bg-violet-400/15"
                 >
                   <FolderOpen className="h-4 w-4" /> Pasta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void pasteComparisonPrint()}
+                  disabled={analyzing}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-emerald-400/35 bg-emerald-400/10 px-3 py-3 text-sm font-black text-emerald-100 transition hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Colar o print que está na área de transferência"
+                >
+                  <ClipboardPaste className="h-4 w-4" /> Colar print
                 </button>
               </div>
 
