@@ -167,7 +167,7 @@ function ParcelamentoCard({
                   <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
                     <Calendar size={10} color={isPaga ? "#4CAF50" : "#79747E"} />
                     <span style={{ fontSize: 11, color: isPaga ? "#4CAF50" : "#79747E" }}>
-                      {new Date(g.data).toLocaleDateString("pt-BR")}{isPaga && " • Paga"}
+                      Venc. {new Date(g.data).toLocaleDateString("pt-BR")}{isPaga && " • Paga"}
                     </span>
                   </div>
                 </div>
