@@ -23,12 +23,12 @@ function replaceNth(text, oldText, newText, nth, label) {
   const path = "drizzle/schema.ts";
   let s = read(path);
   if (!s.includes('mysqlTable("orderStatusFlows"')) {
-    const marker = \`export type OrderStatusType = typeof orderStatusTypes.$inferSelect;
+    const marker = `export type OrderStatusType = typeof orderStatusTypes.$inferSelect;
 export type InsertOrderStatusType = typeof orderStatusTypes.$inferInsert;
 
 // Contador de pedidos (AUTO_INCREMENT = 10000)
-\`;
-    const insert = \`export type OrderStatusType = typeof orderStatusTypes.$inferSelect;
+`;
+    const insert = `export type OrderStatusType = typeof orderStatusTypes.$inferSelect;
 export type InsertOrderStatusType = typeof orderStatusTypes.$inferInsert;
 
 // Sequências de status por produto.
@@ -76,7 +76,7 @@ export const orderStatusFlowAssignments = mysqlTable("orderStatusFlowAssignments
 export type OrderStatusFlowAssignment = typeof orderStatusFlowAssignments.$inferSelect;
 
 // Contador de pedidos (AUTO_INCREMENT = 10000)
-\`;
+`;
     s = replaceOnce(s, marker, insert, "schema status flow tables");
     write(path, s);
   }
@@ -87,21 +87,21 @@ export type OrderStatusFlowAssignment = typeof orderStatusFlowAssignments.$infer
   const path = "server/db.ts";
   let s = read(path);
   if (!s.includes("ensureOrderStatusFlowTables")) {
-    const marker = \`export async function deleteOrderStatusType(id: number): Promise<void> {
+    const marker = `export async function deleteOrderStatusType(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   // Permite excluir qualquer status (admin tem controle total)
-  await db.delete(orderStatusTypes).where(sql\`\${orderStatusTypes.id} = \${id}\`);
+  await db.delete(orderStatusTypes).where(sql`\${orderStatusTypes.id} = \${id}`);
 }
 
 // ========== INFO BANNERS ==========
-\`;
+`;
 
-    const block = \`export async function deleteOrderStatusType(id: number): Promise<void> {
+    const block = `export async function deleteOrderStatusType(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   // Permite excluir qualquer status (admin tem controle total)
-  await db.delete(orderStatusTypes).where(sql\`\${orderStatusTypes.id} = \${id}\`);
+  await db.delete(orderStatusTypes).where(sql`\${orderStatusTypes.id} = \${id}`);
 }
 
 // ── Sequências de status por produto ─────────────────────────────────────────
@@ -112,7 +112,7 @@ export async function ensureOrderStatusFlowTables(): Promise<void> {
   if (!db) throw new Error("Database not available");
   if (!orderStatusFlowTablesPromise) {
     orderStatusFlowTablesPromise = (async () => {
-      await db.execute(sql.raw(\`
+      await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS orderStatusFlows (
           id INT AUTO_INCREMENT PRIMARY KEY,
           name VARCHAR(128) NOT NULL,
@@ -123,8 +123,8 @@ export async function ensureOrderStatusFlowTables(): Promise<void> {
           updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX idx_order_status_flows_default (isDefault, isActive)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      \`));
-      await db.execute(sql.raw(\`
+      `));
+      await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS orderStatusFlowItems (
           id INT AUTO_INCREMENT PRIMARY KEY,
           flowId INT NOT NULL,
@@ -134,8 +134,8 @@ export async function ensureOrderStatusFlowTables(): Promise<void> {
           UNIQUE KEY uq_status_flow_item (flowId, statusKey),
           INDEX idx_status_flow_items_order (flowId, sortOrder)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      \`));
-      await db.execute(sql.raw(\`
+      `));
+      await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS productStatusFlows (
           id INT AUTO_INCREMENT PRIMARY KEY,
           productId INT NOT NULL,
@@ -145,8 +145,8 @@ export async function ensureOrderStatusFlowTables(): Promise<void> {
           UNIQUE KEY uq_product_status_flow (productId),
           INDEX idx_product_status_flow_flow (flowId)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      \`));
-      await db.execute(sql.raw(\`
+      `));
+      await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS orderStatusFlowAssignments (
           id INT AUTO_INCREMENT PRIMARY KEY,
           registrationId INT NOT NULL,
@@ -160,15 +160,15 @@ export async function ensureOrderStatusFlowTables(): Promise<void> {
           INDEX idx_order_status_flow_order (registrationId, orderNumber),
           INDEX idx_order_status_flow_flow (flowId)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-      \`));
+      `));
 
-      const defaultResult = await db.execute(sql\`SELECT id FROM orderStatusFlows WHERE isDefault = 1 LIMIT 1\`);
+      const defaultResult = await db.execute(sql`SELECT id FROM orderStatusFlows WHERE isDefault = 1 LIMIT 1`);
       const defaultRows = (defaultResult as any)[0] as Array<{ id: number }>;
       if (!defaultRows?.[0]?.id) {
-        await db.execute(sql\`
+        await db.execute(sql`
           INSERT INTO orderStatusFlows (name, description, isDefault, isActive)
           VALUES ('Padrão H2', 'Sequência padrão que preserva o comportamento atual do sistema.', 1, 1)
-        \`);
+        `);
       }
     })().catch((error) => {
       orderStatusFlowTablesPromise = null;
@@ -181,12 +181,12 @@ export async function ensureOrderStatusFlowTables(): Promise<void> {
 async function getInitialOrderStatusKey(): Promise<string> {
   const db = await getDb();
   if (!db) return "recebido";
-  const result = await db.execute(sql\`
-    SELECT \\\`key\\\` FROM orderStatusTypes
+  const result = await db.execute(sql`
+    SELECT \`key\` FROM orderStatusTypes
     WHERE isActive = 1
     ORDER BY sortOrder ASC
     LIMIT 1
-  \`);
+  `);
   const rows = (result as any)[0] as Array<{ key: string }>;
   return rows?.[0]?.key || "recebido";
 }
@@ -195,7 +195,7 @@ export async function getDefaultOrderStatusFlowId(): Promise<number> {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.execute(sql\`SELECT id FROM orderStatusFlows WHERE isDefault = 1 LIMIT 1\`);
+  const result = await db.execute(sql`SELECT id FROM orderStatusFlows WHERE isDefault = 1 LIMIT 1`);
   const rows = (result as any)[0] as Array<{ id: number }>;
   if (!rows?.[0]?.id) throw new Error("Default status flow not available");
   return Number(rows[0].id);
@@ -206,13 +206,13 @@ export async function resolveOrderStatusFlowForProduct(productId?: number | null
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (productId) {
-    const result = await db.execute(sql\`
+    const result = await db.execute(sql`
       SELECT f.id
       FROM productStatusFlows pf
       INNER JOIN orderStatusFlows f ON f.id = pf.flowId
       WHERE pf.productId = \${productId} AND f.isActive = 1
       LIMIT 1
-    \`);
+    `);
     const rows = (result as any)[0] as Array<{ id: number }>;
     if (rows?.[0]?.id) return Number(rows[0].id);
   }
@@ -230,12 +230,12 @@ export async function getOrderStatusFlowDefinition(flowId: number): Promise<{
   await ensureOrderStatusFlowTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const flowResult = await db.execute(sql\`
+  const flowResult = await db.execute(sql`
     SELECT id, name, description, isDefault, isActive
     FROM orderStatusFlows
     WHERE id = \${flowId}
     LIMIT 1
-  \`);
+  `);
   const flowRows = (flowResult as any)[0] as any[];
   const flow = flowRows?.[0];
   if (!flow) {
@@ -246,20 +246,20 @@ export async function getOrderStatusFlowDefinition(flowId: number): Promise<{
 
   let itemResult: any;
   if (Number(flow.isDefault) === 1) {
-    itemResult = await db.execute(sql\`
-      SELECT \\\`key\\\` AS statusKey
+    itemResult = await db.execute(sql`
+      SELECT \`key\` AS statusKey
       FROM orderStatusTypes
       WHERE isActive = 1
       ORDER BY sortOrder ASC, id ASC
-    \`);
+    `);
   } else {
-    itemResult = await db.execute(sql\`
+    itemResult = await db.execute(sql`
       SELECT i.statusKey
       FROM orderStatusFlowItems i
-      INNER JOIN orderStatusTypes st ON st.\\\`key\\\` = i.statusKey
+      INNER JOIN orderStatusTypes st ON st.\`key\` = i.statusKey
       WHERE i.flowId = \${flowId} AND st.isActive = 1
       ORDER BY i.sortOrder ASC, i.id ASC
-    \`);
+    `);
   }
   const itemRows = (itemResult as any)[0] as Array<{ statusKey: string }>;
   return {
@@ -283,7 +283,7 @@ export async function assignOrderStatusFlow(data: {
   const db = await getDb();
   if (!db) return;
   const flowId = await resolveOrderStatusFlowForProduct(data.productId);
-  await db.execute(sql\`
+  await db.execute(sql`
     INSERT INTO orderStatusFlowAssignments
       (registrationId, orderStatusId, orderNumber, productId, optionId, flowId)
     VALUES
@@ -293,7 +293,7 @@ export async function assignOrderStatusFlow(data: {
       productId = VALUES(productId),
       optionId = VALUES(optionId),
       flowId = VALUES(flowId)
-  \`);
+  `);
 }
 
 export async function getOrderStatusFlowForOrder(registrationId: number, orderNumber?: number | null) {
@@ -302,21 +302,21 @@ export async function getOrderStatusFlowForOrder(registrationId: number, orderNu
   if (!db) return null;
   let result: any;
   if (orderNumber != null) {
-    result = await db.execute(sql\`
+    result = await db.execute(sql`
       SELECT flowId
       FROM orderStatusFlowAssignments
       WHERE registrationId = \${registrationId} AND orderNumber = \${orderNumber}
       ORDER BY id DESC
       LIMIT 1
-    \`);
+    `);
   } else {
-    result = await db.execute(sql\`
+    result = await db.execute(sql`
       SELECT flowId
       FROM orderStatusFlowAssignments
       WHERE registrationId = \${registrationId}
       ORDER BY id DESC
       LIMIT 1
-    \`);
+    `);
   }
   const rows = (result as any)[0] as Array<{ flowId: number }>;
   const flowId = rows?.[0]?.flowId ? Number(rows[0].flowId) : await getDefaultOrderStatusFlowId();
@@ -327,22 +327,22 @@ export async function listOrderStatusFlowsDetailed() {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
   if (!db) return [];
-  const result = await db.execute(sql\`
+  const result = await db.execute(sql`
     SELECT id, name, description, isDefault, isActive
     FROM orderStatusFlows
     ORDER BY isDefault DESC, id ASC
-  \`);
+  `);
   const rows = (result as any)[0] as any[];
   const output: any[] = [];
   for (const row of rows || []) {
     const definition = await getOrderStatusFlowDefinition(Number(row.id));
-    const productsResult = await db.execute(sql\`
+    const productsResult = await db.execute(sql`
       SELECT p.id, p.name
       FROM productStatusFlows pf
       INNER JOIN products p ON p.id = pf.productId
       WHERE pf.flowId = \${Number(row.id)}
       ORDER BY p.sortOrder ASC, p.name ASC
-    \`);
+    `);
     const productRows = (productsResult as any)[0] as Array<{ id: number; name: string }>;
     output.push({
       ...definition,
@@ -368,11 +368,11 @@ export async function createOrderStatusFlowConfig(data: {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.execute(sql\`
+  await db.execute(sql`
     INSERT INTO orderStatusFlows (name, description, isDefault, isActive)
     VALUES (\${data.name}, \${data.description ?? null}, 0, 1)
-  \`);
-  const idResult = await db.execute(sql\`SELECT LAST_INSERT_ID() AS id\`);
+  `);
+  const idResult = await db.execute(sql`SELECT LAST_INSERT_ID() AS id`);
   const idRows = (idResult as any)[0] as Array<{ id: number }>;
   const flowId = Number(idRows?.[0]?.id || 0);
   if (!flowId) throw new Error("Falha ao criar sequência de status");
@@ -391,7 +391,7 @@ export async function updateOrderStatusFlowConfig(data: {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const flowResult = await db.execute(sql\`SELECT isDefault FROM orderStatusFlows WHERE id = \${data.id} LIMIT 1\`);
+  const flowResult = await db.execute(sql`SELECT isDefault FROM orderStatusFlows WHERE id = \${data.id} LIMIT 1`);
   const flowRows = (flowResult as any)[0] as Array<{ isDefault: number }>;
   if (!flowRows?.[0]) throw new Error("Sequência não encontrada");
   if (Number(flowRows[0].isDefault) === 1 && (data.statusKeys || data.productIds)) {
@@ -399,36 +399,36 @@ export async function updateOrderStatusFlowConfig(data: {
   }
 
   if (data.name !== undefined || data.description !== undefined || data.isActive !== undefined) {
-    await db.execute(sql\`
+    await db.execute(sql`
       UPDATE orderStatusFlows
       SET
         name = CASE WHEN \${data.name !== undefined ? 1 : 0} = 1 THEN \${data.name ?? ""} ELSE name END,
         description = CASE WHEN \${data.description !== undefined ? 1 : 0} = 1 THEN \${data.description ?? null} ELSE description END,
         isActive = CASE WHEN \${data.isActive !== undefined ? 1 : 0} = 1 THEN \${data.isActive ?? 1} ELSE isActive END
       WHERE id = \${data.id}
-    \`);
+    `);
   }
 
   if (data.statusKeys) {
     const keys = await normalizeCustomFlowStatusKeys(data.statusKeys);
-    await db.execute(sql\`DELETE FROM orderStatusFlowItems WHERE flowId = \${data.id}\`);
+    await db.execute(sql`DELETE FROM orderStatusFlowItems WHERE flowId = \${data.id}`);
     let sortOrder = 0;
     for (const key of keys) {
-      await db.execute(sql\`
+      await db.execute(sql`
         INSERT INTO orderStatusFlowItems (flowId, statusKey, sortOrder)
         VALUES (\${data.id}, \${key}, \${sortOrder++})
-      \`);
+      `);
     }
   }
 
   if (data.productIds) {
-    await db.execute(sql\`DELETE FROM productStatusFlows WHERE flowId = \${data.id}\`);
+    await db.execute(sql`DELETE FROM productStatusFlows WHERE flowId = \${data.id}`);
     for (const productId of Array.from(new Set(data.productIds))) {
-      await db.execute(sql\`
+      await db.execute(sql`
         INSERT INTO productStatusFlows (productId, flowId)
         VALUES (\${productId}, \${data.id})
         ON DUPLICATE KEY UPDATE flowId = VALUES(flowId), updatedAt = CURRENT_TIMESTAMP
-      \`);
+      `);
     }
   }
 }
@@ -437,11 +437,11 @@ export async function getOrderStatusFlowMap() {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
   if (!db) return {};
-  const assignmentResult = await db.execute(sql\`
+  const assignmentResult = await db.execute(sql`
     SELECT registrationId, orderNumber, flowId
     FROM orderStatusFlowAssignments
     ORDER BY id ASC
-  \`);
+  `);
   const assignments = (assignmentResult as any)[0] as Array<{ registrationId: number; orderNumber: number | null; flowId: number }>;
   const cache = new Map<number, Awaited<ReturnType<typeof getOrderStatusFlowDefinition>>>();
   const map: Record<string, any> = {};
@@ -452,13 +452,13 @@ export async function getOrderStatusFlowMap() {
       def = await getOrderStatusFlowDefinition(flowId);
       cache.set(flowId, def);
     }
-    map[\`\${Number(row.registrationId)}_\${row.orderNumber == null ? "null" : Number(row.orderNumber)}\`] = def;
+    map[`\${Number(row.registrationId)}_\${row.orderNumber == null ? "null" : Number(row.orderNumber)}`] = def;
   }
   return map;
 }
 
 // ========== INFO BANNERS ==========
-\`;
+`;
     s = replaceOnce(s, marker, block, "db status flow helpers");
     write(path, s);
   }
@@ -470,10 +470,10 @@ export async function getOrderStatusFlowMap() {
   let s = read(path);
 
   if (!s.includes("statusFlows: router({")) {
-    const marker = \`  // === BANNERS INFORMATIVOS ===
+    const marker = `  // === BANNERS INFORMATIVOS ===
   banners: router({
-\`;
-    const routerBlock = \`  // Sequências de status por produto
+`;
+    const routerBlock = `  // Sequências de status por produto
   statusFlows: router({
     list: adminProcedure.query(async () => {
       const { listOrderStatusFlowsDetailed } = await import('./db');
@@ -521,12 +521,12 @@ export async function getOrderStatusFlowMap() {
 
   // === BANNERS INFORMATIVOS ===
   banners: router({
-\`;
+`;
     s = replaceOnce(s, marker, routerBlock, "statusFlows router");
   }
 
   if (!s.includes("[StatusFlow] sequência congelada")) {
-    const marker = \`                const createdOrderStatus = await addOrderStatus({
+    const marker = `                const createdOrderStatus = await addOrderStatus({
                   registrationId: regId,
                   orderNumber: orderNum,
                   customerPhone: phoneDigits,
@@ -539,8 +539,8 @@ export async function getOrderStatusFlowMap() {
                 });
 
                 if (previousOrderCount === 0 && input.optionId) {
-\`;
-    const replacement = \`                const createdOrderStatus = await addOrderStatus({
+`;
+    const replacement = `                const createdOrderStatus = await addOrderStatus({
                   registrationId: regId,
                   orderNumber: orderNum,
                   customerPhone: phoneDigits,
@@ -570,17 +570,17 @@ export async function getOrderStatusFlowMap() {
                 }
 
                 if (previousOrderCount === 0 && input.optionId) {
-\`;
+`;
     s = replaceOnce(s, marker, replacement, "freeze flow on order creation");
   }
 
   if (!s.includes("Este status não pertence à sequência configurada para este pedido.")) {
-    const marker = \`        if (input.status === 'recebido') {
+    const marker = `        if (input.status === 'recebido') {
           return { success: false, error: 'Status recebido não pode ser definido manualmente' };
         }
         const result = await updateLastOrderStatus({
-\`;
-    const replacement = \`        if (input.status === 'recebido') {
+`;
+    const replacement = `        if (input.status === 'recebido') {
           return { success: false, error: 'Status recebido não pode ser definido manualmente' };
         }
 
@@ -597,7 +597,7 @@ export async function getOrderStatusFlowMap() {
         }
 
         const result = await updateLastOrderStatus({
-\`;
+`;
     s = replaceOnce(s, marker, replacement, "server-side flow validation");
   }
 
@@ -617,17 +617,17 @@ export async function getOrderStatusFlowMap() {
     );
   }
   if (!s.includes('path={"/admin/status-flows"}')) {
-    const marker = \`      <Route path={"/admin/status-types"}>
+    const marker = `      <Route path={"/admin/status-types"}>
         <AdminGuard><AdminStatusTypes /></AdminGuard>
       </Route>
-\`;
-    const replacement = \`      <Route path={"/admin/status-types"}>
+`;
+    const replacement = `      <Route path={"/admin/status-types"}>
         <AdminGuard><AdminStatusTypes /></AdminGuard>
       </Route>
       <Route path={"/admin/status-flows"}>
         <AdminGuard><AdminStatusFlows /></AdminGuard>
       </Route>
-\`;
+`;
     s = replaceOnce(s, marker, replacement, "App status flows route");
   }
   write(path, s);
@@ -638,14 +638,14 @@ export async function getOrderStatusFlowMap() {
   const path = "client/src/pages/AdminStatusTypes.tsx";
   let s = read(path);
   if (!s.includes('href="/admin/status-flows"')) {
-    const marker = \`      <AdminHeader title="Status de Pedido" rightContent={
+    const marker = `      <AdminHeader title="Status de Pedido" rightContent={
         <Button onClick={() => { setShowCreate(v => !v); setForm(defaultForm); }} className="bg-primary hover:bg-primary/80 text-white text-xs gap-1 px-3 py-1.5 h-auto" size="sm">
           {showCreate ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
           <span className="hidden sm:inline">{showCreate ? "Cancelar" : "Novo Status"}</span>
         </Button>
       } />
-\`;
-    const replacement = \`      <AdminHeader title="Status de Pedido" rightContent={
+`;
+    const replacement = `      <AdminHeader title="Status de Pedido" rightContent={
         <div className="flex items-center gap-2">
           <Link href="/admin/status-flows">
             <Button variant="outline" className="border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 text-xs h-auto px-3 py-1.5" size="sm">
@@ -658,7 +658,7 @@ export async function getOrderStatusFlowMap() {
           </Button>
         </div>
       } />
-\`;
+`;
     s = replaceOnce(s, marker, replacement, "AdminStatusTypes sequences button");
   }
   write(path, s);
@@ -669,11 +669,11 @@ export async function getOrderStatusFlowMap() {
   const path = "client/src/pages/AdminOrders.tsx";
   let s = read(path);
   if (!s.includes("statusFlowOrderMapQuery")) {
-    const marker = \`  // Status dinâmicos do banco
+    const marker = `  // Status dinâmicos do banco
   const statusTypesQuery = trpc.statusTypes.list.useQuery();
   const dynamicStatuses = statusTypesQuery.data ?? [];
-\`;
-    const replacement = \`  // Status dinâmicos do banco
+`;
+    const replacement = `  // Status dinâmicos do banco
   const statusTypesQuery = trpc.statusTypes.list.useQuery();
   const dynamicStatuses = statusTypesQuery.data ?? [];
 
@@ -681,22 +681,22 @@ export async function getOrderStatusFlowMap() {
   // continuam usando a sequência global atual.
   const statusFlowOrderMapQuery = trpc.statusFlows.orderMap.useQuery(undefined, { staleTime: 30000 });
   const statusFlowOrderMap = (statusFlowOrderMapQuery.data ?? {}) as Record<string, { statusKeys?: string[] }>;
-\`;
+`;
     s = replaceOnce(s, marker, replacement, "AdminOrders flow map query");
 
-    const marker2 = \`  const INITIAL_STATUS_KEY = ACTIVE_STATUS_ORDER[0] || 'recebido';
+    const marker2 = `  const INITIAL_STATUS_KEY = ACTIVE_STATUS_ORDER[0] || 'recebido';
   const isManualSelectableStatus = (s: string) => s !== 'cancelado' && s !== 'recebido' && s !== INITIAL_STATUS_KEY;
-\`;
-    const replacement2 = \`  const INITIAL_STATUS_KEY = ACTIVE_STATUS_ORDER[0] || 'recebido';
+`;
+    const replacement2 = `  const INITIAL_STATUS_KEY = ACTIVE_STATUS_ORDER[0] || 'recebido';
   const isManualSelectableStatus = (s: string) => s !== 'cancelado' && s !== 'recebido' && s !== INITIAL_STATUS_KEY;
   const getStatusOrderForOrder = (order: any): string[] => {
     const registrationId = Number(order?.id ?? order?.registrationId ?? 0);
     const orderNumber = order?.orderNumber == null ? 'null' : String(order.orderNumber);
-    const flow = statusFlowOrderMap[\`\${registrationId}_\${orderNumber}\`];
+    const flow = statusFlowOrderMap[`\${registrationId}_\${orderNumber}`];
     const keys = flow?.statusKeys;
     return Array.isArray(keys) && keys.length > 0 ? keys : ACTIVE_STATUS_ORDER;
   };
-\`;
+`;
     s = replaceOnce(s, marker2, replacement2, "AdminOrders flow helper");
 
     const old = "ACTIVE_STATUS_ORDER.filter(isManualSelectableStatus).map(s => {";
@@ -719,26 +719,26 @@ export async function getOrderStatusFlowMap() {
   const path = "client/src/pages/OrderTracking.tsx";
   let s = read(path);
   if (!s.includes("statusFlowForOrderQuery")) {
-    const marker = \`  // Dados de login liberado
+    const marker = `  // Dados de login liberado
   const registrationId = history.length > 0 ? ((history[0] as any).registrationId ?? 0) : 0;
-\`;
-    const replacement = \`  // Dados de login liberado
+`;
+    const replacement = `  // Dados de login liberado
   const registrationId = history.length > 0 ? ((history[0] as any).registrationId ?? 0) : 0;
   const selectedOrderNumber = history.find((h: any) => h.orderNumber != null)?.orderNumber ?? null;
   const statusFlowForOrderQuery = trpc.statusFlows.forOrder.useQuery(
     { registrationId, orderNumber: selectedOrderNumber ?? undefined },
     { enabled: canAccess && registrationId > 0, staleTime: 30000 }
   );
-\`;
+`;
     s = replaceOnce(s, marker, replacement, "OrderTracking flow query");
 
-    const marker2 = \`  // Timeline steps: todos os status dinâmicos ativos, excluindo "cancelado"
+    const marker2 = `  // Timeline steps: todos os status dinâmicos ativos, excluindo "cancelado"
   const timelineSteps = useMemo(
     () => dynamicStatuses.filter((s: any) => s.key !== 'cancelado'),
     [dynamicStatuses]
   );
-\`;
-    const replacement2 = \`  // Timeline do pedido: usa a sequência congelada do produto quando existir.
+`;
+    const replacement2 = `  // Timeline do pedido: usa a sequência congelada do produto quando existir.
   // Pedidos antigos sem atribuição continuam na sequência padrão atual.
   const timelineSteps = useMemo(() => {
     const keys = statusFlowForOrderQuery.data?.statusKeys ?? [];
@@ -747,7 +747,7 @@ export async function getOrderStatusFlowMap() {
       : dynamicStatuses;
     return base.filter((s: any) => s.key !== 'cancelado');
   }, [dynamicStatuses, statusFlowForOrderQuery.data?.statusKeys]);
-\`;
+`;
     s = replaceOnce(s, marker2, replacement2, "OrderTracking timeline flow");
   }
   write(path, s);
@@ -757,7 +757,7 @@ export async function getOrderStatusFlowMap() {
 {
   const path = "client/src/pages/AdminStatusFlows.tsx";
   if (!fs.existsSync(path)) {
-    write(path, \`import { useMemo, useState } from "react";
+    write(path, `import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { ArrowLeft, Pencil, Plus, Save, X } from "lucide-react";
 import { toast } from "sonner";
@@ -913,7 +913,7 @@ export default function AdminStatusFlows() {
                       key={s.key}
                       disabled={s.key === initialKey}
                       onClick={() => toggleStatus(s.key)}
-                      className={\`text-left rounded-lg border px-3 py-2 text-sm transition \${checked ? "border-cyan-400/50 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-black/10 text-white/50"} \${s.key === initialKey ? "opacity-80 cursor-not-allowed" : ""}\`}
+                      className={`text-left rounded-lg border px-3 py-2 text-sm transition \${checked ? "border-cyan-400/50 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-black/10 text-white/50"} \${s.key === initialKey ? "opacity-80 cursor-not-allowed" : ""}`}
                     >
                       <span className="mr-2">{checked ? "✓" : "○"}</span>{s.label}
                       {s.key === initialKey && <span className="ml-2 text-[10px] text-white/35">INICIAL</span>}
@@ -934,7 +934,7 @@ export default function AdminStatusFlows() {
                       type="button"
                       key={p.id}
                       onClick={() => toggleProduct(p.id)}
-                      className={\`text-left rounded-lg border px-3 py-2 text-sm transition \${checked ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-100" : "border-white/10 bg-black/10 text-white/50"}\`}
+                      className={`text-left rounded-lg border px-3 py-2 text-sm transition \${checked ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-100" : "border-white/10 bg-black/10 text-white/50"}`}
                     >
                       <span className="mr-2">{checked ? "✓" : "○"}</span>{p.name}
                     </button>
@@ -971,7 +971,7 @@ export default function AdminStatusFlows() {
                     {flow.isDefault === 1
                       ? "Usada por todos os produtos sem sequência personalizada."
                       : flow.productNames.length
-                        ? \`Produtos: \${flow.productNames.join(", ")}\`
+                        ? `Produtos: \${flow.productNames.join(", ")}`
                         : "Nenhum produto vinculado ainda."}
                   </p>
                 </div>
@@ -988,7 +988,7 @@ export default function AdminStatusFlows() {
     </div>
   );
 }
-\`);
+`);
   }
 }
 
@@ -996,50 +996,50 @@ export default function AdminStatusFlows() {
 {
   const path = "drizzle/0136_status_flows_by_product.sql";
   if (!fs.existsSync(path)) {
-    write(path, \`CREATE TABLE IF NOT EXISTS \\\`orderStatusFlows\\\` (
-  \\\`id\\\` int AUTO_INCREMENT NOT NULL,
-  \\\`name\\\` varchar(128) NOT NULL,
-  \\\`description\\\` text,
-  \\\`isDefault\\\` int NOT NULL DEFAULT 0,
-  \\\`isActive\\\` int NOT NULL DEFAULT 1,
-  \\\`createdAt\\\` timestamp NOT NULL DEFAULT (now()),
-  \\\`updatedAt\\\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT \\\`orderStatusFlows_id\\\` PRIMARY KEY(\\\`id\\\`)
+    write(path, `CREATE TABLE IF NOT EXISTS \`orderStatusFlows\` (
+  \`id\` int AUTO_INCREMENT NOT NULL,
+  \`name\` varchar(128) NOT NULL,
+  \`description\` text,
+  \`isDefault\` int NOT NULL DEFAULT 0,
+  \`isActive\` int NOT NULL DEFAULT 1,
+  \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+  \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT \`orderStatusFlows_id\` PRIMARY KEY(\`id\`)
 );
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS \\\`orderStatusFlowItems\\\` (
-  \\\`id\\\` int AUTO_INCREMENT NOT NULL,
-  \\\`flowId\\\` int NOT NULL,
-  \\\`statusKey\\\` varchar(64) NOT NULL,
-  \\\`sortOrder\\\` int NOT NULL DEFAULT 0,
-  \\\`createdAt\\\` timestamp NOT NULL DEFAULT (now()),
-  CONSTRAINT \\\`orderStatusFlowItems_id\\\` PRIMARY KEY(\\\`id\\\`),
-  CONSTRAINT \\\`uq_status_flow_item\\\` UNIQUE(\\\`flowId\\\`,\\\`statusKey\\\`)
+CREATE TABLE IF NOT EXISTS \`orderStatusFlowItems\` (
+  \`id\` int AUTO_INCREMENT NOT NULL,
+  \`flowId\` int NOT NULL,
+  \`statusKey\` varchar(64) NOT NULL,
+  \`sortOrder\` int NOT NULL DEFAULT 0,
+  \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+  CONSTRAINT \`orderStatusFlowItems_id\` PRIMARY KEY(\`id\`),
+  CONSTRAINT \`uq_status_flow_item\` UNIQUE(\`flowId\`,\`statusKey\`)
 );
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS \\\`productStatusFlows\\\` (
-  \\\`id\\\` int AUTO_INCREMENT NOT NULL,
-  \\\`productId\\\` int NOT NULL,
-  \\\`flowId\\\` int NOT NULL,
-  \\\`createdAt\\\` timestamp NOT NULL DEFAULT (now()),
-  \\\`updatedAt\\\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT \\\`productStatusFlows_id\\\` PRIMARY KEY(\\\`id\\\`),
-  CONSTRAINT \\\`productStatusFlows_productId_unique\\\` UNIQUE(\\\`productId\\\`)
+CREATE TABLE IF NOT EXISTS \`productStatusFlows\` (
+  \`id\` int AUTO_INCREMENT NOT NULL,
+  \`productId\` int NOT NULL,
+  \`flowId\` int NOT NULL,
+  \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+  \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT \`productStatusFlows_id\` PRIMARY KEY(\`id\`),
+  CONSTRAINT \`productStatusFlows_productId_unique\` UNIQUE(\`productId\`)
 );
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS \\\`orderStatusFlowAssignments\\\` (
-  \\\`id\\\` int AUTO_INCREMENT NOT NULL,
-  \\\`registrationId\\\` int NOT NULL,
-  \\\`orderStatusId\\\` int NOT NULL,
-  \\\`orderNumber\\\` int,
-  \\\`productId\\\` int,
-  \\\`optionId\\\` int,
-  \\\`flowId\\\` int NOT NULL,
-  \\\`createdAt\\\` timestamp NOT NULL DEFAULT (now()),
-  CONSTRAINT \\\`orderStatusFlowAssignments_id\\\` PRIMARY KEY(\\\`id\\\`),
-  CONSTRAINT \\\`orderStatusFlowAssignments_orderStatusId_unique\\\` UNIQUE(\\\`orderStatusId\\\`)
+CREATE TABLE IF NOT EXISTS \`orderStatusFlowAssignments\` (
+  \`id\` int AUTO_INCREMENT NOT NULL,
+  \`registrationId\` int NOT NULL,
+  \`orderStatusId\` int NOT NULL,
+  \`orderNumber\` int,
+  \`productId\` int,
+  \`optionId\` int,
+  \`flowId\` int NOT NULL,
+  \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+  CONSTRAINT \`orderStatusFlowAssignments_id\` PRIMARY KEY(\`id\`),
+  CONSTRAINT \`orderStatusFlowAssignments_orderStatusId_unique\` UNIQUE(\`orderStatusId\`)
 );
-\`);
+`);
   }
 }
 
@@ -1047,7 +1047,7 @@ CREATE TABLE IF NOT EXISTS \\\`orderStatusFlowAssignments\\\` (
 {
   const path = "server/statusFlowsByProduct.test.ts";
   if (!fs.existsSync(path)) {
-    write(path, \`import fs from "node:fs";
+    write(path, `import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -1093,6 +1093,6 @@ describe("sequências de status por produto", () => {
     expect(fs.existsSync(path.join(root, "client/src/pages/AdminStatusFlows.tsx"))).toBe(true);
   });
 });
-\`);
+`);
   }
 }
