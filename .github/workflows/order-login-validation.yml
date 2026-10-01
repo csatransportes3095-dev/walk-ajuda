@@ -1,9 +1,10 @@
 name: Order login validation
 on:
   push:
-    branches: [feature/order-login-cnh-global-group-20261001, recovery/organizar-salvos-2026-08-24]
+    branches: [feature/order-login-cnh-global-group-20261001, fix/order-login-render-compat-20261001, recovery/organizar-salvos-2026-08-24]
     paths:
       - '.github/workflows/order-login-validation.yml'
+      - 'Dockerfile'
       - 'client/src/pages/AdminOrders.tsx'
       - 'client/src/pages/OrderTracking.tsx'
       - 'client/src/components/OrderLoginExtrasFields.tsx'
@@ -14,10 +15,13 @@ on:
       - 'server/routers.ts'
       - 'drizzle/schema.ts'
       - 'scripts/*order-login*'
+      - 'scripts/patch-admin-login-data-reload.mjs'
+      - 'scripts/patch-email-generator-history-ownership-20260915.mjs'
+      - 'scripts/patch-admin-orders-mobile-login-layout-20260915.mjs'
       - 'scripts/render-start.sh'
   pull_request:
     branches: [recovery/organizar-salvos-2026-08-24]
-    paths: ['client/src/pages/AdminOrders.tsx', 'client/src/pages/OrderTracking.tsx', 'server/orderLogin*.ts', 'shared/orderLoginPresentation.ts']
+    paths: ['.github/workflows/order-login-validation.yml', 'client/src/pages/AdminOrders.tsx', 'client/src/pages/OrderTracking.tsx', 'server/orderLogin*.ts', 'shared/orderLoginPresentation.ts', 'scripts/*login*', 'scripts/patch-email-generator-history-ownership-20260915.mjs']
 concurrency:
   group: order-login-${{ github.ref }}
   cancel-in-progress: true
@@ -45,14 +49,34 @@ jobs:
         run: |
           npm install -g pnpm@10.4.1
           pnpm install --frozen-lockfile
+      - name: Legacy build compatibility regressions
+        run: |
+          mkdir -p /tmp/login-report
+          set -o pipefail
+          node --test scripts/order-login-render-compat.test.mjs 2>&1 | tee /tmp/login-report/build-compat-tests.txt
+      - name: Apply the exact source-preparation sequence from Dockerfile
+        run: |
+          set -o pipefail
+          node --input-type=module <<'JS' 2>&1 | tee /tmp/login-report/render-preparation.txt
+          import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const dockerfile = fs.readFileSync('Dockerfile', 'utf8');
+          const scripts = [...dockerfile.matchAll(/&& node (scripts\/[^\s]+)/g)].map(match => match[1]);
+          if (!scripts.length) throw new Error('No Docker preparation steps found');
+          for (const script of scripts) {
+            if (!/^scripts\/[A-Za-z0-9._/-]+\.mjs$/.test(script)) throw new Error(`Unexpected preparation path: ${script}`);
+            console.log(`Preparing ${script}`);
+            execFileSync(process.execPath, [script], { stdio: 'inherit' });
+          }
+          console.log(`All ${scripts.length} Render preparation scripts passed.`);
+          JS
       - name: Login, authenticator and isolated database regression
         env:
           LOGIN_TEST_DB_URL: mysql://root:isolated-login-test@127.0.0.1:3306/h2_login_test
         run: |
-          mkdir -p /tmp/login-report
           set -o pipefail
           pnpm exec vitest run server/orderLoginImprovements.test.ts server/adminAuthenticatorIntegration.test.ts server/adminOrderLoginQuickEnhancer.test.ts server/adminAuthenticatorOrder.test.ts server/adminAuthenticatorVault.test.ts 2>&1 | tee /tmp/login-report/tests.txt
-      - name: Production build
+      - name: Production build after Render preparation
         run: |
           set -o pipefail
           pnpm build 2>&1 | tee /tmp/login-report/build.txt

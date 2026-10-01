@@ -20,13 +20,24 @@ function replaceAll(source, from, to, minCount, label) {
 
 // 1) Escopo apenas dos blocos de login dentro do ADM Pedidos.
 let orders = fs.readFileSync(ordersPath, 'utf8');
-orders = replaceAll(
-  orders,
-  'className="bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3"',
-  'className="admin-order-login-mobile min-w-0 max-w-full overflow-hidden bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3"',
-  3,
-  'marcação responsiva dos blocos Dados de Login',
-);
+// Preserve the ordered form marker while applying the same mobile containment.
+if (orders.includes('className="order-login-layout ')) {
+  orders = replaceAll(
+    orders,
+    'className="order-login-layout bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3"',
+    'className="order-login-layout admin-order-login-mobile min-w-0 max-w-full overflow-hidden bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3"',
+    3,
+    'ordered login form mobile containment',
+  );
+} else {
+  orders = replaceAll(
+    orders,
+    'className="bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3"',
+    'className="admin-order-login-mobile min-w-0 max-w-full overflow-hidden bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3"',
+    3,
+    'marcação responsiva dos blocos Dados de Login',
+  );
+ }
 fs.writeFileSync(ordersPath, orders);
 
 // 2) Autenticador privado: código, copiar e excluir não podem ultrapassar o card no celular.
