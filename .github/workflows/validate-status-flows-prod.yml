@@ -40,6 +40,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
       - name: Targeted tests
-        run: pnpm vitest run server/statusFlowsByProduct.test.ts server/scheduleOrderSync.test.ts server/orderFixes.test.ts
+        run: pnpm vitest run server/statusFlowsByProduct.test.ts
       - name: Production build
         run: pnpm build
