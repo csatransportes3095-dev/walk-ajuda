@@ -8,7 +8,7 @@ for (const [file, expected] of Object.entries(hashes)) {
   const actual = createHash('sha256').update(fs.readFileSync(file)).digest('hex');
   if (actual !== expected) throw new Error(`Reviewed source changed: ${file}. Nothing applied.`);
 }
-const patches = [root + 'backend.patch', root + 'frontend.patch'];
+const patches = ['backend.patch', 'frontend.patch', 'compat.patch'].map(file => root + file);
 execFileSync('git', ['apply', '--unidiff-zero', '--check', ...patches], { stdio: 'inherit' });
 execFileSync('git', ['apply', '--unidiff-zero', ...patches], { stdio: 'inherit' });
 fs.mkdirSync('/tmp/status-reviewed-source', { recursive: true });
