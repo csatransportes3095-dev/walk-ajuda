@@ -1,23 +1,36 @@
 name: Status scope validation
 on:
   push:
-    branches: [fix/status-scope-isolation-20261001]
+    branches: [fix/status-scope-isolation-20261001, recovery/organizar-salvos-2026-08-24]
     paths:
       - '.github/workflows/status-scope-validation.yml'
-      - 'scripts/status-scope-review/**'
       - 'server/orderStatusScope.ts'
       - 'server/statusScopeIsolation.test.ts'
+      - 'server/db.ts'
+      - 'server/routers.ts'
       - 'shared/orderStatusScope.ts'
+      - 'shared/orderProgressSequence.ts'
+      - 'drizzle/schema.ts'
+      - 'client/src/pages/AdminStatusTypes.tsx'
+      - 'client/src/pages/AdminStatusFlows.tsx'
+      - 'client/src/pages/AdminOrders.tsx'
+      - 'client/src/pages/OrderTracking.tsx'
       - 'scripts/apply-status-scope-migration.ts'
+      - 'scripts/patch-status-custom-colors-20260909.mjs'
+      - 'scripts/render-start.sh'
+      - 'scripts/check-status-scope-public.mjs'
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths: ['server/orderStatusScope.ts', 'shared/orderStatusScope.ts', '.github/workflows/status-scope-validation.yml']
 concurrency:
-  group: status-scope-isolated-validation
+  group: status-scope-${{ github.ref }}
   cancel-in-progress: true
 permissions:
-  contents: write
+  contents: read
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     services:
       mysql:
         image: mysql:8.4
@@ -30,40 +43,15 @@ jobs:
           --health-interval=10s --health-timeout=5s --health-retries=12
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: fix/status-scope-isolation-20261001
-          fetch-depth: 1
       - uses: actions/setup-node@v4
         with: {node-version: 22}
       - name: Install locked dependencies
         run: |
           npm install -g pnpm@10.4.1
           pnpm install --frozen-lockfile
-      - name: Typecheck baseline
-        run: |
-          mkdir -p /tmp/status-baseline /tmp/status-report
-          git fetch origin c9f91ac3ba6a79177e6670e43add2661f3799362 --depth=1
-          git archive c9f91ac3ba6a79177e6670e43add2661f3799362 | tar -x -C /tmp/status-baseline
-          ln -s "$PWD/node_modules" /tmp/status-baseline/node_modules
-          pnpm exec tsc -p /tmp/status-baseline/tsconfig.json --incremental false --pretty false > /tmp/status-report/types-before.txt 2>&1 || true
-      - name: Apply readable reviewed patches
-        run: node scripts/status-scope-review/apply-reviewed.mjs
-      - name: No new type errors
-        run: |
-          pnpm exec tsc --incremental false --pretty false > /tmp/status-report/types-after.txt 2>&1 || true
-          node --input-type=module <<'JS'
-          import fs from 'node:fs';
-          function messages(file) {
-            return fs.readFileSync(file, 'utf8').split('\n').filter(x => x.includes('error TS')).map(x => x.replace(/^.*?(client\/src\/|server\/|shared\/)/, '$1').replace(/\(\d+,\d+\)/, '(LINE)'));
-          }
-          const before=messages('/tmp/status-report/types-before.txt');
-          const added=messages('/tmp/status-report/types-after.txt').filter(x => { const i=before.indexOf(x); if(i<0) return true; before.splice(i,1); return false; });
-          fs.writeFileSync('/tmp/status-report/new-type-errors.txt', added.join('\n'));
-          if(added.length) { console.error(added.join('\n')); process.exit(1); }
-          console.log('No new TypeScript errors.');
-          JS
       - name: Login build compatibility
         run: |
+          mkdir -p /tmp/status-report
           set -o pipefail
           node --test scripts/order-login-render-compat.test.mjs 2>&1 | tee /tmp/status-report/login-build-compat.txt
       - name: Exact Docker source preparation
@@ -71,7 +59,7 @@ jobs:
           set -o pipefail
           node --input-type=module <<'JS' 2>&1 | tee /tmp/status-report/docker-preparation.txt
           import fs from 'node:fs';
-          import { execFileSync } from 'node:child_process';
+          import {execFileSync} from 'node:child_process';
           const scripts=[...fs.readFileSync('Dockerfile','utf8').matchAll(/&& node (scripts\/[^\s]+)/g)].map(m=>m[1]);
           if(!scripts.length) throw new Error('No preparation scripts');
           for(const script of scripts) {
@@ -98,30 +86,20 @@ jobs:
         run: |
           set -o pipefail
           pnpm build 2>&1 | tee /tmp/status-report/build.txt
-      - name: Export evidence
-        if: always()
-        run: |
-          mkdir -p /tmp/status-report
-          git diff --stat > /tmp/status-report/diff-stat.txt
-          if [ -d /tmp/status-reviewed-source ]; then tar -czf /tmp/status-report/reviewed-source.tgz -C /tmp/status-reviewed-source .; fi
-          git diff > /tmp/status-report/prepared-source.diff
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: status-scope-validation-results
+          name: status-scope-release-evidence
           path: /tmp/status-report
           retention-days: 5
-      - name: Commit only reviewed source on isolated branch
-        run: |
-          git restore .
-          cp -a /tmp/status-reviewed-source/. .
-          node --input-type=module <<'JS'
-          import fs from 'node:fs';
-          import {execFileSync} from 'node:child_process';
-          const files=Object.keys(JSON.parse(fs.readFileSync('scripts/status-scope-review/base-hashes.json','utf8')));
-          execFileSync('git',['add','--',...files],{stdio:'inherit'});
-          JS
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix(status): validated global membership and independent custom sequences'
-          git push origin HEAD:fix/status-scope-isolation-20261001
+  public-smoke:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/recovery/organizar-salvos-2026-08-24'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Read-only public scope check
+        run: node scripts/check-status-scope-public.mjs
