@@ -11,7 +11,7 @@ export type OperationalOrderLike = {
 export function getOperationalBucket(order: OperationalOrderLike): string {
   const status = String(order.latestStatus || "");
 
-  if (["entregue", "pedido_entregue", "cancelado"].includes(status)) {
+  if (["entregue", "pedido_entregue", "documento_entregue", "cancelado"].includes(status)) {
     return "finalizado";
   }
 
