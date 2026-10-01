@@ -764,24 +764,68 @@ export const cartoesRouter = router({
       .input(z.object({
         id: z.number().int(),
         cartaoId: z.number().int(),
-        novaData: z.string(),
+        // novaDataCompra foi enviado por uma versão antiga do frontend.
+        // Mantemos compatibilidade para aparelhos com bundle/PWA em cache.
+        novaData: z.string().optional(),
+        novaDataCompra: z.string().optional(),
+      }).refine((value) => Boolean(value.novaData || value.novaDataCompra), {
+        message: "Informe a nova data da compra",
+        path: ["novaData"],
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
-        const cartaoRows = await ccExec(`SELECT id, fechamentoDia FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        const novaData = String(input.novaData ?? input.novaDataCompra ?? "").slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(novaData)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Data da compra inválida" });
+        }
+        const [ano, mes, dia] = novaData.split("-").map(Number);
+        const dataValidacao = new Date(ano, mes - 1, dia, 12, 0, 0);
+        if (
+          dataValidacao.getFullYear() !== ano ||
+          dataValidacao.getMonth() !== mes - 1 ||
+          dataValidacao.getDate() !== dia
+        ) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Data da compra inválida" });
+        }
+
+        const cartaoRows = await ccExec(`SELECT id, fechamentoDia, vencimentoDia FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
         if (!cartaoRows.length) throw new TRPCError({ code: "NOT_FOUND" });
-        const fechDia = cartaoRows[0].fechamentoDia ? Number(cartaoRows[0].fechamentoDia) : null;
-        const parcelas = await ccExec(`SELECT id, numeroParcela FROM cc_gastos WHERE parcelamentoId = ${input.id} AND cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY numeroParcela ASC`);
-        const [ano, mes, dia] = input.novaData.slice(0, 10).split("-").map(Number);
+        const card = {
+          id: Number(cartaoRows[0].id),
+          fechamentoDia: cartaoRows[0].fechamentoDia ? Number(cartaoRows[0].fechamentoDia) : null,
+          vencimentoDia: Number(cartaoRows[0].vencimentoDia),
+        };
+
+        // Parcelas já pagas ficam intocadas: não desfaz pagamento nem muda histórico quitado.
+        // Somente parcelas abertas são reposicionadas pela data original da compra.
+        const parcelas = await ccExec(`SELECT id, numeroParcela, invoiceId FROM cc_gastos WHERE parcelamentoId = ${input.id} AND cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY numeroParcela ASC`);
+        const pagasRows = await ccExec(`SELECT COUNT(*) AS total FROM cc_gastos WHERE parcelamentoId = ${input.id} AND cartaoId = ${input.cartaoId} AND paga = 1`);
+        const oldInvoiceIds = new Set<number>();
+
         for (const p of parcelas) {
+          if (p.invoiceId) oldInvoiceIds.add(Number(p.invoiceId));
           const offset = (p.numeroParcela || 1) - 1;
           const d = new Date(ano, mes - 1 + offset, dia, 12, 0, 0);
           const dataStr = d.toISOString().slice(0, 10);
-          const cicloFatura = calcCicloFatura(d, fechDia);
+          const cicloFatura = calcCicloFatura(d, card.fechamentoDia);
           await ccExec(`UPDATE cc_gastos SET data = '${dataStr} 00:00:00', cicloFatura = '${cicloFatura}' WHERE id = ${p.id}`);
+          // Atualiza imediatamente o vínculo da parcela aberta para a fatura correspondente.
+          await createExpenseInvoiceLink(card, cicloFatura, Number(p.id));
         }
-        await ccExec(`UPDATE cc_parcelamentos SET dataInicio = '${input.novaData.slice(0, 10)} 00:00:00' WHERE id = ${input.id}`);
-        return { success: true };
+
+        await ccExec(`UPDATE cc_parcelamentos SET dataInicio = '${novaData} 00:00:00' WHERE id = ${input.id} AND cartaoId = ${input.cartaoId}`);
+
+        // Se alguma parcela saiu de uma fatura antiga, atualiza o saldo daquela fatura também.
+        for (const invoiceId of oldInvoiceIds) {
+          try { await refreshInvoice(invoiceId); } catch {}
+        }
+
+        return {
+          success: true,
+          parcelasRecalculadas: parcelas.length,
+          parcelasPagasPreservadas: Number(pagasRows[0]?.total || 0),
+          novaData,
+        };
       }),
   }),
 
