@@ -1,0 +1,33 @@
+name: Validate custom status flow order
+
+on:
+  push:
+    branches:
+      - fix/custom-status-flow-order-control
+    paths:
+      - ".github/workflows/validate-custom-status-flow-order.yml"
+      - "client/src/pages/AdminStatusFlows.tsx"
+      - "client/src/pages/AdminOrders.tsx"
+      - "server/db.ts"
+      - "server/customStatusFlowOrder.test.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/custom-status-flow-order-control
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm vitest run server/customStatusFlowOrder.test.ts
+      - run: pnpm build

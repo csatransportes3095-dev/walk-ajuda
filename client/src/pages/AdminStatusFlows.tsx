@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Pencil, Plus, Save, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, Pencil, Plus, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
 import { Button } from "@/components/ui/button";
@@ -63,9 +63,24 @@ export default function AdminStatusFlows() {
     setProductIds(flow.productIds ?? []);
   };
 
-  const toggleStatus = (key: string) => {
+  const addStatus = (key: string) => {
+    setStatusKeys((prev) => prev.includes(key) ? prev : [...prev, key]);
+  };
+
+  const removeStatus = (key: string) => {
     if (key === initialKey) return;
-    setStatusKeys((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
+    setStatusKeys((prev) => prev.filter((k) => k !== key));
+  };
+
+  const moveStatus = (index: number, direction: -1 | 1) => {
+    setStatusKeys((prev) => {
+      const next = [...prev];
+      const target = index + direction;
+      // A etapa universal fica sempre na primeira posição.
+      if (index <= 0 || target <= 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   };
 
   const toggleProduct = (id: number) => {
@@ -93,9 +108,10 @@ export default function AdminStatusFlows() {
 
   const save = () => {
     if (!name.trim()) return toast.error("Informe o nome da sequência.");
-    const orderedKeys = activeStatuses
-      .map((s: any) => s.key)
-      .filter((key: string) => key === initialKey || statusKeys.includes(key));
+    // A ordem pertence a ESTA sequência. Não reordenar pela tela global de Status.
+    const validKeys = new Set(activeStatuses.map((s: any) => s.key));
+    const orderedKeys = Array.from(new Set([initialKey, ...statusKeys]))
+      .filter((key) => validKeys.has(key));
 
     if (editingId === "new") {
       createMut.mutate({
@@ -159,24 +175,79 @@ export default function AdminStatusFlows() {
             <div>
               <p className="text-sm font-semibold mb-2">Etapas desta sequência</p>
               <p className="text-xs text-white/40 mb-3">
-                O primeiro status é universal e fica sempre marcado. A ordem segue a ordem configurada na tela principal de Status.
+                Esta sequência tem ordem própria. Use as setas para definir exatamente a ordem que o ADM e o cliente devem seguir.
+                O primeiro status é universal e fica travado na posição 1.
               </p>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {activeStatuses.map((s: any) => {
-                  const checked = s.key === initialKey || statusKeys.includes(s.key);
+
+              <div className="space-y-2">
+                {statusKeys.map((key, index) => {
+                  const status: any = activeStatuses.find((s: any) => s.key === key);
+                  if (!status) return null;
+                  const locked = key === initialKey || index === 0;
                   return (
-                    <button
-                      type="button"
-                      key={s.key}
-                      disabled={s.key === initialKey}
-                      onClick={() => toggleStatus(s.key)}
-                      className={`text-left rounded-lg border px-3 py-2 text-sm transition ${checked ? "border-cyan-400/50 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-black/10 text-white/50"} ${s.key === initialKey ? "opacity-80 cursor-not-allowed" : ""}`}
+                    <div
+                      key={key}
+                      className="flex items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-2.5"
                     >
-                      <span className="mr-2">{checked ? "✓" : "○"}</span>{s.label}
-                      {s.key === initialKey && <span className="ml-2 text-[10px] text-white/35">INICIAL</span>}
-                    </button>
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-cyan-300/30 bg-black/20 text-xs font-bold text-cyan-100">
+                        {index + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-cyan-50">{status.label}</p>
+                        {locked && <p className="text-[10px] uppercase tracking-wide text-cyan-200/45">Inicial universal</p>}
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Subir ${status.label}`}
+                        disabled={locked || index <= 1}
+                        onClick={() => moveStatus(index, -1)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-white/60 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-20"
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Descer ${status.label}`}
+                        disabled={locked || index >= statusKeys.length - 1}
+                        onClick={() => moveStatus(index, 1)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-white/60 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-20"
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </button>
+                      {!locked && (
+                        <button
+                          type="button"
+                          aria-label={`Remover ${status.label}`}
+                          onClick={() => removeStatus(key)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-400/20 text-red-300/70 hover:bg-red-500/10 hover:text-red-200"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
+              </div>
+
+              <div className="mt-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">Adicionar status</p>
+                <div className="flex flex-wrap gap-2">
+                  {activeStatuses
+                    .filter((s: any) => !statusKeys.includes(s.key))
+                    .map((s: any) => (
+                      <button
+                        type="button"
+                        key={s.key}
+                        onClick={() => addStatus(s.key)}
+                        className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-xs text-white/60 transition hover:border-cyan-400/40 hover:bg-cyan-500/10 hover:text-cyan-100"
+                      >
+                        + {s.label}
+                      </button>
+                    ))}
+                  {activeStatuses.every((s: any) => statusKeys.includes(s.key)) && (
+                    <span className="text-xs text-white/30">Todos os status ativos já estão nesta sequência.</span>
+                  )}
+                </div>
               </div>
             </div>
 
