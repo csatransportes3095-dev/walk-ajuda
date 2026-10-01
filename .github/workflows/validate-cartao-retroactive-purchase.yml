@@ -1,0 +1,28 @@
+name: Validate retroactive card purchase
+on:
+  push:
+    branches: [fix/cartao-retroactive-purchase-create-20261001]
+    paths:
+      - 'client/src/pages/CartaoDetailPage.tsx'
+      - 'server/routers/cartoes.ts'
+      - 'server/cartaoRetroactiveRules.ts'
+      - 'server/cartaoRetroactivePurchase.test.ts'
+      - '.github/workflows/validate-cartao-retroactive-purchase.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Retroactive purchase rules
+        run: pnpm exec vitest run server/cartaoRetroactivePurchase.test.ts server/cardInvoicePresentation.test.ts server/cardManualSettlementRecovery.test.ts
+      - name: Production build
+        run: pnpm build
