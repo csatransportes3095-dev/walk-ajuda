@@ -17,7 +17,14 @@
 +  }
 --- a/server/globalOrderProgressIntegration.test.ts
 +++ b/server/globalOrderProgressIntegration.test.ts
-@@ -42 +42,2 @@
+@@ -0,0 +1 @@
++import { getOperationalBucket } from "../shared/orderBuckets";
+@@ -42 +43,2 @@
 -    expect(fn).toContain("db.transaction");
 +    expect(fn).toContain("withStatusScopeLock(db");
 +    expect(fs.readFileSync(path.resolve(process.cwd(), "server/orderStatusScope.ts"), "utf8")).toContain("return db.transaction(");
+@@ -56 +58,3 @@
+-    expect(buckets).toContain('["em_analise", "foto_em_analise", "foto_em_anal"]');
++    for (const latestStatus of ['em_analise', 'foto_em_analise', 'foto_em_anal', 'foto_analise']) {
++      expect(getOperationalBucket({ latestStatus, scheduleStatus: 'confirmed' })).toBe('em_analise');
++    }
