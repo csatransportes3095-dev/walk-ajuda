@@ -34,6 +34,7 @@ run_boot_step "db-migrate-spreadsheet-referral-declaration" pnpm run db:migrate:
 run_boot_step "db-migrate-referral-commission-attribution" pnpm run db:migrate:referral-commission-attribution
 run_boot_step "db-migrate-online-support" pnpm run db:migrate:online-support
 run_boot_step "db-migrate-cartoes" pnpm run db:migrate:cartoes
+run_boot_step "repair-card-installments-created-20261001" pnpm exec tsx scripts/repair-card-installments-created-20261001.ts
 run_boot_step "db-migrate-loans-compat" pnpm run db:migrate:loans-compat
 run_boot_step "db-migrate-loans-manual-limit" pnpm exec tsx scripts/apply-loans-manual-limit-priority-20260915.ts
 run_boot_step "db-migrate-system-backups" pnpm run db:migrate:system-backups
