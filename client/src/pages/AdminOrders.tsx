@@ -4055,6 +4055,7 @@ export default function AdminOrders() {
 <div className="order-login-full space-y-3 border-t border-white/10 pt-4" data-login-field="authenticator"><div><label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label><div className="flex gap-1"><input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))} placeholder="Ex: GJ6W76PV4B23..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
                                                   <AuthenticatorQrAdminField
                                                     registrationId={ar.registrationId}
+                                                    authenticatorSecret={fields.authCode}
                                                     hasExistingQr={Boolean((saved as any)?.hasAuthenticatorQr)}
                                                     pendingValue={loginAuthenticatorQr[arKey]}
                                                     onPendingValueChange={value => setLoginAuthenticatorQr(prev => ({ ...prev, [arKey]: value }))}
@@ -4488,6 +4489,7 @@ export default function AdminOrders() {
 <div className="order-login-full space-y-3 border-t border-white/10 pt-4" data-login-field="authenticator"><div><label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label><div className="flex gap-1"><input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))} placeholder="Ex: GJ6W76PV4B23..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
                                                               <AuthenticatorQrAdminField
                                                                 registrationId={ar.registrationId}
+                                                                authenticatorSecret={fields.authCode}
                                                                 hasExistingQr={Boolean((saved as any)?.hasAuthenticatorQr)}
                                                                 pendingValue={loginAuthenticatorQr[arKey]}
                                                                 onPendingValueChange={value => setLoginAuthenticatorQr(prev => ({ ...prev, [arKey]: value }))}
@@ -6434,6 +6436,7 @@ export default function AdminOrders() {
                               </div>
                               <AuthenticatorQrAdminField
                                 registrationId={order.id}
+                                authenticatorSecret={fields.authCode}
                                 hasExistingQr={Boolean((saved as any)?.hasAuthenticatorQr)}
                                 pendingValue={loginAuthenticatorQr[key]}
                                 onPendingValueChange={value => setLoginAuthenticatorQr(prev => ({ ...prev, [key]: value }))}
