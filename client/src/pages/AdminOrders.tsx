@@ -795,6 +795,11 @@ export default function AdminOrders() {
   // Status dinâmicos do banco
   const statusTypesQuery = trpc.statusTypes.list.useQuery();
   const dynamicStatuses = statusTypesQuery.data ?? [];
+
+  // Sequência congelada por pedido. Pedidos legados sem atribuição
+  // continuam usando a sequência global atual.
+  const statusFlowOrderMapQuery = trpc.statusFlows.orderMap.useQuery(undefined, { staleTime: 30000 });
+  const statusFlowOrderMap = (statusFlowOrderMapQuery.data ?? {}) as Record<string, { statusKeys?: string[] }>;
   // Template editável da mensagem WhatsApp de pedidos
   const waOrderTemplateQuery = trpc.settings.getWhatsappOrderTemplate.useQuery();
   const waOrderTemplate = waOrderTemplateQuery.data?.template || null;
@@ -838,6 +843,13 @@ export default function AdminOrders() {
     : STATUS_ORDER;
   const INITIAL_STATUS_KEY = ACTIVE_STATUS_ORDER[0] || 'recebido';
   const isManualSelectableStatus = (s: string) => s !== 'cancelado' && s !== 'recebido' && s !== INITIAL_STATUS_KEY;
+  const getStatusOrderForOrder = (order: any): string[] => {
+    const registrationId = Number(order?.id ?? order?.registrationId ?? 0);
+    const orderNumber = order?.orderNumber == null ? 'null' : String(order.orderNumber);
+    const flow = statusFlowOrderMap[`${registrationId}_${orderNumber}`];
+    const keys = flow?.statusKeys;
+    return Array.isArray(keys) && keys.length > 0 ? keys : ACTIVE_STATUS_ORDER;
+  };
 
   // autoMarkUrgent automático REMOVIDO — urgência agora é somente manual pelo admin
 
@@ -3847,7 +3859,7 @@ export default function AdminOrders() {
                                       <div className="space-y-3">
                                         <p className="text-xs font-medium text-muted-foreground">Atualizar status do pedido</p>
                                         <div className="grid grid-cols-2 gap-2">
-                                          {ACTIVE_STATUS_ORDER.filter(isManualSelectableStatus).map(s => {
+                                          {getStatusOrderForOrder(ar).filter(isManualSelectableStatus).map(s => {
                                             const cfg = ACTIVE_STATUS_CONFIG[s];
                                             if (!cfg) return null;
                                             const isSel = (archivedSelectedStatus[String(ar.registrationId)] || rawStatus) === s;
@@ -4309,7 +4321,7 @@ export default function AdminOrders() {
                                                   <div className="space-y-3">
                                                     <p className="text-xs font-medium text-muted-foreground">Atualizar status do pedido</p>
                                                     <div className="grid grid-cols-2 gap-2">
-                                                      {ACTIVE_STATUS_ORDER.filter(isManualSelectableStatus).map(s => {
+                                                      {getStatusOrderForOrder(ar).filter(isManualSelectableStatus).map(s => {
                                                         const cfg = ACTIVE_STATUS_CONFIG[s];
                                                         if (!cfg) return null;
                                                         const isSel = (rgCnhSelectedStatus[String(ar.registrationId)] || rawStatus) === s;
@@ -5792,7 +5804,7 @@ export default function AdminOrders() {
                     <div className="p-4 space-y-3">
                       <p className="text-xs font-medium text-muted-foreground">Atualizar status do pedido</p>
                       <div className="grid grid-cols-2 gap-2">
-                        {ACTIVE_STATUS_ORDER.filter(isManualSelectableStatus).map(s => {
+                        {getStatusOrderForOrder(order).filter(isManualSelectableStatus).map(s => {
                           const cfg = ACTIVE_STATUS_CONFIG[s];
                           if (!cfg) return null;
                           const isSel = (selectedStatus[getOrderKey(order)] || latestStatus) === s;
@@ -5834,7 +5846,7 @@ export default function AdminOrders() {
                         })}
                         isSaving={setProgressConfigMut.isPending}
                         statusConfig={ACTIVE_STATUS_CONFIG}
-                        statusOrder={ACTIVE_STATUS_ORDER}
+                        statusOrder={getStatusOrderForOrder(order)}
                       />
 
                       <textarea
