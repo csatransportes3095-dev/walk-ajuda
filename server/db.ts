@@ -1356,6 +1356,360 @@ export async function deleteOrderStatusType(id: number): Promise<void> {
   await db.delete(orderStatusTypes).where(sql`${orderStatusTypes.id} = ${id}`);
 }
 
+// ── Sequências de status por produto ─────────────────────────────────────────
+let orderStatusFlowTablesPromise: Promise<void> | null = null;
+
+export async function ensureOrderStatusFlowTables(): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!orderStatusFlowTablesPromise) {
+    orderStatusFlowTablesPromise = (async () => {
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS orderStatusFlows (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(128) NOT NULL,
+          description TEXT NULL,
+          isDefault TINYINT NOT NULL DEFAULT 0,
+          isActive TINYINT NOT NULL DEFAULT 1,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_order_status_flows_default (isDefault, isActive)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `));
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS orderStatusFlowItems (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          flowId INT NOT NULL,
+          statusKey VARCHAR(64) NOT NULL,
+          sortOrder INT NOT NULL DEFAULT 0,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_status_flow_item (flowId, statusKey),
+          INDEX idx_status_flow_items_order (flowId, sortOrder)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `));
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS productStatusFlows (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          productId INT NOT NULL,
+          flowId INT NOT NULL,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_product_status_flow (productId),
+          INDEX idx_product_status_flow_flow (flowId)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `));
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS orderStatusFlowAssignments (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          registrationId INT NOT NULL,
+          orderStatusId INT NOT NULL,
+          orderNumber INT NULL,
+          productId INT NULL,
+          optionId INT NULL,
+          flowId INT NOT NULL,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_order_status_flow_assignment (orderStatusId),
+          INDEX idx_order_status_flow_order (registrationId, orderNumber),
+          INDEX idx_order_status_flow_flow (flowId)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `));
+
+      const defaultResult = await db.execute(sql`SELECT id FROM orderStatusFlows WHERE isDefault = 1 LIMIT 1`);
+      const defaultRows = (defaultResult as any)[0] as Array<{ id: number }>;
+      if (!defaultRows?.[0]?.id) {
+        await db.execute(sql`
+          INSERT INTO orderStatusFlows (name, description, isDefault, isActive)
+          VALUES ('Padrão H2', 'Sequência padrão que preserva o comportamento atual do sistema.', 1, 1)
+        `);
+      }
+    })().catch((error) => {
+      orderStatusFlowTablesPromise = null;
+      throw error;
+    });
+  }
+  await orderStatusFlowTablesPromise;
+}
+
+async function getInitialOrderStatusKey(): Promise<string> {
+  const db = await getDb();
+  if (!db) return "recebido";
+  const result = await db.execute(sql`
+    SELECT \`key\` FROM orderStatusTypes
+    WHERE isActive = 1
+    ORDER BY sortOrder ASC
+    LIMIT 1
+  `);
+  const rows = (result as any)[0] as Array<{ key: string }>;
+  return rows?.[0]?.key || "recebido";
+}
+
+export async function getDefaultOrderStatusFlowId(): Promise<number> {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.execute(sql`SELECT id FROM orderStatusFlows WHERE isDefault = 1 LIMIT 1`);
+  const rows = (result as any)[0] as Array<{ id: number }>;
+  if (!rows?.[0]?.id) throw new Error("Default status flow not available");
+  return Number(rows[0].id);
+}
+
+export async function resolveOrderStatusFlowForProduct(productId?: number | null): Promise<number> {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (productId) {
+    const result = await db.execute(sql`
+      SELECT f.id
+      FROM productStatusFlows pf
+      INNER JOIN orderStatusFlows f ON f.id = pf.flowId
+      WHERE pf.productId = ${productId} AND f.isActive = 1
+      LIMIT 1
+    `);
+    const rows = (result as any)[0] as Array<{ id: number }>;
+    if (rows?.[0]?.id) return Number(rows[0].id);
+  }
+  return await getDefaultOrderStatusFlowId();
+}
+
+export async function getOrderStatusFlowDefinition(flowId: number): Promise<{
+  id: number;
+  name: string;
+  description: string | null;
+  isDefault: number;
+  isActive: number;
+  statusKeys: string[];
+}> {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const flowResult = await db.execute(sql`
+    SELECT id, name, description, isDefault, isActive
+    FROM orderStatusFlows
+    WHERE id = ${flowId}
+    LIMIT 1
+  `);
+  const flowRows = (flowResult as any)[0] as any[];
+  const flow = flowRows?.[0];
+  if (!flow) {
+    const defaultId = await getDefaultOrderStatusFlowId();
+    if (defaultId !== flowId) return await getOrderStatusFlowDefinition(defaultId);
+    throw new Error("Status flow not found");
+  }
+
+  let itemResult: any;
+  if (Number(flow.isDefault) === 1) {
+    itemResult = await db.execute(sql`
+      SELECT \`key\` AS statusKey
+      FROM orderStatusTypes
+      WHERE isActive = 1
+      ORDER BY sortOrder ASC, id ASC
+    `);
+  } else {
+    itemResult = await db.execute(sql`
+      SELECT i.statusKey
+      FROM orderStatusFlowItems i
+      INNER JOIN orderStatusTypes st ON st.\`key\` = i.statusKey
+      WHERE i.flowId = ${flowId} AND st.isActive = 1
+      ORDER BY i.sortOrder ASC, i.id ASC
+    `);
+  }
+  const itemRows = (itemResult as any)[0] as Array<{ statusKey: string }>;
+  return {
+    id: Number(flow.id),
+    name: String(flow.name),
+    description: flow.description ? String(flow.description) : null,
+    isDefault: Number(flow.isDefault),
+    isActive: Number(flow.isActive),
+    statusKeys: (itemRows || []).map((r) => String(r.statusKey)),
+  };
+}
+
+export async function assignOrderStatusFlow(data: {
+  registrationId: number;
+  orderStatusId: number;
+  orderNumber?: number | null;
+  productId?: number | null;
+  optionId?: number | null;
+}): Promise<void> {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) return;
+  const flowId = await resolveOrderStatusFlowForProduct(data.productId);
+  await db.execute(sql`
+    INSERT INTO orderStatusFlowAssignments
+      (registrationId, orderStatusId, orderNumber, productId, optionId, flowId)
+    VALUES
+      (${data.registrationId}, ${data.orderStatusId}, ${data.orderNumber ?? null}, ${data.productId ?? null}, ${data.optionId ?? null}, ${flowId})
+    ON DUPLICATE KEY UPDATE
+      orderNumber = VALUES(orderNumber),
+      productId = VALUES(productId),
+      optionId = VALUES(optionId),
+      flowId = VALUES(flowId)
+  `);
+}
+
+export async function getOrderStatusFlowForOrder(registrationId: number, orderNumber?: number | null) {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) return null;
+  let result: any;
+  if (orderNumber != null) {
+    result = await db.execute(sql`
+      SELECT flowId
+      FROM orderStatusFlowAssignments
+      WHERE registrationId = ${registrationId} AND orderNumber = ${orderNumber}
+      ORDER BY id DESC
+      LIMIT 1
+    `);
+  } else {
+    result = await db.execute(sql`
+      SELECT flowId
+      FROM orderStatusFlowAssignments
+      WHERE registrationId = ${registrationId}
+      ORDER BY id DESC
+      LIMIT 1
+    `);
+  }
+  const rows = (result as any)[0] as Array<{ flowId: number }>;
+  const flowId = rows?.[0]?.flowId ? Number(rows[0].flowId) : await getDefaultOrderStatusFlowId();
+  return await getOrderStatusFlowDefinition(flowId);
+}
+
+export async function listOrderStatusFlowsDetailed() {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db.execute(sql`
+    SELECT id, name, description, isDefault, isActive
+    FROM orderStatusFlows
+    ORDER BY isDefault DESC, id ASC
+  `);
+  const rows = (result as any)[0] as any[];
+  const output: any[] = [];
+  for (const row of rows || []) {
+    const definition = await getOrderStatusFlowDefinition(Number(row.id));
+    const productsResult = await db.execute(sql`
+      SELECT p.id, p.name
+      FROM productStatusFlows pf
+      INNER JOIN products p ON p.id = pf.productId
+      WHERE pf.flowId = ${Number(row.id)}
+      ORDER BY p.sortOrder ASC, p.name ASC
+    `);
+    const productRows = (productsResult as any)[0] as Array<{ id: number; name: string }>;
+    output.push({
+      ...definition,
+      productIds: (productRows || []).map((p) => Number(p.id)),
+      productNames: (productRows || []).map((p) => String(p.name)),
+    });
+  }
+  return output;
+}
+
+async function normalizeCustomFlowStatusKeys(statusKeys: string[]): Promise<string[]> {
+  const initialKey = await getInitialOrderStatusKey();
+  return Array.from(new Set([initialKey, ...statusKeys.filter(Boolean)]));
+}
+
+export async function createOrderStatusFlowConfig(data: {
+  name: string;
+  description?: string | null;
+  statusKeys: string[];
+  productIds: number[];
+}) {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.execute(sql`
+    INSERT INTO orderStatusFlows (name, description, isDefault, isActive)
+    VALUES (${data.name}, ${data.description ?? null}, 0, 1)
+  `);
+  const idResult = await db.execute(sql`SELECT LAST_INSERT_ID() AS id`);
+  const idRows = (idResult as any)[0] as Array<{ id: number }>;
+  const flowId = Number(idRows?.[0]?.id || 0);
+  if (!flowId) throw new Error("Falha ao criar sequência de status");
+  await updateOrderStatusFlowConfig({ id: flowId, ...data, isActive: 1 });
+  return await getOrderStatusFlowDefinition(flowId);
+}
+
+export async function updateOrderStatusFlowConfig(data: {
+  id: number;
+  name?: string;
+  description?: string | null;
+  statusKeys?: string[];
+  productIds?: number[];
+  isActive?: number;
+}) {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const flowResult = await db.execute(sql`SELECT isDefault FROM orderStatusFlows WHERE id = ${data.id} LIMIT 1`);
+  const flowRows = (flowResult as any)[0] as Array<{ isDefault: number }>;
+  if (!flowRows?.[0]) throw new Error("Sequência não encontrada");
+  if (Number(flowRows[0].isDefault) === 1 && (data.statusKeys || data.productIds)) {
+    throw new Error("A sequência padrão é controlada pela lista principal de status.");
+  }
+
+  if (data.name !== undefined || data.description !== undefined || data.isActive !== undefined) {
+    const currentResult = await db.execute(sql`SELECT name, description, isActive FROM orderStatusFlows WHERE id = ${data.id} LIMIT 1`);
+    const currentRows = (currentResult as any)[0] as Array<{ name: string; description: string | null; isActive: number }>;
+    const current = currentRows[0];
+    await db.execute(sql`
+      UPDATE orderStatusFlows
+      SET name = ${data.name ?? current.name},
+          description = ${data.description !== undefined ? data.description : current.description},
+          isActive = ${data.isActive ?? current.isActive}
+      WHERE id = ${data.id}
+    `);
+  }
+
+  if (data.statusKeys) {
+    const keys = await normalizeCustomFlowStatusKeys(data.statusKeys);
+    await db.execute(sql`DELETE FROM orderStatusFlowItems WHERE flowId = ${data.id}`);
+    let sortOrder = 0;
+    for (const key of keys) {
+      await db.execute(sql`
+        INSERT INTO orderStatusFlowItems (flowId, statusKey, sortOrder)
+        VALUES (${data.id}, ${key}, ${sortOrder++})
+      `);
+    }
+  }
+
+  if (data.productIds) {
+    await db.execute(sql`DELETE FROM productStatusFlows WHERE flowId = ${data.id}`);
+    for (const productId of Array.from(new Set(data.productIds))) {
+      await db.execute(sql`
+        INSERT INTO productStatusFlows (productId, flowId)
+        VALUES (${productId}, ${data.id})
+        ON DUPLICATE KEY UPDATE flowId = VALUES(flowId), updatedAt = CURRENT_TIMESTAMP
+      `);
+    }
+  }
+}
+
+export async function getOrderStatusFlowMap() {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) return {};
+  const assignmentResult = await db.execute(sql`
+    SELECT registrationId, orderNumber, flowId
+    FROM orderStatusFlowAssignments
+    ORDER BY id ASC
+  `);
+  const assignments = (assignmentResult as any)[0] as Array<{ registrationId: number; orderNumber: number | null; flowId: number }>;
+  const cache = new Map<number, Awaited<ReturnType<typeof getOrderStatusFlowDefinition>>>();
+  const map: Record<string, any> = {};
+  for (const row of assignments || []) {
+    const flowId = Number(row.flowId);
+    let def = cache.get(flowId);
+    if (!def) {
+      def = await getOrderStatusFlowDefinition(flowId);
+      cache.set(flowId, def);
+    }
+    map[`${Number(row.registrationId)}_${row.orderNumber == null ? "null" : Number(row.orderNumber)}`] = def;
+  }
+  return map;
+}
+
 // ========== INFO BANNERS ==========
 
 export async function listInfoBanners(onlyActive = false): Promise<InfoBanner[]> {
