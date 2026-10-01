@@ -1,3 +1,4 @@
+import { getOperationalBucket } from "../shared/orderBuckets";
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
@@ -39,7 +40,8 @@ describe("integração da sequência global do cliente", () => {
     expect(fn).not.toContain("sortOrder");
     expect(fn).not.toContain("orderStatusHistory");
     expect(fn).not.toContain("accessCodePhones");
-    expect(fn).toContain("db.transaction");
+    expect(fn).toContain("withStatusScopeLock(db");
+    expect(fs.readFileSync(path.resolve(process.cwd(), "server/orderStatusScope.ts"), "utf8")).toContain("return db.transaction(");
   });
 
   it("só ativa o modo global após salvar explicitamente", () => {
@@ -53,7 +55,9 @@ describe("integração da sequência global do cliente", () => {
     expect(adminOrders).toContain("getOperationalBucket(o) === todosQuickFilter");
     expect(buckets).toContain('if (order.scheduleStatus === "confirmed") return "agendamento_confirmado";');
     expect(buckets).toContain('if (order.scheduleStatus === "pending") return "agendamento";');
-    expect(buckets).toContain('["em_analise", "foto_em_analise", "foto_em_anal"]');
+    for (const latestStatus of ['em_analise', 'foto_em_analise', 'foto_em_anal', 'foto_analise']) {
+      expect(getOperationalBucket({ latestStatus, scheduleStatus: 'confirmed' })).toBe('em_analise');
+    }
     expect(buckets).toContain('["aguardando_ativa", "aguardando_ficar_ativa"]');
     expect(buckets).toContain('["entregue", "pedido_entregue", "cancelado"]');
   });

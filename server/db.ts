@@ -1,3 +1,6 @@
+import { TRPCError } from "@trpc/server";
+import { ensureStatusScopeSchema, withStatusScopeLock, archiveScopeDefinition, assertStatusCanBeRemoved, assertNotInitialStatus, scopeRows } from "./orderStatusScope";
+import { orderedFlowKeys } from "../shared/orderStatusScope";
 import { eq, asc, desc, sql, and, gte, inArray, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -1329,7 +1332,7 @@ export async function updateLastOrderStatus(data: {
   // Buscar o status inicial dinâmico (igual ao listOrders)
   let initialStatus = 'recebido';
   try {
-    const stResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
+    const stResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1`);
     const stRows = (stResult as any)[0] as any[];
     if (stRows && stRows.length > 0 && stRows[0].key) initialStatus = stRows[0].key;
   } catch (e) { /* usa 'recebido' como fallback */ }
@@ -1598,45 +1601,82 @@ export async function getStatusInfoFromDb(key: string): Promise<{ label: string;
 export async function listOrderStatusTypes(): Promise<OrderStatusType[]> {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(orderStatusTypes)
-    .orderBy(asc(orderStatusTypes.sortOrder));
+  await ensureStatusScopeSchema(db);
+  return db.select().from(orderStatusTypes).orderBy(asc(orderStatusTypes.sortOrder));
 }
 
-export async function createOrderStatusType(data: Omit<InsertOrderStatusType, "id" | "createdAt" | "updatedAt" | "isSystem">): Promise<OrderStatusType> {
+export async function createOrderStatusType(data: Omit<InsertOrderStatusType, "id" | "createdAt" | "updatedAt" | "isSystem"> & { flowId?: number }): Promise<OrderStatusType> {
+  await ensureOrderStatusFlowTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.insert(orderStatusTypes).values({ ...data, isSystem: 0 });
-  const [row] = await db.select().from(orderStatusTypes).where(eq(orderStatusTypes.key, data.key)).limit(1);
-  return row;
+  return withStatusScopeLock(db, async tx => {
+    const { flowId, ...fields } = data;
+    if (flowId) {
+      const flow = scopeRows(await tx.execute(sql`SELECT id, isDefault FROM orderStatusFlows WHERE id = ${flowId}`))[0];
+      if (!flow || Number(flow.isDefault) === 1) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione uma sequencia personalizada existente.' });
+    }
+    const duplicate = scopeRows(await tx.execute(sql`SELECT id FROM orderStatusTypes WHERE \`key\` = ${fields.key} LIMIT 1`));
+    if (duplicate.length) throw new TRPCError({ code: 'CONFLICT', message: 'Esta chave ja existe. Edite ou adicione o status existente.' });
+    await tx.insert(orderStatusTypes).values({ ...fields, isSystem: 0, isGlobal: flowId ? 0 : (fields.isGlobal ?? 1) });
+    if (flowId) {
+      const previous = scopeRows(await tx.execute(sql`SELECT statusKey, sortOrder FROM orderStatusFlowItems WHERE flowId = ${flowId} ORDER BY sortOrder, id`));
+      await archiveScopeDefinition(tx, 'flow', String(flowId), previous, 'before-add-status');
+      const nextOrder = previous.reduce((max: number, row: any) => Math.max(max, Number(row.sortOrder)), -1) + 1;
+      // Recovering a retained key must not overwrite its original position.
+      await tx.execute(sql`INSERT INTO orderStatusFlowItems (flowId, statusKey, sortOrder)
+        VALUES (${flowId}, ${fields.key}, ${nextOrder}) ON DUPLICATE KEY UPDATE statusKey = VALUES(statusKey)`);
+    }
+    const [row] = await tx.select().from(orderStatusTypes).where(eq(orderStatusTypes.key, fields.key)).limit(1);
+    await archiveScopeDefinition(tx, 'status', row.key, row, 'created');
+    return row;
+  });
 }
 
-export async function updateOrderStatusType(id: number, data: Partial<Pick<OrderStatusType, "label" | "color" | "bgColor" | "icon" | "description" | "sortOrder" | "isActive" | "pulseColor" | "showInProgress" | "progressOrder">>): Promise<void> {
+export async function updateOrderStatusType(id: number, data: Partial<Pick<OrderStatusType, "label" | "color" | "bgColor" | "icon" | "description" | "sortOrder" | "isActive" | "isGlobal" | "pulseColor" | "showInProgress" | "progressOrder">>): Promise<void> {
+  await ensureOrderStatusFlowTables();
   const db = await getDb();
-  if (!db) return;
-  await db.update(orderStatusTypes).set(data).where(eq(orderStatusTypes.id, id));
+  if (!db) throw new Error("Database not available");
+  await withStatusScopeLock(db, async tx => {
+    const [status] = await tx.select().from(orderStatusTypes).where(eq(orderStatusTypes.id, id)).limit(1);
+    if (!status) throw new TRPCError({ code: 'NOT_FOUND', message: 'Status nao encontrado.' });
+    if (data.isGlobal === 0 || data.isActive === 0) await assertNotInitialStatus(tx, status);
+    if (data.isActive === 0) await assertStatusCanBeRemoved(tx, status);
+    await archiveScopeDefinition(tx, 'status', status.key, status, 'before-update');
+    await tx.update(orderStatusTypes).set(data).where(eq(orderStatusTypes.id, id));
+    await archiveScopeDefinition(tx, 'status', status.key, { ...status, ...data }, 'updated');
+  });
 }
 
 export async function setGlobalOrderProgressSequence(statusKeys: string[]): Promise<void> {
+  await ensureOrderStatusFlowTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.transaction(async (tx) => {
-    await tx.update(orderStatusTypes).set({ showInProgress: 0, progressOrder: 9999 });
+  await withStatusScopeLock(db, async tx => {
+    const statuses = scopeRows(await tx.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1`));
+    const allowed = new Set(statuses.map(s => s.key));
+    if (statusKeys.some(key => !allowed.has(key))) throw new TRPCError({ code: 'CONFLICT', message: 'O cadastro global mudou. Atualize antes de salvar.' });
+    await tx.update(orderStatusTypes).set({ showInProgress: 0, progressOrder: 9999 }).where(eq(orderStatusTypes.isGlobal, 1));
     for (let index = 0; index < statusKeys.length; index++) {
-      await tx.update(orderStatusTypes)
-        .set({ showInProgress: 1, progressOrder: index + 1 })
-        .where(eq(orderStatusTypes.key, statusKeys[index]));
+      await tx.update(orderStatusTypes).set({ showInProgress: 1, progressOrder: index + 1 }).where(eq(orderStatusTypes.key, statusKeys[index]));
     }
   });
 }
 
 export async function deleteOrderStatusType(id: number): Promise<void> {
+  await ensureOrderStatusFlowTables();
   const db = await getDb();
-  if (!db) return;
-  // Permite excluir qualquer status (admin tem controle total)
-  await db.delete(orderStatusTypes).where(sql`${orderStatusTypes.id} = ${id}`);
+  if (!db) throw new Error("Database not available");
+  await withStatusScopeLock(db, async tx => {
+    const [status] = await tx.select().from(orderStatusTypes).where(eq(orderStatusTypes.id, id)).limit(1);
+    if (!status) throw new TRPCError({ code: 'NOT_FOUND', message: 'Status nao encontrado.' });
+    await assertNotInitialStatus(tx, status);
+    await assertStatusCanBeRemoved(tx, status);
+    await archiveScopeDefinition(tx, 'status', status.key, status, 'before-delete');
+    await tx.delete(orderStatusTypes).where(eq(orderStatusTypes.id, id));
+  });
 }
 
-// ── Sequências de status por produto ─────────────────────────────────────────
+// Independent status-flow membership, preserving legacy order assignment.
 let orderStatusFlowTablesPromise: Promise<void> | null = null;
 
 export async function ensureOrderStatusFlowTables(): Promise<void> {
@@ -1707,14 +1747,15 @@ export async function ensureOrderStatusFlowTables(): Promise<void> {
     });
   }
   await orderStatusFlowTablesPromise;
+  await ensureStatusScopeSchema(db);
 }
 
-async function getInitialOrderStatusKey(): Promise<string> {
-  const db = await getDb();
+async function getInitialOrderStatusKey(executor?: any): Promise<string> {
+  const db = executor ?? await getDb();
   if (!db) return "recebido";
   const result = await db.execute(sql`
     SELECT \`key\` FROM orderStatusTypes
-    WHERE isActive = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1
+    WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1
   `);
   const rows = (result as any)[0] as Array<{ key: string }>;
   return rows?.[0]?.key || "recebido";
@@ -1745,23 +1786,26 @@ export async function getOrderStatusFlowDefinition(flowId: number) {
   const itemResult = Number(flow.isDefault) === 1
     ? await db.execute(sql`
         SELECT \`key\` AS statusKey FROM orderStatusTypes
-        WHERE isActive = 1 ORDER BY sortOrder ASC, id ASC
+        WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC
       `)
     : await db.execute(sql`
-        SELECT i.statusKey
+        SELECT i.statusKey, st.id AS catalogueId, st.isActive
         FROM orderStatusFlowItems i
-        INNER JOIN orderStatusTypes st ON st.\`key\` = i.statusKey
-        WHERE i.flowId = ${flowId} AND st.isActive = 1
+        LEFT JOIN orderStatusTypes st ON st.\`key\` = i.statusKey
+        WHERE i.flowId = ${flowId}
         ORDER BY i.sortOrder ASC, i.id ASC
       `);
-  const itemRows = (itemResult as any)[0] as Array<{ statusKey: string }>;
+  const itemRows = (itemResult as any)[0] as Array<{ statusKey: string; catalogueId?: number; isActive?: number }>;
   return {
     id: Number(flow.id),
     name: String(flow.name),
     description: flow.description ? String(flow.description) : null,
     isDefault: Number(flow.isDefault),
     isActive: Number(flow.isActive),
+    // Keep every configured key, including dangling references, for safe ADM review.
     statusKeys: (itemRows || []).map((row) => String(row.statusKey)),
+    unavailableKeys: Number(flow.isDefault) === 1 ? [] : (itemRows || [])
+      .filter(row => !row.catalogueId || Number(row.isActive) !== 1).map(row => String(row.statusKey)),
   };
 }
 
@@ -1877,9 +1921,46 @@ export async function listOrderStatusFlowsDetailed() {
   return output;
 }
 
-async function normalizeCustomFlowStatusKeys(statusKeys: string[]) {
-  const initialKey = await getInitialOrderStatusKey();
-  return Array.from(new Set([initialKey, ...statusKeys.filter(Boolean)]));
+async function normalizeCustomFlowStatusKeys(statusKeys: string[], tx: any) {
+  const initialKey = await getInitialOrderStatusKey(tx);
+  const statuses = await tx.select().from(orderStatusTypes);
+  try { return orderedFlowKeys(initialKey, statusKeys, statuses); }
+  catch (error) { throw new TRPCError({ code: 'BAD_REQUEST', message: error instanceof Error ? error.message : 'Revise as etapas.' }); }
+}
+
+type StatusFlowConfigInput = {
+  id: number; name?: string; description?: string | null; statusKeys?: string[];
+  productIds?: number[]; isActive?: number;
+};
+
+async function writeOrderStatusFlowConfig(tx: any, data: StatusFlowConfigInput) {
+  const flow = scopeRows(await tx.execute(sql`SELECT * FROM orderStatusFlows WHERE id = ${data.id} LIMIT 1`))[0];
+  if (!flow) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sequencia nao encontrada.' });
+  const isDefault = Number(flow.isDefault) === 1;
+  if (isDefault && (data.statusKeys !== undefined || data.productIds !== undefined)) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Configure a participacao no padrao pela opcao Global de cada status.' });
+  }
+  // Validate before deleting any link. A missing key is an error, never silently filtered out.
+  const keys = data.statusKeys === undefined ? undefined : await normalizeCustomFlowStatusKeys(data.statusKeys, tx);
+  const previousItems = scopeRows(await tx.execute(sql`SELECT statusKey, sortOrder FROM orderStatusFlowItems WHERE flowId = ${data.id} ORDER BY sortOrder, id`));
+  const previousProducts = scopeRows(await tx.execute(sql`SELECT productId FROM productStatusFlows WHERE flowId = ${data.id}`));
+  await archiveScopeDefinition(tx, 'flow', String(data.id), { flow, items: previousItems, products: previousProducts }, 'before-save');
+  if (data.name !== undefined) await tx.execute(sql`UPDATE orderStatusFlows SET name = ${data.name} WHERE id = ${data.id}`);
+  if (data.description !== undefined) await tx.execute(sql`UPDATE orderStatusFlows SET description = ${data.description ?? null} WHERE id = ${data.id}`);
+  if (data.isActive !== undefined) await tx.execute(sql`UPDATE orderStatusFlows SET isActive = ${data.isActive} WHERE id = ${data.id}`);
+  if (keys && !isDefault) {
+    await tx.execute(sql`DELETE FROM orderStatusFlowItems WHERE flowId = ${data.id}`);
+    for (let index = 0; index < keys.length; index++) {
+      await tx.execute(sql`INSERT INTO orderStatusFlowItems (flowId, statusKey, sortOrder) VALUES (${data.id}, ${keys[index]}, ${index})`);
+    }
+  }
+  if (data.productIds !== undefined && !isDefault) {
+    await tx.execute(sql`DELETE FROM productStatusFlows WHERE flowId = ${data.id}`);
+    for (const productId of Array.from(new Set(data.productIds))) {
+      await tx.execute(sql`INSERT INTO productStatusFlows (productId, flowId) VALUES (${productId}, ${data.id})
+        ON DUPLICATE KEY UPDATE flowId = VALUES(flowId), updatedAt = CURRENT_TIMESTAMP`);
+    }
+  }
 }
 
 export async function createOrderStatusFlowConfig(data: {
@@ -1887,57 +1968,23 @@ export async function createOrderStatusFlowConfig(data: {
 }) {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.execute(sql`
-    INSERT INTO orderStatusFlows (name, description, isDefault, isActive)
-    VALUES (${data.name}, ${data.description ?? null}, 0, 1)
-  `);
-  const idResult = await db.execute(sql`SELECT LAST_INSERT_ID() AS id`);
-  const idRows = (idResult as any)[0] as Array<{ id: number }>;
-  const id = Number(idRows?.[0]?.id || 0);
-  if (!id) throw new Error("Falha ao criar sequência");
-  await updateOrderStatusFlowConfig({ id, ...data, isActive: 1 });
-  return await getOrderStatusFlowDefinition(id);
+  if (!db) throw new Error('Database not available');
+  const id = await withStatusScopeLock(db, async tx => {
+    await tx.execute(sql`INSERT INTO orderStatusFlows (name, description, isDefault, isActive)
+      VALUES (${data.name}, ${data.description ?? null}, 0, 1)`);
+    const createdId = Number(scopeRows(await tx.execute(sql`SELECT LAST_INSERT_ID() AS id`))[0]?.id);
+    if (!createdId) throw new Error('Falha ao criar sequencia');
+    await writeOrderStatusFlowConfig(tx, { id: createdId, ...data });
+    return createdId;
+  });
+  return getOrderStatusFlowDefinition(id);
 }
 
-export async function updateOrderStatusFlowConfig(data: {
-  id: number; name?: string; description?: string | null; statusKeys?: string[];
-  productIds?: number[]; isActive?: number;
-}) {
+export async function updateOrderStatusFlowConfig(data: StatusFlowConfigInput) {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db.execute(sql`SELECT isDefault FROM orderStatusFlows WHERE id = ${data.id} LIMIT 1`);
-  const rows = (result as any)[0] as Array<{ isDefault: number }>;
-  if (!rows?.[0]) throw new Error("Sequência não encontrada");
-  const isDefault = Number(rows[0].isDefault) === 1;
-  if (isDefault && (data.statusKeys || data.productIds)) {
-    throw new Error("A sequência padrão usa automaticamente todos os status ativos.");
-  }
-  if (data.name !== undefined) await db.execute(sql`UPDATE orderStatusFlows SET name = ${data.name} WHERE id = ${data.id}`);
-  if (data.description !== undefined) await db.execute(sql`UPDATE orderStatusFlows SET description = ${data.description ?? null} WHERE id = ${data.id}`);
-  if (data.isActive !== undefined) await db.execute(sql`UPDATE orderStatusFlows SET isActive = ${data.isActive} WHERE id = ${data.id}`);
-
-  if (data.statusKeys && !isDefault) {
-    const keys = await normalizeCustomFlowStatusKeys(data.statusKeys);
-    await db.execute(sql`DELETE FROM orderStatusFlowItems WHERE flowId = ${data.id}`);
-    for (let index = 0; index < keys.length; index++) {
-      await db.execute(sql`
-        INSERT INTO orderStatusFlowItems (flowId, statusKey, sortOrder)
-        VALUES (${data.id}, ${keys[index]}, ${index})
-      `);
-    }
-  }
-  if (data.productIds && !isDefault) {
-    await db.execute(sql`DELETE FROM productStatusFlows WHERE flowId = ${data.id}`);
-    for (const productId of Array.from(new Set(data.productIds))) {
-      await db.execute(sql`
-        INSERT INTO productStatusFlows (productId, flowId)
-        VALUES (${productId}, ${data.id})
-        ON DUPLICATE KEY UPDATE flowId = VALUES(flowId), updatedAt = CURRENT_TIMESTAMP
-      `);
-    }
-  }
+  if (!db) throw new Error('Database not available');
+  await withStatusScopeLock(db, tx => writeOrderStatusFlowConfig(tx, data));
 }
 
 export async function getOrderStatusFlowMap() {

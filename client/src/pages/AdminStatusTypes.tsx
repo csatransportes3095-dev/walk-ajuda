@@ -1,3 +1,4 @@
+import { isGlobalStatus } from "@shared/orderStatusScope";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
@@ -5,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import {
   Plus, Pencil, Trash2, Save, X, Lock, Eye, EyeOff,
   Clock, Package, DollarSign, Zap, FileCheck, XCircle, Wrench, CheckCircle2, Star, AlertCircle, Info
@@ -68,6 +69,7 @@ type StatusType = {
   sortOrder: number;
   isSystem: number;
   isActive: number;
+  isGlobal?: number;
   pulseColor?: string | null;
   showInProgress?: number;
   progressOrder?: number;
@@ -81,6 +83,7 @@ type FormData = {
   description: string;
   sortOrder: number;
   pulseColor: string;
+  flowId: number;
 };
 
 const defaultForm: FormData = {
@@ -91,28 +94,41 @@ const defaultForm: FormData = {
   description: "",
   sortOrder: 50,
   pulseColor: "#ffffff",
+  flowId: 0,
 };
 
 export default function AdminStatusTypes() {
   useAdminAuth();
   const utils = trpc.useUtils();
+  const params = new URLSearchParams(useSearch());
+  const requestedFlowId = Number(params.get('flowId')) || 0;
+  const restoreKey = params.get('restoreKey') || '';
+  const flowsQuery = trpc.statusFlows.list.useQuery();
+  const [scopeView, setScopeView] = useState<'global' | 'custom' | 'all'>(requestedFlowId ? 'custom' : 'global');
+  const refreshScopes = () => {
+    void utils.statusTypes.list.invalidate();
+    void utils.statusTypes.getProgressSequence.invalidate();
+    void utils.statusFlows.list.invalidate();
+    void utils.statusFlows.orderMap.invalidate();
+    void utils.statusFlows.forOrder.invalidate();
+  };
 
   const { data: statuses = [], isLoading } = trpc.statusTypes.list.useQuery();
   const createMutation = trpc.statusTypes.create.useMutation({
-    onSuccess: () => { utils.statusTypes.list.invalidate(); utils.statusTypes.list.refetch(); toast.success("Status criado!"); setShowCreate(false); setForm(defaultForm); },
+    onSuccess: () => { refreshScopes(); utils.statusTypes.list.refetch(); toast.success("Status criado!"); setShowCreate(false); setForm(defaultForm); },
     onError: (e) => toast.error(e.message),
   });
   const updateMutation = trpc.statusTypes.update.useMutation({
-    onSuccess: () => { utils.statusTypes.list.invalidate(); utils.statusTypes.list.refetch(); toast.success("Status atualizado!"); setEditingId(null); },
+    onSuccess: () => { refreshScopes(); utils.statusTypes.list.refetch(); toast.success("Status atualizado!"); setEditingId(null); },
     onError: (e) => toast.error(e.message),
   });
   const deleteMutation = trpc.statusTypes.delete.useMutation({
-    onSuccess: () => { utils.statusTypes.list.invalidate(); utils.statusTypes.list.refetch(); toast.success("Status removido!"); },
+    onSuccess: () => { refreshScopes(); utils.statusTypes.list.refetch(); toast.success("Status removido!"); },
     onError: (e) => toast.error(e.message),
   });
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState<FormData>(defaultForm);
+  const [showCreate, setShowCreate] = useState(!!requestedFlowId);
+  const [form, setForm] = useState<FormData>({ ...defaultForm, flowId: requestedFlowId, key: restoreKey });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<FormData & { isActive: number }>>({});
 
@@ -156,6 +172,8 @@ export default function AdminStatusTypes() {
       description: form.description || undefined,
       sortOrder: form.sortOrder,
       isActive: 1,
+      isGlobal: form.flowId ? 0 : 1,
+      flowId: form.flowId || undefined,
       pulseColor: form.pulseColor || "#ffffff",
     });
   }
@@ -195,11 +213,29 @@ export default function AdminStatusTypes() {
       } />
       <div className="p-4 md:p-6">
       <div className="max-w-3xl mx-auto space-y-6">
+        <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-4 text-sm text-cyan-100/80">
+          Global e personalizado agora tem participacao separada. Use <strong>Retirar do global</strong> para ocultar apenas do Padrao H2.
+          Excluir ou desativar um cadastro em uso fica bloqueado para preservar outras sequencias e o historico.
+        </div>
+        <div className="flex flex-wrap gap-2" aria-label="Escopo dos status">
+          {(['global', 'custom', 'all'] as const).map(scope => <button key={scope} type="button" onClick={() => setScopeView(scope)} className={`rounded-lg border px-4 py-2 text-sm ${scopeView === scope ? 'border-cyan-300/40 bg-cyan-500/15 text-cyan-100' : 'border-white/10 text-white/60'}`}>
+            {scope === 'global' ? 'Globais' : scope === 'custom' ? 'Personalizados / compartilhados' : 'Todos os cadastros'}
+          </button>)}
+        </div>
+        {requestedFlowId > 0 && <Link href="/admin/status-flows" className="block text-sm text-cyan-200 underline">Voltar as sequencias</Link>}
 
         {/* Formulário de criação */}
         {showCreate && (
           <div className="bg-[#12122a] rounded-2xl border border-white/10 p-5 space-y-4">
-            <p className="text-sm font-semibold text-white/80">Novo Status</p>
+            <p className="text-sm font-semibold text-white/80">{restoreKey ? 'Restaurar cadastro com a chave original' : 'Novo Status'}</p>
+            <label className="block space-y-1 text-xs text-white/60">Onde este status sera utilizado?
+              <select value={form.flowId} onChange={e => setForm(f => ({ ...f, flowId: Number(e.target.value) }))} className={`${inputCls} block w-full`}>
+                <option value={0}>Global / Padrao H2</option>
+                {(flowsQuery.data ?? []).filter(flow => flow.isDefault !== 1).map(flow => <option key={flow.id} value={flow.id}>Somente: {flow.name}</option>)}
+              </select>
+            </label>
+            {form.flowId > 0 && <p className="text-xs text-cyan-200">Sera vinculado a esta sequencia e nao aparecera automaticamente no global.</p>}
+            {restoreKey && <p className="text-xs text-amber-200">Informe somente nome e dados confirmados. A chave original preserva os vinculos existentes.</p>}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1 col-span-2">
                 <label className="text-xs text-white/50">Nome exibido <span className="text-red-400">*</span></label>
@@ -216,6 +252,7 @@ export default function AdminStatusTypes() {
               <Input
                 className={inputCls}
                 placeholder={form.label ? slugify(form.label) || "gerada-automaticamente" : "ex: aguardando_docs"}
+                readOnly={!!restoreKey}
                 value={form.key}
                 onChange={e => setForm(f => ({ ...f, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") }))}
               />
@@ -313,7 +350,7 @@ export default function AdminStatusTypes() {
           </div>
         ) : (
           <div className="space-y-2">
-            {(statuses as StatusType[]).map(s => (
+            {(statuses as StatusType[]).filter(s => scopeView === 'all' || (scopeView === 'global' ? isGlobalStatus(s) : !isGlobalStatus(s) || (flowsQuery.data ?? []).some(f => f.isDefault !== 1 && f.statusKeys.includes(s.key)))).map(s => (
               <div
                 key={s.id}
                 className={`bg-[#12122a] rounded-2xl border p-4 transition-all ${s.isActive ? "border-white/10" : "border-white/5 opacity-60"}`}
@@ -433,6 +470,8 @@ export default function AdminStatusTypes() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`text-sm font-semibold ${s.color}`}>{s.label}</span>
+                        <span className="rounded border border-cyan-400/20 px-2 py-0.5 text-[10px] text-cyan-200">{isGlobalStatus(s) ? 'GLOBAL' : 'FORA DO GLOBAL'}</span>
+                        {(flowsQuery.data ?? []).filter(f => f.isDefault !== 1 && f.statusKeys.includes(s.key)).map(f => <span key={f.id} className="text-[10px] text-white/50">{f.name}</span>)}
                         {s.isActive === 0 && (
                           <span className="text-[10px] text-white/30 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">Inativo</span>
                         )}
@@ -445,10 +484,13 @@ export default function AdminStatusTypes() {
                       </div>
                     </div>
                     {/* Ações */}
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex flex-wrap items-center justify-end gap-1 max-w-[12rem]">
+                      <button type="button" disabled={updateMutation.isPending} title="Altera somente a participacao no global; preserva todos os vinculos personalizados" onClick={() => {
+                        if (confirm(isGlobalStatus(s) ? 'Retirar somente do global? As sequencias personalizadas continuam usando este status.' : 'Adicionar este status ao global?')) updateMutation.mutate({ id: s.id, isGlobal: isGlobalStatus(s) ? 0 : 1 });
+                      }} className="rounded-lg border border-cyan-400/25 px-2 py-1 text-[10px] text-cyan-100 disabled:opacity-40">{isGlobalStatus(s) ? 'Retirar do global' : 'Adicionar ao global'}</button>
                       {/* Ativar/Desativar */}
                       <button
-                        title={s.isActive ? "Desativar" : "Ativar"}
+                        title={s.isActive ? "Desativar cadastro inteiro (bloqueado quando em uso)" : "Ativar cadastro"}
                         onClick={() => updateMutation.mutate({ id: s.id, isActive: s.isActive === 1 ? 0 : 1 })}
                         className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all ${s.isActive ? "border-white/10 text-white/40 hover:text-white/70" : "border-green-500/30 text-green-400/60 hover:text-green-400"}`}
                       >
@@ -466,7 +508,7 @@ export default function AdminStatusTypes() {
                       <button
                         title="Excluir"
                         onClick={() => {
-                          if (confirm(`Excluir o status "${s.label}"?`)) {
+                          if (confirm(`Excluir definitivamente o cadastro "${s.label}"? Para retirar apenas do Padrao H2, cancele e use Retirar do global. A exclusao sera bloqueada se houver vinculos ou historico.`)) {
                             deleteMutation.mutate({ id: s.id });
                           }
                         }}
@@ -483,7 +525,7 @@ export default function AdminStatusTypes() {
         )}
 
         <p className="text-xs text-white/20 text-center pb-4">
-          Todos os status podem ser editados, desativados ou excluídos.
+          Cadastros em uso sao protegidos. Retirar do global nao exclui etapas personalizadas.
         </p>
       </div>
       </div>

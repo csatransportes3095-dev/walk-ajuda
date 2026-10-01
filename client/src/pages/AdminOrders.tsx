@@ -1,3 +1,4 @@
+import { globalActiveStatuses, isGlobalStatus, statusChoicesForFlow } from "@shared/orderStatusScope";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
@@ -205,7 +206,7 @@ function GlobalProgressSequenceModal({
   useEffect(() => { if (open) setLocalKeys(initialKeys); }, [open, initialKeys.join(',')]);
   if (!open) return null;
 
-  const available = statuses.filter((s: any) => s.isActive === 1 && s.key !== 'cancelado');
+  const available = statuses.filter((s: any) => s.isActive === 1 && isGlobalStatus(s) && s.key !== 'cancelado');
   const add = (key: string) => setLocalKeys(prev => prev.includes(key) ? prev : [...prev, key]);
   const remove = (key: string) => setLocalKeys(prev => prev.filter(k => k !== key));
   const move = (idx: number, delta: number) => setLocalKeys(prev => {
@@ -775,8 +776,8 @@ export default function AdminOrders() {
   // Status dinâmicos do banco
   const statusTypesQuery = trpc.statusTypes.list.useQuery();
   const dynamicStatuses = statusTypesQuery.data ?? [];
-  const statusFlowOrderMapQuery = trpc.statusFlows.orderMap.useQuery(undefined, { staleTime: 30_000 });
-  const statusFlowOrderMap = (statusFlowOrderMapQuery.data ?? {}) as Record<string, { statusKeys?: string[] }>;
+  const statusFlowOrderMapQuery = trpc.statusFlows.orderMap.useQuery(undefined, { staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
+  const statusFlowOrderMap = (statusFlowOrderMapQuery.data ?? {}) as Record<string, { isDefault: number; statusKeys: string[] }>;
   const [showGlobalProgressSequence, setShowGlobalProgressSequence] = useState(false);
   const globalProgressSequenceQuery = trpc.statusTypes.getProgressSequence.useQuery(undefined, { staleTime: 0 });
   const saveGlobalProgressSequence = trpc.statusTypes.setProgressSequence.useMutation({
@@ -828,14 +829,15 @@ export default function AdminOrders() {
   const ACTIVE_STATUS_ORDER: string[] = dynamicStatuses.length > 0
     ? dynamicStatuses.filter(s => s.isActive === 1).sort((a, b) => a.sortOrder - b.sortOrder).map(s => s.key)
     : STATUS_ORDER;
-  const INITIAL_STATUS_KEY = ACTIVE_STATUS_ORDER[0] || 'recebido';
+  const GLOBAL_STATUS_ORDER = globalActiveStatuses(dynamicStatuses).slice().sort((a, b) => a.sortOrder - b.sortOrder).map(s => s.key);
+  const INITIAL_STATUS_KEY = GLOBAL_STATUS_ORDER[0] || 'recebido';
   const isManualSelectableStatus = (s: string) => s !== 'cancelado' && s !== 'recebido' && s !== INITIAL_STATUS_KEY;
   const getStatusOrderForOrder = (order: any): string[] => {
     const registrationId = Number(order?.id ?? order?.registrationId ?? 0);
     const orderNumber = order?.orderNumber == null ? 'null' : String(order.orderNumber);
     const flow = statusFlowOrderMap[`${registrationId}_${orderNumber}`];
-    const keys = flow?.statusKeys;
-    return Array.isArray(keys) && keys.length > 0 ? keys : ACTIVE_STATUS_ORDER;
+    if (statusFlowOrderMapQuery.isLoading || statusFlowOrderMapQuery.isError) return [];
+    return statusChoicesForFlow(dynamicStatuses, flow ?? null);
   };
 
   // autoMarkUrgent automático REMOVIDO — urgência agora é somente manual pelo admin

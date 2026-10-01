@@ -3682,7 +3682,7 @@ export const appRouter = router({
       // Buscar o status inicial dinâmico do banco (sortOrder mais baixo)
       let initialStatus = 'recebido';
       try {
-        const statusTypesResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
+        const statusTypesResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1`);
         const statusTypesRows = (statusTypesResult as any)[0] as any[];
         if (statusTypesRows && statusTypesRows.length > 0 && statusTypesRows[0].key) {
           initialStatus = statusTypesRows[0].key;
@@ -4348,11 +4348,12 @@ export const appRouter = router({
         try {
           const { getOrderStatusFlowForOrder } = await import('./db');
           const flow = await getOrderStatusFlowForOrder(input.registrationId, input.orderNumber ?? null);
-          if (flow && input.status !== 'cancelado' && !flow.statusKeys.includes(input.status)) {
+          if (flow && input.status !== 'cancelado' && (!flow.statusKeys.includes(input.status) || flow.unavailableKeys.includes(input.status))) {
             return { success: false, error: 'Este status não pertence à sequência configurada para este pedido.' };
           }
         } catch (flowError) {
           console.error('[StatusFlow] falha ao validar sequência:', flowError);
+          return { success: false, error: 'Nao foi possivel validar a sequencia. Atualize e tente novamente; o status nao foi alterado.' };
         }
 
         const result = await updateLastOrderStatus({
@@ -4572,7 +4573,7 @@ export const appRouter = router({
         if (!rows || rows.length === 0) return { success: false, error: 'Nenhum histórico encontrado' };
         // Buscar status inicial dinâmico
         const stTypeRows = await db.execute(sql.raw(
-          `SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`
+          `SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1`
         ));
         const stTypeArr = (stTypeRows[0] as unknown as Array<{ key: string }>);
         const initialStatus = stTypeArr?.[0]?.key || 'recebido';
@@ -4644,7 +4645,7 @@ export const appRouter = router({
         // Buscar status inicial dinâmico (mesma lógica do admin)
         let initialStatusForHidden = 'recebido';
         try {
-          const stResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
+          const stResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1`);
           const stRows = (stResult as any)[0] as any[];
           if (stRows && stRows.length > 0 && stRows[0].key) initialStatusForHidden = stRows[0].key;
         } catch (e) { /* fallback */ }
@@ -4862,7 +4863,7 @@ export const appRouter = router({
         // Buscar status inicial para dividir sub-pedidos corretamente
         let initialStatus = 'recebido';
         try {
-          const stResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
+          const stResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1`);
           const stRows = (stResult as any)[0] as any[];
           if (stRows?.[0]?.key) initialStatus = stRows[0].key;
         } catch (e) { /* fallback */ }
@@ -5110,7 +5111,7 @@ export const appRouter = router({
 
         let initialStatus = 'recebido';
         try {
-          const stResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
+          const stResult = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1`);
           const stRows = (stResult[0] || []) as any[];
           if (stRows[0]?.key) initialStatus = String(stRows[0].key);
         } catch {}
@@ -6165,6 +6166,14 @@ export const appRouter = router({
         await upsertSetting("order_progress_global_enabled", "1");
         return { success: true, keys: statusKeys };
       }),
+    scopeReport: adminProcedure.query(async () => {
+      const { getDb, ensureOrderStatusFlowTables } = await import('./db');
+      const { readStatusScopeReport } = await import('./orderStatusScope');
+      await ensureOrderStatusFlowTables();
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponivel.' });
+      return readStatusScopeReport(db);
+    }),
     // Admin: criar novo status
     create: adminProcedure
       .input(z.object({
@@ -6176,6 +6185,8 @@ export const appRouter = router({
         description: z.string().optional(),
         sortOrder: z.number().int().default(0),
         isActive: z.number().int().min(0).max(1).default(1),
+        isGlobal: z.number().int().min(0).max(1).default(1),
+        flowId: z.number().int().positive().optional(),
         pulseColor: z.string().max(32).optional(),
       }))
       .mutation(async ({ input }) => {
@@ -6193,6 +6204,7 @@ export const appRouter = router({
         description: z.string().nullable().optional(),
         sortOrder: z.number().int().optional(),
         isActive: z.number().int().min(0).max(1).optional(),
+        isGlobal: z.number().int().min(0).max(1).optional(),
         pulseColor: z.string().max(32).nullable().optional(),
         showInProgress: z.number().int().min(0).max(1).optional(),
         progressOrder: z.number().int().optional(),

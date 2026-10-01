@@ -1,0 +1,105 @@
+name: Status scope validation
+on:
+  push:
+    branches: [fix/status-scope-isolation-20261001, recovery/organizar-salvos-2026-08-24]
+    paths:
+      - '.github/workflows/status-scope-validation.yml'
+      - 'server/orderStatusScope.ts'
+      - 'server/statusScopeIsolation.test.ts'
+      - 'server/db.ts'
+      - 'server/routers.ts'
+      - 'shared/orderStatusScope.ts'
+      - 'shared/orderProgressSequence.ts'
+      - 'drizzle/schema.ts'
+      - 'client/src/pages/AdminStatusTypes.tsx'
+      - 'client/src/pages/AdminStatusFlows.tsx'
+      - 'client/src/pages/AdminOrders.tsx'
+      - 'client/src/pages/OrderTracking.tsx'
+      - 'scripts/apply-status-scope-migration.ts'
+      - 'scripts/patch-status-custom-colors-20260909.mjs'
+      - 'scripts/render-start.sh'
+      - 'scripts/check-status-scope-public.mjs'
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths: ['server/orderStatusScope.ts', 'shared/orderStatusScope.ts', '.github/workflows/status-scope-validation.yml']
+concurrency:
+  group: status-scope-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-status-test
+          MYSQL_DATABASE: h2_status_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pisolated-status-test"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Install locked dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Login build compatibility
+        run: |
+          mkdir -p /tmp/status-report
+          set -o pipefail
+          node --test scripts/order-login-render-compat.test.mjs 2>&1 | tee /tmp/status-report/login-build-compat.txt
+      - name: Exact Docker source preparation
+        run: |
+          set -o pipefail
+          node --input-type=module <<'JS' 2>&1 | tee /tmp/status-report/docker-preparation.txt
+          import fs from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          const scripts=[...fs.readFileSync('Dockerfile','utf8').matchAll(/&& node (scripts\/[^\s]+)/g)].map(m=>m[1]);
+          if(!scripts.length) throw new Error('No preparation scripts');
+          for(const script of scripts) {
+            if(!/^scripts\/[A-Za-z0-9._/-]+\.mjs$/.test(script)) throw new Error('Unexpected path');
+            console.log('Preparing '+script); execFileSync(process.execPath,[script],{stdio:'inherit'});
+          }
+          console.log(`All ${scripts.length} preparation scripts passed.`);
+          JS
+      - name: Prepare independent login test database
+        run: |
+          node --input-type=module <<'JS'
+          import {createConnection} from 'mysql2/promise';
+          const c=await createConnection('mysql://root:isolated-status-test@127.0.0.1:3306/h2_status_test');
+          try { await c.query('CREATE DATABASE h2_login_test'); } finally {await c.end();}
+          JS
+      - name: Scope, ordering, migration and login regressions
+        env:
+          STATUS_TEST_DB_URL: mysql://root:isolated-status-test@127.0.0.1:3306/h2_status_test
+          LOGIN_TEST_DB_URL: mysql://root:isolated-status-test@127.0.0.1:3306/h2_login_test
+        run: |
+          set -o pipefail
+          pnpm exec vitest run server/statusScopeIsolation.test.ts server/customStatusFlowOrder.test.ts server/orderProgressSequence.test.ts server/statusFlowsByProduct.test.ts server/globalOrderProgressIntegration.test.ts server/orderLoginImprovements.test.ts server/adminAuthenticatorIntegration.test.ts server/adminOrderLoginQuickEnhancer.test.ts server/adminAuthenticatorOrder.test.ts server/adminAuthenticatorVault.test.ts 2>&1 | tee /tmp/status-report/tests.txt
+      - name: Production build
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee /tmp/status-report/build.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: status-scope-release-evidence
+          path: /tmp/status-report
+          retention-days: 5
+  public-smoke:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/recovery/organizar-salvos-2026-08-24'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Read-only public scope check
+        run: node scripts/check-status-scope-public.mjs

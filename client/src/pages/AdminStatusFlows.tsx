@@ -1,3 +1,4 @@
+import { globalActiveStatuses, unavailableFlowKeys } from "@shared/orderStatusScope";
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { ArrowDown, ArrowLeft, ArrowUp, Pencil, Plus, Save, X } from "lucide-react";
@@ -31,7 +32,8 @@ export default function AdminStatusFlows() {
     () => (statusesQuery.data ?? []).filter((s: any) => s.isActive === 1).sort((a: any, b: any) => a.sortOrder - b.sortOrder),
     [statusesQuery.data]
   );
-  const initialKey = activeStatuses[0]?.key ?? "recebido";
+  const initialKey = globalActiveStatuses(activeStatuses)[0]?.key ?? "recebido";
+  const recoveryQuery = trpc.statusTypes.scopeReport.useQuery();
 
   const [editingId, setEditingId] = useState<number | "new" | null>(null);
   const [name, setName] = useState("");
@@ -101,6 +103,7 @@ export default function AdminStatusFlows() {
       toast.success("Sequência atualizada!");
       await utils.statusFlows.list.invalidate();
       await utils.statusFlows.orderMap.invalidate();
+      await utils.statusFlows.forOrder.invalidate();
       reset();
     },
     onError: (e) => toast.error(e.message),
@@ -109,9 +112,9 @@ export default function AdminStatusFlows() {
   const save = () => {
     if (!name.trim()) return toast.error("Informe o nome da sequência.");
     // A ordem pertence a ESTA sequência. Não reordenar pela tela global de Status.
-    const validKeys = new Set(activeStatuses.map((s: any) => s.key));
-    const orderedKeys = Array.from(new Set([initialKey, ...statusKeys]))
-      .filter((key) => validKeys.has(key));
+    const orderedKeys = Array.from(new Set([initialKey, ...statusKeys]));
+    const unavailable = unavailableFlowKeys(orderedKeys, activeStatuses);
+    if (unavailable.length) return toast.error(`Revise as etapas ausentes ou inativas: ${unavailable.join(', ')}. Nada foi removido.`);
 
     if (editingId === "new") {
       createMut.mutate({
@@ -131,7 +134,7 @@ export default function AdminStatusFlows() {
     }
   };
 
-  const busy = createMut.isPending || updateMut.isPending;
+  const busy = createMut.isPending || updateMut.isPending || statusesQuery.isLoading;
   const flows = (flowsQuery.data ?? []) as Flow[];
 
   return (
@@ -151,9 +154,15 @@ export default function AdminStatusFlows() {
 
       <main className="max-w-5xl mx-auto p-4 md:p-6 space-y-5">
         <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-sm text-cyan-100/80">
-          A sequência <strong>Padrão H2</strong> continua usando exatamente os status atuais. Só produtos marcados em uma sequência personalizada passam a ter opções diferentes.
+          O <strong>Global / Padrao H2</strong> usa somente os status marcados como globais. Etapas personalizadas permanecem nos produtos vinculados. Remover desta sequencia nao apaga o cadastro nem altera outras sequencias.
         </div>
 
+        {!!recoveryQuery.data?.recovered?.some(item => item.source === 'recovered-reference-review-style') && (
+          <div className="rounded-xl border border-amber-400/25 bg-amber-500/5 p-4 text-sm text-amber-100">
+            Etapas recuperadas pelas chaves ainda vinculadas: {recoveryQuery.data.recovered.filter(item => item.source === 'recovered-reference-review-style').map(item => item.key).join(', ')}.
+            As chaves e posicoes foram preservadas; revise cores e descricoes, que nao estavam disponiveis na referencia.
+          </div>
+        )}
         {editingId !== null && (
           <section className="rounded-2xl border border-white/10 bg-[#12122a] p-5 space-y-5">
             <div className="flex items-center justify-between">
@@ -181,8 +190,9 @@ export default function AdminStatusFlows() {
 
               <div className="space-y-2">
                 {statusKeys.map((key, index) => {
-                  const status: any = activeStatuses.find((s: any) => s.key === key);
-                  if (!status) return null;
+                  const existing: any = (statusesQuery.data ?? []).find((s: any) => s.key === key);
+                  const unavailable = !existing || existing.isActive !== 1;
+                  const status: any = existing ?? { label: key };
                   const locked = key === initialKey || index === 0;
                   return (
                     <div
@@ -194,6 +204,7 @@ export default function AdminStatusFlows() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-cyan-50">{status.label}</p>
+                        {unavailable && <p className="text-xs text-amber-300">{existing ? "Cadastro inativo - reative pelo catalogo." : "Cadastro ausente - vinculo preservado."}</p>}
                         {locked && <p className="text-[10px] uppercase tracking-wide text-cyan-200/45">Inicial universal</p>}
                       </div>
                       <button
@@ -214,10 +225,13 @@ export default function AdminStatusFlows() {
                       >
                         <ArrowDown className="h-4 w-4" />
                       </button>
+                      {!existing && typeof editingId === 'number' && (
+                        <Link href={`/admin/status-types?flowId=${editingId}&restoreKey=${encodeURIComponent(key)}`} className="text-xs text-amber-200 underline">Restaurar cadastro</Link>
+                      )}
                       {!locked && (
                         <button
                           type="button"
-                          aria-label={`Remover ${status.label}`}
+                          aria-label={`Remover desta sequencia: ${status.label}`} title="Remove somente o vinculo nesta sequencia"
                           onClick={() => removeStatus(key)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-400/20 text-red-300/70 hover:bg-red-500/10 hover:text-red-200"
                         >
@@ -230,7 +244,10 @@ export default function AdminStatusFlows() {
               </div>
 
               <div className="mt-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">Adicionar status</p>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">Adicionar status existente</p>
+                {typeof editingId === 'number' ? (
+                  <Link href={`/admin/status-types?flowId=${editingId}`} className="mb-3 inline-block rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">+ Criar status exclusivo desta sequencia</Link>
+                ) : <p className="mb-3 text-xs text-white/40">Salve a sequencia para criar suas etapas exclusivas.</p>}
                 <div className="flex flex-wrap gap-2">
                   {activeStatuses
                     .filter((s: any) => !statusKeys.includes(s.key))
@@ -291,8 +308,8 @@ export default function AdminStatusFlows() {
                   {flow.description && <p className="mt-1 text-xs text-white/45">{flow.description}</p>}
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {flow.statusKeys.map((key) => {
-                      const st: any = activeStatuses.find((s: any) => s.key === key);
-                      return <span key={key} className="rounded-md border border-white/10 bg-black/15 px-2 py-1 text-[11px] text-white/65">{st?.label ?? key}</span>;
+                      const st: any = (statusesQuery.data ?? []).find((s: any) => s.key === key);
+                      return <span key={key} className="rounded-md border border-white/10 bg-black/15 px-2 py-1 text-[11px] text-white/65">{st?.label ?? key}{!st ? " - CADASTRO AUSENTE" : st.isActive !== 1 ? " - INATIVO" : ""}</span>;
                     })}
                   </div>
                   <p className="mt-3 text-xs text-white/40">
@@ -303,6 +320,7 @@ export default function AdminStatusFlows() {
                         : "Nenhum produto vinculado ainda."}
                   </p>
                 </div>
+                {flow.isDefault === 1 && <Link href="/admin/status-types" className="text-xs text-cyan-200 underline">Gerenciar globais</Link>}
                 {flow.isDefault !== 1 && (
                   <button onClick={() => startEdit(flow)} className="w-9 h-9 rounded-lg border border-white/10 text-white/50 hover:text-white flex items-center justify-center">
                     <Pencil className="w-4 h-4" />
