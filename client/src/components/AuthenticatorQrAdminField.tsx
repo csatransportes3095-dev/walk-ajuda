@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react';
 import { ClipboardPaste, ImagePlus, Maximize2, Trash2, Upload } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { trpc } from '@/lib/trpc';
 
 type PendingQr = { data: string; mimeType: string } | null | undefined;
 
 type Props = {
   registrationId: number;
+  authenticatorSecret?: string;
   hasExistingQr: boolean;
   pendingValue: PendingQr;
   onPendingValueChange: (value: PendingQr) => void;
@@ -24,7 +26,7 @@ function readAsDataUrl(file: File) {
   });
 }
 
-export function AuthenticatorQrAdminField({ registrationId, hasExistingQr, pendingValue, onPendingValueChange, disabled }: Props) {
+export function AuthenticatorQrAdminField({ registrationId, authenticatorSecret, hasExistingQr, pendingValue, onPendingValueChange, disabled }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +41,15 @@ export function AuthenticatorQrAdminField({ registrationId, hasExistingQr, pendi
     : pendingValue === undefined
       ? (existingQuery.data ? `data:${existingQuery.data.mimeType};base64,${existingQuery.data.data}` : null)
       : null;
+
+  const normalizedSecret = String(authenticatorSecret || '')
+    .toUpperCase()
+    .replace(/[\s-]+/g, '')
+    .replace(/=+$/g, '');
+  const validBase32Secret = /^[A-Z2-7]{16,}$/.test(normalizedSecret) ? normalizedSecret : '';
+  const generatedOtpAuth = validBase32Secret
+    ? `otpauth://totp/${encodeURIComponent(`Pedido ${registrationId}`)}?secret=${encodeURIComponent(validBase32Secret)}&digits=6&period=30`
+    : null;
 
   const acceptFile = async (file?: File | null) => {
     setError(null);
@@ -118,6 +129,21 @@ export function AuthenticatorQrAdminField({ registrationId, hasExistingQr, pendi
             <button type="button" onClick={handlePasteButton} disabled={disabled} className="rounded-lg border border-violet-300/50 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-2 py-1.5 text-[11px] font-bold text-white shadow-lg shadow-violet-900/30 hover:brightness-110 disabled:opacity-50"><ClipboardPaste className="inline w-3.5 h-3.5 mr-1" />Colar print</button>
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={disabled} className="rounded-lg border border-lime-400/30 bg-lime-500/10 px-2 py-1.5 text-[11px] font-semibold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"><Upload className="inline w-3.5 h-3.5 mr-1" />Trocar</button>
             <button type="button" onClick={requestDelete} disabled={disabled} className="rounded-lg border border-red-400/30 bg-red-500/10 px-2 py-1.5 text-[11px] font-semibold text-red-300 hover:bg-red-500/20 disabled:opacity-50"><Trash2 className="inline w-3.5 h-3.5 mr-1" />Excluir</button>
+          </div>
+        </div>
+      ) : generatedOtpAuth ? (
+        <div className="rounded-lg border border-cyan-400/30 bg-black/20 p-3 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-bold text-cyan-200">QR CODE GERADO AUTOMATICAMENTE</p>
+            <span className="text-[10px] text-cyan-200/70">Base32 válido</span>
+          </div>
+          <div className="flex justify-center rounded-md bg-white p-3">
+            <QRCodeSVG value={generatedOtpAuth} size={184} level="M" includeMargin aria-label="QR Code do autenticador gerado automaticamente" />
+          </div>
+          <p className="text-[10px] text-muted-foreground text-center">Gerado neste navegador a partir do Código Autenticador. Não usa API externa e não precisa enviar print.</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <button type="button" onClick={handlePasteButton} disabled={disabled} className="rounded-lg border border-violet-300/50 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 py-1.5 text-[11px] font-bold text-white hover:brightness-110 disabled:opacity-50"><ClipboardPaste className="inline w-3.5 h-3.5 mr-1" />Usar outro print</button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={disabled} className="rounded-lg border border-lime-400/35 bg-lime-500/10 px-3 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"><Upload className="inline w-3.5 h-3.5 mr-1" />Selecionar imagem</button>
           </div>
         </div>
       ) : (
