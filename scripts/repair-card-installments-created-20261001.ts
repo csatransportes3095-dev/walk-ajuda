@@ -117,7 +117,9 @@ async function run() {
   }
 }
 
-run().catch((error) => {
-  console.error("[card-installment-repair] FAILED", error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+run()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error("[card-installment-repair] FAILED", error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
