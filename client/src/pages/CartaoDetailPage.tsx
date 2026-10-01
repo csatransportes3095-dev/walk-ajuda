@@ -895,6 +895,7 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
     const v = parseFloat(valor.replace(",", "."));
     if (!v || v <= 0) return toast.error("Valor inválido");
     const resp = responsavel.trim() || undefined;
+    if (!data) return toast.error("Informe a data da compra");
 
     if (parcelado) {
       const n = parseInt(numParcelas);
@@ -924,8 +925,11 @@ function GastoSheet({ accent, cartaoId, onClose, onSuccess }: { accent: string; 
         <Field label="VALOR TOTAL (R$)">
           <input value={valor} onChange={e => setValor(e.target.value.replace(/[^\d,.]/g, ""))} placeholder="0,00" inputMode="decimal" style={iStyle(accent)} onFocus={e => (e.target.style.borderColor = accent)} onBlur={e => (e.target.style.borderColor = "#E7E0EC")} />
         </Field>
-        <Field label="DATA">
-          <input value={data} onChange={e => setData(e.target.value)} type="date" style={iStyle(accent)} onFocus={e => (e.target.style.borderColor = accent)} onBlur={e => (e.target.style.borderColor = "#E7E0EC")} />
+        <Field label="DATA DA COMPRA">
+          <input value={data} onChange={e => setData(e.target.value)} type="date" aria-label="Data da compra" style={iStyle(accent)} onFocus={e => (e.target.style.borderColor = accent)} onBlur={e => (e.target.style.borderColor = "#E7E0EC")} />
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.38)", marginTop: 5 }}>
+            Datas anteriores são permitidas. Parcelas de faturas antigas já quitadas aparecem automaticamente como pagas.
+          </div>
         </Field>
       </div>
 
