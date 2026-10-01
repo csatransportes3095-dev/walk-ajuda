@@ -1,0 +1,57 @@
+name: Order login validation
+on:
+  push:
+    branches: [feature/order-login-cnh-global-group-20261001]
+    paths:
+      - '.github/workflows/order-login-validation.yml'
+      - 'scripts/order-login-patch-20261001.mjs'
+      - 'scripts/order-login-new/**'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/order-login-cnh-global-group-20261001
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - name: Export source for local review (no runtime data)
+        run: |
+          mkdir -p /tmp/login-review
+          git archive --format=tar.gz -o /tmp/login-review/source.tgz HEAD client/src server shared drizzle scripts package.json pnpm-lock.yaml tsconfig.json vite.config.ts vitest.config.ts
+          git rev-parse HEAD > /tmp/login-review/commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order-login-source
+          path: /tmp/login-review
+          retention-days: 2
+      - name: Apply reviewed patch on isolated feature branch
+        if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
+        run: node scripts/order-login-patch-20261001.mjs
+      - name: Install locked dependencies
+        if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
+        run: pnpm install --frozen-lockfile
+      - name: Test login changes
+        if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
+        run: pnpm exec vitest run server/orderLoginImprovements.test.ts
+      - name: Production build
+        if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
+        run: pnpm build
+      - name: Commit validated code to feature branch only
+        if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add client/src server shared drizzle scripts package.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(login): manual CNH code, global group and ordered access layout'
+            git push origin HEAD:feature/order-login-cnh-global-group-20261001
+          fi
