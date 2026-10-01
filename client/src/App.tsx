@@ -54,6 +54,7 @@ import AdminOrders from "./pages/AdminOrders";
 import AdminCommissions from "./pages/AdminCommissions";
 import AdminNewOrder from "./pages/AdminNewOrder";
 import AdminStatusTypes from "./pages/AdminStatusTypes";
+import AdminStatusFlows from "./pages/AdminStatusFlows";
 import AdminBanners from "./pages/AdminBanners";
 import AdminIpBlock from "./pages/AdminIpBlock";
 import AdminVpn from "./pages/AdminVpn";
@@ -236,6 +237,9 @@ function Router() {
       </Route>
       <Route path={"/admin/status-types"}>
         <AdminGuard><AdminStatusTypes /></AdminGuard>
+      </Route>
+      <Route path={"/admin/status-flows"}>
+        <AdminGuard><AdminStatusFlows /></AdminGuard>
       </Route>
       <Route path={"/admin/banners"}>
         <AdminGuard><AdminBanners /></AdminGuard>
