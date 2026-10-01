@@ -40,7 +40,7 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Targeted regression tests
         run: pnpm vitest run server/statusFlowsByProduct.test.ts server/scheduleOrderSync.test.ts server/orderFixes.test.ts
