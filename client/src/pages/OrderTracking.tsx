@@ -474,6 +474,11 @@ export default function OrderTracking() {
 
   // Dados de login liberado
   const registrationId = history.length > 0 ? ((history[0] as any).registrationId ?? 0) : 0;
+  const selectedOrderNumber = history.find((h: any) => h.orderNumber != null)?.orderNumber ?? null;
+  const statusFlowForOrderQuery = trpc.statusFlows.forOrder.useQuery(
+    { registrationId, orderNumber: selectedOrderNumber ?? undefined },
+    { enabled: canAccess && registrationId > 0, staleTime: 30000 }
+  );
   // Documentos enviados pelo admin para o cliente (filtrado pelo pedido selecionado)
   const adminFilesQuery = trpc.orderStatus.getAdminFilesForClient.useQuery(
     { phone: searchPhone, registrationId: registrationId > 0 ? registrationId : undefined },
@@ -604,11 +609,15 @@ export default function OrderTracking() {
     });
   };
 
-  // Timeline steps: todos os status dinâmicos ativos, excluindo "cancelado"
-  const timelineSteps = useMemo(
-    () => dynamicStatuses.filter((s: any) => s.key !== 'cancelado'),
-    [dynamicStatuses]
-  );
+  // Timeline do pedido: usa a sequência congelada do produto quando existir.
+  // Pedidos antigos sem atribuição continuam na sequência padrão atual.
+  const timelineSteps = useMemo(() => {
+    const keys = statusFlowForOrderQuery.data?.statusKeys ?? [];
+    const base = keys.length > 0
+      ? keys.map((key: string) => dynamicStatuses.find((s: any) => s.key === key)).filter(Boolean)
+      : dynamicStatuses;
+    return base.filter((s: any) => s.key !== 'cancelado');
+  }, [dynamicStatuses, statusFlowForOrderQuery.data?.statusKeys]);
 
   // Configuração de progresso por pedido (definida pelo admin individualmente)
   const subOrderIndex = selectedOrderIdx;
