@@ -181,10 +181,17 @@ export default function AdminStatusTypes() {
   return (
     <div className="min-h-screen bg-[#07071a] text-white">
       <AdminHeader title="Status de Pedido" rightContent={
-        <Button onClick={() => { setShowCreate(v => !v); setForm(defaultForm); }} className="bg-primary hover:bg-primary/80 text-white text-xs gap-1 px-3 py-1.5 h-auto" size="sm">
-          {showCreate ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-          <span className="hidden sm:inline">{showCreate ? "Cancelar" : "Novo Status"}</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href="/admin/status-flows">
+            <Button variant="outline" className="border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 text-xs h-auto px-3 py-1.5" size="sm">
+              Sequências
+            </Button>
+          </Link>
+          <Button onClick={() => { setShowCreate(v => !v); setForm(defaultForm); }} className="bg-primary hover:bg-primary/80 text-white text-xs gap-1 px-3 py-1.5 h-auto" size="sm">
+            {showCreate ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{showCreate ? "Cancelar" : "Novo Status"}</span>
+          </Button>
+        </div>
       } />
       <div className="p-4 md:p-6">
       <div className="max-w-3xl mx-auto space-y-6">
