@@ -35,7 +35,7 @@ async function run() {
       WHERE DATE(p.createdAt) = ?`, [CREATED_DATE]);
 
     const [parcelamentos] = await connection.query<any[]>(`
-      SELECT p.id, p.cartaoId, p.dataInicio, p.numParcelas,
+      SELECT p.id, p.cartaoId, DATE_FORMAT(p.dataInicio, '%Y-%m-%d') AS dataInicioDate, p.numParcelas,
              c.fechamentoDia, c.vencimentoDia
       FROM cc_parcelamentos p
       INNER JOIN cc_cartoes c ON c.id = p.cartaoId
@@ -49,7 +49,7 @@ async function run() {
     let parcelasHistoricasPagas = 0;
 
     for (const p of parcelamentos) {
-      const purchaseDate = new Date(p.dataInicio).toISOString().slice(0, 10);
+      const purchaseDate = String(p.dataInicioDate);
       const card = {
         id: Number(p.cartaoId),
         fechamentoDia: p.fechamentoDia ? Number(p.fechamentoDia) : null,
