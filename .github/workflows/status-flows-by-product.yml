@@ -4,31 +4,51 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - ".github/workflows/status-flows-by-product.yml"
+      - "drizzle/schema.ts"
+      - "drizzle/0136_status_flows_by_product.sql"
+      - "server/db.ts"
+      - "server/routers.ts"
+      - "server/statusFlowsByProduct.test.ts"
+      - "client/src/App.tsx"
+      - "client/src/pages/AdminStatusTypes.tsx"
+      - "client/src/pages/AdminStatusFlows.tsx"
+      - "client/src/pages/AdminOrders.tsx"
+      - "client/src/pages/OrderTracking.tsx"
   push:
     branches:
       - feature/status-flows-by-product
     paths:
       - ".github/workflows/status-flows-by-product.yml"
       - "drizzle/schema.ts"
+      - "drizzle/0136_status_flows_by_product.sql"
+      - "server/db.ts"
+      - "server/routers.ts"
+      - "server/statusFlowsByProduct.test.ts"
+      - "client/src/App.tsx"
+      - "client/src/pages/AdminStatusTypes.tsx"
+      - "client/src/pages/AdminStatusFlows.tsx"
+      - "client/src/pages/AdminOrders.tsx"
+      - "client/src/pages/OrderTracking.tsx"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch-test-commit:
-    if: github.actor != 'github-actions[bot]'
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - name: Checkout feature branch
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: feature/status-flows-by-product
           fetch-depth: 0
 
       - name: Validate whitespace
-        run: git diff --check
+        run: git diff --check origin/main...HEAD
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -40,24 +60,10 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Targeted regression tests
         run: pnpm vitest run server/statusFlowsByProduct.test.ts server/scheduleOrderSync.test.ts server/orderFixes.test.ts
 
       - name: Production build
         run: pnpm build
-
-      - name: Commit validated implementation
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add drizzle/schema.ts drizzle/0136_status_flows_by_product.sql server/db.ts server/routers.ts client/src/App.tsx client/src/pages/AdminStatusTypes.tsx client/src/pages/AdminStatusFlows.tsx client/src/pages/AdminOrders.tsx client/src/pages/OrderTracking.tsx server/statusFlowsByProduct.test.ts
-          if git diff --cached --quiet; then
-            echo "No generated changes to commit"
-            exit 0
-          fi
-          git commit -m "feat(status): add per-product status sequences [skip ci]"
-          git push origin HEAD:feature/status-flows-by-product
-
-# implementation retry 1
