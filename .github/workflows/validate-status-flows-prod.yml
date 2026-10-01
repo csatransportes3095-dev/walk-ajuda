@@ -1,0 +1,45 @@
+name: Validate product status flows production branch
+
+on:
+  push:
+    branches:
+      - feature/status-flows-by-product-prod
+    paths:
+      - ".github/workflows/validate-status-flows-prod.yml"
+      - "drizzle/schema.ts"
+      - "drizzle/0146_status_flows_by_product.sql"
+      - "server/db.ts"
+      - "server/routers.ts"
+      - "server/statusFlowsByProduct.test.ts"
+      - "client/src/App.tsx"
+      - "client/src/pages/AdminStatusTypes.tsx"
+      - "client/src/pages/AdminStatusFlows.tsx"
+      - "client/src/pages/AdminOrders.tsx"
+      - "client/src/pages/OrderTracking.tsx"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/status-flows-by-product-prod
+          fetch-depth: 0
+      - name: Whitespace check
+        run: git diff --check
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Targeted tests
+        run: pnpm vitest run server/statusFlowsByProduct.test.ts
+      - name: Production build
+        run: pnpm build
