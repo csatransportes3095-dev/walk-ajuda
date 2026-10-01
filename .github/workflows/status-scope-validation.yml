@@ -1,11 +1,12 @@
 name: Status scope validation
 on:
   push:
-    branches: [fix/status-scope-isolation-20261001, recovery/organizar-salvos-2026-08-24]
+    branches: [fix/status-scope-isolation-20261001, fix/status-progress-import-20261001, recovery/organizar-salvos-2026-08-24]
     paths:
       - '.github/workflows/status-scope-validation.yml'
       - 'server/orderStatusScope.ts'
       - 'server/statusScopeIsolation.test.ts'
+      - 'server/statusProgressRead.test.ts'
       - 'server/db.ts'
       - 'server/routers.ts'
       - 'shared/orderStatusScope.ts'
@@ -21,7 +22,7 @@ on:
       - 'scripts/check-status-scope-public.mjs'
   pull_request:
     branches: [recovery/organizar-salvos-2026-08-24]
-    paths: ['server/orderStatusScope.ts', 'shared/orderStatusScope.ts', '.github/workflows/status-scope-validation.yml']
+    paths: ['server/orderStatusScope.ts', 'shared/orderStatusScope.ts', 'server/statusProgressRead.test.ts', '.github/workflows/status-scope-validation.yml']
 concurrency:
   group: status-scope-${{ github.ref }}
   cancel-in-progress: true
@@ -81,7 +82,7 @@ jobs:
           LOGIN_TEST_DB_URL: mysql://root:isolated-status-test@127.0.0.1:3306/h2_login_test
         run: |
           set -o pipefail
-          pnpm exec vitest run server/statusScopeIsolation.test.ts server/customStatusFlowOrder.test.ts server/orderProgressSequence.test.ts server/statusFlowsByProduct.test.ts server/globalOrderProgressIntegration.test.ts server/orderLoginImprovements.test.ts server/adminAuthenticatorIntegration.test.ts server/adminOrderLoginQuickEnhancer.test.ts server/adminAuthenticatorOrder.test.ts server/adminAuthenticatorVault.test.ts 2>&1 | tee /tmp/status-report/tests.txt
+          pnpm exec vitest run server/statusScopeIsolation.test.ts server/statusProgressRead.test.ts server/customStatusFlowOrder.test.ts server/orderProgressSequence.test.ts server/statusFlowsByProduct.test.ts server/globalOrderProgressIntegration.test.ts server/orderLoginImprovements.test.ts server/adminAuthenticatorIntegration.test.ts server/adminOrderLoginQuickEnhancer.test.ts server/adminAuthenticatorOrder.test.ts server/adminAuthenticatorVault.test.ts 2>&1 | tee /tmp/status-report/tests.txt
       - name: Production build
         run: |
           set -o pipefail
