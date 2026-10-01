@@ -127,6 +127,7 @@ function ParcelamentoCard({
           nomeProduto={nomeProduto}
           parcelamentoId={pid}
           cartaoId={id}
+          dataInicial={dataInicioParcelamento ?? new Date().toISOString().split("T")[0]}
           editarDataMutation={editarDataMutation}
           onClose={() => setShowEditarData(false)}
         />
@@ -1173,20 +1174,21 @@ function EditCartaoSheet({ cartao, accent, onClose, onSuccess }: { cartao: any; 
   );
 }
 
-function EditarDataSheet({ accent, nomeProduto, parcelamentoId, cartaoId, editarDataMutation, onClose }: {
+function EditarDataSheet({ accent, nomeProduto, parcelamentoId, cartaoId, dataInicial, editarDataMutation, onClose }: {
   accent: string;
   nomeProduto: string;
   parcelamentoId: number;
   cartaoId: number;
+  dataInicial: string;
   editarDataMutation: any;
   onClose: () => void;
 }) {
-  const [novaData, setNovaData] = useState(new Date().toISOString().split("T")[0]);
+  const [novaData, setNovaData] = useState(dataInicial);
 
   const submit = () => {
     if (!novaData) return toast.error("Selecione uma data");
     editarDataMutation.mutate(
-      { id: parcelamentoId, cartaoId, novaDataCompra: novaData },
+      { id: parcelamentoId, cartaoId, novaData },
       { onSuccess: () => onClose() }
     );
   };
@@ -1195,7 +1197,7 @@ function EditarDataSheet({ accent, nomeProduto, parcelamentoId, cartaoId, editar
     <Sheet title="Editar Data da Compra" onClose={onClose}>
       <div style={{ background: `${accent}10`, borderRadius: 14, padding: "12px 16px", marginBottom: 4 }}>
         <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>{nomeProduto}</div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>A 1ª parcela e todas as seguintes serão recalculadas automaticamente a partir da nova data de compra, respeitando o dia de vencimento do cartão.</div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>Datas anteriores são permitidas. Parcelas já pagas serão preservadas; somente as parcelas em aberto serão recalculadas a partir da nova data da compra e realocadas na fatura correta.</div>
       </div>
       <Field label="NOVA DATA DA COMPRA">
         <input
