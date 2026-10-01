@@ -2045,7 +2045,10 @@ export default function AdminOrders() {
 
   // Helper para verificar se um status é "entregue" — declarado antes de filtered para uso global
   const isDeliveredStatus = (status: string | null) =>
-    status === "entregue" || status === "login_de_acesso" || status === "pedido_entregue";
+    status === "entregue" ||
+    status === "login_de_acesso" ||
+    status === "pedido_entregue" ||
+    status === "documento_entregue";
 
   const filtered = orders.filter(o => {
     const name = (o.customerName || o.codeClientName || "").toLowerCase();
