@@ -10,6 +10,9 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, Wrench, Layers, Star, AlertCircle, Info, CheckCircle2, SlidersHorizontal, Upload, ZoomIn, FolderOpen,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
+import { OrderLoginCnhField, OrderLoginGlobalGroup } from '@/components/OrderLoginExtrasFields';
+import { cnhCodeSchema, cleanLoginText } from '@shared/orderLoginPresentation';
+import '@/styles/order-login-layout.css';
 import OrderScheduleBlock from "@/components/OrderScheduleBlock";
 import ScheduleStatusBadge from "@/components/ScheduleStatusBadge";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
@@ -147,6 +150,19 @@ function EmailTrackingBadge({ registrationId, subOrderIndex }: { registrationId:
       )}
     </div>
   );
+}
+
+function loginFormFromSaved(saved: any) {
+  return {
+    loginPhone: cleanLoginText(saved?.loginPhone) ?? '',
+    loginEmail: cleanLoginText(saved?.loginEmail) ?? '',
+    loginPassword: cleanLoginText(saved?.loginPassword) ?? '',
+    authCode: cleanLoginText(saved?.authCode) ?? '',
+    cnhCode: cleanLoginText(saved?.cnhCode) ?? '',
+    emailLink: cleanLoginText(saved?.emailLink) ?? '',
+    loginNotes: cleanLoginText(saved?.loginNotes) ?? '',
+    loginGroupLink: cleanLoginText(saved?.loginGroupLink) ?? '',
+  };
 }
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
@@ -1397,7 +1413,7 @@ export default function AdminOrders() {
 
   const loginDataQuery = trpc.loginData.get.useQuery(
     { registrationId: expandedNumericId },
-    { enabled: expandedId !== null && activeTab[expandedId!] === "status" }
+    { enabled: expandedId !== null && (!activeTab[expandedId!] || activeTab[expandedId!] === "status"), staleTime: 0, refetchOnWindowFocus: true }
   );
 
   // Queries para aba Perguntas
@@ -1450,7 +1466,7 @@ export default function AdminOrders() {
   const deleteDocReqMut = trpc.docRequests.delete.useMutation({
     onSuccess: () => { toast.success('Solicitação removida'); docRequestsQuery.refetch(); },
   });
-  const [loginFields, setLoginFields] = useState<Record<string, { loginPhone: string; loginEmail: string; loginPassword: string; authCode: string; emailLink: string; loginNotes: string; loginGroupLink: string }>>({})
+  const [loginFields, setLoginFields] = useState<Record<string, { loginPhone: string; loginEmail: string; loginPassword: string; authCode: string; cnhCode: string; emailLink: string; loginNotes: string; loginGroupLink: string }>>({})
   const [loginAuthenticatorQr, setLoginAuthenticatorQr] = useState<Record<string, PendingQr>>({});
   // Inicializar loginFields com dados do banco somente se o admin ainda não editou esse pedido
   useEffect(() => {
@@ -1466,6 +1482,7 @@ export default function AdminOrders() {
           loginEmail: saved.loginEmail ?? '',
           loginPassword: saved.loginPassword ?? '',
           authCode: saved.authCode ?? '',
+          cnhCode: saved.cnhCode ?? '',
           emailLink: saved.emailLink ?? '',
           loginNotes: saved.loginNotes ?? '',
           loginGroupLink: saved.loginGroupLink ?? '',
@@ -1477,7 +1494,8 @@ export default function AdminOrders() {
   const saveLoginDataMut = trpc.loginData.save.useMutation({
     onSuccess: (_result, variables) => {
       toast.success('Dados de login salvos!');
-      setLoginAuthenticatorQr(prev => { const next = { ...prev }; delete next[`order_${variables.registrationId}`]; delete next[`rgcnh_${variables.registrationId}`]; delete next[String(variables.registrationId)]; return next; });
+      setLoginAuthenticatorQr(prev => { const next = { ...prev }; for (const key of Object.keys(next)) { if (key === `arquivo_${variables.registrationId}` || key === `rgcnh_${variables.registrationId}` || key === String(variables.registrationId) || key.startsWith(`${variables.registrationId}_`)) delete next[key]; } return next; });
+      void trpcUtils.loginData.getAuthenticatorQrForAdmin.invalidate({ registrationId: variables.registrationId });
       loginDataQuery.refetch();
     },
     onError: (error) => toast.error(error.message || 'Erro ao salvar dados de login'),
@@ -3992,11 +4010,11 @@ export default function AdminOrders() {
                                         {(() => {
                                           const arKey = `arquivo_${ar.registrationId}`;
                                           const saved = loginDataQuery.data;
-                                          const fields = loginFields[arKey] ?? { loginPhone: '', loginEmail: '', loginPassword: '', authCode: '', emailLink: '', loginNotes: '', loginGroupLink: '' };
-                                          const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) =>
-                                            setLoginFields(prev => ({ ...prev, [arKey]: { ...(prev[arKey] ?? { loginPhone: '', loginEmail: '', loginPassword: '', authCode: '', emailLink: '', loginNotes: '', loginGroupLink: '' }), [f]: v } }));
+                                          const fields = loginFields[arKey] ?? loginFormFromSaved(saved?.registrationId === ar.registrationId ? saved : null);
+                                          const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'cnhCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) =>
+                                            setLoginFields(prev => ({ ...prev, [arKey]: { ...(prev[arKey] ?? fields), [f]: v } }));
                                           const waPhone = ar.customerPhone ? (ar.customerPhone.replace(/\D/g, '').startsWith('55') ? ar.customerPhone.replace(/\D/g, '') : `55${ar.customerPhone.replace(/\D/g, '')}`) : '';
-                                          const hasLoginData = fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
+                                          const hasLoginData = fields.cnhCode || fields.loginPhone || fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
                                           return (
                                             <div className="space-y-3 mt-2">
 
@@ -4016,27 +4034,30 @@ export default function AdminOrders() {
                                               )}
 
                                               {/* Dados de Login */}
-                                              <div className="bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3">
+                                              <div className="order-login-layout bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3">
                                                 <p className="text-xs font-semibold text-lime-400 flex items-center gap-1.5">
                                                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                                                   Dados de Login para o Cliente
                                                 </p>
-                                                <div className="space-y-2">
+                                                <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
                                                   <div><label className="text-xs text-muted-foreground mb-1 block">📱 Login 1 — Telefone <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">✉️ Login 2 — Email <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
                                                   <div><label className="text-xs text-muted-foreground mb-1 block">Senha para entrar na sua conta</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label><div className="flex gap-1"><input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))} placeholder="Ex: GJ6W76PV4B23..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
+
+                                                  <OrderLoginCnhField value={fields.cnhCode} onChange={value => setField('cnhCode', value)} />
+<OrderLoginGlobalGroup legacyLink={fields.loginGroupLink} />
+                                                  <div className="order-login-full" data-login-field="notes"><label className="text-xs text-muted-foreground mb-1 block">📝 Texto / Instruções para o Cliente</label><div className="flex gap-1 items-start"><textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)} placeholder="Ex: Acesse o app, vá em configurações e ative a conta..." rows={3} className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />{fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
+
+<div className="order-login-full space-y-3 border-t border-white/10 pt-4" data-login-field="authenticator"><div><label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label><div className="flex gap-1"><input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))} placeholder="Ex: GJ6W76PV4B23..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
                                                   <AuthenticatorQrAdminField
                                                     registrationId={ar.registrationId}
                                                     hasExistingQr={Boolean((saved as any)?.hasAuthenticatorQr)}
                                                     pendingValue={loginAuthenticatorQr[arKey]}
                                                     onPendingValueChange={value => setLoginAuthenticatorQr(prev => ({ ...prev, [arKey]: value }))}
                                                     disabled={saveLoginDataMut.isPending}
-                                                  />
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">👥 Link do Grupo</label><div className="flex gap-1"><input type="text" value={fields.loginGroupLink} onChange={e => setField('loginGroupLink', e.target.value)} placeholder="Ex: https://chat.whatsapp.com/..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginGroupLink && <button onClick={() => setField('loginGroupLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">📝 Texto / Instruções para o Cliente</label><div className="flex gap-1 items-start"><textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)} placeholder="Ex: Acesse o app, vá em configurações e ative a conta..." rows={3} className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />{fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                </div>
+                                                  /></div>
+</fieldset>
                                                 <div className="flex gap-2">
-                                                  <button onClick={() => { const pendingQr = loginAuthenticatorQr[arKey]; saveLoginDataMut.mutate({ registrationId: ar.registrationId, customerPhone: ar.customerPhone || '', loginPhone: fields.loginPhone, loginEmail: fields.loginEmail, loginPassword: fields.loginPassword, authCode: fields.authCode, emailLink: fields.emailLink, loginNotes: fields.loginNotes, loginGroupLink: fields.loginGroupLink, authenticatorQrData: pendingQr && typeof pendingQr === 'object' ? pendingQr.data : undefined, authenticatorQrAction: pendingQr === null ? 'delete' : pendingQr ? 'replace' : 'keep' }); }} disabled={saveLoginDataMut.isPending} className="flex-1 py-1.5 px-3 bg-lime-500/20 border border-lime-500/40 text-lime-300 rounded-lg text-xs font-semibold hover:bg-lime-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                                                  <button onClick={() => { const pendingQr = loginAuthenticatorQr[arKey]; saveLoginDataMut.mutate({ registrationId: ar.registrationId, customerPhone: ar.customerPhone || '', loginPhone: fields.loginPhone, loginEmail: fields.loginEmail, loginPassword: fields.loginPassword, authCode: fields.authCode, cnhCode: fields.cnhCode, loginNotes: fields.loginNotes,  authenticatorQrData: pendingQr && typeof pendingQr === 'object' ? pendingQr.data : undefined, authenticatorQrAction: pendingQr === null ? 'delete' : pendingQr ? 'replace' : 'keep' }); }} disabled={saveLoginDataMut.isPending || loginDataQuery.isPending || loginDataQuery.isError || !cnhCodeSchema.safeParse(fields.cnhCode).success} className="flex-1 py-1.5 px-3 bg-lime-500/20 border border-lime-500/40 text-lime-300 rounded-lg text-xs font-semibold hover:bg-lime-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                                                     {saveLoginDataMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-lime-300" />Salvando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Dados de Login</>)}
                                                   </button>
                                                   {waPhone && hasLoginData && (
@@ -4045,7 +4066,7 @@ export default function AdminOrders() {
                                                     </a>
                                                   )}
                                                 </div>
-                                                {saved && (saved.loginEmail || saved.loginPassword || saved.authCode || (saved as any).emailLink || (saved as any).loginNotes || (saved as any).loginGroupLink) && (
+                                                {saved && (saved.cnhCode || saved.loginPhone || saved.loginEmail || saved.loginPassword || saved.authCode || (saved as any).emailLink || (saved as any).loginNotes || (saved as any).loginGroupLink) && (
                                                   <p className="text-xs text-lime-400/70 text-center">✓ Dados salvos — visíveis para o cliente quando status for Entregue</p>
                                                 )}
                                               </div>
@@ -4422,11 +4443,11 @@ export default function AdminOrders() {
                                                     {(() => {
                                                       const arKey = `rgcnh_${ar.registrationId}`;
                                                       const saved = loginDataQuery.data;
-                                                      const fields = loginFields[arKey] ?? { loginPhone: '', loginEmail: '', loginPassword: '', authCode: '', emailLink: '', loginNotes: '', loginGroupLink: '' };
-                                                      const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) =>
-                                                        setLoginFields(prev => ({ ...prev, [arKey]: { ...(prev[arKey] ?? { loginPhone: '', loginEmail: '', loginPassword: '', authCode: '', emailLink: '', loginNotes: '', loginGroupLink: '' }), [f]: v } }));
+                                                      const fields = loginFields[arKey] ?? loginFormFromSaved(saved?.registrationId === ar.registrationId ? saved : null);
+                                                      const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'cnhCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) =>
+                                                        setLoginFields(prev => ({ ...prev, [arKey]: { ...(prev[arKey] ?? fields), [f]: v } }));
                                                       const waPhone = ar.customerPhone ? (ar.customerPhone.replace(/\D/g, '').startsWith('55') ? ar.customerPhone.replace(/\D/g, '') : `55${ar.customerPhone.replace(/\D/g, '')}`) : '';
-                                                      const hasLoginData = fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
+                                                      const hasLoginData = fields.cnhCode || fields.loginPhone || fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
                                                       return (
                                                         <div className="space-y-3 mt-2">
 
@@ -4446,27 +4467,30 @@ export default function AdminOrders() {
                                                           )}
 
                                                           {/* Dados de Login */}
-                                                          <div className="bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3">
+                                                          <div className="order-login-layout bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3">
                                                             <p className="text-xs font-semibold text-lime-400 flex items-center gap-1.5">
                                                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                                                               Dados de Login para o Cliente
                                                             </p>
-                                                            <div className="space-y-2">
+                                                            <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
                                                               <div><label className="text-xs text-muted-foreground mb-1 block">📱 Login 1 — Telefone <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">✉️ Login 2 — Email <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
                                                               <div><label className="text-xs text-muted-foreground mb-1 block">Senha para entrar na sua conta</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label><div className="flex gap-1"><input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))} placeholder="Ex: GJ6W76PV4B23..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
+            
+                                                              <OrderLoginCnhField value={fields.cnhCode} onChange={value => setField('cnhCode', value)} />
+<OrderLoginGlobalGroup legacyLink={fields.loginGroupLink} />
+                                                              <div className="order-login-full" data-login-field="notes"><label className="text-xs text-muted-foreground mb-1 block">📝 Texto / Instruções para o Cliente</label><div className="flex gap-1 items-start"><textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)} placeholder="Ex: Acesse o app, vá em configurações e ative a conta..." rows={3} className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />{fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
+          
+<div className="order-login-full space-y-3 border-t border-white/10 pt-4" data-login-field="authenticator"><div><label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label><div className="flex gap-1"><input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))} placeholder="Ex: GJ6W76PV4B23..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.authCode && <button onClick={() => setField('authCode', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
                                                               <AuthenticatorQrAdminField
                                                                 registrationId={ar.registrationId}
                                                                 hasExistingQr={Boolean((saved as any)?.hasAuthenticatorQr)}
                                                                 pendingValue={loginAuthenticatorQr[arKey]}
                                                                 onPendingValueChange={value => setLoginAuthenticatorQr(prev => ({ ...prev, [arKey]: value }))}
                                                                 disabled={saveLoginDataMut.isPending}
-                                                              />
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">👥 Link do Grupo</label><div className="flex gap-1"><input type="text" value={fields.loginGroupLink} onChange={e => setField('loginGroupLink', e.target.value)} placeholder="Ex: https://chat.whatsapp.com/..." className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginGroupLink && <button onClick={() => setField('loginGroupLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">📝 Texto / Instruções para o Cliente</label><div className="flex gap-1 items-start"><textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)} placeholder="Ex: Acesse o app, vá em configurações e ative a conta..." rows={3} className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />{fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                            </div>
+                                                              /></div>
+</fieldset>
                                                             <div className="flex gap-2">
-                                                              <button onClick={() => { const pendingQr = loginAuthenticatorQr[arKey]; saveLoginDataMut.mutate({ registrationId: ar.registrationId, customerPhone: ar.customerPhone || '', loginPhone: fields.loginPhone, loginEmail: fields.loginEmail, loginPassword: fields.loginPassword, authCode: fields.authCode, emailLink: fields.emailLink, loginNotes: fields.loginNotes, loginGroupLink: fields.loginGroupLink, authenticatorQrData: pendingQr && typeof pendingQr === 'object' ? pendingQr.data : undefined, authenticatorQrAction: pendingQr === null ? 'delete' : pendingQr ? 'replace' : 'keep' }); }} disabled={saveLoginDataMut.isPending} className="flex-1 py-1.5 px-3 bg-lime-500/20 border border-lime-500/40 text-lime-300 rounded-lg text-xs font-semibold hover:bg-lime-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                                                              <button onClick={() => { const pendingQr = loginAuthenticatorQr[arKey]; saveLoginDataMut.mutate({ registrationId: ar.registrationId, customerPhone: ar.customerPhone || '', loginPhone: fields.loginPhone, loginEmail: fields.loginEmail, loginPassword: fields.loginPassword, authCode: fields.authCode, cnhCode: fields.cnhCode, loginNotes: fields.loginNotes,  authenticatorQrData: pendingQr && typeof pendingQr === 'object' ? pendingQr.data : undefined, authenticatorQrAction: pendingQr === null ? 'delete' : pendingQr ? 'replace' : 'keep' }); }} disabled={saveLoginDataMut.isPending || loginDataQuery.isPending || loginDataQuery.isError || !cnhCodeSchema.safeParse(fields.cnhCode).success} className="flex-1 py-1.5 px-3 bg-lime-500/20 border border-lime-500/40 text-lime-300 rounded-lg text-xs font-semibold hover:bg-lime-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                                                                 {saveLoginDataMut.isPending ? (<><div className="animate-spin rounded-full h-3 w-3 border-t-2 border-lime-300" />Salvando...</>) : (<><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Salvar Dados de Login</>)}
                                                               </button>
                                                               {waPhone && hasLoginData && (
@@ -4475,7 +4499,7 @@ export default function AdminOrders() {
                                                                 </a>
                                                               )}
                                                             </div>
-                                                            {saved && (saved.loginEmail || saved.loginPassword || saved.authCode || (saved as any).emailLink || (saved as any).loginNotes || (saved as any).loginGroupLink) && (
+                                                            {saved && (saved.cnhCode || saved.loginPhone || saved.loginEmail || saved.loginPassword || saved.authCode || (saved as any).emailLink || (saved as any).loginNotes || (saved as any).loginGroupLink) && (
                                                               <p className="text-xs text-lime-400/70 text-center">✓ Dados salvos — visíveis para o cliente quando status for Entregue</p>
                                                             )}
                                                           </div>
@@ -6057,9 +6081,9 @@ export default function AdminOrders() {
                         const saved = loginDataQuery.data;
                         // Usar loginFields[key] se existir (editado pelo admin ou inicializado pelo useEffect)
                         // Fallback vazio — o useEffect popula os campos quando os dados chegam do banco
-                        const fields = loginFields[key] ?? { loginPhone: '', loginEmail: '', loginPassword: '', authCode: '', emailLink: '', loginNotes: '', loginGroupLink: '' };
-                        const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) =>
-                          setLoginFields(prev => ({ ...prev, [key]: { ...(prev[key] ?? { loginPhone: '', loginEmail: '', loginPassword: '', authCode: '', emailLink: '', loginNotes: '', loginGroupLink: '' }), [f]: v } }));
+                        const fields = loginFields[key] ?? loginFormFromSaved(saved?.registrationId === order.id ? saved : null);
+                        const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'cnhCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) =>
+                          setLoginFields(prev => ({ ...prev, [key]: { ...(prev[key] ?? fields), [f]: v } }));
                         // Montar mensagem WhatsApp com dados de login
                         const buildLoginWaMsg = () => {
                           const nome = order.customerName || order.codeClientName || '';
@@ -6105,7 +6129,7 @@ export default function AdminOrders() {
                           return linhas.join('\n');
                         };
                         const waPhone = order.phone ? (order.phone.replace(/\D/g, '').startsWith('55') ? order.phone.replace(/\D/g, '') : `55${order.phone.replace(/\D/g, '')}`) : '';
-                        const hasLoginData = fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
+                        const hasLoginData = fields.cnhCode || fields.loginPhone || fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
                         return (
                           <div className="space-y-3">
 
@@ -6346,12 +6370,12 @@ export default function AdminOrders() {
                             })()}
 
                             {/* Seção: Dados de Login do Serviço */}
-                            <div className="bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3">
+                            <div className="order-login-layout bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3">
                             <p className="text-xs font-semibold text-lime-400 flex items-center gap-1.5">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                               Dados de Login para o Cliente
                             </p>
-                            <div className="space-y-2">
+                            <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
                               <div>
                                 <label className="text-xs text-muted-foreground mb-1 block">📱 Login 1 — Telefone <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label>
                                 <div className="flex gap-1">
@@ -6379,8 +6403,22 @@ export default function AdminOrders() {
                                   {fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
                                 </div>
                               </div>
-                              <OrderLoginAuthenticatorCode registrationId={order.id} />
-                              <div>
+
+
+                              <OrderLoginCnhField value={fields.cnhCode} onChange={value => setField('cnhCode', value)} />
+                              <OrderLoginGlobalGroup legacyLink={fields.loginGroupLink} />
+                              <div className="order-login-full" data-login-field="notes">
+                                <label className="text-xs text-muted-foreground mb-1 block">📝 Texto / Instruções para o Cliente</label>
+                                <div className="flex gap-1 items-start">
+                                  <textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)}
+                                    placeholder="Ex: Acesse o app, vá em configurações e ative a conta..."
+                                    rows={3}
+                                    className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />
+                                  {fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
+                                </div>
+                              </div>
+                            <details className="order-login-full rounded-xl border border-cyan-400/25 bg-cyan-500/5"><summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-cyan-200">Autenticador privado do ADM <span className="text-white/40">· expandir / recolher</span></summary><div className="p-3 pt-0"><OrderLoginAuthenticatorCode registrationId={order.id} /></div></details>
+<div className="order-login-full space-y-3 border-t border-white/10 pt-4" data-login-field="authenticator"><div>
                                 <label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label>
                                 <div className="flex gap-1">
                                   <input type="text" value={fields.authCode} onChange={e => setField('authCode', e.target.value.replace(/-/g, ''))}
@@ -6395,40 +6433,12 @@ export default function AdminOrders() {
                                 pendingValue={loginAuthenticatorQr[key]}
                                 onPendingValueChange={value => setLoginAuthenticatorQr(prev => ({ ...prev, [key]: value }))}
                                 disabled={saveLoginDataMut.isPending}
-                              />
-                              <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">🔗 Link de Acesso ao E-mail</label>
-                                <div className="flex gap-1">
-                                  <input type="text" value={fields.emailLink} onChange={e => setField('emailLink', e.target.value)}
-                                    placeholder="Ex: https://mail.google.com/..."
-                                    className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
-                                  {fields.emailLink && <button onClick={() => setField('emailLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
-                                </div>
-                              </div>
-                              <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">👥 Link do Grupo (WhatsApp, Telegram, etc.)</label>
-                                <div className="flex gap-1">
-                                  <input type="text" value={fields.loginGroupLink} onChange={e => setField('loginGroupLink', e.target.value)}
-                                    placeholder="Ex: https://chat.whatsapp.com/..."
-                                    className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
-                                  {fields.loginGroupLink && <button onClick={() => setField('loginGroupLink', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
-                                </div>
-                              </div>
-                              <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">📝 Texto / Instruções para o Cliente</label>
-                                <div className="flex gap-1 items-start">
-                                  <textarea value={fields.loginNotes} onChange={e => setField('loginNotes', e.target.value)}
-                                    placeholder="Ex: Acesse o app, vá em configurações e ative a conta..."
-                                    rows={3}
-                                    className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60 resize-none" />
-                                  {fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
-                                </div>
-                              </div>
-                            </div>
+                              /></div>
+</fieldset>
                             <div className="flex gap-2">
                               <button
-                                onClick={() => { const pendingQr = loginAuthenticatorQr[key]; saveLoginDataMut.mutate({ registrationId: order.id, customerPhone: order.phone, loginPhone: fields.loginPhone, loginEmail: fields.loginEmail, loginPassword: fields.loginPassword, authCode: fields.authCode, emailLink: fields.emailLink, loginNotes: fields.loginNotes, loginGroupLink: fields.loginGroupLink, authenticatorQrData: pendingQr && typeof pendingQr === 'object' ? pendingQr.data : undefined, authenticatorQrAction: pendingQr === null ? 'delete' : pendingQr ? 'replace' : 'keep' }); }}
-                                disabled={saveLoginDataMut.isPending}
+                                onClick={() => { const pendingQr = loginAuthenticatorQr[key]; saveLoginDataMut.mutate({ registrationId: order.id, customerPhone: order.phone, loginPhone: fields.loginPhone, loginEmail: fields.loginEmail, loginPassword: fields.loginPassword, authCode: fields.authCode, cnhCode: fields.cnhCode, loginNotes: fields.loginNotes,  authenticatorQrData: pendingQr && typeof pendingQr === 'object' ? pendingQr.data : undefined, authenticatorQrAction: pendingQr === null ? 'delete' : pendingQr ? 'replace' : 'keep' }); }}
+                                disabled={saveLoginDataMut.isPending || loginDataQuery.isPending || loginDataQuery.isError || !cnhCodeSchema.safeParse(fields.cnhCode).success}
                                 className="flex-1 py-1.5 px-3 bg-lime-500/20 border border-lime-500/40 text-lime-300 rounded-lg text-xs font-semibold hover:bg-lime-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
                               >
                                 {saveLoginDataMut.isPending ? (
@@ -6450,7 +6460,7 @@ export default function AdminOrders() {
                                 </a>
                               )}
                             </div>
-                            {saved && (saved.loginEmail || saved.loginPassword || saved.authCode || (saved as any).emailLink || (saved as any).loginNotes || (saved as any).loginGroupLink) && (
+                            {saved && (saved.cnhCode || saved.loginPhone || saved.loginEmail || saved.loginPassword || saved.authCode || (saved as any).emailLink || (saved as any).loginNotes || (saved as any).loginGroupLink) && (
                               <p className="text-xs text-lime-400/70 text-center">✓ Dados salvos — visíveis para o cliente quando status for Entregue</p>
                             )}
                           </div>

@@ -1,4 +1,7 @@
 import { sql } from "drizzle-orm";
+import { cnhCodeSchema, globalOrderGroupSchema, resolveOrderGroupLink, loginOptionalFields, cleanLoginText, escapeLoginHtml } from '../shared/orderLoginPresentation';
+import { readOrderLoginDefaults, saveOrderGroupDefault, canReadOrderLoginExtras } from './orderLoginDefaults';
+import { isAdminJwtValid } from './_core/trpc';
 import {
   listZohoUsers,
   listAllZohoUsersGrouped,
@@ -4459,13 +4462,16 @@ export const appRouter = router({
                 if (dbL) {
                   const loginRows = await dbL.select().from(oldTable).where(eqL(oldTable.registrationId, input.registrationId)).limit(1);
                   const ld = loginRows[0];
+                  const loginDefaults = await readOrderLoginDefaults(dbL);
+                  const deliveredGroupLink = resolveOrderGroupLink(loginDefaults, ld?.loginGroupLink);
                   if (ld) {
                     const loginRows2: string[] = [];
                     if (ld.loginEmail) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Login / Email</td><td style="color:#fff;font-size:13px;font-family:monospace;font-weight:bold;padding:4px 0;">${ld.loginEmail}</td></tr>`);
                     if (ld.loginPassword) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Senha</td><td style="color:#fff;font-size:13px;font-family:monospace;font-weight:bold;padding:4px 0;">${ld.loginPassword}</td></tr>`);
+                    if (ld.cnhCode) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Código de Habilitação CNH</td><td style="color:#fff;font-size:13px;font-family:monospace;padding:4px 0;">${escapeLoginHtml(ld.cnhCode)}</td></tr>`);
                     if (ld.authCode) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Autenticador</td><td style="color:#fff;font-size:12px;font-family:monospace;word-break:break-all;padding:4px 0;">${ld.authCode}</td></tr>`);
                     if (ld.emailLink) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Link E-mail</td><td style="color:#a78bfa;font-size:12px;word-break:break-all;padding:4px 0;"><a href="${ld.emailLink}" style="color:#a78bfa;">${ld.emailLink}</a></td></tr>`);
-                    if (ld.loginGroupLink) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Link do Grupo</td><td style="color:#4ade80;font-size:12px;word-break:break-all;padding:4px 0;"><a href="${ld.loginGroupLink}" style="color:#4ade80;">${ld.loginGroupLink}</a></td></tr>`);
+                    if (deliveredGroupLink) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Link do Grupo</td><td style="color:#4ade80;font-size:12px;word-break:break-all;padding:4px 0;"><a href="${escapeLoginHtml(deliveredGroupLink)}" style="color:#4ade80;">${escapeLoginHtml(deliveredGroupLink)}</a></td></tr>`);
                     if (loginRows2.length > 0) {
                       loginDataHtml += `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:11px;font-weight:bold;margin:0 0 10px;text-transform:uppercase;letter-spacing:1px;">Í°Å¸"Â Seus Dados de Acesso</p><table style="width:100%;border-collapse:collapse;">${loginRows2.join('')}</table></div>`;
                     }
@@ -6388,6 +6394,17 @@ export const appRouter = router({
 
   // â"â‚¬â"â‚¬ Dados de Login Liberado por Pedido â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬
   loginData: router({
+    getGlobalGroup: adminProcedure.query(async () => {
+      const db = await (await import('./db')).getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+      const defaults = await readOrderLoginDefaults(db);
+      return { configured: defaults !== null, groupLink: defaults?.groupLink ?? null, revision: defaults?.revision ?? 0 };
+    }),
+    setGlobalGroup: adminProcedure.input(globalOrderGroupSchema).mutation(async ({ input }) => {
+      const db = await (await import('./db')).getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+      return saveOrderGroupDefault(db, input);
+    }),
     // Admin busca dados de login de um pedido
     get: adminProcedure
       .input(z.object({ registrationId: z.number().int() }))
@@ -6434,6 +6451,7 @@ export const appRouter = router({
         loginPassword: z.string().optional(),
         authCode: z.string().optional(),
         emailLink: z.string().optional(),
+        cnhCode: cnhCodeSchema.optional(),
         loginNotes: z.string().optional(),
         loginGroupLink: z.string().optional(),
         authenticatorQrData: z.string().max(4_250_000).optional(),
@@ -6483,9 +6501,9 @@ export const appRouter = router({
             loginEmail: input.loginEmail ?? null,
             loginPassword: input.loginPassword ?? null,
             authCode: cleanAuthCode,
-            emailLink: input.emailLink ?? null,
+            ...loginOptionalFields(input),
             loginNotes: input.loginNotes ?? null,
-            loginGroupLink: input.loginGroupLink ?? null,
+            // The global group is saved by its own admin mutation, never here.
             ...qrFields,
           };
           if (existing) {
@@ -6508,8 +6526,8 @@ export const appRouter = router({
       }),
     // Cliente busca dados de login do seu pedido (sem autenticação admin)
     getForClient: publicProcedure
-      .input(z.object({ registrationId: z.number().int(), customerPhone: z.string() }))
-      .query(async ({ input }) => {
+      .input(z.object({ registrationId: z.number().int(), customerPhone: z.string(), cpToken: z.string().max(512).optional() }))
+      .query(async ({ input, ctx }) => {
         const { getDb } = await import('./db');
         const { orderLoginData } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
@@ -6518,19 +6536,25 @@ export const appRouter = router({
         const rows = await db.select().from(orderLoginData).where(
           and(eq(orderLoginData.registrationId, input.registrationId), eq(orderLoginData.customerPhone, input.customerPhone))
         ).limit(1);
-        if (!rows[0]) return null;
+        const defaults = await readOrderLoginDefaults(db);
+        const allowedExtras = await canReadOrderLoginExtras(db, input, ctx.user?.role === 'admin' || isAdminJwtValid(ctx.req));
         const row = rows[0];
-        const { authenticatorQrStorageKey, authenticatorQrMimeType: _qrMime, authenticatorQrUpdatedAt: _qrUpdatedAt, ...safeRow } = row;
-        // Tratar string "NULL" como null (dado legado); nunca expor chave interna do QR.
+        if (!row && !allowedExtras) return null;
+        // Explicit fields: new sensitive data and protected QR storage cannot
+        // escape through a spread, including calls from old browser tabs.
         return {
-          ...safeRow,
-          loginPhone: (row.loginPhone && row.loginPhone !== 'NULL' && row.loginPhone.trim() !== '') ? row.loginPhone : null,
-          authCode: (row.authCode && row.authCode !== 'NULL' && row.authCode.trim() !== '') ? row.authCode : null,
-          loginEmail: (row.loginEmail && row.loginEmail !== 'NULL' && row.loginEmail.trim() !== '') ? row.loginEmail : null,
-          loginPassword: (row.loginPassword && row.loginPassword !== 'NULL' && row.loginPassword.trim() !== '') ? row.loginPassword : null,
-          emailLink: (row.emailLink && row.emailLink !== 'NULL' && row.emailLink.trim() !== '') ? row.emailLink : null,
-          loginNotes: (row.loginNotes && row.loginNotes !== 'NULL' && row.loginNotes.trim() !== '') ? row.loginNotes : null,
-          loginGroupLink: (row.loginGroupLink && row.loginGroupLink !== 'NULL' && row.loginGroupLink.trim() !== '') ? row.loginGroupLink : null,
+          id: row?.id, registrationId: input.registrationId, customerPhone: row?.customerPhone ?? input.customerPhone,
+          createdAt: row?.createdAt, updatedAt: row?.updatedAt,
+          loginPhone: cleanLoginText(row?.loginPhone),
+          loginEmail: cleanLoginText(row?.loginEmail),
+          loginPassword: cleanLoginText(row?.loginPassword),
+          authCode: cleanLoginText(row?.authCode),
+          emailLink: cleanLoginText(row?.emailLink),
+          loginNotes: cleanLoginText(row?.loginNotes),
+          cnhCode: allowedExtras ? cleanLoginText(row?.cnhCode) : null,
+          loginGroupLink: defaults === null
+            ? resolveOrderGroupLink(null, row?.loginGroupLink)
+            : allowedExtras ? resolveOrderGroupLink(defaults) : null,
         };
       }),
     // Cliente só recebe QR após validar a sessão do acompanhamento e a titularidade do pedido.
