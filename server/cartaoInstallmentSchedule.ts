@@ -51,7 +51,7 @@ export function buildInstallmentSchedule(
     result.push({
       numeroParcela: offset + 1,
       compraReferencia: purchaseReference.toISOString().slice(0, 10),
-      competencia,
+      competencia: competence,
       fechamento: cycle.closingDate,
       vencimento: cycle.dueDate,
       // Somente vencimento que já passou vira histórico pago.
