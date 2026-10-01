@@ -9,6 +9,13 @@ const loginBefore = `  const loginDataQuery = trpc.loginData.get.useQuery(
     { enabled: expandedId !== null && activeTab[expandedId!] === "status" }
   );`;
 
+// The ordered login form already enables the default status tab.
+// Normalize its query to the same reload behavior without dropping new fields.
+const loginOrderedBefore = `  const loginDataQuery = trpc.loginData.get.useQuery(
+    { registrationId: expandedNumericId },
+    { enabled: expandedId !== null && (!activeTab[expandedId!] || activeTab[expandedId!] === "status"), staleTime: 0, refetchOnWindowFocus: true }
+  );`;
+
 const loginAfter = `  const isExpandedStatusTab = expandedId !== null && (!activeTab[expandedId] || activeTab[expandedId] === "status");
 
   const loginDataQuery = trpc.loginData.get.useQuery(
@@ -63,6 +70,8 @@ let next = source;
 
 if (next.includes(loginBefore)) {
   next = next.replace(loginBefore, loginAfter);
+} else if (next.includes(loginOrderedBefore)) {
+  next = next.replace(loginOrderedBefore, loginAfter);
 } else if (!next.includes('const isExpandedStatusTab = expandedId !== null')) {
   throw new Error('Trecho loginData esperado não encontrado; patch abortado.');
 }

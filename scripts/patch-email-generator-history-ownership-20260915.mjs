@@ -9,14 +9,14 @@ function replaceOnce(source, from, to, label) {
   return source.replace(from, to);
 }
 
+// Anchor at the existing login reader, not the beginning of the router.
+// New independent group settings may precede this reader.
 let router = fs.readFileSync(routerPath, 'utf8');
 
 router = replaceOnce(
   router,
-`  loginData: router({
-    // Admin busca dados de login de um pedido`,
-`  loginData: router({
-    // Histórico global do Gerador H2 + vínculos reais já salvos nos pedidos.
+`    // Admin busca dados de login de um pedido`,
+`    // Histórico global do Gerador H2 + vínculos reais já salvos nos pedidos.
     emailHistory: adminProcedure.query(async () => {
       const { getDb } = await import('./db');
       const db = await getDb();
